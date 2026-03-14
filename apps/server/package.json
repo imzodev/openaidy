@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
   },
   "dependencies": {
