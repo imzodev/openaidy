@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.turbo
+.env
+.env.*
+dist
+coverage
+.vite
+.cache
+.temp
+.tmp
+.DS_Store
+*.log
+apps/web/.solid
+*.tsbuildinfo

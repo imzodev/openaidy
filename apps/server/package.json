@@ -1,0 +1,27 @@
+{
+  "name": "@openaidy/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/sensible": "^6.0.4",
+    "@fastify/websocket": "^11.2.0",
+    "croner": "^10.0.1",
+    "drizzle-orm": "^0.41.0",
+    "eventemitter3": "^5.0.4",
+    "fastify": "^5.8.2",
+    "nanoid": "^5.1.6",
+    "pg": "^8.20.0",
+    "pino": "^9.14.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.6"
+  }
+}
