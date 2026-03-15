@@ -40,9 +40,12 @@ export class ModelInvocationService {
     request: ModelRequest,
     options?: InvocationOptions
   ): Promise<ProviderResult<ModelResponse>> {
+    // Determine provider ID from options or request metadata
+    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
+    
     // Select provider and model
     const selectionResult = this.selection.select({
-      providerId: options?.providerId ?? request.metadata?.providerId as string | undefined,
+      ...(providerId !== undefined && { providerId }),
       modelId: options?.modelId ?? request.model,
       capabilities: request.stream ? ['streaming', 'text_generation'] : ['text_generation'],
     });
@@ -102,9 +105,12 @@ export class ModelInvocationService {
     request: ModelRequest,
     options?: InvocationOptions
   ): AsyncIterable<ProviderResult<ModelStreamEvent>> {
+    // Determine provider ID from options or request metadata
+    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
+    
     // Select provider and model
     const selectionResult = this.selection.select({
-      providerId: options?.providerId ?? request.metadata?.providerId as string | undefined,
+      ...(providerId !== undefined && { providerId }),
       modelId: options?.modelId ?? request.model,
       capabilities: ['streaming', 'text_generation'],
     });

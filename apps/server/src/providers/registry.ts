@@ -33,9 +33,9 @@ export class ProviderRegistryService {
       provider,
       enabled: options?.enabled ?? true,
       priority: options?.priority ?? 0,
-      defaultModel: options?.defaultModel,
-      config: options?.config,
       registeredAt: new Date(),
+      ...(options?.defaultModel !== undefined && { defaultModel: options.defaultModel }),
+      ...(options?.config !== undefined && { config: options.config }),
     };
 
     this.providers.set(id, entry);

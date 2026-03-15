@@ -33,7 +33,7 @@ export class ProviderSelectionService {
     }
 
     // Otherwise, fall back to default
-    return this.selectDefault(request.capabilities);
+    return this.selectDefault(request.modelId, request.capabilities);
   }
 
   /**
@@ -87,6 +87,17 @@ export class ProviderSelectionService {
     // Use explicit model or provider's default or first available
     const resolvedModelId =
       modelId ?? entry.defaultModel ?? provider.descriptor.capabilities[0];
+
+    if (!resolvedModelId) {
+      return {
+        ok: false,
+        error: createProviderError(
+          'provider.config_invalid',
+          `No model specified and provider "${providerId}" has no default model or capabilities`,
+          { providerId }
+        ),
+      };
+    }
 
     return {
       ok: true,
@@ -156,7 +167,7 @@ export class ProviderSelectionService {
     return {
       ok: true,
       provider,
-      modelId: defaultConfig.modelId,
+      modelId: modelId ?? defaultConfig.modelId,
     };
   }
 

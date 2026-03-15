@@ -360,7 +360,12 @@ describe('ModelInvocationService', () => {
         }
       }
 
-      expect(events[0]?.providerId).toBe('provider-2');
+      // Check that the stream.started event has the correct providerId
+      const startedEvent = events.find(e => e.type === 'stream.started');
+      expect(startedEvent?.type).toBe('stream.started');
+      if (startedEvent?.type === 'stream.started') {
+        expect(startedEvent.providerId).toBe('provider-2');
+      }
     });
   });
 
