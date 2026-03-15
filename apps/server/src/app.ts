@@ -6,6 +6,7 @@ import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
+import { providerRoutes } from './routes/providers';
 
 export async function buildApp() {
   const app = Fastify({ logger: loggerOptions });
@@ -16,6 +17,7 @@ export async function buildApp() {
 
   await app.register(healthRoutes);
   await app.register(sessionRoutes);
+  await app.register(providerRoutes);
 
   return app;
 }
