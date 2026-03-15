@@ -12,6 +12,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/sensible": "^6.0.4",
     "@fastify/websocket": "^11.2.0",
+    "@openaidy/runtime": "workspace:*",
     "croner": "^10.0.1",
     "drizzle-orm": "^0.41.0",
     "eventemitter3": "^5.0.4",
