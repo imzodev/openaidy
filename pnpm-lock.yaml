@@ -50,6 +50,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.2.0
         version: 11.2.0
+      '@openaidy/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@openaidy/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime

@@ -79,7 +79,7 @@ export class ProviderConfigService {
         error: createProviderError(
           'provider.config_invalid',
           `Invalid provider configuration: ${validationResult.error.issues
-            .map((i) => `${i.path.join('.')}: ${i.message}`)
+            .map((i: { path: (string|number)[]; message: string }) => `${i.path.join('.')}: ${i.message}`)
             .join('; ')}`,
           { providerId: config.id }
         ),

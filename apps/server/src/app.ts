@@ -8,6 +8,7 @@ import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
 import { providerRoutes } from './routes/providers';
 import { createProviderServices, type ProviderServices } from './providers';
+import { SessionMessageService } from './sessions/service';
 
 /**
  * Application services container
@@ -18,6 +19,7 @@ import { createProviderServices, type ProviderServices } from './providers';
  */
 export type AppServices = {
   providers: ProviderServices;
+  sessions: SessionMessageService;
 };
 
 /**
@@ -27,8 +29,12 @@ export async function buildApp() {
   const app = Fastify({ logger: loggerOptions });
 
   // Create shared services once per app instance
+  const providerServices = createProviderServices();
+  const sessionService = new SessionMessageService(providerServices);
+  
   const services: AppServices = {
-    providers: createProviderServices(),
+    providers: providerServices,
+    sessions: sessionService,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -39,7 +45,9 @@ export async function buildApp() {
   await app.register(websocket);
 
   await app.register(healthRoutes);
-  await app.register(sessionRoutes);
+  
+  // Pass shared services to session routes
+  await app.register(sessionRoutes, { sessionService: services.sessions });
   
   // Pass shared services to provider routes
   await app.register(providerRoutes, { services: services.providers });
