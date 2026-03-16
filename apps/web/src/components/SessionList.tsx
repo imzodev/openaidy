@@ -61,9 +61,9 @@ export function SessionList(props: SessionListProps) {
           <For each={props.sessions}>
             {(session) => (
               <li>
-                <button
+                <div
                   onClick={() => props.onSelect(session.id)}
-                  class={`w-full text-left px-3 py-2 rounded-lg transition-colors group flex items-center gap-2 ${
+                  class={`w-full text-left px-3 py-2 rounded-lg transition-colors group flex items-center gap-2 cursor-pointer ${
                     props.selectedId === session.id
                       ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
                       : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
@@ -81,7 +81,7 @@ export function SessionList(props: SessionListProps) {
                   >
                     <Trash2 class="w-3 h-3" />
                   </button>
-                </button>
+                </div>
               </li>
             )}
           </For>

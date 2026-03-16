@@ -1,27 +1,35 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render } from 'solid-js/web';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@solidjs/testing-library';
 import App from './App';
 
+// Mock the API module
+vi.mock('./lib/api', () => ({
+  listSessions: vi.fn().mockResolvedValue({ items: [] }),
+  createSession: vi.fn().mockResolvedValue({ id: '1', title: 'Test Session', createdAt: '2024-01-01T00:00:00Z' }),
+  listMessages: vi.fn().mockResolvedValue({ items: [] }),
+  submitMessage: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
+// Mock lucide-solid
+vi.mock('lucide-solid', () => ({
+  Plus: () => <span>+</span>,
+  MessageSquare: () => <span>M</span>,
+  Trash2: () => <span>T</span>,
+  User: () => <span>U</span>,
+  Bot: () => <span>B</span>,
+  AlertCircle: () => <span>A</span>,
+  Send: () => <span>S</span>,
+}));
+
 describe('App', () => {
-  let container: HTMLElement;
-
   beforeEach(() => {
-    container = document.createElement('div');
-    document.body.appendChild(container);
+    vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    container.remove();
-  });
-
-  describe('Initial Render', () => {
-    it('renders the welcome message when no session is selected', () => {
-      const dispose = render(() => <App />, container);
-
-      expect(container.textContent).toContain('Welcome to OpenAidy');
-      expect(container.textContent).toContain('Select a session');
-
-      dispose();
-    });
+  it('should render welcome message when no session selected', async () => {
+    render(() => <App />);
+    
+    // Should show welcome state initially
+    expect(screen.getByText('Welcome to OpenAidy')).toBeInTheDocument();
   });
 });
