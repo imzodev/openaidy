@@ -1,9 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import {
-  createProviderRegistry,
-  createProviderSelection,
-  createModelInvocation,
+  type ProviderServices,
   type ProviderRegistryService,
   type RegisteredProvider,
 } from '../providers';
@@ -106,15 +104,26 @@ type TestInvokeResponse = {
 };
 
 /**
+ * Options for provider routes plugin
+ */
+type ProviderRoutesOptions = {
+  services: ProviderServices;
+};
+
+/**
  * Provider Routes Plugin
  * 
  * Provides internal API routes for provider invocation testing and diagnostics.
+ * 
+ * IMPORTANT: This plugin receives provider services via options rather than
+ * creating its own instances. This ensures all routes operate on the same
+ * service graph used by the rest of the application.
  */
-export const providerRoutes: FastifyPluginAsync = async (app) => {
-  // Initialize provider services
-  const registry = createProviderRegistry();
-  const selection = createProviderSelection(registry);
-  const invocation = createModelInvocation(registry, selection);
+export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (app, options) => {
+  // Use injected services from app initialization
+  const { services } = options;
+  const { registry, invocation } = services;
+  // Selection is available via services.selection if needed for future routes
 
   /**
    * GET /providers
@@ -398,19 +407,4 @@ function getAllEntries(
   }
 
   return entries;
-}
-
-/**
- * Export services for external use (e.g., registering providers at startup)
- */
-export function getProviderServices() {
-  const registry = createProviderRegistry();
-  const selection = createProviderSelection(registry);
-  const invocation = createModelInvocation(registry, selection);
-
-  return {
-    registry,
-    selection,
-    invocation,
-  };
 }
