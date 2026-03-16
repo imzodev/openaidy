@@ -153,9 +153,11 @@ export class SessionMessageService {
       messages,
     };
 
-    const invokeOptions = input.providerId
-      ? { providerId: input.providerId, ...(input.modelId !== undefined && { modelId: input.modelId }) }
-      : { ...(input.modelId !== undefined && { modelId: input.modelId }) };
+    // Build invocation options, only including properties that have values
+    const invokeOptions = {
+      ...(input.providerId !== undefined && { providerId: input.providerId }),
+      ...(input.modelId !== undefined && { modelId: input.modelId }),
+    };
 
     const result = await this.providers.invocation.invoke(modelRequest, invokeOptions);
 
