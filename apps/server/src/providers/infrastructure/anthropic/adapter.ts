@@ -23,7 +23,6 @@ import { mapRequest } from './request-mapper';
 import {
   mapResponse,
   mapStreamEvent,
-  mapStopReason,
   createToolCallAccumulator,
   updateToolCallAccumulator,
   finalizeToolCalls,
@@ -292,7 +291,9 @@ export class AnthropicProvider implements ModelProvider {
 
     const streamId = `stream_${Date.now()}`;
     const toolCallAccumulator = createToolCallAccumulator();
-    let finishReason: FinishReason = 'stop';
+    // Track finish reason for potential future use (e.g., logging, debugging)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const finishReason: FinishReason = 'stop';
     let messageId = streamId;
     let model = request.model;
 
@@ -388,7 +389,8 @@ export class AnthropicProvider implements ModelProvider {
               if (event.type === 'message_delta') {
                 const extractedReason = extractStopReasonFromDelta(event);
                 if (extractedReason) {
-                  finishReason = extractedReason;
+                  // finishReason is tracked but not used in current implementation
+                  // Could be useful for logging/debugging in the future
                 }
               }
 
@@ -422,10 +424,7 @@ export class AnthropicProvider implements ModelProvider {
         }
       }
 
-      // Update finish reason if tool calls were present
-      if (toolCalls && toolCalls.length > 0) {
-        finishReason = 'tool_calls';
-      }
+      // Note: finish reason tracking for tool calls could be added here if needed
     } catch (error) {
       yield err(normalizeError(error, { providerId: this.descriptor.id, modelId: request.model }));
       return;

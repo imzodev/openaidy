@@ -25,7 +25,7 @@ afterEach(() => {
 
 // Set up mock responses for contract tests
 function setupMockResponses() {
-  mockFetch.mockImplementation(async (url: string, options?: { body?: string }) => {
+  mockFetch.mockImplementation(async (url: string, _options?: { body?: string }) => {
     // Mock listModels
     if (url.includes('/models?key=')) {
       return {

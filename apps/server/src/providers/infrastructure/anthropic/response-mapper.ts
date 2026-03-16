@@ -226,7 +226,7 @@ export function* mapStreamEvent(
   event: AnthropicStreamEvent,
   providerId: string,
   streamId: string,
-  model: string
+  _model: string
 ): Generator<ModelStreamEvent> {
   const timestamp = new Date().toISOString();
 
