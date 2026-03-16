@@ -62,7 +62,7 @@ describe('ProviderSelectionService', () => {
   describe('select with explicit provider', () => {
     it('should select an explicit provider', () => {
       const provider = createMockProvider('openai');
-      registry.register(provider);
+      registry.register(provider, { defaultModel: 'gpt-4' });
       registry.setDefault({ providerId: 'anthropic', modelId: 'claude-3' });
 
       const result = selection.select({ providerId: 'openai' });
@@ -120,6 +120,46 @@ describe('ProviderSelectionService', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.modelId).toBe('gpt-4');
+      }
+    });
+
+    it('should return error when no model specified and no default model configured', () => {
+      const provider = createMockProvider('openai');
+      registry.register(provider); // No defaultModel configured
+
+      const result = selection.select({ providerId: 'openai' });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('provider.config_invalid');
+        expect(result.error.message).toContain('no default model configured');
+        expect(result.error.providerId).toBe('openai');
+      }
+    });
+
+    it('should never use capability flags as model ID fallback', () => {
+      // This test ensures we don't regress to using capabilities[0] as model ID
+      const provider = createMockProvider('test-provider', ['text_generation', 'streaming']);
+      registry.register(provider); // No defaultModel
+
+      const result = selection.select({ providerId: 'test-provider' });
+
+      // Should fail, NOT return 'text_generation' as modelId
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('provider.config_invalid');
+      }
+
+      // Also verify with explicit model that it works
+      const resultWithModel = selection.select({
+        providerId: 'test-provider',
+        modelId: 'gpt-4',
+      });
+      expect(resultWithModel.ok).toBe(true);
+      if (resultWithModel.ok) {
+        expect(resultWithModel.modelId).toBe('gpt-4');
+        // Ensure it's not a capability string
+        expect(['text_generation', 'streaming', 'tool_calls', 'vision', 'audio_input', 'audio_output', 'embedding']).not.toContain(resultWithModel.modelId);
       }
     });
   });
@@ -199,7 +239,7 @@ describe('ProviderSelectionService', () => {
         'streaming',
         'vision',
       ]);
-      registry.register(provider);
+      registry.register(provider, { defaultModel: 'full-model' });
 
       const result = selection.select({
         providerId: 'full-provider',

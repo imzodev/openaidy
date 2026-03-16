@@ -84,16 +84,18 @@ export class ProviderSelectionService {
       }
     }
 
-    // Use explicit model or provider's default or first available
-    const resolvedModelId =
-      modelId ?? entry.defaultModel ?? provider.descriptor.capabilities[0];
+    // Resolve model ID: explicit model takes priority, then provider's default model
+    // Note: We intentionally do NOT fall back to capabilities[0] because capability
+    // flags (e.g., 'text_generation', 'streaming') are not valid model identifiers.
+    const resolvedModelId = modelId ?? entry.defaultModel;
 
     if (!resolvedModelId) {
       return {
         ok: false,
         error: createProviderError(
           'provider.config_invalid',
-          `No model specified and provider "${providerId}" has no default model or capabilities`,
+          `No model specified and provider "${providerId}" has no default model configured. ` +
+          `Please specify a modelId or configure a defaultModel for this provider.`,
           { providerId }
         ),
       };

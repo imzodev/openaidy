@@ -143,7 +143,7 @@ describe('App services lifecycle', () => {
 
     // But within each graph, services share the same registry
     const mockProvider = createMockProvider('shared-test');
-    services1.registry.register(mockProvider);
+    services1.registry.register(mockProvider, { defaultModel: 'mock-model-1' });
 
     // Selection service in services1 should see the registered provider
     const result = services1.selection.select({ providerId: 'shared-test' });
