@@ -91,6 +91,8 @@ export const finishReasonEnum = pgEnum('finish_reason', [
 export const sessionRuns = pgTable('session_runs', {
   id: text('id').primaryKey(),
   sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  // Agent that executed this run
+  agentId: text('agent_id').notNull(),
   // Provider and model information
   providerId: text('provider_id').notNull(),
   modelId: text('model_id').notNull(),

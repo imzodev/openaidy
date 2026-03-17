@@ -9,6 +9,7 @@ const createSessionSchema = z.object({
 const submitMessageSchema = z.object({
   role: z.enum(['user', 'system']),
   content: z.string().min(1),
+  agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
 });
@@ -118,6 +119,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       sessionId,
       role: body.role,
       content: body.content,
+      ...(body.agentId !== undefined && { agentId: body.agentId }),
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
     });

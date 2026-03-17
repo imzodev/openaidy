@@ -35,6 +35,7 @@ export type SessionMessageRecord = {
 export type SessionRunRecord = {
   id: string;
   sessionId: string;
+  agentId: string;
   providerId: string;
   modelId: string;
   status: RunStatus;
@@ -120,6 +121,7 @@ export function listSessionMessageRecords(sessionId: string): SessionMessageReco
 // Run operations
 export function createRunRecord(input: {
   sessionId: string;
+  agentId: string;
   providerId: string;
   modelId: string;
   metadata?: Record<string, unknown>;
@@ -127,6 +129,7 @@ export function createRunRecord(input: {
   const record: SessionRunRecord = {
     id: nanoid(),
     sessionId: input.sessionId,
+    agentId: input.agentId,
     providerId: input.providerId,
     modelId: input.modelId,
     status: 'queued',

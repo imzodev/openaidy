@@ -46,6 +46,7 @@ export class SessionRunsRepository {
    */
   async create(input: {
     sessionId: string;
+    agentId: string;
     providerId: string;
     modelId: string;
     metadata?: Record<string, unknown>;
@@ -53,6 +54,7 @@ export class SessionRunsRepository {
     const [run] = await this.db.insert(schema.sessionRuns).values({
       id: nanoid(),
       sessionId: input.sessionId,
+      agentId: input.agentId,
       providerId: input.providerId,
       modelId: input.modelId,
       status: 'queued',

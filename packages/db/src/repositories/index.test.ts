@@ -155,15 +155,17 @@ describe('Session Repositories (integration)', () => {
       sessionId = session.id;
     });
 
-    test('should create a run in queued status', async () => {
+    test('should create a run in queued status with agentId', async () => {
       const run = await runsRepo!.create({
         sessionId,
+        agentId: 'assistant',
         providerId: 'openai',
         modelId: 'gpt-4',
       });
 
       expect(run.id).toBeDefined();
       expect(run.status).toBe('queued');
+      expect(run.agentId).toBe('assistant');
       expect(run.providerId).toBe('openai');
       expect(run.modelId).toBe('gpt-4');
     });
@@ -171,6 +173,7 @@ describe('Session Repositories (integration)', () => {
     test('should transition run through states', async () => {
       const run = await runsRepo!.create({
         sessionId,
+        agentId: 'assistant',
         providerId: 'test',
         modelId: 'model-1',
       });
@@ -193,6 +196,7 @@ describe('Session Repositories (integration)', () => {
     test('should mark run as failed', async () => {
       const run = await runsRepo!.create({
         sessionId,
+        agentId: 'assistant',
         providerId: 'test',
         modelId: 'model-1',
       });
@@ -209,8 +213,8 @@ describe('Session Repositories (integration)', () => {
 
     test('should get active run', async () => {
       // Create multiple runs
-      await runsRepo!.create({ sessionId, providerId: 'p1', modelId: 'm1' });
-      const runningRun = await runsRepo!.create({ sessionId, providerId: 'p2', modelId: 'm2' });
+      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
+      const runningRun = await runsRepo!.create({ sessionId, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
       
       await runsRepo!.markRunning(runningRun.id);
       
@@ -219,19 +223,21 @@ describe('Session Repositories (integration)', () => {
       expect(active?.status).toBe('running');
     });
 
-    test('should list runs for session', async () => {
-      await runsRepo!.create({ sessionId, providerId: 'p1', modelId: 'm1' });
-      await runsRepo!.create({ sessionId, providerId: 'p2', modelId: 'm2' });
+    test('should list runs for session with agentId', async () => {
+      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
+      await runsRepo!.create({ sessionId, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
       
       const runs = await runsRepo!.listBySession(sessionId);
       expect(runs).toHaveLength(2);
+      expect(runs[0]?.agentId).toBe('agent2');
+      expect(runs[1]?.agentId).toBe('agent1');
     });
 
     test('should isolate runs between sessions', async () => {
       const otherSession = await sessionsRepo!.create({ title: 'Other' });
       
-      await runsRepo!.create({ sessionId, providerId: 'p1', modelId: 'm1' });
-      await runsRepo!.create({ sessionId: otherSession.id, providerId: 'p2', modelId: 'm2' });
+      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
+      await runsRepo!.create({ sessionId: otherSession.id, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
       
       const session1Runs = await runsRepo!.listBySession(sessionId);
       const session2Runs = await runsRepo!.listBySession(otherSession.id);
@@ -239,7 +245,9 @@ describe('Session Repositories (integration)', () => {
       expect(session1Runs).toHaveLength(1);
       expect(session2Runs).toHaveLength(1);
       expect(session1Runs[0]?.providerId).toBe('p1');
+      expect(session1Runs[0]?.agentId).toBe('agent1');
       expect(session2Runs[0]?.providerId).toBe('p2');
+      expect(session2Runs[0]?.agentId).toBe('agent2');
     });
   });
 });

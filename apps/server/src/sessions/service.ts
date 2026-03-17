@@ -24,6 +24,7 @@ export type SubmitMessageInput = {
   sessionId: string;
   role: 'user' | 'system';
   content: string;
+  agentId?: string;
   providerId?: string;
   modelId?: string;
 };
@@ -118,11 +119,13 @@ export class SessionMessageService {
     });
 
     // 3. Create run record (starts in 'queued' status)
+    const agentId = input.agentId ?? 'default';
     const providerId = input.providerId ?? 'default';
     const modelId = input.modelId ?? 'default';
     
     const run = createRunRecord({
       sessionId: input.sessionId,
+      agentId,
       providerId,
       modelId,
     });
