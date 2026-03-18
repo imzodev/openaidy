@@ -1,0 +1,15 @@
+{
+  "id": "default",
+  "name": "Default Assistant",
+  "description": "A general-purpose assistant for everyday tasks",
+  "enabled": true,
+  "systemPrompt": "You are a helpful AI assistant. Be concise, accurate, and helpful. When unsure, say so.",
+  "defaults": {
+    "providerId": "openai",
+    "modelId": "gpt-4o-mini",
+    "temperature": 0.7,
+    "maxTokens": 4096
+  },
+  "tags": ["general", "default"],
+  "version": 1
+}

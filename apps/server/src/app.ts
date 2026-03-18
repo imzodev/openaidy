@@ -10,8 +10,10 @@ import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
 import { providerRoutes } from './routes/providers';
+import { agentRoutes } from './routes/agents';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
+import { createAgentRegistry, type AgentRegistry } from './agents';
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -25,6 +27,7 @@ type Database = NodePgDatabase<typeof schema>;
 export type AppServices = {
   providers: ProviderServices;
   sessions: SessionMessageService;
+  agents: AgentRegistry;
   db: Database | undefined;
   pool: Pool | undefined;
 };
@@ -51,9 +54,13 @@ export async function buildApp() {
     db: db,
   });
   
+  // Create agent registry
+  const agentRegistry = createAgentRegistry();
+  
   const services: AppServices = {
     providers: providerServices,
     sessions: sessionService,
+    agents: agentRegistry,
     db: db,
     pool: pool,
   };
@@ -72,6 +79,9 @@ export async function buildApp() {
   
   // Pass shared services to provider routes
   await app.register(providerRoutes, { services: services.providers });
+  
+  // Register agent routes
+  await app.register(agentRoutes, { agentRegistry: services.agents });
 
   // Clean up database pool on close
   app.addHook('onClose', async () => {
