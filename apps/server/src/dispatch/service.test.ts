@@ -4,6 +4,7 @@ import path from 'path';
 import { DispatchService, createDispatchService, type DispatchServiceOptions } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
+import { RunEventEmitter } from './events';
 import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelResponse } from '@openaidy/runtime';
 import { ok, err, createProviderError } from '@openaidy/runtime';
 
@@ -283,5 +284,232 @@ describe('Resolution precedence', () => {
     // This test documents the expected behavior
     const precedence = ['overrides', 'agent defaults', 'system defaults'];
     expect(precedence).toEqual(['overrides', 'agent defaults', 'system defaults']);
+  });
+});
+
+describe('DispatchService streaming', () => {
+  let tempDir: string;
+  let agentRegistry: AgentRegistry;
+  let providers: ProviderServices;
+  let dispatchService: DispatchService;
+  let runEvents: RunEventEmitter;
+  let sessionId: string;
+
+  /**
+   * Helper to create a mock streaming provider
+   */
+  function createMockStreamingProvider(id: string): ModelProvider {
+    const descriptor: ProviderDescriptor = {
+      id,
+      name: `Mock Streaming Provider ${id}`,
+      vendorFamily: 'mock',
+      capabilities: ['text_generation', 'streaming'],
+    };
+
+    return {
+      descriptor,
+      listModels: async () => ok([]),
+      getModel: async () => err(createProviderError('provider.model_not_found', 'Not found')),
+      hasCapability: (cap: string) => descriptor.capabilities.includes(cap as never),
+      invoke: async (request: ModelRequest): Promise<ProviderResult<ModelResponse>> => {
+        return ok({
+          id: `resp_${Date.now()}`,
+          model: request.model,
+          providerId: id,
+          content: `Mock response to: ${request.messages[request.messages.length - 1]?.content}`,
+          usage: {
+            promptTokens: 10,
+            completionTokens: 20,
+            totalTokens: 30,
+          },
+          finishReason: 'stop',
+          created: new Date().toISOString(),
+        });
+      },
+      invokeStream: async function* (request: ModelRequest) {
+        const streamId = `stream_${Date.now()}`;
+        
+        // Emit stream started
+        yield ok({
+          type: 'stream.started' as const,
+          timestamp: new Date().toISOString(),
+          id: streamId,
+          model: request.model,
+          providerId: id,
+        });
+        
+        // Emit content deltas
+        const content = `Mock streaming response to: ${request.messages[request.messages.length - 1]?.content}`;
+        const words = content.split(' ');
+        
+        for (let i = 0; i < words.length; i++) {
+          yield ok({
+            type: 'stream.content_delta' as const,
+            timestamp: new Date().toISOString(),
+            id: streamId,
+            model: request.model,
+            providerId: id,
+            delta: (i === 0 ? words[i] : ' ' + words[i]) ?? '',
+          });
+        }
+        
+        // Emit finished
+        yield ok({
+          type: 'stream.finished' as const,
+          timestamp: new Date().toISOString(),
+          id: streamId,
+          model: request.model,
+          providerId: id,
+          finishReason: 'stop' as const,
+          response: {
+            id: `resp_${Date.now()}`,
+            model: request.model,
+            providerId: id,
+            content,
+            usage: {
+              promptTokens: 10,
+              completionTokens: words.length,
+              totalTokens: 10 + words.length,
+            },
+            finishReason: 'stop',
+            created: new Date().toISOString(),
+          },
+        });
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    // Create temp directory for agents
+    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-streaming-agents-'));
+
+    // Create test agent
+    fs.writeFileSync(
+      path.join(tempDir, 'streamer.json'),
+      JSON.stringify({
+        id: 'streamer',
+        name: 'Streaming Agent',
+        enabled: true,
+        systemPrompt: 'You are a streaming assistant.',
+        defaults: {
+          providerId: 'stream-provider',
+          modelId: 'stream-model',
+        },
+      })
+    );
+
+    agentRegistry = createAgentRegistry({ agentsDir: tempDir });
+    providers = createProviderServices();
+    runEvents = new RunEventEmitter();
+    
+    // Register mock streaming provider
+    const streamProvider = createMockStreamingProvider('stream-provider');
+    providers.registry.register(streamProvider, { defaultModel: 'stream-model' });
+
+    dispatchService = createDispatchService({
+      agents: agentRegistry,
+      providers,
+      runEvents,
+    });
+
+    sessionId = 'test-stream-session';
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  describe('dispatchStream', () => {
+    it('should yield failure event for non-existent agent', async () => {
+      // First create a session using the regular dispatch
+      await dispatchService.dispatch({
+        sessionId,
+        agentId: 'streamer',
+        input: { role: 'user', content: 'Hello' },
+      });
+      
+      const events: any[] = [];
+      
+      for await (const event of dispatchService.dispatchStream({
+        sessionId,
+        agentId: 'non-existent',
+        input: { role: 'user', content: 'Hello' },
+      })) {
+        events.push(event);
+      }
+
+      expect(events.length).toBe(1);
+      expect(events[0].type).toBe('run.failed');
+      expect(events[0].data.errorCode).toBe('agent.not_found');
+    });
+
+    it('should yield failure event for disabled agent', async () => {
+      // First create a session using the regular dispatch
+      await dispatchService.dispatch({
+        sessionId,
+        agentId: 'streamer',
+        input: { role: 'user', content: 'Hello' },
+      });
+      
+      // Create disabled agent
+      fs.writeFileSync(
+        path.join(tempDir, 'disabled.json'),
+        JSON.stringify({
+          id: 'disabled',
+          name: 'Disabled Agent',
+          enabled: false,
+          systemPrompt: 'Disabled.',
+          defaults: {},
+        })
+      );
+      agentRegistry.reload();
+
+      const events: any[] = [];
+      
+      for await (const event of dispatchService.dispatchStream({
+        sessionId,
+        agentId: 'disabled',
+        input: { role: 'user', content: 'Hello' },
+      })) {
+        events.push(event);
+      }
+
+      expect(events.length).toBe(1);
+      expect(events[0].type).toBe('run.failed');
+      expect(events[0].data.errorCode).toBe('agent.disabled');
+    });
+
+    it('should emit events through RunEventEmitter', async () => {
+      // First create a session using the regular dispatch
+      await dispatchService.dispatch({
+        sessionId,
+        agentId: 'streamer',
+        input: { role: 'user', content: 'Hello' },
+      });
+      
+      // Subscribe to events
+      const receivedEvents: any[] = [];
+      const unsubscribe = runEvents.subscribe('test-run-id', (event) => {
+        receivedEvents.push(event);
+      });
+
+      // Emit a test event
+      runEvents.emit({
+        type: 'run.queued',
+        runId: 'test-run-id',
+        sessionId,
+        agentId: 'streamer',
+        timestamp: new Date().toISOString(),
+        data: {},
+      });
+
+      // Wait for processing
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(receivedEvents.length).toBe(1);
+      expect(receivedEvents[0].type).toBe('run.queued');
+
+      unsubscribe();
+    });
   });
 });
