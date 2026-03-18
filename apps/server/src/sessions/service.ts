@@ -1,5 +1,17 @@
 import type { ProviderServices } from '../providers';
 import type { Message, ModelRequest, ModelResponse } from '@openaidy/runtime';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import {
+  SessionsRepository,
+  SessionMessagesRepository,
+  SessionRunsRepository,
+  type Session,
+  type SessionMessage,
+  type SessionRun,
+  type MessageRole as DbMessageRole,
+  type FinishReason as DbFinishReason,
+} from '@openaidy/db';
+import * as schema from '@openaidy/db';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -17,6 +29,8 @@ import {
   type FinishReason,
 } from './store';
 
+type Database = NodePgDatabase<typeof schema>;
+
 /**
  * Input for submitting a message to a session
  */
@@ -33,8 +47,16 @@ export type SubmitMessageInput = {
  * Result of submitting a message
  */
 export type SubmitMessageResult =
-  | { ok: true; userMessage: SessionMessageRecord; assistantMessage: SessionMessageRecord; run: SessionRunRecord }
+  | { ok: true; userMessage: SessionMessageRecord | SessionMessage; assistantMessage: SessionMessageRecord | SessionMessage; run: SessionRunRecord | SessionRun }
   | { ok: false; error: { code: string; message: string; providerId?: string; modelId?: string } };
+
+/**
+ * Session message service options
+ */
+export type SessionMessageServiceOptions = {
+  providers: ProviderServices;
+  db?: Database | undefined;
+};
 
 /**
  * Session message service
@@ -46,42 +68,81 @@ export type SubmitMessageResult =
  * 4. Invoke provider
  * 5. Persist assistant message
  * 6. Update run with result
+ * 
+ * Supports both in-memory (for testing) and DB-backed persistence.
  */
 export class SessionMessageService {
-  constructor(private readonly providers: ProviderServices) {}
+  private readonly providers: ProviderServices;
+  private readonly db: Database | undefined;
+  private readonly sessionsRepo: SessionsRepository | undefined;
+  private readonly messagesRepo: SessionMessagesRepository | undefined;
+  private readonly runsRepo: SessionRunsRepository | undefined;
+
+  constructor(options: SessionMessageServiceOptions) {
+    this.providers = options.providers;
+    this.db = options.db;
+    
+    if (options.db) {
+      this.sessionsRepo = new SessionsRepository(options.db);
+      this.messagesRepo = new SessionMessagesRepository(options.db);
+      this.runsRepo = new SessionRunsRepository(options.db);
+    }
+  }
+
+  /**
+   * Check if using DB-backed storage
+   */
+  get isDbBacked(): boolean {
+    return !!this.db;
+  }
 
   /**
    * List all sessions
    */
-  listSessions(): SessionRecord[] {
+  async listSessions(): Promise<SessionRecord[] | Session[]> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.list('active');
+    }
     return listSessionRecords();
   }
 
   /**
    * Get a session by ID
    */
-  getSession(id: string): SessionRecord | undefined {
-    return findSessionRecord(id);
+  async getSession(id: string): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.findById(id);
+    }
+    return findSessionRecord(id) ?? null;
   }
 
   /**
    * Create a new session
    */
-  createSession(title: string): SessionRecord {
+  async createSession(title: string): Promise<SessionRecord | Session> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.create({ title });
+    }
     return createSessionRecord(title);
   }
 
   /**
    * List messages for a session
    */
-  listMessages(sessionId: string): SessionMessageRecord[] {
+  async listMessages(sessionId: string): Promise<SessionMessageRecord[] | SessionMessage[]> {
+    if (this.messagesRepo) {
+      return this.messagesRepo.listBySession(sessionId);
+    }
     return listSessionMessageRecords(sessionId);
   }
 
   /**
    * List runs for a session
    */
-  listRuns(sessionId: string): SessionRunRecord[] {
+  async listRuns(sessionId: string): Promise<SessionRunRecord[] | SessionRun[]> {
+    if (this.runsRepo) {
+      return this.runsRepo.listBySession(sessionId);
+    }
     return listSessionRunRecords(sessionId);
   }
 
@@ -100,7 +161,7 @@ export class SessionMessageService {
    */
   async submitMessage(input: SubmitMessageInput): Promise<SubmitMessageResult> {
     // 1. Validate session exists
-    const session = findSessionRecord(input.sessionId);
+    const session = await this.getSession(input.sessionId);
     if (!session) {
       return {
         ok: false,
@@ -112,7 +173,7 @@ export class SessionMessageService {
     }
 
     // 2. Persist user message
-    const userMessage = appendMessageRecord({
+    const userMessage = await this.appendMessage({
       sessionId: input.sessionId,
       role: input.role,
       content: input.content,
@@ -123,7 +184,7 @@ export class SessionMessageService {
     const providerId = input.providerId ?? 'default';
     const modelId = input.modelId ?? 'default';
     
-    const run = createRunRecord({
+    const run = await this.createRun({
       sessionId: input.sessionId,
       agentId,
       providerId,
@@ -131,22 +192,26 @@ export class SessionMessageService {
     });
 
     // 4. Mark run as running
-    markRunRunning(run.id);
+    await this.markRunRunning(run.id);
 
     // 5. Build request from session history + new message
-    const history = listSessionMessageRecords(input.sessionId);
+    const history = await this.listMessages(input.sessionId);
     const messages: Message[] = history.map(m => {
-      // Map to proper Message type
-      if (m.role === 'tool') {
+      // Map to proper Message type - both types have these properties
+      const msgRole = (m as { role: string }).role;
+      const msgContent = (m as { content: string }).content;
+      const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
+      
+      if (msgRole === 'tool') {
         return {
           role: 'tool' as const,
-          content: m.content,
-          toolCallId: m.toolCallId ?? '',
+          content: msgContent,
+          toolCallId: msgToolCallId ?? '',
         };
       }
       return {
-        role: m.role as 'system' | 'user' | 'assistant',
-        content: m.content,
+        role: msgRole as 'system' | 'user' | 'assistant',
+        content: msgContent,
       } as Message;
     });
 
@@ -166,23 +231,136 @@ export class SessionMessageService {
 
     // 7 & 8. Handle result
     if (result.ok) {
-      return this.handleSuccess(run.id, userMessage, result.value);
+      return this.handleSuccess(run.id, input.sessionId, userMessage, result.value);
     } else {
       return this.handleFailure(run.id, userMessage, result.error.code, result.error.message);
     }
   }
 
   /**
+   * Append a message to a session
+   */
+  private async appendMessage(input: {
+    sessionId: string;
+    role: 'user' | 'system' | 'assistant' | 'tool';
+    content: string;
+    toolCallId?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<SessionMessageRecord | SessionMessage> {
+    if (this.messagesRepo) {
+      const appendInput: {
+        sessionId: string;
+        role: DbMessageRole;
+        content: string;
+        toolCallId?: string;
+        metadata?: Record<string, unknown>;
+      } = {
+        sessionId: input.sessionId,
+        role: input.role as DbMessageRole,
+        content: input.content,
+      };
+      if (input.toolCallId !== undefined) {
+        appendInput.toolCallId = input.toolCallId;
+      }
+      if (input.metadata !== undefined) {
+        appendInput.metadata = input.metadata;
+      }
+      return this.messagesRepo.append(appendInput);
+    }
+    return appendMessageRecord(input);
+  }
+
+  /**
+   * Create a run record
+   */
+  private async createRun(input: {
+    sessionId: string;
+    agentId: string;
+    providerId: string;
+    modelId: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<SessionRunRecord | SessionRun> {
+    if (this.runsRepo) {
+      return this.runsRepo.create(input);
+    }
+    return createRunRecord(input);
+  }
+
+  /**
+   * Mark a run as running
+   */
+  private async markRunRunning(id: string): Promise<SessionRunRecord | SessionRun | null> {
+    if (this.runsRepo) {
+      return this.runsRepo.markRunning(id);
+    }
+    return markRunRunning(id) ?? null;
+  }
+
+  /**
+   * Mark a run as succeeded
+   */
+  private async markRunSucceeded(
+    id: string,
+    input: {
+      finishReason: FinishReason;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<SessionRunRecord | SessionRun | null> {
+    if (this.runsRepo) {
+      const successInput: {
+        finishReason: DbFinishReason;
+        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+        metadata?: Record<string, unknown>;
+      } = {
+        finishReason: input.finishReason as DbFinishReason,
+      };
+      if (input.promptTokens !== undefined) {
+        successInput.usage = {
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens ?? 0,
+          totalTokens: input.totalTokens ?? 0,
+        };
+      }
+      if (input.metadata !== undefined) {
+        successInput.metadata = input.metadata;
+      }
+      return this.runsRepo.markSucceeded(id, successInput);
+    }
+    return markRunSucceeded(id, input) ?? null;
+  }
+
+  /**
+   * Mark a run as failed
+   */
+  private async markRunFailed(
+    id: string,
+    input: {
+      errorCode: string;
+      errorMessage: string;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<SessionRunRecord | SessionRun | null> {
+    if (this.runsRepo) {
+      return this.runsRepo.markFailed(id, input);
+    }
+    return markRunFailed(id, input) ?? null;
+  }
+
+  /**
    * Handle successful provider invocation
    */
-  private handleSuccess(
+  private async handleSuccess(
     runId: string,
-    userMessage: SessionMessageRecord,
+    sessionId: string,
+    userMessage: SessionMessageRecord | SessionMessage,
     response: ModelResponse
-  ): SubmitMessageResult {
+  ): Promise<SubmitMessageResult> {
     // Persist assistant message
-    const assistantMessage = appendMessageRecord({
-      sessionId: userMessage.sessionId,
+    const assistantMessage = await this.appendMessage({
+      sessionId: sessionId,
       role: 'assistant',
       content: response.content,
       metadata: {
@@ -193,7 +371,7 @@ export class SessionMessageService {
     });
 
     // Update run with success
-    const updatedRun = markRunSucceeded(runId, {
+    const updatedRun = await this.markRunSucceeded(runId, {
       finishReason: response.finishReason as FinishReason,
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,
@@ -216,14 +394,14 @@ export class SessionMessageService {
   /**
    * Handle failed provider invocation
    */
-  private handleFailure(
+  private async handleFailure(
     runId: string,
-    userMessage: SessionMessageRecord,
+    userMessage: SessionMessageRecord | SessionMessage,
     errorCode: string,
     errorMessage: string
-  ): SubmitMessageResult {
+  ): Promise<SubmitMessageResult> {
     // Update run with failure
-    markRunFailed(runId, {
+    await this.markRunFailed(runId, {
       errorCode,
       errorMessage,
     });

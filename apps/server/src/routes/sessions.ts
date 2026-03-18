@@ -29,7 +29,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
    * List all sessions
    */
   app.get('/sessions', async () => {
-    return { items: sessionService.listSessions() };
+    const items = await sessionService.listSessions();
+    return { items };
   });
 
   /**
@@ -47,7 +48,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         message: error instanceof Error ? error.message : 'Invalid request body',
       };
     }
-    const session = sessionService.createSession(parsed.title);
+    const session = await sessionService.createSession(parsed.title);
     reply.code(201);
     return session;
   });
@@ -58,7 +59,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
    */
   app.get('/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    const session = sessionService.getSession(sessionId);
+    const session = await sessionService.getSession(sessionId);
     
     if (!session) {
       reply.code(404);
@@ -75,13 +76,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   app.get('/sessions/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     
-    const session = sessionService.getSession(sessionId);
+    const session = await sessionService.getSession(sessionId);
     if (!session) {
       reply.code(404);
       return { error: 'Session not found', sessionId };
     }
     
-    const messages = sessionService.listMessages(sessionId);
+    const messages = await sessionService.listMessages(sessionId);
     return { items: messages };
   });
 
@@ -158,13 +159,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   app.get('/sessions/:sessionId/runs', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     
-    const session = sessionService.getSession(sessionId);
+    const session = await sessionService.getSession(sessionId);
     if (!session) {
       reply.code(404);
       return { error: 'Session not found', sessionId };
     }
     
-    const runs = sessionService.listRuns(sessionId);
+    const runs = await sessionService.listRuns(sessionId);
     return { items: runs };
   });
 };

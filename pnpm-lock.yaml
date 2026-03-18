@@ -53,6 +53,9 @@ importers:
       '@openaidy/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@openaidy/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@openaidy/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
