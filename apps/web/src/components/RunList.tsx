@@ -1,0 +1,151 @@
+import { Show, For } from 'solid-js';
+import { Clock, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-solid';
+import type { SessionRun, RunStatus } from '../lib/api';
+
+type RunListProps = {
+  runs: SessionRun[];
+  isLoading: boolean;
+  error?: string;
+};
+
+/**
+ * Get icon for run status
+ */
+function getStatusIcon(status: RunStatus) {
+  switch (status) {
+    case 'queued':
+      return <Clock class="w-4 h-4 text-gray-400" />;
+    case 'running':
+      return <Loader class="w-4 h-4 text-blue-500 animate-spin" />;
+    case 'succeeded':
+      return <CheckCircle class="w-4 h-4 text-green-500" />;
+    case 'failed':
+      return <XCircle class="w-4 h-4 text-red-500" />;
+    case 'cancelled':
+      return <AlertCircle class="w-4 h-4 text-yellow-500" />;
+    default:
+      return <Clock class="w-4 h-4 text-gray-400" />;
+  }
+}
+
+/**
+ * Get status badge class
+ */
+function getStatusClass(status: RunStatus) {
+  switch (status) {
+    case 'queued':
+      return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+    case 'running':
+      return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
+    case 'succeeded':
+      return 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400';
+    case 'failed':
+      return 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
+    case 'cancelled':
+      return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
+    default:
+      return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+  }
+}
+
+/**
+ * Format timestamp
+ */
+function formatTime(isoString: string): string {
+  return new Date(isoString).toLocaleTimeString();
+}
+
+/**
+ * Truncate ID for display
+ */
+function truncateId(id: string): string {
+  return id.length > 8 ? id.slice(0, 8) + '...' : id;
+}
+
+export function RunList(props: RunListProps) {
+  return (
+    <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+      {/* Header */}
+      <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Runs</h3>
+        <Show when={props.runs.length > 0}>
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
+          </span>
+        </Show>
+      </div>
+
+      {/* Loading state */}
+      <Show when={props.isLoading}>
+        <div class="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          <Loader class="w-4 h-4 animate-spin inline mr-2" />
+          Loading runs...
+        </div>
+      </Show>
+
+      {/* Error state */}
+      <Show when={props.error}>
+        <div class="px-4 py-2 text-sm text-red-600 dark:text-red-400">
+          {props.error}
+        </div>
+      </Show>
+
+      {/* Empty state */}
+      <Show when={!props.isLoading && !props.error && props.runs.length === 0}>
+        <div class="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+          No runs yet
+        </div>
+      </Show>
+
+      {/* Runs list */}
+      <Show when={!props.isLoading && props.runs.length > 0}>
+        <div class="max-h-48 overflow-y-auto">
+          <For each={props.runs}>
+            {(run) => (
+              <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                <div class="flex items-center justify-between gap-2">
+                  {/* Left side: status and ID */}
+                  <div class="flex items-center gap-2">
+                    {getStatusIcon(run.status)}
+                    <code class="text-xs font-mono text-gray-600 dark:text-gray-400">
+                      {truncateId(run.id)}
+                    </code>
+                    <Show when={run.agentId}>
+                      <span class="text-xs text-gray-500 dark:text-gray-400">
+                        • {run.agentId}
+                      </span>
+                    </Show>
+                  </div>
+
+                  {/* Right side: status badge and time */}
+                  <div class="flex items-center gap-2">
+                    <span class={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(run.status)}`}>
+                      {run.status}
+                    </span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                      {formatTime(run.createdAt)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Provider/Model info */}
+                <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>{run.providerId}</span>
+                  <span>•</span>
+                  <span>{run.modelId}</span>
+                </div>
+
+                {/* Error message */}
+                <Show when={run.status === 'failed' && run.errorMessage}>
+                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                    {run.errorMessage}
+                  </div>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}

@@ -1,9 +1,21 @@
 import { createSignal, Show } from 'solid-js';
 import { QueryClient, QueryClientProvider, createQuery, createMutation } from '@tanstack/solid-query';
-import { listSessions, createSession, listMessages, submitMessage, type Session, type SessionMessage } from './lib/api';
+import { 
+  listSessions, 
+  createSession, 
+  listMessages, 
+  submitMessage, 
+  listAgents,
+  listRuns,
+  type Session, 
+  type SessionMessage,
+  type Agent,
+  type SessionRun
+} from './lib/api';
 import { SessionList } from './components/SessionList';
 import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
+import { RunList } from './components/RunList';
 import './index.css';
 
 // Create a client
@@ -19,6 +31,7 @@ const queryClient = new QueryClient({
 function AppContent() {
   const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>(undefined);
   const [submitError, setSubmitError] = createSignal<string | undefined>(undefined);
+  const [selectedAgentId, setSelectedAgentId] = createSignal<string | undefined>(undefined);
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({
@@ -26,10 +39,23 @@ function AppContent() {
     queryFn: listSessions,
   }));
 
+  // Agents query
+  const agentsQuery = createQuery(() => ({
+    queryKey: ['agents'],
+    queryFn: listAgents,
+  }));
+
   // Messages query
   const messagesQuery = createQuery(() => ({
     queryKey: ['messages', selectedSessionId()],
     queryFn: () => selectedSessionId() ? listMessages(selectedSessionId()!) : { items: [] },
+    enabled: !!selectedSessionId(),
+  }));
+
+  // Runs query
+  const runsQuery = createQuery(() => ({
+    queryKey: ['runs', selectedSessionId()],
+    queryFn: () => selectedSessionId() ? listRuns(selectedSessionId()!) : { items: [] },
     enabled: !!selectedSessionId(),
   }));
 
@@ -44,14 +70,15 @@ function AppContent() {
 
   // Submit message mutation
   const submitMessageMutation = createMutation(() => ({
-    mutationFn: (content: string) => {
+    mutationFn: ({ content, agentId }: { content: string; agentId?: string }) => {
       const sessionId = selectedSessionId();
       if (!sessionId) throw new Error('No session selected');
-      return submitMessage(sessionId, { role: 'user', content });
+      return submitMessage(sessionId, { role: 'user', content, agentId });
     },
     onSuccess: (result) => {
       if (result.ok) {
         queryClient.invalidateQueries({ queryKey: ['messages', selectedSessionId()] });
+        queryClient.invalidateQueries({ queryKey: ['runs', selectedSessionId()] });
         setSubmitError(undefined);
       } else {
         setSubmitError(result.error.message);
@@ -69,9 +96,9 @@ function AppContent() {
   };
 
   // Handle message submission
-  const handleSubmit = async (content: string) => {
+  const handleSubmit = async (content: string, agentId?: string) => {
     setSubmitError(undefined);
-    await submitMessageMutation.mutateAsync(content);
+    await submitMessageMutation.mutateAsync({ content, agentId });
   };
 
   // Get messages array
@@ -79,6 +106,18 @@ function AppContent() {
     const data = messagesQuery.data;
     if (!data || 'error' in data) return [];
     return data.items || [];
+  };
+
+  // Get runs array
+  const runs = (): SessionRun[] => {
+    const data = runsQuery.data;
+    if (!data || 'error' in data) return [];
+    return data.items || [];
+  };
+
+  // Get agents array
+  const agents = (): Agent[] => {
+    return agentsQuery.data?.items || [];
   };
 
   return (
@@ -130,11 +169,21 @@ function AppContent() {
             error={messagesQuery.error?.message}
           />
 
+          {/* Runs panel */}
+          <RunList
+            runs={runs()}
+            isLoading={runsQuery.isLoading}
+            error={runsQuery.error?.message}
+          />
+
           {/* Composer */}
           <ChatComposer
             onSend={handleSubmit}
             disabled={submitMessageMutation.isPending}
             placeholder="Type your message..."
+            agents={agents()}
+            selectedAgentId={selectedAgentId()}
+            onAgentSelect={setSelectedAgentId}
           />
 
           {/* Error toast */}

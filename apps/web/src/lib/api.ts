@@ -67,11 +67,29 @@ export type SessionMessage = {
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /**
+ * Agent configuration
+ */
+export type Agent = {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  systemPrompt: string;
+  defaults: {
+    providerId?: string;
+    modelId?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+};
+
+/**
  * Session run record
  */
 export type SessionRun = {
   id: string;
   sessionId: string;
+  agentId?: string;
   providerId: string;
   modelId: string;
   status: RunStatus;
@@ -141,11 +159,31 @@ export async function listRuns(sessionId: string): Promise<{ items: SessionRun[]
 }
 
 /**
+ * List all agents
+ */
+export async function listAgents(): Promise<{ items: Agent[] }> {
+  const response = await fetch(`${API_BASE}/agents`);
+  if (!response.ok) {
+    throw new Error(`Failed to list agents: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get an agent by ID
+ */
+export async function getAgent(id: string): Promise<Agent | ApiError> {
+  const response = await fetch(`${API_BASE}/agents/${id}`);
+  return response.json();
+}
+
+/**
  * Submit message input
  */
 export type SubmitMessageInput = {
   role: 'user' | 'system';
   content: string;
+  agentId?: string;
   providerId?: string;
   modelId?: string;
 };

@@ -1,10 +1,15 @@
 import { createSignal, Show } from 'solid-js';
 import { Send } from 'lucide-solid';
+import { AgentPicker } from './AgentPicker';
+import type { Agent } from '../lib/api';
 
 type ChatComposerProps = {
-  onSend: (content: string) => Promise<void>;
+  onSend: (content: string, agentId?: string) => Promise<void>;
   disabled?: boolean;
   placeholder?: string;
+  agents: Agent[];
+  selectedAgentId?: string;
+  onAgentSelect: (agentId: string | undefined) => void;
 };
 
 export function ChatComposer(props: ChatComposerProps) {
@@ -18,7 +23,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
     setIsSending(true);
     try {
-      await props.onSend(content);
+      await props.onSend(content, props.selectedAgentId);
       setInput('');
     } finally {
       setIsSending(false);
@@ -35,6 +40,15 @@ export function ChatComposer(props: ChatComposerProps) {
   return (
     <form onSubmit={handleSubmit} class="border-t border-gray-200 dark:border-gray-700 p-4">
       <div class="flex items-end gap-3">
+        {/* Agent picker */}
+        <AgentPicker
+          agents={props.agents}
+          selectedAgentId={props.selectedAgentId}
+          onSelect={props.onAgentSelect}
+          disabled={props.disabled || isSending()}
+        />
+
+        {/* Text input */}
         <div class="flex-1">
           <textarea
             value={input()}
@@ -47,6 +61,8 @@ export function ChatComposer(props: ChatComposerProps) {
             style={{ 'min-height': '44px', 'max-height': '200px' }}
           />
         </div>
+
+        {/* Send button */}
         <button
           type="submit"
           disabled={props.disabled || isSending() || !input().trim()}
