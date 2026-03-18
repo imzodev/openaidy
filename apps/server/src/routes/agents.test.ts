@@ -9,6 +9,7 @@ import { agentRoutes } from './agents';
 import { createAgentRegistry } from '../agents';
 import { createProviderServices } from '../providers';
 import { SessionMessageService } from '../sessions/service';
+import { RunEventEmitter } from '../dispatch/events';
 
 describe('Agent Routes', () => {
   let app: FastifyInstance;
@@ -64,6 +65,7 @@ describe('Agent Routes', () => {
     const sessionService = new SessionMessageService({
       providers: providerServices,
     });
+    const runEvents = new RunEventEmitter();
     
     app = Fastify({ logger: false });
     
@@ -71,6 +73,7 @@ describe('Agent Routes', () => {
       providers: providerServices,
       sessions: sessionService,
       agents: testRegistry,
+      runEvents,
       db: undefined,
       pool: undefined,
     });

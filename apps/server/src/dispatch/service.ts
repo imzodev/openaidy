@@ -1,7 +1,8 @@
 import type { ProviderServices } from '../providers';
-import type { Message, ModelRequest, ModelResponse } from '@openaidy/runtime';
+import type { Message, ModelRequest, ModelResponse, ModelStreamEvent } from '@openaidy/runtime';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Agent, AgentRegistry } from '../agents';
+import type { RunEvent, RunEventEmitter } from './events';
 import {
   SessionsRepository,
   SessionMessagesRepository,
@@ -89,6 +90,8 @@ export type DispatchServiceOptions = {
   providers: ProviderServices;
   db?: Database | undefined;
   systemDefaults?: SystemDefaults;
+  /** Optional event emitter for streaming run events */
+  runEvents?: RunEventEmitter;
 };
 
 /**
@@ -116,11 +119,13 @@ export class DispatchService {
   private readonly messagesRepo: SessionMessagesRepository | undefined;
   private readonly runsRepo: SessionRunsRepository | undefined;
   private readonly systemDefaults: SystemDefaults;
+  private readonly runEvents: RunEventEmitter | undefined;
 
   constructor(options: DispatchServiceOptions) {
     this.agents = options.agents;
     this.providers = options.providers;
     this.db = options.db;
+    this.runEvents = options.runEvents;
     
     // Default system defaults
     this.systemDefaults = options.systemDefaults ?? {
@@ -287,6 +292,302 @@ export class DispatchService {
     } else {
       return this.handleFailure(run.id, userMessage, result.error.code, result.error.message);
     }
+  }
+
+  /**
+   * Dispatch an agent to a session with streaming
+   * 
+   * Emits events via runEvents emitter:
+   * - run.queued - when run is created
+   * - run.started - when invocation begins
+   * - run.delta - for each streaming chunk
+   * - run.completed - on success
+   * - run.failed - on error
+   */
+  async *dispatchStream(input: DispatchInput): AsyncGenerator<RunEvent, void, unknown> {
+    // 1. Resolve configuration
+    const config = this.resolveConfig(input.agentId, input.overrides);
+    
+    if ('error' in config) {
+      // Emit failure event if we have an emitter
+      if (this.runEvents) {
+        const failureEvent: RunEvent = {
+          type: 'run.failed',
+          runId: 'unknown',
+          sessionId: input.sessionId,
+          agentId: input.agentId,
+          timestamp: new Date().toISOString(),
+          data: {
+            errorCode: config.error.code,
+            errorMessage: config.error.message,
+          },
+        };
+        this.runEvents.emit(failureEvent);
+        yield failureEvent;
+      }
+      return;
+    }
+
+    // 2. Validate session exists
+    const session = await this.getSession(input.sessionId);
+    if (!session) {
+      if (this.runEvents) {
+        const failureEvent: RunEvent = {
+          type: 'run.failed',
+          runId: 'unknown',
+          sessionId: input.sessionId,
+          agentId: config.agentId,
+          timestamp: new Date().toISOString(),
+          data: {
+            errorCode: 'session.not_found',
+            errorMessage: `Session "${input.sessionId}" not found`,
+          },
+        };
+        this.runEvents.emit(failureEvent);
+        yield failureEvent;
+      }
+      return;
+    }
+
+    // 3. Persist user message
+    const userMessage = await this.appendMessage({
+      sessionId: input.sessionId,
+      role: input.input.role,
+      content: input.input.content,
+      metadata: {
+        agentId: config.agentId,
+      },
+    });
+
+    // 4. Create run record (starts in 'queued' status)
+    const run = await this.createRun({
+      sessionId: input.sessionId,
+      agentId: config.agentId,
+      providerId: config.providerId,
+      modelId: config.modelId,
+      metadata: {
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+      },
+    });
+
+    // Emit run.queued event
+    if (this.runEvents) {
+      const queuedEvent: RunEvent = {
+        type: 'run.queued',
+        runId: run.id,
+        sessionId: input.sessionId,
+        agentId: config.agentId,
+        timestamp: new Date().toISOString(),
+        data: {},
+      };
+      this.runEvents.emit(queuedEvent);
+      yield queuedEvent;
+    }
+
+    // 5. Mark run as running
+    await this.markRunRunning(run.id);
+
+    // Emit run.started event
+    if (this.runEvents) {
+      const startedEvent: RunEvent = {
+        type: 'run.started',
+        runId: run.id,
+        sessionId: input.sessionId,
+        agentId: config.agentId,
+        timestamp: new Date().toISOString(),
+        data: {
+          providerId: config.providerId,
+          modelId: config.modelId,
+        },
+      };
+      this.runEvents.emit(startedEvent);
+      yield startedEvent;
+    }
+
+    // 6. Build messages with agent system prompt
+    const history = await this.listMessages(input.sessionId);
+    const messages: Message[] = this.buildMessages(history, config.systemPrompt);
+
+    // 7. Invoke provider with streaming
+    const modelRequest: ModelRequest = {
+      model: config.modelId,
+      messages,
+      stream: true,
+      ...(config.temperature !== undefined && { temperature: config.temperature }),
+      ...(config.maxTokens !== undefined && { maxTokens: config.maxTokens }),
+    };
+
+    let fullContent = '';
+    let lastStreamEvent: ModelStreamEvent | null = null;
+
+    try {
+      for await (const streamResult of this.providers.invocation.invokeStream(modelRequest, {
+        providerId: config.providerId,
+      })) {
+        if (!streamResult.ok) {
+          // Handle stream error
+          await this.handleStreamFailure(run.id, userMessage, streamResult.error.code, streamResult.error.message);
+          
+          if (this.runEvents) {
+            const failedEvent: RunEvent = {
+              type: 'run.failed',
+              runId: run.id,
+              sessionId: input.sessionId,
+              agentId: config.agentId,
+              timestamp: new Date().toISOString(),
+              data: {
+                errorCode: streamResult.error.code,
+                errorMessage: streamResult.error.message,
+              },
+            };
+            this.runEvents.emit(failedEvent);
+            yield failedEvent;
+          }
+          return;
+        }
+
+        const streamEvent = streamResult.value;
+        lastStreamEvent = streamEvent;
+
+        // Handle different event types
+        if (streamEvent.type === 'stream.content_delta' && 'delta' in streamEvent) {
+          const delta = (streamEvent as { delta?: string }).delta ?? '';
+          fullContent += delta;
+
+          // Emit run.delta event
+          if (this.runEvents) {
+            const deltaEvent: RunEvent = {
+              type: 'run.delta',
+              runId: run.id,
+              sessionId: input.sessionId,
+              agentId: config.agentId,
+              timestamp: new Date().toISOString(),
+              data: {
+                delta,
+                content: fullContent,
+              },
+            };
+            this.runEvents.emit(deltaEvent);
+            yield deltaEvent;
+          }
+        }
+      }
+
+      // 8. Handle successful completion
+      if (lastStreamEvent && lastStreamEvent.type === 'stream.finished') {
+        const completedEvent = lastStreamEvent as { response?: ModelResponse };
+        if (completedEvent.response) {
+          const result = await this.handleStreamSuccess(
+            run.id,
+            input.sessionId,
+            userMessage,
+            completedEvent.response,
+            config
+          );
+
+          // Emit run.completed event
+          if (this.runEvents) {
+            const completedRunEvent: RunEvent = {
+              type: 'run.completed',
+              runId: run.id,
+              sessionId: input.sessionId,
+              agentId: config.agentId,
+              timestamp: new Date().toISOString(),
+              data: {
+                finishReason: completedEvent.response.finishReason,
+                usage: completedEvent.response.usage,
+              },
+            };
+            this.runEvents.emit(completedRunEvent);
+            yield completedRunEvent;
+          }
+        }
+      }
+    } catch (error) {
+      // Handle unexpected errors
+      const errorCode = 'provider.stream_error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown stream error';
+      
+      await this.handleStreamFailure(run.id, userMessage, errorCode, errorMessage);
+      
+      if (this.runEvents) {
+        const failedEvent: RunEvent = {
+          type: 'run.failed',
+          runId: run.id,
+          sessionId: input.sessionId,
+          agentId: config.agentId,
+          timestamp: new Date().toISOString(),
+          data: {
+            errorCode,
+            errorMessage,
+          },
+        };
+        this.runEvents.emit(failedEvent);
+        yield failedEvent;
+      }
+    }
+  }
+
+  /**
+   * Handle successful streaming completion
+   */
+  private async handleStreamSuccess(
+    runId: string,
+    sessionId: string,
+    userMessage: SessionMessageRecord | SessionMessage,
+    response: ModelResponse,
+    config: ResolvedConfig
+  ): Promise<DispatchResult> {
+    // Persist assistant message
+    const assistantMessage = await this.appendMessage({
+      sessionId: sessionId,
+      role: 'assistant',
+      content: response.content,
+      metadata: {
+        agentId: config.agentId,
+        providerId: response.providerId,
+        model: response.model,
+        runId,
+      },
+    });
+
+    // Update run with success
+    const updatedRun = await this.markRunSucceeded(runId, {
+      finishReason: response.finishReason as FinishReason,
+      promptTokens: response.usage.promptTokens,
+      completionTokens: response.usage.completionTokens,
+      totalTokens: response.usage.totalTokens,
+      metadata: {
+        agentId: config.agentId,
+        providerId: response.providerId,
+        model: response.model,
+        responseId: response.id,
+      },
+    });
+
+    return {
+      ok: true,
+      userMessage,
+      assistantMessage,
+      run: updatedRun!,
+    };
+  }
+
+  /**
+   * Handle streaming failure
+   */
+  private async handleStreamFailure(
+    runId: string,
+    userMessage: SessionMessageRecord | SessionMessage,
+    errorCode: string,
+    errorMessage: string
+  ): Promise<void> {
+    // Update run with failure
+    await this.markRunFailed(runId, {
+      errorCode,
+      errorMessage,
+    });
   }
 
   /**

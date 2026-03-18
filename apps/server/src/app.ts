@@ -11,9 +11,11 @@ import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
+import { runStreamRoutes } from './routes/runs';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
+import { RunEventEmitter, type RunEvent } from './dispatch';
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -28,6 +30,7 @@ export type AppServices = {
   providers: ProviderServices;
   sessions: SessionMessageService;
   agents: AgentRegistry;
+  runEvents: RunEventEmitter;
   db: Database | undefined;
   pool: Pool | undefined;
 };
@@ -57,10 +60,14 @@ export async function buildApp() {
   // Create agent registry
   const agentRegistry = createAgentRegistry();
   
+  // Create run event emitter for SSE streaming
+  const runEvents = new RunEventEmitter();
+  
   const services: AppServices = {
     providers: providerServices,
     sessions: sessionService,
     agents: agentRegistry,
+    runEvents,
     db: db,
     pool: pool,
   };
@@ -82,6 +89,9 @@ export async function buildApp() {
   
   // Register agent routes
   await app.register(agentRoutes, { agentRegistry: services.agents });
+  
+  // Register run stream routes (SSE)
+  await app.register(runStreamRoutes, { runEvents: services.runEvents });
 
   // Clean up database pool on close
   app.addHook('onClose', async () => {
