@@ -2,7 +2,37 @@
  * API client for session endpoints
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+/**
+ * Get the API base URL
+ * 
+ * Priority:
+ * 1. VITE_API_URL environment variable
+ * 2. In development: http://localhost:3001 (server default port)
+ * 3. In production: throw error if not configured
+ */
+function getApiBase(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  
+  if (envUrl) {
+    return envUrl;
+  }
+  
+  // Check if we're in development mode
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001';
+  }
+  
+  // Production without VITE_API_URL - throw clear error
+  throw new Error(
+    'VITE_API_URL environment variable is required in production. ' +
+    'Set it in your .env file or build environment.'
+  );
+}
+
+/**
+ * API base URL (computed once at module load)
+ */
+export const API_BASE = typeof window !== 'undefined' ? getApiBase() : '';
 
 /**
  * Session record
@@ -149,3 +179,6 @@ export async function submitMessage(
   });
   return response.json();
 }
+
+// Export getApiBase for testing
+export { getApiBase };
