@@ -5,6 +5,12 @@ import websocket from '@fastify/websocket';
 import { Pool } from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '@openaidy/db';
+import {
+  JobsRepository,
+  JobRunsRepository,
+  createJobsRepository,
+  createJobRunsRepository,
+} from '@openaidy/db';
 import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
@@ -16,6 +22,7 @@ import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
+import { SchedulerService, createSchedulerService } from './scheduler';
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -33,6 +40,9 @@ export type AppServices = {
   runEvents: RunEventEmitter;
   db: Database | undefined;
   pool: Pool | undefined;
+  scheduler: SchedulerService | undefined;
+  jobsRepo: JobsRepository | undefined;
+  jobRunsRepo: JobRunsRepository | undefined;
 };
 
 /**
@@ -44,10 +54,15 @@ export async function buildApp() {
   // Initialize database if DATABASE_URL is provided
   let db: Database | undefined;
   let pool: Pool | undefined;
+  let jobsRepo: JobsRepository | undefined;
+  let jobRunsRepo: JobRunsRepository | undefined;
+  let scheduler: SchedulerService | undefined;
   
   if (env.DATABASE_URL) {
     pool = new Pool({ connectionString: env.DATABASE_URL });
     db = drizzle(pool, { schema }) as Database;
+    jobsRepo = createJobsRepository(db);
+    jobRunsRepo = createJobRunsRepository(db);
   }
 
   // Create shared services once per app instance
@@ -63,6 +78,17 @@ export async function buildApp() {
   // Create run event emitter for SSE streaming
   const runEvents = new RunEventEmitter();
   
+  // Create scheduler service if database is available
+  if (db && jobsRepo && jobRunsRepo) {
+    scheduler = createSchedulerService(
+      jobsRepo,
+      jobRunsRepo,
+      sessionService,
+      app.log,
+      { pollIntervalMs: 5000 }
+    );
+  }
+  
   const services: AppServices = {
     providers: providerServices,
     sessions: sessionService,
@@ -70,6 +96,9 @@ export async function buildApp() {
     runEvents,
     db: db,
     pool: pool,
+    scheduler,
+    jobsRepo,
+    jobRunsRepo,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -93,8 +122,22 @@ export async function buildApp() {
   // Register run stream routes (SSE)
   await app.register(runStreamRoutes, { runEvents: services.runEvents });
 
-  // Clean up database pool on close
+  // Start scheduler after server is ready
+  app.addHook('onReady', async () => {
+    if (scheduler) {
+      // Recover any stuck jobs from previous run
+      await scheduler.recoverStuckJobs();
+      scheduler.start();
+      app.log.info('Scheduler started');
+    }
+  });
+
+  // Clean up on close
   app.addHook('onClose', async () => {
+    if (scheduler) {
+      await scheduler.stop();
+      app.log.info('Scheduler stopped');
+    }
     if (pool) {
       await pool.end();
     }
