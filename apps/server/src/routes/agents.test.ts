@@ -79,6 +79,7 @@ describe('Agent Routes', () => {
       scheduler: undefined,
       jobsRepo: undefined,
       jobRunsRepo: undefined,
+      sessionsRepo: undefined,
     });
     
     await app.register(cors, { origin: '*' });

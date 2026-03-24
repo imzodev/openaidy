@@ -8,8 +8,10 @@ import * as schema from '@openaidy/db';
 import {
   JobsRepository,
   JobRunsRepository,
+  SessionsRepository,
   createJobsRepository,
   createJobRunsRepository,
+  createSessionsRepository,
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
@@ -18,6 +20,7 @@ import { sessionRoutes } from './routes/sessions';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
+import { schedulerRoutes } from './routes/scheduler';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
@@ -43,6 +46,7 @@ export type AppServices = {
   scheduler: SchedulerService | undefined;
   jobsRepo: JobsRepository | undefined;
   jobRunsRepo: JobRunsRepository | undefined;
+  sessionsRepo: SessionsRepository | undefined;
 };
 
 /**
@@ -56,6 +60,7 @@ export async function buildApp() {
   let pool: Pool | undefined;
   let jobsRepo: JobsRepository | undefined;
   let jobRunsRepo: JobRunsRepository | undefined;
+  let sessionsRepo: SessionsRepository | undefined;
   let scheduler: SchedulerService | undefined;
   
   if (env.DATABASE_URL) {
@@ -63,6 +68,7 @@ export async function buildApp() {
     db = drizzle(pool, { schema }) as Database;
     jobsRepo = createJobsRepository(db);
     jobRunsRepo = createJobRunsRepository(db);
+    sessionsRepo = createSessionsRepository(db);
   }
 
   // Create shared services once per app instance
@@ -99,6 +105,7 @@ export async function buildApp() {
     scheduler,
     jobsRepo,
     jobRunsRepo,
+    sessionsRepo,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -121,6 +128,16 @@ export async function buildApp() {
   
   // Register run stream routes (SSE)
   await app.register(runStreamRoutes, { runEvents: services.runEvents });
+  
+  // Register scheduler routes (if database is available)
+  if (services.scheduler && services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
+    await app.register(schedulerRoutes, {
+      schedulerService: services.scheduler,
+      jobsRepo: services.jobsRepo,
+      jobRunsRepo: services.jobRunsRepo,
+      sessionsRepo: services.sessionsRepo,
+    });
+  }
 
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {
