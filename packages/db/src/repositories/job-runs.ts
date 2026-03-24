@@ -106,17 +106,6 @@ export class JobRunsRepository {
    * Count runs by job and status
    */
   async countByJobAndStatus(jobId: string, status: schema.JobRunStatus): Promise<number> {
-    const [result] = await this.db
-      .select({ count: schema.jobRuns.id })
-      .from(schema.jobRuns)
-      .where(
-        and(
-          eq(schema.jobRuns.jobId, jobId),
-          eq(schema.jobRuns.status, status)
-        )
-      );
-
-    // Count the number of rows returned
     const results = await this.db
       .select()
       .from(schema.jobRuns)

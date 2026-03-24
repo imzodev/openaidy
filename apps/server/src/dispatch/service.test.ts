@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { DispatchService, createDispatchService, type DispatchServiceOptions } from './service';
+import { DispatchService, createDispatchService } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
-import { RunEventEmitter } from './events';
+import { RunEventEmitter, type RunEvent } from './events';
 import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelResponse } from '@openaidy/runtime';
 import { ok, err, createProviderError } from '@openaidy/runtime';
 
@@ -428,7 +428,7 @@ describe('DispatchService streaming', () => {
         input: { role: 'user', content: 'Hello' },
       });
       
-      const events: any[] = [];
+      const events: RunEvent[] = [];
       
       for await (const event of dispatchService.dispatchStream({
         sessionId,
@@ -439,8 +439,8 @@ describe('DispatchService streaming', () => {
       }
 
       expect(events.length).toBe(1);
-      expect(events[0].type).toBe('run.failed');
-      expect(events[0].data.errorCode).toBe('agent.not_found');
+      expect(events[0]!.type).toBe('run.failed');
+      expect(events[0]!.data.errorCode).toBe('agent.not_found');
     });
 
     it('should yield failure event for disabled agent', async () => {
@@ -464,7 +464,7 @@ describe('DispatchService streaming', () => {
       );
       agentRegistry.reload();
 
-      const events: any[] = [];
+      const events: RunEvent[] = [];
       
       for await (const event of dispatchService.dispatchStream({
         sessionId,
@@ -475,8 +475,8 @@ describe('DispatchService streaming', () => {
       }
 
       expect(events.length).toBe(1);
-      expect(events[0].type).toBe('run.failed');
-      expect(events[0].data.errorCode).toBe('agent.disabled');
+      expect(events[0]!.type).toBe('run.failed');
+      expect(events[0]!.data.errorCode).toBe('agent.disabled');
     });
 
     it('should emit events through RunEventEmitter', async () => {
@@ -488,7 +488,7 @@ describe('DispatchService streaming', () => {
       });
       
       // Subscribe to events
-      const receivedEvents: any[] = [];
+      const receivedEvents: RunEvent[] = [];
       const unsubscribe = runEvents.subscribe('test-run-id', (event) => {
         receivedEvents.push(event);
       });
@@ -507,7 +507,7 @@ describe('DispatchService streaming', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
 
       expect(receivedEvents.length).toBe(1);
-      expect(receivedEvents[0].type).toBe('run.queued');
+      expect(receivedEvents[0]!.type).toBe('run.queued');
 
       unsubscribe();
     });

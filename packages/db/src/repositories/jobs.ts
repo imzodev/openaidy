@@ -1,4 +1,4 @@
-import { eq, and, lte, asc, desc, sql, isNull } from 'drizzle-orm';
+import { eq, and, lte, asc, desc, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../schema/jobs';
 import * as sessionSchema from '../schema/sessions';

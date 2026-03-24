@@ -1,7 +1,7 @@
 import type { ProviderServices } from '../providers';
 import type { Message, ModelRequest, ModelResponse, ModelStreamEvent } from '@openaidy/runtime';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import type { Agent, AgentRegistry } from '../agents';
+import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
 import {
   SessionsRepository,
@@ -16,15 +16,12 @@ import {
 import * as schema from '@openaidy/db';
 import {
   findSessionRecord,
-  createSessionRecord,
-  listSessionRecords,
   appendMessageRecord,
   listSessionMessageRecords,
   createRunRecord,
   markRunRunning,
   markRunSucceeded,
   markRunFailed,
-  listSessionRunRecords,
   type SessionMessageRecord,
   type SessionRunRecord,
   type SessionRecord,
@@ -478,7 +475,7 @@ export class DispatchService {
       if (lastStreamEvent && lastStreamEvent.type === 'stream.finished') {
         const completedEvent = lastStreamEvent as { response?: ModelResponse };
         if (completedEvent.response) {
-          const result = await this.handleStreamSuccess(
+          await this.handleStreamSuccess(
             run.id,
             input.sessionId,
             userMessage,

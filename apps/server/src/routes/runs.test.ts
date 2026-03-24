@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { runStreamRoutes } from './runs';
-import { RunEventEmitter } from '../dispatch/events';
+import { RunEventEmitter, type RunEvent } from '../dispatch/events';
 
 describe('Run Stream Routes', () => {
   let app: FastifyInstance;
@@ -38,7 +38,7 @@ describe('Run Stream Routes', () => {
 
       try {
         await responsePromise;
-      } catch (e) {
+      } catch {
         // Expected - request was aborted
       }
 
@@ -59,7 +59,7 @@ describe('Run Stream Routes', () => {
       };
 
       // Subscribe to events
-      let receivedEvent: any = null;
+      let receivedEvent: RunEvent | null = null;
       const unsubscribe = runEvents.subscribe('test-run', (event) => {
         receivedEvent = event;
       });
@@ -76,8 +76,8 @@ describe('Run Stream Routes', () => {
     });
 
     it('should isolate events between different runs', async () => {
-      let run1Events: any[] = [];
-      let run2Events: any[] = [];
+      const run1Events: RunEvent[] = [];
+      const run2Events: RunEvent[] = [];
 
       // Subscribe to two different runs
       const unsub1 = runEvents.subscribe('run-1', (event) => {
@@ -112,10 +112,10 @@ describe('Run Stream Routes', () => {
 
       // Verify isolation
       expect(run1Events).toHaveLength(1);
-      expect(run1Events[0].runId).toBe('run-1');
+      expect(run1Events[0]!.runId).toBe('run-1');
 
       expect(run2Events).toHaveLength(1);
-      expect(run2Events[0].runId).toBe('run-2');
+      expect(run2Events[0]!.runId).toBe('run-2');
 
       unsub1();
       unsub2();

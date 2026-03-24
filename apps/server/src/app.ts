@@ -15,7 +15,7 @@ import { runStreamRoutes } from './routes/runs';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
-import { RunEventEmitter, type RunEvent } from './dispatch';
+import { RunEventEmitter } from './dispatch';
 
 type Database = NodePgDatabase<typeof schema>;
 
