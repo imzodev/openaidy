@@ -9,6 +9,8 @@
     "@types/pg": "^8.18.0",
     "eslint": "^9.39.4",
     "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
@@ -22,6 +24,15 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,mts,cts,tsx,json,md}": [
+      "prettier --write"
+    ],
+    "*.{js,mjs,cjs,ts,mts,cts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }
