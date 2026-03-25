@@ -23,10 +23,10 @@ export type SchedulerServiceOptions = {
 
 /**
  * SchedulerService
- * 
+ *
  * Core scheduler service that polls for due jobs, executes them via the dispatch system,
  * handles retries, and manages job lifecycle. This is the heart of the Phase 2 scheduler.
- * 
+ *
  * Features:
  * - Runs a polling loop to check for due jobs
  * - Claims and executes jobs atomically
@@ -47,10 +47,10 @@ export class SchedulerService {
     private readonly jobRunsRepo: JobRunsStore,
     private readonly sessionMessageService: SessionMessageService,
     private readonly logger: GenericLogger,
-    options?: SchedulerServiceOptions
+    options?: SchedulerServiceOptions,
   ) {
     this.pollIntervalMs = options?.pollIntervalMs ?? 5000;
-    
+
     if (options?.enableAutoStart) {
       this.start();
     }
@@ -73,7 +73,7 @@ export class SchedulerService {
 
     this.logger.info(
       { pollIntervalMs: this.pollIntervalMs },
-      'Scheduler started'
+      'Scheduler started',
     );
   }
 
@@ -161,7 +161,7 @@ export class SchedulerService {
           });
           this.logger.info(
             { jobId: job.id, nextRunAt: nextRun },
-            'Cron job completed, rescheduled'
+            'Cron job completed, rescheduled',
           );
         }
 
@@ -172,7 +172,15 @@ export class SchedulerService {
         return true;
       }
     } catch (error) {
-      this.logger.error({ error }, 'Scheduler tick failed');
+      this.logger.error(
+        {
+          error:
+            error instanceof Error
+              ? { message: error.message, stack: error.stack }
+              : error,
+        },
+        'Scheduler tick failed',
+      );
       return false;
     } finally {
       this.tickInProgress = false;
@@ -206,7 +214,10 @@ export class SchedulerService {
         status: 'succeeded',
         finishedAt: new Date(),
       });
-      this.logger.info({ jobId: job.id, runId: run.id }, 'Manual trigger succeeded');
+      this.logger.info(
+        { jobId: job.id, runId: run.id },
+        'Manual trigger succeeded',
+      );
     } catch (error) {
       await this.jobRunsRepo.updateStatus(run.id, {
         status: 'failed',
@@ -214,7 +225,10 @@ export class SchedulerService {
         errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
         errorMessage: error instanceof Error ? error.message : String(error),
       });
-      this.logger.error({ jobId: job.id, runId: run.id, error }, 'Manual trigger failed');
+      this.logger.error(
+        { jobId: job.id, runId: run.id, error },
+        'Manual trigger failed',
+      );
       throw error;
     }
 
@@ -261,11 +275,12 @@ export class SchedulerService {
       if (modelId !== undefined) messageInput.modelId = modelId;
 
       // Use SessionMessageService to submit message
-      const result = await this.sessionMessageService.submitMessage(messageInput);
+      const result =
+        await this.sessionMessageService.submitMessage(messageInput);
 
       if (!result.ok) {
         throw new Error(
-          `Job execution failed: ${result.error.code} - ${result.error.message}`
+          `Job execution failed: ${result.error.code} - ${result.error.message}`,
         );
       }
     } else {
@@ -280,7 +295,7 @@ export class SchedulerService {
   private async handleJobFailure(
     job: ScheduledJob,
     run: JobRun,
-    error: unknown
+    error: unknown,
   ): Promise<void> {
     // Mark run as failed
     await this.jobRunsRepo.updateStatus(run.id, {
@@ -309,7 +324,7 @@ export class SchedulerService {
           maxRetries: job.maxRetries,
           backoffMs,
         },
-        `Job failed, retry scheduled`
+        `Job failed, retry scheduled`,
       );
     } else {
       // Max retries exceeded, mark job as failed
@@ -320,7 +335,7 @@ export class SchedulerService {
 
       this.logger.error(
         { jobId: job.id, maxRetries: job.maxRetries },
-        'Job permanently failed after max retries'
+        'Job permanently failed after max retries',
       );
     }
   }
@@ -328,10 +343,7 @@ export class SchedulerService {
   /**
    * Calculate exponential backoff
    */
-  private calculateBackoff(
-    baseBackoffMs: number,
-    retryCount: number
-  ): number {
+  private calculateBackoff(baseBackoffMs: number, retryCount: number): number {
     // Exponential: backoff * 2^retryCount
     const backoff = baseBackoffMs * Math.pow(2, retryCount);
 
@@ -348,7 +360,7 @@ export class SchedulerService {
     for (const run of stuckRuns) {
       this.logger.warn(
         { runId: run.id, jobId: run.jobId },
-        'Recovering stuck run'
+        'Recovering stuck run',
       );
 
       await this.jobRunsRepo.updateStatus(run.id, {
@@ -366,10 +378,7 @@ export class SchedulerService {
     }
 
     if (stuckRuns.length > 0) {
-      this.logger.info(
-        { count: stuckRuns.length },
-        'Recovered stuck jobs'
-      );
+      this.logger.info({ count: stuckRuns.length }, 'Recovered stuck jobs');
     }
   }
 }
@@ -382,13 +391,13 @@ export function createSchedulerService(
   jobRunsRepo: JobRunsStore,
   sessionMessageService: SessionMessageService,
   logger: GenericLogger,
-  options?: SchedulerServiceOptions
+  options?: SchedulerServiceOptions,
 ): SchedulerService {
   return new SchedulerService(
     jobsRepo,
     jobRunsRepo,
     sessionMessageService,
     logger,
-    options
+    options,
   );
 }

@@ -13,7 +13,7 @@ type Database = NodePgDatabase<CombinedSchema>;
 
 /**
  * Integration tests for jobs repositories
- * 
+ *
  * These tests require a PostgreSQL database. Set DATABASE_URL to run.
  */
 describe('Jobs Repositories (integration)', () => {
@@ -31,8 +31,10 @@ describe('Jobs Repositories (integration)', () => {
     if (!shouldRun || !databaseUrl) return;
 
     pool = new Pool({ connectionString: databaseUrl });
-    db = drizzle(pool, { schema: { ...sessionSchema, ...jobsSchema } }) as Database;
-    
+    db = drizzle(pool, {
+      schema: { ...sessionSchema, ...jobsSchema },
+    }) as Database;
+
     sessionsRepo = new SessionsRepository(db);
     jobsRepo = new JobsRepository(db);
     jobRunsRepo = new JobRunsRepository(db);
@@ -96,7 +98,7 @@ describe('Jobs Repositories (integration)', () => {
       test('should create a session-targeted job', async () => {
         const session = await sessionsRepo!.create({ title: 'Target Session' });
         const nextRunAt = new Date(Date.now() + 60000);
-        
+
         const job = await jobsRepo!.create({
           type: 'one-shot',
           schedule: nextRunAt,
@@ -166,14 +168,16 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         const found = await jobsRepo!.findById(created.id);
-        
+
         expect(found).toBeDefined();
         expect(found?.id).toBe(created.id);
         expect(found?.payload).toEqual({ test: 'data' });
       });
 
       test('should return null when not found', async () => {
-        const found = await jobsRepo!.findById('00000000-0000-0000-0000-000000000000');
+        const found = await jobsRepo!.findById(
+          '00000000-0000-0000-0000-000000000000',
+        );
         expect(found).toBeNull();
       });
     });
@@ -181,8 +185,19 @@ describe('Jobs Repositories (integration)', () => {
     describe('list()', () => {
       test('should return all jobs when no filters', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, nextRunAt });
-        await jobsRepo!.create({ type: 'cron', targetType: 'isolated', payload: {}, cronExpression: '* * * * *', nextRunAt });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'cron',
+          targetType: 'isolated',
+          payload: {},
+          cronExpression: '* * * * *',
+          nextRunAt,
+        });
 
         const jobs = await jobsRepo!.list();
         expect(jobs).toHaveLength(2);
@@ -190,8 +205,20 @@ describe('Jobs Repositories (integration)', () => {
 
       test('should filter by status', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'active', nextRunAt });
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'paused', nextRunAt });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'active',
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'paused',
+          nextRunAt,
+        });
 
         const activeJobs = await jobsRepo!.list({ status: 'active' });
         expect(activeJobs).toHaveLength(1);
@@ -200,8 +227,19 @@ describe('Jobs Repositories (integration)', () => {
 
       test('should filter by type', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, nextRunAt });
-        await jobsRepo!.create({ type: 'cron', targetType: 'isolated', payload: {}, cronExpression: '* * * * *', nextRunAt });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'cron',
+          targetType: 'isolated',
+          payload: {},
+          cronExpression: '* * * * *',
+          nextRunAt,
+        });
 
         const cronJobs = await jobsRepo!.list({ type: 'cron' });
         expect(cronJobs).toHaveLength(1);
@@ -211,22 +249,24 @@ describe('Jobs Repositories (integration)', () => {
       test('should filter by targetSessionId', async () => {
         const session = await sessionsRepo!.create({ title: 'Test' });
         const nextRunAt = new Date(Date.now() + 60000);
-        
-        await jobsRepo!.create({ 
-          type: 'one-shot', 
-          targetType: 'session', 
-          targetSessionId: session.id, 
-          payload: {}, 
-          nextRunAt 
+
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'session',
+          targetSessionId: session.id,
+          payload: {},
+          nextRunAt,
         });
-        await jobsRepo!.create({ 
-          type: 'one-shot', 
-          targetType: 'isolated', 
-          payload: {}, 
-          nextRunAt 
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          nextRunAt,
         });
 
-        const sessionJobs = await jobsRepo!.list({ targetSessionId: session.id });
+        const sessionJobs = await jobsRepo!.list({
+          targetSessionId: session.id,
+        });
         expect(sessionJobs).toHaveLength(1);
         expect(sessionJobs[0]?.targetSessionId).toBe(session.id);
       });
@@ -234,7 +274,12 @@ describe('Jobs Repositories (integration)', () => {
       test('should respect limit and offset for pagination', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
         for (let i = 0; i < 5; i++) {
-          await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: { index: i }, nextRunAt });
+          await jobsRepo!.create({
+            type: 'one-shot',
+            targetType: 'isolated',
+            payload: { index: i },
+            nextRunAt,
+          });
         }
 
         const page1 = await jobsRepo!.list({ limit: 2, offset: 0 });
@@ -256,7 +301,7 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         const updated = await jobsRepo!.update(job.id, { status: 'paused' });
-        
+
         expect(updated.status).toBe('paused');
       });
 
@@ -272,9 +317,9 @@ describe('Jobs Repositories (integration)', () => {
 
         const newNextRun = new Date(Date.now() + 120000);
         const lastRun = new Date();
-        const updated = await jobsRepo!.update(job.id, { 
-          nextRunAt: newNextRun, 
-          lastRunAt: lastRun 
+        const updated = await jobsRepo!.update(job.id, {
+          nextRunAt: newNextRun,
+          lastRunAt: lastRun,
         });
 
         expect(updated.nextRunAt).toEqual(newNextRun);
@@ -291,7 +336,7 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         const updated = await jobsRepo!.update(job.id, { retryCount: 2 });
-        
+
         expect(updated.retryCount).toBe(2);
       });
 
@@ -304,8 +349,8 @@ describe('Jobs Repositories (integration)', () => {
           nextRunAt,
         });
 
-        const updated = await jobsRepo!.update(job.id, { 
-          metadata: { lastError: 'connection timeout' } 
+        const updated = await jobsRepo!.update(job.id, {
+          metadata: { lastError: 'connection timeout' },
         });
 
         expect(updated.metadata).toEqual({ lastError: 'connection timeout' });
@@ -323,7 +368,7 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         await jobsRepo!.delete(job.id);
-        
+
         const found = await jobsRepo!.findById(job.id);
         expect(found).toBeNull();
       });
@@ -375,7 +420,7 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         const job = await jobsRepo!.claimNextDueJob();
-        
+
         expect(job).toBeDefined();
         expect(job?.id).toBe(created.id);
       });
@@ -396,7 +441,7 @@ describe('Jobs Repositories (integration)', () => {
 
       test('should skip paused jobs', async () => {
         const pastDate = new Date(Date.now() - 1000);
-        
+
         // Create paused job
         await jobsRepo!.create({
           type: 'one-shot',
@@ -405,7 +450,7 @@ describe('Jobs Repositories (integration)', () => {
           status: 'paused',
           nextRunAt: pastDate,
         });
-        
+
         // Create active job
         const activeJob = await jobsRepo!.create({
           type: 'one-shot',
@@ -419,18 +464,33 @@ describe('Jobs Repositories (integration)', () => {
       });
 
       // This test requires actual concurrent connections which is harder to test in unit tests
-      test.skip('concurrent claims should return different jobs', async () => {
-        // This would require multiple database connections
-        // For now, we test the basic functionality
-      });
+      // Skipping - would require multiple database connections
     });
 
     describe('countByStatus()', () => {
       test('should return correct counts', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'active', nextRunAt });
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'active', nextRunAt });
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'paused', nextRunAt });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'active',
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'active',
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'paused',
+          nextRunAt,
+        });
 
         const activeCount = await jobsRepo!.countByStatus('active');
         const pausedCount = await jobsRepo!.countByStatus('paused');
@@ -443,8 +503,20 @@ describe('Jobs Repositories (integration)', () => {
     describe('listActive()', () => {
       test('should return only active jobs', async () => {
         const nextRunAt = new Date(Date.now() + 60000);
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'active', nextRunAt });
-        await jobsRepo!.create({ type: 'one-shot', targetType: 'isolated', payload: {}, status: 'paused', nextRunAt });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'active',
+          nextRunAt,
+        });
+        await jobsRepo!.create({
+          type: 'one-shot',
+          targetType: 'isolated',
+          payload: {},
+          status: 'paused',
+          nextRunAt,
+        });
 
         const activeJobs = await jobsRepo!.listActive();
         expect(activeJobs).toHaveLength(1);
@@ -501,21 +573,31 @@ describe('Jobs Repositories (integration)', () => {
         });
 
         const found = await jobRunsRepo!.findById(created.id);
-        
+
         expect(found).toBeDefined();
         expect(found?.id).toBe(created.id);
       });
 
       test('should return null when not found', async () => {
-        const found = await jobRunsRepo!.findById('00000000-0000-0000-0000-000000000000');
+        const found = await jobRunsRepo!.findById(
+          '00000000-0000-0000-0000-000000000000',
+        );
         expect(found).toBeNull();
       });
     });
 
     describe('listByJob()', () => {
       test('should return all runs for a job', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'queued', attemptNumber: 1 });
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 2 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'queued',
+          attemptNumber: 1,
+        });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 2,
+        });
 
         const runs = await jobRunsRepo!.listByJob(jobId);
         expect(runs).toHaveLength(2);
@@ -528,20 +610,38 @@ describe('Jobs Repositories (integration)', () => {
 
       test('should respect limit and offset', async () => {
         for (let i = 0; i < 5; i++) {
-          await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: i + 1 });
+          await jobRunsRepo!.create({
+            jobId,
+            status: 'succeeded',
+            attemptNumber: i + 1,
+          });
         }
 
-        const page1 = await jobRunsRepo!.listByJob(jobId, { limit: 2, offset: 0 });
-        const page2 = await jobRunsRepo!.listByJob(jobId, { limit: 2, offset: 2 });
+        const page1 = await jobRunsRepo!.listByJob(jobId, {
+          limit: 2,
+          offset: 0,
+        });
+        const page2 = await jobRunsRepo!.listByJob(jobId, {
+          limit: 2,
+          offset: 2,
+        });
 
         expect(page1).toHaveLength(2);
         expect(page2).toHaveLength(2);
       });
 
       test('should order by created_at descending', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 1 });
-        await new Promise(r => setTimeout(r, 10)); // Small delay
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 2 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 1,
+        });
+        await new Promise((r) => setTimeout(r, 10)); // Small delay
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 2,
+        });
 
         const runs = await jobRunsRepo!.listByJob(jobId);
         expect(runs[0]?.attemptNumber).toBe(2);
@@ -626,9 +726,17 @@ describe('Jobs Repositories (integration)', () => {
 
     describe('getLatestByJob()', () => {
       test('should return most recent run', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 1 });
-        await new Promise(r => setTimeout(r, 10));
-        const latest = await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 2 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 1,
+        });
+        await new Promise((r) => setTimeout(r, 10));
+        const latest = await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 2,
+        });
 
         const found = await jobRunsRepo!.getLatestByJob(jobId);
         expect(found?.id).toBe(latest.id);
@@ -642,12 +750,30 @@ describe('Jobs Repositories (integration)', () => {
 
     describe('countByJobAndStatus()', () => {
       test('should return correct counts', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 1 });
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 2 });
-        await jobRunsRepo!.create({ jobId, status: 'failed', attemptNumber: 3 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 1,
+        });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 2,
+        });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'failed',
+          attemptNumber: 3,
+        });
 
-        const succeededCount = await jobRunsRepo!.countByJobAndStatus(jobId, 'succeeded');
-        const failedCount = await jobRunsRepo!.countByJobAndStatus(jobId, 'failed');
+        const succeededCount = await jobRunsRepo!.countByJobAndStatus(
+          jobId,
+          'succeeded',
+        );
+        const failedCount = await jobRunsRepo!.countByJobAndStatus(
+          jobId,
+          'failed',
+        );
 
         expect(succeededCount).toBe(2);
         expect(failedCount).toBe(1);
@@ -656,8 +782,16 @@ describe('Jobs Repositories (integration)', () => {
 
     describe('listByStatus()', () => {
       test('should list runs by status', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'queued', attemptNumber: 1 });
-        await jobRunsRepo!.create({ jobId, status: 'running', attemptNumber: 2 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'queued',
+          attemptNumber: 1,
+        });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'running',
+          attemptNumber: 2,
+        });
 
         const queued = await jobRunsRepo!.listByStatus('queued');
         expect(queued).toHaveLength(1);
@@ -667,8 +801,16 @@ describe('Jobs Repositories (integration)', () => {
 
     describe('deleteByJob()', () => {
       test('should delete all runs for a job', async () => {
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 1 });
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 2 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 1,
+        });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 2,
+        });
 
         await jobRunsRepo!.deleteByJob(jobId);
 
@@ -687,8 +829,16 @@ describe('Jobs Repositories (integration)', () => {
           nextRunAt,
         });
 
-        await jobRunsRepo!.create({ jobId, status: 'succeeded', attemptNumber: 1 });
-        await jobRunsRepo!.create({ jobId: job2.id, status: 'failed', attemptNumber: 1 });
+        await jobRunsRepo!.create({
+          jobId,
+          status: 'succeeded',
+          attemptNumber: 1,
+        });
+        await jobRunsRepo!.create({
+          jobId: job2.id,
+          status: 'failed',
+          attemptNumber: 1,
+        });
 
         const job1Runs = await jobRunsRepo!.listByJob(jobId);
         const job2Runs = await jobRunsRepo!.listByJob(job2.id);
@@ -711,8 +861,16 @@ describe('Jobs Repositories (integration)', () => {
         nextRunAt,
       });
 
-      const run1 = await jobRunsRepo!.create({ jobId: job.id, status: 'succeeded', attemptNumber: 1 });
-      const run2 = await jobRunsRepo!.create({ jobId: job.id, status: 'succeeded', attemptNumber: 2 });
+      const run1 = await jobRunsRepo!.create({
+        jobId: job.id,
+        status: 'succeeded',
+        attemptNumber: 1,
+      });
+      const run2 = await jobRunsRepo!.create({
+        jobId: job.id,
+        status: 'succeeded',
+        attemptNumber: 2,
+      });
 
       await jobsRepo!.delete(job.id);
 

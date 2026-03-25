@@ -228,26 +228,204 @@ export async function submitMessage(
 }
 
 /**
+ * Model capability
+ */
+export type ModelCapability =
+  | 'text_generation'
+  | 'streaming'
+  | 'tool_calls'
+  | 'vision'
+  | 'audio_input'
+  | 'audio_output'
+  | 'embedding';
+
+/**
+ * Model configuration within a provider
+ */
+export type ModelConfig = {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  description?: string;
+  capabilities?: ModelCapability[];
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Agent defaults
+ */
+export type AgentDefaults = {
+  providerId?: string;
+  modelId?: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+/**
+ * Agent configuration
+ */
+export type AgentConfig = {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  description?: string;
+  systemPrompt: string;
+  defaults: AgentDefaults;
+  tools?: string[];
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  version?: number;
+};
+
+/**
+ * Application defaults
+ */
+export type AppDefaults = {
+  providerId: string;
+  modelId: string;
+  agentId: string;
+};
+
+/**
+ * Provider configuration (discriminated union by vendorFamily)
+ */
+export type OpenAICompatibleProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'openai-compatible';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  chatModel?: string;
+  embeddingModel?: string;
+  audioModel?: string;
+  imageModel?: string;
+  useResponsesApi?: boolean;
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableStreaming?: boolean;
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
+};
+
+export type AnthropicProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'anthropic';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  apiVersion?: string;
+  messagesModel?: string;
+  betas?: string[];
+  enableExtendedThinking?: boolean;
+  maxThinkingTokens?: number;
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableStreaming?: boolean;
+  defaultMaxTokens?: number;
+  defaultTemperature?: number;
+  systemPrompt?: string;
+};
+
+export type GeminiProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'gemini';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  projectId?: string;
+  region?: string;
+  useVertexAI?: boolean;
+  embeddingModel?: string;
+  safetySettings?: Array<{
+    category:
+      | 'HARM_CATEGORY_HARASSMENT'
+      | 'HARM_CATEGORY_HATE_SPEECH'
+      | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
+      | 'HARM_CATEGORY_DANGEROUS_CONTENT'
+      | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+    threshold:
+      | 'BLOCK_NONE'
+      | 'BLOCK_LOW_AND_ABOVE'
+      | 'BLOCK_MEDIUM_AND_ABOVE'
+      | 'BLOCK_ONLY_HIGH';
+  }>;
+  generationConfig?: {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    candidateCount?: number;
+    maxOutputTokens?: number;
+    stopSequences?: string[];
+    responseMimeType?: 'text/plain' | 'application/json';
+  };
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableAudioInput?: boolean;
+  enableStreaming?: boolean;
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
+  systemInstruction?: string;
+};
+
+export type ProviderConfig =
+  | OpenAICompatibleProviderConfig
+  | AnthropicProviderConfig
+  | GeminiProviderConfig;
+
+/**
  * Application configuration
  */
 export type AppConfig = {
-  defaults?: {
-    providerId?: string;
-    modelId?: string;
-  };
-  providers?: Array<{
-    id: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  [key: string]: unknown;
+  version: number;
+  defaults: AppDefaults;
+  providers: ProviderConfig[];
+  agents: AgentConfig[];
+};
+
+/**
+ * Configuration issue
+ */
+export type ConfigIssue = {
+  scope: 'provider';
+  id: string;
+  code: string;
+  message: string;
 };
 
 /**
  * Configuration status
  */
 export type ConfigStatus = {
-  [key: string]: unknown;
+  issues: ConfigIssue[];
 };
 
 /**

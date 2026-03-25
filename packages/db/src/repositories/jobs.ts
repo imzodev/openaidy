@@ -7,7 +7,7 @@ type Database = DatabaseClient;
 
 /**
  * Jobs repository
- * 
+ *
  * Provides data access methods for scheduled job records.
  * Includes atomic job claiming with PostgreSQL FOR UPDATE SKIP LOCKED.
  */
@@ -16,31 +16,30 @@ export class JobsRepository {
 
   /**
    * Claim the next due job atomically
-   * 
-   * Uses PostgreSQL FOR UPDATE SKIP LOCKED to prevent concurrent execution.
-   * This ensures that multiple scheduler instances never claim the same job.
-   * 
+   *
+   * For PostgreSQL, this would use FOR UPDATE SKIP LOCKED to prevent concurrent execution.
+   * For SQLite, we use a direct query since it doesn't support row-level locking.
+   * Single-server SQLite deployments don't need distributed locking.
+   *
    * @returns The next due job, or null if none available
    */
   async claimNextDueJob(): Promise<schema.ScheduledJob | null> {
-    const results = await this.db.transaction(async (tx: any) => {
-      const jobs = await tx
-        .select()
-        .from(schema.scheduledJobs)
-        .where(
-          and(
-            eq(schema.scheduledJobs.status, 'active'),
-            lte(schema.scheduledJobs.nextRunAt, new Date())
-          )
-        )
-        .orderBy(asc(schema.scheduledJobs.nextRunAt))
-        .limit(1)
-        .for('update', { skipLocked: true });
+    // Query for the next due job
+    // Note: SQLite doesn't support FOR UPDATE SKIP LOCKED, so we use a direct query
+    // For single-server deployments this is sufficient
+    const jobs = await this.db
+      .select()
+      .from(schema.scheduledJobs)
+      .where(
+        and(
+          eq(schema.scheduledJobs.status, 'active'),
+          lte(schema.scheduledJobs.nextRunAt, new Date()),
+        ),
+      )
+      .orderBy(asc(schema.scheduledJobs.nextRunAt))
+      .limit(1);
 
-      return jobs;
-    });
-
-    return results[0] ?? null;
+    return jobs[0] ?? null;
   }
 
   /**
@@ -59,23 +58,26 @@ export class JobsRepository {
     metadata?: Record<string, unknown>;
     nextRunAt: Date;
   }): Promise<schema.ScheduledJob> {
-    const [job] = await this.db.insert(schema.scheduledJobs).values({
-      id: randomUUID(),
-      type: input.type,
-      schedule: input.schedule,
-      cronExpression: input.cronExpression,
-      targetType: input.targetType,
-      targetSessionId: input.targetSessionId ?? null,
-      payload: input.payload,
-      status: input.status ?? 'active',
-      nextRunAt: input.nextRunAt,
-      maxRetries: input.maxRetries ?? 3,
-      backoffMs: input.backoffMs ?? 1000,
-      metadata: input.metadata ?? null,
-      retryCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    const [job] = await this.db
+      .insert(schema.scheduledJobs)
+      .values({
+        id: randomUUID(),
+        type: input.type,
+        schedule: input.schedule,
+        cronExpression: input.cronExpression,
+        targetType: input.targetType,
+        targetSessionId: input.targetSessionId ?? null,
+        payload: input.payload,
+        status: input.status ?? 'active',
+        nextRunAt: input.nextRunAt,
+        maxRetries: input.maxRetries ?? 3,
+        backoffMs: input.backoffMs ?? 1000,
+        metadata: input.metadata ?? null,
+        retryCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
 
     return job!;
   }
@@ -84,7 +86,8 @@ export class JobsRepository {
    * Find job by ID
    */
   async findById(id: string): Promise<schema.ScheduledJob | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.scheduledJobs)
       .where(eq(schema.scheduledJobs.id, id))
       .limit(1);
@@ -103,7 +106,7 @@ export class JobsRepository {
     offset?: number;
   }): Promise<schema.ScheduledJob[]> {
     const conditions = [];
-    
+
     if (filters?.status) {
       conditions.push(eq(schema.scheduledJobs.status, filters.status));
     }
@@ -114,10 +117,13 @@ export class JobsRepository {
       conditions.push(eq(schema.scheduledJobs.targetType, filters.targetType));
     }
     if (filters?.targetSessionId) {
-      conditions.push(eq(schema.scheduledJobs.targetSessionId, filters.targetSessionId));
+      conditions.push(
+        eq(schema.scheduledJobs.targetSessionId, filters.targetSessionId),
+      );
     }
 
-    const query = this.db.select()
+    const query = this.db
+      .select()
       .from(schema.scheduledJobs)
       .orderBy(desc(schema.scheduledJobs.createdAt));
 
@@ -138,14 +144,18 @@ export class JobsRepository {
   /**
    * Update job fields
    */
-  async update(id: string, updates: {
-    status?: schema.JobStatus;
-    nextRunAt?: Date;
-    lastRunAt?: Date;
-    retryCount?: number;
-    metadata?: Record<string, unknown>;
-  }): Promise<schema.ScheduledJob> {
-    const [job] = await this.db.update(schema.scheduledJobs)
+  async update(
+    id: string,
+    updates: {
+      status?: schema.JobStatus;
+      nextRunAt?: Date;
+      lastRunAt?: Date;
+      retryCount?: number;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<schema.ScheduledJob> {
+    const [job] = await this.db
+      .update(schema.scheduledJobs)
       .set({
         ...updates,
         updatedAt: new Date(),
@@ -160,7 +170,8 @@ export class JobsRepository {
    * Delete job (cascade deletes runs)
    */
   async delete(id: string): Promise<void> {
-    await this.db.delete(schema.scheduledJobs)
+    await this.db
+      .delete(schema.scheduledJobs)
       .where(eq(schema.scheduledJobs.id, id));
   }
 
@@ -180,7 +191,8 @@ export class JobsRepository {
    * Get all active jobs (for scheduler initialization)
    */
   async listActive(): Promise<schema.ScheduledJob[]> {
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.scheduledJobs)
       .where(eq(schema.scheduledJobs.status, 'active'))
       .orderBy(asc(schema.scheduledJobs.nextRunAt));

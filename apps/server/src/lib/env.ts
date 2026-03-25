@@ -16,7 +16,7 @@ const envSchema = z
   .object({
     HOST: z.string().default('0.0.0.0'),
     PORT: z.coerce.number().int().positive().default(3001),
-    CORS_ORIGIN: z.string().default('http://localhost:3000'),
+    CORS_ORIGIN: z.string().default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),
