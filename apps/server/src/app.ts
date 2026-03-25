@@ -2,16 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
-import { Pool } from 'pg';
-import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
-import * as schema from '@openaidy/db';
 import {
-  JobsRepository,
-  JobRunsRepository,
-  SessionsRepository,
-  createJobsRepository,
-  createJobRunsRepository,
-  createSessionsRepository,
+  type DatabaseAdapter,
+  type JobsStore,
+  type JobRunsStore,
+  type SessionsStore,
+  createDatabaseAdapter,
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
@@ -27,8 +23,6 @@ import { createAgentRegistry, type AgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
 import { SchedulerService, createSchedulerService } from './scheduler';
 
-type Database = NodePgDatabase<typeof schema>;
-
 /**
  * Application services container
  * 
@@ -41,12 +35,11 @@ export type AppServices = {
   sessions: SessionMessageService;
   agents: AgentRegistry;
   runEvents: RunEventEmitter;
-  db: Database | undefined;
-  pool: Pool | undefined;
+  dbAdapter: DatabaseAdapter | undefined;
   scheduler: SchedulerService | undefined;
-  jobsRepo: JobsRepository | undefined;
-  jobRunsRepo: JobRunsRepository | undefined;
-  sessionsRepo: SessionsRepository | undefined;
+  jobsRepo: JobsStore | undefined;
+  jobRunsRepo: JobRunsStore | undefined;
+  sessionsRepo: SessionsStore | undefined;
 };
 
 /**
@@ -55,27 +48,37 @@ export type AppServices = {
 export async function buildApp() {
   const app = Fastify({ logger: loggerOptions });
 
-  // Initialize database if DATABASE_URL is provided
-  let db: Database | undefined;
-  let pool: Pool | undefined;
-  let jobsRepo: JobsRepository | undefined;
-  let jobRunsRepo: JobRunsRepository | undefined;
-  let sessionsRepo: SessionsRepository | undefined;
+  // Initialize database if a DB backend is configured.
+  let dbAdapter: DatabaseAdapter | undefined;
+  let jobsRepo: JobsStore | undefined;
+  let jobRunsRepo: JobRunsStore | undefined;
+  let sessionsRepo: SessionsStore | undefined;
   let scheduler: SchedulerService | undefined;
   
-  if (env.DATABASE_URL) {
-    pool = new Pool({ connectionString: env.DATABASE_URL });
-    db = drizzle(pool, { schema }) as Database;
-    jobsRepo = createJobsRepository(db);
-    jobRunsRepo = createJobRunsRepository(db);
-    sessionsRepo = createSessionsRepository(db);
+  const dbConfig = env.DB_KIND === 'postgres'
+    ? { kind: 'postgres' as const, connectionString: env.DATABASE_URL! }
+    : env.DB_KIND === 'sqlite'
+      ? { kind: 'sqlite' as const, sqlitePath: env.SQLITE_PATH! }
+      : undefined;
+
+  if (dbConfig) {
+    dbAdapter = createDatabaseAdapter(dbConfig);
+    jobsRepo = dbAdapter.repositories.jobs;
+    jobRunsRepo = dbAdapter.repositories.jobRuns;
+    sessionsRepo = dbAdapter.repositories.sessions;
   }
 
   // Create shared services once per app instance
   const providerServices = createProviderServices();
   const sessionService = new SessionMessageService({
     providers: providerServices,
-    db: db,
+    repositories: dbAdapter
+      ? {
+          sessions: dbAdapter.repositories.sessions,
+          messages: dbAdapter.repositories.sessionMessages,
+          runs: dbAdapter.repositories.sessionRuns,
+        }
+      : undefined,
   });
   
   // Create agent registry
@@ -85,7 +88,7 @@ export async function buildApp() {
   const runEvents = new RunEventEmitter();
   
   // Create scheduler service if database is available
-  if (db && jobsRepo && jobRunsRepo) {
+  if (dbAdapter && jobsRepo && jobRunsRepo) {
     scheduler = createSchedulerService(
       jobsRepo,
       jobRunsRepo,
@@ -100,8 +103,7 @@ export async function buildApp() {
     sessions: sessionService,
     agents: agentRegistry,
     runEvents,
-    db: db,
-    pool: pool,
+    dbAdapter,
     scheduler,
     jobsRepo,
     jobRunsRepo,
@@ -155,8 +157,8 @@ export async function buildApp() {
       await scheduler.stop();
       app.log.info('Scheduler stopped');
     }
-    if (pool) {
-      await pool.end();
+    if (dbAdapter) {
+      await dbAdapter.close();
     }
   });
 

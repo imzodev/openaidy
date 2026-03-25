@@ -1,17 +1,15 @@
 import type { ProviderServices } from '../providers';
 import type { Message, ModelRequest, ModelResponse } from '@openaidy/runtime';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import {
-  SessionsRepository,
-  SessionMessagesRepository,
-  SessionRunsRepository,
+  type SessionsStore,
+  type SessionMessagesStore,
+  type SessionRunsStore,
   type Session,
   type SessionMessage,
   type SessionRun,
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import * as schema from '@openaidy/db';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -28,8 +26,6 @@ import {
   type SessionRecord,
   type FinishReason,
 } from './store';
-
-type Database = NodePgDatabase<typeof schema>;
 
 /**
  * Input for submitting a message to a session
@@ -55,7 +51,11 @@ export type SubmitMessageResult =
  */
 export type SessionMessageServiceOptions = {
   providers: ProviderServices;
-  db?: Database | undefined;
+  repositories?: {
+    sessions: SessionsStore;
+    messages: SessionMessagesStore;
+    runs: SessionRunsStore;
+  } | undefined;
 };
 
 /**
@@ -73,19 +73,17 @@ export type SessionMessageServiceOptions = {
  */
 export class SessionMessageService {
   private readonly providers: ProviderServices;
-  private readonly db: Database | undefined;
-  private readonly sessionsRepo: SessionsRepository | undefined;
-  private readonly messagesRepo: SessionMessagesRepository | undefined;
-  private readonly runsRepo: SessionRunsRepository | undefined;
+  private readonly sessionsRepo: SessionsStore | undefined;
+  private readonly messagesRepo: SessionMessagesStore | undefined;
+  private readonly runsRepo: SessionRunsStore | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
-    this.db = options.db;
     
-    if (options.db) {
-      this.sessionsRepo = new SessionsRepository(options.db);
-      this.messagesRepo = new SessionMessagesRepository(options.db);
-      this.runsRepo = new SessionRunsRepository(options.db);
+    if (options.repositories) {
+      this.sessionsRepo = options.repositories.sessions;
+      this.messagesRepo = options.repositories.messages;
+      this.runsRepo = options.repositories.runs;
     }
   }
 
@@ -93,7 +91,7 @@ export class SessionMessageService {
    * Check if using DB-backed storage
    */
   get isDbBacked(): boolean {
-    return !!this.db;
+    return !!this.sessionsRepo;
   }
 
   /**

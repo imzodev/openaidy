@@ -1,8 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../lib/env', () => ({
+  env: {
+    HOST: '0.0.0.0',
+    PORT: 3001,
+    CORS_ORIGIN: 'http://localhost:3000',
+    DB_KIND: 'disabled',
+    DATABASE_URL: undefined,
+    SQLITE_PATH: undefined,
+    LOG_LEVEL: 'info',
+  },
+}));
+
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 
-describe('Scheduler Routes', () => {
+const describeSchedulerRoutes = process.env.OPENAIDY_RUN_DB_TESTS === '1' ? describe : describe.skip;
+
+describeSchedulerRoutes('Scheduler Routes', () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {

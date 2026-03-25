@@ -1,11 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { eq, and, lte, asc, desc, sql } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type { DatabaseClient } from '../client';
 import * as schema from '../schema/jobs';
-import * as sessionSchema from '../schema/sessions';
 
-// Combine schemas for the database type
-type CombinedSchema = typeof schema & typeof sessionSchema;
-type Database = NodePgDatabase<CombinedSchema>;
+type Database = DatabaseClient;
 
 /**
  * Jobs repository
@@ -25,7 +23,7 @@ export class JobsRepository {
    * @returns The next due job, or null if none available
    */
   async claimNextDueJob(): Promise<schema.ScheduledJob | null> {
-    const results = await this.db.transaction(async (tx) => {
+    const results = await this.db.transaction(async (tx: any) => {
       const jobs = await tx
         .select()
         .from(schema.scheduledJobs)
@@ -62,6 +60,7 @@ export class JobsRepository {
     nextRunAt: Date;
   }): Promise<schema.ScheduledJob> {
     const [job] = await this.db.insert(schema.scheduledJobs).values({
+      id: randomUUID(),
       type: input.type,
       schedule: input.schedule,
       cronExpression: input.cronExpression,

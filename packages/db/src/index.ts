@@ -1,4 +1,5 @@
 export * from './client';
+export * from './adapter';
 export * from './schema/sessions';
 export * from './schema/jobs';
 export * from './repositories/sessions';

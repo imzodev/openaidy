@@ -1,11 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { eq, and, desc } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type { DatabaseClient } from '../client';
 import * as schema from '../schema/jobs';
-import * as sessionSchema from '../schema/sessions';
 
-// Combine schemas for the database type
-type CombinedSchema = typeof schema & typeof sessionSchema;
-type Database = NodePgDatabase<CombinedSchema>;
+type Database = DatabaseClient;
 
 /**
  * Job runs repository
@@ -24,6 +22,7 @@ export class JobRunsRepository {
     attemptNumber: number;
   }): Promise<schema.JobRun> {
     const [run] = await this.db.insert(schema.jobRuns).values({
+      id: randomUUID(),
       jobId: input.jobId,
       status: input.status,
       attemptNumber: input.attemptNumber,

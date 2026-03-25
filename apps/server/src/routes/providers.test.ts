@@ -1,4 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('../lib/env', () => ({
+  env: {
+    HOST: '0.0.0.0',
+    PORT: 3001,
+    CORS_ORIGIN: 'http://localhost:3000',
+    DB_KIND: 'disabled',
+    DATABASE_URL: undefined,
+    SQLITE_PATH: undefined,
+    LOG_LEVEL: 'info',
+  },
+}));
+
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 

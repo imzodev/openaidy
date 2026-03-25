@@ -1,4 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('./lib/env', () => ({
+  env: {
+    HOST: '0.0.0.0',
+    PORT: 3001,
+    CORS_ORIGIN: 'http://localhost:3000',
+    DB_KIND: 'disabled',
+    DATABASE_URL: undefined,
+    SQLITE_PATH: undefined,
+    LOG_LEVEL: 'info',
+  },
+}));
+
 import { buildApp } from './app';
 import { createProviderServices } from './providers';
 import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelStreamEvent, ModelDescriptor } from '@openaidy/runtime';

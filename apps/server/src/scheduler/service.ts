@@ -1,4 +1,4 @@
-import type { JobsRepository, JobRunsRepository } from '@openaidy/db';
+import type { JobsStore, JobRunsStore } from '@openaidy/db';
 import type { ScheduledJob, JobRun } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import { calculateNextRun } from './cron-utils';
@@ -43,8 +43,8 @@ export class SchedulerService {
   private readonly maxBackoffMs: number = 300000; // 5 minutes max
 
   constructor(
-    private readonly jobsRepo: JobsRepository,
-    private readonly jobRunsRepo: JobRunsRepository,
+    private readonly jobsRepo: JobsStore,
+    private readonly jobRunsRepo: JobRunsStore,
     private readonly sessionMessageService: SessionMessageService,
     private readonly logger: GenericLogger,
     options?: SchedulerServiceOptions
@@ -378,8 +378,8 @@ export class SchedulerService {
  * Create a scheduler service instance
  */
 export function createSchedulerService(
-  jobsRepo: JobsRepository,
-  jobRunsRepo: JobRunsRepository,
+  jobsRepo: JobsStore,
+  jobRunsRepo: JobRunsStore,
   sessionMessageService: SessionMessageService,
   logger: GenericLogger,
   options?: SchedulerServiceOptions

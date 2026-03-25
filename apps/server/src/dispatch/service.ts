@@ -1,19 +1,17 @@
 import type { ProviderServices } from '../providers';
 import type { Message, ModelRequest, ModelResponse, ModelStreamEvent } from '@openaidy/runtime';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
 import {
-  SessionsRepository,
-  SessionMessagesRepository,
-  SessionRunsRepository,
+  type SessionsStore,
+  type SessionMessagesStore,
+  type SessionRunsStore,
   type Session,
   type SessionMessage,
   type SessionRun,
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import * as schema from '@openaidy/db';
 import {
   findSessionRecord,
   appendMessageRecord,
@@ -27,8 +25,6 @@ import {
   type SessionRecord,
   type FinishReason,
 } from '../sessions/store';
-
-type Database = NodePgDatabase<typeof schema>;
 
 /**
  * Dispatch input
@@ -85,7 +81,11 @@ export type SystemDefaults = {
 export type DispatchServiceOptions = {
   agents: AgentRegistry;
   providers: ProviderServices;
-  db?: Database | undefined;
+  repositories?: {
+    sessions: SessionsStore;
+    messages: SessionMessagesStore;
+    runs: SessionRunsStore;
+  } | undefined;
   systemDefaults?: SystemDefaults;
   /** Optional event emitter for streaming run events */
   runEvents?: RunEventEmitter;
@@ -111,17 +111,15 @@ export type DispatchServiceOptions = {
 export class DispatchService {
   private readonly agents: AgentRegistry;
   private readonly providers: ProviderServices;
-  private readonly db: Database | undefined;
-  private readonly sessionsRepo: SessionsRepository | undefined;
-  private readonly messagesRepo: SessionMessagesRepository | undefined;
-  private readonly runsRepo: SessionRunsRepository | undefined;
+  private readonly sessionsRepo: SessionsStore | undefined;
+  private readonly messagesRepo: SessionMessagesStore | undefined;
+  private readonly runsRepo: SessionRunsStore | undefined;
   private readonly systemDefaults: SystemDefaults;
   private readonly runEvents: RunEventEmitter | undefined;
 
   constructor(options: DispatchServiceOptions) {
     this.agents = options.agents;
     this.providers = options.providers;
-    this.db = options.db;
     this.runEvents = options.runEvents;
     
     // Default system defaults
@@ -132,10 +130,10 @@ export class DispatchService {
       maxTokens: 4096,
     };
     
-    if (options.db) {
-      this.sessionsRepo = new SessionsRepository(options.db);
-      this.messagesRepo = new SessionMessagesRepository(options.db);
-      this.runsRepo = new SessionRunsRepository(options.db);
+    if (options.repositories) {
+      this.sessionsRepo = options.repositories.sessions;
+      this.messagesRepo = options.repositories.messages;
+      this.runsRepo = options.repositories.runs;
     }
   }
 

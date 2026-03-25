@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { SchedulerService } from '../scheduler/service';
-import type { JobsRepository, JobRunsRepository, SessionsRepository } from '@openaidy/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import { validateCronExpression, calculateNextRun } from '../scheduler/cron-utils';
 
 /**
@@ -59,9 +59,9 @@ const listRunsSchema = z.object({
  */
 export type SchedulerRoutesOptions = {
   schedulerService: SchedulerService;
-  jobsRepo: JobsRepository;
-  jobRunsRepo: JobRunsRepository;
-  sessionsRepo: SessionsRepository;
+  jobsRepo: JobsStore;
+  jobRunsRepo: JobRunsStore;
+  sessionsRepo: SessionsStore;
 };
 
 /**
@@ -127,19 +127,51 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       };
     }
 
-    const job = await jobsRepo.create({
+    const createInput: {
+      type: 'one-shot' | 'cron';
+      schedule?: Date;
+      cronExpression?: string;
+      targetType: 'session' | 'isolated';
+      targetSessionId?: string;
+      payload: Record<string, unknown>;
+      status: 'active';
+      maxRetries?: number;
+      backoffMs?: number;
+      metadata?: Record<string, unknown>;
+      nextRunAt: Date;
+    } = {
       type: parsed.type,
-      schedule: parsed.type === 'one-shot' ? new Date(parsed.schedule!) : undefined,
-      cronExpression: parsed.type === 'cron' ? parsed.cronExpression : undefined,
       targetType: parsed.targetType,
-      targetSessionId: parsed.targetSessionId,
       payload: parsed.payload,
       status: 'active',
-      maxRetries: parsed.maxRetries,
-      backoffMs: parsed.backoffMs,
-      metadata: parsed.metadata,
       nextRunAt,
-    });
+    };
+
+    if (parsed.type === 'one-shot') {
+      createInput.schedule = new Date(parsed.schedule!);
+    }
+
+    if (parsed.type === 'cron') {
+      createInput.cronExpression = parsed.cronExpression!;
+    }
+
+    if (parsed.targetSessionId !== undefined) {
+      createInput.targetSessionId = parsed.targetSessionId;
+    }
+
+    if (parsed.maxRetries !== undefined) {
+      createInput.maxRetries = parsed.maxRetries;
+    }
+
+    if (parsed.backoffMs !== undefined) {
+      createInput.backoffMs = parsed.backoffMs;
+    }
+
+    if (parsed.metadata !== undefined) {
+      createInput.metadata = parsed.metadata;
+    }
+
+    const job = await jobsRepo.create(createInput);
 
     reply.code(201);
     return job;
@@ -161,14 +193,32 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       };
     }
 
-    const jobs = await jobsRepo.list({
-      status: parsed.status,
-      type: parsed.type,
-      targetType: parsed.targetType,
-      targetSessionId: parsed.targetSessionId,
+    const listFilters: {
+      status?: 'active' | 'paused' | 'completed' | 'failed';
+      type?: 'one-shot' | 'cron';
+      targetType?: 'session' | 'isolated';
+      targetSessionId?: string;
+      limit?: number;
+      offset?: number;
+    } = {
       limit: parsed.limit,
       offset: parsed.offset,
-    });
+    };
+
+    if (parsed.status !== undefined) {
+      listFilters.status = parsed.status;
+    }
+    if (parsed.type !== undefined) {
+      listFilters.type = parsed.type;
+    }
+    if (parsed.targetType !== undefined) {
+      listFilters.targetType = parsed.targetType;
+    }
+    if (parsed.targetSessionId !== undefined) {
+      listFilters.targetSessionId = parsed.targetSessionId;
+    }
+
+    const jobs = await jobsRepo.list(listFilters);
 
     // Get total count for pagination (simplified - returns current page count)
     const total = jobs.length;
@@ -228,10 +278,19 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       };
     }
 
-    const job = await jobsRepo.update(id, {
-      status: parsed.status,
-      metadata: parsed.metadata,
-    });
+    const updates: {
+      status?: 'active' | 'paused' | 'completed' | 'failed';
+      metadata?: Record<string, unknown>;
+    } = {};
+
+    if (parsed.status !== undefined) {
+      updates.status = parsed.status;
+    }
+    if (parsed.metadata !== undefined) {
+      updates.metadata = parsed.metadata;
+    }
+
+    const job = await jobsRepo.update(id, updates);
 
     return job;
   });

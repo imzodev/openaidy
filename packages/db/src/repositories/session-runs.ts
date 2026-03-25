@@ -1,9 +1,9 @@
 import { eq, and, desc, sql } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { nanoid } from 'nanoid';
+import type { DatabaseClient } from '../client';
 import * as schema from '../schema/sessions';
 
-type Database = NodePgDatabase<typeof schema>;
+type Database = DatabaseClient;
 
 /**
  * Usage information for a run
