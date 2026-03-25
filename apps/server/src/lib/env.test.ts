@@ -4,7 +4,10 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from './env';
 
-const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../');
+const workspaceRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../',
+);
 
 describe('parseEnv', () => {
   it('defaults to sqlite with a default sqlite path', () => {
@@ -12,8 +15,12 @@ describe('parseEnv', () => {
 
     expect(parsed.DB_KIND).toBe('sqlite');
     expect(parsed.SQLITE_PATH).toBe('./data/openaidy.db');
-    expect(parsed.APP_CONFIG_PATH).toBe(resolve(workspaceRoot, '.openaidy/config.json'));
-    expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(resolve(workspaceRoot, 'config/openaidy.template.json'));
+    expect(parsed.APP_CONFIG_PATH).toBe(
+      resolve(workspaceRoot, '.openaidy/openaidy.json'),
+    );
+    expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(
+      resolve(workspaceRoot, 'config/openaidy.template.json'),
+    );
   });
 
   it('uses a provided sqlite path', () => {
@@ -27,7 +34,9 @@ describe('parseEnv', () => {
   });
 
   it('requires DATABASE_URL for postgres mode', () => {
-    expect(() => parseEnv({ DB_KIND: 'postgres' })).toThrow(/DATABASE_URL is required/i);
+    expect(() => parseEnv({ DB_KIND: 'postgres' })).toThrow(
+      /DATABASE_URL is required/i,
+    );
   });
 
   it('accepts postgres mode with a database url', () => {
@@ -37,6 +46,8 @@ describe('parseEnv', () => {
     });
 
     expect(parsed.DB_KIND).toBe('postgres');
-    expect(parsed.DATABASE_URL).toBe('postgres://postgres:postgres@localhost:5432/openaidy');
+    expect(parsed.DATABASE_URL).toBe(
+      'postgres://postgres:postgres@localhost:5432/openaidy',
+    );
   });
 });
