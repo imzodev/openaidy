@@ -1,18 +1,24 @@
 import { createSignal, Show } from 'solid-js';
-import { QueryClient, QueryClientProvider, createQuery, createMutation } from '@tanstack/solid-query';
-import { 
-  listSessions, 
-  createSession, 
-  listMessages, 
-  submitMessage, 
+import {
+  QueryClient,
+  QueryClientProvider,
+  createQuery,
+  createMutation,
+} from '@tanstack/solid-query';
+import {
+  listSessions,
+  createSession,
+  listMessages,
+  submitMessage,
   listAgents,
   listRuns,
-  type Session, 
+  type Session,
   type SessionMessage,
   type Agent,
-  type SessionRun
+  type SessionRun,
 } from './lib/api';
-import { SessionList } from './components/SessionList';
+import { Sidebar } from './components/Sidebar';
+import { SettingsView } from './components/SettingsView';
 import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
 import { RunList } from './components/RunList';
@@ -29,9 +35,18 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const [selectedSessionId, setSelectedSessionId] = createSignal<string | undefined>(undefined);
-  const [submitError, setSubmitError] = createSignal<string | undefined>(undefined);
-  const [selectedAgentId, setSelectedAgentId] = createSignal<string | undefined>(undefined);
+  const [selectedSessionId, setSelectedSessionId] = createSignal<
+    string | undefined
+  >(undefined);
+  const [submitError, setSubmitError] = createSignal<string | undefined>(
+    undefined,
+  );
+  const [selectedAgentId, setSelectedAgentId] = createSignal<
+    string | undefined
+  >(undefined);
+  const [currentView, setCurrentView] = createSignal<'chat' | 'settings'>(
+    'chat',
+  );
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({
@@ -48,14 +63,16 @@ function AppContent() {
   // Messages query
   const messagesQuery = createQuery(() => ({
     queryKey: ['messages', selectedSessionId()],
-    queryFn: () => selectedSessionId() ? listMessages(selectedSessionId()!) : { items: [] },
+    queryFn: () =>
+      selectedSessionId() ? listMessages(selectedSessionId()!) : { items: [] },
     enabled: !!selectedSessionId(),
   }));
 
   // Runs query
   const runsQuery = createQuery(() => ({
     queryKey: ['runs', selectedSessionId()],
-    queryFn: () => selectedSessionId() ? listRuns(selectedSessionId()!) : { items: [] },
+    queryFn: () =>
+      selectedSessionId() ? listRuns(selectedSessionId()!) : { items: [] },
     enabled: !!selectedSessionId(),
   }));
 
@@ -70,15 +87,25 @@ function AppContent() {
 
   // Submit message mutation
   const submitMessageMutation = createMutation(() => ({
-    mutationFn: ({ content, agentId }: { content: string; agentId?: string }) => {
+    mutationFn: ({
+      content,
+      agentId,
+    }: {
+      content: string;
+      agentId?: string;
+    }) => {
       const sessionId = selectedSessionId();
       if (!sessionId) throw new Error('No session selected');
       return submitMessage(sessionId, { role: 'user', content, agentId });
     },
     onSuccess: (result) => {
       if (result.ok) {
-        queryClient.invalidateQueries({ queryKey: ['messages', selectedSessionId()] });
-        queryClient.invalidateQueries({ queryKey: ['runs', selectedSessionId()] });
+        queryClient.invalidateQueries({
+          queryKey: ['messages', selectedSessionId()],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ['runs', selectedSessionId()],
+        });
         setSubmitError(undefined);
       } else {
         setSubmitError(result.error.message);
@@ -123,74 +150,86 @@ function AppContent() {
   return (
     <div class="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
-      <SessionList
+      <Sidebar
         sessions={sessionsQuery.data?.items || []}
-        selectedId={selectedSessionId()}
-        onSelect={setSelectedSessionId}
-        onCreate={handleCreateSession}
-        isLoading={sessionsQuery.isLoading}
+        selectedSessionId={selectedSessionId()}
+        onSelectSession={setSelectedSessionId}
+        onCreateSession={handleCreateSession}
+        isLoadingSessions={sessionsQuery.isLoading}
+        currentView={currentView()}
+        onNavigate={setCurrentView}
       />
 
       {/* Main Content */}
       <main class="flex-1 flex flex-col min-w-0">
-        <Show when={!selectedSessionId()}>
-          {/* Empty state */}
-          <div class="flex-1 flex items-center justify-center">
-            <div class="text-center">
-              <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                Welcome to OpenAidy
-              </h1>
-              <p class="text-gray-600 dark:text-gray-400 mb-4">
-                Select a session or create a new one to start chatting
-              </p>
-              <button
-                onClick={handleCreateSession}
-                disabled={createSessionMutation.isPending}
-                class="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors"
-              >
-                {createSessionMutation.isPending ? 'Creating...' : 'Create New Session'}
-              </button>
-            </div>
-          </div>
+        <Show when={currentView() === 'settings'}>
+          <SettingsView />
         </Show>
 
-        <Show when={selectedSessionId()}>
-          {/* Header */}
-          <header class="border-b border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-gray-800">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-              {sessionsQuery.data?.items.find(s => s.id === selectedSessionId())?.title || 'Chat'}
-            </h2>
-          </header>
-
-          {/* Messages */}
-          <ChatView
-            messages={messages()}
-            isLoading={messagesQuery.isLoading}
-            error={messagesQuery.error?.message}
-          />
-
-          {/* Runs panel */}
-          <RunList
-            runs={runs()}
-            isLoading={runsQuery.isLoading}
-            error={runsQuery.error?.message}
-          />
-
-          {/* Composer */}
-          <ChatComposer
-            onSend={handleSubmit}
-            disabled={submitMessageMutation.isPending}
-            placeholder="Type your message..."
-            agents={agents()}
-            selectedAgentId={selectedAgentId()}
-            onAgentSelect={setSelectedAgentId}
-          />
-
-          {/* Error toast */}
-          <Show when={submitError()}>
-            <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
-              {submitError()}
+        <Show when={currentView() === 'chat'}>
+          <Show when={!selectedSessionId()}>
+            {/* Empty state */}
+            <div class="flex-1 flex items-center justify-center">
+              <div class="text-center">
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                  Welcome to OpenAidy
+                </h1>
+                <p class="text-gray-600 dark:text-gray-400 mb-4">
+                  Select a session or create a new one to start chatting
+                </p>
+                <button
+                  onClick={handleCreateSession}
+                  disabled={createSessionMutation.isPending}
+                  class="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                >
+                  {createSessionMutation.isPending
+                    ? 'Creating...'
+                    : 'Create New Session'}
+                </button>
+              </div>
             </div>
+          </Show>
+
+          <Show when={selectedSessionId()}>
+            {/* Header */}
+            <header class="border-b border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-gray-800">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {sessionsQuery.data?.items.find(
+                  (s) => s.id === selectedSessionId(),
+                )?.title || 'Chat'}
+              </h2>
+            </header>
+
+            {/* Messages */}
+            <ChatView
+              messages={messages()}
+              isLoading={messagesQuery.isLoading}
+              error={messagesQuery.error?.message}
+            />
+
+            {/* Runs panel */}
+            <RunList
+              runs={runs()}
+              isLoading={runsQuery.isLoading}
+              error={runsQuery.error?.message}
+            />
+
+            {/* Composer */}
+            <ChatComposer
+              onSend={handleSubmit}
+              disabled={submitMessageMutation.isPending}
+              placeholder="Type your message..."
+              agents={agents()}
+              selectedAgentId={selectedAgentId()}
+              onAgentSelect={setSelectedAgentId}
+            />
+
+            {/* Error toast */}
+            <Show when={submitError()}>
+              <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                {submitError()}
+              </div>
+            </Show>
           </Show>
         </Show>
       </main>

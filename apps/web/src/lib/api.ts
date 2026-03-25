@@ -4,7 +4,7 @@
 
 /**
  * Get the API base URL
- * 
+ *
  * Priority:
  * 1. VITE_API_URL environment variable
  * 2. In development: http://localhost:3001 (server default port)
@@ -12,20 +12,20 @@
  */
 function getApiBase(): string {
   const envUrl = import.meta.env.VITE_API_URL;
-  
+
   if (envUrl) {
     return envUrl;
   }
-  
+
   // Check if we're in development mode
   if (import.meta.env.DEV) {
     return 'http://localhost:3001';
   }
-  
+
   // Production without VITE_API_URL - throw clear error
   throw new Error(
     'VITE_API_URL environment variable is required in production. ' +
-    'Set it in your .env file or build environment.'
+      'Set it in your .env file or build environment.',
   );
 }
 
@@ -64,7 +64,12 @@ export type SessionMessage = {
 /**
  * Run status
  */
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type RunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
 
 /**
  * Agent configuration
@@ -145,7 +150,9 @@ export async function getSession(id: string): Promise<Session | ApiError> {
 /**
  * List messages for a session
  */
-export async function listMessages(sessionId: string): Promise<{ items: SessionMessage[] } | ApiError> {
+export async function listMessages(
+  sessionId: string,
+): Promise<{ items: SessionMessage[] } | ApiError> {
   const response = await fetch(`${API_BASE}/sessions/${sessionId}/messages`);
   return response.json();
 }
@@ -153,7 +160,9 @@ export async function listMessages(sessionId: string): Promise<{ items: SessionM
 /**
  * List runs for a session
  */
-export async function listRuns(sessionId: string): Promise<{ items: SessionRun[] } | ApiError> {
+export async function listRuns(
+  sessionId: string,
+): Promise<{ items: SessionRun[] } | ApiError> {
   const response = await fetch(`${API_BASE}/sessions/${sessionId}/runs`);
   return response.json();
 }
@@ -208,12 +217,59 @@ export type SubmitMessageResult =
  */
 export async function submitMessage(
   sessionId: string,
-  input: SubmitMessageInput
+  input: SubmitMessageInput,
 ): Promise<SubmitMessageResult> {
   const response = await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  });
+  return response.json();
+}
+
+/**
+ * Application configuration
+ */
+export type AppConfig = {
+  defaults?: {
+    providerId?: string;
+    modelId?: string;
+  };
+  providers?: Array<{
+    id: string;
+    name: string;
+    [key: string]: unknown;
+  }>;
+  [key: string]: unknown;
+};
+
+/**
+ * Configuration status
+ */
+export type ConfigStatus = {
+  [key: string]: unknown;
+};
+
+/**
+ * Get application configuration
+ */
+export async function getConfig(): Promise<
+  { config: AppConfig; status: ConfigStatus } | ApiError
+> {
+  const response = await fetch(`${API_BASE}/config`);
+  return response.json();
+}
+
+/**
+ * Update application configuration
+ */
+export async function updateConfig(
+  config: AppConfig,
+): Promise<{ config: AppConfig; status: ConfigStatus } | ApiError> {
+  const response = await fetch(`${API_BASE}/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
   });
   return response.json();
 }
