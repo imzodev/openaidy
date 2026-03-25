@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
+
+const appConfigTemplatePath = fileURLToPath(new URL('../../../config/openaidy.template.json', import.meta.url));
 
 describe('buildApp sqlite bootstrap', () => {
   let app: FastifyInstance | undefined;
@@ -33,6 +36,8 @@ describe('buildApp sqlite bootstrap', () => {
         DB_KIND: 'sqlite',
         DATABASE_URL: undefined,
         SQLITE_PATH: sqlitePath,
+        APP_CONFIG_PATH: join(sqliteDir!, 'openaidy.config.json'),
+        APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
         LOG_LEVEL: 'info',
       },
     }));

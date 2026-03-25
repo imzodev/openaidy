@@ -1,15 +1,23 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
 
 vi.mock('../lib/env', () => ({
-  env: {
-    HOST: '0.0.0.0',
-    PORT: 3001,
-    CORS_ORIGIN: 'http://localhost:3000',
-    DB_KIND: 'disabled',
-    DATABASE_URL: undefined,
-    SQLITE_PATH: undefined,
-    LOG_LEVEL: 'info',
-  },
+  env: (() => {
+    const appConfigPath = fileURLToPath(new URL('../../../.openaidy/test-scheduler-config.json', import.meta.url));
+    const appConfigTemplatePath = fileURLToPath(new URL('../../../../config/openaidy.template.json', import.meta.url));
+
+    return {
+      HOST: '0.0.0.0',
+      PORT: 3001,
+      CORS_ORIGIN: 'http://localhost:3000',
+      DB_KIND: 'disabled',
+      DATABASE_URL: undefined,
+      SQLITE_PATH: undefined,
+      APP_CONFIG_PATH: appConfigPath,
+      APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
+      LOG_LEVEL: 'info',
+    };
+  })(),
 }));
 
 import { buildApp } from '../app';

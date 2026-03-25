@@ -7,6 +7,7 @@ import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import { agentRoutes } from './agents';
 import { createAgentRegistry } from '../agents';
+import type { AppConfigService } from '../config/service';
 import { createProviderServices } from '../providers';
 import { SessionMessageService } from '../sessions/service';
 import { RunEventEmitter } from '../dispatch/events';
@@ -69,7 +70,18 @@ describe('Agent Routes', () => {
     
     app = Fastify({ logger: false });
     
+    const configServiceStub = {
+      getConfig: () => ({
+        version: 1,
+        defaults: { agentId: 'default', providerId: 'openai', modelId: 'gpt-4o-mini' },
+        providers: [],
+        agents: [],
+      }),
+      getStatus: () => ({ issues: [] }),
+    } as unknown as AppConfigService;
+
     app.decorate('services', {
+      config: configServiceStub,
       providers: providerServices,
       sessions: sessionService,
       agents: testRegistry,

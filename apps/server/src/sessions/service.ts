@@ -1,4 +1,5 @@
 import type { ProviderServices } from '../providers';
+import type { AgentRegistry } from '../agents';
 import type { Message, ModelRequest, ModelResponse } from '@openaidy/runtime';
 import {
   type SessionsStore,
@@ -51,6 +52,8 @@ export type SubmitMessageResult =
  */
 export type SessionMessageServiceOptions = {
   providers: ProviderServices;
+  agents?: AgentRegistry;
+  getDefaultAgentId?: () => string | undefined;
   repositories?: {
     sessions: SessionsStore;
     messages: SessionMessagesStore;
@@ -73,12 +76,16 @@ export type SessionMessageServiceOptions = {
  */
 export class SessionMessageService {
   private readonly providers: ProviderServices;
+  private readonly agents: AgentRegistry | undefined;
+  private readonly getDefaultAgentId: (() => string | undefined) | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
   private readonly messagesRepo: SessionMessagesStore | undefined;
   private readonly runsRepo: SessionRunsStore | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
+    this.agents = options.agents;
+    this.getDefaultAgentId = options.getDefaultAgentId;
     
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -178,9 +185,28 @@ export class SessionMessageService {
     });
 
     // 3. Create run record (starts in 'queued' status)
-    const agentId = input.agentId ?? 'default';
-    const providerId = input.providerId ?? 'default';
-    const modelId = input.modelId ?? 'default';
+    const configuredDefaultAgentId = this.getDefaultAgentId?.();
+    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const agent = resolvedAgentId ? this.agents?.getAgent(resolvedAgentId) : undefined;
+    const defaultProviderConfig = this.providers.registry.getDefault();
+    const providerEntry = input.providerId
+      ? this.providers.registry.getEntry(input.providerId)
+      : agent?.defaults.providerId
+        ? this.providers.registry.getEntry(agent.defaults.providerId)
+        : defaultProviderConfig
+          ? this.providers.registry.getEntry(defaultProviderConfig.providerId)
+          : undefined;
+    const providerId = input.providerId
+      ?? agent?.defaults.providerId
+      ?? defaultProviderConfig?.providerId
+      ?? providerEntry?.provider.descriptor.id
+      ?? 'default';
+    const modelId = input.modelId
+      ?? agent?.defaults.modelId
+      ?? (providerId === defaultProviderConfig?.providerId ? defaultProviderConfig.modelId : undefined)
+      ?? providerEntry?.defaultModel
+      ?? 'default';
+    const agentId = resolvedAgentId ?? 'default';
     
     const run = await this.createRun({
       sessionId: input.sessionId,

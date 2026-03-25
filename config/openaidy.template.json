@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "defaults": {
+    "providerId": "openai",
+    "modelId": "gpt-4o-mini",
+    "agentId": "default"
+  },
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "vendorFamily": "openai-compatible",
+      "enabled": true,
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "defaultModel": "gpt-4o-mini",
+      "chatModel": "gpt-4o-mini",
+      "enableTools": true,
+      "enableVision": true,
+      "enableStreaming": true,
+      "defaultTemperature": 0.7,
+      "defaultMaxTokens": 4096,
+      "models": [
+        {
+          "id": "gpt-4o-mini",
+          "name": "GPT-4o Mini",
+          "enabled": true,
+          "capabilities": ["text_generation", "streaming", "tool_calls", "vision"],
+          "maxOutputTokens": 4096
+        },
+        {
+          "id": "gpt-4o",
+          "name": "GPT-4o",
+          "enabled": true,
+          "capabilities": ["text_generation", "streaming", "tool_calls", "vision"],
+          "maxOutputTokens": 8192
+        }
+      ]
+    }
+  ],
+  "agents": [
+    {
+      "id": "default",
+      "name": "Default Assistant",
+      "description": "A general-purpose assistant for everyday tasks",
+      "enabled": true,
+      "systemPrompt": "You are a helpful AI assistant. Be concise, accurate, and helpful. When unsure, say so.",
+      "defaults": {
+        "providerId": "openai",
+        "modelId": "gpt-4o-mini",
+        "temperature": 0.7,
+        "maxTokens": 4096
+      },
+      "tags": ["general", "default"],
+      "version": 1
+    },
+    {
+      "id": "code-assistant",
+      "name": "Code Assistant",
+      "description": "An assistant specialized in programming and software development",
+      "enabled": true,
+      "systemPrompt": "You are an expert software developer. Provide clear, well-structured code examples. Explain your reasoning. Follow best practices and consider edge cases.",
+      "defaults": {
+        "providerId": "openai",
+        "modelId": "gpt-4o",
+        "temperature": 0.3,
+        "maxTokens": 8192
+      },
+      "tags": ["coding", "development", "technical"],
+      "version": 1
+    }
+  ]
+}

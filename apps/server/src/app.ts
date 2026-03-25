@@ -13,6 +13,7 @@ import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { sessionRoutes } from './routes/sessions';
+import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
@@ -22,6 +23,7 @@ import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
 import { SchedulerService, createSchedulerService } from './scheduler';
+import { createAppConfigService, type AppConfigService } from './config/service';
 
 /**
  * Application services container
@@ -31,6 +33,7 @@ import { SchedulerService, createSchedulerService } from './scheduler';
  * selection, and invocation all operate on the same service graph.
  */
 export type AppServices = {
+  config: AppConfigService;
   providers: ProviderServices;
   sessions: SessionMessageService;
   agents: AgentRegistry;
@@ -70,8 +73,19 @@ export async function buildApp() {
 
   // Create shared services once per app instance
   const providerServices = createProviderServices();
+  const agentRegistry = createAgentRegistry({ initialAgents: [] });
+  const configService = createAppConfigService({
+    configPath: env.APP_CONFIG_PATH,
+    templatePath: env.APP_CONFIG_TEMPLATE_PATH,
+    providers: providerServices,
+    agents: agentRegistry,
+  });
+  await configService.load();
+
   const sessionService = new SessionMessageService({
     providers: providerServices,
+    agents: agentRegistry,
+    getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -80,9 +94,6 @@ export async function buildApp() {
         }
       : undefined,
   });
-  
-  // Create agent registry
-  const agentRegistry = createAgentRegistry();
   
   // Create run event emitter for SSE streaming
   const runEvents = new RunEventEmitter();
@@ -99,6 +110,7 @@ export async function buildApp() {
   }
   
   const services: AppServices = {
+    config: configService,
     providers: providerServices,
     sessions: sessionService,
     agents: agentRegistry,
@@ -118,6 +130,8 @@ export async function buildApp() {
   await app.register(websocket);
 
   await app.register(healthRoutes);
+
+  await app.register(configRoutes, { configService: services.config });
   
   // Pass shared services to session routes
   await app.register(sessionRoutes, { sessionService: services.sessions });

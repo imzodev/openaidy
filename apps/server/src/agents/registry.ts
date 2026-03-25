@@ -15,6 +15,8 @@ import {
 export type AgentRegistryOptions = {
   /** Directory containing agent JSON files */
   agentsDir?: string;
+  /** Initial in-memory agents */
+  initialAgents?: Agent[];
 };
 
 /**
@@ -31,6 +33,10 @@ export class AgentRegistry {
   constructor(options: AgentRegistryOptions = {}) {
     // Default to config/agents relative to workspace root
     this.agentsDir = options.agentsDir ?? path.join(process.cwd(), 'config', 'agents');
+
+    if (options.initialAgents) {
+      this.replaceAll(options.initialAgents);
+    }
   }
 
   /**
@@ -180,6 +186,31 @@ export class AgentRegistry {
   }
 
   /**
+   * Replace all loaded agents with an in-memory set.
+   */
+  replaceAll(agents: Agent[]): void {
+    this.agents.clear();
+
+    for (const agent of agents) {
+      const result = AgentSchema.safeParse(agent);
+      if (!result.success) {
+        const errorMessages = result.error.errors
+          .map(e => `  - ${e.path.join('.')}: ${e.message}`)
+          .join('\n');
+        throw new Error(`Invalid in-memory agent "${agent.id}":\n${errorMessages}`);
+      }
+
+      if (this.agents.has(result.data.id)) {
+        throw new Error(`Duplicate agent ID "${result.data.id}" found in in-memory config`);
+      }
+
+      this.agents.set(result.data.id, result.data);
+    }
+
+    this.loaded = true;
+  }
+
+  /**
    * Get the number of loaded agents
    */
   get size(): number {
@@ -193,6 +224,8 @@ export class AgentRegistry {
  */
 export function createAgentRegistry(options?: AgentRegistryOptions): AgentRegistry {
   const registry = new AgentRegistry(options);
-  registry.load();
+  if (!options?.initialAgents) {
+    registry.load();
+  }
   return registry;
 }

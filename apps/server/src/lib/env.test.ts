@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseEnv } from './env';
+
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../');
 
 describe('parseEnv', () => {
   it('defaults to sqlite with a default sqlite path', () => {
@@ -7,6 +12,8 @@ describe('parseEnv', () => {
 
     expect(parsed.DB_KIND).toBe('sqlite');
     expect(parsed.SQLITE_PATH).toBe('./data/openaidy.db');
+    expect(parsed.APP_CONFIG_PATH).toBe(resolve(workspaceRoot, '.openaidy/config.json'));
+    expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(resolve(workspaceRoot, 'config/openaidy.template.json'));
   });
 
   it('uses a provided sqlite path', () => {

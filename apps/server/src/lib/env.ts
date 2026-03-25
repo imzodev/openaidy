@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../');
+const defaultAppConfigPath = resolve(workspaceRoot, '.openaidy/config.json');
+const defaultAppConfigTemplatePath = resolve(workspaceRoot, 'config/openaidy.template.json');
 
 const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
@@ -7,6 +13,8 @@ const envSchema = z.object({
   DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
   DATABASE_URL: z.string().optional(),
   SQLITE_PATH: z.string().optional(),
+  APP_CONFIG_PATH: z.string().default(defaultAppConfigPath),
+  APP_CONFIG_TEMPLATE_PATH: z.string().default(defaultAppConfigTemplatePath),
   LOG_LEVEL: z.string().default('info'),
 }).superRefine((value, ctx) => {
   if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {

@@ -13,4 +13,5 @@ coverage
 *.log
 apps/web/.solid
 apps/server/data/
+.openaidy/
 *.tsbuildinfo
