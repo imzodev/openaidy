@@ -12,4 +12,5 @@ coverage
 .DS_Store
 *.log
 apps/web/.solid
+apps/server/data/
 *.tsbuildinfo
