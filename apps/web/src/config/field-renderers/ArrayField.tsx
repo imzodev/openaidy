@@ -6,18 +6,16 @@
  */
 
 import { Show, For } from 'solid-js';
-import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-solid';
+import { Plus } from 'lucide-solid';
 import type { FieldRendererProps, FieldRenderer } from './types';
 import { getDefaultRegistry } from './registry';
 
 export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
   const items = () => (props.value as unknown[]) ?? [];
   const itemSchema = () => props.schema.itemSchema;
-  const minItems = () => props.schema.minItems ?? 0;
   const maxItems = () => props.schema.maxItems ?? Infinity;
 
   const canAdd = () => items().length < maxItems();
-  const canRemove = () => items().length > minItems();
 
   const handleAdd = () => {
     if (!canAdd() || !itemSchema()) return;
@@ -25,36 +23,6 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
     const newItem =
       itemSchema()!.defaultValue ?? getDefaultValue(itemSchema()!.type);
     props.onChange([...items(), newItem]);
-  };
-
-  const handleRemove = (index: number) => {
-    if (!canRemove()) return;
-
-    const newItems = [...items()];
-    newItems.splice(index, 1);
-    props.onChange(newItems);
-  };
-
-  const handleMoveUp = (index: number) => {
-    if (index === 0) return;
-
-    const newItems = [...items()];
-    [newItems[index - 1], newItems[index]] = [
-      newItems[index],
-      newItems[index - 1],
-    ];
-    props.onChange(newItems);
-  };
-
-  const handleMoveDown = (index: number) => {
-    if (index >= items().length - 1) return;
-
-    const newItems = [...items()];
-    [newItems[index], newItems[index + 1]] = [
-      newItems[index + 1],
-      newItems[index],
-    ];
-    props.onChange(newItems);
   };
 
   const handleItemChange = (index: number, value: unknown) => {
@@ -95,44 +63,11 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
       <div class="space-y-3">
         <For each={items()}>
           {(item, index) => (
-            <div class="flex items-start gap-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div>
               {/* Item content */}
-              <div class="flex-1">
-                <Show when={itemSchema()}>
-                  {(schema) => renderItem(index(), item, schema())}
-                </Show>
-              </div>
-
-              {/* Item controls */}
-              <div class="flex items-center gap-1 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleMoveUp(index())}
-                  disabled={index() === 0 || props.disabled}
-                  class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Move up"
-                >
-                  <ChevronUp class="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMoveDown(index())}
-                  disabled={index() >= items().length - 1 || props.disabled}
-                  class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Move down"
-                >
-                  <ChevronDown class="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleRemove(index())}
-                  disabled={!canRemove() || props.disabled}
-                  class="p-1 text-red-400 hover:text-red-600 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Remove item"
-                >
-                  <Trash2 class="w-4 h-4" />
-                </button>
-              </div>
+              <Show when={itemSchema()}>
+                {(schema) => renderItem(index(), item, schema())}
+              </Show>
             </div>
           )}
         </For>
@@ -151,13 +86,9 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
         </Show>
 
         {/* Item count hint */}
-        <Show when={minItems() > 0 || maxItems() < Infinity}>
+        <Show when={maxItems() < Infinity}>
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            <Show when={minItems() > 0}>Minimum: {minItems()} items</Show>
-            <Show when={minItems() > 0 && maxItems() < Infinity}> • </Show>
-            <Show when={maxItems() < Infinity}>
-              Maximum: {maxItems()} items
-            </Show>
+            Maximum: {maxItems()} items
           </p>
         </Show>
       </div>

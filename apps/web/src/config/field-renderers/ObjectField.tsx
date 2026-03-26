@@ -51,7 +51,7 @@ export const ObjectField: FieldRenderer = (props: FieldRendererProps) => {
     <div class="field-container mb-4">
       {/* Object label removed - redundant when used as array item */}
 
-      <div class="space-y-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+      <div class="space-y-4">
         <For each={propertyKeys()}>
           {(key) => {
             const propSchema = () => properties()[key];
