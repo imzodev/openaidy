@@ -337,64 +337,87 @@ export function SettingsView() {
                   }
                 >
                   <For each={config()?.providers}>
-                    {(provider, index) => (
-                      <div class="border border-gray-200 dark:border-gray-700 rounded-lg mb-4">
-                        <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-t-lg">
-                          <div class="flex items-center gap-3">
-                            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">
-                              #{index() + 1}
-                            </span>
-                            <h3 class="font-medium text-gray-900 dark:text-gray-100">
-                              {provider.name}
-                            </h3>
-                            <span class="px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                              {provider.vendorFamily}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => handleDeleteProvider(provider.id)}
-                            disabled={updateMutation.isPending}
-                            class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                            title="Delete provider"
-                          >
-                            <Trash2 class="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div class="p-4">
-                          <DynamicConfigForm
-                            config={
-                              { providers: [provider] } as Record<
-                                string,
-                                unknown
+                    {(provider, index) => {
+                      const [isCollapsed, setIsCollapsed] = createSignal(false);
+
+                      return (
+                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg mb-4">
+                          <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-t-lg">
+                            <div class="flex items-center gap-3">
+                              <span class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                #{index() + 1}
+                              </span>
+                              <h3 class="font-medium text-gray-900 dark:text-gray-100">
+                                {provider.name}
+                              </h3>
+                              <span class="px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                                {provider.vendorFamily}
+                              </span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                              <button
+                                onClick={() => setIsCollapsed(!isCollapsed())}
+                                class="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                                title={isCollapsed() ? 'Expand' : 'Collapse'}
                               >
-                            }
-                            schema={providersSchema()}
-                            onChange={(newConfig) => {
-                              const currentConfig = config();
-                              const updatedProviders = [
-                                ...(currentConfig?.providers || []),
-                              ];
-                              const providerIndex = updatedProviders.findIndex(
-                                (p) => p.id === provider.id,
-                              );
-                              if (
-                                providerIndex !== -1 &&
-                                Array.isArray(newConfig.providers)
-                              ) {
-                                updatedProviders[providerIndex] = newConfig
-                                  .providers[0] as ProviderConfig;
-                              }
-                              const mergedConfig = {
-                                ...currentConfig,
-                                providers: updatedProviders,
-                              } as AppConfig;
-                              updateMutation.mutateAsync(mergedConfig);
-                            }}
-                            errors={{}}
-                          />
+                                <Show
+                                  when={isCollapsed()}
+                                  fallback={<ChevronDown class="w-4 h-4" />}
+                                >
+                                  <ChevronRight class="w-4 h-4" />
+                                </Show>
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleDeleteProvider(provider.id)
+                                }
+                                disabled={updateMutation.isPending}
+                                class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                title="Delete provider"
+                              >
+                                <Trash2 class="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                          <Show when={!isCollapsed()}>
+                            <div class="p-4">
+                              <DynamicConfigForm
+                                config={
+                                  { providers: [provider] } as Record<
+                                    string,
+                                    unknown
+                                  >
+                                }
+                                schema={providersSchema()}
+                                onChange={(newConfig) => {
+                                  const currentConfig = config();
+                                  const updatedProviders = [
+                                    ...(currentConfig?.providers || []),
+                                  ];
+                                  const providerIndex =
+                                    updatedProviders.findIndex(
+                                      (p) => p.id === provider.id,
+                                    );
+                                  if (
+                                    providerIndex !== -1 &&
+                                    Array.isArray(newConfig.providers)
+                                  ) {
+                                    updatedProviders[providerIndex] = newConfig
+                                      .providers[0] as ProviderConfig;
+                                  }
+                                  const mergedConfig = {
+                                    ...currentConfig,
+                                    providers: updatedProviders,
+                                  } as AppConfig;
+                                  updateMutation.mutateAsync(mergedConfig);
+                                }}
+                                errors={{}}
+                              />
+                            </div>
+                          </Show>
                         </div>
-                      </div>
-                    )}
+                      );
+                    }}
                   </For>
                 </Show>
               </div>

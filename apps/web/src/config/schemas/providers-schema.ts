@@ -352,10 +352,6 @@ const providerSchema: FieldSchema = {
 export function getProvidersSectionSchema(): SectionSchema {
   return {
     id: 'providers',
-    title: 'Providers',
-    description: 'Configure AI providers and their models.',
-    collapsible: true,
-    defaultCollapsed: false,
     fields: [
       {
         type: 'array',
