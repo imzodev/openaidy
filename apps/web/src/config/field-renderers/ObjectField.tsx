@@ -5,9 +5,8 @@
  * Supports recursive rendering of nested objects and arrays.
  */
 
-import { Show, For } from 'solid-js';
+import { For } from 'solid-js';
 import type { FieldRendererProps, FieldRenderer } from './types';
-import { FieldLabel } from './FieldLabel';
 import { getDefaultRegistry } from './registry';
 
 export const ObjectField: FieldRenderer = (props: FieldRendererProps) => {
@@ -50,7 +49,7 @@ export const ObjectField: FieldRenderer = (props: FieldRendererProps) => {
 
   return (
     <div class="field-container mb-4">
-      <FieldLabel schema={props.schema} error={props.error} />
+      {/* Object label removed - redundant when used as array item */}
 
       <div class="space-y-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
         <For each={propertyKeys()}>
@@ -58,11 +57,7 @@ export const ObjectField: FieldRenderer = (props: FieldRendererProps) => {
             const propSchema = () => properties()[key];
             const propValue = () => objectValue()[key];
 
-            return (
-              <Show when={propSchema()}>
-                {renderNestedField(key, propSchema()!, propValue())}
-              </Show>
-            );
+            return renderNestedField(key, propSchema()!, propValue());
           }}
         </For>
       </div>

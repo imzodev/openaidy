@@ -8,7 +8,6 @@
 import { Show, For } from 'solid-js';
 import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-solid';
 import type { FieldRendererProps, FieldRenderer } from './types';
-import { FieldLabel } from './FieldLabel';
 import { getDefaultRegistry } from './registry';
 
 export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
@@ -91,7 +90,7 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
 
   return (
     <div class="field-container mb-4">
-      <FieldLabel schema={props.schema} error={props.error} />
+      {/* Array label removed - redundant with section header */}
 
       <div class="space-y-3">
         <For each={items()}>
