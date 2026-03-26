@@ -85,6 +85,14 @@ export function getAgentsSectionSchema(): SectionSchema {
       'Configure AI agents with custom system prompts and model selection.',
     collapsible: true,
     defaultCollapsed: false,
-    fields: [agentSchema],
+    fields: [
+      {
+        type: 'array',
+        key: 'agents',
+        label: 'Agent',
+        minItems: 1,
+        itemSchema: agentSchema,
+      },
+    ],
   };
 }

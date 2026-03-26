@@ -10,6 +10,7 @@ import {
   type AppConfig,
   type ConfigStatus,
   type ProviderConfig,
+  type AgentConfig,
 } from '../lib/api';
 import { Save, AlertCircle, CheckCircle2, Plus, Trash2 } from 'lucide-solid';
 import {
@@ -133,15 +134,6 @@ export function SettingsView() {
     updateMutation.mutateAsync(mergedConfig);
   };
 
-  const handleAgentsChange = (newConfig: Record<string, unknown>) => {
-    const currentConfig = config();
-    const mergedConfig = {
-      ...currentConfig,
-      agents: newConfig.agents,
-    } as AppConfig;
-    updateMutation.mutateAsync(mergedConfig);
-  };
-
   const handleAddProvider = () => {
     const currentConfig = config();
     if (!currentConfig) return;
@@ -170,6 +162,39 @@ export function SettingsView() {
     const updatedConfig = {
       ...currentConfig,
       providers: currentConfig.providers?.filter((p) => p.id !== providerId),
+    } as AppConfig;
+
+    updateMutation.mutateAsync(updatedConfig);
+  };
+
+  const handleAddAgent = () => {
+    const currentConfig = config();
+    if (!currentConfig) return;
+
+    const newAgent: AgentConfig = {
+      id: `agent-${Date.now()}`,
+      name: 'New Agent',
+      enabled: true,
+      description: '',
+      systemPrompt: 'You are a helpful assistant.',
+      model: '',
+    };
+
+    const updatedConfig = {
+      ...currentConfig,
+      agents: [...(currentConfig.agents || []), newAgent],
+    } as AppConfig;
+
+    updateMutation.mutateAsync(updatedConfig);
+  };
+
+  const handleDeleteAgent = (agentId: string) => {
+    const currentConfig = config();
+    if (!currentConfig) return;
+
+    const updatedConfig = {
+      ...currentConfig,
+      agents: currentConfig.agents?.filter((a) => a.id !== agentId),
     } as AppConfig;
 
     updateMutation.mutateAsync(updatedConfig);
@@ -370,14 +395,91 @@ export function SettingsView() {
             {/* Agents Tab */}
             <Show when={activeTab() === 'agents'}>
               <div class="p-6">
-                <DynamicConfigForm
-                  config={
-                    { agents: config()?.agents } as Record<string, unknown>
+                <div class="flex items-center justify-between mb-4">
+                  <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    Agents
+                  </h2>
+                  <button
+                    onClick={handleAddAgent}
+                    disabled={updateMutation.isPending}
+                    class="flex items-center gap-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    <Plus class="w-4 h-4" />
+                    Add Agent
+                  </button>
+                </div>
+
+                <Show
+                  when={(config()?.agents?.length ?? 0) > 0}
+                  fallback={
+                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <p>No agents configured.</p>
+                      <p class="text-sm mt-2">
+                        Click "Add Agent" to add a new agent.
+                      </p>
+                    </div>
                   }
-                  schema={agentsSchema()}
-                  onChange={handleAgentsChange}
-                  errors={{}}
-                />
+                >
+                  <For each={config()?.agents}>
+                    {(agent, index) => (
+                      <div class="border border-gray-200 dark:border-gray-700 rounded-lg mb-4">
+                        <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-t-lg">
+                          <div class="flex items-center gap-3">
+                            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">
+                              #{index() + 1}
+                            </span>
+                            <h3 class="font-medium text-gray-900 dark:text-gray-100">
+                              {agent.name}
+                            </h3>
+                            <Show when={agent.enabled}>
+                              <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                                enabled
+                              </span>
+                            </Show>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAgent(agent.id)}
+                            disabled={updateMutation.isPending}
+                            class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Delete agent"
+                          >
+                            <Trash2 class="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div class="p-4">
+                          <DynamicConfigForm
+                            config={
+                              { agents: [agent] } as Record<string, unknown>
+                            }
+                            schema={agentsSchema()}
+                            onChange={(newConfig) => {
+                              const currentConfig = config();
+                              const updatedAgents = [
+                                ...(currentConfig?.agents || []),
+                              ];
+                              const agentIndex = updatedAgents.findIndex(
+                                (a) => a.id === agent.id,
+                              );
+                              if (
+                                agentIndex !== -1 &&
+                                Array.isArray(newConfig.agents)
+                              ) {
+                                updatedAgents[agentIndex] = newConfig
+                                  .agents[0] as AgentConfig;
+                              }
+                              const mergedConfig = {
+                                ...currentConfig,
+                                agents: updatedAgents,
+                              } as AppConfig;
+                              updateMutation.mutateAsync(mergedConfig);
+                            }}
+                            errors={{}}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </For>
+                </Show>
               </div>
             </Show>
 
