@@ -1,21 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Agent defaults schema
- * 
- * Default provider/model configuration for an agent.
- */
-export const AgentDefaultsSchema = z.object({
-  providerId: z.string().optional(),
-  modelId: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().int().positive().optional(),
-});
-
-/**
  * Agent definition schema
- * 
- * Defines an agent with its configuration, defaults, and metadata.
+ *
+ * Defines an agent with its configuration and metadata.
  * Stored as JSON files in config/agents/*.json
  */
 export const AgentSchema = z.object({
@@ -24,7 +12,7 @@ export const AgentSchema = z.object({
   name: z.string().min(1),
   enabled: z.boolean(),
   systemPrompt: z.string().min(1),
-  defaults: AgentDefaultsSchema,
+  model: z.string().min(1), // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
 
   // Optional fields
   description: z.string().optional(),
@@ -35,9 +23,8 @@ export const AgentSchema = z.object({
 });
 
 /**
- * TypeScript types inferred from Zod schemas
+ * TypeScript type inferred from Zod schema
  */
-export type AgentDefaults = z.infer<typeof AgentDefaultsSchema>;
 export type Agent = z.infer<typeof AgentSchema>;
 
 /**
@@ -71,27 +58,33 @@ export type AgentValidationError = {
 /**
  * Parse and validate an agent JSON file
  */
-export function parseAgent(json: unknown, filePath: string): Agent | AgentValidationError {
+export function parseAgent(
+  json: unknown,
+  filePath: string,
+): Agent | AgentValidationError {
   const result = AgentSchema.safeParse(json);
-  
+
   if (!result.success) {
     return {
       filePath,
-      errors: result.error.errors.map(e => ({
+      errors: result.error.errors.map((e) => ({
         code: e.code,
         message: e.message,
         path: e.path,
       })),
     };
   }
-  
+
   return result.data;
 }
 
 /**
  * Check if id matches filename (without .json extension)
  */
-export function validateAgentIdMatch(agentId: string, fileName: string): boolean {
+export function validateAgentIdMatch(
+  agentId: string,
+  fileName: string,
+): boolean {
   const expectedId = fileName.replace(/\.json$/, '');
   return agentId === expectedId;
 }
@@ -100,19 +93,25 @@ export function validateAgentIdMatch(agentId: string, fileName: string): boolean
  * Convert agent to summary format
  */
 export function toAgentSummary(agent: Agent): AgentSummary {
-  const summary: AgentSummary = {
+  return {
     id: agent.id,
     name: agent.name,
+    description: agent.description,
     enabled: agent.enabled,
+    tags: agent.tags,
   };
-  
-  if (agent.description !== undefined) {
-    summary.description = agent.description;
+}
+
+/**
+ * Parse model string into providerId and modelId
+ * Model format: "providerId/modelId"
+ */
+export function parseModelString(
+  model: string,
+): { providerId: string; modelId: string } | null {
+  const parts = model.split('/');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return null;
   }
-  
-  if (agent.tags !== undefined) {
-    summary.tags = agent.tags;
-  }
-  
-  return summary;
+  return { providerId: parts[0], modelId: parts[1] };
 }

@@ -2,55 +2,10 @@
  * Configuration schema for the agents section
  *
  * Defines the schema for agent configuration including
- * system prompts, defaults, and capabilities.
+ * system prompts and model selection.
  */
 
 import type { SectionSchema, FieldSchema } from '../schema';
-
-/**
- * Agent defaults schema
- */
-const agentDefaultsSchema: FieldSchema = {
-  type: 'object',
-  key: 'defaults',
-  label: 'Agent Defaults',
-  properties: {
-    providerId: {
-      type: 'string',
-      key: 'providerId',
-      label: 'Provider ID',
-      description:
-        'Provider to use for this agent (optional, uses app default if not set)',
-      placeholder: 'e.g., openai',
-    },
-    modelId: {
-      type: 'string',
-      key: 'modelId',
-      label: 'Model ID',
-      description:
-        'Model to use for this agent (optional, uses provider default if not set)',
-      placeholder: 'e.g., gpt-4o',
-    },
-    temperature: {
-      type: 'number',
-      key: 'temperature',
-      label: 'Temperature',
-      min: 0,
-      max: 2,
-      step: 0.1,
-      description: 'Sampling temperature for this agent (0-2)',
-      helpText: 'Override the provider default temperature for this agent.',
-    },
-    maxTokens: {
-      type: 'number',
-      key: 'maxTokens',
-      label: 'Max Tokens',
-      min: 1,
-      description: 'Maximum tokens for responses',
-      helpText: 'Override the provider default max tokens for this agent.',
-    },
-  },
-};
 
 /**
  * Agent configuration schema
@@ -105,7 +60,17 @@ const agentSchema: FieldSchema = {
       helpText:
         'This prompt is sent at the beginning of each conversation to instruct the AI how to behave.',
     },
-    defaults: agentDefaultsSchema,
+    model: {
+      type: 'string',
+      key: 'model',
+      label: 'Model',
+      required: true,
+      description:
+        'The model to use for this agent in "providerId/modelId" format',
+      placeholder: 'e.g., openai/gpt-4o-mini',
+      helpText:
+        'Specify the provider and model using the format "providerId/modelId". For example, "openai/gpt-4o-mini" or "anthropic/claude-3-5-sonnet-20241022".',
+    },
   },
 };
 
@@ -116,17 +81,10 @@ export function getAgentsSectionSchema(): SectionSchema {
   return {
     id: 'agents',
     title: 'Agents',
-    description: 'Configure AI agents with custom system prompts and settings.',
+    description:
+      'Configure AI agents with custom system prompts and model selection.',
     collapsible: true,
-    defaultCollapsed: true,
-    fields: [
-      {
-        type: 'array',
-        key: 'agents',
-        label: 'Agent',
-        minItems: 1,
-        itemSchema: agentSchema,
-      },
-    ],
+    defaultCollapsed: false,
+    fields: [agentSchema],
   };
 }

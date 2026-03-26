@@ -1,5 +1,10 @@
 import type { ProviderServices } from '../providers';
-import type { Message, ModelRequest, ModelResponse, ModelStreamEvent } from '@openaidy/runtime';
+import type {
+  Message,
+  ModelRequest,
+  ModelResponse,
+  ModelStreamEvent,
+} from '@openaidy/runtime';
 import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
 import {
@@ -49,8 +54,21 @@ export type DispatchInput = {
  * Dispatch result
  */
 export type DispatchResult =
-  | { ok: true; userMessage: SessionMessageRecord | SessionMessage; assistantMessage: SessionMessageRecord | SessionMessage; run: SessionRunRecord | SessionRun }
-  | { ok: false; error: { code: string; message: string; providerId?: string; modelId?: string } };
+  | {
+      ok: true;
+      userMessage: SessionMessageRecord | SessionMessage;
+      assistantMessage: SessionMessageRecord | SessionMessage;
+      run: SessionRunRecord | SessionRun;
+    }
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        providerId?: string;
+        modelId?: string;
+      };
+    };
 
 /**
  * Resolved configuration for a dispatch
@@ -81,11 +99,13 @@ export type SystemDefaults = {
 export type DispatchServiceOptions = {
   agents: AgentRegistry;
   providers: ProviderServices;
-  repositories?: {
-    sessions: SessionsStore;
-    messages: SessionMessagesStore;
-    runs: SessionRunsStore;
-  } | undefined;
+  repositories?:
+    | {
+        sessions: SessionsStore;
+        messages: SessionMessagesStore;
+        runs: SessionRunsStore;
+      }
+    | undefined;
   systemDefaults?: SystemDefaults;
   /** Optional event emitter for streaming run events */
   runEvents?: RunEventEmitter;
@@ -93,7 +113,7 @@ export type DispatchServiceOptions = {
 
 /**
  * DispatchService
- * 
+ *
  * Orchestrates agent-based dispatch to sessions:
  * 1. Resolve agent config (provider/model/defaults)
  * 2. Validate session exists
@@ -102,7 +122,7 @@ export type DispatchServiceOptions = {
  * 5. Invoke provider with agent's system prompt
  * 6. Persist assistant message
  * 7. Update run with result
- * 
+ *
  * Resolution precedence:
  * - per-run overrides (providerId, modelId, etc.)
  * - agent defaults from AgentRegistry
@@ -121,7 +141,7 @@ export class DispatchService {
     this.agents = options.agents;
     this.providers = options.providers;
     this.runEvents = options.runEvents;
-    
+
     // Default system defaults
     this.systemDefaults = options.systemDefaults ?? {
       providerId: 'openai',
@@ -129,7 +149,7 @@ export class DispatchService {
       temperature: 0.7,
       maxTokens: 4096,
     };
-    
+
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
       this.messagesRepo = options.repositories.messages;
@@ -139,15 +159,18 @@ export class DispatchService {
 
   /**
    * Resolve configuration for a dispatch
-   * 
+   *
    * Precedence:
    * 1. per-run overrides
    * 2. agent defaults
    * 3. system defaults
    */
-  resolveConfig(agentId: string, overrides?: DispatchInput['overrides']): ResolvedConfig | { error: { code: string; message: string } } {
+  resolveConfig(
+    agentId: string,
+    overrides?: DispatchInput['overrides'],
+  ): ResolvedConfig | { error: { code: string; message: string } } {
     const agent = this.agents.getAgent(agentId);
-    
+
     if (!agent) {
       return {
         error: {
@@ -156,7 +179,7 @@ export class DispatchService {
         },
       };
     }
-    
+
     if (!agent.enabled) {
       return {
         error: {
@@ -166,23 +189,33 @@ export class DispatchService {
       };
     }
 
+    // Parse model string "providerId/modelId"
+    const modelParts = agent.model.split('/');
+    if (modelParts.length !== 2 || !modelParts[0] || !modelParts[1]) {
+      return {
+        error: {
+          code: 'agent.model_invalid',
+          message: `Invalid model format "${agent.model}" for agent "${agentId}". Expected "providerId/modelId"`,
+        },
+      };
+    }
+    const agentProviderId = modelParts[0];
+    const agentModelId = modelParts[1];
+
     // Resolution precedence
-    const providerId = overrides?.providerId 
-      ?? agent.defaults.providerId 
-      ?? this.systemDefaults.providerId;
-    
-    const modelId = overrides?.modelId 
-      ?? agent.defaults.modelId 
-      ?? this.systemDefaults.modelId;
-    
-    const temperature = overrides?.temperature 
-      ?? agent.defaults.temperature 
-      ?? this.systemDefaults.temperature;
-    
-    const maxTokens = overrides?.maxTokens 
-      ?? agent.defaults.maxTokens 
-      ?? this.systemDefaults.maxTokens;
-    
+    const providerId =
+      overrides?.providerId ??
+      agentProviderId ??
+      this.systemDefaults.providerId;
+
+    const modelId =
+      overrides?.modelId ?? agentModelId ?? this.systemDefaults.modelId;
+
+    const temperature =
+      overrides?.temperature ?? this.systemDefaults.temperature;
+
+    const maxTokens = overrides?.maxTokens ?? this.systemDefaults.maxTokens;
+
     const systemPrompt = agent.systemPrompt;
 
     // Validate we have required config
@@ -190,16 +223,16 @@ export class DispatchService {
       return {
         error: {
           code: 'provider.config_invalid',
-          message: `No provider configured for agent "${agentId}" (set agent.defaults.providerId or systemDefaults.providerId)`,
+          message: `No provider configured for agent "${agentId}" (set agent.model or systemDefaults.providerId)`,
         },
       };
     }
-    
+
     if (!modelId) {
       return {
         error: {
           code: 'provider.config_invalid',
-          message: `No model configured for agent "${agentId}" (set agent.defaults.modelId or systemDefaults.modelId)`,
+          message: `No model configured for agent "${agentId}" (set agent.model or systemDefaults.modelId)`,
         },
       };
     }
@@ -220,7 +253,7 @@ export class DispatchService {
   async dispatch(input: DispatchInput): Promise<DispatchResult> {
     // 1. Resolve configuration
     const config = this.resolveConfig(input.agentId, input.overrides);
-    
+
     if ('error' in config) {
       return {
         ok: false,
@@ -267,13 +300,18 @@ export class DispatchService {
 
     // 6. Build messages with agent system prompt
     const history = await this.listMessages(input.sessionId);
-    const messages: Message[] = this.buildMessages(history, config.systemPrompt);
+    const messages: Message[] = this.buildMessages(
+      history,
+      config.systemPrompt,
+    );
 
     // 7. Invoke provider
     const modelRequest: ModelRequest = {
       model: config.modelId,
       messages,
-      ...(config.temperature !== undefined && { temperature: config.temperature }),
+      ...(config.temperature !== undefined && {
+        temperature: config.temperature,
+      }),
       ...(config.maxTokens !== undefined && { maxTokens: config.maxTokens }),
     };
 
@@ -283,15 +321,26 @@ export class DispatchService {
 
     // 8. Handle result
     if (result.ok) {
-      return this.handleSuccess(run.id, input.sessionId, userMessage, result.value, config);
+      return this.handleSuccess(
+        run.id,
+        input.sessionId,
+        userMessage,
+        result.value,
+        config,
+      );
     } else {
-      return this.handleFailure(run.id, userMessage, result.error.code, result.error.message);
+      return this.handleFailure(
+        run.id,
+        userMessage,
+        result.error.code,
+        result.error.message,
+      );
     }
   }
 
   /**
    * Dispatch an agent to a session with streaming
-   * 
+   *
    * Emits events via runEvents emitter:
    * - run.queued - when run is created
    * - run.started - when invocation begins
@@ -299,10 +348,12 @@ export class DispatchService {
    * - run.completed - on success
    * - run.failed - on error
    */
-  async *dispatchStream(input: DispatchInput): AsyncGenerator<RunEvent, void, unknown> {
+  async *dispatchStream(
+    input: DispatchInput,
+  ): AsyncGenerator<RunEvent, void, unknown> {
     // 1. Resolve configuration
     const config = this.resolveConfig(input.agentId, input.overrides);
-    
+
     if ('error' in config) {
       // Emit failure event if we have an emitter
       if (this.runEvents) {
@@ -402,14 +453,19 @@ export class DispatchService {
 
     // 6. Build messages with agent system prompt
     const history = await this.listMessages(input.sessionId);
-    const messages: Message[] = this.buildMessages(history, config.systemPrompt);
+    const messages: Message[] = this.buildMessages(
+      history,
+      config.systemPrompt,
+    );
 
     // 7. Invoke provider with streaming
     const modelRequest: ModelRequest = {
       model: config.modelId,
       messages,
       stream: true,
-      ...(config.temperature !== undefined && { temperature: config.temperature }),
+      ...(config.temperature !== undefined && {
+        temperature: config.temperature,
+      }),
       ...(config.maxTokens !== undefined && { maxTokens: config.maxTokens }),
     };
 
@@ -417,13 +473,21 @@ export class DispatchService {
     let lastStreamEvent: ModelStreamEvent | null = null;
 
     try {
-      for await (const streamResult of this.providers.invocation.invokeStream(modelRequest, {
-        providerId: config.providerId,
-      })) {
+      for await (const streamResult of this.providers.invocation.invokeStream(
+        modelRequest,
+        {
+          providerId: config.providerId,
+        },
+      )) {
         if (!streamResult.ok) {
           // Handle stream error
-          await this.handleStreamFailure(run.id, userMessage, streamResult.error.code, streamResult.error.message);
-          
+          await this.handleStreamFailure(
+            run.id,
+            userMessage,
+            streamResult.error.code,
+            streamResult.error.message,
+          );
+
           if (this.runEvents) {
             const failedEvent: RunEvent = {
               type: 'run.failed',
@@ -446,7 +510,10 @@ export class DispatchService {
         lastStreamEvent = streamEvent;
 
         // Handle different event types
-        if (streamEvent.type === 'stream.content_delta' && 'delta' in streamEvent) {
+        if (
+          streamEvent.type === 'stream.content_delta' &&
+          'delta' in streamEvent
+        ) {
           const delta = (streamEvent as { delta?: string }).delta ?? '';
           fullContent += delta;
 
@@ -478,7 +545,7 @@ export class DispatchService {
             input.sessionId,
             userMessage,
             completedEvent.response,
-            config
+            config,
           );
 
           // Emit run.completed event
@@ -502,10 +569,16 @@ export class DispatchService {
     } catch (error) {
       // Handle unexpected errors
       const errorCode = 'provider.stream_error';
-      const errorMessage = error instanceof Error ? error.message : 'Unknown stream error';
-      
-      await this.handleStreamFailure(run.id, userMessage, errorCode, errorMessage);
-      
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown stream error';
+
+      await this.handleStreamFailure(
+        run.id,
+        userMessage,
+        errorCode,
+        errorMessage,
+      );
+
       if (this.runEvents) {
         const failedEvent: RunEvent = {
           type: 'run.failed',
@@ -532,7 +605,7 @@ export class DispatchService {
     sessionId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     response: ModelResponse,
-    config: ResolvedConfig
+    config: ResolvedConfig,
   ): Promise<DispatchResult> {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
@@ -576,7 +649,7 @@ export class DispatchService {
     runId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     errorCode: string,
-    errorMessage: string
+    errorMessage: string,
   ): Promise<void> {
     // Update run with failure
     await this.markRunFailed(runId, {
@@ -590,22 +663,22 @@ export class DispatchService {
    */
   private buildMessages(
     history: SessionMessageRecord[] | SessionMessage[],
-    systemPrompt: string
+    systemPrompt: string,
   ): Message[] {
     const messages: Message[] = [];
-    
+
     // Add system prompt first
     messages.push({
       role: 'system',
       content: systemPrompt,
     });
-    
+
     // Add conversation history
     for (const m of history) {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
-      
+
       if (msgRole === 'tool') {
         messages.push({
           role: 'tool',
@@ -620,19 +693,23 @@ export class DispatchService {
         });
       }
     }
-    
+
     return messages;
   }
 
   // Session operations
-  private async getSession(id: string): Promise<SessionRecord | Session | null> {
+  private async getSession(
+    id: string,
+  ): Promise<SessionRecord | Session | null> {
     if (this.sessionsRepo) {
       return this.sessionsRepo.findById(id);
     }
     return findSessionRecord(id) ?? null;
   }
 
-  private async listMessages(sessionId: string): Promise<SessionMessageRecord[] | SessionMessage[]> {
+  private async listMessages(
+    sessionId: string,
+  ): Promise<SessionMessageRecord[] | SessionMessage[]> {
     if (this.messagesRepo) {
       return this.messagesRepo.listBySession(sessionId);
     }
@@ -684,7 +761,9 @@ export class DispatchService {
     return createRunRecord(input);
   }
 
-  private async markRunRunning(id: string): Promise<SessionRunRecord | SessionRun | null> {
+  private async markRunRunning(
+    id: string,
+  ): Promise<SessionRunRecord | SessionRun | null> {
     if (this.runsRepo) {
       return this.runsRepo.markRunning(id);
     }
@@ -699,12 +778,16 @@ export class DispatchService {
       completionTokens?: number;
       totalTokens?: number;
       metadata?: Record<string, unknown>;
-    }
+    },
   ): Promise<SessionRunRecord | SessionRun | null> {
     if (this.runsRepo) {
       const successInput: {
         finishReason: DbFinishReason;
-        usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        };
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
@@ -730,7 +813,7 @@ export class DispatchService {
       errorCode: string;
       errorMessage: string;
       metadata?: Record<string, unknown>;
-    }
+    },
   ): Promise<SessionRunRecord | SessionRun | null> {
     if (this.runsRepo) {
       return this.runsRepo.markFailed(id, input);
@@ -744,7 +827,7 @@ export class DispatchService {
     sessionId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     response: ModelResponse,
-    config: ResolvedConfig
+    config: ResolvedConfig,
   ): Promise<DispatchResult> {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
@@ -785,7 +868,7 @@ export class DispatchService {
     runId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     errorCode: string,
-    errorMessage: string
+    errorMessage: string,
   ): Promise<DispatchResult> {
     // Update run with failure
     await this.markRunFailed(runId, {
@@ -806,6 +889,8 @@ export class DispatchService {
 /**
  * Create a dispatch service
  */
-export function createDispatchService(options: DispatchServiceOptions): DispatchService {
+export function createDispatchService(
+  options: DispatchServiceOptions,
+): DispatchService {
   return new DispatchService(options);
 }

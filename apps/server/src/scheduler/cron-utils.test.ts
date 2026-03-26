@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   validateCronExpression,
   calculateNextRun,
@@ -17,7 +17,9 @@ describe('cron-utils', () => {
     });
 
     it('rejects empty string', () => {
-      expect(() => validateCronExpression('')).toThrow('Expression cannot be empty');
+      expect(() => validateCronExpression('')).toThrow(
+        'Expression cannot be empty',
+      );
     });
 
     it('rejects too few fields', () => {
@@ -41,7 +43,9 @@ describe('cron-utils', () => {
     });
 
     it('provides helpful error message', () => {
-      expect(() => validateCronExpression('invalid')).toThrow('Invalid cron expression');
+      expect(() => validateCronExpression('invalid')).toThrow(
+        'Invalid cron expression',
+      );
     });
   });
 
@@ -117,7 +121,9 @@ describe('cron-utils', () => {
     });
 
     it('throws error for invalid expression', () => {
-      expect(() => calculateNextRun('invalid')).toThrow('Failed to calculate next run');
+      expect(() => calculateNextRun('invalid')).toThrow(
+        'Failed to calculate next run',
+      );
     });
   });
 
@@ -180,15 +186,21 @@ describe('cron-utils', () => {
     });
 
     it('describes "every Sunday at midnight"', () => {
-      expect(describeCronExpression('0 0 * * 0')).toBe('Every Sunday at midnight');
+      expect(describeCronExpression('0 0 * * 0')).toBe(
+        'Every Sunday at midnight',
+      );
     });
 
     it('describes "every Monday at midnight"', () => {
-      expect(describeCronExpression('0 0 * * 1')).toBe('Every Monday at midnight');
+      expect(describeCronExpression('0 0 * * 1')).toBe(
+        'Every Monday at midnight',
+      );
     });
 
     it('describes "monthly on the 1st"', () => {
-      expect(describeCronExpression('0 0 1 * *')).toBe('Monthly on the 1st at midnight');
+      expect(describeCronExpression('0 0 1 * *')).toBe(
+        'Monthly on the 1st at midnight',
+      );
     });
 
     it('handles invalid expression gracefully', () => {

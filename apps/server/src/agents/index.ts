@@ -1,4 +1,13 @@
-export { AgentSchema, AgentDefaultsSchema } from './schema';
-export type { Agent, AgentDefaults, AgentSummary, AgentValidationError } from './schema';
-export { parseAgent, validateAgentIdMatch, toAgentSummary } from './schema';
-export { AgentRegistry, createAgentRegistry, type AgentRegistryOptions } from './registry';
+export { AgentSchema } from './schema';
+export type { Agent, AgentSummary, AgentValidationError } from './schema';
+export {
+  parseAgent,
+  validateAgentIdMatch,
+  toAgentSummary,
+  parseModelString,
+} from './schema';
+export {
+  AgentRegistry,
+  createAgentRegistry,
+  type AgentRegistryOptions,
+} from './registry';

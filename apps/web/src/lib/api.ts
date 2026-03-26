@@ -272,7 +272,7 @@ export type AgentConfig = {
   enabled?: boolean;
   description?: string;
   systemPrompt: string;
-  defaults: AgentDefaults;
+  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
   tools?: string[];
   tags?: string[];
   metadata?: Record<string, unknown>;
