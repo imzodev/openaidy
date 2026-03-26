@@ -23,11 +23,14 @@ import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
 import { SchedulerService, createSchedulerService } from './scheduler';
-import { createAppConfigService, type AppConfigService } from './config/service';
+import {
+  createAppConfigService,
+  type AppConfigService,
+} from './config/service';
 
 /**
  * Application services container
- * 
+ *
  * These services are created once per app instance and shared across
  * all routes and plugins. This ensures that provider registration,
  * selection, and invocation all operate on the same service graph.
@@ -57,12 +60,13 @@ export async function buildApp() {
   let jobRunsRepo: JobRunsStore | undefined;
   let sessionsRepo: SessionsStore | undefined;
   let scheduler: SchedulerService | undefined;
-  
-  const dbConfig = env.DB_KIND === 'postgres'
-    ? { kind: 'postgres' as const, connectionString: env.DATABASE_URL! }
-    : env.DB_KIND === 'sqlite'
-      ? { kind: 'sqlite' as const, sqlitePath: env.SQLITE_PATH! }
-      : undefined;
+
+  const dbConfig =
+    env.DB_KIND === 'postgres'
+      ? { kind: 'postgres' as const, connectionString: env.DATABASE_URL! }
+      : env.DB_KIND === 'sqlite'
+        ? { kind: 'sqlite' as const, sqlitePath: env.SQLITE_PATH! }
+        : undefined;
 
   if (dbConfig) {
     dbAdapter = createDatabaseAdapter(dbConfig);
@@ -94,10 +98,10 @@ export async function buildApp() {
         }
       : undefined,
   });
-  
+
   // Create run event emitter for SSE streaming
   const runEvents = new RunEventEmitter();
-  
+
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo) {
     scheduler = createSchedulerService(
@@ -105,10 +109,10 @@ export async function buildApp() {
       jobRunsRepo,
       sessionService,
       app.log,
-      { pollIntervalMs: 5000 }
+      { pollIntervalMs: 5000 },
     );
   }
-  
+
   const services: AppServices = {
     config: configService,
     providers: providerServices,
@@ -125,28 +129,36 @@ export async function buildApp() {
   // Decorate the app with services for access in routes/plugins
   app.decorate('services', services);
 
-  await app.register(cors, { origin: env.CORS_ORIGIN });
+  await app.register(cors, {
+    origin: env.CORS_ORIGIN,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  });
   await app.register(sensible);
   await app.register(websocket);
 
   await app.register(healthRoutes);
 
   await app.register(configRoutes, { configService: services.config });
-  
+
   // Pass shared services to session routes
   await app.register(sessionRoutes, { sessionService: services.sessions });
-  
+
   // Pass shared services to provider routes
   await app.register(providerRoutes, { services: services.providers });
-  
+
   // Register agent routes
   await app.register(agentRoutes, { agentRegistry: services.agents });
-  
+
   // Register run stream routes (SSE)
   await app.register(runStreamRoutes, { runEvents: services.runEvents });
-  
+
   // Register scheduler routes (if database is available)
-  if (services.scheduler && services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
+  if (
+    services.scheduler &&
+    services.jobsRepo &&
+    services.jobRunsRepo &&
+    services.sessionsRepo
+  ) {
     await app.register(schedulerRoutes, {
       schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
