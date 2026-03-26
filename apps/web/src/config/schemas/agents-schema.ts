@@ -80,11 +80,6 @@ const agentSchema: FieldSchema = {
 export function getAgentsSectionSchema(): SectionSchema {
   return {
     id: 'agents',
-    title: 'Agents',
-    description:
-      'Configure AI agents with custom system prompts and model selection.',
-    collapsible: true,
-    defaultCollapsed: false,
     fields: [
       {
         type: 'array',

@@ -125,7 +125,7 @@ export type FieldSchema = {
  */
 export type SectionSchema = {
   id: string;
-  title: string;
+  title?: string;
   description?: string;
   fields: FieldSchema[];
   collapsible?: boolean;

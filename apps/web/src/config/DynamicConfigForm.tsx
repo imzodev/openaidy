@@ -145,43 +145,51 @@ function ConfigSection(props: ConfigSectionProps) {
   const isCollapsible = () => props.section.collapsible ?? false;
   const showContent = () => !isCollapsible() || !props.collapsed;
 
+  const hasHeader = () => props.section.title || props.section.description;
+
   return (
     <div class="config-section bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-      {/* Section header */}
-      <div
-        class={`flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 ${
-          isCollapsible()
-            ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50'
-            : ''
-        }`}
-        onClick={isCollapsible() ? props.onToggleCollapse : undefined}
-      >
-        <div>
-          <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
-            {props.section.title}
-          </h3>
-          <Show when={props.section.description}>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {props.section.description}
-            </p>
+      {/* Section header - only show if title or description exists */}
+      <Show when={hasHeader()}>
+        <div
+          class={`flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 ${
+            isCollapsible()
+              ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50'
+              : ''
+          }`}
+          onClick={isCollapsible() ? props.onToggleCollapse : undefined}
+        >
+          <div>
+            <Show when={props.section.title}>
+              <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                {props.section.title}
+              </h3>
+            </Show>
+            <Show when={props.section.description}>
+              <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {props.section.description}
+              </p>
+            </Show>
+          </div>
+
+          <Show when={isCollapsible()}>
+            <button
+              type="button"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              aria-label={
+                props.collapsed ? 'Expand section' : 'Collapse section'
+              }
+            >
+              <Show
+                when={props.collapsed}
+                fallback={<ChevronDown class="w-5 h-5" />}
+              >
+                <ChevronRight class="w-5 h-5" />
+              </Show>
+            </button>
           </Show>
         </div>
-
-        <Show when={isCollapsible()}>
-          <button
-            type="button"
-            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            aria-label={props.collapsed ? 'Expand section' : 'Collapse section'}
-          >
-            <Show
-              when={props.collapsed}
-              fallback={<ChevronDown class="w-5 h-5" />}
-            >
-              <ChevronRight class="w-5 h-5" />
-            </Show>
-          </button>
-        </Show>
-      </div>
+      </Show>
 
       {/* Section content */}
       <Show when={showContent()}>
