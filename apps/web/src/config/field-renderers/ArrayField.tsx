@@ -6,7 +6,6 @@
  */
 
 import { Show, For } from 'solid-js';
-import { Plus } from 'lucide-solid';
 import type { FieldRendererProps, FieldRenderer } from './types';
 import { getDefaultRegistry } from './registry';
 
@@ -14,16 +13,6 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
   const items = () => (props.value as unknown[]) ?? [];
   const itemSchema = () => props.schema.itemSchema;
   const maxItems = () => props.schema.maxItems ?? Infinity;
-
-  const canAdd = () => items().length < maxItems();
-
-  const handleAdd = () => {
-    if (!canAdd() || !itemSchema()) return;
-
-    const newItem =
-      itemSchema()!.defaultValue ?? getDefaultValue(itemSchema()!.type);
-    props.onChange([...items(), newItem]);
-  };
 
   const handleItemChange = (index: number, value: unknown) => {
     const newItems = [...items()];
@@ -72,19 +61,6 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
           )}
         </For>
 
-        {/* Add button */}
-        <Show when={canAdd()}>
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={props.disabled}
-            class="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus class="w-4 h-4" />
-            Add {props.schema.label?.toLowerCase() ?? 'item'}
-          </button>
-        </Show>
-
         {/* Item count hint */}
         <Show when={maxItems() < Infinity}>
           <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -95,23 +71,3 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
     </div>
   );
 };
-
-/**
- * Get default value for a field type
- */
-function getDefaultValue(type: string): unknown {
-  switch (type) {
-    case 'string':
-      return '';
-    case 'number':
-      return 0;
-    case 'boolean':
-      return false;
-    case 'array':
-      return [];
-    case 'object':
-      return {};
-    default:
-      return null;
-  }
-}
