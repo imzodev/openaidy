@@ -20,6 +20,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
+  X,
 } from 'lucide-solid';
 import {
   DynamicConfigForm,
@@ -43,6 +44,19 @@ export function SettingsView() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  // Modal state for adding new provider
+  const [showAddProviderModal, setShowAddProviderModal] = createSignal(false);
+  const [newProviderData, setNewProviderData] = createSignal<
+    Partial<ProviderConfig>
+  >({
+    id: '',
+    name: '',
+    vendorFamily: 'openai-compatible',
+    enabled: true,
+    baseUrl: '',
+    apiKeyEnv: '',
+  });
 
   const configQuery = createQuery(() => ({
     queryKey: ['config'],
@@ -142,16 +156,38 @@ export function SettingsView() {
     updateMutation.mutateAsync(mergedConfig);
   };
 
-  const handleAddProvider = () => {
+  const handleOpenAddProviderModal = () => {
+    setNewProviderData({
+      id: '',
+      name: '',
+      vendorFamily: 'openai-compatible',
+      enabled: true,
+      baseUrl: '',
+      apiKeyEnv: '',
+    });
+    setShowAddProviderModal(true);
+  };
+
+  const handleSaveNewProvider = () => {
     const currentConfig = config();
     if (!currentConfig) return;
 
+    const providerData = newProviderData();
+    if (!providerData.id || !providerData.name) {
+      setSaveMessage({
+        type: 'error',
+        text: 'Provider ID and Name are required',
+      });
+      return;
+    }
+
     const newProvider: ProviderConfig = {
-      id: `provider-${Date.now()}`,
-      name: 'New Provider',
-      vendorFamily: 'openai-compatible',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKeyEnv: 'OPENAI_API_KEY',
+      id: providerData.id || `provider-${Date.now()}`,
+      name: providerData.name || 'New Provider',
+      vendorFamily: providerData.vendorFamily || 'openai-compatible',
+      enabled: providerData.enabled ?? true,
+      baseUrl: providerData.baseUrl || '',
+      apiKeyEnv: providerData.apiKeyEnv || '',
       models: [],
     };
 
@@ -161,6 +197,7 @@ export function SettingsView() {
     } as AppConfig;
 
     updateMutation.mutateAsync(updatedConfig);
+    setShowAddProviderModal(false);
   };
 
   const handleDeleteProvider = (providerId: string) => {
@@ -316,7 +353,7 @@ export function SettingsView() {
                     Providers
                   </h2>
                   <button
-                    onClick={handleAddProvider}
+                    onClick={handleOpenAddProviderModal}
                     disabled={updateMutation.isPending}
                     class="flex items-center gap-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors text-sm font-medium"
                   >
@@ -550,6 +587,175 @@ export function SettingsView() {
           </Show>
         </div>
       </div>
+
+      {/* Add Provider Modal */}
+      <Show when={showAddProviderModal()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            class="absolute inset-0 bg-black/50"
+            onClick={() => setShowAddProviderModal(false)}
+          />
+          <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Add New Provider
+              </h3>
+              <button
+                onClick={() => setShowAddProviderModal(false)}
+                class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            <div class="p-4 space-y-4">
+              {/* Provider ID */}
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Provider ID <span class="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newProviderData().id || ''}
+                  onInput={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      id: e.currentTarget.value,
+                    })
+                  }
+                  placeholder="e.g., openai, anthropic"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Unique identifier (lowercase letters, numbers, hyphens)
+                </p>
+              </div>
+
+              {/* Display Name */}
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Display Name <span class="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newProviderData().name || ''}
+                  onInput={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      name: e.currentTarget.value,
+                    })
+                  }
+                  placeholder="e.g., OpenAI, Anthropic"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Vendor Family */}
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Vendor Family
+                </label>
+                <select
+                  value={newProviderData().vendorFamily || 'openai-compatible'}
+                  onChange={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      vendorFamily: e.currentTarget
+                        .value as ProviderConfig['vendorFamily'],
+                    })
+                  }
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+
+              {/* Base URL */}
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Base URL
+                </label>
+                <input
+                  type="text"
+                  value={newProviderData().baseUrl || ''}
+                  onInput={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      baseUrl: e.currentTarget.value,
+                    })
+                  }
+                  placeholder="e.g., https://api.openai.com/v1"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* API Key Env */}
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  API Key Environment Variable
+                </label>
+                <input
+                  type="text"
+                  value={newProviderData().apiKeyEnv || ''}
+                  onInput={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      apiKeyEnv: e.currentTarget.value,
+                    })
+                  }
+                  placeholder="e.g., OPENAI_API_KEY"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Name of the environment variable containing the API key
+                </p>
+              </div>
+
+              {/* Enabled */}
+              <div class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="provider-enabled"
+                  checked={newProviderData().enabled ?? true}
+                  onChange={(e) =>
+                    setNewProviderData({
+                      ...newProviderData(),
+                      enabled: e.currentTarget.checked,
+                    })
+                  }
+                  class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label
+                  for="provider-enabled"
+                  class="text-sm text-gray-700 dark:text-gray-300"
+                >
+                  Enabled
+                </label>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setShowAddProviderModal(false)}
+                class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveNewProvider}
+                disabled={
+                  updateMutation.isPending ||
+                  !newProviderData().id ||
+                  !newProviderData().name
+                }
+                class="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                {updateMutation.isPending ? 'Adding...' : 'Add Provider'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }
