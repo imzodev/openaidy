@@ -181,15 +181,29 @@ export function SettingsView() {
       return;
     }
 
+    // Build the provider object with required fields
     const newProvider: ProviderConfig = {
-      id: providerData.id || `provider-${Date.now()}`,
-      name: providerData.name || 'New Provider',
+      id: providerData.id,
+      name: providerData.name,
       vendorFamily: providerData.vendorFamily || 'openai-compatible',
       enabled: providerData.enabled ?? true,
-      baseUrl: providerData.baseUrl || '',
-      apiKeyEnv: providerData.apiKeyEnv || '',
-      models: [],
-    };
+      models: [
+        {
+          id: 'default-model',
+          name: 'Default Model',
+          enabled: true,
+        },
+      ],
+    } as ProviderConfig;
+
+    // Only add optional fields if they have values
+    if (providerData.baseUrl) {
+      (newProvider as Record<string, unknown>).baseUrl = providerData.baseUrl;
+    }
+    if (providerData.apiKeyEnv) {
+      (newProvider as Record<string, unknown>).apiKeyEnv =
+        providerData.apiKeyEnv;
+    }
 
     const updatedConfig = {
       ...currentConfig,
