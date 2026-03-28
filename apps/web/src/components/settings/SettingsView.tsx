@@ -65,7 +65,11 @@ export function SettingsView() {
       (prev) =>
         ({
           ...prev,
-          defaults: newConfig.defaults,
+          defaults: {
+            ...(prev?.defaults ?? {}),
+            ...((newConfig.defaults as Record<string, unknown> | undefined) ??
+              {}),
+          },
         }) as AppConfig,
     );
     setHasChanges(true);

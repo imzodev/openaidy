@@ -52,17 +52,27 @@ describe('DefaultsTab', () => {
     cleanup();
   });
 
+  const mergeDefaultsChange = (
+    setConfig: (updater: (prev: AppConfig) => AppConfig) => void,
+  ) => {
+    return (newConfig: Record<string, unknown>) => {
+      setConfig((prev) => ({
+        ...prev,
+        defaults: {
+          ...prev.defaults,
+          ...((newConfig.defaults as Record<string, unknown> | undefined) ??
+            {}),
+        },
+      }));
+    };
+  };
+
   it('preserves unsaved text input when default provider changes', async () => {
     const [config, setConfig] = createSignal<AppConfig>(
       structuredClone(baseConfig),
     );
 
-    const handleChange = (newConfig: Record<string, unknown>) => {
-      setConfig((prev) => ({
-        ...prev,
-        defaults: newConfig.defaults as AppConfig['defaults'],
-      }));
-    };
+    const handleChange = mergeDefaultsChange(setConfig);
 
     render(() => <DefaultsTab config={config} onChange={handleChange} />);
 
@@ -92,12 +102,7 @@ describe('DefaultsTab', () => {
       structuredClone(baseConfig),
     );
 
-    const handleChange = (newConfig: Record<string, unknown>) => {
-      setConfig((prev) => ({
-        ...prev,
-        defaults: newConfig.defaults as AppConfig['defaults'],
-      }));
-    };
+    const handleChange = mergeDefaultsChange(setConfig);
 
     render(() => <DefaultsTab config={config} onChange={handleChange} />);
 
@@ -120,5 +125,37 @@ describe('DefaultsTab', () => {
 
     expect(agentSelect.value).toBe('research');
     expect(modelInput.value).toBe('draft-before-agent-change');
+  });
+
+  it('preserves previously selected defaults when another defaults field changes', async () => {
+    const [config, setConfig] = createSignal<AppConfig>(
+      structuredClone(baseConfig),
+    );
+
+    const handleChange = mergeDefaultsChange(setConfig);
+
+    render(() => <DefaultsTab config={config} onChange={handleChange} />);
+
+    const selects = document.querySelectorAll('select');
+    const providerSelect = selects[0] as HTMLSelectElement;
+    const agentSelect = selects[1] as HTMLSelectElement;
+
+    fireEvent.change(providerSelect, {
+      currentTarget: { value: 'anthropic' },
+      target: { value: 'anthropic' },
+    });
+
+    expect(providerSelect.value).toBe('anthropic');
+    expect(config().defaults.providerId).toBe('anthropic');
+    expect(config().defaults.agentId).toBe('default');
+
+    fireEvent.change(agentSelect, {
+      currentTarget: { value: 'research' },
+      target: { value: 'research' },
+    });
+
+    expect(agentSelect.value).toBe('research');
+    expect(config().defaults.providerId).toBe('anthropic');
+    expect(config().defaults.agentId).toBe('research');
   });
 });
