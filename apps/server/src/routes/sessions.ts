@@ -21,7 +21,10 @@ export type SessionRoutesOptions = {
   sessionService: SessionMessageService;
 };
 
-export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (app, options) => {
+export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
+  app,
+  options,
+) => {
   const { sessionService } = options;
 
   /**
@@ -45,7 +48,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       reply.code(400);
       return {
         error: 'validation.invalid_request',
-        message: error instanceof Error ? error.message : 'Invalid request body',
+        message:
+          error instanceof Error ? error.message : 'Invalid request body',
       };
     }
     const session = await sessionService.createSession(parsed.title);
@@ -60,12 +64,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   app.get('/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
     const session = await sessionService.getSession(sessionId);
-    
+
     if (!session) {
       reply.code(404);
       return { error: 'Session not found', sessionId };
     }
-    
+
     return session;
   });
 
@@ -75,13 +79,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
    */
   app.get('/sessions/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    
+
     const session = await sessionService.getSession(sessionId);
     if (!session) {
       reply.code(404);
       return { error: 'Session not found', sessionId };
     }
-    
+
     const messages = await sessionService.listMessages(sessionId);
     return { items: messages };
   });
@@ -89,7 +93,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
   /**
    * POST /sessions/:sessionId/messages
    * Submit a message to a session
-   * 
+   *
    * This endpoint:
    * 1. Persists the user message
    * 2. Creates a run record
@@ -99,31 +103,42 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
    */
   app.post('/sessions/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    
+
+    // Log incoming request
+    console.log('[DEBUG] Received POST /sessions/:sessionId/messages');
+    console.log('[DEBUG] Request body:', request.body);
+
     // Validate request body
     let body;
     try {
       body = submitMessageSchema.parse(request.body);
+      console.log('[DEBUG] Parsed body:', body);
     } catch (error) {
+      console.log('[DEBUG] Validation error:', error);
       reply.code(400);
       return {
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
 
     // Submit message through service
-    const result = await sessionService.submitMessage({
+    const submitInput = {
       sessionId,
       role: body.role,
       content: body.content,
       ...(body.agentId !== undefined && { agentId: body.agentId }),
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
-    });
+    };
+    console.log('[DEBUG] Submitting to service:', submitInput);
+
+    const result = await sessionService.submitMessage(submitInput);
+    console.log('[DEBUG] Service result:', result);
 
     if (result.ok) {
       reply.code(201);
@@ -144,7 +159,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       } else {
         reply.code(500);
       }
-      
+
       return {
         ok: false,
         error: result.error,
@@ -158,13 +173,13 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
    */
   app.get('/sessions/:sessionId/runs', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
-    
+
     const session = await sessionService.getSession(sessionId);
     if (!session) {
       reply.code(404);
       return { error: 'Session not found', sessionId };
     }
-    
+
     const runs = await sessionService.listRuns(sessionId);
     return { items: runs };
   });

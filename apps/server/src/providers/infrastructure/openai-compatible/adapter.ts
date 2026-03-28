@@ -1,10 +1,11 @@
 /**
  * OpenAI-Compatible Provider Adapter
  *
- * Implements the ModelProvider interface for OpenAI and OpenAI-compatible APIs.
- * Supports OpenAI itself, custom baseUrl endpoints, streaming, and normalized error mapping.
+ * Implements the ModelProvider interface using the official OpenAI SDK.
+ * Supports OpenAI itself and OpenAI-compatible APIs (like Z.AI, Groq, etc.)
  */
 
+import OpenAI from 'openai';
 import {
   ok,
   err,
@@ -18,15 +19,7 @@ import {
   type ModelStreamEvent,
   type ProviderResult,
 } from '@openaidy/runtime';
-import { mapRequest } from './request-mapper';
-import { mapResponse, mapStreamChunk, createToolCallAccumulator, updateToolCallAccumulator, finalizeToolCalls, mapFinishReason } from './response-mapper';
-import { normalizeError, isOpenAIError } from './error-normalizer';
-import type {
-  OpenAICompatibleAdapterConfig,
-  OpenAIChatCompletionResponse,
-  OpenAIStreamChunk,
-  OpenAIModelListResponse,
-} from './types';
+import type { OpenAICompatibleAdapterConfig } from './types';
 
 // =====================
 // Default Configuration
@@ -42,10 +35,10 @@ const PROVIDER_NAME = 'OpenAI-Compatible';
 // Known Models
 // =====================
 
-/**
- * Common OpenAI models with their capabilities
- */
-const KNOWN_MODELS: Record<string, { name: string; capabilities: ProviderCapability[] }> = {
+const KNOWN_MODELS: Record<
+  string,
+  { name: string; capabilities: ProviderCapability[] }
+> = {
   'gpt-4': {
     name: 'GPT-4',
     capabilities: ['text_generation', 'streaming', 'tool_calls'],
@@ -56,7 +49,7 @@ const KNOWN_MODELS: Record<string, { name: string; capabilities: ProviderCapabil
   },
   'gpt-4o': {
     name: 'GPT-4o',
-    capabilities: ['text_generation', 'streaming', 'tool_calls', 'vision', 'audio_input'],
+    capabilities: ['text_generation', 'streaming', 'tool_calls', 'vision'],
   },
   'gpt-4o-mini': {
     name: 'GPT-4o Mini',
@@ -66,7 +59,7 @@ const KNOWN_MODELS: Record<string, { name: string; capabilities: ProviderCapabil
     name: 'GPT-3.5 Turbo',
     capabilities: ['text_generation', 'streaming', 'tool_calls'],
   },
-  'o1': {
+  o1: {
     name: 'o1',
     capabilities: ['text_generation', 'streaming'],
   },
@@ -77,6 +70,10 @@ const KNOWN_MODELS: Record<string, { name: string; capabilities: ProviderCapabil
   'o1-preview': {
     name: 'o1 Preview',
     capabilities: ['text_generation', 'streaming'],
+  },
+  'glm-5': {
+    name: 'GLM-5',
+    capabilities: ['text_generation', 'streaming', 'tool_calls'],
   },
 };
 
@@ -90,6 +87,7 @@ const KNOWN_MODELS: Record<string, { name: string; capabilities: ProviderCapabil
  * Implements the ModelProvider interface for OpenAI and compatible APIs.
  */
 export class OpenAICompatibleProvider implements ModelProvider {
+  private readonly client: OpenAI;
   private readonly config: Required<
     Pick<OpenAICompatibleAdapterConfig, 'apiKey' | 'baseUrl'>
   > &
@@ -108,6 +106,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
       providerName: PROVIDER_NAME,
       ...config,
     };
+
+    // Initialize OpenAI SDK client
+    this.client = new OpenAI({
+      apiKey: this.config.apiKey,
+      baseURL: this.config.baseUrl,
+      organization: this.config.organizationId,
+      defaultHeaders: this.config.headers,
+      timeout: this.config.timeoutMs,
+    });
 
     // Build capabilities based on config
     const capabilities: ProviderCapability[] = ['text_generation'];
@@ -133,28 +140,27 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
   async listModels(): Promise<ProviderResult<readonly ModelDescriptor[]>> {
     try {
-      const response = await this.fetch(`${this.config.baseUrl}/models`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-        signal: this.createAbortSignal(),
-      });
-
-      if (!response.ok) {
-        return err(normalizeError(response, { providerId: this.descriptor.id }));
-      }
-
-      const data = (await response.json()) as OpenAIModelListResponse;
+      const response = await this.client.models.list();
 
       // Filter to chat models and map to descriptors
-      const models: ModelDescriptor[] = data.data
-        .filter((model) => model.id.includes('gpt') || model.id.includes('o1') || model.id.includes('chat'))
+      const models: ModelDescriptor[] = response.data
+        .filter(
+          (model) =>
+            model.id.includes('gpt') ||
+            model.id.includes('o1') ||
+            model.id.includes('chat') ||
+            model.id.includes('glm'),
+        )
         .map((model) => {
           const known = KNOWN_MODELS[model.id];
           return {
             id: model.id,
             providerId: this.descriptor.id,
             name: known?.name ?? model.id,
-            capabilities: known?.capabilities ?? ['text_generation', 'streaming'],
+            capabilities: known?.capabilities ?? [
+              'text_generation',
+              'streaming',
+            ],
           };
         });
 
@@ -170,7 +176,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
       return ok(models);
     } catch (error) {
-      return err(normalizeError(error, { providerId: this.descriptor.id }));
+      return err(this.normalizeError(error));
     }
   }
 
@@ -188,34 +194,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
     // Try to fetch from API
     try {
-      const response = await this.fetch(`${this.config.baseUrl}/models/${modelId}`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-        signal: this.createAbortSignal(),
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return err(
-            createProviderError('provider.model_not_found', `Model "${modelId}" not found`, {
-              providerId: this.descriptor.id,
-              modelId,
-            })
-          );
-        }
-        return err(normalizeError(response, { providerId: this.descriptor.id, modelId }));
-      }
-
-      const data = await response.json();
+      await this.client.models.retrieve(modelId);
       return ok({
         id: modelId,
         providerId: this.descriptor.id,
-        name: (data as { id: string }).id,
+        name: modelId,
         capabilities: ['text_generation', 'streaming'],
       });
     } catch (_error) {
       // For unknown models, return a generic descriptor
-      // This allows the adapter to work with custom models
       return ok({
         id: modelId,
         providerId: this.descriptor.id,
@@ -239,46 +226,58 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
   async invoke(request: ModelRequest): Promise<ProviderResult<ModelResponse>> {
     // Check capabilities
-    if (request.tools && request.tools.length > 0 && !this.hasCapability('tool_calls')) {
+    if (
+      request.tools &&
+      request.tools.length > 0 &&
+      !this.hasCapability('tool_calls')
+    ) {
       return err(
         createProviderError(
           'provider.capability_unsupported',
           `Provider "${this.descriptor.id}" does not support tool calls`,
-          { providerId: this.descriptor.id, modelId: request.model }
-        )
+          { providerId: this.descriptor.id, modelId: request.model },
+        ),
       );
     }
 
     try {
-      const openAIRequest = mapRequest({ ...request, stream: false });
+      const modelId =
+        request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+      const messages = this.mapMessages(request.messages);
+      const tools =
+        request.tools && request.tools.length > 0
+          ? this.mapTools(request.tools)
+          : null;
 
-      const response = await this.fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(openAIRequest),
-        signal: this.createAbortSignal(),
+      console.log('[DEBUG] OpenAI SDK Request:', {
+        model: modelId,
+        messages: messages.length,
+        tools: tools?.length,
       });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let errorData: unknown;
-        try {
-          errorData = JSON.parse(errorBody);
-        } catch {
-          errorData = errorBody;
-        }
-        return err(
-          normalizeError(isOpenAIError(errorData) ? errorData : response, {
-            providerId: this.descriptor.id,
-            modelId: request.model,
-          })
-        );
+      const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
+        model: modelId,
+        messages,
+        temperature: request.temperature ?? null,
+        max_tokens: request.maxTokens ?? null,
+        stream: false,
+      };
+
+      if (tools) {
+        requestParams.tools = tools;
       }
 
-      const data = (await response.json()) as OpenAIChatCompletionResponse;
-      return ok(mapResponse(data, this.descriptor.id));
+      const response = await this.client.chat.completions.create(requestParams);
+
+      console.log('[DEBUG] OpenAI SDK Response:', {
+        id: response.id,
+        model: response.model,
+      });
+
+      return ok(this.mapResponse(response, modelId));
     } catch (error) {
-      return err(normalizeError(error, { providerId: this.descriptor.id, modelId: request.model }));
+      console.log('[DEBUG] OpenAI SDK Error:', error);
+      return err(this.normalizeError(error));
     }
   }
 
@@ -286,151 +285,122 @@ export class OpenAICompatibleProvider implements ModelProvider {
   // Streaming Invocation
   // =====================
 
-  async *invokeStream(request: ModelRequest): AsyncIterable<ProviderResult<ModelStreamEvent>> {
+  async *invokeStream(
+    request: ModelRequest,
+  ): AsyncIterable<ProviderResult<ModelStreamEvent>> {
     // Check streaming capability
     if (!this.hasCapability('streaming')) {
       yield err(
         createProviderError(
           'provider.capability_unsupported',
           `Provider "${this.descriptor.id}" does not support streaming`,
-          { providerId: this.descriptor.id, modelId: request.model }
-        )
+          { providerId: this.descriptor.id, modelId: request.model },
+        ),
       );
       return;
     }
 
     const responseId = `stream_${Date.now()}`;
     let started = false;
-    const toolCallAccumulator = createToolCallAccumulator();
 
     try {
-      const openAIRequest = mapRequest({ ...request, stream: true });
+      const modelId =
+        request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+      const messages = this.mapMessages(request.messages);
+      const tools =
+        request.tools && request.tools.length > 0
+          ? this.mapTools(request.tools)
+          : null;
 
-      const response = await this.fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { ...this.getHeaders(), Accept: 'text/event-stream' },
-        body: JSON.stringify(openAIRequest),
-        signal: this.createAbortSignal(),
-      });
+      const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
+        model: modelId,
+        messages,
+        temperature: request.temperature ?? null,
+        max_tokens: request.maxTokens ?? null,
+        stream: true,
+      };
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let errorData: unknown;
-        try {
-          errorData = JSON.parse(errorBody);
-        } catch {
-          errorData = errorBody;
+      if (tools) {
+        requestParams.tools = tools;
+      }
+
+      const stream = await this.client.chat.completions.create(requestParams);
+
+      for await (const chunk of stream) {
+        const choice = chunk.choices[0];
+        if (!choice) continue;
+
+        // Emit stream.started on first chunk
+        if (!started) {
+          started = true;
+          yield ok({
+            type: 'stream.started',
+            timestamp: new Date().toISOString(),
+            id: chunk.id,
+            model: chunk.model,
+            providerId: this.descriptor.id,
+          });
         }
-        yield err(
-          normalizeError(isOpenAIError(errorData) ? errorData : response, {
-            providerId: this.descriptor.id,
-            modelId: request.model,
-          })
-        );
-        return;
-      }
 
-      if (!response.body) {
-        yield err(
-          createProviderError('provider.stream_error', 'Response body is null', {
-            providerId: this.descriptor.id,
-            modelId: request.model,
-          })
-        );
-        return;
-      }
+        // Handle content delta
+        if (choice.delta?.content) {
+          yield ok({
+            type: 'stream.content_delta',
+            timestamp: new Date().toISOString(),
+            id: responseId,
+            delta: choice.delta.content,
+          });
+        }
 
-      // Process SSE stream
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE events
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-
-          // Skip empty lines and comments
-          if (!trimmed || trimmed.startsWith(':')) continue;
-
-          // Parse SSE data
-          if (trimmed.startsWith('data: ')) {
-            const data = trimmed.slice(6);
-
-            // Check for end of stream
-            if (data === '[DONE]') continue;
-
-            try {
-              const chunk = JSON.parse(data) as OpenAIStreamChunk;
-              const choice = chunk.choices[0];
-
-              if (!choice) continue;
-
-              // Emit stream.started on first chunk
-              if (!started) {
-                started = true;
-                yield ok({
-                  type: 'stream.started',
-                  timestamp: new Date().toISOString(),
-                  id: chunk.id,
-                  model: chunk.model,
-                  providerId: this.descriptor.id,
-                });
-              }
-
-              // Track tool calls
-              if (choice.delta.tool_calls) {
-                updateToolCallAccumulator(toolCallAccumulator, choice.delta.tool_calls);
-              }
-
-              // Map content deltas
-              for (const event of mapStreamChunk(chunk, this.descriptor.id, chunk.id)) {
-                yield ok(event);
-              }
-
-              // Track finish reason
-              if (choice.finish_reason) {
-                finishReason = choice.finish_reason;
-              }
-            } catch {
-              // Skip malformed JSON
-              continue;
+        // Handle tool calls
+        if (choice.delta?.tool_calls) {
+          for (const tc of choice.delta.tool_calls) {
+            if (tc.function) {
+              yield ok({
+                type: 'stream.tool_call',
+                timestamp: new Date().toISOString(),
+                id: tc.id ?? '',
+                toolCall: {
+                  id: tc.id ?? '',
+                  type: 'function',
+                  name: tc.function.name ?? '',
+                  arguments: tc.function.arguments ?? '',
+                },
+              });
             }
           }
         }
-      }
 
-      // Emit tool call events for accumulated tool calls
-      const toolCalls = finalizeToolCalls(toolCallAccumulator);
-      if (toolCalls) {
-        for (const toolCall of toolCalls) {
+        // Check for finish reason
+        if (choice.finish_reason) {
+          const finishReason =
+            choice.finish_reason === 'function_call'
+              ? 'tool_calls'
+              : (choice.finish_reason as
+                  | 'stop'
+                  | 'length'
+                  | 'tool_calls'
+                  | 'content_filter');
           yield ok({
-            type: 'stream.tool_call',
+            type: 'stream.finished',
             timestamp: new Date().toISOString(),
             id: responseId,
-            toolCall,
+            finishReason,
           });
         }
       }
 
-      // Emit stream.finished
-      yield ok({
-        type: 'stream.finished',
-        timestamp: new Date().toISOString(),
-        id: responseId,
-        finishReason: mapFinishReason(finishReason),
-      });
+      // Ensure we emit finished if not already done
+      if (started) {
+        yield ok({
+          type: 'stream.finished',
+          timestamp: new Date().toISOString(),
+          id: responseId,
+          finishReason: 'stop' as const,
+        });
+      }
     } catch (error) {
-      yield err(normalizeError(error, { providerId: this.descriptor.id, modelId: request.model }));
+      yield err(this.normalizeError(error));
     }
   }
 
@@ -438,31 +408,124 @@ export class OpenAICompatibleProvider implements ModelProvider {
   // Private Helpers
   // =====================
 
-  private getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.config.apiKey}`,
+  private mapMessages(
+    messages: ModelRequest['messages'],
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    return messages.map((msg) => {
+      if (msg.role === 'system') {
+        return { role: 'system', content: msg.content };
+      }
+      if (msg.role === 'user') {
+        return { role: 'user', content: msg.content };
+      }
+      if (msg.role === 'assistant') {
+        const assistantMsg: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
+          role: 'assistant',
+          content: msg.content,
+        };
+        return assistantMsg;
+      }
+      if (msg.role === 'tool') {
+        return {
+          role: 'tool',
+          content: msg.content,
+          tool_call_id: (msg as { toolCallId?: string }).toolCallId ?? '',
+        };
+      }
+      // Fallback for any other message types
+      return {
+        role: 'user',
+        content: (msg as { content?: string }).content ?? '',
+      };
+    });
+  }
+
+  private mapTools(
+    tools: NonNullable<ModelRequest['tools']>,
+  ): OpenAI.Chat.ChatCompletionTool[] {
+    return tools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }));
+  }
+
+  private mapResponse(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+    modelId: string,
+  ): ModelResponse {
+    const choice = response.choices[0];
+    if (!choice) {
+      throw new Error('No choice in response');
+    }
+
+    const finishReason = choice.finish_reason ?? 'stop';
+
+    const result: ModelResponse = {
+      id: response.id,
+      model: modelId,
+      providerId: this.descriptor.id,
+      content: choice.message.content ?? '',
+      finishReason: finishReason as
+        | 'stop'
+        | 'length'
+        | 'tool_calls'
+        | 'content_filter',
+      usage: response.usage
+        ? {
+            promptTokens: response.usage.prompt_tokens,
+            completionTokens: response.usage.completion_tokens,
+            totalTokens: response.usage.total_tokens,
+          }
+        : { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      created: new Date().toISOString(),
     };
 
-    if (this.config.organizationId) {
-      headers['OpenAI-Organization'] = this.config.organizationId;
+    // Only add toolCalls if there are tool calls
+    if (choice.message.tool_calls?.length) {
+      return {
+        ...result,
+        toolCalls: choice.message.tool_calls.map((tc) => ({
+          id: tc.id,
+          name: (tc as { function: { name: string } }).function.name,
+          arguments: (tc as { function: { arguments: string } }).function
+            .arguments,
+        })),
+      };
     }
 
-    if (this.config.headers) {
-      Object.assign(headers, this.config.headers);
+    return result;
+  }
+
+  private normalizeError(
+    error: unknown,
+  ): ReturnType<typeof createProviderError> {
+    if (error instanceof OpenAI.APIError) {
+      const errorCode =
+        error.code === 'rate_limit_exceeded'
+          ? 'provider.rate_limit'
+          : 'provider.api_error';
+      return createProviderError(
+        errorCode as import('@openaidy/runtime').ProviderErrorCode,
+        error.message,
+        { cause: { code: error.code, type: error.type } },
+      );
     }
 
-    return headers;
-  }
+    if (error instanceof Error) {
+      return createProviderError(
+        'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
+        error.message,
+      );
+    }
 
-  private createAbortSignal(): AbortSignal {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-    return controller.signal;
-  }
-
-  private async fetch(url: string, options: RequestInit): Promise<Response> {
-    return fetch(url, options);
+    return createProviderError(
+      'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
+      'Unknown error occurred',
+    );
   }
 }
 
@@ -474,7 +537,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
  * Creates an OpenAI-compatible provider instance
  */
 export function createOpenAICompatibleProvider(
-  config: OpenAICompatibleAdapterConfig
+  config: OpenAICompatibleAdapterConfig,
 ): ModelProvider {
   return new OpenAICompatibleProvider(config);
 }
@@ -482,7 +545,10 @@ export function createOpenAICompatibleProvider(
 /**
  * Creates a standard OpenAI provider instance with defaults
  */
-export function createOpenAIProvider(apiKey: string, options?: Partial<OpenAICompatibleAdapterConfig>): ModelProvider {
+export function createOpenAIProvider(
+  apiKey: string,
+  options?: Partial<OpenAICompatibleAdapterConfig>,
+): ModelProvider {
   return createOpenAICompatibleProvider({
     apiKey,
     providerId: 'openai',
@@ -499,7 +565,7 @@ export function createOpenAIProvider(apiKey: string, options?: Partial<OpenAICom
 export function createCompatibleProvider(
   baseUrl: string,
   apiKey: string,
-  options?: Partial<OpenAICompatibleAdapterConfig>
+  options?: Partial<OpenAICompatibleAdapterConfig>,
 ): ModelProvider {
   return createOpenAICompatibleProvider({
     apiKey,

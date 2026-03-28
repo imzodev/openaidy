@@ -1,4 +1,11 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 import {
   appConfigSchema,
@@ -68,8 +75,18 @@ export class AppConfigService {
   }
 
   async load(): Promise<OpenAidyAppConfig> {
+    console.log('[DEBUG] Loading config from:', this.configPath);
     this.bootstrapIfMissing();
     const config = this.readConfigFile(this.configPath);
+    console.log(
+      '[DEBUG] Loaded config with',
+      config.providers.length,
+      'providers',
+    );
+    console.log(
+      '[DEBUG] Provider IDs:',
+      config.providers.map((p) => p.id),
+    );
     await this.applyConfig(config);
     this.currentConfig = config;
     return config;
@@ -106,7 +123,9 @@ export class AppConfigService {
     try {
       parsedJson = JSON.parse(readFileSync(filePath, 'utf-8'));
     } catch (error) {
-      throw new Error(`Failed to read app config at ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to read app config at ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
 
     return appConfigSchema.parse(parsedJson);
@@ -120,7 +139,9 @@ export class AppConfigService {
   }
 
   private async applyConfig(config: OpenAidyAppConfig): Promise<void> {
+    console.log('[DEBUG] applyConfig starting...');
     this.agents.replaceAll(config.agents as Agent[]);
+    console.log('[DEBUG] Agents replaced:', config.agents.length);
 
     this.providers.registry.clear();
     this.issues = [];
@@ -128,14 +149,28 @@ export class AppConfigService {
     const configService = createProviderConfigService();
 
     for (const provider of config.providers) {
+      console.log(
+        '[DEBUG] Processing provider:',
+        provider.id,
+        'enabled:',
+        provider.enabled,
+      );
       if (!provider.enabled) {
+        console.log('[DEBUG] Skipping disabled provider:', provider.id);
         continue;
       }
 
       const providerConfig = this.toProviderConfig(provider);
+      console.log('[DEBUG] Loading provider config for:', provider.id);
       const result = await configService.loadProvider(providerConfig);
 
       if (!result.ok) {
+        console.log(
+          '[DEBUG] Failed to load provider',
+          provider.id,
+          ':',
+          result.error,
+        );
         this.issues.push({
           scope: 'provider',
           id: provider.id,
@@ -144,6 +179,8 @@ export class AppConfigService {
         });
         continue;
       }
+
+      console.log('[DEBUG] Provider loaded successfully:', provider.id);
 
       const registrationOptions: {
         enabled?: boolean;
@@ -170,14 +207,40 @@ export class AppConfigService {
       }
       registrationOptions.config = routeConfig;
 
+      console.log(
+        '[DEBUG] Registering provider:',
+        provider.id,
+        'with options:',
+        registrationOptions,
+      );
       this.providers.registry.register(result.provider, registrationOptions);
+      console.log('[DEBUG] Provider registered:', provider.id);
     }
 
+    console.log(
+      '[DEBUG] Checking zai registered:',
+      this.providers.registry.has('zai'),
+    );
+    console.log(
+      '[DEBUG] Checking openai registered:',
+      this.providers.registry.has('openai'),
+    );
+    console.log('[DEBUG] Issues:', this.issues);
+
     if (this.providers.registry.has(config.defaults.providerId)) {
+      console.log(
+        '[DEBUG] Setting default provider:',
+        config.defaults.providerId,
+      );
       this.providers.registry.setDefault({
         providerId: config.defaults.providerId,
         modelId: config.defaults.modelId,
       });
+    } else {
+      console.log(
+        '[DEBUG] Default provider not found in registry:',
+        config.defaults.providerId,
+      );
     }
   }
 
@@ -290,6 +353,8 @@ export class AppConfigService {
   }
 }
 
-export function createAppConfigService(options: AppConfigServiceOptions): AppConfigService {
+export function createAppConfigService(
+  options: AppConfigServiceOptions,
+): AppConfigService {
   return new AppConfigService(options);
 }

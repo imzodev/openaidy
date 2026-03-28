@@ -80,6 +80,7 @@ export type Agent = {
   description?: string;
   enabled: boolean;
   systemPrompt: string;
+  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
   defaults: {
     providerId?: string;
     modelId?: string;

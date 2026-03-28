@@ -36,6 +36,7 @@ export type AgentSummary = {
   description?: string | undefined;
   enabled: boolean;
   tags?: string[] | undefined;
+  model: string; // Format: "providerId/modelId"
 };
 
 /**
@@ -99,6 +100,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     description: agent.description,
     enabled: agent.enabled,
     tags: agent.tags,
+    model: agent.model,
   };
 }
 

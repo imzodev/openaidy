@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, createEffect, Show } from 'solid-js';
 import {
   QueryClient,
   QueryClientProvider,
@@ -105,13 +105,23 @@ function AppContent() {
     mutationFn: ({
       content,
       agentId,
+      providerId,
+      modelId,
     }: {
       content: string;
       agentId?: string;
+      providerId?: string;
+      modelId?: string;
     }) => {
       const sessionId = selectedSessionId();
       if (!sessionId) throw new Error('No session selected');
-      return submitMessage(sessionId, { role: 'user', content, agentId });
+      return submitMessage(sessionId, {
+        role: 'user',
+        content,
+        agentId,
+        providerId,
+        modelId,
+      });
     },
     onSuccess: (result) => {
       if (result.ok) {
@@ -140,7 +150,36 @@ function AppContent() {
   // Handle message submission
   const handleSubmit = async (content: string, agentId?: string) => {
     setSubmitError(undefined);
-    await submitMessageMutation.mutateAsync({ content, agentId });
+
+    // Find agent and extract provider/model from model field
+    let providerId: string | undefined;
+    let modelId: string | undefined;
+
+    if (agentId) {
+      const agent = agents().find((a) => a.id === agentId);
+      console.log('[DEBUG] Found agent:', agent);
+      if (agent?.model) {
+        const parts = agent.model.split('/');
+        console.log('[DEBUG] Model parts:', parts);
+        if (parts.length === 2) {
+          providerId = parts[0];
+          modelId = parts[1];
+        }
+      }
+    }
+
+    console.log('[DEBUG] Submitting with:', {
+      agentId,
+      providerId,
+      modelId,
+      content,
+    });
+    await submitMessageMutation.mutateAsync({
+      content,
+      agentId,
+      providerId,
+      modelId,
+    });
   };
 
   // Get messages array
@@ -161,6 +200,14 @@ function AppContent() {
   const agents = (): Agent[] => {
     return agentsQuery.data?.items || [];
   };
+
+  // Auto-select first agent when agents load
+  createEffect(() => {
+    const agentList = agents();
+    if (agentList.length > 0 && !selectedAgentId()) {
+      setSelectedAgentId(agentList[0].id);
+    }
+  });
 
   return (
     <div class="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-900">

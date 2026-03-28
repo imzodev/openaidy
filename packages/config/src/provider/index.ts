@@ -52,7 +52,7 @@ export {
   createBaseProviderConfig,
 } from './base';
 
-// OpenAI-compatible provider
+// OpenAI-compatible provider (custom HTTP adapter)
 export {
   // Schema
   openaiCompatibleProviderConfigSchema,
@@ -173,8 +173,10 @@ export type ResolveConfigOptions = {
  */
 export async function resolveProviderConfig(
   config: BaseProviderConfig,
-  options: ResolveConfigOptions
-): Promise<SecretResolutionResult | { ok: true; value: ResolvedProviderConfig }> {
+  options: ResolveConfigOptions,
+): Promise<
+  SecretResolutionResult | { ok: true; value: ResolvedProviderConfig }
+> {
   const { secretProvider } = options;
 
   // Resolve API key if it's a secret reference
@@ -197,7 +199,9 @@ export async function resolveProviderConfig(
     name: config.name,
     vendorFamily: config.vendorFamily,
     enabled: config.enabled ?? true,
-    ...(config.defaultModel !== undefined && { defaultModel: config.defaultModel }),
+    ...(config.defaultModel !== undefined && {
+      defaultModel: config.defaultModel,
+    }),
     ...(config.baseUrl !== undefined && { baseUrl: config.baseUrl }),
     ...(resolvedApiKey !== undefined && { apiKey: resolvedApiKey }),
     ...(config.organizationId !== undefined && {
@@ -216,15 +220,17 @@ export async function resolveProviderConfig(
 /**
  * Validate a provider configuration
  */
-export function validateProviderConfig(config: unknown):
-  | { ok: true; value: ProviderConfig }
-  | { ok: false; error: string } {
+export function validateProviderConfig(
+  config: unknown,
+): { ok: true; value: ProviderConfig } | { ok: false; error: string } {
   const result = providerConfigSchema.safeParse(config);
   if (result.success) {
     return { ok: true, value: result.data };
   }
   return {
     ok: false,
-    error: result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
+    error: result.error.issues
+      .map((i) => `${i.path.join('.')}: ${i.message}`)
+      .join('; '),
   };
 }
