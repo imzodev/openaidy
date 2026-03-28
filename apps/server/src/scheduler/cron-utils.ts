@@ -29,9 +29,12 @@ export function validateCronExpression(expression: string): boolean {
  * @returns Next scheduled run time
  * @throws Error if expression is invalid
  */
-export function calculateNextRun(expression: string, fromDate: Date = new Date()): Date {
+export function calculateNextRun(
+  expression: string,
+  fromDate: Date = new Date(),
+): Date {
   try {
-    const cron = new Cron(expression);
+    const cron = new Cron(expression, { timezone: 'UTC' });
     const next = cron.nextRun(fromDate);
     if (!next) {
       throw new Error('No next run time available');
@@ -55,7 +58,7 @@ export function calculateNextRun(expression: string, fromDate: Date = new Date()
 export function calculateNextRuns(
   expression: string,
   count: number,
-  fromDate: Date = new Date()
+  fromDate: Date = new Date(),
 ): Date[] {
   if (count <= 0) {
     return [];

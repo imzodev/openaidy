@@ -86,6 +86,7 @@ describe('AgentRegistry', () => {
           name: 'Test',
           enabled: true,
           systemPrompt: 'Prompt',
+          model: 'openai/gpt-4o-mini',
           defaults: {},
         }),
       );
@@ -104,6 +105,7 @@ describe('AgentRegistry', () => {
           name: 'Agent 1',
           enabled: true,
           systemPrompt: 'Prompt',
+          model: 'openai/gpt-4o-mini',
           defaults: {},
         }),
       );
@@ -148,6 +150,7 @@ describe('AgentRegistry', () => {
         description: 'A test',
         enabled: true,
         tags: ['tag1'],
+        model: 'openai/gpt-4o-mini',
       });
     });
   });
@@ -230,6 +233,7 @@ describe('createAgentRegistry', () => {
           name: 'Test',
           enabled: true,
           systemPrompt: 'Prompt',
+          model: 'openai/gpt-4o-mini',
           defaults: {},
         }),
       );

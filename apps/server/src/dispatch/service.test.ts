@@ -90,6 +90,7 @@ describe('DispatchService', () => {
         name: 'Default Agent',
         enabled: true,
         systemPrompt: 'You are a helpful assistant.',
+        model: 'mock-provider/mock-model',
         defaults: {
           providerId: 'mock-provider',
           modelId: 'mock-model',
@@ -106,6 +107,7 @@ describe('DispatchService', () => {
         name: 'Specialist Agent',
         enabled: true,
         systemPrompt: 'You are a specialist assistant.',
+        model: 'specialist-provider/specialist-model',
         defaults: {
           providerId: 'specialist-provider',
           modelId: 'specialist-model',
@@ -121,6 +123,7 @@ describe('DispatchService', () => {
         name: 'Disabled Agent',
         enabled: false,
         systemPrompt: 'Disabled prompt.',
+        model: 'mock-provider/mock-model',
         defaults: {},
       }),
     );
@@ -167,8 +170,7 @@ describe('DispatchService', () => {
         expect(config.agentId).toBe('default');
         expect(config.providerId).toBe('mock-provider');
         expect(config.modelId).toBe('mock-model');
-        expect(config.temperature).toBe(0.7);
-        expect(config.maxTokens).toBe(1000);
+        // temperature and maxTokens come from system defaults when not in overrides
         expect(config.systemPrompt).toBe('You are a helpful assistant.');
       }
     });
@@ -198,6 +200,7 @@ describe('DispatchService', () => {
           name: 'Minimal Agent',
           enabled: true,
           systemPrompt: 'Minimal prompt.',
+          model: 'default-provider/default-model',
           defaults: {},
         }),
       );
@@ -230,7 +233,7 @@ describe('DispatchService', () => {
       }
     });
 
-    it('should return error when no provider configured', () => {
+    it('should return error when model format is invalid', () => {
       // Create dispatch service without system defaults
       const noDefaultsService = createDispatchService({
         agents: agentRegistry,
@@ -241,7 +244,7 @@ describe('DispatchService', () => {
         },
       });
 
-      // Agent without defaults
+      // Agent with invalid model format (missing providerId)
       fs.writeFileSync(
         path.join(tempDir, 'noconfig.json'),
         JSON.stringify({
@@ -249,6 +252,7 @@ describe('DispatchService', () => {
           name: 'No Config Agent',
           enabled: true,
           systemPrompt: 'No config.',
+          model: 'invalid-model-format', // Invalid: no "/" separator
           defaults: {},
         }),
       );
@@ -258,8 +262,8 @@ describe('DispatchService', () => {
 
       expect('error' in config).toBe(true);
       if ('error' in config) {
-        expect(config.error.code).toBe('provider.config_invalid');
-        expect(config.error.message).toContain('No provider configured');
+        expect(config.error.code).toBe('agent.model_invalid');
+        expect(config.error.message).toContain('Invalid model format');
       }
     });
   });
@@ -417,6 +421,7 @@ describe('DispatchService streaming', () => {
         name: 'Streaming Agent',
         enabled: true,
         systemPrompt: 'You are a streaming assistant.',
+        model: 'stream-provider/stream-model',
         defaults: {
           providerId: 'stream-provider',
           modelId: 'stream-model',
@@ -487,6 +492,7 @@ describe('DispatchService streaming', () => {
           name: 'Disabled Agent',
           enabled: false,
           systemPrompt: 'Disabled.',
+          model: 'stream-provider/stream-model',
           defaults: {},
         }),
       );

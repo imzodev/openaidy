@@ -123,7 +123,7 @@ describe('toAgentSummary', () => {
     expect(summary.description).toBe('A test agent');
     expect(summary.enabled).toBe(true);
     expect(summary.tags).toEqual(['test']);
+    expect(summary.model).toBe('openai/gpt-4o-mini');
     expect('systemPrompt' in summary).toBe(false);
-    expect('model' in summary).toBe(false);
   });
 });

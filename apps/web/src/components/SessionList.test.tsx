@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@solidjs/testing-library';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@solidjs/testing-library';
 import { SessionList } from './SessionList';
 import type { Session } from '../lib/api';
 
@@ -17,10 +17,13 @@ describe('SessionList', () => {
   ];
 
   const mockOnSelect = vi.fn();
-  const mockOnCreate = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('should render empty state when no sessions', () => {
@@ -29,7 +32,8 @@ describe('SessionList', () => {
         sessions={[]}
         selectedId={undefined}
         onSelect={mockOnSelect}
-        onCreate={mockOnCreate}
+        isCollapsed={false}
+        isActiveView={true}
       />
     ));
 
@@ -42,7 +46,8 @@ describe('SessionList', () => {
         sessions={mockSessions}
         selectedId={undefined}
         onSelect={mockOnSelect}
-        onCreate={mockOnCreate}
+        isCollapsed={false}
+        isActiveView={true}
       />
     ));
 
@@ -56,26 +61,28 @@ describe('SessionList', () => {
         sessions={[]}
         selectedId={undefined}
         onSelect={mockOnSelect}
-        onCreate={mockOnCreate}
         isLoading={true}
+        isCollapsed={false}
+        isActiveView={true}
       />
     ));
 
     expect(screen.getByText('Loading sessions...')).toBeInTheDocument();
   });
 
-  it('should render new session button', () => {
+  it('should render delete button for each session', () => {
     render(() => (
       <SessionList
         sessions={mockSessions}
         selectedId={undefined}
         onSelect={mockOnSelect}
-        onCreate={mockOnCreate}
+        isCollapsed={false}
+        isActiveView={true}
       />
     ));
 
-    const buttons = screen.getAllByRole('button');
-    const newSessionBtn = buttons.find(btn => btn.textContent?.includes('New Session'));
-    expect(newSessionBtn).toBeDefined();
+    // Each session has a delete button (with aria-label)
+    const deleteButtons = screen.getAllByLabelText('Delete session');
+    expect(deleteButtons.length).toBe(2);
   });
 });

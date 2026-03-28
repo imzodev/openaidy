@@ -212,9 +212,14 @@ export class DispatchService {
       overrides?.modelId ?? agentModelId ?? this.systemDefaults.modelId;
 
     const temperature =
-      overrides?.temperature ?? this.systemDefaults.temperature;
+      overrides?.temperature ??
+      agent.defaults?.temperature ??
+      this.systemDefaults.temperature;
 
-    const maxTokens = overrides?.maxTokens ?? this.systemDefaults.maxTokens;
+    const maxTokens =
+      overrides?.maxTokens ??
+      agent.defaults?.maxTokens ??
+      this.systemDefaults.maxTokens;
 
     const systemPrompt = agent.systemPrompt;
 

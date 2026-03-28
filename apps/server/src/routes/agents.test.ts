@@ -30,6 +30,7 @@ describe('Agent Routes', () => {
         description: 'The default agent',
         enabled: true,
         systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4',
         defaults: { providerId: 'openai', modelId: 'gpt-4' },
         tags: ['general'],
       }),
@@ -42,6 +43,7 @@ describe('Agent Routes', () => {
         name: 'Disabled Agent',
         enabled: false,
         systemPrompt: 'Disabled prompt',
+        model: 'openai/gpt-4',
         defaults: {},
       }),
     );
@@ -54,6 +56,7 @@ describe('Agent Routes', () => {
         description: 'Helps with code',
         enabled: true,
         systemPrompt: 'You are a coding assistant.',
+        model: 'anthropic/claude-3',
         defaults: { providerId: 'anthropic', modelId: 'claude-3' },
         tags: ['coding', 'development'],
       }),
@@ -163,10 +166,7 @@ describe('Agent Routes', () => {
       expect(agent.description).toBe('The default agent');
       expect(agent.enabled).toBe(true);
       expect(agent.systemPrompt).toBe('You are helpful.');
-      expect(agent.defaults).toEqual({
-        providerId: 'openai',
-        modelId: 'gpt-4',
-      });
+      expect(agent.model).toBe('openai/gpt-4');
       expect(agent.tags).toEqual(['general']);
     });
 

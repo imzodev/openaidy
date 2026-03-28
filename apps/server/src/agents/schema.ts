@@ -20,6 +20,12 @@ export const AgentSchema = z.object({
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
   version: z.number().int().positive().default(1),
+  defaults: z
+    .object({
+      temperature: z.number().min(0).max(2).optional(),
+      maxTokens: z.number().int().positive().optional(),
+    })
+    .optional(),
 });
 
 /**
