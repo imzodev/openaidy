@@ -1,7 +1,7 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, createEffect } from 'solid-js';
 import { Save } from 'lucide-solid';
 import type { AppConfig } from '../../lib/api';
-import { useConfig, useProviders, useAgents } from './hooks';
+import { useConfig } from './hooks/useConfig';
 import { SaveMessage, Tabs, type Tab } from '../ui';
 import { AddProviderModal } from './AddProviderModal';
 import { DefaultsTab, ProvidersTab, AgentsTab, RawJsonTab } from './tabs';
@@ -16,6 +16,9 @@ const tabs: { id: ConfigTab; label: string }[] = [
 
 export function SettingsView() {
   const [activeTab, setActiveTab] = createSignal<ConfigTab>('defaults');
+  // Local state for editing - only saved to server when Save button is clicked
+  const [localConfig, setLocalConfig] = createSignal<AppConfig | undefined>();
+  const [hasChanges, setHasChanges] = createSignal(false);
 
   // Config hook - handles data fetching and mutations
   const {
@@ -29,49 +32,214 @@ export function SettingsView() {
     showSaveError,
   } = useConfig();
 
-  // Providers hook - handles provider CRUD operations
-  const {
-    showAddProviderModal,
-    newProviderData,
-    setNewProviderData,
-    openAddProviderModal,
-    closeAddProviderModal,
-    saveNewProvider,
-    deleteProvider,
-    updateProvider,
-  } = useProviders(config, updateConfigData, showSaveError);
+  // Sync local config with server config when data loads
+  createEffect(() => {
+    const serverConfig = config();
+    if (serverConfig && !localConfig()) {
+      setLocalConfig(serverConfig);
+    }
+  });
 
-  // Agents hook - handles agent CRUD operations
-  const { addAgent, deleteAgent, updateAgent } = useAgents(
-    config,
-    updateConfigData,
-  );
-
-  // Handle raw JSON save
-  const handleSaveRaw = () => {
-    try {
-      const parsed = JSON.parse(rawJson()) as AppConfig;
-      updateConfigData(parsed);
-    } catch {
-      showSaveError('Invalid JSON format');
+  // Handle global save
+  const handleSave = () => {
+    const configToSave = activeTab() === 'raw' ? parseRawJson() : localConfig();
+    if (configToSave) {
+      updateConfigData(configToSave);
+      setHasChanges(false);
     }
   };
 
-  // Handle defaults tab change
+  // Parse raw JSON for saving
+  const parseRawJson = (): AppConfig | null => {
+    try {
+      return JSON.parse(rawJson()) as AppConfig;
+    } catch {
+      showSaveError('Invalid JSON format');
+      return null;
+    }
+  };
+
+  // Handle defaults tab change - update local state only
   const handleDefaultsChange = (newConfig: Record<string, unknown>) => {
-    const currentConfig = config();
-    const mergedConfig = {
+    setLocalConfig(
+      (prev) =>
+        ({
+          ...prev,
+          defaults: newConfig.defaults,
+        }) as AppConfig,
+    );
+    setHasChanges(true);
+  };
+
+  // Handle provider update - update local state only
+  const handleUpdateProvider = (
+    _providerId: string,
+    updatedProvider: import('../../lib/api').ProviderConfig,
+  ) => {
+    setLocalConfig((prev) => {
+      if (!prev) return prev;
+      const updatedProviders = [...(prev.providers || [])];
+      const providerIndex = updatedProviders.findIndex(
+        (p) => p.id === _providerId,
+      );
+      if (providerIndex !== -1) {
+        updatedProviders[providerIndex] = updatedProvider;
+      }
+      return { ...prev, providers: updatedProviders } as AppConfig;
+    });
+    setHasChanges(true);
+  };
+
+  // Handle agent update - update local state only
+  const handleUpdateAgent = (
+    _agentId: string,
+    updatedAgent: import('../../lib/api').AgentConfig,
+  ) => {
+    setLocalConfig((prev) => {
+      if (!prev) return prev;
+      const updatedAgents = [...(prev.agents || [])];
+      const agentIndex = updatedAgents.findIndex((a) => a.id === _agentId);
+      if (agentIndex !== -1) {
+        updatedAgents[agentIndex] = updatedAgent;
+      }
+      return { ...prev, agents: updatedAgents } as AppConfig;
+    });
+    setHasChanges(true);
+  };
+
+  // Handle add provider - saves immediately (modal action)
+  const handleAddProvider = async (
+    newProvider: import('../../lib/api').ProviderConfig,
+  ) => {
+    const currentConfig = localConfig() || config();
+    if (!currentConfig) return false;
+
+    const updatedConfig = {
       ...currentConfig,
-      defaults: newConfig.defaults,
+      providers: [...(currentConfig.providers || []), newProvider],
     } as AppConfig;
-    updateConfigData(mergedConfig);
+
+    await updateConfigData(updatedConfig);
+    setLocalConfig(updatedConfig);
+    return true;
+  };
+
+  // Handle delete provider - saves immediately
+  const handleDeleteProvider = async (providerId: string) => {
+    const currentConfig = localConfig() || config();
+    if (!currentConfig) return;
+
+    const updatedConfig = {
+      ...currentConfig,
+      providers: currentConfig.providers?.filter((p) => p.id !== providerId),
+    } as AppConfig;
+
+    await updateConfigData(updatedConfig);
+    setLocalConfig(updatedConfig);
+  };
+
+  // Handle add agent - saves immediately
+  const handleAddAgent = async () => {
+    const currentConfig = localConfig() || config();
+    if (!currentConfig) return;
+
+    const newAgent: import('../../lib/api').AgentConfig = {
+      id: `agent-${Date.now()}`,
+      name: 'New Agent',
+      enabled: true,
+      description: '',
+      systemPrompt: 'You are a helpful assistant.',
+      model: '',
+    };
+
+    const updatedConfig = {
+      ...currentConfig,
+      agents: [...(currentConfig.agents || []), newAgent],
+    } as AppConfig;
+
+    await updateConfigData(updatedConfig);
+    setLocalConfig(updatedConfig);
+  };
+
+  // Handle delete agent - saves immediately
+  const handleDeleteAgent = async (agentId: string) => {
+    const currentConfig = localConfig() || config();
+    if (!currentConfig) return;
+
+    const updatedConfig = {
+      ...currentConfig,
+      agents: currentConfig.agents?.filter((a) => a.id !== agentId),
+    } as AppConfig;
+
+    await updateConfigData(updatedConfig);
+    setLocalConfig(updatedConfig);
+  };
+
+  // Provider modal state
+  const [showAddProviderModal, setShowAddProviderModal] = createSignal(false);
+  const [newProviderData, setNewProviderData] = createSignal({
+    id: '',
+    name: '',
+    vendorFamily: 'openai-compatible' as const,
+    enabled: true,
+    baseUrl: '',
+    apiKeyEnv: '',
+  });
+
+  const openAddProviderModal = () => {
+    setNewProviderData({
+      id: '',
+      name: '',
+      vendorFamily: 'openai-compatible',
+      enabled: true,
+      baseUrl: '',
+      apiKeyEnv: '',
+    });
+    setShowAddProviderModal(true);
+  };
+
+  const closeAddProviderModal = () => {
+    setShowAddProviderModal(false);
+  };
+
+  const saveNewProvider = async () => {
+    const providerData = newProviderData();
+    if (!providerData.id || !providerData.name) {
+      showSaveError('Provider ID and Name are required');
+      return false;
+    }
+
+    const newProvider: import('../../lib/api').ProviderConfig = {
+      id: providerData.id,
+      name: providerData.name,
+      vendorFamily: providerData.vendorFamily || 'openai-compatible',
+      enabled: providerData.enabled ?? true,
+      models: [{ id: 'default-model', name: 'Default Model', enabled: true }],
+    } as import('../../lib/api').ProviderConfig;
+
+    if (providerData.baseUrl) {
+      (newProvider as Record<string, unknown>).baseUrl = providerData.baseUrl;
+    }
+    if (providerData.apiKeyEnv) {
+      (newProvider as Record<string, unknown>).apiKeyEnv =
+        providerData.apiKeyEnv;
+    }
+
+    const result = await handleAddProvider(newProvider);
+    if (result) {
+      setShowAddProviderModal(false);
+    }
+    return result;
   };
 
   // Handle tab change with raw JSON sync
   const handleTabChange = (tab: ConfigTab) => {
     setActiveTab(tab);
-    if (tab === 'raw' && config()) {
-      setRawJson(JSON.stringify(config(), null, 2));
+    if (tab === 'raw') {
+      const configToSync = localConfig() || config();
+      if (configToSync) {
+        setRawJson(JSON.stringify(configToSync, null, 2));
+      }
     }
   };
 
@@ -83,16 +251,19 @@ export function SettingsView() {
             Configuration
           </h1>
 
-          <Show when={activeTab() === 'raw'}>
-            <button
-              onClick={handleSaveRaw}
-              disabled={updateMutation.isPending}
-              class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors text-sm font-medium"
-            >
-              <Save class="w-4 h-4" />
-              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </button>
-          </Show>
+          {/* Global Save Button - always visible */}
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending || !hasChanges()}
+            class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white rounded-lg transition-colors text-sm font-medium"
+          >
+            <Save class="w-4 h-4" />
+            {updateMutation.isPending
+              ? 'Saving...'
+              : hasChanges()
+                ? 'Save Changes'
+                : 'No Changes'}
+          </button>
         </div>
 
         <SaveMessage message={saveMessage} />
@@ -118,37 +289,46 @@ export function SettingsView() {
             </div>
           </Show>
 
-          <Show when={config()}>
+          <Show when={localConfig()}>
             {/* Defaults Tab */}
             <Show when={activeTab() === 'defaults'}>
-              <DefaultsTab config={config} onChange={handleDefaultsChange} />
+              <DefaultsTab
+                config={localConfig}
+                onChange={handleDefaultsChange}
+              />
             </Show>
 
             {/* Providers Tab */}
             <Show when={activeTab() === 'providers'}>
               <ProvidersTab
-                config={config}
+                config={localConfig}
                 isPending={updateMutation.isPending}
                 onAddProvider={openAddProviderModal}
-                onDeleteProvider={deleteProvider}
-                onUpdateProvider={updateProvider}
+                onDeleteProvider={handleDeleteProvider}
+                onUpdateProvider={handleUpdateProvider}
               />
             </Show>
 
             {/* Agents Tab */}
             <Show when={activeTab() === 'agents'}>
               <AgentsTab
-                config={config}
+                config={localConfig}
                 isPending={updateMutation.isPending}
-                onAddAgent={addAgent}
-                onDeleteAgent={deleteAgent}
-                onUpdateAgent={updateAgent}
+                onAddAgent={handleAddAgent}
+                onDeleteAgent={handleDeleteAgent}
+                onUpdateAgent={handleUpdateAgent}
               />
             </Show>
 
             {/* Raw JSON Tab */}
             <Show when={activeTab() === 'raw'}>
-              <RawJsonTab value={rawJson} onInput={setRawJson} />
+              <RawJsonTab
+                value={rawJson}
+                onInput={(val) => {
+                  setRawJson(val);
+                  setHasChanges(true);
+                }}
+              />
             </Show>
           </Show>
         </div>

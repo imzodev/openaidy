@@ -2,22 +2,40 @@
  * Number field renderer
  *
  * Renders numeric inputs with optional min/max/step constraints.
+ * Uses local state to prevent focus loss on every keystroke.
  */
 
+import { createSignal, createEffect } from 'solid-js';
 import type { FieldRendererProps, FieldRenderer } from './types';
 import { FieldLabel } from './FieldLabel';
 
 export const NumberField: FieldRenderer = (props: FieldRendererProps) => {
-  const value = () => {
+  // Local state to prevent focus loss on every keystroke
+  const getInitialValue = () => {
     const v = props.value;
     return typeof v === 'number' ? v : '';
   };
+  const [localValue, setLocalValue] = createSignal<string | number>(
+    getInitialValue(),
+  );
 
-  const handleChange = (e: Event) => {
+  // Sync local state when props.value changes externally
+  createEffect(() => {
+    const v = props.value;
+    setLocalValue(typeof v === 'number' ? v : '');
+  });
+
+  const handleInput = (e: Event) => {
     const target = e.currentTarget as HTMLInputElement;
-    const value = target.valueAsNumber;
-    if (!Number.isNaN(value)) {
-      props.onChange(value);
+    setLocalValue(target.value);
+    // Don't call props.onChange here - that causes re-render and focus loss
+  };
+
+  const handleBlur = () => {
+    // Only propagate changes to parent on blur
+    const numValue = parseFloat(localValue() as string);
+    if (!Number.isNaN(numValue)) {
+      props.onChange(numValue);
     }
   };
 
@@ -27,8 +45,9 @@ export const NumberField: FieldRenderer = (props: FieldRendererProps) => {
 
       <input
         type="number"
-        value={value()}
-        onInput={handleChange}
+        value={localValue()}
+        onInput={handleInput}
+        onBlur={handleBlur}
         placeholder={props.schema.placeholder}
         disabled={props.disabled}
         min={props.schema.min}
