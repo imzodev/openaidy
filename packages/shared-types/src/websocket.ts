@@ -802,13 +802,16 @@ export function createErrorResponse(
   message: string,
   details?: Record<string, unknown>,
 ): ErrorResponse {
+  const error: WSError = {
+    code,
+    message,
+  };
+  if (details !== undefined) {
+    error.details = details;
+  }
   return createWSMessage('error', {
     requestId,
-    error: {
-      code,
-      message,
-      details,
-    },
+    error,
   });
 }
 
@@ -820,9 +823,12 @@ export function createWSError(
   message: string,
   details?: Record<string, unknown>,
 ): WSError {
-  return {
+  const error: WSError = {
     code,
     message,
-    details,
   };
+  if (details !== undefined) {
+    error.details = details;
+  }
+  return error;
 }

@@ -15,6 +15,7 @@
     "@openaidy/config": "workspace:*",
     "@openaidy/db": "workspace:*",
     "@openaidy/runtime": "workspace:*",
+    "@openaidy/shared-types": "workspace:*",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.41.0",

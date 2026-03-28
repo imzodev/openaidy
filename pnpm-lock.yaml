@@ -7,13 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      dotenv:
-        specifier: ^17.3.1
-        version: 17.3.1
-      openai:
-        specifier: ^6.33.0
-        version: 6.33.0(ws@8.19.0)(zod@4.3.6)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.4
@@ -72,6 +65,9 @@ importers:
       '@openaidy/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@openaidy/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -5016,11 +5012,6 @@ snapshots:
     optionalDependencies:
       ws: 8.19.0
       zod: 3.25.76
-
-  openai@6.33.0(ws@8.19.0)(zod@4.3.6):
-    optionalDependencies:
-      ws: 8.19.0
-      zod: 4.3.6
 
   optionator@0.9.4:
     dependencies:
