@@ -18,6 +18,7 @@ import {
   type Agent,
   type SessionRun,
 } from './lib/api';
+import { ThemeProvider } from './lib/theme';
 import { Sidebar } from './components/Sidebar';
 import { SettingsView } from './components/SettingsView';
 import { ChatView } from './components/ChatView';
@@ -278,9 +279,11 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppContent />
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AppContent />
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

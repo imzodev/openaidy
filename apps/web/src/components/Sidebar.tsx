@@ -1,6 +1,7 @@
 import { Show, createSignal } from 'solid-js';
 import { Plus, Settings, ChevronLeft, ChevronRight } from 'lucide-solid';
 import { SessionList } from './SessionList';
+import { ThemeToggle } from './ThemeToggle';
 import type { Session } from '../lib/api';
 
 type SidebarProps = {
@@ -124,8 +125,10 @@ export function Sidebar(props: SidebarProps) {
 
           {/* Bottom Actions */}
           <div
-            class={`py-3 border-t border-gray-200 dark:border-gray-700 ${props.isCollapsed ? 'px-2' : 'px-3'}`}
+            class={`py-3 border-t border-gray-200 dark:border-gray-700 ${props.isCollapsed ? 'px-2' : 'px-3'} space-y-2`}
           >
+            <ThemeToggle isCollapsed={props.isCollapsed} />
+
             <button
               onClick={() => {
                 props.onNavigate('settings');
