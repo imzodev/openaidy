@@ -15,7 +15,7 @@ export function SessionList(props: SessionListProps) {
   return (
     <div class="h-full flex flex-col">
       <Show when={props.isLoading}>
-        <div class="p-4 text-center text-gray-500 dark:text-gray-400">
+        <div class="p-4 text-center text-text-tertiary">
           <Show when={!props.isCollapsed}>
             <span>Loading sessions...</span>
           </Show>
@@ -27,7 +27,7 @@ export function SessionList(props: SessionListProps) {
 
       <Show when={!props.isLoading && props.sessions.length === 0}>
         <div
-          class={`p-4 text-center text-gray-500 dark:text-gray-400 ${props.isCollapsed ? 'px-2' : ''}`}
+          class={`p-4 text-center text-text-tertiary ${props.isCollapsed ? 'px-2' : ''}`}
         >
           <MessageSquare class="w-6 h-6 mx-auto mb-2 opacity-50" />
           <Show when={!props.isCollapsed}>
@@ -46,7 +46,7 @@ export function SessionList(props: SessionListProps) {
                 class={`w-full text-left py-2 rounded-lg transition-colors group flex items-center cursor-pointer ${
                   props.isActiveView && props.selectedId === session.id
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
                 } ${props.isCollapsed ? 'justify-center px-0' : 'px-3 gap-2'}`}
                 title={props.isCollapsed ? session.title : undefined}
               >

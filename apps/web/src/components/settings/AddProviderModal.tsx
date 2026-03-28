@@ -22,12 +22,12 @@ export function AddProviderModal(props: AddProviderModalProps) {
         />
         <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h3 class="text-lg font-semibold text-text-primary">
               Add New Provider
             </h3>
             <button
               onClick={() => props.onClose()}
-              class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              class="p-1 text-text-tertiary hover:text-text-secondary"
             >
               <X class="w-5 h-5" />
             </button>
@@ -35,7 +35,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
           <div class="p-4 space-y-4">
             {/* Provider ID */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-text-secondary mb-1">
                 Provider ID <span class="text-red-500">*</span>
               </label>
               <input
@@ -48,16 +48,16 @@ export function AddProviderModal(props: AddProviderModalProps) {
                   })
                 }
                 placeholder="e.g., openai, anthropic"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p class="text-xs text-text-tertiary mt-1">
                 Unique identifier (lowercase letters, numbers, hyphens)
               </p>
             </div>
 
             {/* Display Name */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-text-secondary mb-1">
                 Display Name <span class="text-red-500">*</span>
               </label>
               <input
@@ -70,13 +70,13 @@ export function AddProviderModal(props: AddProviderModalProps) {
                   })
                 }
                 placeholder="e.g., OpenAI, Anthropic"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
             {/* Vendor Family */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-text-secondary mb-1">
                 Vendor Family
               </label>
               <select
@@ -88,7 +88,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
                       .value as ProviderConfig['vendorFamily'],
                   })
                 }
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="openai-compatible">OpenAI Compatible</option>
                 <option value="anthropic">Anthropic</option>
@@ -98,7 +98,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
 
             {/* Base URL */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-text-secondary mb-1">
                 Base URL
               </label>
               <input
@@ -111,13 +111,13 @@ export function AddProviderModal(props: AddProviderModalProps) {
                   })
                 }
                 placeholder="e.g., https://api.openai.com/v1"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
             {/* API Key Env */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              <label class="block text-sm font-medium text-text-secondary mb-1">
                 API Key Environment Variable
               </label>
               <input
@@ -130,9 +130,9 @@ export function AddProviderModal(props: AddProviderModalProps) {
                   })
                 }
                 placeholder="e.g., OPENAI_API_KEY"
-                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-text-primary focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p class="text-xs text-text-tertiary mt-1">
                 Name of the environment variable containing the API key
               </p>
             </div>
@@ -151,10 +151,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
                 }
                 class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
-              <label
-                for="provider-enabled"
-                class="text-sm text-gray-700 dark:text-gray-300"
-              >
+              <label for="provider-enabled" class="text-sm text-text-secondary">
                 Enabled
               </label>
             </div>
@@ -162,7 +159,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
           <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={() => props.onClose()}
-              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              class="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               Cancel
             </button>
@@ -171,7 +168,7 @@ export function AddProviderModal(props: AddProviderModalProps) {
               disabled={
                 props.isPending || !props.data().id || !props.data().name
               }
-              class="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+              class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               {props.isPending ? 'Adding...' : 'Add Provider'}
             </button>

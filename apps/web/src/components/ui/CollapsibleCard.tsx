@@ -17,7 +17,7 @@ interface CollapsibleCardProps {
 }
 
 const badgeStyles = {
-  default: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+  default: 'bg-gray-100 dark:bg-gray-700 text-text-secondary',
   success:
     'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
   info: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
@@ -36,13 +36,11 @@ export function CollapsibleCard(props: CollapsibleCardProps) {
       <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-t-lg">
         <div class="flex items-center gap-3 flex-wrap">
           <Show when={props.index !== undefined}>
-            <span class="text-sm font-medium text-gray-500 dark:text-gray-400">
+            <span class="text-sm font-medium text-text-tertiary">
               #{props.index! + 1}
             </span>
           </Show>
-          <h3 class="font-medium text-gray-900 dark:text-gray-100">
-            {props.title}
-          </h3>
+          <h3 class="font-medium text-text-primary">{props.title}</h3>
           <Show when={props.badge}>
             <span
               class={`px-2 py-0.5 text-xs rounded-full ${
@@ -53,9 +51,7 @@ export function CollapsibleCard(props: CollapsibleCardProps) {
             </span>
           </Show>
           <Show when={props.description}>
-            <span class="text-sm text-gray-500 dark:text-gray-400">
-              {props.description}
-            </span>
+            <span class="text-sm text-text-tertiary">{props.description}</span>
           </Show>
           <Show when={props.showEnabled && props.enabled}>
             <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
@@ -66,7 +62,7 @@ export function CollapsibleCard(props: CollapsibleCardProps) {
         <div class="flex items-center gap-1">
           <button
             onClick={() => setIsCollapsed(!isCollapsed())}
-            class="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            class="p-1.5 text-text-tertiary hover:text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             title={isCollapsed() ? 'Expand' : 'Collapse'}
           >
             <Show

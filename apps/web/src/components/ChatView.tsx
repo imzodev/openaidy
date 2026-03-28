@@ -49,10 +49,16 @@ export function ChatView(props: ChatViewProps) {
       {/* Loading state */}
       <Show when={props.isLoading}>
         <div class="flex items-center justify-center h-full">
-          <div class="animate-pulse flex items-center gap-2 text-gray-500 dark:text-gray-400">
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ 'animation-delay': '0.1s' }} />
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ 'animation-delay': '0.2s' }} />
+          <div class="animate-pulse flex items-center gap-2 text-text-tertiary">
+            <div class="w-2 h-2 bg-primary rounded-full animate-bounce" />
+            <div
+              class="w-2 h-2 bg-primary rounded-full animate-bounce"
+              style={{ 'animation-delay': '0.1s' }}
+            />
+            <div
+              class="w-2 h-2 bg-primary rounded-full animate-bounce"
+              style={{ 'animation-delay': '0.2s' }}
+            />
             <span class="ml-2">Loading messages...</span>
           </div>
         </div>
@@ -66,11 +72,15 @@ export function ChatView(props: ChatViewProps) {
       </Show>
 
       {/* Empty state */}
-      <Show when={!props.isLoading && !props.error && props.messages.length === 0}>
-        <div class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+      <Show
+        when={!props.isLoading && !props.error && props.messages.length === 0}
+      >
+        <div class="flex flex-col items-center justify-center h-full text-text-tertiary">
           <Bot class="w-12 h-12 mb-4 opacity-50" />
           <p class="text-lg font-medium">No messages yet</p>
-          <p class="text-sm mt-1">Start a conversation by sending a message below</p>
+          <p class="text-sm mt-1">
+            Start a conversation by sending a message below
+          </p>
         </div>
       </Show>
 
@@ -85,14 +95,14 @@ export function ChatView(props: ChatViewProps) {
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-1">
-                    <span class="font-medium text-sm text-gray-900 dark:text-gray-100">
+                    <span class="font-medium text-sm text-text-primary">
                       {getRoleLabel(message.role)}
                     </span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                    <span class="text-xs text-text-tertiary">
                       {new Date(message.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                  <p class="text-text-secondary whitespace-pre-wrap">
                     {message.content}
                   </p>
                 </div>

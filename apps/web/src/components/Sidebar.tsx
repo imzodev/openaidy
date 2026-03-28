@@ -62,13 +62,14 @@ export function Sidebar(props: SidebarProps) {
           }`}
         >
           <Show when={!props.isCollapsed}>
-            <h1 class="text-xl font-bold text-gray-900 dark:text-white truncate tracking-tight">
+            <div class="w-2 h-2 bg-btn-primary-bg rounded-full animate-bounce" />
+            <h1 class="text-xl font-bold text-text-primary truncate tracking-tight">
               OpenAidy
             </h1>
           </Show>
           <button
             onClick={props.onToggleCollapse}
-            class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors"
+            class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-text-tertiary transition-colors"
             aria-label={
               props.isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
             }
@@ -86,7 +87,7 @@ export function Sidebar(props: SidebarProps) {
           <button
             onClick={handleCreate}
             disabled={isCreating()}
-            class={`flex items-center justify-center gap-2 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors ${
+            class={`flex items-center justify-center gap-2 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors ${
               props.isCollapsed ? 'w-full px-0' : 'w-full px-4'
             }`}
             title="New Session"
@@ -138,8 +139,8 @@ export function Sidebar(props: SidebarProps) {
               }}
               class={`w-full flex items-center gap-2 py-2 rounded-lg transition-colors ${
                 props.currentView === 'settings'
-                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                  ? 'bg-gray-100 dark:bg-gray-700 text-text-primary'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
               } ${props.isCollapsed ? 'justify-center px-0' : 'px-3 justify-start'}`}
               title="Settings"
             >

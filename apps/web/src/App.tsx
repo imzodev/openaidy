@@ -183,7 +183,7 @@ function AppContent() {
               </button>
 
               <div class="min-w-0">
-                <div class="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                <div class="flex items-center gap-2 text-xs font-medium text-text-tertiary">
                   <span class="hidden sm:inline">OpenAidy</span>
                   <span class="hidden sm:inline">/</span>
                   <span class="inline-flex items-center gap-1.5">
@@ -199,7 +199,7 @@ function AppContent() {
               </div>
             </div>
 
-            <div class="hidden sm:flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 shadow-sm">
+            <div class="hidden sm:flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-text-tertiary shadow-sm">
               <span class="truncate max-w-[220px]">
                 {currentView() === 'settings'
                   ? 'Manage configuration'
@@ -220,16 +220,16 @@ function AppContent() {
             {/* Empty state */}
             <div class="flex-1 flex items-center justify-center">
               <div class="text-center">
-                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                <h1 class="text-2xl font-bold text-text-primary mb-2">
                   Welcome to OpenAidy
                 </h1>
-                <p class="text-gray-600 dark:text-gray-400 mb-4">
+                <p class="text-text-secondary mb-4">
                   Select a session or create a new one to start chatting
                 </p>
                 <button
                   onClick={handleCreateSession}
                   disabled={createSessionMutation.isPending}
-                  class="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+                  class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
                 >
                   {createSessionMutation.isPending
                     ? 'Creating...'

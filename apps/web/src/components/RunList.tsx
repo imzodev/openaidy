@@ -14,7 +14,7 @@ type RunListProps = {
 function getStatusIcon(status: RunStatus) {
   switch (status) {
     case 'queued':
-      return <Clock class="w-4 h-4 text-gray-400" />;
+      return <Clock class="w-4 h-4 text-text-tertiary" />;
     case 'running':
       return <Loader class="w-4 h-4 text-blue-500 animate-spin" />;
     case 'succeeded':
@@ -24,7 +24,7 @@ function getStatusIcon(status: RunStatus) {
     case 'cancelled':
       return <AlertCircle class="w-4 h-4 text-yellow-500" />;
     default:
-      return <Clock class="w-4 h-4 text-gray-400" />;
+      return <Clock class="w-4 h-4 text-text-tertiary" />;
   }
 }
 
@@ -34,7 +34,7 @@ function getStatusIcon(status: RunStatus) {
 function getStatusClass(status: RunStatus) {
   switch (status) {
     case 'queued':
-      return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+      return 'bg-gray-100 dark:bg-gray-700 text-text-secondary';
     case 'running':
       return 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
     case 'succeeded':
@@ -44,7 +44,7 @@ function getStatusClass(status: RunStatus) {
     case 'cancelled':
       return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
     default:
-      return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+      return 'bg-gray-100 dark:bg-gray-700 text-text-secondary';
   }
 }
 
@@ -67,9 +67,9 @@ export function RunList(props: RunListProps) {
     <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
       {/* Header */}
       <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Runs</h3>
+        <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
         <Show when={props.runs.length > 0}>
-          <span class="text-xs text-gray-500 dark:text-gray-400">
+          <span class="text-xs text-text-tertiary">
             {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
           </span>
         </Show>
@@ -77,7 +77,7 @@ export function RunList(props: RunListProps) {
 
       {/* Loading state */}
       <Show when={props.isLoading}>
-        <div class="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+        <div class="px-4 py-4 text-center text-sm text-text-tertiary">
           <Loader class="w-4 h-4 animate-spin inline mr-2" />
           Loading runs...
         </div>
@@ -85,14 +85,14 @@ export function RunList(props: RunListProps) {
 
       {/* Error state */}
       <Show when={props.error}>
-        <div class="px-4 py-2 text-sm text-red-600 dark:text-red-400">
+        <div class="px-4 py-4 text-center text-sm text-error">
           {props.error}
         </div>
       </Show>
 
       {/* Empty state */}
       <Show when={!props.isLoading && !props.error && props.runs.length === 0}>
-        <div class="px-4 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+        <div class="px-4 py-4 text-center text-sm text-text-tertiary">
           No runs yet
         </div>
       </Show>
@@ -107,11 +107,11 @@ export function RunList(props: RunListProps) {
                   {/* Left side: status and ID */}
                   <div class="flex items-center gap-2">
                     {getStatusIcon(run.status)}
-                    <code class="text-xs font-mono text-gray-600 dark:text-gray-400">
+                    <code class="text-xs font-mono text-text-tertiary">
                       {truncateId(run.id)}
                     </code>
                     <Show when={run.agentId}>
-                      <span class="text-xs text-gray-500 dark:text-gray-400">
+                      <span class="text-xs text-text-tertiary">
                         • {run.agentId}
                       </span>
                     </Show>
@@ -119,17 +119,19 @@ export function RunList(props: RunListProps) {
 
                   {/* Right side: status badge and time */}
                   <div class="flex items-center gap-2">
-                    <span class={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(run.status)}`}>
+                    <span
+                      class={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(run.status)}`}
+                    >
                       {run.status}
                     </span>
-                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                    <span class="text-xs text-text-tertiary">
                       {formatTime(run.createdAt)}
                     </span>
                   </div>
                 </div>
 
                 {/* Provider/Model info */}
-                <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <div class="mt-1 flex items-center gap-2 text-xs text-text-tertiary">
                   <span>{run.providerId}</span>
                   <span>•</span>
                   <span>{run.modelId}</span>

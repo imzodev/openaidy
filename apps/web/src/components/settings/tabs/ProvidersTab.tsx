@@ -37,13 +37,11 @@ export function ProvidersTab(props: ProvidersTabProps) {
   return (
     <div class="p-6">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          Providers
-        </h2>
+        <h2 class="text-lg font-semibold text-text-primary">Providers</h2>
         <button
           onClick={() => props.onAddProvider()}
           disabled={props.isPending}
-          class="flex items-center gap-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400 text-white rounded-lg transition-colors text-sm font-medium"
+          class="flex items-center gap-2 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors text-sm font-medium"
         >
           <Plus class="w-4 h-4" />
           Add Provider
@@ -53,7 +51,7 @@ export function ProvidersTab(props: ProvidersTabProps) {
       <Show
         when={(props.config()?.providers?.length ?? 0) > 0}
         fallback={
-          <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div class="text-center py-8 text-text-tertiary">
             <p>No providers configured.</p>
             <p class="text-sm mt-2">
               Click "Add Provider" to add a new provider.

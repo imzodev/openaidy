@@ -251,15 +251,13 @@ export function SettingsView() {
     <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
       <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between mb-6">
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Configuration
-          </h1>
+          <h1 class="text-2xl font-bold text-text-primary">Configuration</h1>
 
           {/* Global Save Button - always visible */}
           <button
             onClick={handleSave}
             disabled={updateMutation.isPending || !hasChanges()}
-            class="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 text-white rounded-lg transition-colors text-sm font-medium"
+            class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors text-sm font-medium"
           >
             <Save class="w-4 h-4" />
             {updateMutation.isPending
@@ -282,7 +280,7 @@ export function SettingsView() {
         {/* Tab Content */}
         <div class="bg-white dark:bg-gray-800 shadow rounded-b-lg min-h-[500px]">
           <Show when={configQuery.isLoading}>
-            <div class="p-8 text-center text-gray-500">
+            <div class="p-8 text-center text-text-tertiary">
               Loading configuration...
             </div>
           </Show>
