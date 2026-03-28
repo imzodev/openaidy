@@ -20,10 +20,22 @@ import {
 } from './lib/api';
 import { ThemeProvider } from './lib/theme';
 import { Sidebar } from './components/Sidebar';
-import { SettingsView } from './components/SettingsView';
+import type { ViewType } from './components/Sidebar';
+import { SettingsView } from './components/settings/SettingsView';
 import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
 import { RunList } from './components/RunList';
+import { SessionsPage } from './components/pages/SessionsPage';
+import { TasksPage } from './components/pages/TasksPage';
+import { PulsesPage } from './components/pages/PulsesPage';
+import { ChannelsPage } from './components/pages/ChannelsPage';
+import { WebhooksPage } from './components/pages/WebhooksPage';
+import { AgentsPage } from './components/pages/AgentsPage';
+import { SkillsPage } from './components/pages/SkillsPage';
+import { McpsPage } from './components/pages/McpsPage';
+import { LogsPage } from './components/pages/LogsPage';
+import { BackupsPage } from './components/pages/BackupsPage';
+import { AddonsPage } from './components/pages/AddonsPage';
 import './index.css';
 
 // Create a client
@@ -49,9 +61,7 @@ function AppContent() {
   const [selectedAgentId, setSelectedAgentId] = createSignal<
     string | undefined
   >(undefined);
-  const [currentView, setCurrentView] = createSignal<'chat' | 'settings'>(
-    'chat',
-  );
+  const [currentView, setCurrentView] = createSignal<ViewType>('sessions');
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({
@@ -213,6 +223,59 @@ function AppContent() {
 
         <Show when={currentView() === 'settings'}>
           <SettingsView />
+        </Show>
+
+        <Show when={currentView() === 'sessions'}>
+          <SessionsPage
+            sessions={sessionsQuery.data?.items || []}
+            selectedSessionId={selectedSessionId()}
+            onSelectSession={(id) => {
+              setSelectedSessionId(id);
+              setCurrentView('chat');
+            }}
+            onCreateSession={handleCreateSession}
+            isLoading={sessionsQuery.isLoading}
+          />
+        </Show>
+
+        <Show when={currentView() === 'tasks'}>
+          <TasksPage />
+        </Show>
+
+        <Show when={currentView() === 'pulses'}>
+          <PulsesPage />
+        </Show>
+
+        <Show when={currentView() === 'channels'}>
+          <ChannelsPage />
+        </Show>
+
+        <Show when={currentView() === 'webhooks'}>
+          <WebhooksPage />
+        </Show>
+
+        <Show when={currentView() === 'agents'}>
+          <AgentsPage />
+        </Show>
+
+        <Show when={currentView() === 'skills'}>
+          <SkillsPage />
+        </Show>
+
+        <Show when={currentView() === 'mcps'}>
+          <McpsPage />
+        </Show>
+
+        <Show when={currentView() === 'logs'}>
+          <LogsPage />
+        </Show>
+
+        <Show when={currentView() === 'backups'}>
+          <BackupsPage />
+        </Show>
+
+        <Show when={currentView() === 'addons'}>
+          <AddonsPage />
         </Show>
 
         <Show when={currentView() === 'chat'}>
