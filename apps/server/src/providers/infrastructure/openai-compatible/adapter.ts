@@ -249,12 +249,6 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ? this.mapTools(request.tools)
           : null;
 
-      console.log('[DEBUG] OpenAI SDK Request:', {
-        model: modelId,
-        messages: messages.length,
-        tools: tools?.length,
-      });
-
       const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
         model: modelId,
         messages,
@@ -269,14 +263,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
       const response = await this.client.chat.completions.create(requestParams);
 
-      console.log('[DEBUG] OpenAI SDK Response:', {
-        id: response.id,
-        model: response.model,
-      });
-
       return ok(this.mapResponse(response, modelId));
     } catch (error) {
-      console.log('[DEBUG] OpenAI SDK Error:', error);
       return err(this.normalizeError(error));
     }
   }

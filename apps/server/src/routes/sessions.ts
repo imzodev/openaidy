@@ -104,17 +104,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
   app.post('/sessions/:sessionId/messages', async (request, reply) => {
     const { sessionId } = request.params as { sessionId: string };
 
-    // Log incoming request
-    console.log('[DEBUG] Received POST /sessions/:sessionId/messages');
-    console.log('[DEBUG] Request body:', request.body);
-
     // Validate request body
     let body;
     try {
       body = submitMessageSchema.parse(request.body);
-      console.log('[DEBUG] Parsed body:', body);
     } catch (error) {
-      console.log('[DEBUG] Validation error:', error);
       reply.code(400);
       return {
         ok: false,
@@ -135,10 +129,8 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
     };
-    console.log('[DEBUG] Submitting to service:', submitInput);
 
     const result = await sessionService.submitMessage(submitInput);
-    console.log('[DEBUG] Service result:', result);
 
     if (result.ok) {
       reply.code(201);
