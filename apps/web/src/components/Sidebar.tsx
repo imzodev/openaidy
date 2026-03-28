@@ -32,8 +32,8 @@ export function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      class={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full transition-all duration-300 ${
-        isCollapsed() ? 'w-12' : 'w-64'
+      class={`fixed inset-y-0 left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full transition-all duration-300 md:relative md:z-auto md:flex-shrink-0 ${
+        isCollapsed() ? 'w-12' : 'w-64 max-w-[85vw]'
       }`}
     >
       {/* Header */}
