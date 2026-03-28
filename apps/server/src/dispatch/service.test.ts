@@ -1,17 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { DispatchService, createDispatchService } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
 import { RunEventEmitter, type RunEvent } from './events';
-import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelResponse } from '@openaidy/runtime';
+import type {
+  ModelProvider,
+  ProviderDescriptor,
+  ModelRequest,
+  ProviderResult,
+  ModelResponse,
+} from '@openaidy/runtime';
 import { ok, err, createProviderError } from '@openaidy/runtime';
 
 /**
  * Helper to create a mock provider for testing
  */
-function createMockProvider(id: string, options: { shouldFail?: boolean } = {}): ModelProvider {
+function createMockProvider(
+  id: string,
+  options: { shouldFail?: boolean } = {},
+): ModelProvider {
   const descriptor: ProviderDescriptor = {
     id,
     name: `Mock Provider ${id}`,
@@ -22,13 +32,19 @@ function createMockProvider(id: string, options: { shouldFail?: boolean } = {}):
   return {
     descriptor,
     listModels: async () => ok([]),
-    getModel: async () => err(createProviderError('provider.model_not_found', 'Not found')),
-    hasCapability: (cap: string) => descriptor.capabilities.includes(cap as never),
-    invoke: async (request: ModelRequest): Promise<ProviderResult<ModelResponse>> => {
+    getModel: async () =>
+      err(createProviderError('provider.model_not_found', 'Not found')),
+    hasCapability: (cap: string) =>
+      descriptor.capabilities.includes(cap as never),
+    invoke: async (
+      request: ModelRequest,
+    ): Promise<ProviderResult<ModelResponse>> => {
       if (options.shouldFail) {
-        return err(createProviderError('provider.unavailable', 'Mock provider failed'));
+        return err(
+          createProviderError('provider.unavailable', 'Mock provider failed'),
+        );
       }
-      
+
       return ok({
         id: `resp_${Date.now()}`,
         model: request.model,
@@ -63,8 +79,8 @@ describe('DispatchService', () => {
   let sessionId: string;
 
   beforeEach(async () => {
-    // Create temp directory for agents
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-dispatch-agents-'));
+    // Create temp directory for agents in the system temp dir
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-dispatch-agents-'));
 
     // Create test agents
     fs.writeFileSync(
@@ -80,7 +96,7 @@ describe('DispatchService', () => {
           temperature: 0.7,
           maxTokens: 1000,
         },
-      })
+      }),
     );
 
     fs.writeFileSync(
@@ -95,7 +111,7 @@ describe('DispatchService', () => {
           modelId: 'specialist-model',
           temperature: 0.3,
         },
-      })
+      }),
     );
 
     fs.writeFileSync(
@@ -106,7 +122,7 @@ describe('DispatchService', () => {
         enabled: false,
         systemPrompt: 'Disabled prompt.',
         defaults: {},
-      })
+      }),
     );
 
     // Create agent registry
@@ -119,7 +135,9 @@ describe('DispatchService', () => {
     const mockProvider = createMockProvider('mock-provider');
     const specialistProvider = createMockProvider('specialist-provider');
     providers.registry.register(mockProvider, { defaultModel: 'mock-model' });
-    providers.registry.register(specialistProvider, { defaultModel: 'specialist-model' });
+    providers.registry.register(specialistProvider, {
+      defaultModel: 'specialist-model',
+    });
 
     // Create dispatch service
     dispatchService = createDispatchService({
@@ -181,7 +199,7 @@ describe('DispatchService', () => {
           enabled: true,
           systemPrompt: 'Minimal prompt.',
           defaults: {},
-        })
+        }),
       );
       agentRegistry.reload();
 
@@ -232,7 +250,7 @@ describe('DispatchService', () => {
           enabled: true,
           systemPrompt: 'No config.',
           defaults: {},
-        })
+        }),
       );
       agentRegistry.reload();
 
@@ -283,7 +301,11 @@ describe('Resolution precedence', () => {
   it('should document the precedence order: overrides > agent defaults > system defaults', () => {
     // This test documents the expected behavior
     const precedence = ['overrides', 'agent defaults', 'system defaults'];
-    expect(precedence).toEqual(['overrides', 'agent defaults', 'system defaults']);
+    expect(precedence).toEqual([
+      'overrides',
+      'agent defaults',
+      'system defaults',
+    ]);
   });
 });
 
@@ -309,9 +331,13 @@ describe('DispatchService streaming', () => {
     return {
       descriptor,
       listModels: async () => ok([]),
-      getModel: async () => err(createProviderError('provider.model_not_found', 'Not found')),
-      hasCapability: (cap: string) => descriptor.capabilities.includes(cap as never),
-      invoke: async (request: ModelRequest): Promise<ProviderResult<ModelResponse>> => {
+      getModel: async () =>
+        err(createProviderError('provider.model_not_found', 'Not found')),
+      hasCapability: (cap: string) =>
+        descriptor.capabilities.includes(cap as never),
+      invoke: async (
+        request: ModelRequest,
+      ): Promise<ProviderResult<ModelResponse>> => {
         return ok({
           id: `resp_${Date.now()}`,
           model: request.model,
@@ -328,7 +354,7 @@ describe('DispatchService streaming', () => {
       },
       invokeStream: async function* (request: ModelRequest) {
         const streamId = `stream_${Date.now()}`;
-        
+
         // Emit stream started
         yield ok({
           type: 'stream.started' as const,
@@ -337,11 +363,11 @@ describe('DispatchService streaming', () => {
           model: request.model,
           providerId: id,
         });
-        
+
         // Emit content deltas
         const content = `Mock streaming response to: ${request.messages[request.messages.length - 1]?.content}`;
         const words = content.split(' ');
-        
+
         for (let i = 0; i < words.length; i++) {
           yield ok({
             type: 'stream.content_delta' as const,
@@ -352,7 +378,7 @@ describe('DispatchService streaming', () => {
             delta: (i === 0 ? words[i] : ' ' + words[i]) ?? '',
           });
         }
-        
+
         // Emit finished
         yield ok({
           type: 'stream.finished' as const,
@@ -380,8 +406,8 @@ describe('DispatchService streaming', () => {
   }
 
   beforeEach(async () => {
-    // Create temp directory for agents
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-streaming-agents-'));
+    // Create temp directory for agents in the system temp dir
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-streaming-agents-'));
 
     // Create test agent
     fs.writeFileSync(
@@ -395,16 +421,18 @@ describe('DispatchService streaming', () => {
           providerId: 'stream-provider',
           modelId: 'stream-model',
         },
-      })
+      }),
     );
 
     agentRegistry = createAgentRegistry({ agentsDir: tempDir });
     providers = createProviderServices();
     runEvents = new RunEventEmitter();
-    
+
     // Register mock streaming provider
     const streamProvider = createMockStreamingProvider('stream-provider');
-    providers.registry.register(streamProvider, { defaultModel: 'stream-model' });
+    providers.registry.register(streamProvider, {
+      defaultModel: 'stream-model',
+    });
 
     dispatchService = createDispatchService({
       agents: agentRegistry,
@@ -427,9 +455,9 @@ describe('DispatchService streaming', () => {
         agentId: 'streamer',
         input: { role: 'user', content: 'Hello' },
       });
-      
+
       const events: RunEvent[] = [];
-      
+
       for await (const event of dispatchService.dispatchStream({
         sessionId,
         agentId: 'non-existent',
@@ -450,7 +478,7 @@ describe('DispatchService streaming', () => {
         agentId: 'streamer',
         input: { role: 'user', content: 'Hello' },
       });
-      
+
       // Create disabled agent
       fs.writeFileSync(
         path.join(tempDir, 'disabled.json'),
@@ -460,12 +488,12 @@ describe('DispatchService streaming', () => {
           enabled: false,
           systemPrompt: 'Disabled.',
           defaults: {},
-        })
+        }),
       );
       agentRegistry.reload();
 
       const events: RunEvent[] = [];
-      
+
       for await (const event of dispatchService.dispatchStream({
         sessionId,
         agentId: 'disabled',
@@ -486,7 +514,7 @@ describe('DispatchService streaming', () => {
         agentId: 'streamer',
         input: { role: 'user', content: 'Hello' },
       });
-      
+
       // Subscribe to events
       const receivedEvents: RunEvent[] = [];
       const unsubscribe = runEvents.subscribe('test-run-id', (event) => {
@@ -504,7 +532,7 @@ describe('DispatchService streaming', () => {
       });
 
       // Wait for processing
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(receivedEvents.length).toBe(1);
       expect(receivedEvents[0]!.type).toBe('run.queued');

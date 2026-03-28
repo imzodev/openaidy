@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
@@ -15,11 +16,11 @@ import { RunEventEmitter } from '../dispatch/events';
 describe('Agent Routes', () => {
   let app: FastifyInstance;
   let tempDir: string;
-  
+
   beforeEach(async () => {
-    // Create a temporary directory for test agents
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-agents-routes-'));
-    
+    // Create a temporary directory for test agents in the system temp dir
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-agents-routes-'));
+
     // Create test agents
     fs.writeFileSync(
       path.join(tempDir, 'default.json'),
@@ -31,9 +32,9 @@ describe('Agent Routes', () => {
         systemPrompt: 'You are helpful.',
         defaults: { providerId: 'openai', modelId: 'gpt-4' },
         tags: ['general'],
-      })
+      }),
     );
-    
+
     fs.writeFileSync(
       path.join(tempDir, 'disabled.json'),
       JSON.stringify({
@@ -42,9 +43,9 @@ describe('Agent Routes', () => {
         enabled: false,
         systemPrompt: 'Disabled prompt',
         defaults: {},
-      })
+      }),
     );
-    
+
     fs.writeFileSync(
       path.join(tempDir, 'coder.json'),
       JSON.stringify({
@@ -55,25 +56,29 @@ describe('Agent Routes', () => {
         systemPrompt: 'You are a coding assistant.',
         defaults: { providerId: 'anthropic', modelId: 'claude-3' },
         tags: ['coding', 'development'],
-      })
+      }),
     );
-    
+
     // Create test registry with temp directory
     const testRegistry = createAgentRegistry({ agentsDir: tempDir });
-    
+
     // Build a minimal app with agent routes
     const providerServices = createProviderServices();
     const sessionService = new SessionMessageService({
       providers: providerServices,
     });
     const runEvents = new RunEventEmitter();
-    
+
     app = Fastify({ logger: false });
-    
+
     const configServiceStub = {
       getConfig: () => ({
         version: 1,
-        defaults: { agentId: 'default', providerId: 'openai', modelId: 'gpt-4o-mini' },
+        defaults: {
+          agentId: 'default',
+          providerId: 'openai',
+          modelId: 'gpt-4o-mini',
+        },
         providers: [],
         agents: [],
       }),
@@ -92,13 +97,13 @@ describe('Agent Routes', () => {
       jobRunsRepo: undefined,
       sessionsRepo: undefined,
     });
-    
+
     await app.register(cors, { origin: '*' });
     await app.register(sensible);
     await app.register(websocket);
     await app.register(agentRoutes, { agentRegistry: testRegistry });
   });
-  
+
   afterEach(async () => {
     await app.close();
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -113,10 +118,10 @@ describe('Agent Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      
+
       expect(body.items).toBeInstanceOf(Array);
       expect(body.items.length).toBe(2); // Only enabled agents
-      
+
       const ids = body.items.map((a: { id: string }) => a.id);
       expect(ids).toContain('default');
       expect(ids).toContain('coder');
@@ -130,8 +135,10 @@ describe('Agent Routes', () => {
       });
 
       const body = response.json();
-      const defaultAgent = body.items.find((a: { id: string }) => a.id === 'default');
-      
+      const defaultAgent = body.items.find(
+        (a: { id: string }) => a.id === 'default',
+      );
+
       expect(defaultAgent).toBeDefined();
       expect(defaultAgent.name).toBe('Default Agent');
       expect(defaultAgent.description).toBe('The default agent');
@@ -150,13 +157,16 @@ describe('Agent Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
-      
+
       expect(agent.id).toBe('default');
       expect(agent.name).toBe('Default Agent');
       expect(agent.description).toBe('The default agent');
       expect(agent.enabled).toBe(true);
       expect(agent.systemPrompt).toBe('You are helpful.');
-      expect(agent.defaults).toEqual({ providerId: 'openai', modelId: 'gpt-4' });
+      expect(agent.defaults).toEqual({
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
       expect(agent.tags).toEqual(['general']);
     });
 
@@ -168,7 +178,7 @@ describe('Agent Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const agent = response.json();
-      
+
       expect(agent.id).toBe('disabled');
       expect(agent.enabled).toBe(false);
     });
@@ -181,7 +191,7 @@ describe('Agent Routes', () => {
 
       expect(response.statusCode).toBe(404);
       const body = response.json();
-      
+
       expect(body.error).toBe('Agent not found');
       expect(body.agentId).toBe('non-existent');
     });

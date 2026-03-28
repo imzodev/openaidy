@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { AgentRegistry, createAgentRegistry } from './registry';
 import type { Agent } from './schema';
 
@@ -8,8 +9,8 @@ describe('AgentRegistry', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    // Create a temporary directory for test agents
-    tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-agents-'));
+    // Create a temporary directory for test agents in the system temp dir
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-agents-'));
   });
 
   afterEach(() => {
@@ -219,7 +220,7 @@ describe('AgentRegistry', () => {
 
 describe('createAgentRegistry', () => {
   it('should create and load registry', () => {
-    const tempDir = fs.mkdtempSync(path.join(process.cwd(), 'test-agents-'));
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-agents-'));
 
     try {
       fs.writeFileSync(
