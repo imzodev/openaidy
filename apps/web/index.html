@@ -8,8 +8,12 @@
     <script>
       (function() {
         const theme = localStorage.getItem('theme') || 'system';
-        if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {
           document.documentElement.classList.add('dark');
+          document.documentElement.style.backgroundColor = '#111827';
+        } else {
+          document.documentElement.style.backgroundColor = '#f9fafb';
         }
       })();
     </script>
