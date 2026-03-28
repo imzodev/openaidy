@@ -12,19 +12,26 @@ interface DefaultsTabProps {
 }
 
 export function DefaultsTab(props: DefaultsTabProps) {
+  const providerOptions = createMemo(() =>
+    props.config()?.providers?.map((p) => ({
+      id: p.id,
+      name: p.name,
+    })),
+  );
+
+  const agentOptions = createMemo(() =>
+    props.config()?.agents?.map((a) => ({
+      id: a.id,
+      name: a.name,
+    })),
+  );
+
   const defaultsSchema = createMemo((): FormSchema => {
-    const currentConfig = props.config();
     return {
       sections: [
         getDefaultsSectionSchema({
-          providers: currentConfig?.providers?.map((p) => ({
-            id: p.id,
-            name: p.name,
-          })),
-          agents: currentConfig?.agents?.map((a) => ({
-            id: a.id,
-            name: a.name,
-          })),
+          providers: providerOptions(),
+          agents: agentOptions(),
         }),
       ],
     };
