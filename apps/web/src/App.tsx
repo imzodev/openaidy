@@ -5,6 +5,7 @@ import {
   createQuery,
   createMutation,
 } from '@tanstack/solid-query';
+import { Menu, Settings, MessageSquare } from 'lucide-solid';
 import {
   listSessions,
   createSession,
@@ -38,6 +39,9 @@ function AppContent() {
   const [selectedSessionId, setSelectedSessionId] = createSignal<
     string | undefined
   >(undefined);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = createSignal(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false,
+  );
   const [submitError, setSubmitError] = createSignal<string | undefined>(
     undefined,
   );
@@ -158,10 +162,54 @@ function AppContent() {
         isLoadingSessions={sessionsQuery.isLoading}
         currentView={currentView()}
         onNavigate={setCurrentView}
+        isCollapsed={isSidebarCollapsed()}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        onCollapse={() => setIsSidebarCollapsed(true)}
       />
 
       {/* Main Content */}
-      <main class="flex-1 flex flex-col min-w-0">
+      <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header class="sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:supports-[backdrop-filter]:bg-gray-900/80">
+          <div class="flex items-center justify-between gap-3 px-4 py-2 sm:px-6">
+            <div class="flex items-center gap-3 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+                class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 md:hidden"
+                aria-label="Toggle sidebar"
+              >
+                <Menu class="w-5 h-5" />
+              </button>
+
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                  <span class="hidden sm:inline">OpenAidy</span>
+                  <span class="hidden sm:inline">/</span>
+                  <span class="inline-flex items-center gap-1.5">
+                    <Show
+                      when={currentView() === 'settings'}
+                      fallback={<MessageSquare class="w-3.5 h-3.5" />}
+                    >
+                      <Settings class="w-3.5 h-3.5" />
+                    </Show>
+                    {currentView() === 'settings' ? 'Settings' : 'Chat'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="hidden sm:flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-500 dark:text-gray-400 shadow-sm">
+              <span class="truncate max-w-[220px]">
+                {currentView() === 'settings'
+                  ? 'Manage configuration'
+                  : selectedSessionId()
+                    ? 'Active conversation'
+                    : 'No session selected'}
+              </span>
+            </div>
+          </div>
+        </header>
+
         <Show when={currentView() === 'settings'}>
           <SettingsView />
         </Show>
@@ -191,15 +239,6 @@ function AppContent() {
           </Show>
 
           <Show when={selectedSessionId()}>
-            {/* Header */}
-            <header class="border-b border-gray-200 dark:border-gray-700 px-4 py-3 bg-white dark:bg-gray-800">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {sessionsQuery.data?.items.find(
-                  (s) => s.id === selectedSessionId(),
-                )?.title || 'Chat'}
-              </h2>
-            </header>
-
             {/* Messages */}
             <ChatView
               messages={messages()}
