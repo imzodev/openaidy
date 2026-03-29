@@ -506,21 +506,7 @@ export type NodeInvokedResponse = WSMessage<
   }
 >;
 
-export type NodeOnlineEvent = WSMessage<
-  'node.online',
-  {
-    nodeId: string;
-    capabilities: string[];
-    metadata?: Record<string, unknown>;
-  }
->;
-
-export type NodeOfflineEvent = WSMessage<
-  'node.offline',
-  {
-    nodeId: string;
-  }
->;
+// Note: NodeOnlineEvent and NodeOfflineEvent are defined later in the Node Event Types section
 
 // ============================================================================
 // Pairing Types
@@ -550,17 +536,7 @@ export type PairingDenyRequest = WSMessage<
   }
 >;
 
-export type PairingRequestedEvent = WSMessage<
-  'pairing.requested',
-  {
-    requestId: string;
-    pairingCode: string;
-    deviceName: string;
-    deviceType: NodeType;
-    capabilities: string[];
-    requestedAt: string;
-  }
->;
+// Note: PairingRequestedEvent is defined later in the Pairing Event Types section
 
 export type PairingApprovedResponse = WSMessage<
   'pairing.approved',
@@ -589,13 +565,47 @@ export type ConfigUpdateRequest = WSMessage<
   }
 >;
 
+/**
+ * Event emitted when configuration is updated
+ */
 export type ConfigUpdatedEvent = WSMessage<
   'config.updated',
   {
     updates: Record<string, unknown>;
     updatedAt: string;
+    updatedBy?: string;
   }
 >;
+
+/**
+ * Event emitted when configuration is reloaded
+ */
+export type ConfigReloadedEvent = WSMessage<
+  'config.reloaded',
+  {
+    config: Record<string, unknown>;
+    reloadedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when configuration validation fails
+ */
+export type ConfigValidationErrorEvent = WSMessage<
+  'config.validation_error',
+  {
+    errors: string[];
+    occurredAt: string;
+  }
+>;
+
+/**
+ * Union type for all configuration events
+ */
+export type ConfigEvent =
+  | ConfigUpdatedEvent
+  | ConfigReloadedEvent
+  | ConfigValidationErrorEvent;
 
 // ============================================================================
 // Presence Types
@@ -681,6 +691,8 @@ export type WSResponse =
   | PairingRequestedEvent
   | PairingApprovedResponse
   | ConfigUpdatedEvent
+  | ConfigReloadedEvent
+  | ConfigValidationErrorEvent
   | PresenceChangedEvent
   | ErrorResponse;
 
@@ -735,6 +747,8 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'pairing.requested',
   'pairing.approved',
   'config.updated',
+  'config.reloaded',
+  'config.validation_error',
   'presence.changed',
   'error',
 ]);
@@ -1424,6 +1438,51 @@ export function isPairingApprovedEvent(msg: unknown): msg is PairingApprovedEven
  */
 export function isPairingDeniedEvent(msg: unknown): msg is PairingDeniedEvent {
   return isWSMessage(msg) && msg.type === 'pairing.denied';
+}
+
+// ============================================================================
+// Configuration Event Type Guards
+// ============================================================================
+
+const CONFIG_EVENT_TYPES: Set<string> = new Set([
+  'config.updated',
+  'config.reloaded',
+  'config.validation_error',
+]);
+
+/**
+ * Check if a message type is a config event type
+ */
+export function isConfigEventType(type: string): type is ConfigEvent['type'] {
+  return CONFIG_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a ConfigEvent
+ */
+export function isConfigEvent(msg: unknown): msg is ConfigEvent {
+  return isWSMessage(msg) && isConfigEventType(msg.type);
+}
+
+/**
+ * Check if a message is a ConfigUpdatedEvent
+ */
+export function isConfigUpdatedEvent(msg: unknown): msg is ConfigUpdatedEvent {
+  return isWSMessage(msg) && msg.type === 'config.updated';
+}
+
+/**
+ * Check if a message is a ConfigReloadedEvent
+ */
+export function isConfigReloadedEvent(msg: unknown): msg is ConfigReloadedEvent {
+  return isWSMessage(msg) && msg.type === 'config.reloaded';
+}
+
+/**
+ * Check if a message is a ConfigValidationErrorEvent
+ */
+export function isConfigValidationErrorEvent(msg: unknown): msg is ConfigValidationErrorEvent {
+  return isWSMessage(msg) && msg.type === 'config.validation_error';
 }
 
 // ============================================================================

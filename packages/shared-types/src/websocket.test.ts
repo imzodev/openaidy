@@ -89,6 +89,16 @@ import {
   type PairingRequestedEvent,
   type PairingApprovedEvent,
   type PairingDeniedEvent,
+  // Config event types and guards
+  isConfigEventType,
+  isConfigEvent,
+  isConfigUpdatedEvent,
+  isConfigReloadedEvent,
+  isConfigValidationErrorEvent,
+  type ConfigEvent,
+  type ConfigUpdatedEvent,
+  type ConfigReloadedEvent,
+  type ConfigValidationErrorEvent,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -1896,6 +1906,175 @@ describe('websocket types', () => {
 
       expect(isPairingDeniedEvent(parsed)).toBe(true);
       expect(parsed.payload.requestId).toBe('req-1');
+    });
+  });
+});
+
+// ============================================================================
+// Configuration Event Tests
+// ============================================================================
+
+describe('Configuration Events', () => {
+  describe('isConfigEventType', () => {
+    it('should return true for valid config event types', () => {
+      expect(isConfigEventType('config.updated')).toBe(true);
+      expect(isConfigEventType('config.reloaded')).toBe(true);
+      expect(isConfigEventType('config.validation_error')).toBe(true);
+    });
+
+    it('should return false for invalid config event types', () => {
+      expect(isConfigEventType('config.get')).toBe(false);
+      expect(isConfigEventType('config.update')).toBe(false);
+      expect(isConfigEventType('node.registered')).toBe(false);
+      expect(isConfigEventType('error')).toBe(false);
+    });
+  });
+
+  describe('isConfigEvent', () => {
+    it('should return true for valid ConfigUpdatedEvent', () => {
+      const msg = createWSMessage('config.updated', {
+        updates: { 'app.name': 'NewName' },
+        updatedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigEvent(msg)).toBe(true);
+    });
+
+    it('should return true for valid ConfigReloadedEvent', () => {
+      const msg = createWSMessage('config.reloaded', {
+        config: { app: { name: 'TestApp' } },
+        reloadedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigEvent(msg)).toBe(true);
+    });
+
+    it('should return true for valid ConfigValidationErrorEvent', () => {
+      const msg = createWSMessage('config.validation_error', {
+        errors: ['Invalid value for field "port"'],
+        occurredAt: new Date().toISOString(),
+      });
+
+      expect(isConfigEvent(msg)).toBe(true);
+    });
+
+    it('should return false for non-config messages', () => {
+      const msg = createWSMessage('node.registered', {
+        nodeId: 'node-1',
+        name: 'Test',
+        type: 'mobile',
+        capabilities: [],
+        registeredAt: new Date().toISOString(),
+      });
+
+      expect(isConfigEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isConfigUpdatedEvent', () => {
+    it('should return true for ConfigUpdatedEvent', () => {
+      const msg = createWSMessage('config.updated', {
+        updates: { 'app.name': 'NewName' },
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'admin',
+      });
+
+      expect(isConfigUpdatedEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('config.reloaded', {
+        config: {},
+        reloadedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigUpdatedEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isConfigReloadedEvent', () => {
+    it('should return true for ConfigReloadedEvent', () => {
+      const msg = createWSMessage('config.reloaded', {
+        config: { app: { name: 'ReloadedApp' } },
+        reloadedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigReloadedEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('config.updated', {
+        updates: {},
+        updatedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigReloadedEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isConfigValidationErrorEvent', () => {
+    it('should return true for ConfigValidationErrorEvent', () => {
+      const msg = createWSMessage('config.validation_error', {
+        errors: ['Field "port" must be a number'],
+        occurredAt: new Date().toISOString(),
+      });
+
+      expect(isConfigValidationErrorEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('config.updated', {
+        updates: {},
+        updatedAt: new Date().toISOString(),
+      });
+
+      expect(isConfigValidationErrorEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('Config Event Serialization', () => {
+    it('should serialize and deserialize ConfigUpdatedEvent', () => {
+      const original = createWSMessage('config.updated', {
+        updates: { 'app.name': 'NewName', 'app.version': '2.0.0' },
+        updatedAt: '2024-01-15T10:30:00.000Z',
+        updatedBy: 'admin-user',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isConfigUpdatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.updates).toEqual({ 'app.name': 'NewName', 'app.version': '2.0.0' });
+      expect(parsed.payload.updatedBy).toBe('admin-user');
+    });
+
+    it('should serialize and deserialize ConfigReloadedEvent', () => {
+      const original = createWSMessage('config.reloaded', {
+        config: { app: { name: 'TestApp', version: '1.0.0' } },
+        reloadedAt: '2024-01-15T11:00:00.000Z',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isConfigReloadedEvent(parsed)).toBe(true);
+      expect(parsed.payload.config).toEqual({ app: { name: 'TestApp', version: '1.0.0' } });
+    });
+
+    it('should serialize and deserialize ConfigValidationErrorEvent', () => {
+      const original = createWSMessage('config.validation_error', {
+        errors: [
+          'Field "port" must be a number',
+          'Field "host" is required',
+        ],
+        occurredAt: '2024-01-15T11:05:00.000Z',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isConfigValidationErrorEvent(parsed)).toBe(true);
+      expect(parsed.payload.errors).toHaveLength(2);
     });
   });
 });
