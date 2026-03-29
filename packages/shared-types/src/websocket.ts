@@ -438,6 +438,18 @@ export type ProviderListResponse = WSMessage<
   }
 >;
 
+export type ProviderModelsResponse = WSMessage<
+  'provider.models',
+  {
+    providerId: string;
+    models: Array<{
+      id: string;
+      name: string;
+      capabilities?: string[];
+    }>;
+  }
+>;
+
 // ============================================================================
 // Node Types
 // ============================================================================

@@ -78,12 +78,11 @@ const createMockAgentRegistry = (): AgentRegistry => {
       return Array.from(agents.values())
         .filter((a) => a.enabled)
         .map((a) => ({
-        id: a.id,
-        name: a.name,
-        description: a.description,
+          id: a.id,
+          name: a.name,
+          description: a.description,
           capabilities: a.tools ?? [], // Map tools to capabilities for summary
         }));
-      },
     }),
     listAllAgents: vi.fn().mockImplementation(() => {
       return Array.from(agents.values()).map((a) => ({
@@ -148,7 +147,7 @@ describe('AgentHandler', () => {
     expect(response.payload.agents.find((a) => a.id === 'agent-disabled')).toBeUndefined();
   });
 
-  it('should log agent list operation async () => {
+  it('should log agent list operation', async () => {
     const request = createWSMessage('agent.list', {});
     await handler.handleList('conn-1', request as never, handlerContext);
 
