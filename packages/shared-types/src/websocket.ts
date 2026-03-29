@@ -241,6 +241,68 @@ export type SessionMessageResponse = WSMessage<
 >;
 
 // ============================================================================
+// Session Event Types (Non-Streaming)
+// ============================================================================
+
+/**
+ * Event emitted when a session is created
+ */
+export type SessionCreatedEvent = WSMessage<
+  'session.created',
+  {
+    sessionId: string;
+    agentId: string;
+    createdAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a session message is received/processed
+ */
+export type SessionMessageEvent = WSMessage<
+  'session.message',
+  {
+    sessionId: string;
+    messageId: string;
+    role: 'assistant' | 'user' | 'system';
+    content: string;
+    createdAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a session is deleted
+ */
+export type SessionDeletedEvent = WSMessage<
+  'session.deleted',
+  {
+    sessionId: string;
+    deletedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a session is updated
+ */
+export type SessionUpdatedEvent = WSMessage<
+  'session.updated',
+  {
+    sessionId: string;
+    updates: Record<string, unknown>;
+    updatedAt: string;
+  }
+>;
+
+/**
+ * Union type for all non-streaming session events
+ */
+export type SessionEvent =
+  | SessionCreatedEvent
+  | SessionMessageEvent
+  | SessionDeletedEvent
+  | SessionUpdatedEvent;
+
+// ============================================================================
 // Streaming Types
 // ============================================================================
 
@@ -744,6 +806,105 @@ export function isSessionStreamEvent(msg: unknown): msg is SessionStreamEvent {
  */
 export function isErrorResponse(msg: unknown): msg is ErrorResponse {
   return isWSMessage(msg) && msg.type === 'error';
+}
+
+// ============================================================================
+// Session Event Type Guards
+// ============================================================================
+
+const SESSION_EVENT_TYPES: Set<string> = new Set([
+  'session.created',
+  'session.message',
+  'session.deleted',
+  'session.updated',
+]);
+
+/**
+ * Check if a message type is a session event type
+ */
+export function isSessionEventType(type: string): type is SessionEvent['type'] {
+  return SESSION_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a SessionEvent
+ */
+export function isSessionEvent(msg: unknown): msg is SessionEvent {
+  return isWSMessage(msg) && isSessionEventType(msg.type);
+}
+
+/**
+ * Check if a message is a SessionCreatedEvent
+ */
+export function isSessionCreatedEvent(msg: unknown): msg is SessionCreatedEvent {
+  return isWSMessage(msg) && msg.type === 'session.created';
+}
+
+/**
+ * Check if a message is a SessionMessageEvent
+ */
+export function isSessionMessageEvent(msg: unknown): msg is SessionMessageEvent {
+  return isWSMessage(msg) && msg.type === 'session.message';
+}
+
+/**
+ * Check if a message is a SessionDeletedEvent
+ */
+export function isSessionDeletedEvent(msg: unknown): msg is SessionDeletedEvent {
+  return isWSMessage(msg) && msg.type === 'session.deleted';
+}
+
+/**
+ * Check if a message is a SessionUpdatedEvent
+ */
+export function isSessionUpdatedEvent(msg: unknown): msg is SessionUpdatedEvent {
+  return isWSMessage(msg) && msg.type === 'session.updated';
+}
+
+// ============================================================================
+// Session Stream Event Type Guards
+// ============================================================================
+
+/**
+ * Check if a message is a SessionStreamStart
+ */
+export function isSessionStreamStart(msg: unknown): msg is SessionStreamStart {
+  return isWSMessage(msg) && msg.type === 'session.stream.start';
+}
+
+/**
+ * Check if a message is a SessionStreamDelta
+ */
+export function isSessionStreamDelta(msg: unknown): msg is SessionStreamDelta {
+  return isWSMessage(msg) && msg.type === 'session.stream.delta';
+}
+
+/**
+ * Check if a message is a SessionStreamToolCall
+ */
+export function isSessionStreamToolCall(msg: unknown): msg is SessionStreamToolCall {
+  return isWSMessage(msg) && msg.type === 'session.stream.tool_call';
+}
+
+/**
+ * Check if a message is a SessionStreamUsage
+ */
+export function isSessionStreamUsage(msg: unknown): msg is SessionStreamUsage {
+  return isWSMessage(msg) && msg.type === 'session.stream.usage';
+}
+
+/**
+ * Check if a message is a SessionStreamEnd
+ */
+export function isSessionStreamEnd(msg: unknown): msg is SessionStreamEnd {
+  return isWSMessage(msg) && msg.type === 'session.stream.end';
+}
+
+/**
+ * Check if a message is a SessionStreamError
+ */
+export function isSessionStreamError(msg: unknown): msg is SessionStreamError {
+  return isWSMessage(msg) && msg.type === 'session.stream.error';
 }
 
 // ============================================================================

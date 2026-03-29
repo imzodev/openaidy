@@ -19,6 +19,24 @@ import {
   type WSError,
   type SessionStreamEvent,
   type ErrorResponse,
+  // Session event types and guards
+  isSessionEventType,
+  isSessionEvent,
+  isSessionCreatedEvent,
+  isSessionMessageEvent,
+  isSessionDeletedEvent,
+  isSessionUpdatedEvent,
+  isSessionStreamStart,
+  isSessionStreamDelta,
+  isSessionStreamToolCall,
+  isSessionStreamUsage,
+  isSessionStreamEnd,
+  isSessionStreamError,
+  type SessionEvent,
+  type SessionCreatedEvent,
+  type SessionMessageEvent,
+  type SessionDeletedEvent,
+  type SessionUpdatedEvent,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -425,6 +443,351 @@ describe('websocket types', () => {
 
       expect(isErrorResponse(parsed)).toBe(true);
       expect(parsed.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+    });
+  });
+
+  // ============================================================================
+  // Session Event Type Guards Tests
+  // ============================================================================
+
+  describe('Session Event Type Guards', () => {
+    describe('isSessionEventType', () => {
+      it('should return true for session event types', () => {
+        expect(isSessionEventType('session.created')).toBe(true);
+        expect(isSessionEventType('session.message')).toBe(true);
+        expect(isSessionEventType('session.deleted')).toBe(true);
+        expect(isSessionEventType('session.updated')).toBe(true);
+      });
+
+      it('should return false for non-session event types', () => {
+        expect(isSessionEventType('session.create')).toBe(false);
+        expect(isSessionEventType('session.stream.start')).toBe(false);
+        expect(isSessionEventType('error')).toBe(false);
+      });
+    });
+
+    describe('isSessionEvent', () => {
+      it('should return true for session.created event', () => {
+        const msg = createWSMessage('session.created', {
+          sessionId: 's1',
+          agentId: 'a1',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isSessionEvent(msg)).toBe(true);
+      });
+
+      it('should return true for session.message event', () => {
+        const msg = createWSMessage('session.message', {
+          sessionId: 's1',
+          messageId: 'm1',
+          role: 'assistant',
+          content: 'Hello!',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isSessionEvent(msg)).toBe(true);
+      });
+
+      it('should return true for session.deleted event', () => {
+        const msg = createWSMessage('session.deleted', {
+          sessionId: 's1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isSessionEvent(msg)).toBe(true);
+      });
+
+      it('should return true for session.updated event', () => {
+        const msg = createWSMessage('session.updated', {
+          sessionId: 's1',
+          updates: { title: 'New Title' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isSessionEvent(msg)).toBe(true);
+      });
+
+      it('should return false for non-session events', () => {
+        const msg = createWSMessage('session.stream.start', {
+          sessionId: 's1',
+          runId: 'r1',
+          agentId: 'a1',
+          providerId: 'p1',
+          modelId: 'm1',
+        });
+        expect(isSessionEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isSessionCreatedEvent', () => {
+      it('should return true for session.created event', () => {
+        const msg = createWSMessage('session.created', {
+          sessionId: 's1',
+          agentId: 'a1',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isSessionCreatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('session.deleted', {
+          sessionId: 's1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isSessionCreatedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isSessionMessageEvent', () => {
+      it('should return true for session.message event', () => {
+        const msg = createWSMessage('session.message', {
+          sessionId: 's1',
+          messageId: 'm1',
+          role: 'user',
+          content: 'Hello!',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isSessionMessageEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('session.created', {
+          sessionId: 's1',
+          agentId: 'a1',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isSessionMessageEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isSessionDeletedEvent', () => {
+      it('should return true for session.deleted event', () => {
+        const msg = createWSMessage('session.deleted', {
+          sessionId: 's1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isSessionDeletedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('session.updated', {
+          sessionId: 's1',
+          updates: {},
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isSessionDeletedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isSessionUpdatedEvent', () => {
+      it('should return true for session.updated event', () => {
+        const msg = createWSMessage('session.updated', {
+          sessionId: 's1',
+          updates: { title: 'New Title' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isSessionUpdatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('session.deleted', {
+          sessionId: 's1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isSessionUpdatedEvent(msg)).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Session Stream Event Type Guards Tests
+  // ============================================================================
+
+  describe('Session Stream Event Type Guards', () => {
+    describe('isSessionStreamStart', () => {
+      it('should return true for session.stream.start event', () => {
+        const msg = createWSMessage('session.stream.start', {
+          sessionId: 's1',
+          runId: 'r1',
+          agentId: 'a1',
+          providerId: 'p1',
+          modelId: 'm1',
+        });
+        expect(isSessionStreamStart(msg)).toBe(true);
+        expect(isSessionStreamEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other stream events', () => {
+        const msg = createWSMessage('session.stream.delta', {
+          sessionId: 's1',
+          runId: 'r1',
+          delta: 'Hello',
+          content: 'Hello',
+        });
+        expect(isSessionStreamStart(msg)).toBe(false);
+      });
+    });
+
+    describe('isSessionStreamDelta', () => {
+      it('should return true for session.stream.delta event', () => {
+        const msg = createWSMessage('session.stream.delta', {
+          sessionId: 's1',
+          runId: 'r1',
+          delta: 'lo',
+          content: 'Hello',
+        });
+        expect(isSessionStreamDelta(msg)).toBe(true);
+      });
+    });
+
+    describe('isSessionStreamToolCall', () => {
+      it('should return true for session.stream.tool_call event', () => {
+        const msg = createWSMessage('session.stream.tool_call', {
+          sessionId: 's1',
+          runId: 'r1',
+          toolCall: {
+            id: 'tc1',
+            name: 'get_weather',
+            arguments: { location: 'Berlin' },
+          },
+        });
+        expect(isSessionStreamToolCall(msg)).toBe(true);
+      });
+    });
+
+    describe('isSessionStreamUsage', () => {
+      it('should return true for session.stream.usage event', () => {
+        const msg = createWSMessage('session.stream.usage', {
+          sessionId: 's1',
+          runId: 'r1',
+          usage: {
+            promptTokens: 100,
+            completionTokens: 50,
+            totalTokens: 150,
+          },
+        });
+        expect(isSessionStreamUsage(msg)).toBe(true);
+      });
+    });
+
+    describe('isSessionStreamEnd', () => {
+      it('should return true for session.stream.end event', () => {
+        const msg = createWSMessage('session.stream.end', {
+          sessionId: 's1',
+          runId: 'r1',
+          finishReason: 'stop',
+        });
+        expect(isSessionStreamEnd(msg)).toBe(true);
+      });
+    });
+
+    describe('isSessionStreamError', () => {
+      it('should return true for session.stream.error event', () => {
+        const msg = createWSMessage('session.stream.error', {
+          sessionId: 's1',
+          runId: 'r1',
+          error: {
+            code: 'PROVIDER_ERROR',
+            message: 'Provider unavailable',
+          },
+        });
+        expect(isSessionStreamError(msg)).toBe(true);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Session Event Serialization Tests
+  // ============================================================================
+
+  describe('Session Event Serialization', () => {
+    it('should serialize and deserialize session.created event', () => {
+      const original = createWSMessage('session.created', {
+        sessionId: 's1',
+        agentId: 'a1',
+        createdAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionCreatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.sessionId).toBe('s1');
+      expect(parsed.payload.agentId).toBe('a1');
+    });
+
+    it('should serialize and deserialize session.deleted event', () => {
+      const original = createWSMessage('session.deleted', {
+        sessionId: 's1',
+        deletedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionDeletedEvent(parsed)).toBe(true);
+      expect(parsed.payload.sessionId).toBe('s1');
+    });
+
+    it('should serialize and deserialize session.updated event', () => {
+      const original = createWSMessage('session.updated', {
+        sessionId: 's1',
+        updates: { title: 'New Title', metadata: { key: 'value' } },
+        updatedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionUpdatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.updates.title).toBe('New Title');
+    });
+
+    it('should serialize and deserialize session.stream.start event', () => {
+      const original = createWSMessage('session.stream.start', {
+        sessionId: 's1',
+        runId: 'r1',
+        agentId: 'a1',
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionStreamStart(parsed)).toBe(true);
+      expect(parsed.payload.providerId).toBe('openai');
+      expect(parsed.payload.modelId).toBe('gpt-4');
+    });
+
+    it('should serialize and deserialize session.stream.delta event', () => {
+      const original = createWSMessage('session.stream.delta', {
+        sessionId: 's1',
+        runId: 'r1',
+        delta: ' World',
+        content: 'Hello World',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionStreamDelta(parsed)).toBe(true);
+      expect(parsed.payload.delta).toBe(' World');
+      expect(parsed.payload.content).toBe('Hello World');
+    });
+
+    it('should serialize and deserialize session.stream.error event', () => {
+      const original = createWSMessage('session.stream.error', {
+        sessionId: 's1',
+        runId: 'r1',
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Rate limit exceeded',
+        },
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isSessionStreamError(parsed)).toBe(true);
+      expect(parsed.payload.error.code).toBe('RATE_LIMITED');
     });
   });
 });
