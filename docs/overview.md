@@ -69,6 +69,18 @@ This keeps the product flexible without requiring plugins to rely on private imp
 
 ## Main capabilities
 
+## Real-time Communication
+
+OpenAidy provides a WebSocket gateway for real-time, bidirectional communication:
+
+- **Instant messaging** - Real-time message delivery without polling
+- **Streaming responses** - Token-by-token streaming of AI responses
+- **Event subscriptions** - Subscribe to session, agent, node, and presence events
+- **Low latency** - Persistent connections eliminate HTTP overhead
+- **Automatic reconnection** - Robust handling of connection drops
+
+For details, see [WebSocket Protocol](./websocket-protocol) and [WebSocket Client SDK](./websocket-client-sdk).
+
 ## Sessions
 
 Sessions are the main container for conversations, agent runs, and transcripts.
@@ -276,5 +288,6 @@ OpenAidy is intended to be an extensible agent platform with:
 - easy configuration
 - plugin SDKs
 - MCP integration
+- **real-time WebSocket communication**
 
 The main differentiator is that these capabilities should be built around public contracts and extension points from the start, rather than added through tightly coupled internal mechanisms.

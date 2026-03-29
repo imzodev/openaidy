@@ -39,6 +39,7 @@ The core API server owns:
 - plugin lifecycle
 - MCP client and MCP server bridges
 - configuration loading and validation
+- **WebSocket gateway for real-time communication**
 
 Recommended stack:
 
@@ -47,6 +48,25 @@ Recommended stack:
 - Fastify
 - WebSocket + Server-Sent Events
 - Zod for contracts and validation
+
+### WebSocket gateway
+
+The WebSocket gateway provides real-time, bidirectional communication between clients and the OpenAidy server. It enables:
+
+- **Real-time messaging** - Instant message delivery without polling
+- **Streaming responses** - Token-by-token streaming of AI responses
+- **Event subscriptions** - Subscribe to session, agent, node, and presence events
+- **Low latency** - Persistent connection eliminates HTTP overhead
+
+Key components:
+
+- **Connection Manager** - Manages connections, heartbeats, rate limiting
+- **Message Router** - Routes messages to appropriate handlers
+- **Authentication Middleware** - JWT validation and capability extraction
+- **Handlers** - Session, Agent, Provider, Node, Pairing, Config, Presence
+- **Services** - NodeRegistry, PairingService, PresenceManager, StreamManager
+
+For detailed architecture, see [WebSocket Architecture](./websocket-architecture).
 
 ### Session engine
 
