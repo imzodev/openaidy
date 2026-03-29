@@ -51,6 +51,18 @@ import {
   type AgentDeletedEvent,
   type AgentEnabledEvent,
   type AgentDisabledEvent,
+  // Provider event types and guards
+  isProviderEventType,
+  isProviderEvent,
+  isProviderRegisteredEvent,
+  isProviderUpdatedEvent,
+  isProviderUnregisteredEvent,
+  isModelAddedEvent,
+  type ProviderEvent,
+  type ProviderRegisteredEvent,
+  type ProviderUpdatedEvent,
+  type ProviderUnregisteredEvent,
+  type ModelAddedEvent,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -1052,6 +1064,260 @@ describe('websocket types', () => {
 
       expect(isAgentDisabledEvent(parsed)).toBe(true);
       expect(parsed.payload.agentId).toBe('a1');
+    });
+  });
+
+  // ============================================================================
+  // Provider Event Type Guards Tests
+  // ============================================================================
+
+  describe('Provider Event Type Guards', () => {
+    describe('isProviderEventType', () => {
+      it('should return true for provider event types', () => {
+        expect(isProviderEventType('provider.registered')).toBe(true);
+        expect(isProviderEventType('provider.updated')).toBe(true);
+        expect(isProviderEventType('provider.unregistered')).toBe(true);
+        expect(isProviderEventType('model.added')).toBe(true);
+      });
+
+      it('should return false for non-provider event types', () => {
+        expect(isProviderEventType('provider.list')).toBe(false);
+        expect(isProviderEventType('provider.models')).toBe(false);
+        expect(isProviderEventType('agent.created')).toBe(false);
+        expect(isProviderEventType('error')).toBe(false);
+      });
+    });
+
+    describe('isProviderEvent', () => {
+      it('should return true for provider.registered event', () => {
+        const msg = createWSMessage('provider.registered', {
+          providerId: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat', 'streaming'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isProviderEvent(msg)).toBe(true);
+      });
+
+      it('should return true for provider.updated event', () => {
+        const msg = createWSMessage('provider.updated', {
+          providerId: 'openai',
+          updates: { enabled: true },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isProviderEvent(msg)).toBe(true);
+      });
+
+      it('should return true for provider.unregistered event', () => {
+        const msg = createWSMessage('provider.unregistered', {
+          providerId: 'openai',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isProviderEvent(msg)).toBe(true);
+      });
+
+      it('should return true for model.added event', () => {
+        const msg = createWSMessage('model.added', {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          name: 'GPT-4o',
+          capabilities: ['chat', 'streaming'],
+          addedAt: new Date().toISOString(),
+        });
+        expect(isProviderEvent(msg)).toBe(true);
+      });
+
+      it('should return false for non-provider events', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isProviderEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isProviderRegisteredEvent', () => {
+      it('should return true for provider.registered event', () => {
+        const msg = createWSMessage('provider.registered', {
+          providerId: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat', 'streaming'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isProviderRegisteredEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('provider.unregistered', {
+          providerId: 'openai',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isProviderRegisteredEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isProviderUpdatedEvent', () => {
+      it('should return true for provider.updated event', () => {
+        const msg = createWSMessage('provider.updated', {
+          providerId: 'openai',
+          updates: { enabled: true },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isProviderUpdatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('provider.registered', {
+          providerId: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isProviderUpdatedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isProviderUnregisteredEvent', () => {
+      it('should return true for provider.unregistered event', () => {
+        const msg = createWSMessage('provider.unregistered', {
+          providerId: 'openai',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isProviderUnregisteredEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('provider.updated', {
+          providerId: 'openai',
+          updates: {},
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isProviderUnregisteredEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isModelAddedEvent', () => {
+      it('should return true for model.added event', () => {
+        const msg = createWSMessage('model.added', {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          name: 'GPT-4o',
+          capabilities: ['chat', 'streaming'],
+          addedAt: new Date().toISOString(),
+        });
+        expect(isModelAddedEvent(msg)).toBe(true);
+      });
+
+      it('should return true for model.added event without capabilities', () => {
+        const msg = createWSMessage('model.added', {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          name: 'GPT-4o',
+          addedAt: new Date().toISOString(),
+        });
+        expect(isModelAddedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('provider.registered', {
+          providerId: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isModelAddedEvent(msg)).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Provider Event Serialization Tests
+  // ============================================================================
+
+  describe('Provider Event Serialization', () => {
+    it('should serialize and deserialize provider.registered event', () => {
+      const original = createWSMessage('provider.registered', {
+        providerId: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai',
+        capabilities: ['chat', 'streaming'],
+        registeredAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isProviderRegisteredEvent(parsed)).toBe(true);
+      expect(parsed.payload.providerId).toBe('openai');
+      expect(parsed.payload.name).toBe('OpenAI');
+      expect(parsed.payload.capabilities).toContain('chat');
+    });
+
+    it('should serialize and deserialize provider.updated event', () => {
+      const original = createWSMessage('provider.updated', {
+        providerId: 'openai',
+        updates: { enabled: false, priority: 10 },
+        updatedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isProviderUpdatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.updates.enabled).toBe(false);
+    });
+
+    it('should serialize and deserialize provider.unregistered event', () => {
+      const original = createWSMessage('provider.unregistered', {
+        providerId: 'openai',
+        unregisteredAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isProviderUnregisteredEvent(parsed)).toBe(true);
+      expect(parsed.payload.providerId).toBe('openai');
+    });
+
+    it('should serialize and deserialize model.added event', () => {
+      const original = createWSMessage('model.added', {
+        providerId: 'openai',
+        modelId: 'gpt-4o',
+        name: 'GPT-4o',
+        capabilities: ['chat', 'streaming'],
+        addedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isModelAddedEvent(parsed)).toBe(true);
+      expect(parsed.payload.providerId).toBe('openai');
+      expect(parsed.payload.modelId).toBe('gpt-4o');
+      expect(parsed.payload.capabilities).toContain('chat');
+    });
+
+    it('should serialize and deserialize model.added event without capabilities', () => {
+      const original = createWSMessage('model.added', {
+        providerId: 'anthropic',
+        modelId: 'claude-3',
+        name: 'Claude 3',
+        addedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isModelAddedEvent(parsed)).toBe(true);
+      expect(parsed.payload.providerId).toBe('anthropic');
+      expect(parsed.payload.modelId).toBe('claude-3');
     });
   });
 });

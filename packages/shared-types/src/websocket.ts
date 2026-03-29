@@ -1053,6 +1053,123 @@ export function isAgentDisabledEvent(msg: unknown): msg is AgentDisabledEvent {
 }
 
 // ============================================================================
+// Provider Event Types
+// ============================================================================
+
+/**
+ * Event emitted when a provider is registered
+ */
+export type ProviderRegisteredEvent = WSMessage<
+  'provider.registered',
+  {
+    providerId: string;
+    name: string;
+    vendorFamily: string;
+    capabilities: string[];
+    registeredAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a provider is updated
+ */
+export type ProviderUpdatedEvent = WSMessage<
+  'provider.updated',
+  {
+    providerId: string;
+    updates: Record<string, unknown>;
+    updatedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a provider is unregistered
+ */
+export type ProviderUnregisteredEvent = WSMessage<
+  'provider.unregistered',
+  {
+    providerId: string;
+    unregisteredAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a model is added to a provider
+ */
+export type ModelAddedEvent = WSMessage<
+  'model.added',
+  {
+    providerId: string;
+    modelId: string;
+    name: string;
+    capabilities?: string[];
+    addedAt: string;
+  }
+>;
+
+/**
+ * Union type for all provider events
+ */
+export type ProviderEvent =
+  | ProviderRegisteredEvent
+  | ProviderUpdatedEvent
+  | ProviderUnregisteredEvent
+  | ModelAddedEvent;
+
+// ============================================================================
+// Provider Event Type Guards
+// ============================================================================
+
+const PROVIDER_EVENT_TYPES: Set<string> = new Set([
+  'provider.registered',
+  'provider.updated',
+  'provider.unregistered',
+  'model.added',
+]);
+
+/**
+ * Check if a message type is a provider event type
+ */
+export function isProviderEventType(type: string): type is ProviderEvent['type'] {
+  return PROVIDER_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a ProviderEvent
+ */
+export function isProviderEvent(msg: unknown): msg is ProviderEvent {
+  return isWSMessage(msg) && isProviderEventType(msg.type);
+}
+
+/**
+ * Check if a message is a ProviderRegisteredEvent
+ */
+export function isProviderRegisteredEvent(msg: unknown): msg is ProviderRegisteredEvent {
+  return isWSMessage(msg) && msg.type === 'provider.registered';
+}
+
+/**
+ * Check if a message is a ProviderUpdatedEvent
+ */
+export function isProviderUpdatedEvent(msg: unknown): msg is ProviderUpdatedEvent {
+  return isWSMessage(msg) && msg.type === 'provider.updated';
+}
+
+/**
+ * Check if a message is a ProviderUnregisteredEvent
+ */
+export function isProviderUnregisteredEvent(msg: unknown): msg is ProviderUnregisteredEvent {
+  return isWSMessage(msg) && msg.type === 'provider.unregistered';
+}
+
+/**
+ * Check if a message is a ModelAddedEvent
+ */
+export function isModelAddedEvent(msg: unknown): msg is ModelAddedEvent {
+  return isWSMessage(msg) && msg.type === 'model.added';
+}
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 
