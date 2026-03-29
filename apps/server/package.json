@@ -28,6 +28,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.6"
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.30.6",
+    "ws": "^8.20.0"
   }
 }

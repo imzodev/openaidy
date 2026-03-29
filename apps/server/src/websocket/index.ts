@@ -12,28 +12,25 @@ import {
   type WebSocketConfig,
   type PairingConfig,
   type ConnectionContext,
-  type RateLimitInfo,
-  type RateLimitResult,
-  type ConnectionStatus,
-  createWebSocketConfig,
-  createPairingConfig,
   defaultWebSocketConfig,
   defaultPairingConfig,
+  createWebSocketConfig,
+  createPairingConfig,
 } from './types';
 import {
   type WSMessage,
-  type WSRequest,
   type WSResponse,
-  type WSError,
-  type ErrorResponse,
   WS_ERROR_CODES,
   isWSMessage,
-  isWSRequest,
   createWSMessage,
   createErrorResponse,
-  createWSError,
 } from '@openaidy/shared-types';
 import type { AppServices } from '../app';
+import { ConnectionManager } from './connection-manager';
+import { MessageRouter, type HandlerContext } from './message-router';
+import { SessionHandler, registerSessionHandlers } from './handlers/session';
+import { StreamManager } from './streaming';
+import { SubscriptionManager } from './subscriptions';
 
 // ============================================================================
 // Types
@@ -45,306 +42,6 @@ import type { AppServices } from '../app';
 export type WebSocketConnection = {
   socket: WebSocket;
   req: FastifyRequest | IncomingMessage;
-};
-
-/**
- * Rate limiter for per-connection rate limiting
- */
-class RateLimiter {
-  private requests: number[] = [];
-  private resetTime: number;
-
-  constructor(
-    private max: number,
-    private windowMs: number,
-  ) {
-    this.resetTime = Date.now() + windowMs;
-  }
-
-  check(): RateLimitResult {
-    const now = Date.now();
-
-    // Reset if window expired
-    if (now >= this.resetTime) {
-      this.requests = [];
-      this.resetTime = now + this.windowMs;
-    }
-
-    // Clean old requests
-    const windowStart = now - this.windowMs;
-    this.requests = this.requests.filter((t) => t > windowStart);
-
-    const remaining = Math.max(0, this.max - this.requests.length);
-    const allowed = this.requests.length < this.max;
-
-    return {
-      allowed,
-      info: {
-        remaining,
-        reset: this.resetTime,
-        limit: this.max,
-      },
-    };
-  }
-
-  recordRequest(): void {
-    this.requests.push(Date.now());
-  }
-
-  reset(): void {
-    this.requests = [];
-    this.resetTime = Date.now() + this.windowMs;
-  }
-}
-
-/**
- * Connection manager - tracks active WebSocket connections
- */
-class ConnectionManager {
-  private connections: Map<string, ConnectionContext> = new Map();
-  private rateLimiters: Map<string, RateLimiter> = new Map();
-
-  constructor(private config: WebSocketConfig) {}
-
-  /**
-   * Register a new connection
-   */
-  registerConnection(id: string, socket: WebSocket): ConnectionContext {
-    const context: ConnectionContext = {
-      id,
-      status: 'connected',
-      authenticated: false,
-      capabilities: [],
-      subscriptions: new Set(),
-      lastHeartbeat: Date.now(),
-      createdAt: Date.now(),
-      metadata: {},
-    };
-
-    this.connections.set(id, context);
-    this.rateLimiters.set(id, new RateLimiter(this.config.rateLimit.max, this.config.rateLimit.window));
-
-    return context;
-  }
-
-  /**
-   * Remove a connection
-   */
-  removeConnection(id: string): void {
-    this.connections.delete(id);
-    this.rateLimiters.delete(id);
-  }
-
-  /**
-   * Get a connection by ID
-   */
-  getConnection(id: string): ConnectionContext | undefined {
-    return this.connections.get(id);
-  }
-
-  /**
-   * Get all connections
-   */
-  getAllConnections(): ConnectionContext[] {
-    return Array.from(this.connections.values());
-  }
-
-  /**
-   * Check rate limit for a connection
-   */
-  checkRateLimit(id: string): RateLimitResult {
-    const limiter = this.rateLimiters.get(id);
-    if (!limiter) {
-      return {
-        allowed: false,
-        info: { remaining: 0, reset: Date.now() + this.config.rateLimit.window, limit: this.config.rateLimit.max },
-      };
-    }
-    return limiter.check();
-  }
-
-  /**
-   * Record a request for rate limiting
-   */
-  recordRequest(id: string): void {
-    const limiter = this.rateLimiters.get(id);
-    if (limiter) {
-      limiter.recordRequest();
-    }
-  }
-
-  /**
-   * Update heartbeat timestamp
-   */
-  updateHeartbeat(id: string): void {
-    const ctx = this.connections.get(id);
-    if (ctx) {
-      ctx.lastHeartbeat = Date.now();
-    }
-  }
-
-  /**
-   * Check for stale connections
-   */
-  checkStaleConnections(timeoutMs: number): string[] {
-    const now = Date.now();
-    const staleIds: string[] = [];
-
-    for (const [id, ctx] of this.connections) {
-      if (now - ctx.lastHeartbeat > timeoutMs) {
-        staleIds.push(id);
-      }
-    }
-
-    return staleIds;
-  }
-
-  /**
-   * Send a message to a specific connection
-   */
-  send(id: string, message: WSMessage): boolean {
-    const ctx = this.connections.get(id);
-    if (!ctx || ctx.status !== 'connected') {
-      return false;
-    }
-
-    try {
-      const data = JSON.stringify(message);
-      // Access the raw WebSocket from the context
-      // The socket is passed during registration
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Broadcast a message to all connections
-   */
-  broadcast(message: WSMessage, exclude: string[] = []): void {
-    const data = JSON.stringify(message);
-    const excludeSet = new Set(exclude);
-
-    for (const [id, ctx] of this.connections) {
-      if (!excludeSet.has(id) && ctx.status === 'connected') {
-        // Message will be sent via the socket reference
-      }
-    }
-  }
-
-  /**
-   * Get connection count
-   */
-  getConnectionCount(): number {
-    return this.connections.size;
-  }
-
-  /**
-   * Close all connections
-   */
-  closeAll(): void {
-    this.connections.clear();
-    this.rateLimiters.clear();
-  }
-}
-
-/**
- * Message router - routes incoming messages to handlers
- */
-class MessageRouter {
-  private handlers: Map<string, MessageHandler> = new Map();
-  private pendingRequests: Map<string, PendingRequest> = new Map();
-
-  constructor(private logger: { info: (msg: string) => void; error: (msg: string) => void; warn: (msg: string) => void }) {}
-
-  /**
-   * Register a handler for a message type
-   */
-  registerHandler(type: string, handler: MessageHandler): void {
-    this.handlers.set(type, handler);
-  }
-
-  /**
-   * Unregister a handler
-   */
-  unregisterHandler(type: string): void {
-    this.handlers.delete(type);
-  }
-
-  /**
-   * Route a message to the appropriate handler
-   */
-  async route(
-    connectionId: string,
-    message: WSMessage,
-    context: HandlerContext,
-  ): Promise<WSResponse | void> {
-    const handler = this.handlers.get(message.type);
-
-    if (!handler) {
-      this.logger.warn(`No handler registered for message type: ${message.type}`);
-      return createErrorResponse(
-        message.id,
-        WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE,
-        `Unknown message type: ${message.type}`,
-      );
-    }
-
-    try {
-      const result = await handler(connectionId, message as WSRequest, context);
-      return result;
-    } catch (error) {
-      this.logger.error(`Handler error for ${message.type}: ${error}`);
-      const err = error as Error;
-      return createErrorResponse(
-        message.id,
-        WS_ERROR_CODES.INTERNAL_ERROR,
-        err.message || 'Internal server error',
-      );
-    }
-  }
-
-  /**
-   * Check if a handler exists for a type
-   */
-  hasHandler(type: string): boolean {
-    return this.handlers.has(type);
-  }
-
-  /**
-   * Get all registered handler types
-   */
-  getHandlerTypes(): string[] {
-    return Array.from(this.handlers.keys());
-  }
-}
-
-/**
- * Message handler type
- */
-type MessageHandler = (
-  connectionId: string,
-  message: WSRequest,
-  context: HandlerContext,
-) => Promise<WSResponse | void>;
-
-/**
- * Handler context
- */
-type HandlerContext = {
-  connectionManager: ConnectionManager;
-  services: AppServices;
-  logger: { info: (msg: string) => void; error: (msg: string) => void; warn: (msg: string) => void };
-};
-
-/**
- * Pending request for request-response correlation
- */
-type PendingRequest = {
-  connectionId: string;
-  createdAt: number;
-  resolve: (value: unknown) => void;
-  reject: (error: Error) => void;
 };
 
 // ============================================================================
@@ -359,6 +56,9 @@ export type WebSocketGateway = {
   pairingConfig: PairingConfig;
   connectionManager: ConnectionManager;
   messageRouter: MessageRouter;
+  sessionHandler: SessionHandler;
+  streamManager: StreamManager;
+  subscriptionManager: SubscriptionManager;
   shutdown: () => Promise<void>;
 };
 
@@ -367,7 +67,7 @@ export type WebSocketGateway = {
  */
 function createGateway(
   fastify: {
-    log: { info: (msg: string) => void; error: (msg: string) => void; warn: (msg: string) => void };
+    log: FastifyRequest['log'];
     services: AppServices;
   },
   wsConfig?: Partial<WebSocketConfig>,
@@ -378,13 +78,75 @@ function createGateway(
 
   const connectionManager = new ConnectionManager(config);
   const messageRouter = new MessageRouter(fastify.log);
+  const sessionHandler = new SessionHandler(fastify.services.sessions, fastify.log);
+  const streamManager = new StreamManager(
+    fastify.services.runEvents,
+    connectionManager,
+    fastify.log,
+  );
+  const subscriptionManager = new SubscriptionManager(connectionManager, fastify.log);
+
+  // Register session handlers with the message router
+  registerSessionHandlers(messageRouter, sessionHandler);
+
+  // Register subscribe/unsubscribe handlers
+  messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
+    const payload = message.payload as { sessionId: string; events?: string[] };
+    const subscriptionId = subscriptionManager.createSubscription(
+      connectionId,
+      payload.sessionId,
+      payload.events,
+    );
+
+    if (!subscriptionId) {
+      return createErrorResponse(
+        message.id,
+        WS_ERROR_CODES.INTERNAL_ERROR,
+        'Failed to create subscription',
+      );
+    }
+
+    // Return the response as unknown first to satisfy type constraints
+    return {
+      id: message.id,
+      type: 'session.subscribed',
+      timestamp: new Date().toISOString(),
+      payload: {
+        sessionId: payload.sessionId,
+        subscriptionId,
+      },
+    } as unknown as WSResponse;
+  });
+
+  messageRouter.registerHandler('session.unsubscribe', async (connectionId, message) => {
+    const payload = message.payload as { sessionId: string };
+    const subscription = subscriptionManager.findSubscription(connectionId, payload.sessionId);
+
+    if (subscription) {
+      subscriptionManager.removeSubscription(subscription.id);
+    }
+
+    return {
+      id: message.id,
+      type: 'session.unsubscribed',
+      timestamp: new Date().toISOString(),
+      payload: {
+        sessionId: payload.sessionId,
+      },
+    } as unknown as WSResponse;
+  });
 
   return {
     config,
     pairingConfig: pairing,
     connectionManager,
     messageRouter,
+    sessionHandler,
+    streamManager,
+    subscriptionManager,
     shutdown: async () => {
+      streamManager.stop();
+      subscriptionManager.cleanup();
       connectionManager.closeAll();
     },
   };
@@ -432,6 +194,9 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     { ...pairingConfig, ...options.pairingConfig },
   );
 
+  // Start the stream manager
+  gateway.streamManager.start();
+
   // Store gateway in app
   fastify.decorate('websocketGateway', gateway);
 
@@ -461,7 +226,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     }
 
     // Register connection
-    const ctx = gateway.connectionManager.registerConnection(connectionId, socket);
+    gateway.connectionManager.registerConnection(connectionId, socket);
     fastify.log.info(`WebSocket connection established: ${connectionId}`);
 
     // Create handler context
@@ -515,6 +280,14 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
         return;
       }
 
+      // Handle streaming messages specially
+      if (message.type === 'session.message' && (message.payload as { stream?: boolean })?.stream) {
+        // Subscribe connection to the run's stream events
+        const payload = message.payload as { sessionId: string };
+        // The run ID will be created by the handler, we'll subscribe after
+        // For now, route to handler which will handle streaming setup
+      }
+
       // Route message to handler
       const response = await gateway.messageRouter.route(connectionId, message, handlerContext);
 
@@ -526,13 +299,25 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
 
     // Handle close
     socket.on('close', (code: number, reason: Buffer) => {
+      // Clean up stream subscriptions
+      gateway.streamManager.unsubscribeAllFromConnection(connectionId);
+      // Clean up session subscriptions
+      gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
+      // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
+      // Clear pending requests
+      gateway.messageRouter.clearPendingRequests(connectionId);
       fastify.log.info(`WebSocket connection closed: ${connectionId} (code: ${code})`);
     });
 
     // Handle error
     socket.on('error', (error: Error) => {
       fastify.log.error(`WebSocket error on ${connectionId}: ${error.message}`);
+      // Clean up stream subscriptions
+      gateway.streamManager.unsubscribeAllFromConnection(connectionId);
+      // Clean up session subscriptions
+      gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
+      // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
     });
 
@@ -546,7 +331,10 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
 
   // Register WebSocket route
   fastify.get('/ws', { websocket: true }, async (connection, req) => {
-    await handleConnection(connection, req);
+    // In @fastify/websocket, connection is { socket: WebSocket } in newer versions
+    // The socket is directly accessible as connection for the WebSocket handler
+    const socket = (connection as unknown as { socket: WebSocket }).socket || connection as WebSocket;
+    await handleConnection({ socket, req }, req);
   });
 
   // Heartbeat check interval
@@ -556,6 +344,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     );
     for (const id of staleIds) {
       fastify.log.warn(`Closing stale connection: ${id}`);
+      gateway.streamManager.unsubscribeAllFromConnection(id);
+      gateway.subscriptionManager.removeConnectionSubscriptions(id);
       gateway.connectionManager.removeConnection(id);
     }
   }, gateway.config.heartbeatInterval);
@@ -580,5 +370,9 @@ declare module 'fastify' {
   }
 }
 
+// Re-export types and classes for external use
 export { ConnectionManager, MessageRouter, createGateway };
-export type { MessageHandler, HandlerContext };
+export type { MessageHandler, HandlerContext } from './message-router';
+export { SessionHandler, registerSessionHandlers } from './handlers/session';
+export { StreamManager } from './streaming';
+export { SubscriptionManager } from './subscriptions';
