@@ -27,6 +27,7 @@ import {
   createAppConfigService,
   type AppConfigService,
 } from './config/service';
+import { websocketGatewayPlugin, type WebSocketGateway } from './websocket';
 
 /**
  * Application services container
@@ -135,6 +136,34 @@ export async function buildApp() {
   });
   await app.register(sensible);
   await app.register(websocket);
+
+  // Register WebSocket gateway
+  await app.register(websocketGatewayPlugin, {
+    enabled: env.WS_ENABLED,
+    wsConfig: {
+      enabled: env.WS_ENABLED,
+      port: env.WS_PORT,
+      path: env.WS_PATH,
+      maxConnections: env.WS_MAX_CONNECTIONS,
+      heartbeatInterval: env.WS_HEARTBEAT_INTERVAL,
+      auth: {
+        required: env.WS_AUTH_REQUIRED,
+        tokenExpiry: env.WS_TOKEN_EXPIRY,
+        secret: env.WS_TOKEN_SECRET,
+      },
+      rateLimit: {
+        max: env.WS_RATE_LIMIT_MAX,
+        window: env.WS_RATE_LIMIT_WINDOW,
+      },
+    },
+    pairingConfig: {
+      codeLength: env.WS_PAIRING_CODE_LENGTH,
+      codeExpiryMs: env.WS_PAIRING_CODE_EXPIRY_MS,
+      maxPendingRequests: env.WS_PAIRING_MAX_PENDING,
+      defaultTokenExpiryMs: env.WS_PAIRING_TOKEN_EXPIRY_MS,
+      requireAdminApproval: env.WS_PAIRING_REQUIRE_ADMIN,
+    },
+  });
 
   await app.register(healthRoutes);
 
