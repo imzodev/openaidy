@@ -1170,6 +1170,263 @@ export function isModelAddedEvent(msg: unknown): msg is ModelAddedEvent {
 }
 
 // ============================================================================
+// Node Event Types
+// ============================================================================
+
+/**
+ * Event emitted when a node is registered
+ */
+export type NodeRegisteredEvent = WSMessage<
+  'node.registered',
+  {
+    nodeId: string;
+    name: string;
+    type: string;
+    capabilities: string[];
+    registeredAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a node comes online
+ */
+export type NodeOnlineEvent = WSMessage<
+  'node.online',
+  {
+    nodeId: string;
+    capabilities: string[];
+    metadata?: Record<string, unknown>;
+    onlineAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a node goes offline
+ */
+export type NodeOfflineEvent = WSMessage<
+  'node.offline',
+  {
+    nodeId: string;
+    offlineAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a node is invoked
+ */
+export type NodeInvokedEvent = WSMessage<
+  'node.invoked',
+  {
+    nodeId: string;
+    capability: string;
+    params: Record<string, unknown>;
+    result?: unknown;
+    error?: WSError;
+    invokedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a node is updated
+ */
+export type NodeUpdatedEvent = WSMessage<
+  'node.updated',
+  {
+    nodeId: string;
+    updates: Record<string, unknown>;
+    updatedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a node is unregistered
+ */
+export type NodeUnregisteredEvent = WSMessage<
+  'node.unregistered',
+  {
+    nodeId: string;
+    unregisteredAt: string;
+  }
+>;
+
+/**
+ * Union type for all node events
+ */
+export type NodeEvent =
+  | NodeRegisteredEvent
+  | NodeOnlineEvent
+  | NodeOfflineEvent
+  | NodeInvokedEvent
+  | NodeUpdatedEvent
+  | NodeUnregisteredEvent;
+
+// ============================================================================
+// Node Event Type Guards
+// ============================================================================
+
+const NODE_EVENT_TYPES: Set<string> = new Set([
+  'node.registered',
+  'node.online',
+  'node.offline',
+  'node.invoked',
+  'node.updated',
+  'node.unregistered',
+]);
+
+/**
+ * Check if a message type is a node event type
+ */
+export function isNodeEventType(type: string): type is NodeEvent['type'] {
+  return NODE_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a NodeEvent
+ */
+export function isNodeEvent(msg: unknown): msg is NodeEvent {
+  return isWSMessage(msg) && isNodeEventType(msg.type);
+}
+
+/**
+ * Check if a message is a NodeRegisteredEvent
+ */
+export function isNodeRegisteredEvent(msg: unknown): msg is NodeRegisteredEvent {
+  return isWSMessage(msg) && msg.type === 'node.registered';
+}
+
+/**
+ * Check if a message is a NodeOnlineEvent
+ */
+export function isNodeOnlineEvent(msg: unknown): msg is NodeOnlineEvent {
+  return isWSMessage(msg) && msg.type === 'node.online';
+}
+
+/**
+ * Check if a message is a NodeOfflineEvent
+ */
+export function isNodeOfflineEvent(msg: unknown): msg is NodeOfflineEvent {
+  return isWSMessage(msg) && msg.type === 'node.offline';
+}
+
+/**
+ * Check if a message is a NodeInvokedEvent
+ */
+export function isNodeInvokedEvent(msg: unknown): msg is NodeInvokedEvent {
+  return isWSMessage(msg) && msg.type === 'node.invoked';
+}
+
+/**
+ * Check if a message is a NodeUpdatedEvent
+ */
+export function isNodeUpdatedEvent(msg: unknown): msg is NodeUpdatedEvent {
+  return isWSMessage(msg) && msg.type === 'node.updated';
+}
+
+/**
+ * Check if a message is a NodeUnregisteredEvent
+ */
+export function isNodeUnregisteredEvent(msg: unknown): msg is NodeUnregisteredEvent {
+  return isWSMessage(msg) && msg.type === 'node.unregistered';
+}
+
+// ============================================================================
+// Pairing Event Types
+// ============================================================================
+
+/**
+ * Event emitted when a pairing request is made
+ */
+export type PairingRequestedEvent = WSMessage<
+  'pairing.requested',
+  {
+    requestId: string;
+    pairingCode: string;
+    deviceName: string;
+    deviceType: string;
+    capabilities: string[];
+    requestedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a pairing request is approved
+ */
+export type PairingApprovedEvent = WSMessage<
+  'pairing.approved',
+  {
+    requestId: string;
+    nodeId: string;
+    token: string;
+    scopes: string[];
+    approvedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a pairing request is denied
+ */
+export type PairingDeniedEvent = WSMessage<
+  'pairing.denied',
+  {
+    requestId: string;
+    deniedAt: string;
+  }
+>;
+
+/**
+ * Union type for all pairing events
+ */
+export type PairingEvent =
+  | PairingRequestedEvent
+  | PairingApprovedEvent
+  | PairingDeniedEvent;
+
+// ============================================================================
+// Pairing Event Type Guards
+// ============================================================================
+
+const PAIRING_EVENT_TYPES: Set<string> = new Set([
+  'pairing.requested',
+  'pairing.approved',
+  'pairing.denied',
+]);
+
+/**
+ * Check if a message type is a pairing event type
+ */
+export function isPairingEventType(type: string): type is PairingEvent['type'] {
+  return PAIRING_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a PairingEvent
+ */
+export function isPairingEvent(msg: unknown): msg is PairingEvent {
+  return isWSMessage(msg) && isPairingEventType(msg.type);
+}
+
+/**
+ * Check if a message is a PairingRequestedEvent
+ */
+export function isPairingRequestedEvent(msg: unknown): msg is PairingRequestedEvent {
+  return isWSMessage(msg) && msg.type === 'pairing.requested';
+}
+
+/**
+ * Check if a message is a PairingApprovedEvent
+ */
+export function isPairingApprovedEvent(msg: unknown): msg is PairingApprovedEvent {
+  return isWSMessage(msg) && msg.type === 'pairing.approved';
+}
+
+/**
+ * Check if a message is a PairingDeniedEvent
+ */
+export function isPairingDeniedEvent(msg: unknown): msg is PairingDeniedEvent {
+  return isWSMessage(msg) && msg.type === 'pairing.denied';
+}
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 

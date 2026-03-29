@@ -63,6 +63,32 @@ import {
   type ProviderUpdatedEvent,
   type ProviderUnregisteredEvent,
   type ModelAddedEvent,
+  // Node event types and guards
+  isNodeEventType,
+  isNodeEvent,
+  isNodeRegisteredEvent,
+  isNodeOnlineEvent,
+  isNodeOfflineEvent,
+  isNodeInvokedEvent,
+  isNodeUpdatedEvent,
+  isNodeUnregisteredEvent,
+  type NodeEvent,
+  type NodeRegisteredEvent,
+  type NodeOnlineEvent,
+  type NodeOfflineEvent,
+  type NodeInvokedEvent,
+  type NodeUpdatedEvent,
+  type NodeUnregisteredEvent,
+  // Pairing event types and guards
+  isPairingEventType,
+  isPairingEvent,
+  isPairingRequestedEvent,
+  isPairingApprovedEvent,
+  isPairingDeniedEvent,
+  type PairingEvent,
+  type PairingRequestedEvent,
+  type PairingApprovedEvent,
+  type PairingDeniedEvent,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -1318,6 +1344,558 @@ describe('websocket types', () => {
       expect(isModelAddedEvent(parsed)).toBe(true);
       expect(parsed.payload.providerId).toBe('anthropic');
       expect(parsed.payload.modelId).toBe('claude-3');
+    });
+  });
+
+  // ============================================================================
+  // Node Event Type Guards Tests
+  // ============================================================================
+
+  describe('Node Event Type Guards', () => {
+    describe('isNodeEventType', () => {
+      it('should return true for node event types', () => {
+        expect(isNodeEventType('node.registered')).toBe(true);
+        expect(isNodeEventType('node.online')).toBe(true);
+        expect(isNodeEventType('node.offline')).toBe(true);
+        expect(isNodeEventType('node.invoked')).toBe(true);
+        expect(isNodeEventType('node.updated')).toBe(true);
+        expect(isNodeEventType('node.unregistered')).toBe(true);
+      });
+
+      it('should return false for non-node event types', () => {
+        expect(isNodeEventType('node.list')).toBe(false);
+        expect(isNodeEventType('node.describe')).toBe(false);
+        expect(isNodeEventType('agent.created')).toBe(false);
+        expect(isNodeEventType('error')).toBe(false);
+      });
+    });
+
+    describe('isNodeEvent', () => {
+      it('should return true for node.registered event', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: ['camera', 'microphone'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.online event', () => {
+        const msg = createWSMessage('node.online', {
+          nodeId: 'n1',
+          capabilities: ['camera'],
+          onlineAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.offline event', () => {
+        const msg = createWSMessage('node.offline', {
+          nodeId: 'n1',
+          offlineAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.invoked event', () => {
+        const msg = createWSMessage('node.invoked', {
+          nodeId: 'n1',
+          capability: 'camera',
+          params: { action: 'capture' },
+          invokedAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.updated event', () => {
+        const msg = createWSMessage('node.updated', {
+          nodeId: 'n1',
+          updates: { name: 'Updated Node' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.unregistered event', () => {
+        const msg = createWSMessage('node.unregistered', {
+          nodeId: 'n1',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(true);
+      });
+
+      it('should return false for non-node events', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isNodeEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeRegisteredEvent', () => {
+      it('should return true for node.registered event', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: ['camera'],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isNodeRegisteredEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.unregistered', {
+          nodeId: 'n1',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isNodeRegisteredEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeOnlineEvent', () => {
+      it('should return true for node.online event', () => {
+        const msg = createWSMessage('node.online', {
+          nodeId: 'n1',
+          capabilities: ['camera'],
+          onlineAt: new Date().toISOString(),
+        });
+        expect(isNodeOnlineEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.online event with metadata', () => {
+        const msg = createWSMessage('node.online', {
+          nodeId: 'n1',
+          capabilities: ['camera'],
+          metadata: { version: '1.0' },
+          onlineAt: new Date().toISOString(),
+        });
+        expect(isNodeOnlineEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.offline', {
+          nodeId: 'n1',
+          offlineAt: new Date().toISOString(),
+        });
+        expect(isNodeOnlineEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeOfflineEvent', () => {
+      it('should return true for node.offline event', () => {
+        const msg = createWSMessage('node.offline', {
+          nodeId: 'n1',
+          offlineAt: new Date().toISOString(),
+        });
+        expect(isNodeOfflineEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.online', {
+          nodeId: 'n1',
+          capabilities: ['camera'],
+          onlineAt: new Date().toISOString(),
+        });
+        expect(isNodeOfflineEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeInvokedEvent', () => {
+      it('should return true for node.invoked event', () => {
+        const msg = createWSMessage('node.invoked', {
+          nodeId: 'n1',
+          capability: 'camera',
+          params: { action: 'capture' },
+          invokedAt: new Date().toISOString(),
+        });
+        expect(isNodeInvokedEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.invoked event with result', () => {
+        const msg = createWSMessage('node.invoked', {
+          nodeId: 'n1',
+          capability: 'camera',
+          params: {},
+          result: { success: true },
+          invokedAt: new Date().toISOString(),
+        });
+        expect(isNodeInvokedEvent(msg)).toBe(true);
+      });
+
+      it('should return true for node.invoked event with error', () => {
+        const msg = createWSMessage('node.invoked', {
+          nodeId: 'n1',
+          capability: 'camera',
+          params: {},
+          error: { code: 'CAPTURE_FAILED', message: 'Capture failed' },
+          invokedAt: new Date().toISOString(),
+        });
+        expect(isNodeInvokedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: [],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isNodeInvokedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeUpdatedEvent', () => {
+      it('should return true for node.updated event', () => {
+        const msg = createWSMessage('node.updated', {
+          nodeId: 'n1',
+          updates: { name: 'Updated Node' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isNodeUpdatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: [],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isNodeUpdatedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isNodeUnregisteredEvent', () => {
+      it('should return true for node.unregistered event', () => {
+        const msg = createWSMessage('node.unregistered', {
+          nodeId: 'n1',
+          unregisteredAt: new Date().toISOString(),
+        });
+        expect(isNodeUnregisteredEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: [],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isNodeUnregisteredEvent(msg)).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Node Event Serialization Tests
+  // ============================================================================
+
+  describe('Node Event Serialization', () => {
+    it('should serialize and deserialize node.registered event', () => {
+      const original = createWSMessage('node.registered', {
+        nodeId: 'n1',
+        name: 'Test Node',
+        type: 'mobile',
+        capabilities: ['camera', 'microphone'],
+        registeredAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeRegisteredEvent(parsed)).toBe(true);
+      expect(parsed.payload.nodeId).toBe('n1');
+      expect(parsed.payload.name).toBe('Test Node');
+      expect(parsed.payload.type).toBe('mobile');
+      expect(parsed.payload.capabilities).toContain('camera');
+    });
+
+    it('should serialize and deserialize node.online event', () => {
+      const original = createWSMessage('node.online', {
+        nodeId: 'n1',
+        capabilities: ['camera'],
+        metadata: { version: '1.0' },
+        onlineAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeOnlineEvent(parsed)).toBe(true);
+      expect(parsed.payload.nodeId).toBe('n1');
+      expect(parsed.payload.metadata?.version).toBe('1.0');
+    });
+
+    it('should serialize and deserialize node.offline event', () => {
+      const original = createWSMessage('node.offline', {
+        nodeId: 'n1',
+        offlineAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeOfflineEvent(parsed)).toBe(true);
+      expect(parsed.payload.nodeId).toBe('n1');
+    });
+
+    it('should serialize and deserialize node.invoked event with result', () => {
+      const original = createWSMessage('node.invoked', {
+        nodeId: 'n1',
+        capability: 'camera',
+        params: { action: 'capture' },
+        result: { success: true, imageId: 'img-123' },
+        invokedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeInvokedEvent(parsed)).toBe(true);
+      expect(parsed.payload.capability).toBe('camera');
+      expect((parsed.payload.result as { success: boolean }).success).toBe(true);
+    });
+
+    it('should serialize and deserialize node.invoked event with error', () => {
+      const original = createWSMessage('node.invoked', {
+        nodeId: 'n1',
+        capability: 'camera',
+        params: {},
+        error: { code: 'CAPTURE_FAILED', message: 'Camera not available' },
+        invokedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeInvokedEvent(parsed)).toBe(true);
+      expect(parsed.payload.error?.code).toBe('CAPTURE_FAILED');
+    });
+
+    it('should serialize and deserialize node.updated event', () => {
+      const original = createWSMessage('node.updated', {
+        nodeId: 'n1',
+        updates: { name: 'Updated Node', capabilities: ['camera', 'gps'] },
+        updatedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeUpdatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.updates.name).toBe('Updated Node');
+    });
+
+    it('should serialize and deserialize node.unregistered event', () => {
+      const original = createWSMessage('node.unregistered', {
+        nodeId: 'n1',
+        unregisteredAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isNodeUnregisteredEvent(parsed)).toBe(true);
+      expect(parsed.payload.nodeId).toBe('n1');
+    });
+  });
+
+  // ============================================================================
+  // Pairing Event Type Guards Tests
+  // ============================================================================
+
+  describe('Pairing Event Type Guards', () => {
+    describe('isPairingEventType', () => {
+      it('should return true for pairing event types', () => {
+        expect(isPairingEventType('pairing.requested')).toBe(true);
+        expect(isPairingEventType('pairing.approved')).toBe(true);
+        expect(isPairingEventType('pairing.denied')).toBe(true);
+      });
+
+      it('should return false for non-pairing event types', () => {
+        expect(isPairingEventType('pairing.request')).toBe(false);
+        expect(isPairingEventType('pairing.approve')).toBe(false);
+        expect(isPairingEventType('node.registered')).toBe(false);
+        expect(isPairingEventType('error')).toBe(false);
+      });
+    });
+
+    describe('isPairingEvent', () => {
+      it('should return true for pairing.requested event', () => {
+        const msg = createWSMessage('pairing.requested', {
+          requestId: 'req-1',
+          pairingCode: '123456',
+          deviceName: 'Test Device',
+          deviceType: 'mobile',
+          capabilities: ['camera'],
+          requestedAt: new Date().toISOString(),
+        });
+        expect(isPairingEvent(msg)).toBe(true);
+      });
+
+      it('should return true for pairing.approved event', () => {
+        const msg = createWSMessage('pairing.approved', {
+          requestId: 'req-1',
+          nodeId: 'n1',
+          token: 'token-abc123',
+          scopes: ['camera', 'microphone'],
+          approvedAt: new Date().toISOString(),
+        });
+        expect(isPairingEvent(msg)).toBe(true);
+      });
+
+      it('should return true for pairing.denied event', () => {
+        const msg = createWSMessage('pairing.denied', {
+          requestId: 'req-1',
+          deniedAt: new Date().toISOString(),
+        });
+        expect(isPairingEvent(msg)).toBe(true);
+      });
+
+      it('should return false for non-pairing events', () => {
+        const msg = createWSMessage('node.registered', {
+          nodeId: 'n1',
+          name: 'Test Node',
+          type: 'mobile',
+          capabilities: [],
+          registeredAt: new Date().toISOString(),
+        });
+        expect(isPairingEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isPairingRequestedEvent', () => {
+      it('should return true for pairing.requested event', () => {
+        const msg = createWSMessage('pairing.requested', {
+          requestId: 'req-1',
+          pairingCode: '123456',
+          deviceName: 'Test Device',
+          deviceType: 'mobile',
+          capabilities: ['camera'],
+          requestedAt: new Date().toISOString(),
+        });
+        expect(isPairingRequestedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('pairing.approved', {
+          requestId: 'req-1',
+          nodeId: 'n1',
+          token: 'token-abc',
+          scopes: [],
+          approvedAt: new Date().toISOString(),
+        });
+        expect(isPairingRequestedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isPairingApprovedEvent', () => {
+      it('should return true for pairing.approved event', () => {
+        const msg = createWSMessage('pairing.approved', {
+          requestId: 'req-1',
+          nodeId: 'n1',
+          token: 'token-abc123',
+          scopes: ['camera'],
+          approvedAt: new Date().toISOString(),
+        });
+        expect(isPairingApprovedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('pairing.denied', {
+          requestId: 'req-1',
+          deniedAt: new Date().toISOString(),
+        });
+        expect(isPairingApprovedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isPairingDeniedEvent', () => {
+      it('should return true for pairing.denied event', () => {
+        const msg = createWSMessage('pairing.denied', {
+          requestId: 'req-1',
+          deniedAt: new Date().toISOString(),
+        });
+        expect(isPairingDeniedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('pairing.approved', {
+          requestId: 'req-1',
+          nodeId: 'n1',
+          token: 'token-abc',
+          scopes: [],
+          approvedAt: new Date().toISOString(),
+        });
+        expect(isPairingDeniedEvent(msg)).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Pairing Event Serialization Tests
+  // ============================================================================
+
+  describe('Pairing Event Serialization', () => {
+    it('should serialize and deserialize pairing.requested event', () => {
+      const original = createWSMessage('pairing.requested', {
+        requestId: 'req-1',
+        pairingCode: '123456',
+        deviceName: 'Test Device',
+        deviceType: 'mobile',
+        capabilities: ['camera', 'microphone'],
+        requestedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPairingRequestedEvent(parsed)).toBe(true);
+      expect(parsed.payload.requestId).toBe('req-1');
+      expect(parsed.payload.pairingCode).toBe('123456');
+      expect(parsed.payload.deviceName).toBe('Test Device');
+      expect(parsed.payload.capabilities).toContain('camera');
+    });
+
+    it('should serialize and deserialize pairing.approved event', () => {
+      const original = createWSMessage('pairing.approved', {
+        requestId: 'req-1',
+        nodeId: 'n1',
+        token: 'token-abc123',
+        scopes: ['camera', 'microphone'],
+        approvedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPairingApprovedEvent(parsed)).toBe(true);
+      expect(parsed.payload.requestId).toBe('req-1');
+      expect(parsed.payload.nodeId).toBe('n1');
+      expect(parsed.payload.token).toBe('token-abc123');
+      expect(parsed.payload.scopes).toContain('camera');
+    });
+
+    it('should serialize and deserialize pairing.denied event', () => {
+      const original = createWSMessage('pairing.denied', {
+        requestId: 'req-1',
+        deniedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPairingDeniedEvent(parsed)).toBe(true);
+      expect(parsed.payload.requestId).toBe('req-1');
     });
   });
 });
