@@ -31,8 +31,13 @@ import { MessageRouter, type HandlerContext } from './message-router';
 import { SessionHandler, registerSessionHandlers } from './handlers/session';
 import { AgentHandler, registerAgentHandlers } from './handlers/agent';
 import { ProviderHandler, registerProviderHandlers } from './handlers/provider';
+import { NodeHandler, registerNodeHandlers } from './handlers/node';
+import { PairingHandler, registerPairingHandlers } from './handlers/pairing';
+import { PairingService } from './pairing-service';
+import { NodeRegistry } from './node-registry';
 import { StreamManager } from './streaming';
 import { SubscriptionManager } from './subscriptions';
+import { AuthMiddleware } from './middleware/auth';
 
 // ============================================================================
 // Types
@@ -61,8 +66,12 @@ export type WebSocketGateway = {
   sessionHandler: SessionHandler;
   agentHandler: AgentHandler;
   providerHandler: ProviderHandler;
+  nodeHandler: NodeHandler;
+  pairingHandler: PairingHandler;
   streamManager: StreamManager;
   subscriptionManager: SubscriptionManager;
+  nodeRegistry: NodeRegistry;
+  pairingService: PairingService;
   shutdown: () => Promise<void>;
 };
 
@@ -75,16 +84,46 @@ function createGateway(
     services: AppServices;
   },
   wsConfig?: Partial<WebSocketConfig>,
-  pairingConfig?: Partial<PairingConfig>,
+  pairingOpts?: Partial<PairingConfig>,
 ): WebSocketGateway {
   const config = { ...defaultWebSocketConfig, ...wsConfig };
-  const pairing = { ...defaultPairingConfig, ...pairingConfig };
+  const pairingConfig = { ...defaultPairingConfig, ...pairingOpts };
 
   const connectionManager = new ConnectionManager(config);
   const messageRouter = new MessageRouter(fastify.log);
   const sessionHandler = new SessionHandler(fastify.services.sessions, fastify.log);
   const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
   const providerHandler = new ProviderHandler(fastify.services.providers, fastify.log);
+  
+  // Create auth middleware for pairing service
+  const authMiddleware = new AuthMiddleware(config);
+  
+  // Create node registry and pairing service
+  const nodeRegistry = new NodeRegistry({}, fastify.log);
+  const pairingService = new PairingService(
+    authMiddleware,
+    fastify.log,
+    { 
+      codeLength: pairingConfig.codeLength,
+      requestExpiry: pairingConfig.codeExpiryMs,
+      tokenExpiry: pairingConfig.defaultTokenExpiryMs,
+    },
+  );
+
+  // Create node and pairing handlers
+  const nodeHandler = new NodeHandler(
+    nodeRegistry,
+    connectionManager,
+    fastify.log,
+  );
+  const pairingHandler = new PairingHandler(
+    pairingService,
+    connectionManager,
+    nodeRegistry,
+    fastify.log,
+  );
+
+  // Create stream manager and subscription manager
   const streamManager = new StreamManager(
     fastify.services.runEvents,
     connectionManager,
@@ -100,6 +139,12 @@ function createGateway(
 
   // Register provider handlers with the message router
   registerProviderHandlers(messageRouter, providerHandler);
+
+  // Register node handlers with the message router
+  registerNodeHandlers(messageRouter, nodeHandler);
+
+  // Register pairing handlers with the message router
+  registerPairingHandlers(messageRouter, pairingHandler);
 
   // Register subscribe/unsubscribe handlers
   messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
@@ -150,17 +195,23 @@ function createGateway(
 
   return {
     config,
-    pairingConfig: pairing,
+    pairingConfig: pairingConfig,
     connectionManager,
     messageRouter,
     sessionHandler,
     agentHandler,
     providerHandler,
+    nodeHandler,
+    pairingHandler,
     streamManager,
     subscriptionManager,
+    nodeRegistry,
+    pairingService,
     shutdown: async () => {
       streamManager.stop();
       subscriptionManager.cleanup();
+      nodeRegistry.clear();
+      pairingService.destroy();
       connectionManager.closeAll();
     },
   };
@@ -213,6 +264,14 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
 
   // Store gateway in app
   fastify.decorate('websocketGateway', gateway);
+
+  // Setup periodic cleanup tasks
+  const cleanupInterval = setInterval(() => {
+    // Cleanup expired pairing requests
+    gateway.pairingService.cleanupExpiredRequests();
+    // Cleanup stale nodes (nodes that haven't been seen in 2x heartbeat interval)
+    gateway.nodeRegistry.cleanupStaleNodes(gateway.config.heartbeatInterval * 2);
+  }, 60000); // Every minute
 
   // Generate unique connection IDs
   const generateConnectionId = (): string => {
@@ -367,6 +426,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
   // Cleanup on close
   fastify.addHook('onClose', async () => {
     clearInterval(heartbeatInterval);
+    clearInterval(cleanupInterval);
     await gateway.shutdown();
     fastify.log.info('WebSocket gateway shutdown complete');
   });
