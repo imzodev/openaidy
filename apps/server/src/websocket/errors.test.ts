@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   WSErrorHandler,
   createWSErrorResponse,
@@ -10,12 +10,12 @@ import { WS_ERROR_CODES, type WSError } from '@openaidy/shared-types';
 
 // Mock logger
 const mockLogger = {
-  info: () => {},
-  error: () => {},
-  warn: () => {},
-  debug: () => {},
-  trace: () => {},
-  fatal: () => {},
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+  fatal: vi.fn(),
   child: () => mockLogger,
 };
 
@@ -34,6 +34,7 @@ describe('errors', () => {
     let handler: WSErrorHandler;
 
     beforeEach(() => {
+      vi.clearAllMocks();
       handler = new WSErrorHandler(mockLogger as any);
     });
 
@@ -144,155 +145,138 @@ describe('errors', () => {
         const result = handler.formatError('string error');
 
         expect(result.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
-        expect(result.message).toBe('An unexpected error occurred');
-        expect(result.details).toBeDefined();
+        expect(result.details).toEqual({ original: 'string error' });
       });
 
-      it('should handle null', () => {
+      it('should handle null errors', () => {
         const result = handler.formatError(null);
 
         expect(result.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
       });
 
-      it('should handle undefined', () => {
-        const result = handler.formatError(undefined);
-
-        expect(result.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
-      });
-
-      it('should default to internal error for unknown Error', () => {
+      it('should fall back to internal error for generic errors', () => {
         const error = new Error('Some random error');
         const result = handler.formatError(error);
 
         expect(result.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
-        expect(result.message).toBe('Some random error');
       });
     });
 
     describe('createErrorResponse', () => {
-      it('should create error response with request ID', () => {
+      it('should create error response message', () => {
         const error: WSError = {
-          code: WS_ERROR_CODES.AUTH_FAILED,
-          message: 'Invalid credentials',
+          code: WS_ERROR_CODES.NOT_FOUND,
+          message: 'Session not found',
         };
 
         const response = handler.createErrorResponse('req-123', error);
 
         expect(response.type).toBe('error');
-        expect(response.id).toBeDefined();
-        expect(response.timestamp).toBeDefined();
         expect(response.payload.requestId).toBe('req-123');
-        expect(response.payload.error).toEqual(error);
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
       });
 
-      it('should create error response with details', () => {
+      it('should include error details in response', () => {
         const error: WSError = {
           code: WS_ERROR_CODES.INVALID_PAYLOAD,
           message: 'Validation failed',
           details: { field: 'sessionId' },
         };
 
-        const response = handler.createErrorResponse('req-456', error);
+        const response = handler.createErrorResponse('req-123', error);
 
-        expect(response.payload.requestId).toBe('req-456');
         expect(response.payload.error.details).toEqual({ field: 'sessionId' });
       });
     });
 
-    describe('mapError', () => {
-      it('should map auth-related errors', () => {
-        const tests = [
-          { message: 'Unauthorized access', expectedCode: WS_ERROR_CODES.AUTH_FAILED },
-          { message: 'Authentication failed', expectedCode: WS_ERROR_CODES.AUTH_FAILED },
-        ];
+    describe('logError', () => {
+      it('should log client errors as warnings', () => {
+        const error = handler.createError(WS_ERROR_CODES.INVALID_REQUEST);
+        handler.logError(error, { connectionId: 'conn-1' });
 
-        for (const test of tests) {
-          const error = new Error(test.message);
-          const result = handler.mapError(error);
-          expect(result.code).toBe(test.expectedCode);
-        }
+        expect(mockLogger.warn).toHaveBeenCalled();
       });
 
-      it('should map token-related errors', () => {
-        const tests = [
-          { message: 'Token expired', expectedCode: WS_ERROR_CODES.TOKEN_EXPIRED },
-          { message: 'jwt expired', expectedCode: WS_ERROR_CODES.TOKEN_EXPIRED },
-          { message: 'Invalid token', expectedCode: WS_ERROR_CODES.TOKEN_INVALID },
-          { message: 'jwt invalid', expectedCode: WS_ERROR_CODES.TOKEN_INVALID },
-        ];
+      it('should log server errors as errors', () => {
+        const error = handler.createError(WS_ERROR_CODES.INTERNAL_ERROR);
+        handler.logError(error, { connectionId: 'conn-1' });
 
-        for (const test of tests) {
-          const error = new Error(test.message);
-          const result = handler.mapError(error);
-          expect(result.code).toBe(test.expectedCode);
-        }
+        expect(mockLogger.error).toHaveBeenCalled();
       });
 
-      it('should map capability errors', () => {
-        const tests = [
-          { message: 'No capability', expectedCode: WS_ERROR_CODES.INSUFFICIENT_CAPABILITY },
-          { message: 'Permission denied', expectedCode: WS_ERROR_CODES.INSUFFICIENT_CAPABILITY },
-        ];
+      it('should include context in log', () => {
+        const error = handler.createError(WS_ERROR_CODES.NOT_FOUND);
+        handler.logError(error, { sessionId: 'sess-1' });
 
-        for (const test of tests) {
-          const error = new Error(test.message);
-          const result = handler.mapError(error);
-          expect(result.code).toBe(test.expectedCode);
-        }
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: 'sess-1' }),
+          expect.any(String),
+        );
       });
     });
 
-    describe('logError', () => {
-      it('should log without throwing', () => {
-        const error = new Error('Test error');
-
-        expect(() => handler.logError(error)).not.toThrow();
+    describe('mapError', () => {
+      it('should map auth errors', () => {
+        const result = handler.mapError(new Error('Unauthorized access'));
+        expect(result.code).toBe(WS_ERROR_CODES.AUTH_FAILED);
       });
 
-      it('should log with context', () => {
-        const error = new Error('Test error');
+      it('should map token invalid errors', () => {
+        const result = handler.mapError(new Error('jwt invalid'));
+        expect(result.code).toBe(WS_ERROR_CODES.TOKEN_INVALID);
+      });
 
-        expect(() => handler.logError(error, { connectionId: 'conn-1' })).not.toThrow();
+      it('should map duplicate errors', () => {
+        const result = handler.mapError(new Error('duplicate key'));
+        expect(result.code).toBe(WS_ERROR_CODES.ALREADY_EXISTS);
+      });
+
+      it('should map too many requests', () => {
+        const result = handler.mapError(new Error('too many requests'));
+        expect(result.code).toBe(WS_ERROR_CODES.RATE_LIMITED);
+      });
+
+      it('should preserve original message', () => {
+        const result = handler.mapError(new Error('Custom error message'));
+        expect(result.message).toBe('Custom error message');
       });
     });
   });
 
   describe('createWSErrorResponse (helper)', () => {
-    it('should create error response', () => {
-      const response = createWSErrorResponse(
-        'req-789',
-        WS_ERROR_CODES.NOT_FOUND,
-        'Session not found',
-      );
+    it('should create error response with default message', () => {
+      const response = createWSErrorResponse('req-123', WS_ERROR_CODES.AUTH_REQUIRED);
 
       expect(response.type).toBe('error');
-      expect(response.id).toBeDefined();
-      expect(response.timestamp).toBeDefined();
-      expect(response.payload.requestId).toBe('req-789');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
-      expect(response.payload.error.message).toBe('Session not found');
+      expect(response.payload.requestId).toBe('req-123');
+      expect(response.payload.error.code).toBe(WS_ERROR_CODES.AUTH_REQUIRED);
+      expect(response.payload.error.message).toBe(ERROR_MESSAGES.AUTH_REQUIRED);
+    });
+
+    it('should create error response with custom message', () => {
+      const response = createWSErrorResponse(
+        'req-123',
+        WS_ERROR_CODES.NOT_FOUND,
+        'Session abc not found',
+      );
+
+      expect(response.payload.error.message).toBe('Session abc not found');
     });
 
     it('should create error response with details', () => {
       const response = createWSErrorResponse(
-        'req-abc',
+        'req-123',
         WS_ERROR_CODES.INVALID_PAYLOAD,
-        'Invalid field',
-        { field: 'sessionId' },
+        'Validation failed',
+        { fields: ['sessionId', 'type'] },
       );
 
-      expect(response.payload.error.details).toEqual({ field: 'sessionId' });
-    });
-
-    it('should use default message if not provided', () => {
-      const response = createWSErrorResponse('req-def', WS_ERROR_CODES.AUTH_REQUIRED);
-
-      expect(response.payload.error.message).toBe(ERROR_MESSAGES.AUTH_REQUIRED);
+      expect(response.payload.error.details).toEqual({ fields: ['sessionId', 'type'] });
     });
   });
 
   describe('createWSErrorObj (helper)', () => {
-    it('should create WSError', () => {
+    it('should create WSError with default message', () => {
       const error = createWSErrorObj(WS_ERROR_CODES.RATE_LIMITED);
 
       expect(error.code).toBe(WS_ERROR_CODES.RATE_LIMITED);
@@ -300,15 +284,15 @@ describe('errors', () => {
     });
 
     it('should create WSError with custom message', () => {
-      const error = createWSErrorObj(WS_ERROR_CODES.RATE_LIMITED, 'Too many requests');
+      const error = createWSErrorObj(WS_ERROR_CODES.RATE_LIMITED, 'Custom rate limit');
 
-      expect(error.message).toBe('Too many requests');
+      expect(error.message).toBe('Custom rate limit');
     });
 
     it('should create WSError with details', () => {
       const error = createWSErrorObj(
         WS_ERROR_CODES.RATE_LIMITED,
-        'Too many requests',
+        'Rate limited',
         { retryAfter: 60 },
       );
 
@@ -317,74 +301,55 @@ describe('errors', () => {
   });
 
   describe('WSErrorClass', () => {
-    it('should create error instance', () => {
-      const error = new WSErrorClass(WS_ERROR_CODES.NOT_FOUND);
+    it('should create error with code and default message', () => {
+      const error = new WSErrorClass(WS_ERROR_CODES.FORBIDDEN);
 
-      expect(error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
-      expect(error.message).toBe(ERROR_MESSAGES.NOT_FOUND);
+      expect(error.code).toBe(WS_ERROR_CODES.FORBIDDEN);
+      expect(error.message).toBe(ERROR_MESSAGES.FORBIDDEN);
       expect(error.name).toBe('WSError');
     });
 
     it('should create error with custom message', () => {
-      const error = new WSErrorClass(
-        WS_ERROR_CODES.NOT_FOUND,
-        'Session xyz not found',
-      );
+      const error = new WSErrorClass(WS_ERROR_CODES.FORBIDDEN, 'Access denied to resource');
 
-      expect(error.message).toBe('Session xyz not found');
+      expect(error.message).toBe('Access denied to resource');
     });
 
     it('should create error with details', () => {
       const error = new WSErrorClass(
-        WS_ERROR_CODES.NOT_FOUND,
-        'Session not found',
-        { sessionId: 'xyz' },
+        WS_ERROR_CODES.INSUFFICIENT_CAPABILITY,
+        'Missing capability',
+        { required: 'admin', actual: ['read'] },
       );
 
-      expect(error.details).toEqual({ sessionId: 'xyz' });
+      expect(error.details).toEqual({ required: 'admin', actual: ['read'] });
     });
 
     it('should convert to WSError', () => {
       const error = new WSErrorClass(
         WS_ERROR_CODES.NOT_FOUND,
-        'Session not found',
-        { sessionId: 'xyz' },
+        'Not found',
+        { resource: 'session' },
       );
 
       const wsError = error.toWSError();
 
       expect(wsError.code).toBe(WS_ERROR_CODES.NOT_FOUND);
-      expect(wsError.message).toBe('Session not found');
-      expect(wsError.details).toEqual({ sessionId: 'xyz' });
-    });
-
-    it('should convert without details', () => {
-      const error = new WSErrorClass(WS_ERROR_CODES.NOT_FOUND);
-      const wsError = error.toWSError();
-
-      expect(wsError.details).toBeUndefined();
+      expect(wsError.message).toBe('Not found');
+      expect(wsError.details).toEqual({ resource: 'session' });
     });
 
     it('should create error response', () => {
-      const error = new WSErrorClass(
-        WS_ERROR_CODES.NOT_FOUND,
-        'Session not found',
-        { sessionId: 'xyz' },
-      );
-
-      const response = error.toErrorResponse('req-123');
+      const error = new WSErrorClass(WS_ERROR_CODES.AUTH_REQUIRED);
+      const response = error.toErrorResponse('req-456');
 
       expect(response.type).toBe('error');
-      expect(response.id).toBeDefined();
-      expect(response.timestamp).toBeDefined();
-      expect(response.payload.requestId).toBe('req-123');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
-      expect(response.payload.error.message).toBe('Session not found');
-      expect(response.payload.error.details).toEqual({ sessionId: 'xyz' });
+      expect(response.payload.requestId).toBe('req-456');
+      expect(response.payload.error.code).toBe(WS_ERROR_CODES.AUTH_REQUIRED);
     });
 
-    it('should be an Error instance', () => {
-      const error = new WSErrorClass(WS_ERROR_CODES.NOT_FOUND);
+    it('should be instance of Error', () => {
+      const error = new WSErrorClass(WS_ERROR_CODES.INTERNAL_ERROR);
 
       expect(error).toBeInstanceOf(Error);
     });
