@@ -99,6 +99,21 @@ import {
   type ConfigUpdatedEvent,
   type ConfigReloadedEvent,
   type ConfigValidationErrorEvent,
+  // Presence event types and guards
+  isPresenceEventType,
+  isPresenceEvent,
+  isPresenceChangedEvent,
+  isPresenceOnlineEvent,
+  isPresenceOfflineEvent,
+  isPresenceSubscribedEvent,
+  isPresenceUnsubscribedEvent,
+  type PresenceEvent,
+  type PresenceChangedEvent,
+  type PresenceOnlineEvent,
+  type PresenceOfflineEvent,
+  type PresenceSubscribedEvent,
+  type PresenceUnsubscribedEvent,
+  type PresenceStatus,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -2075,6 +2090,235 @@ describe('Configuration Events', () => {
 
       expect(isConfigValidationErrorEvent(parsed)).toBe(true);
       expect(parsed.payload.errors).toHaveLength(2);
+    });
+  });
+});
+
+// ============================================================================
+// Presence Event Type Guards Tests
+// ============================================================================
+
+describe('Presence Event Types', () => {
+  describe('isPresenceEventType', () => {
+    it('should return true for presence event types', () => {
+      expect(isPresenceEventType('presence.changed')).toBe(true);
+      expect(isPresenceEventType('presence.online')).toBe(true);
+      expect(isPresenceEventType('presence.offline')).toBe(true);
+      expect(isPresenceEventType('presence.subscribed')).toBe(true);
+      expect(isPresenceEventType('presence.unsubscribed')).toBe(true);
+    });
+
+    it('should return false for non-presence event types', () => {
+      expect(isPresenceEventType('config.updated')).toBe(false);
+      expect(isPresenceEventType('session.created')).toBe(false);
+      expect(isPresenceEventType('node.online')).toBe(false);
+    });
+  });
+
+  describe('isPresenceEvent', () => {
+    it('should return true for PresenceChangedEvent', () => {
+      const msg = createWSMessage('presence.changed', {
+        clientId: 'client-123',
+        status: 'online' as PresenceStatus,
+      });
+
+      expect(isPresenceEvent(msg)).toBe(true);
+    });
+
+    it('should return true for PresenceOnlineEvent', () => {
+      const msg = createWSMessage('presence.online', {
+        clientId: 'client-123',
+        onlineAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceEvent(msg)).toBe(true);
+    });
+
+    it('should return false for non-presence events', () => {
+      const msg = createWSMessage('config.updated', {
+        updates: {},
+        updatedAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isPresenceChangedEvent', () => {
+    it('should return true for PresenceChangedEvent', () => {
+      const msg = createWSMessage('presence.changed', {
+        clientId: 'client-123',
+        status: 'online' as PresenceStatus,
+        metadata: { device: 'mobile' },
+      });
+
+      expect(isPresenceChangedEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('presence.online', {
+        clientId: 'client-123',
+        onlineAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceChangedEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isPresenceOnlineEvent', () => {
+    it('should return true for PresenceOnlineEvent', () => {
+      const msg = createWSMessage('presence.online', {
+        clientId: 'client-123',
+        connectionId: 'conn-456',
+        onlineAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceOnlineEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('presence.changed', {
+        clientId: 'client-123',
+        status: 'online' as PresenceStatus,
+      });
+
+      expect(isPresenceOnlineEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isPresenceOfflineEvent', () => {
+    it('should return true for PresenceOfflineEvent', () => {
+      const msg = createWSMessage('presence.offline', {
+        clientId: 'client-123',
+        connectionId: 'conn-456',
+        offlineAt: new Date().toISOString(),
+        reason: 'disconnect',
+      });
+
+      expect(isPresenceOfflineEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('presence.online', {
+        clientId: 'client-123',
+        onlineAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceOfflineEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isPresenceSubscribedEvent', () => {
+    it('should return true for PresenceSubscribedEvent', () => {
+      const msg = createWSMessage('presence.subscribed', {
+        connectionId: 'conn-456',
+        subscribedAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceSubscribedEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('presence.unsubscribed', {
+        connectionId: 'conn-456',
+        unsubscribedAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceSubscribedEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('isPresenceUnsubscribedEvent', () => {
+    it('should return true for PresenceUnsubscribedEvent', () => {
+      const msg = createWSMessage('presence.unsubscribed', {
+        connectionId: 'conn-456',
+        unsubscribedAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceUnsubscribedEvent(msg)).toBe(true);
+    });
+
+    it('should return false for other message types', () => {
+      const msg = createWSMessage('presence.subscribed', {
+        connectionId: 'conn-456',
+        subscribedAt: new Date().toISOString(),
+      });
+
+      expect(isPresenceUnsubscribedEvent(msg)).toBe(false);
+    });
+  });
+
+  describe('Presence Event Serialization', () => {
+    it('should serialize and deserialize PresenceChangedEvent', () => {
+      const original = createWSMessage('presence.changed', {
+        clientId: 'client-789',
+        status: 'away' as PresenceStatus,
+        metadata: { lastActive: '2024-01-15T10:00:00.000Z' },
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPresenceChangedEvent(parsed)).toBe(true);
+      expect(parsed.payload.clientId).toBe('client-789');
+      expect(parsed.payload.status).toBe('away');
+    });
+
+    it('should serialize and deserialize PresenceOnlineEvent', () => {
+      const original = createWSMessage('presence.online', {
+        clientId: 'client-789',
+        connectionId: 'conn-111',
+        metadata: { device: 'desktop' },
+        onlineAt: '2024-01-15T09:00:00.000Z',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPresenceOnlineEvent(parsed)).toBe(true);
+      expect(parsed.payload.clientId).toBe('client-789');
+      expect(parsed.payload.connectionId).toBe('conn-111');
+    });
+
+    it('should serialize and deserialize PresenceOfflineEvent', () => {
+      const original = createWSMessage('presence.offline', {
+        clientId: 'client-789',
+        connectionId: 'conn-111',
+        offlineAt: '2024-01-15T10:00:00.000Z',
+        reason: 'timeout',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPresenceOfflineEvent(parsed)).toBe(true);
+      expect(parsed.payload.reason).toBe('timeout');
+    });
+
+    it('should serialize and deserialize PresenceSubscribedEvent', () => {
+      const original = createWSMessage('presence.subscribed', {
+        connectionId: 'conn-222',
+        subscribedAt: '2024-01-15T08:30:00.000Z',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPresenceSubscribedEvent(parsed)).toBe(true);
+      expect(parsed.payload.connectionId).toBe('conn-222');
+    });
+
+    it('should serialize and deserialize PresenceUnsubscribedEvent', () => {
+      const original = createWSMessage('presence.unsubscribed', {
+        connectionId: 'conn-222',
+        unsubscribedAt: '2024-01-15T09:00:00.000Z',
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isPresenceUnsubscribedEvent(parsed)).toBe(true);
+      expect(parsed.payload.connectionId).toBe('conn-222');
     });
   });
 });

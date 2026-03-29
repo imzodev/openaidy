@@ -630,6 +630,64 @@ export type PresenceChangedEvent = WSMessage<
   }
 >;
 
+/**
+ * Event emitted when a client comes online
+ */
+export type PresenceOnlineEvent = WSMessage<
+  'presence.online',
+  {
+    clientId: string;
+    connectionId?: string;
+    metadata?: Record<string, unknown>;
+    onlineAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a client goes offline
+ */
+export type PresenceOfflineEvent = WSMessage<
+  'presence.offline',
+  {
+    clientId: string;
+    connectionId?: string;
+    offlineAt: string;
+    reason?: string;
+  }
+>;
+
+/**
+ * Event emitted when a connection subscribes to presence updates
+ */
+export type PresenceSubscribedEvent = WSMessage<
+  'presence.subscribed',
+  {
+    connectionId: string;
+    subscribedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when a connection unsubscribes from presence updates
+ */
+export type PresenceUnsubscribedEvent = WSMessage<
+  'presence.unsubscribed',
+  {
+    connectionId: string;
+    unsubscribedAt: string;
+  }
+>;
+
+/**
+ * Union type for all presence events
+ */
+export type PresenceEvent =
+  | PresenceChangedEvent
+  | PresenceOnlineEvent
+  | PresenceOfflineEvent
+  | PresenceSubscribedEvent
+  | PresenceUnsubscribedEvent;
+
 // ============================================================================
 // Error Response
 // ============================================================================
@@ -694,6 +752,10 @@ export type WSResponse =
   | ConfigReloadedEvent
   | ConfigValidationErrorEvent
   | PresenceChangedEvent
+  | PresenceOnlineEvent
+  | PresenceOfflineEvent
+  | PresenceSubscribedEvent
+  | PresenceUnsubscribedEvent
   | ErrorResponse;
 
 export type WSResponseType = WSResponse['type'];
@@ -750,6 +812,10 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'config.reloaded',
   'config.validation_error',
   'presence.changed',
+  'presence.online',
+  'presence.offline',
+  'presence.subscribed',
+  'presence.unsubscribed',
   'error',
 ]);
 
@@ -1483,6 +1549,67 @@ export function isConfigReloadedEvent(msg: unknown): msg is ConfigReloadedEvent 
  */
 export function isConfigValidationErrorEvent(msg: unknown): msg is ConfigValidationErrorEvent {
   return isWSMessage(msg) && msg.type === 'config.validation_error';
+}
+
+// ============================================================================
+// Presence Event Type Guards
+// ============================================================================
+
+const PRESENCE_EVENT_TYPES: Set<string> = new Set([
+  'presence.changed',
+  'presence.online',
+  'presence.offline',
+  'presence.subscribed',
+  'presence.unsubscribed',
+]);
+
+/**
+ * Check if a message type is a presence event type
+ */
+export function isPresenceEventType(type: string): type is PresenceEvent['type'] {
+  return PRESENCE_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is a PresenceEvent
+ */
+export function isPresenceEvent(msg: unknown): msg is PresenceEvent {
+  return isWSMessage(msg) && isPresenceEventType(msg.type);
+}
+
+/**
+ * Check if a message is a PresenceChangedEvent
+ */
+export function isPresenceChangedEvent(msg: unknown): msg is PresenceChangedEvent {
+  return isWSMessage(msg) && msg.type === 'presence.changed';
+}
+
+/**
+ * Check if a message is a PresenceOnlineEvent
+ */
+export function isPresenceOnlineEvent(msg: unknown): msg is PresenceOnlineEvent {
+  return isWSMessage(msg) && msg.type === 'presence.online';
+}
+
+/**
+ * Check if a message is a PresenceOfflineEvent
+ */
+export function isPresenceOfflineEvent(msg: unknown): msg is PresenceOfflineEvent {
+  return isWSMessage(msg) && msg.type === 'presence.offline';
+}
+
+/**
+ * Check if a message is a PresenceSubscribedEvent
+ */
+export function isPresenceSubscribedEvent(msg: unknown): msg is PresenceSubscribedEvent {
+  return isWSMessage(msg) && msg.type === 'presence.subscribed';
+}
+
+/**
+ * Check if a message is a PresenceUnsubscribedEvent
+ */
+export function isPresenceUnsubscribedEvent(msg: unknown): msg is PresenceUnsubscribedEvent {
+  return isWSMessage(msg) && msg.type === 'presence.unsubscribed';
 }
 
 // ============================================================================
