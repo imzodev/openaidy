@@ -29,6 +29,8 @@ import type { AppServices } from '../app';
 import { ConnectionManager } from './connection-manager';
 import { MessageRouter, type HandlerContext } from './message-router';
 import { SessionHandler, registerSessionHandlers } from './handlers/session';
+import { AgentHandler, registerAgentHandlers } from './handlers/agent';
+import { ProviderHandler, registerProviderHandlers } from './handlers/provider';
 import { StreamManager } from './streaming';
 import { SubscriptionManager } from './subscriptions';
 
@@ -57,6 +59,8 @@ export type WebSocketGateway = {
   connectionManager: ConnectionManager;
   messageRouter: MessageRouter;
   sessionHandler: SessionHandler;
+  agentHandler: AgentHandler;
+  providerHandler: ProviderHandler;
   streamManager: StreamManager;
   subscriptionManager: SubscriptionManager;
   shutdown: () => Promise<void>;
@@ -79,6 +83,8 @@ function createGateway(
   const connectionManager = new ConnectionManager(config);
   const messageRouter = new MessageRouter(fastify.log);
   const sessionHandler = new SessionHandler(fastify.services.sessions, fastify.log);
+  const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
+  const providerHandler = new ProviderHandler(fastify.services.providers, fastify.log);
   const streamManager = new StreamManager(
     fastify.services.runEvents,
     connectionManager,
@@ -88,6 +94,12 @@ function createGateway(
 
   // Register session handlers with the message router
   registerSessionHandlers(messageRouter, sessionHandler);
+
+  // Register agent handlers with the message router
+  registerAgentHandlers(messageRouter, agentHandler);
+
+  // Register provider handlers with the message router
+  registerProviderHandlers(messageRouter, providerHandler);
 
   // Register subscribe/unsubscribe handlers
   messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
@@ -142,6 +154,8 @@ function createGateway(
     connectionManager,
     messageRouter,
     sessionHandler,
+    agentHandler,
+    providerHandler,
     streamManager,
     subscriptionManager,
     shutdown: async () => {
