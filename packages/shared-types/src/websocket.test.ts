@@ -37,6 +37,20 @@ import {
   type SessionMessageEvent,
   type SessionDeletedEvent,
   type SessionUpdatedEvent,
+  // Agent event types and guards
+  isAgentEventType,
+  isAgentEvent,
+  isAgentCreatedEvent,
+  isAgentUpdatedEvent,
+  isAgentDeletedEvent,
+  isAgentEnabledEvent,
+  isAgentDisabledEvent,
+  type AgentEvent,
+  type AgentCreatedEvent,
+  type AgentUpdatedEvent,
+  type AgentDeletedEvent,
+  type AgentEnabledEvent,
+  type AgentDisabledEvent,
 } from './websocket';
 
 describe('websocket types', () => {
@@ -788,6 +802,256 @@ describe('websocket types', () => {
 
       expect(isSessionStreamError(parsed)).toBe(true);
       expect(parsed.payload.error.code).toBe('RATE_LIMITED');
+    });
+  });
+
+  // ============================================================================
+  // Agent Event Type Guards Tests
+  // ============================================================================
+
+  describe('Agent Event Type Guards', () => {
+    describe('isAgentEventType', () => {
+      it('should return true for agent event types', () => {
+        expect(isAgentEventType('agent.created')).toBe(true);
+        expect(isAgentEventType('agent.updated')).toBe(true);
+        expect(isAgentEventType('agent.deleted')).toBe(true);
+        expect(isAgentEventType('agent.enabled')).toBe(true);
+        expect(isAgentEventType('agent.disabled')).toBe(true);
+      });
+
+      it('should return false for non-agent event types', () => {
+        expect(isAgentEventType('agent.list')).toBe(false);
+        expect(isAgentEventType('agent.get')).toBe(false);
+        expect(isAgentEventType('session.created')).toBe(false);
+        expect(isAgentEventType('error')).toBe(false);
+      });
+    });
+
+    describe('isAgentEvent', () => {
+      it('should return true for agent.created event', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(true);
+      });
+
+      it('should return true for agent.updated event', () => {
+        const msg = createWSMessage('agent.updated', {
+          agentId: 'a1',
+          updates: { name: 'Updated Agent' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(true);
+      });
+
+      it('should return true for agent.deleted event', () => {
+        const msg = createWSMessage('agent.deleted', {
+          agentId: 'a1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(true);
+      });
+
+      it('should return true for agent.enabled event', () => {
+        const msg = createWSMessage('agent.enabled', {
+          agentId: 'a1',
+          enabledAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(true);
+      });
+
+      it('should return true for agent.disabled event', () => {
+        const msg = createWSMessage('agent.disabled', {
+          agentId: 'a1',
+          disabledAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(true);
+      });
+
+      it('should return false for non-agent events', () => {
+        const msg = createWSMessage('session.created', {
+          sessionId: 's1',
+          agentId: 'a1',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isAgentEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isAgentCreatedEvent', () => {
+      it('should return true for agent.created event', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isAgentCreatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('agent.deleted', {
+          agentId: 'a1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isAgentCreatedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isAgentUpdatedEvent', () => {
+      it('should return true for agent.updated event', () => {
+        const msg = createWSMessage('agent.updated', {
+          agentId: 'a1',
+          updates: { name: 'Updated Agent' },
+          updatedAt: new Date().toISOString(),
+        });
+        expect(isAgentUpdatedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isAgentUpdatedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isAgentDeletedEvent', () => {
+      it('should return true for agent.deleted event', () => {
+        const msg = createWSMessage('agent.deleted', {
+          agentId: 'a1',
+          deletedAt: new Date().toISOString(),
+        });
+        expect(isAgentDeletedEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('agent.created', {
+          agentId: 'a1',
+          name: 'Test Agent',
+          model: 'openai/gpt-4',
+          createdAt: new Date().toISOString(),
+        });
+        expect(isAgentDeletedEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isAgentEnabledEvent', () => {
+      it('should return true for agent.enabled event', () => {
+        const msg = createWSMessage('agent.enabled', {
+          agentId: 'a1',
+          enabledAt: new Date().toISOString(),
+        });
+        expect(isAgentEnabledEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('agent.disabled', {
+          agentId: 'a1',
+          disabledAt: new Date().toISOString(),
+        });
+        expect(isAgentEnabledEvent(msg)).toBe(false);
+      });
+    });
+
+    describe('isAgentDisabledEvent', () => {
+      it('should return true for agent.disabled event', () => {
+        const msg = createWSMessage('agent.disabled', {
+          agentId: 'a1',
+          disabledAt: new Date().toISOString(),
+        });
+        expect(isAgentDisabledEvent(msg)).toBe(true);
+      });
+
+      it('should return false for other event types', () => {
+        const msg = createWSMessage('agent.enabled', {
+          agentId: 'a1',
+          enabledAt: new Date().toISOString(),
+        });
+        expect(isAgentDisabledEvent(msg)).toBe(false);
+      });
+    });
+  });
+
+  // ============================================================================
+  // Agent Event Serialization Tests
+  // ============================================================================
+
+  describe('Agent Event Serialization', () => {
+    it('should serialize and deserialize agent.created event', () => {
+      const original = createWSMessage('agent.created', {
+        agentId: 'a1',
+        name: 'Test Agent',
+        model: 'openai/gpt-4',
+        createdAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isAgentCreatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.agentId).toBe('a1');
+      expect(parsed.payload.name).toBe('Test Agent');
+      expect(parsed.payload.model).toBe('openai/gpt-4');
+    });
+
+    it('should serialize and deserialize agent.updated event', () => {
+      const original = createWSMessage('agent.updated', {
+        agentId: 'a1',
+        updates: { name: 'Updated Agent', model: 'anthropic/claude-3' },
+        updatedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isAgentUpdatedEvent(parsed)).toBe(true);
+      expect(parsed.payload.updates.name).toBe('Updated Agent');
+    });
+
+    it('should serialize and deserialize agent.deleted event', () => {
+      const original = createWSMessage('agent.deleted', {
+        agentId: 'a1',
+        deletedAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isAgentDeletedEvent(parsed)).toBe(true);
+      expect(parsed.payload.agentId).toBe('a1');
+    });
+
+    it('should serialize and deserialize agent.enabled event', () => {
+      const original = createWSMessage('agent.enabled', {
+        agentId: 'a1',
+        enabledAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isAgentEnabledEvent(parsed)).toBe(true);
+      expect(parsed.payload.agentId).toBe('a1');
+    });
+
+    it('should serialize and deserialize agent.disabled event', () => {
+      const original = createWSMessage('agent.disabled', {
+        agentId: 'a1',
+        disabledAt: new Date().toISOString(),
+      });
+
+      const json = JSON.stringify(original);
+      const parsed = JSON.parse(json);
+
+      expect(isAgentDisabledEvent(parsed)).toBe(true);
+      expect(parsed.payload.agentId).toBe('a1');
     });
   });
 });

@@ -920,6 +920,139 @@ export function isSessionStreamError(msg: unknown): msg is SessionStreamError {
 }
 
 // ============================================================================
+// Agent Event Types
+// ============================================================================
+
+/**
+ * Event emitted when an agent is registered/created
+ */
+export type AgentCreatedEvent = WSMessage<
+  'agent.created',
+  {
+    agentId: string;
+    name: string;
+    model: string;
+    createdAt: string;
+  }
+>;
+
+/**
+ * Event emitted when an agent is updated
+ */
+export type AgentUpdatedEvent = WSMessage<
+  'agent.updated',
+  {
+    agentId: string;
+    updates: Record<string, unknown>;
+    updatedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when an agent is deleted
+ */
+export type AgentDeletedEvent = WSMessage<
+  'agent.deleted',
+  {
+    agentId: string;
+    deletedAt: string;
+  }
+>;
+
+/**
+ * Event emitted when an agent is enabled
+ */
+export type AgentEnabledEvent = WSMessage<
+  'agent.enabled',
+  {
+    agentId: string;
+    enabledAt: string;
+  }
+>;
+
+/**
+ * Event emitted when an agent is disabled
+ */
+export type AgentDisabledEvent = WSMessage<
+  'agent.disabled',
+  {
+    agentId: string;
+    disabledAt: string;
+  }
+>;
+
+/**
+ * Union type for all agent events
+ */
+export type AgentEvent =
+  | AgentCreatedEvent
+  | AgentUpdatedEvent
+  | AgentDeletedEvent
+  | AgentEnabledEvent
+  | AgentDisabledEvent;
+
+// ============================================================================
+// Agent Event Type Guards
+// ============================================================================
+
+const AGENT_EVENT_TYPES: Set<string> = new Set([
+  'agent.created',
+  'agent.updated',
+  'agent.deleted',
+  'agent.enabled',
+  'agent.disabled',
+]);
+
+/**
+ * Check if a message type is an agent event type
+ */
+export function isAgentEventType(type: string): type is AgentEvent['type'] {
+  return AGENT_EVENT_TYPES.has(type);
+}
+
+/**
+ * Check if a message is an AgentEvent
+ */
+export function isAgentEvent(msg: unknown): msg is AgentEvent {
+  return isWSMessage(msg) && isAgentEventType(msg.type);
+}
+
+/**
+ * Check if a message is an AgentCreatedEvent
+ */
+export function isAgentCreatedEvent(msg: unknown): msg is AgentCreatedEvent {
+  return isWSMessage(msg) && msg.type === 'agent.created';
+}
+
+/**
+ * Check if a message is an AgentUpdatedEvent
+ */
+export function isAgentUpdatedEvent(msg: unknown): msg is AgentUpdatedEvent {
+  return isWSMessage(msg) && msg.type === 'agent.updated';
+}
+
+/**
+ * Check if a message is an AgentDeletedEvent
+ */
+export function isAgentDeletedEvent(msg: unknown): msg is AgentDeletedEvent {
+  return isWSMessage(msg) && msg.type === 'agent.deleted';
+}
+
+/**
+ * Check if a message is an AgentEnabledEvent
+ */
+export function isAgentEnabledEvent(msg: unknown): msg is AgentEnabledEvent {
+  return isWSMessage(msg) && msg.type === 'agent.enabled';
+}
+
+/**
+ * Check if a message is an AgentDisabledEvent
+ */
+export function isAgentDisabledEvent(msg: unknown): msg is AgentDisabledEvent {
+  return isWSMessage(msg) && msg.type === 'agent.disabled';
+}
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 
