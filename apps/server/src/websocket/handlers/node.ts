@@ -258,8 +258,8 @@ export class NodeHandler {
         connectionId: request.payload.connectionId || connectionId,
         registeredAt: Date.now(),
         lastSeen: Date.now(),
-        tokenHash: request.payload.tokenHash,
-        scopes: request.payload.scopes,
+        ...(request.payload.tokenHash !== undefined && { tokenHash: request.payload.tokenHash }),
+        ...(request.payload.scopes !== undefined && { scopes: request.payload.scopes }),
       };
 
       this.nodeRegistry.registerNode(node);

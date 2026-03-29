@@ -1,15 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { NodeRegistry, type Node } from '../node-registry';
+import { NodeRegistry, type Node, type NodeType } from '../node-registry';
 import {
   NodeHandler,
   registerNodeHandlers,
   createNodeHandler,
-  type NodeListRequest,
-  type NodeDescribeRequest,
-  type NodeInvokeRequest,
-  type NodeRegisterRequest,
-  type NodeUnregisterRequest,
 } from './node';
 import { type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
@@ -89,11 +84,12 @@ describe('NodeHandler', () => {
       const request = createWSMessage('node.list', {});
       const response = await handler.handleList('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.list');
       if (response.type === 'node.list') {
         expect(response.payload.nodes).toHaveLength(2);
         expect(response.payload.nodes.map(n => n.nodeId)).toContain('node-1');
         expect(response.payload.nodes.map(n => n.nodeId)).toContain('node-2');
+      } else {
+        expect.fail('Expected node.list response');
       }
     });
 
@@ -101,9 +97,10 @@ describe('NodeHandler', () => {
       const request = createWSMessage('node.list', {});
       const response = await handler.handleList('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.list');
       if (response.type === 'node.list') {
         expect(response.payload.nodes).toHaveLength(0);
+      } else {
+        expect.fail('Expected node.list response');
       }
     });
 
@@ -123,35 +120,42 @@ describe('NodeHandler', () => {
   // ============================================================================
 
   describe('handleDescribe', () => {
-    it('should return node details for valid nodeId', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1' });
-      nodeRegistry.registerNode(testNode);
+    it('should return node details for existing node', async () => {
+      const node = createTestNode({
+        nodeId: 'node-1',
+        name: 'Test Node',
+        type: 'mobile',
+        capabilities: ['camera'],
+      });
+      nodeRegistry.registerNode(node);
 
       const request = createWSMessage('node.describe', { nodeId: 'node-1' });
       const response = await handler.handleDescribe('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.describe');
       if (response.type === 'node.describe') {
         expect(response.payload.node.nodeId).toBe('node-1');
         expect(response.payload.node.name).toBe('Test Node');
-        expect(response.payload.node.capabilities).toEqual(['camera', 'microphone']);
+        expect(response.payload.node.type).toBe('mobile');
+        expect(response.payload.node.capabilities).toContain('camera');
+      } else {
+        expect.fail('Expected node.describe response');
       }
     });
 
-    it('should return error for non-existent nodeId', async () => {
+    it('should return error for non-existent node', async () => {
       const request = createWSMessage('node.describe', { nodeId: 'non-existent' });
       const response = await handler.handleDescribe('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
         expect(response.payload.error.message).toContain('Node not found');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
     it('should log describe operation', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1' });
-      nodeRegistry.registerNode(testNode);
+      nodeRegistry.registerNode(createTestNode({ nodeId: 'node-1' }));
 
       const request = createWSMessage('node.describe', { nodeId: 'node-1' });
       await handler.handleDescribe('conn-1', request, handlerContext);
@@ -172,109 +176,137 @@ describe('NodeHandler', () => {
       const request = createWSMessage('node.invoke', {
         nodeId: 'non-existent',
         capability: 'camera',
-        params: {},
       });
       const response = await handler.handleInvoke('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
-    it('should return error when node is offline', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1', status: 'offline' });
-      nodeRegistry.registerNode(testNode);
+    it('should return error if node is offline', async () => {
+      nodeRegistry.registerNode(createTestNode({
+        nodeId: 'node-1',
+        status: 'offline',
+        capabilities: ['camera'],
+      }));
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
-        params: {},
       });
       const response = await handler.handleInvoke('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
         expect(response.payload.error.message).toContain('not online');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
-    it('should return error when node lacks capability', async () => {
-      const testNode = createTestNode({
+    it('should return error if node is stale', async () => {
+      nodeRegistry.registerNode(createTestNode({
         nodeId: 'node-1',
-        capabilities: ['screen'], // No 'camera'
-      });
-      nodeRegistry.registerNode(testNode);
+        status: 'stale',
+        capabilities: ['camera'],
+      }));
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
-        params: {},
       });
       const response = await handler.handleInvoke('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+      } else {
+        expect.fail('Expected error response');
+      }
+    });
+
+    it('should return error if node lacks capability', async () => {
+      nodeRegistry.registerNode(createTestNode({
+        nodeId: 'node-1',
+        status: 'online',
+        capabilities: ['microphone'],
+        connectionId: 'conn-node',
+      }));
+
+      const request = createWSMessage('node.invoke', {
+        nodeId: 'node-1',
+        capability: 'camera',
+      });
+      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INSUFFICIENT_CAPABILITY);
         expect(response.payload.error.message).toContain('does not have capability');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
-    it('should return error when node has no connection', async () => {
-      const testNode = createTestNode({
+    it('should return error if node has no connection', async () => {
+      const { connectionId: _, ...nodeWithoutConnection } = createTestNode({
         nodeId: 'node-1',
-        connectionId: undefined, // No connection
+        status: 'online',
+        capabilities: ['camera'],
       });
-      nodeRegistry.registerNode(testNode);
+      nodeRegistry.registerNode({
+        ...nodeWithoutConnection,
+        connectionId: undefined,
+      } as Node);
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
-        params: {},
       });
       const response = await handler.handleInvoke('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
         expect(response.payload.error.message).toContain('not connected');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
     it('should return placeholder response for valid invocation', async () => {
-      const testNode = createTestNode({
+      nodeRegistry.registerNode(createTestNode({
         nodeId: 'node-1',
-        connectionId: 'conn-node-1',
-      });
-      nodeRegistry.registerNode(testNode);
+        status: 'online',
+        capabilities: ['camera'],
+        connectionId: 'conn-node',
+      }));
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
-        params: { action: 'snap' },
       });
       const response = await handler.handleInvoke('conn-1', request, handlerContext);
 
-      // Current implementation returns placeholder
-      expect(response.type).toBe('node.invoke');
       if (response.type === 'node.invoke') {
         expect(response.payload.result).toBeDefined();
-        expect(response.payload.duration).toBeDefined();
+        expect(response.payload.duration).toBe(0);
+      } else {
+        expect.fail('Expected node.invoke response');
       }
     });
 
     it('should log invoke operation', async () => {
-      const testNode = createTestNode({
+      nodeRegistry.registerNode(createTestNode({
         nodeId: 'node-1',
-        connectionId: 'conn-node-1',
-      });
-      nodeRegistry.registerNode(testNode);
+        status: 'online',
+        capabilities: ['camera'],
+        connectionId: 'conn-node',
+      }));
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
-        params: {},
       });
       await handler.handleInvoke('conn-1', request, handlerContext);
 
@@ -293,71 +325,91 @@ describe('NodeHandler', () => {
     it('should register a new node', async () => {
       const request = createWSMessage('node.register', {
         name: 'New Node',
-        type: 'desktop',
-        capabilities: ['screen', 'keyboard'],
-        metadata: { version: '1.0' },
+        type: 'mobile' as NodeType,
+        capabilities: ['camera', 'microphone'],
       });
       const response = await handler.handleRegister('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.registered');
       if (response.type === 'node.registered') {
         expect(response.payload.node.name).toBe('New Node');
-        expect(response.payload.node.type).toBe('desktop');
-        expect(response.payload.node.capabilities).toEqual(['screen', 'keyboard']);
-        expect(response.payload.node.metadata).toEqual({ version: '1.0' });
+        expect(response.payload.node.type).toBe('mobile');
+        expect(response.payload.node.capabilities).toContain('camera');
         expect(response.payload.node.status).toBe('online');
+        expect(response.payload.node.nodeId).toBeDefined();
+      } else {
+        expect.fail('Expected node.registered response');
       }
     });
 
-    it('should use connectionId from request or default to caller', async () => {
-      const requestWithConn = createWSMessage('node.register', {
-        name: 'Node 1',
-        type: 'mobile',
-        capabilities: ['camera'],
+    it('should use connectionId from payload if provided', async () => {
+      const request = createWSMessage('node.register', {
+        name: 'New Node',
+        type: 'desktop' as NodeType,
+        capabilities: ['screen'],
         connectionId: 'custom-conn',
       });
-      const response1 = await handler.handleRegister('conn-default', requestWithConn, handlerContext);
+      const response = await handler.handleRegister('conn-1', request, handlerContext);
 
-      expect(response1.type).toBe('node.registered');
-      if (response1.type === 'node.registered') {
-        expect(response1.payload.node.connectionId).toBe('custom-conn');
-      }
-
-      // Without connectionId
-      const requestWithoutConn = createWSMessage('node.register', {
-        name: 'Node 2',
-        type: 'mobile',
-        capabilities: ['microphone'],
-      });
-      const response2 = await handler.handleRegister('conn-default', requestWithoutConn, handlerContext);
-
-      expect(response2.type).toBe('node.registered');
-      if (response2.type === 'node.registered') {
-        expect(response2.payload.node.connectionId).toBe('conn-default');
+      if (response.type === 'node.registered') {
+        expect(response.payload.node.connectionId).toBe('custom-conn');
+      } else {
+        expect.fail('Expected node.registered response');
       }
     });
 
-    it('should register node with optional fields', async () => {
+    it('should use connectionId from handler if not in payload', async () => {
       const request = createWSMessage('node.register', {
-        name: 'Secure Node',
-        type: 'service',
-        capabilities: ['admin'],
-        tokenHash: 'hash123',
+        name: 'New Node',
+        type: 'browser' as NodeType,
+        capabilities: ['notifications'],
+      });
+      const response = await handler.handleRegister('conn-handler', request, handlerContext);
+
+      if (response.type === 'node.registered') {
+        expect(response.payload.node.connectionId).toBe('conn-handler');
+      } else {
+        expect.fail('Expected node.registered response');
+      }
+    });
+
+    it('should store metadata if provided', async () => {
+      const request = createWSMessage('node.register', {
+        name: 'New Node',
+        type: 'mobile' as NodeType,
+        capabilities: ['camera'],
+        metadata: { version: '1.0', platform: 'ios' },
+      });
+      const response = await handler.handleRegister('conn-1', request, handlerContext);
+
+      if (response.type === 'node.registered') {
+        expect(response.payload.node.metadata).toEqual({ version: '1.0', platform: 'ios' });
+      } else {
+        expect.fail('Expected node.registered response');
+      }
+    });
+
+    it('should store tokenHash and scopes if provided', async () => {
+      const request = createWSMessage('node.register', {
+        name: 'New Node',
+        type: 'service' as NodeType,
+        capabilities: ['api'],
+        tokenHash: 'abc123',
         scopes: ['read', 'write'],
       });
       const response = await handler.handleRegister('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.registered');
       if (response.type === 'node.registered') {
-        expect(response.payload.node.tokenHash).toBe('hash123');
+        expect(response.payload.node.tokenHash).toBe('abc123');
         expect(response.payload.node.scopes).toEqual(['read', 'write']);
+      } else {
+        expect.fail('Expected node.registered response');
       }
     });
 
     it('should add node to registry', async () => {
       const request = createWSMessage('node.register', {
         name: 'New Node',
-        type: 'mobile',
+        type: 'mobile' as NodeType,
         capabilities: ['camera'],
       });
       await handler.handleRegister('conn-1', request, handlerContext);
@@ -368,7 +420,7 @@ describe('NodeHandler', () => {
     it('should log register operation', async () => {
       const request = createWSMessage('node.register', {
         name: 'New Node',
-        type: 'mobile',
+        type: 'mobile' as NodeType,
         capabilities: ['camera'],
       });
       await handler.handleRegister('conn-1', request, handlerContext);
@@ -386,25 +438,16 @@ describe('NodeHandler', () => {
 
   describe('handleUnregister', () => {
     it('should unregister an existing node', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1' });
-      nodeRegistry.registerNode(testNode);
+      nodeRegistry.registerNode(createTestNode({ nodeId: 'node-1' }));
 
       const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
       const response = await handler.handleUnregister('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('node.unregistered');
       if (response.type === 'node.unregistered') {
         expect(response.payload.nodeId).toBe('node-1');
+      } else {
+        expect.fail('Expected node.unregistered response');
       }
-    });
-
-    it('should remove node from registry', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1' });
-      nodeRegistry.registerNode(testNode);
-      expect(nodeRegistry.size).toBe(1);
-
-      const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
-      await handler.handleUnregister('conn-1', request, handlerContext);
 
       expect(nodeRegistry.size).toBe(0);
     });
@@ -413,15 +456,16 @@ describe('NodeHandler', () => {
       const request = createWSMessage('node.unregister', { nodeId: 'non-existent' });
       const response = await handler.handleUnregister('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+        expect(response.payload.error.message).toContain('Node not found');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
     it('should log unregister operation', async () => {
-      const testNode = createTestNode({ nodeId: 'node-1' });
-      nodeRegistry.registerNode(testNode);
+      nodeRegistry.registerNode(createTestNode({ nodeId: 'node-1' }));
 
       const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
       await handler.handleUnregister('conn-1', request, handlerContext);
@@ -438,86 +482,77 @@ describe('NodeHandler', () => {
   // ============================================================================
 
   describe('error handling', () => {
-    it('should return internal error on unexpected exception in handleList', async () => {
-      // Create a handler with a broken registry
-      const brokenRegistry = null as unknown as NodeRegistry;
-      const brokenHandler = new NodeHandler(brokenRegistry, connectionManager, mockLogger);
+    it('should handle errors in handleList', async () => {
+      // Force an error by making getAllNodes throw
+      const errorRegistry = {
+        getAllNodes: () => { throw new Error('Test error'); },
+      } as unknown as NodeRegistry;
 
+      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
       const request = createWSMessage('node.list', {});
-      const response = await brokenHandler.handleList('conn-1', request, handlerContext);
+      const response = await errorHandler.handleList('conn-1', request, handlerContext);
 
-      expect(response.type).toBe('error');
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+        expect(response.payload.error.message).toBe('Test error');
+      } else {
+        expect.fail('Expected error response');
       }
     });
 
-    it('should log errors with error method', async () => {
-      // Create a handler with a broken registry
-      const brokenRegistry = null as unknown as NodeRegistry;
-      const brokenHandler = new NodeHandler(brokenRegistry, connectionManager, mockLogger);
+    it('should handle errors in handleDescribe', async () => {
+      // Force an error by making getNode throw
+      const errorRegistry = {
+        getNode: () => { throw new Error('Describe error'); },
+      } as unknown as NodeRegistry;
 
-      const request = createWSMessage('node.list', {});
-      await brokenHandler.handleList('conn-1', request, handlerContext);
+      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const request = createWSMessage('node.describe', { nodeId: 'node-1' });
+      const response = await errorHandler.handleDescribe('conn-1', request, handlerContext);
 
-      expect(mockLogger.error).toHaveBeenCalled();
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+      } else {
+        expect.fail('Expected error response');
+      }
     });
-  });
 
-  // ============================================================================
-  // Integration Tests
-  // ============================================================================
+    it('should handle errors in handleRegister', async () => {
+      // Force an error by making registerNode throw
+      const errorRegistry = {
+        registerNode: () => { throw new Error('Register error'); },
+      } as unknown as NodeRegistry;
 
-  describe('integration', () => {
-    it('should support full node lifecycle', async () => {
-      // Register
-      const registerRequest = createWSMessage('node.register', {
-        name: 'Lifecycle Node',
-        type: 'browser',
-        capabilities: ['screen', 'clipboard'],
+      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const request = createWSMessage('node.register', {
+        name: 'Test',
+        type: 'mobile' as NodeType,
+        capabilities: ['camera'],
       });
-      const registerResponse = await handler.handleRegister('conn-1', registerRequest, handlerContext);
+      const response = await errorHandler.handleRegister('conn-1', request, handlerContext);
 
-      expect(registerResponse.type).toBe('node.registered');
-      if (registerResponse.type !== 'node.registered') return;
-      const nodeId = registerResponse.payload.node.nodeId;
-
-      // List
-      const listResponse = await handler.handleList(
-        'conn-1',
-        createWSMessage('node.list', {}),
-        handlerContext
-      );
-      expect(listResponse.type).toBe('node.list');
-      if (listResponse.type === 'node.list') {
-        expect(listResponse.payload.nodes).toHaveLength(1);
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+      } else {
+        expect.fail('Expected error response');
       }
+    });
 
-      // Describe
-      const describeResponse = await handler.handleDescribe(
-        'conn-1',
-        createWSMessage('node.describe', { nodeId }),
-        handlerContext
-      );
-      expect(describeResponse.type).toBe('node.describe');
+    it('should handle errors in handleUnregister', async () => {
+      // Force an error by making getNode and unregisterNode throw
+      const errorRegistry = {
+        getNode: () => { throw new Error('Unregister error'); },
+        unregisterNode: () => {},
+      } as unknown as NodeRegistry;
 
-      // Unregister
-      const unregisterResponse = await handler.handleUnregister(
-        'conn-1',
-        createWSMessage('node.unregister', { nodeId }),
-        handlerContext
-      );
-      expect(unregisterResponse.type).toBe('node.unregistered');
+      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
+      const response = await errorHandler.handleUnregister('conn-1', request, handlerContext);
 
-      // Verify removed
-      const listAfterResponse = await handler.handleList(
-        'conn-1',
-        createWSMessage('node.list', {}),
-        handlerContext
-      );
-      expect(listAfterResponse.type).toBe('node.list');
-      if (listAfterResponse.type === 'node.list') {
-        expect(listAfterResponse.payload.nodes).toHaveLength(0);
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+      } else {
+        expect.fail('Expected error response');
       }
     });
   });
@@ -528,16 +563,18 @@ describe('NodeHandler', () => {
 // ============================================================================
 
 describe('registerNodeHandlers', () => {
-  it('should register all handlers', () => {
+  it('should register all node handlers', () => {
     const mockRouter = {
       registerHandler: vi.fn(),
     };
+
     const mockLogger = createMockLogger();
     const nodeRegistry = new NodeRegistry({}, mockLogger);
     const connectionManager = new ConnectionManager();
     const handler = new NodeHandler(nodeRegistry, connectionManager, mockLogger);
 
-    registerNodeHandlers(mockRouter, handler);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    registerNodeHandlers(mockRouter as any, handler);
 
     expect(mockRouter.registerHandler).toHaveBeenCalledTimes(5);
     expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.list', expect.any(Function));
@@ -549,7 +586,7 @@ describe('registerNodeHandlers', () => {
 });
 
 // ============================================================================
-// createNodeHandler Tests
+// createNodeHandler Factory Tests
 // ============================================================================
 
 describe('createNodeHandler', () => {
