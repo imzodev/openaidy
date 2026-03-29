@@ -33,8 +33,11 @@ import { AgentHandler, registerAgentHandlers } from './handlers/agent';
 import { ProviderHandler, registerProviderHandlers } from './handlers/provider';
 import { NodeHandler, registerNodeHandlers } from './handlers/node';
 import { PairingHandler, registerPairingHandlers } from './handlers/pairing';
+import { ConfigHandler, registerConfigHandlers } from './handlers/config';
+import { PresenceHandler, registerPresenceHandlers } from './handlers/presence';
 import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
+import { PresenceManager } from './presence-manager';
 import { StreamManager } from './streaming';
 import { SubscriptionManager } from './subscriptions';
 import { AuthMiddleware } from './middleware/auth';
@@ -68,10 +71,13 @@ export type WebSocketGateway = {
   providerHandler: ProviderHandler;
   nodeHandler: NodeHandler;
   pairingHandler: PairingHandler;
+  configHandler: ConfigHandler;
+  presenceHandler: PresenceHandler;
   streamManager: StreamManager;
   subscriptionManager: SubscriptionManager;
   nodeRegistry: NodeRegistry;
   pairingService: PairingService;
+  presenceManager: PresenceManager;
   shutdown: () => Promise<void>;
 };
 
@@ -123,6 +129,21 @@ function createGateway(
     fastify.log,
   );
 
+  // Create presence manager
+  const presenceManager = new PresenceManager({}, fastify.log);
+
+  // Create config and presence handlers
+  const configHandler = new ConfigHandler(
+    fastify.services.config,
+    connectionManager,
+    fastify.log,
+  );
+  const presenceHandler = new PresenceHandler(
+    presenceManager,
+    connectionManager,
+    fastify.log,
+  );
+
   // Create stream manager and subscription manager
   const streamManager = new StreamManager(
     fastify.services.runEvents,
@@ -145,6 +166,12 @@ function createGateway(
 
   // Register pairing handlers with the message router
   registerPairingHandlers(messageRouter, pairingHandler);
+
+  // Register config handlers with the message router
+  registerConfigHandlers(messageRouter, configHandler);
+
+  // Register presence handlers with the message router
+  registerPresenceHandlers(messageRouter, presenceHandler);
 
   // Register subscribe/unsubscribe handlers
   messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
@@ -203,15 +230,19 @@ function createGateway(
     providerHandler,
     nodeHandler,
     pairingHandler,
+    configHandler,
+    presenceHandler,
     streamManager,
     subscriptionManager,
     nodeRegistry,
     pairingService,
+    presenceManager,
     shutdown: async () => {
       streamManager.stop();
       subscriptionManager.cleanup();
       nodeRegistry.clear();
       pairingService.destroy();
+      presenceManager.clear();
       connectionManager.closeAll();
     },
   };
@@ -271,6 +302,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     gateway.pairingService.cleanupExpiredRequests();
     // Cleanup stale nodes (nodes that haven't been seen in 2x heartbeat interval)
     gateway.nodeRegistry.cleanupStaleNodes(gateway.config.heartbeatInterval * 2);
+    // Cleanup stale presence (presence that hasn't been updated in 3x heartbeat interval)
+    gateway.presenceManager.cleanupStalePresence(gateway.config.heartbeatInterval * 3);
   }, 60000); // Every minute
 
   // Generate unique connection IDs
@@ -376,6 +409,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       gateway.streamManager.unsubscribeAllFromConnection(connectionId);
       // Clean up session subscriptions
       gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
+      // Clean up presence for this connection
+      gateway.presenceHandler.removeConnection(connectionId);
       // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
       // Clear pending requests
@@ -390,6 +425,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       gateway.streamManager.unsubscribeAllFromConnection(connectionId);
       // Clean up session subscriptions
       gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
+      // Clean up presence for this connection
+      gateway.presenceHandler.removeConnection(connectionId);
       // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
     });
