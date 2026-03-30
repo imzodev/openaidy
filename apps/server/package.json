@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "bench": "vitest bench --run",
     "lint": "eslint ."
   },
   "dependencies": {
