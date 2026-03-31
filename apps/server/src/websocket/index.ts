@@ -23,6 +23,8 @@ import {
   type AuthAuthenticateRequest,
   type AuthRefreshRequest,
   type AuthAuthenticatedResponse,
+  type NodeRpcResponse,
+  type NodeRpcError,
   WS_ERROR_CODES,
   isWSMessage,
   createWSMessage,
@@ -254,6 +256,35 @@ function createGateway(
 
   // Register presence handlers with the message router
   registerPresenceHandlers(messageRouter, presenceHandler);
+
+  // Register node RPC response handlers (for node.invoke responses from nodes)
+  messageRouter.registerHandler('node.rpc.response', async (connectionId, message) => {
+    const rpcResponse = message as NodeRpcResponse;
+    const handled = nodeHandler.handleRpcResponse(connectionId, rpcResponse);
+    if (!handled) {
+      return createErrorResponse(
+        message.id,
+        WS_ERROR_CODES.INVALID_REQUEST,
+        'Unknown invocation ID or invocation already completed',
+      );
+    }
+    // No response needed - the response is routed to the original caller
+    return undefined;
+  });
+
+  messageRouter.registerHandler('node.rpc.error', async (connectionId, message) => {
+    const rpcError = message as NodeRpcError;
+    const handled = nodeHandler.handleRpcError(connectionId, rpcError);
+    if (!handled) {
+      return createErrorResponse(
+        message.id,
+        WS_ERROR_CODES.INVALID_REQUEST,
+        'Unknown invocation ID or invocation already completed',
+      );
+    }
+    // No response needed - the error is routed to the original caller
+    return undefined;
+  });
 
   // Register subscribe/unsubscribe handlers
   messageRouter.registerHandler('auth.authenticate', async (connectionId, message) => {
@@ -671,6 +702,13 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
       // Clean up presence for this connection
       gateway.presenceHandler.removeConnection(connectionId);
+      // Clean up pending node invocations for this connection
+      gateway.nodeHandler.handleCallerDisconnect(connectionId);
+      // Check if this connection was a node and clean up its invocations
+      const node = gateway.nodeRegistry.getNodeByConnection(connectionId);
+      if (node) {
+        gateway.nodeHandler.handleNodeDisconnect(node.nodeId);
+      }
       // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
       // Clear pending requests
@@ -687,6 +725,13 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       gateway.subscriptionManager.removeConnectionSubscriptions(connectionId);
       // Clean up presence for this connection
       gateway.presenceHandler.removeConnection(connectionId);
+      // Clean up pending node invocations for this connection
+      gateway.nodeHandler.handleCallerDisconnect(connectionId);
+      // Check if this connection was a node and clean up its invocations
+      const node = gateway.nodeRegistry.getNodeByConnection(connectionId);
+      if (node) {
+        gateway.nodeHandler.handleNodeDisconnect(node.nodeId);
+      }
       // Remove connection
       gateway.connectionManager.removeConnection(connectionId);
     });

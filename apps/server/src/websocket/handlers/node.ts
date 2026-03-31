@@ -2,18 +2,25 @@
  * Node Handler
  *
  * WebSocket message handlers for node operations.
+ * 
+ * Issue #127: Implements real node.invoke RPC flow with correlation and timeout.
  */
 
 import type { FastifyBaseLogger } from 'fastify';
 import { NodeRegistry } from '../node-registry';
+import { InvocationManager, type InvocationManagerOptions } from '../invocation-manager';
 import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../message-router';
 import {
   type WSMessage,
   type WSResponse,
   type ErrorResponse,
+  type NodeRpcRequest,
+  type NodeRpcResponse,
+  type NodeRpcError,
   WS_ERROR_CODES,
   createWSMessage,
+  isWSMessage,
 } from '@openaidy/shared-types';
 import type { Node, NodeType } from '../node-registry';
 
@@ -75,15 +82,22 @@ export class NodeHandler {
   private nodeRegistry: NodeRegistry;
   private connectionManager: ConnectionManager;
   private logger: FastifyBaseLogger;
+  private invocationManager: InvocationManager;
 
   constructor(
     nodeRegistry: NodeRegistry,
     connectionManager: ConnectionManager,
     logger: FastifyBaseLogger,
+    invocationManagerOptions?: InvocationManagerOptions,
   ) {
     this.nodeRegistry = nodeRegistry;
     this.connectionManager = connectionManager;
     this.logger = logger;
+    this.invocationManager = new InvocationManager(
+      connectionManager,
+      logger,
+      invocationManagerOptions,
+    );
   }
 
   // ============================================================================
@@ -219,19 +233,132 @@ export class NodeHandler {
         } as ErrorResponse;
       }
 
-      // TODO: Implement actual invocation
-      // This would send a message to the node and wait for response
-      // For now, return a placeholder response
+      // Start invocation through the invocation manager
+      const result = this.invocationManager.startInvocation(
+        request.payload.nodeId,
+        connectionId,
+        request.id,
+        request.payload.capability,
+        request.payload.params ?? {},
+        request.payload.timeout,
+      );
 
-      return {
-        ...createWSMessage('node.invoke', {
-          result: { message: 'Invocation pending - not yet implemented' },
-          duration: 0,
-        }),
-      } as NodeInvokeResponse;
+      if (!result.ok) {
+        return {
+          ...createWSMessage('error', {
+            requestId: request.id,
+            error: {
+              code: result.error.code,
+              message: result.error.message,
+            },
+          }),
+        } as ErrorResponse;
+      }
+
+      // Create the RPC request to send to the node
+      const rpcRequest = this.invocationManager.createRpcRequest(result.invocationId);
+      if (!rpcRequest) {
+        // Should not happen, but handle gracefully
+        this.invocationManager.failInvocation(
+          result.invocationId,
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          'Failed to create RPC request',
+        );
+        return {
+          ...createWSMessage('error', {
+            requestId: request.id,
+            error: {
+              code: WS_ERROR_CODES.INTERNAL_ERROR,
+              message: 'Failed to create RPC request',
+            },
+          }),
+        } as ErrorResponse;
+      }
+
+      // Send the RPC request to the node
+      const sent = this.connectionManager.send(node.connectionId, rpcRequest);
+      if (!sent) {
+        // Failed to send to node
+        this.invocationManager.failInvocation(
+          result.invocationId,
+          WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+          'Failed to send request to node',
+        );
+        return {
+          ...createWSMessage('error', {
+            requestId: request.id,
+            error: {
+              code: WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+              message: 'Failed to send request to node',
+            },
+          }),
+        } as ErrorResponse;
+      }
+
+      this.logger.info(
+        { 
+          connectionId, 
+          nodeId: request.payload.nodeId, 
+          capability: request.payload.capability,
+          invocationId: result.invocationId,
+        },
+        'Node invocation request sent',
+      );
+
+      // Wait for the response (with timeout handled by InvocationManager)
+      return result.promise as Promise<NodeInvokeResponse | ErrorResponse>;
     } catch (error) {
       return this.handleError('node.invoke', request.id, error);
     }
+  }
+
+  // ============================================================================
+  // Node RPC Response Handling
+  // ============================================================================
+
+  /**
+   * Handle a node.rpc.response from a node
+   * 
+   * This should be called when a node sends a response to a pending invocation.
+   */
+  handleRpcResponse(
+    connectionId: string,
+    message: NodeRpcResponse,
+  ): boolean {
+    return this.invocationManager.handleResponse(message);
+  }
+
+  /**
+   * Handle a node.rpc.error from a node
+   * 
+   * This should be called when a node sends an error for a pending invocation.
+   */
+  handleRpcError(
+    connectionId: string,
+    message: NodeRpcError,
+  ): boolean {
+    return this.invocationManager.handleError(message);
+  }
+
+  /**
+   * Clean up invocations when a node disconnects
+   */
+  handleNodeDisconnect(nodeId: string): number {
+    return this.invocationManager.failNodeInvocations(nodeId, 'Node disconnected');
+  }
+
+  /**
+   * Clean up invocations when a caller disconnects
+   */
+  handleCallerDisconnect(connectionId: string): number {
+    return this.invocationManager.cleanupCallerConnection(connectionId);
+  }
+
+  /**
+   * Get the invocation manager (for testing/debugging)
+   */
+  getInvocationManager(): InvocationManager {
+    return this.invocationManager;
   }
 
   // ============================================================================

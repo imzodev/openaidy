@@ -522,6 +522,45 @@ export type NodeInvokedResponse = WSMessage<
   }
 >;
 
+/**
+ * Node RPC request - sent from server to node for invocation
+ * 
+ * This is the envelope sent to the target node when a client calls node.invoke.
+ * The node should respond with node.rpc.response or node.rpc.error.
+ */
+export type NodeRpcRequest = WSMessage<
+  'node.rpc.request',
+  {
+    invocationId: string;
+    capability: string;
+    params: Record<string, unknown>;
+    timeout?: number;
+  }
+>;
+
+/**
+ * Node RPC response - sent from node to server on successful invocation
+ */
+export type NodeRpcResponse = WSMessage<
+  'node.rpc.response',
+  {
+    invocationId: string;
+    result: unknown;
+    duration: number;
+  }
+>;
+
+/**
+ * Node RPC error - sent from node to server on failed invocation
+ */
+export type NodeRpcError = WSMessage<
+  'node.rpc.error',
+  {
+    invocationId: string;
+    error: WSError;
+  }
+>;
+
 // Note: NodeOnlineEvent and NodeOfflineEvent are defined later in the Node Event Types section
 
 // ============================================================================
