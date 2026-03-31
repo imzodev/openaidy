@@ -406,19 +406,66 @@ describe('E2E Integration Tests', () => {
   // ============================================================================
 
   describe('Authentication', () => {
-    it('should handle valid token authentication', () => {
-      const ctx = gateway.connectionManager.registerConnection('conn-1');
-      expect(ctx.status).toBe('connected');
+    it('should handle valid token authentication', async () => {
+      gateway.connectionManager.registerConnection('conn-1');
+
+      const realAuth = new AuthMiddleware(gateway.config);
+      const token = await realAuth.generateToken({
+        clientId: 'e2e-client',
+        type: 'access',
+        scopes: ['sessions.read', 'config.read'],
+      });
+
+      const response = await sendAndReceive<{ type: 'auth.authenticated'; payload: { clientId: string; capabilities: string[] } }>(
+        gateway.messageRouter,
+        'conn-1',
+        'auth.authenticate',
+        { token },
+        handlerContext,
+      );
+
+      expect(response.type).toBe('auth.authenticated');
+      expect(response.payload.clientId).toBe('e2e-client');
+      expect(response.payload.capabilities).toEqual(['sessions.read', 'config.read']);
+      expect(gateway.connectionManager.isAuthenticated('conn-1')).toBe(true);
     });
 
-    it('should extract capabilities from token', () => {
-      const ctx = gateway.connectionManager.registerConnection('conn-1');
-      expect(ctx).toBeDefined();
+    it('should extract capabilities from token', async () => {
+      gateway.connectionManager.registerConnection('conn-2');
+
+      const realAuth = new AuthMiddleware(gateway.config);
+      const token = await realAuth.generateToken({
+        clientId: 'cap-client',
+        type: 'access',
+        scopes: ['config.write'],
+      });
+
+      await sendAndReceive(
+        gateway.messageRouter,
+        'conn-2',
+        'auth.authenticate',
+        { token },
+        handlerContext,
+      );
+
+      expect(gateway.connectionManager.getCapabilities('conn-2')).toEqual(['config.write']);
+      expect(gateway.connectionManager.hasCapability('conn-2', 'config.write')).toBe(true);
     });
 
-    it('should enforce permission checks', () => {
-      const ctx = gateway.connectionManager.registerConnection('conn-1');
-      expect(ctx).toBeDefined();
+    it('should reject invalid token authentication', async () => {
+      gateway.connectionManager.registerConnection('conn-3');
+
+      const response = await sendAndReceive<ErrorResponse>(
+        gateway.messageRouter,
+        'conn-3',
+        'auth.authenticate',
+        { token: 'invalid-token' },
+        handlerContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect(response.payload.error.code).toBe(WS_ERROR_CODES.AUTH_FAILED);
+      expect(gateway.connectionManager.isAuthenticated('conn-3')).toBe(false);
     });
   });
 

@@ -145,6 +145,33 @@ describe('AuthMiddleware', () => {
       expect(payload).toBeNull();
     });
 
+    it('should reject token with tampered payload', async () => {
+      const token = await middleware.generateToken({
+        clientId: 'client-123',
+        type: 'access',
+        scopes: ['sessions.read'],
+      });
+
+      const parts = token.split('.');
+      expect(parts).toHaveLength(3);
+
+      const [header, payload, signature] = parts as [string, string, string];
+      const decodedPayload = JSON.parse(
+        Buffer.from(payload, 'base64url').toString('utf-8'),
+      ) as JWTPayload;
+      decodedPayload.scopes = ['config.write'];
+
+      const tamperedPayload = Buffer.from(
+        JSON.stringify(decodedPayload),
+        'utf-8',
+      ).toString('base64url');
+
+      const tamperedToken = `${header}.${tamperedPayload}.${signature}`;
+      const result = await middleware.validateToken(tamperedToken);
+
+      expect(result).toBeNull();
+    });
+
     it('should reject expired token', async () => {
       // Create token that expired 1 second ago
       const token = await middleware.generateToken({
@@ -435,7 +462,7 @@ describe('AuthMiddleware', () => {
     });
 
     it('should return null if no token in payload', () => {
-      const token = middleware.extractFromPayload({ other: 'value' });
+      const token = middleware.extractFromPayload({});
 
       expect(token).toBeNull();
     });

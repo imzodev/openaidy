@@ -8,10 +8,10 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import type { IncomingMessage } from 'http';
+import { parse as parseUrl } from 'node:url';
 import {
   type WebSocketConfig,
   type PairingConfig,
-  type ConnectionContext,
   defaultWebSocketConfig,
   defaultPairingConfig,
   createWebSocketConfig,
@@ -20,10 +20,14 @@ import {
 import {
   type WSMessage,
   type WSResponse,
+  type AuthAuthenticateRequest,
+  type AuthRefreshRequest,
+  type AuthAuthenticatedResponse,
   WS_ERROR_CODES,
   isWSMessage,
   createWSMessage,
   createErrorResponse,
+  WS_CAPABILITIES,
 } from '@openaidy/shared-types';
 import type { AppServices } from '../app';
 import { ConnectionManager } from './connection-manager';
@@ -53,6 +57,69 @@ export type WebSocketConnection = {
   socket: WebSocket;
   req: FastifyRequest | IncomingMessage;
 };
+
+const PUBLIC_MESSAGE_TYPES = new Set<string>([
+  'auth.authenticate',
+  'auth.refresh',
+  'pairing.request',
+  'pairing.status',
+]);
+
+const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
+  'session.create': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.get': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.list': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.delete': [WS_CAPABILITIES.SESSIONS_DELETE],
+  'session.message': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.subscribe': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.unsubscribe': [WS_CAPABILITIES.SESSIONS_READ],
+  'agent.list': [WS_CAPABILITIES.AGENTS_READ],
+  'agent.get': [WS_CAPABILITIES.AGENTS_READ],
+  'provider.list': [WS_CAPABILITIES.PROVIDERS_READ],
+  'provider.models': [WS_CAPABILITIES.PROVIDERS_READ],
+  'config.get': [WS_CAPABILITIES.CONFIG_READ],
+  'config.update': [WS_CAPABILITIES.CONFIG_WRITE],
+  'config.watch': [WS_CAPABILITIES.CONFIG_READ],
+  'config.unwatch': [WS_CAPABILITIES.CONFIG_READ],
+  'node.list': [WS_CAPABILITIES.NODE_DESCRIBE],
+  'node.describe': [WS_CAPABILITIES.NODE_DESCRIBE],
+  'node.invoke': [WS_CAPABILITIES.NODE_INVOKE],
+  'node.register': [WS_CAPABILITIES.NODE_DESCRIBE],
+  'node.unregister': [WS_CAPABILITIES.NODE_DESCRIBE],
+  'pairing.list': [WS_CAPABILITIES.PAIRING_APPROVE],
+  'pairing.approve': [WS_CAPABILITIES.PAIRING_APPROVE],
+  'pairing.deny': [WS_CAPABILITIES.PAIRING_DENY],
+  'presence.update': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  'presence.get': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  'presence.getAll': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  'presence.subscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  'presence.unsubscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+};
+
+function isPublicMessageType(type: string): boolean {
+  return PUBLIC_MESSAGE_TYPES.has(type);
+}
+
+function getRequiredCapabilities(type: string): string[] {
+  return MESSAGE_CAPABILITIES[type] ?? [];
+}
+
+function extractHandshakeToken(
+  req: FastifyRequest | IncomingMessage,
+  authMiddleware: AuthMiddleware,
+): string | null {
+  const authHeader = req.headers?.authorization;
+  if (typeof authHeader === 'string') {
+    const token = authMiddleware.extractFromHeader(authHeader);
+    if (token) {
+      return token;
+    }
+  }
+
+  const parsed = parseUrl(req.url ?? '', true);
+  const query = parsed.query as Record<string, string | undefined>;
+  return authMiddleware.extractFromQuery(query);
+}
 
 // ============================================================================
 // WebSocket Gateway
@@ -174,6 +241,77 @@ function createGateway(
   registerPresenceHandlers(messageRouter, presenceHandler);
 
   // Register subscribe/unsubscribe handlers
+  messageRouter.registerHandler('auth.authenticate', async (connectionId, message) => {
+    const request = message as AuthAuthenticateRequest;
+    const token = authMiddleware.extractFromPayload(request.payload);
+
+    if (!token) {
+      return createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.AUTH_REQUIRED,
+        'Authentication token is required',
+      );
+    }
+
+    const result = await authMiddleware.authenticate(token);
+    if (!result.success || !result.clientId) {
+      return createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.AUTH_FAILED,
+        result.error?.message ?? 'Authentication failed',
+      );
+    }
+
+    connectionManager.authenticate(
+      connectionId,
+      result.clientId,
+      result.capabilities ?? [],
+    );
+
+    const payload = await authMiddleware.validateToken(token);
+    const expiresAt = payload?.exp
+      ? new Date(payload.exp * 1000).toISOString()
+      : new Date(Date.now() + config.auth.tokenExpiry).toISOString();
+
+    return createWSMessage('auth.authenticated', {
+      clientId: result.clientId,
+      token,
+      expiresAt,
+      capabilities: result.capabilities ?? [],
+    }) as AuthAuthenticatedResponse;
+  });
+
+  messageRouter.registerHandler('auth.refresh', async (connectionId, message) => {
+    const request = message as AuthRefreshRequest;
+    const refreshedToken = await authMiddleware.refreshToken(request.payload.refreshToken);
+
+    if (!refreshedToken) {
+      return createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.AUTH_FAILED,
+        'Invalid refresh token',
+      );
+    }
+
+    const payload = await authMiddleware.validateToken(refreshedToken);
+    if (!payload) {
+      return createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.AUTH_FAILED,
+        'Failed to refresh token',
+      );
+    }
+
+    connectionManager.authenticate(connectionId, payload.sub, payload.scopes);
+
+    return createWSMessage('auth.authenticated', {
+      clientId: payload.sub,
+      token: refreshedToken,
+      expiresAt: new Date(payload.exp * 1000).toISOString(),
+      capabilities: payload.scopes,
+    }) as AuthAuthenticatedResponse;
+  });
+
   messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
     const payload = message.payload as { sessionId: string; events?: string[] };
     const subscriptionId = subscriptionManager.createSubscription(
@@ -335,6 +473,28 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     gateway.connectionManager.registerConnection(connectionId, socket);
     fastify.log.info(`WebSocket connection established: ${connectionId}`);
 
+    const handshakeToken = extractHandshakeToken(req, authMiddleware);
+    if (handshakeToken) {
+      const authResult = await authMiddleware.authenticate(handshakeToken);
+      if (authResult.success && authResult.clientId) {
+        gateway.connectionManager.authenticate(
+          connectionId,
+          authResult.clientId,
+          authResult.capabilities ?? [],
+        );
+      } else if (gateway.config.auth.required) {
+        const errorMsg = createErrorResponse(
+          '0',
+          WS_ERROR_CODES.AUTH_FAILED,
+          authResult.error?.message ?? 'Authentication failed',
+        );
+        socket.send(JSON.stringify(errorMsg));
+        socket.close(1008, 'Authentication failed');
+        gateway.connectionManager.removeConnection(connectionId);
+        return;
+      }
+    }
+
     // Create handler context
     const handlerContext: HandlerContext = {
       connectionManager: gateway.connectionManager,
@@ -384,6 +544,48 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
         );
         socket.send(JSON.stringify(errorMsg));
         return;
+      }
+
+      const connection = gateway.connectionManager.getConnection(connectionId);
+      if (!connection) {
+        const errorMsg = createErrorResponse(
+          message.id,
+          WS_ERROR_CODES.CONNECTION_CLOSED,
+          'Connection is no longer available',
+        );
+        socket.send(JSON.stringify(errorMsg));
+        return;
+      }
+
+      if (
+        gateway.config.auth.required &&
+        !connection.authenticated &&
+        !isPublicMessageType(message.type)
+      ) {
+        const errorMsg = createErrorResponse(
+          message.id,
+          WS_ERROR_CODES.AUTH_REQUIRED,
+          'Authentication required',
+        );
+        socket.send(JSON.stringify(errorMsg));
+        return;
+      }
+
+      const requiredCapabilities = getRequiredCapabilities(message.type);
+      if (requiredCapabilities.length > 0) {
+        const hasAllCapabilities = requiredCapabilities.every((capability) =>
+          gateway.connectionManager.hasCapability(connectionId, capability),
+        );
+
+        if (!hasAllCapabilities) {
+          const errorMsg = createErrorResponse(
+            message.id,
+            WS_ERROR_CODES.FORBIDDEN,
+            `Missing required capabilities: ${requiredCapabilities.join(', ')}`,
+          );
+          socket.send(JSON.stringify(errorMsg));
+          return;
+        }
       }
 
       // Handle streaming messages specially
@@ -440,7 +642,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
   };
 
   // Register WebSocket route
-  fastify.get('/ws', { websocket: true }, async (connection, req) => {
+  fastify.get(gateway.config.path, { websocket: true }, async (connection, req) => {
     // In @fastify/websocket, connection is { socket: WebSocket } in newer versions
     // The socket is directly accessible as connection for the WebSocket handler
     const socket = (connection as unknown as { socket: WebSocket }).socket || connection as WebSocket;

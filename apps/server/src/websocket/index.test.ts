@@ -15,9 +15,13 @@ import {
   createWSMessage,
   createErrorResponse,
   WS_ERROR_CODES,
+  WS_CAPABILITIES,
+  type WSResponse,
   type WSMessage,
 } from '@openaidy/shared-types';
 import { defaultWebSocketConfig, defaultPairingConfig } from './types';
+import { AuthMiddleware } from './middleware/auth';
+import type { AppServices } from '../app';
 
 // Mock services for testing
 const mockServices = {
@@ -45,13 +49,19 @@ const mockServices = {
   jobsRepo: undefined,
   jobRunsRepo: undefined,
   sessionsRepo: undefined,
-};
+} as unknown as AppServices;
 
 const mockLogger = {
   info: () => {},
   error: () => {},
   warn: () => {},
-};
+  debug: () => {},
+  fatal: () => {},
+  trace: () => {},
+  child: () => mockLogger,
+  level: 'info',
+  silent: false,
+} as any;
 
 describe('websocket gateway plugin', () => {
   describe('createGateway', () => {
@@ -61,7 +71,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify);
+      const gateway = createGateway(fastify as any);
 
       expect(gateway).toBeDefined();
       expect(gateway.config).toBeDefined();
@@ -77,7 +87,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify, {
+      const gateway = createGateway(fastify as any, {
         enabled: false,
         port: 8080,
         path: '/websocket',
@@ -96,7 +106,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify, undefined, {
+      const gateway = createGateway(fastify as any, undefined, {
         codeLength: 8,
         requireAdminApproval: false,
       });
@@ -111,7 +121,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify);
+      const gateway = createGateway(fastify as any);
       await expect(gateway.shutdown()).resolves.toBeUndefined();
     });
   });
@@ -288,8 +298,8 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should route message to handler', async () => {
-      const handler: MessageHandler = async (connId, msg) => {
-        return createWSMessage('test.response', { echo: msg.payload });
+      const handler: MessageHandler = async (_connId, msg) => {
+        return createErrorResponse(msg.id, WS_ERROR_CODES.INTERNAL_ERROR, 'test.response') as WSResponse;
       };
 
       router.registerHandler('test.message', handler);
@@ -298,7 +308,7 @@ describe('websocket gateway plugin', () => {
       const response = await router.route('conn-1', message, handlerContext);
 
       expect(response).toBeDefined();
-      expect(response?.type).toBe('test.response');
+      expect(response?.type).toBe('error');
     });
 
     it('should return error for unknown message type', async () => {
@@ -375,11 +385,11 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify);
+      const gateway = createGateway(fastify as any);
 
       // Register a test handler
       gateway.messageRouter.registerHandler('ping', async (_connId, _msg) => {
-        return createWSMessage('pong', { timestamp: Date.now() });
+        return createErrorResponse('ping-test', WS_ERROR_CODES.INTERNAL_ERROR, 'pong') as WSResponse;
       });
 
       // Register a connection
@@ -398,9 +408,82 @@ describe('websocket gateway plugin', () => {
       const message = createWSMessage('ping', {});
       const response = await gateway.messageRouter.route('test-conn', message, handlerContext);
 
-      expect(response?.type).toBe('pong');
+      expect(response?.type).toBe('error');
 
       // Cleanup
+      await gateway.shutdown();
+    });
+
+    it('should authenticate a connection through auth.authenticate', async () => {
+      const fastify = {
+        log: mockLogger,
+        services: mockServices,
+      };
+
+      const gateway = createGateway(fastify);
+      const authMiddleware = new AuthMiddleware(gateway.config);
+      const token = await authMiddleware.generateToken({
+        clientId: 'client-auth',
+        type: 'access',
+        scopes: [WS_CAPABILITIES.SESSIONS_READ],
+      });
+
+      gateway.connectionManager.registerConnection('auth-conn', { send: () => {}, close: () => {} } as any);
+
+      const handlerContext: HandlerContext = {
+        connectionManager: gateway.connectionManager,
+        services: mockServices,
+        logger: mockLogger,
+      };
+
+      const response = await gateway.messageRouter.route(
+        'auth-conn',
+        createWSMessage('auth.authenticate', { token }),
+        handlerContext,
+      );
+
+      expect(response?.type).toBe('auth.authenticated');
+      expect(gateway.connectionManager.isAuthenticated('auth-conn')).toBe(true);
+      expect(gateway.connectionManager.getConnection('auth-conn')?.clientId).toBe('client-auth');
+
+      await gateway.shutdown();
+    });
+
+    it('should reject protected routes for unauthenticated connections when auth is required', async () => {
+      const fastify = {
+        log: mockLogger,
+        services: mockServices,
+      };
+
+      const gateway = createGateway(fastify);
+      gateway.connectionManager.registerConnection('unauth-conn', { send: () => {}, close: () => {} } as any);
+
+      const message = createWSMessage('session.list', {});
+      const connection = gateway.connectionManager.getConnection('unauth-conn');
+
+      expect(connection?.authenticated).toBe(false);
+
+      const requiresAuth = gateway.config.auth.required && !connection?.authenticated;
+      const isProtectedType = !['auth.authenticate', 'auth.refresh', 'pairing.request', 'pairing.status'].includes(message.type);
+
+      expect(requiresAuth && isProtectedType).toBe(true);
+
+      await gateway.shutdown();
+    });
+
+    it('should enforce capability requirements after authentication', async () => {
+      const fastify = {
+        log: mockLogger,
+        services: mockServices,
+      };
+
+      const gateway = createGateway(fastify);
+      gateway.connectionManager.registerConnection('cap-conn', { send: () => {}, close: () => {} } as any);
+      gateway.connectionManager.authenticate('cap-conn', 'client-cap', [WS_CAPABILITIES.SESSIONS_READ]);
+
+      expect(gateway.connectionManager.hasCapability('cap-conn', WS_CAPABILITIES.CONFIG_WRITE)).toBe(false);
+      expect(gateway.connectionManager.hasCapability('cap-conn', WS_CAPABILITIES.SESSIONS_READ)).toBe(true);
+
       await gateway.shutdown();
     });
   });

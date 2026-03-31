@@ -6,6 +6,7 @@
  */
 
 import type { WebSocketConfig } from '../types';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // ============================================================================
 // Types
@@ -129,6 +130,10 @@ export class AuthMiddleware {
    */
   async validateToken(token: string): Promise<JWTPayload | null> {
     try {
+      if (!this.verifyToken(token)) {
+        return null;
+      }
+
       const payload = this.decodeToken(token);
 
       if (!payload) {
@@ -176,13 +181,7 @@ export class AuthMiddleware {
    * Decode base64url string
    */
   private base64UrlDecode(str: string): string {
-    // Convert base64url to base64
-    let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
-    // Pad with '=' if needed
-    while (base64.length % 4) {
-      base64 += '=';
-    }
-    return atob(base64);
+    return Buffer.from(str, 'base64url').toString('utf-8');
   }
 
   // ============================================================================
@@ -225,23 +224,41 @@ export class AuthMiddleware {
    * Encode string to base64url
    */
   private base64UrlEncode(str: string): string {
-    const base64 = btoa(str);
-    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    return Buffer.from(str, 'utf-8').toString('base64url');
   }
 
   /**
    * Sign data with secret (simple HMAC simulation)
    */
   private sign(data: string): string {
-    // Simple hash simulation - in production, use proper HMAC
-    let hash = 0;
-    const combined = data + this.secret;
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
+    return createHmac('sha256', this.secret)
+      .update(data)
+      .digest('base64url');
+  }
+
+  /**
+   * Verify token signature
+   */
+  private verifyToken(token: string): boolean {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return false;
+      }
+
+      const [header, payload, signature] = parts;
+      const expectedSignature = this.sign(`${header}.${payload}`);
+      const provided = Buffer.from(signature, 'utf-8');
+      const expected = Buffer.from(expectedSignature, 'utf-8');
+
+      if (provided.length !== expected.length) {
+        return false;
+      }
+
+      return timingSafeEqual(provided, expected);
+    } catch {
+      return false;
     }
-    return this.base64UrlEncode(hash.toString(36));
   }
 
   /**
