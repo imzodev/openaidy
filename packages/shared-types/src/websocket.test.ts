@@ -15,10 +15,6 @@ import {
   createWSError,
   WS_ERROR_CODES,
   WS_CAPABILITIES,
-  type WSMessage,
-  type WSError,
-  type SessionStreamEvent,
-  type ErrorResponse,
   // Session event types and guards
   isSessionEventType,
   isSessionEvent,
@@ -32,11 +28,6 @@ import {
   isSessionStreamUsage,
   isSessionStreamEnd,
   isSessionStreamError,
-  type SessionEvent,
-  type SessionCreatedEvent,
-  type SessionMessageEvent,
-  type SessionDeletedEvent,
-  type SessionUpdatedEvent,
   // Agent event types and guards
   isAgentEventType,
   isAgentEvent,
@@ -45,12 +36,6 @@ import {
   isAgentDeletedEvent,
   isAgentEnabledEvent,
   isAgentDisabledEvent,
-  type AgentEvent,
-  type AgentCreatedEvent,
-  type AgentUpdatedEvent,
-  type AgentDeletedEvent,
-  type AgentEnabledEvent,
-  type AgentDisabledEvent,
   // Provider event types and guards
   isProviderEventType,
   isProviderEvent,
@@ -58,11 +43,6 @@ import {
   isProviderUpdatedEvent,
   isProviderUnregisteredEvent,
   isModelAddedEvent,
-  type ProviderEvent,
-  type ProviderRegisteredEvent,
-  type ProviderUpdatedEvent,
-  type ProviderUnregisteredEvent,
-  type ModelAddedEvent,
   // Node event types and guards
   isNodeEventType,
   isNodeEvent,
@@ -72,33 +52,18 @@ import {
   isNodeInvokedEvent,
   isNodeUpdatedEvent,
   isNodeUnregisteredEvent,
-  type NodeEvent,
-  type NodeRegisteredEvent,
-  type NodeOnlineEvent,
-  type NodeOfflineEvent,
-  type NodeInvokedEvent,
-  type NodeUpdatedEvent,
-  type NodeUnregisteredEvent,
   // Pairing event types and guards
   isPairingEventType,
   isPairingEvent,
   isPairingRequestedEvent,
   isPairingApprovedEvent,
   isPairingDeniedEvent,
-  type PairingEvent,
-  type PairingRequestedEvent,
-  type PairingApprovedEvent,
-  type PairingDeniedEvent,
   // Config event types and guards
   isConfigEventType,
   isConfigEvent,
   isConfigUpdatedEvent,
   isConfigReloadedEvent,
   isConfigValidationErrorEvent,
-  type ConfigEvent,
-  type ConfigUpdatedEvent,
-  type ConfigReloadedEvent,
-  type ConfigValidationErrorEvent,
   // Presence event types and guards
   isPresenceEventType,
   isPresenceEvent,
@@ -107,12 +72,6 @@ import {
   isPresenceOfflineEvent,
   isPresenceSubscribedEvent,
   isPresenceUnsubscribedEvent,
-  type PresenceEvent,
-  type PresenceChangedEvent,
-  type PresenceOnlineEvent,
-  type PresenceOfflineEvent,
-  type PresenceSubscribedEvent,
-  type PresenceUnsubscribedEvent,
   type PresenceStatus,
 } from './websocket';
 
@@ -139,13 +98,31 @@ describe('websocket types', () => {
       expect(isWSMessage({})).toBe(false);
       expect(isWSMessage({ id: '123' })).toBe(false);
       expect(isWSMessage({ id: '123', type: 'test' })).toBe(false);
-      expect(isWSMessage({ id: '123', type: 'test', timestamp: '2024-01-01' })).toBe(false);
+      expect(
+        isWSMessage({ id: '123', type: 'test', timestamp: '2024-01-01' }),
+      ).toBe(false);
     });
 
     it('should return false for wrong field types', () => {
-      expect(isWSMessage({ id: 123, type: 'test', timestamp: '2024-01-01', payload: {} })).toBe(false);
-      expect(isWSMessage({ id: '123', type: 123, timestamp: '2024-01-01', payload: {} })).toBe(false);
-      expect(isWSMessage({ id: '123', type: 'test', timestamp: 123, payload: {} })).toBe(false);
+      expect(
+        isWSMessage({
+          id: 123,
+          type: 'test',
+          timestamp: '2024-01-01',
+          payload: {},
+        }),
+      ).toBe(false);
+      expect(
+        isWSMessage({
+          id: '123',
+          type: 123,
+          timestamp: '2024-01-01',
+          payload: {},
+        }),
+      ).toBe(false);
+      expect(
+        isWSMessage({ id: '123', type: 'test', timestamp: 123, payload: {} }),
+      ).toBe(false);
     });
   });
 
@@ -289,7 +266,12 @@ describe('websocket types', () => {
         id: '123',
         type: 'session.stream.delta',
         timestamp: new Date().toISOString(),
-        payload: { sessionId: 's1', runId: 'r1', delta: 'Hello', content: 'Hello' },
+        payload: {
+          sessionId: 's1',
+          runId: 'r1',
+          delta: 'Hello',
+          content: 'Hello',
+        },
       };
       expect(isSessionStreamEvent(msg)).toBe(true);
     });
@@ -372,20 +354,24 @@ describe('websocket types', () => {
   describe('createWSMessage', () => {
     it('should create a message with auto-generated ID and timestamp', () => {
       const msg = createWSMessage('session.create', { agentId: 'agent-1' });
-      
+
       expect(msg.type).toBe('session.create');
       expect(msg.payload).toEqual({ agentId: 'agent-1' });
       expect(msg.id).toBeDefined();
       expect(typeof msg.id).toBe('string');
       expect(msg.timestamp).toBeDefined();
-      
+
       // Validate timestamp is ISO 8601
       const timestamp = Date.parse(msg.timestamp);
       expect(isNaN(timestamp)).toBe(false);
     });
 
     it('should create a message with provided ID', () => {
-      const msg = createWSMessage('session.get', { sessionId: 's1' }, 'custom-id');
+      const msg = createWSMessage(
+        'session.get',
+        { sessionId: 's1' },
+        'custom-id',
+      );
       expect(msg.id).toBe('custom-id');
     });
   });
@@ -1687,7 +1673,9 @@ describe('websocket types', () => {
 
       expect(isNodeInvokedEvent(parsed)).toBe(true);
       expect(parsed.payload.capability).toBe('camera');
-      expect((parsed.payload.result as { success: boolean }).success).toBe(true);
+      expect((parsed.payload.result as { success: boolean }).success).toBe(
+        true,
+      );
     });
 
     it('should serialize and deserialize node.invoked event with error', () => {
@@ -2059,7 +2047,10 @@ describe('Configuration Events', () => {
       const parsed = JSON.parse(json);
 
       expect(isConfigUpdatedEvent(parsed)).toBe(true);
-      expect(parsed.payload.updates).toEqual({ 'app.name': 'NewName', 'app.version': '2.0.0' });
+      expect(parsed.payload.updates).toEqual({
+        'app.name': 'NewName',
+        'app.version': '2.0.0',
+      });
       expect(parsed.payload.updatedBy).toBe('admin-user');
     });
 
@@ -2073,15 +2064,14 @@ describe('Configuration Events', () => {
       const parsed = JSON.parse(json);
 
       expect(isConfigReloadedEvent(parsed)).toBe(true);
-      expect(parsed.payload.config).toEqual({ app: { name: 'TestApp', version: '1.0.0' } });
+      expect(parsed.payload.config).toEqual({
+        app: { name: 'TestApp', version: '1.0.0' },
+      });
     });
 
     it('should serialize and deserialize ConfigValidationErrorEvent', () => {
       const original = createWSMessage('config.validation_error', {
-        errors: [
-          'Field "port" must be a number',
-          'Field "host" is required',
-        ],
+        errors: ['Field "port" must be a number', 'Field "host" is required'],
         occurredAt: '2024-01-15T11:05:00.000Z',
       });
 

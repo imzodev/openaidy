@@ -6,7 +6,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WebSocketClient, createWebSocketClient } from './websocket-client';
-import { noopLogger } from './websocket-client.types';
 
 // ============================================================================
 // Mock WebSocket
@@ -19,7 +18,9 @@ class MockWebSocket {
   url: string;
   readyState: number = WebSocket.CONNECTING;
   private onopenHandler: (() => void) | null = null;
-  private oncloseHandler: ((event: { code: number; reason: string }) => void) | null = null;
+  private oncloseHandler:
+    | ((event: { code: number; reason: string }) => void)
+    | null = null;
   private onerrorHandler: ((event: Event) => void) | null = null;
   private onmessageHandler: ((event: { data: string }) => void) | null = null;
 
@@ -95,12 +96,17 @@ class MockWebSocket {
 
 const originalWebSocket = global.WebSocket;
 
+type GlobalWithWebSocket = typeof globalThis & {
+  WebSocket: typeof WebSocket;
+};
+
 describe('WebSocketClient', () => {
   let client: WebSocketClient;
 
   beforeEach(() => {
     MockWebSocket.reset();
-    (global as any).WebSocket = MockWebSocket as any;
+    (global as GlobalWithWebSocket).WebSocket =
+      MockWebSocket as unknown as typeof WebSocket;
 
     client = createWebSocketClient({
       url: 'ws://localhost:3000/ws',
@@ -111,7 +117,7 @@ describe('WebSocketClient', () => {
 
   afterEach(() => {
     client.destroy();
-    (global as any).WebSocket = originalWebSocket;
+    (global as GlobalWithWebSocket).WebSocket = originalWebSocket;
   });
 
   // ============================================================================
@@ -133,13 +139,17 @@ describe('WebSocketClient', () => {
     });
 
     it('should use default options', () => {
-      const defaultClient = createWebSocketClient({ url: 'ws://localhost:3000/ws' });
+      const defaultClient = createWebSocketClient({
+        url: 'ws://localhost:3000/ws',
+      });
       expect(defaultClient.getState()).toBe('disconnected');
       defaultClient.destroy();
     });
 
     it('should create client with factory function', () => {
-      const factoryClient = createWebSocketClient({ url: 'ws://localhost:3000/ws' });
+      const factoryClient = createWebSocketClient({
+        url: 'ws://localhost:3000/ws',
+      });
       expect(factoryClient).toBeInstanceOf(WebSocketClient);
       factoryClient.destroy();
     });

@@ -13,13 +13,20 @@ describe('ChatComposer', () => {
   const mockOnSend = vi.fn().mockResolvedValue(undefined);
   const mockOnAgentSelect = vi.fn();
   const mockAgents = [
-    { id: 'agent-1', name: 'Test Agent', enabled: true, systemPrompt: 'Test', defaults: {} },
+    {
+      id: 'agent-1',
+      name: 'Test Agent',
+      enabled: true,
+      systemPrompt: 'Test',
+      model: 'openai/gpt-4o-mini',
+      defaults: {},
+    },
   ];
 
   it('should render textarea', () => {
     const { container } = render(() => (
-      <ChatComposer 
-        onSend={mockOnSend} 
+      <ChatComposer
+        onSend={mockOnSend}
         agents={mockAgents}
         onAgentSelect={mockOnAgentSelect}
       />
@@ -30,8 +37,8 @@ describe('ChatComposer', () => {
 
   it('should render send button', () => {
     const { container } = render(() => (
-      <ChatComposer 
-        onSend={mockOnSend} 
+      <ChatComposer
+        onSend={mockOnSend}
         agents={mockAgents}
         onAgentSelect={mockOnAgentSelect}
       />

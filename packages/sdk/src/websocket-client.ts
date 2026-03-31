@@ -16,15 +16,24 @@ import {
   type MessageOptions,
   type AgentQueryFilter,
   type Logger,
-  type ConnectionEstablishedEvent,
-  type SessionEvent,
-  type PresenceChangedEvent,
-  type ConfigUpdatedEvent,
-  type ClientEvent,
   defaultWebSocketClientOptions,
   noopLogger,
 } from './websocket-client.types';
-import { createWSMessage, type WSMessage, type WSResponse, WS_ERROR_CODES } from '@openaidy/shared-types';
+import {
+  createWSMessage,
+  type WSMessage,
+  type WSResponse,
+} from '@openaidy/shared-types';
+
+type ConnectionEstablishedMessage = {
+  id: string;
+  type: 'connection.established';
+  timestamp: string;
+  payload: {
+    connectionId: string;
+    heartbeatInterval: number;
+  };
+};
 
 // ============================================================================
 // Request Correlator
@@ -93,7 +102,7 @@ class RequestCorrelator {
    */
   rejectAll(error: Error): number {
     const count = this.pending.size;
-    for (const [id, pending] of this.pending) {
+    for (const [, pending] of this.pending) {
       clearTimeout(pending.timeout);
       pending.reject(error);
     }
@@ -106,11 +115,11 @@ class RequestCorrelator {
    */
   cleanup(): void {
     const now = Date.now();
-    for (const [id, pending] of this.pending) {
+    for (const [requestId, pending] of this.pending) {
       if (now - pending.createdAt > this.timeout) {
         clearTimeout(pending.timeout);
         pending.reject(new Error('Request expired'));
-        this.pending.delete(id);
+        this.pending.delete(requestId);
       }
     }
   }
@@ -206,7 +215,9 @@ class ReconnectionManager {
  * WebSocket client for OpenAidy gateway
  */
 export class WebSocketClient {
-  private options: Required<Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>> & {
+  private options: Required<
+    Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>
+  > & {
     token?: string;
     logger: Logger;
     clientId?: string;
@@ -242,7 +253,10 @@ export class WebSocketClient {
    * Connect to the WebSocket server
    */
   async connect(): Promise<void> {
-    if (this.socket && (this.state === 'connected' || this.state === 'connecting')) {
+    if (
+      this.socket &&
+      (this.state === 'connected' || this.state === 'connecting')
+    ) {
       return;
     }
 
@@ -260,7 +274,9 @@ export class WebSocketClient {
 
         this.socket.onopen = () => {
           this.setState('connected');
-          this.options.logger.info('WebSocket connected', { url: this.options.url });
+          this.options.logger.info('WebSocket connected', {
+            url: this.options.url,
+          });
           this.startHeartbeat();
           resolve();
         };
@@ -269,7 +285,7 @@ export class WebSocketClient {
           this.handleClose(event.code, event.reason);
         };
 
-        this.socket.onerror = (event) => {
+        this.socket.onerror = (_event) => {
           const error = new Error('WebSocket error');
           this.handleError(error);
           reject(error);
@@ -325,7 +341,9 @@ export class WebSocketClient {
    * Check if connected
    */
   isConnected(): boolean {
-    return this.state === 'connected' && this.socket?.readyState === WebSocket.OPEN;
+    return (
+      this.state === 'connected' && this.socket?.readyState === WebSocket.OPEN
+    );
   }
 
   /**
@@ -408,7 +426,11 @@ export class WebSocketClient {
   /**
    * List sessions
    */
-  async listSessions(options?: { status?: string; offset?: number; limit?: number }): Promise<WSResponse> {
+  async listSessions(options?: {
+    status?: string;
+    offset?: number;
+    limit?: number;
+  }): Promise<WSResponse> {
     return this.sendRequest('session.list', options || {});
   }
 
@@ -439,7 +461,10 @@ export class WebSocketClient {
   /**
    * Subscribe to session events
    */
-  async subscribeToSession(sessionId: string, events?: string[]): Promise<WSResponse> {
+  async subscribeToSession(
+    sessionId: string,
+    events?: string[],
+  ): Promise<WSResponse> {
     return this.sendRequest('session.subscribe', {
       sessionId,
       events,
@@ -600,7 +625,10 @@ export class WebSocketClient {
   /**
    * Get presence information
    */
-  async getPresence(options?: { connectionId?: string; clientId?: string }): Promise<WSResponse> {
+  async getPresence(options?: {
+    connectionId?: string;
+    clientId?: string;
+  }): Promise<WSResponse> {
     return this.sendRequest('presence.get', options || {});
   }
 
@@ -632,7 +660,10 @@ export class WebSocketClient {
   /**
    * Request pairing
    */
-  async requestPairing(clientId: string, capabilities: string[]): Promise<WSResponse> {
+  async requestPairing(
+    clientId: string,
+    capabilities: string[],
+  ): Promise<WSResponse> {
     return this.sendRequest('pairing.request', { clientId, capabilities });
   }
 
@@ -646,7 +677,10 @@ export class WebSocketClient {
   /**
    * Approve pairing
    */
-  async approvePairing(code: string, capabilities?: string[]): Promise<WSResponse> {
+  async approvePairing(
+    code: string,
+    capabilities?: string[],
+  ): Promise<WSResponse> {
     return this.sendRequest('pairing.approve', { code, capabilities });
   }
 
@@ -746,7 +780,9 @@ export class WebSocketClient {
    */
   private handleMessage(data: string): void {
     try {
-      const message = JSON.parse(data) as WSResponse;
+      const message = JSON.parse(data) as
+        | WSResponse
+        | ConnectionEstablishedMessage;
 
       // Check if this is a response to a pending request
       if (message.id && this.correlator.resolve(message.id, message)) {
@@ -755,7 +791,10 @@ export class WebSocketClient {
 
       // Handle connection established
       if (message.type === 'connection.established') {
-        const payload = message.payload as { connectionId: string; heartbeatInterval: number };
+        const payload = message.payload as {
+          connectionId: string;
+          heartbeatInterval: number;
+        };
         this.connectionId = payload.connectionId;
         this.emit('connection.established', payload);
         return;
@@ -763,14 +802,20 @@ export class WebSocketClient {
 
       // Handle error responses
       if (message.type === 'error') {
-        const payload = message.payload as { requestId: string; error: { code: string; message: string } };
+        const payload = message.payload as {
+          requestId: string;
+          error: { code: string; message: string };
+        };
         if (payload.requestId) {
           this.correlator.reject(
             payload.requestId,
             new Error(`[${payload.error.code}] ${payload.error.message}`),
           );
         }
-        this.emit('error', new Error(`[${payload.error.code}] ${payload.error.message}`));
+        this.emit(
+          'error',
+          new Error(`[${payload.error.code}] ${payload.error.message}`),
+        );
         return;
       }
 
@@ -803,7 +848,9 @@ export class WebSocketClient {
       });
     } else {
       this.setState('disconnected');
-      this.correlator.rejectAll(new Error(`Connection closed: ${code} - ${reason}`));
+      this.correlator.rejectAll(
+        new Error(`Connection closed: ${code} - ${reason}`),
+      );
     }
 
     this.emit('close', { code, reason });
@@ -828,7 +875,10 @@ export class WebSocketClient {
         try {
           handler(data);
         } catch (error) {
-          this.options.logger.error('Event handler error', { eventType, error });
+          this.options.logger.error('Event handler error', {
+            eventType,
+            error,
+          });
         }
       }
     }
@@ -842,7 +892,12 @@ export class WebSocketClient {
     this.heartbeatTimer = setInterval(() => {
       if (this.isConnected()) {
         // Send ping - server should respond with pong or update heartbeat
-        this.send({ id: this.createRequestId(), type: 'ping', timestamp: new Date().toISOString(), payload: {} }).catch(() => {
+        this.send({
+          id: this.createRequestId(),
+          type: 'ping',
+          timestamp: new Date().toISOString(),
+          payload: {},
+        }).catch(() => {
           // Ignore ping errors
         });
       }
@@ -867,7 +922,9 @@ export class WebSocketClient {
 /**
  * Create a WebSocket client instance
  */
-export function createWebSocketClient(options: WebSocketClientOptions): WebSocketClient {
+export function createWebSocketClient(
+  options: WebSocketClientOptions,
+): WebSocketClient {
   return new WebSocketClient(options);
 }
 

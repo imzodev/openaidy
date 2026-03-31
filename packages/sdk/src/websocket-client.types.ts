@@ -8,7 +8,6 @@ import type {
   WSMessage,
   WSResponse,
   SessionCreatedResponse,
-  SessionListResponse,
   SessionMessageResponse,
   AgentListResponse,
   ProviderListResponse,
@@ -46,7 +45,9 @@ export type WebSocketClientOptions = {
 /**
  * Default client options
  */
-export const defaultWebSocketClientOptions: Required<Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>> = {
+export const defaultWebSocketClientOptions: Required<
+  Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>
+> = {
   url: 'ws://localhost:3000/ws',
   autoReconnect: true,
   reconnectInterval: 1000,
@@ -209,7 +210,6 @@ export type {
   WSMessage,
   WSResponse,
   SessionCreatedResponse,
-  SessionListResponse,
   SessionMessageResponse,
   AgentListResponse,
   ProviderListResponse,
