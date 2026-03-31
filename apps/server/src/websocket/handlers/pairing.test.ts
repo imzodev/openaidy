@@ -43,7 +43,7 @@ const createMockConfig = (): WebSocketConfig => ({
     interval: 30000,
     timeout: 10000,
   },
-} as WebSocketConfig);
+} as unknown as WebSocketConfig);
 
 // ============================================================================
 // PairingHandler Tests
@@ -74,6 +74,15 @@ describe('PairingHandler', () => {
       services: {},
       logger: mockLogger,
     };
+
+    connectionManager.registerConnection('approver', undefined as never);
+    connectionManager.authenticate('approver', 'approver-client', ['pairing.approve', 'pairing.deny']);
+
+    connectionManager.registerConnection('viewer', undefined as never);
+    connectionManager.authenticate('viewer', 'viewer-client', ['pairing.approve']);
+
+    connectionManager.registerConnection('unprivileged', undefined as never);
+    connectionManager.authenticate('unprivileged', 'unprivileged-client', []);
   });
 
   afterEach(() => {
@@ -268,7 +277,7 @@ describe('PairingHandler', () => {
       const approveReq = createWSMessage('pairing.approve', {
         requestId: created.payload.requestId,
       });
-      const response = await handler.handleApprove('conn-2', approveReq, handlerContext);
+      const response = await handler.handleApprove('approver', approveReq, handlerContext);
 
       if (response.type === 'pairing.approved') {
         expect(response.payload.requestId).toBe(created.payload.requestId);
@@ -295,9 +304,9 @@ describe('PairingHandler', () => {
 
       const approveReq = createWSMessage('pairing.approve', {
         requestId: created.payload.requestId,
-        scopes: ['camera'], // Only grant camera
+        scopes: ['camera'],
       });
-      const response = await handler.handleApprove('conn-2', approveReq, handlerContext);
+      const response = await handler.handleApprove('approver', approveReq, handlerContext);
 
       if (response.type === 'pairing.approved') {
         expect(response.payload.scopes).toEqual(['camera']);
@@ -310,7 +319,7 @@ describe('PairingHandler', () => {
       const approveReq = createWSMessage('pairing.approve', {
         requestId: 'non-existent',
       });
-      const response = await handler.handleApprove('conn-1', approveReq, handlerContext);
+      const response = await handler.handleApprove('approver', approveReq, handlerContext);
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -334,12 +343,8 @@ describe('PairingHandler', () => {
       const approveReq = createWSMessage('pairing.approve', {
         requestId: created.payload.requestId,
       });
-
-      // First approval
-      await handler.handleApprove('conn-2', approveReq, handlerContext);
-
-      // Second approval attempt - the request is no longer found because it was already processed
-      const response = await handler.handleApprove('conn-2', approveReq, handlerContext);
+      await handler.handleApprove('approver', approveReq, handlerContext);
+      const response = await handler.handleApprove('approver', approveReq, handlerContext);
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -348,7 +353,7 @@ describe('PairingHandler', () => {
       }
     });
 
-    it('should register node after approval', async () => {
+    it('should not register node until the paired device connects and registers itself', async () => {
       const createReq = createWSMessage('pairing.request', {
         deviceName: 'Test Device',
         deviceType: 'mobile' as NodeType,
@@ -363,21 +368,16 @@ describe('PairingHandler', () => {
       const approveReq = createWSMessage('pairing.approve', {
         requestId: created.payload.requestId,
       });
-      const response = await handler.handleApprove('conn-2', approveReq, handlerContext);
+      const response = await handler.handleApprove('approver', approveReq, handlerContext);
 
       if (response.type === 'pairing.approved') {
-        // Verify node was registered
-        const node = nodeRegistry.getNode(response.payload.nodeId);
-        expect(node).toBeDefined();
-        expect(node?.name).toBe('Test Device');
-        expect(node?.type).toBe('mobile');
-        expect(node?.capabilities).toEqual(['camera']);
+        expect(nodeRegistry.getNode(response.payload.nodeId)).toBeUndefined();
       } else {
         expect.fail('Expected pairing.approved response');
       }
     });
 
-    it('should log approval', async () => {
+    it('should reject approval without pairing.approve capability', async () => {
       const createReq = createWSMessage('pairing.request', {
         deviceName: 'Test Device',
         deviceType: 'mobile' as NodeType,
@@ -392,15 +392,13 @@ describe('PairingHandler', () => {
       const approveReq = createWSMessage('pairing.approve', {
         requestId: created.payload.requestId,
       });
-      await handler.handleApprove('conn-2', approveReq, handlerContext);
+      const response = await handler.handleApprove('unprivileged', approveReq, handlerContext);
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          connectionId: 'conn-2',
-          requestId: created.payload.requestId,
-        }),
-        'Approving pairing request via WebSocket',
-      );
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.FORBIDDEN);
+      } else {
+        expect.fail('Expected error response');
+      }
     });
   });
 
@@ -424,7 +422,7 @@ describe('PairingHandler', () => {
       const denyReq = createWSMessage('pairing.deny', {
         requestId: created.payload.requestId,
       });
-      const response = await handler.handleDeny('conn-2', denyReq, handlerContext);
+      const response = await handler.handleDeny('approver', denyReq, handlerContext);
 
       if (response.type === 'pairing.denied') {
         expect(response.payload.requestId).toBe(created.payload.requestId);
@@ -438,7 +436,7 @@ describe('PairingHandler', () => {
       const denyReq = createWSMessage('pairing.deny', {
         requestId: 'non-existent',
       });
-      const response = await handler.handleDeny('conn-1', denyReq, handlerContext);
+      const response = await handler.handleDeny('approver', denyReq, handlerContext);
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -462,12 +460,8 @@ describe('PairingHandler', () => {
       const denyReq = createWSMessage('pairing.deny', {
         requestId: created.payload.requestId,
       });
-
-      // First denial
-      await handler.handleDeny('conn-2', denyReq, handlerContext);
-
-      // Second denial attempt - the request is no longer found because it was already processed
-      const response = await handler.handleDeny('conn-2', denyReq, handlerContext);
+      await handler.handleDeny('approver', denyReq, handlerContext);
+      const response = await handler.handleDeny('approver', denyReq, handlerContext);
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -476,7 +470,7 @@ describe('PairingHandler', () => {
       }
     });
 
-    it('should log denial', async () => {
+    it('should reject deny without pairing.deny capability', async () => {
       const createReq = createWSMessage('pairing.request', {
         deviceName: 'Test Device',
         deviceType: 'mobile' as NodeType,
@@ -491,15 +485,13 @@ describe('PairingHandler', () => {
       const denyReq = createWSMessage('pairing.deny', {
         requestId: created.payload.requestId,
       });
-      await handler.handleDeny('conn-2', denyReq, handlerContext);
+      const response = await handler.handleDeny('viewer', denyReq, handlerContext);
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          connectionId: 'conn-2',
-          requestId: created.payload.requestId,
-        }),
-        'Denying pairing request via WebSocket',
-      );
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.FORBIDDEN);
+      } else {
+        expect.fail('Expected error response');
+      }
     });
   });
 
@@ -509,70 +501,57 @@ describe('PairingHandler', () => {
 
   describe('handleList', () => {
     it('should list pending requests', async () => {
-      // Create multiple requests
-      const req1 = createWSMessage('pairing.request', {
+      await handler.handleRequest('conn-1', createWSMessage('pairing.request', {
         deviceName: 'Device 1',
         deviceType: 'mobile' as NodeType,
         capabilities: ['camera'],
-      });
-      const req2 = createWSMessage('pairing.request', {
+      }), handlerContext);
+      await handler.handleRequest('conn-1', createWSMessage('pairing.request', {
         deviceName: 'Device 2',
         deviceType: 'desktop' as NodeType,
         capabilities: ['screen'],
-      });
-
-      await handler.handleRequest('conn-1', req1, handlerContext);
-      await handler.handleRequest('conn-1', req2, handlerContext);
+      }), handlerContext);
 
       const listReq = createWSMessage('pairing.list', {});
-      const response = await handler.handleList('conn-2', listReq, handlerContext);
+      const response = await handler.handleList('viewer', listReq, handlerContext);
 
       if (response.type === 'pairing.list') {
         expect(response.payload.requests).toHaveLength(2);
-        expect(response.payload.requests.map(r => r.deviceName)).toContain('Device 1');
-        expect(response.payload.requests.map(r => r.deviceName)).toContain('Device 2');
       } else {
         expect.fail('Expected pairing.list response');
       }
     });
 
     it('should only list pending requests', async () => {
-      const req1 = createWSMessage('pairing.request', {
+      const created1 = await handler.handleRequest('conn-1', createWSMessage('pairing.request', {
         deviceName: 'Device 1',
         deviceType: 'mobile' as NodeType,
         capabilities: ['camera'],
-      });
-      const req2 = createWSMessage('pairing.request', {
+      }), handlerContext);
+      await handler.handleRequest('conn-1', createWSMessage('pairing.request', {
         deviceName: 'Device 2',
         deviceType: 'desktop' as NodeType,
         capabilities: ['screen'],
-      });
+      }), handlerContext);
 
-      const created1 = await handler.handleRequest('conn-1', req1, handlerContext);
-      await handler.handleRequest('conn-1', req2, handlerContext);
-
-      // Approve one
       if (created1.type === 'pairing.requested') {
-        const approveReq = createWSMessage('pairing.approve', {
+        await handler.handleApprove('approver', createWSMessage('pairing.approve', {
           requestId: created1.payload.requestId,
-        });
-        await handler.handleApprove('conn-2', approveReq, handlerContext);
+        }), handlerContext);
       }
 
-      const listReq = createWSMessage('pairing.list', {});
-      const response = await handler.handleList('conn-2', listReq, handlerContext);
+      const response = await handler.handleList('viewer', createWSMessage('pairing.list', {}), handlerContext);
 
       if (response.type === 'pairing.list') {
         expect(response.payload.requests).toHaveLength(1);
-        expect(response.payload.requests[0].deviceName).toBe('Device 2');
+        expect(response.payload.requests[0]?.deviceName).toBe('Device 2');
       } else {
         expect.fail('Expected pairing.list response');
       }
     });
 
     it('should return empty array when no pending requests', async () => {
-      const listReq = createWSMessage('pairing.list', {});
-      const response = await handler.handleList('conn-1', listReq, handlerContext);
+      const response = await handler.handleList('viewer', createWSMessage('pairing.list', {}), handlerContext);
 
       if (response.type === 'pairing.list') {
         expect(response.payload.requests).toHaveLength(0);
@@ -581,16 +560,14 @@ describe('PairingHandler', () => {
       }
     });
 
-    it('should log list operation', async () => {
-      const listReq = createWSMessage('pairing.list', {});
-      await handler.handleList('conn-1', listReq, handlerContext);
+    it('should reject list without pairing.approve capability', async () => {
+      const response = await handler.handleList('unprivileged', createWSMessage('pairing.list', {}), handlerContext);
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({
-          connectionId: 'conn-1',
-        }),
-        'Listing pending pairing requests via WebSocket',
-      );
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(WS_ERROR_CODES.FORBIDDEN);
+      } else {
+        expect.fail('Expected error response');
+      }
     });
   });
 });

@@ -5,6 +5,7 @@
  */
 
 import type { FastifyBaseLogger } from 'fastify';
+import type { DevicesStore, PairingRequestsStore } from '@openaidy/db';
 import type { NodeType } from './node-registry';
 import { AuthMiddleware, type JWTPayload } from './middleware/auth';
 
@@ -51,6 +52,11 @@ export type PairingServiceOptions = {
   tokenExpiry?: number;
   /** Cleanup interval in milliseconds (default: 1 minute) */
   cleanupInterval?: number;
+  /** Optional durable stores for restart-safe pairing/device state */
+  persistence?: {
+    pairingRequests: PairingRequestsStore;
+    devices: DevicesStore;
+  };
 };
 
 // ============================================================================
@@ -104,11 +110,23 @@ export class PairingService {
   private requests: Map<string, PairingRequest> = new Map();
   private codeIndex: Map<string, string> = new Map(); // pairingCode -> requestId
   private tokenIndex: Map<string, string> = new Map(); // token -> requestId
-  private options: Required<PairingServiceOptions>;
+  private options: {
+    codeLength: number;
+    requestExpiry: number;
+    tokenExpiry: number;
+    cleanupInterval: number;
+  };
   private authMiddleware: AuthMiddleware;
   private logger: FastifyBaseLogger;
   private codeGenerator: PairingCodeGenerator;
-  private cleanupTimer?: ReturnType<typeof setInterval>;
+  private cleanupTimer: ReturnType<typeof setInterval> | undefined;
+  private persistence:
+    | {
+        pairingRequests: PairingRequestsStore;
+        devices: DevicesStore;
+      }
+    | undefined;
+  private pendingWrites: Set<Promise<unknown>> = new Set();
 
   constructor(
     authMiddleware: AuthMiddleware,
@@ -117,6 +135,7 @@ export class PairingService {
   ) {
     this.authMiddleware = authMiddleware;
     this.logger = logger;
+    this.persistence = options.persistence;
     
     this.options = {
       codeLength: options.codeLength ?? 6,
@@ -129,6 +148,58 @@ export class PairingService {
     
     // Start cleanup timer
     this.startCleanupTimer();
+  }
+
+  async loadPersistedState(): Promise<void> {
+    if (!this.persistence) return;
+
+    const [requests, devices] = await Promise.all([
+      this.persistence.pairingRequests.listAll(),
+      this.persistence.devices.listAll(),
+    ]);
+
+    this.requests.clear();
+    this.codeIndex.clear();
+    this.tokenIndex.clear();
+
+    for (const record of requests) {
+      const request: PairingRequest = {
+        requestId: record.id,
+        pairingCode: record.pairingCode,
+        deviceName: record.deviceName,
+        deviceType: record.deviceType as NodeType,
+        capabilities: record.requestedCapabilities,
+        status: record.status,
+        requestedAt: record.requestedAt.getTime(),
+        expiresAt: record.expiresAt.getTime(),
+        ...(record.metadata !== null && record.metadata !== undefined && { metadata: record.metadata }),
+        ...(record.approvedAt && { approvedAt: record.approvedAt.getTime() }),
+        ...(record.approvedBy && { approvedBy: record.approvedBy }),
+        ...(record.deniedAt && { deniedAt: record.deniedAt.getTime() }),
+        ...(record.deniedBy && { deniedBy: record.deniedBy }),
+        ...(record.nodeId && { nodeId: record.nodeId }),
+        ...(record.token && { token: record.token }),
+        ...(record.grantedScopes && { scopes: record.grantedScopes }),
+      };
+
+      this.requests.set(request.requestId, request);
+      if (request.status === 'pending') {
+        this.codeIndex.set(request.pairingCode, request.requestId);
+      }
+      if (request.token) {
+        this.tokenIndex.set(request.token, request.requestId);
+      }
+    }
+
+    for (const device of devices) {
+      if (device.token && device.pairingRequestId && !this.tokenIndex.has(device.token)) {
+        this.tokenIndex.set(device.token, device.pairingRequestId);
+      }
+    }
+  }
+
+  async awaitPendingWrites(): Promise<void> {
+    await Promise.all(Array.from(this.pendingWrites));
   }
 
   // ============================================================================
@@ -154,14 +225,26 @@ export class PairingService {
       deviceName,
       deviceType,
       capabilities,
-      metadata,
       status: 'pending',
       requestedAt: now,
       expiresAt: now + this.options.requestExpiry,
+      ...(metadata !== undefined && { metadata }),
     };
 
     this.requests.set(requestId, request);
     this.codeIndex.set(pairingCode, requestId);
+    this.queuePersistence(
+      this.persistence?.pairingRequests.create({
+        id: requestId,
+        pairingCode,
+        deviceName,
+        deviceType,
+        requestedCapabilities: capabilities,
+        requestedAt: new Date(now),
+        expiresAt: new Date(now + this.options.requestExpiry),
+        ...(metadata !== undefined && { metadata }),
+      }),
+    );
 
     this.logger.info(
       { requestId, pairingCode, deviceName, deviceType },
@@ -222,6 +305,31 @@ export class PairingService {
 
     // Update token index
     this.tokenIndex.set(token, requestId);
+    this.queuePersistence(
+      Promise.all([
+        this.persistence?.pairingRequests.update(requestId, {
+          status: 'approved',
+          grantedScopes: grantedScopes,
+          approvedAt: new Date(now),
+          approvedBy,
+          nodeId,
+          token,
+        }),
+        this.persistence?.devices.upsert({
+          nodeId,
+          pairingRequestId: requestId,
+          deviceName: request.deviceName,
+          deviceType: request.deviceType,
+          capabilities: request.capabilities,
+          scopes: grantedScopes,
+          token,
+          tokenHash: token.substring(0, 16),
+          status: 'approved',
+          lastSeen: new Date(now),
+          ...(request.metadata !== undefined && { metadata: request.metadata }),
+        }),
+      ]),
+    );
 
     this.logger.info(
       { requestId, nodeId, approvedBy, scopes: grantedScopes },
@@ -253,6 +361,13 @@ export class PairingService {
     request.status = 'denied';
     request.deniedAt = Date.now();
     request.deniedBy = deniedBy;
+    this.queuePersistence(
+      this.persistence?.pairingRequests.update(requestId, {
+        status: 'denied',
+        deniedAt: new Date(request.deniedAt),
+        deniedBy,
+      }),
+    );
 
     this.logger.info(
       { requestId, deniedBy },
@@ -336,8 +451,22 @@ export class PairingService {
     
     const request = this.requests.get(requestId);
     if (request) {
-      request.token = undefined;
+      delete request.token;
       request.status = 'expired';
+      this.queuePersistence(
+        Promise.all([
+          this.persistence?.pairingRequests.update(requestId, {
+            status: 'expired',
+            token: null,
+          }),
+          request.nodeId
+            ? this.persistence?.devices.update(request.nodeId, {
+                status: 'revoked',
+                token: null,
+              })
+            : undefined,
+        ]),
+      );
     }
 
     this.logger.info({ requestId }, 'Pairing token revoked');
@@ -372,6 +501,11 @@ export class PairingService {
         request.status = 'expired';
         this.codeIndex.delete(request.pairingCode);
         cleanedCount++;
+        this.queuePersistence(
+          this.persistence?.pairingRequests.update(requestId, {
+            status: 'expired',
+          }),
+        );
         
         this.logger.debug({ requestId }, 'Pairing request expired');
       }
@@ -443,8 +577,21 @@ export class PairingService {
   private stopCleanupTimer(): void {
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
-      this.cleanupTimer = undefined;
     }
+    this.cleanupTimer = undefined;
+  }
+
+  private queuePersistence(operation: Promise<unknown> | undefined): void {
+    if (!operation) return;
+
+    this.pendingWrites.add(operation);
+    operation
+      .catch((error) => {
+        this.logger.error({ err: error }, 'Failed to persist pairing state');
+      })
+      .finally(() => {
+        this.pendingWrites.delete(operation);
+      });
   }
 
   /**

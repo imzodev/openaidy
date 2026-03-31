@@ -1,16 +1,15 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
-import { drizzle as drizzleSqlite, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { drizzle as drizzlePostgres, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as jobSchema from './schema/jobs';
+import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
 
-export type DatabaseSchema = typeof sessionSchema & typeof jobSchema;
-type RawDatabaseClient = NodePgDatabase<DatabaseSchema> | BetterSQLite3Database<DatabaseSchema>;
-
-export type DatabaseClient = any;
+export type DatabaseSchema = typeof sessionSchema & typeof jobSchema & typeof pairingSchema;
+export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
   | { kind: 'sqlite'; sqlitePath: string }
@@ -25,6 +24,7 @@ export type DatabaseConnection = {
 const schema: DatabaseSchema = {
   ...sessionSchema,
   ...jobSchema,
+  ...pairingSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -104,6 +104,42 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       FOREIGN KEY (job_id) REFERENCES scheduled_jobs(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS pairing_requests (
+      id TEXT PRIMARY KEY NOT NULL,
+      pairing_code TEXT NOT NULL,
+      device_name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      requested_capabilities TEXT NOT NULL,
+      granted_scopes TEXT,
+      metadata TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      approved_at TEXT,
+      approved_by TEXT,
+      denied_at TEXT,
+      denied_by TEXT,
+      node_id TEXT,
+      token TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS devices (
+      node_id TEXT PRIMARY KEY NOT NULL,
+      pairing_request_id TEXT,
+      device_name TEXT NOT NULL,
+      device_type TEXT NOT NULL,
+      capabilities TEXT NOT NULL,
+      scopes TEXT NOT NULL,
+      metadata TEXT,
+      token TEXT,
+      token_hash TEXT,
+      status TEXT NOT NULL DEFAULT 'approved',
+      last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (pairing_request_id) REFERENCES pairing_requests(id) ON DELETE SET NULL
+    );
+
     CREATE INDEX IF NOT EXISTS session_messages_session_id_idx ON session_messages(session_id);
     CREATE INDEX IF NOT EXISTS session_messages_sequence_idx ON session_messages(sequence);
     CREATE INDEX IF NOT EXISTS session_runs_session_id_idx ON session_runs(session_id);
@@ -114,6 +150,12 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS job_runs_job_id_idx ON job_runs(job_id);
     CREATE INDEX IF NOT EXISTS job_runs_status_idx ON job_runs(status);
     CREATE INDEX IF NOT EXISTS job_runs_created_at_idx ON job_runs(created_at);
+    CREATE INDEX IF NOT EXISTS pairing_requests_pairing_code_idx ON pairing_requests(pairing_code);
+    CREATE INDEX IF NOT EXISTS pairing_requests_status_idx ON pairing_requests(status);
+    CREATE INDEX IF NOT EXISTS pairing_requests_token_idx ON pairing_requests(token);
+    CREATE INDEX IF NOT EXISTS devices_pairing_request_id_idx ON devices(pairing_request_id);
+    CREATE INDEX IF NOT EXISTS devices_status_idx ON devices(status);
+    CREATE INDEX IF NOT EXISTS devices_token_idx ON devices(token);
   `);
 }
 

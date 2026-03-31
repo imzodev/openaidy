@@ -246,20 +246,52 @@ export class NodeHandler {
     try {
       this.logger.info({ connectionId, name: request.payload.name }, 'Registering node via WebSocket');
 
-      const nodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const connection = this.connectionManager.getConnection(connectionId);
+      const metadata = this.connectionManager.getMetadata(connectionId);
+      const claimedNodeId = typeof metadata.pairedNodeId === 'string' ? metadata.pairedNodeId : undefined;
+      const claimedScopes = Array.isArray(metadata.pairedScopes)
+        ? metadata.pairedScopes.filter((scope): scope is string => typeof scope === 'string')
+        : undefined;
+      const tokenHash = typeof metadata.pairingToken === 'string'
+        ? metadata.pairingToken.substring(0, 16)
+        : request.payload.tokenHash;
+
+      const nodeId = claimedNodeId ?? `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const capabilities = claimedScopes ?? request.payload.capabilities;
+
+      const existingNode = this.nodeRegistry.getNode(nodeId);
+      if (existingNode) {
+        this.nodeRegistry.updateNode(nodeId, {
+          name: request.payload.name,
+          type: request.payload.type,
+          status: 'online',
+          capabilities,
+          metadata: request.payload.metadata || {},
+          connectionId,
+          lastSeen: Date.now(),
+          ...(tokenHash !== undefined && { tokenHash }),
+          ...(claimedScopes !== undefined && { scopes: claimedScopes }),
+        });
+
+        return {
+          ...createWSMessage('node.registered', {
+            node: this.nodeRegistry.getNode(nodeId)!,
+          }),
+        } as NodeRegisterResponse;
+      }
 
       const node: Node = {
         nodeId,
         name: request.payload.name,
         type: request.payload.type,
         status: 'online',
-        capabilities: request.payload.capabilities,
+        capabilities,
         metadata: request.payload.metadata || {},
-        connectionId: request.payload.connectionId || connectionId,
+        connectionId,
         registeredAt: Date.now(),
         lastSeen: Date.now(),
-        ...(request.payload.tokenHash !== undefined && { tokenHash: request.payload.tokenHash }),
-        ...(request.payload.scopes !== undefined && { scopes: request.payload.scopes }),
+        ...(tokenHash !== undefined && { tokenHash }),
+        ...((claimedScopes ?? request.payload.scopes) !== undefined && { scopes: claimedScopes ?? request.payload.scopes }),
       };
 
       this.nodeRegistry.registerNode(node);
@@ -343,23 +375,23 @@ export function registerNodeHandlers(
   handler: NodeHandler,
 ): void {
   router.registerHandler('node.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as NodeListRequest, ctx),
+    handler.handleList(connId, msg as NodeListRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('node.describe', (connId, msg, ctx) =>
-    handler.handleDescribe(connId, msg as NodeDescribeRequest, ctx),
+    handler.handleDescribe(connId, msg as NodeDescribeRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('node.invoke', (connId, msg, ctx) =>
-    handler.handleInvoke(connId, msg as NodeInvokeRequest, ctx),
+    handler.handleInvoke(connId, msg as NodeInvokeRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('node.register', (connId, msg, ctx) =>
-    handler.handleRegister(connId, msg as NodeRegisterRequest, ctx),
+    handler.handleRegister(connId, msg as NodeRegisterRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('node.unregister', (connId, msg, ctx) =>
-    handler.handleUnregister(connId, msg as NodeUnregisterRequest, ctx),
+    handler.handleUnregister(connId, msg as NodeUnregisterRequest, ctx) as Promise<WSResponse>,
   );
 }
 

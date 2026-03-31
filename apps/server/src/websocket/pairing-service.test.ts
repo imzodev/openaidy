@@ -8,6 +8,7 @@ import {
   type PairingServiceOptions,
 } from './pairing-service';
 import { AuthMiddleware } from './middleware/auth';
+import type { DevicesStore, PairingRequestsStore } from '@openaidy/db';
 import type { WebSocketConfig } from './types';
 
 // ============================================================================
@@ -41,6 +42,31 @@ const createMockConfig = (): WebSocketConfig => ({
     timeout: 10000,
   },
 } as WebSocketConfig);
+
+const createMockPersistence = () => {
+  const pairingRequestsStore: PairingRequestsStore = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByCode: vi.fn(),
+    findByToken: vi.fn(),
+    listAll: vi.fn().mockResolvedValue([]),
+    listPending: vi.fn().mockResolvedValue([]),
+    update: vi.fn(),
+  };
+
+  const devicesStore: DevicesStore = {
+    upsert: vi.fn(),
+    findByNodeId: vi.fn(),
+    findByToken: vi.fn(),
+    listAll: vi.fn().mockResolvedValue([]),
+    update: vi.fn(),
+  };
+
+  return {
+    pairingRequestsStore,
+    devicesStore,
+  };
+};
 
 // ============================================================================
 // PairingCodeGenerator Tests
@@ -103,11 +129,13 @@ describe('PairingService', () => {
   let authMiddleware: AuthMiddleware;
   let mockLogger: ReturnType<typeof createMockLogger>;
   let mockConfig: WebSocketConfig;
+  let mockPersistence: ReturnType<typeof createMockPersistence>;
 
   beforeEach(() => {
     mockLogger = createMockLogger();
     mockConfig = createMockConfig();
     authMiddleware = new AuthMiddleware(mockConfig);
+    mockPersistence = createMockPersistence();
     
     // Use short cleanup interval for testing
     const options: PairingServiceOptions = {
@@ -181,6 +209,29 @@ describe('PairingService', () => {
         }),
         'Pairing request created',
       );
+    });
+
+    it('should persist new requests when a durable store is configured', async () => {
+      const persistentService = new PairingService(authMiddleware, mockLogger, {
+        persistence: {
+          pairingRequests: mockPersistence.pairingRequestsStore,
+          devices: mockPersistence.devicesStore,
+        },
+      });
+
+      const request = persistentService.createRequest('Persisted Device', 'mobile', ['camera']);
+      await persistentService.awaitPendingWrites();
+
+      expect(mockPersistence.pairingRequestsStore.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: request.requestId,
+          deviceName: 'Persisted Device',
+          requestedCapabilities: ['camera'],
+        }),
+      );
+
+      persistentService.destroy();
+      persistentService.clear();
     });
   });
 
@@ -273,6 +324,38 @@ describe('PairingService', () => {
         }),
         'Pairing request approved',
       );
+    });
+
+    it('should persist approved devices and granted scopes', async () => {
+      const persistentService = new PairingService(authMiddleware, mockLogger, {
+        persistence: {
+          pairingRequests: mockPersistence.pairingRequestsStore,
+          devices: mockPersistence.devicesStore,
+        },
+      });
+
+      const request = persistentService.createRequest('Approved Device', 'mobile', ['camera', 'microphone']);
+      const approved = await persistentService.approveRequest(request.requestId, 'admin-1', ['camera']);
+      await persistentService.awaitPendingWrites();
+
+      expect(mockPersistence.pairingRequestsStore.update).toHaveBeenCalledWith(
+        request.requestId,
+        expect.objectContaining({
+          status: 'approved',
+          grantedScopes: ['camera'],
+          nodeId: approved?.nodeId,
+        }),
+      );
+      expect(mockPersistence.devicesStore.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nodeId: approved?.nodeId,
+          scopes: ['camera'],
+          token: approved?.token,
+        }),
+      );
+
+      persistentService.destroy();
+      persistentService.clear();
     });
   });
 
@@ -471,6 +554,68 @@ describe('PairingService', () => {
       const result = service.getRequestByToken('non-existent');
       
       expect(result).toBeUndefined();
+    });
+
+    it('should reload approved requests and tokens from persistence', async () => {
+      const requestedAt = new Date();
+      const expiresAt = new Date(requestedAt.getTime() + 60_000);
+      const approvedAt = new Date(requestedAt.getTime() + 1_000);
+
+      mockPersistence.pairingRequestsStore.listAll = vi.fn().mockResolvedValue([
+        {
+          id: 'persisted-request',
+          pairingCode: '123456',
+          deviceName: 'Persisted Phone',
+          deviceType: 'mobile',
+          requestedCapabilities: ['camera', 'microphone'],
+          grantedScopes: ['camera'],
+          metadata: { platform: 'ios' },
+          status: 'approved',
+          requestedAt,
+          expiresAt,
+          approvedAt,
+          approvedBy: 'admin-1',
+          deniedAt: null,
+          deniedBy: null,
+          nodeId: 'node-persisted',
+          token: 'persisted-token',
+        },
+      ]);
+      mockPersistence.devicesStore.listAll = vi.fn().mockResolvedValue([
+        {
+          nodeId: 'node-persisted',
+          pairingRequestId: 'persisted-request',
+          deviceName: 'Persisted Phone',
+          deviceType: 'mobile',
+          capabilities: ['camera', 'microphone'],
+          scopes: ['camera'],
+          metadata: { platform: 'ios' },
+          token: 'persisted-token',
+          tokenHash: 'persisted-token',
+          status: 'approved',
+          lastSeen: approvedAt,
+          createdAt: requestedAt,
+          updatedAt: approvedAt,
+        },
+      ]);
+
+      const persistentService = new PairingService(authMiddleware, mockLogger, {
+        persistence: {
+          pairingRequests: mockPersistence.pairingRequestsStore,
+          devices: mockPersistence.devicesStore,
+        },
+      });
+
+      await persistentService.loadPersistedState();
+
+      const reloaded = persistentService.getRequest('persisted-request');
+      expect(reloaded).toBeDefined();
+      expect(reloaded?.nodeId).toBe('node-persisted');
+      expect(reloaded?.scopes).toEqual(['camera']);
+      expect(persistentService.getRequestByToken('persisted-token')?.requestId).toBe('persisted-request');
+
+      persistentService.destroy();
+      persistentService.clear();
     });
   });
 

@@ -170,16 +170,24 @@ function createGateway(
   
   // Create auth middleware for pairing service
   const authMiddleware = new AuthMiddleware(config);
+  const pairingPersistence =
+    fastify.services.pairingRequestsRepo && fastify.services.devicesRepo
+      ? {
+          pairingRequests: fastify.services.pairingRequestsRepo,
+          devices: fastify.services.devicesRepo,
+        }
+      : undefined;
   
   // Create node registry and pairing service
   const nodeRegistry = new NodeRegistry({}, fastify.log);
   const pairingService = new PairingService(
     authMiddleware,
     fastify.log,
-    { 
+    {
       codeLength: pairingConfig.codeLength,
       requestExpiry: pairingConfig.codeExpiryMs,
       tokenExpiry: pairingConfig.defaultTokenExpiryMs,
+      ...(pairingPersistence && { persistence: pairingPersistence }),
     },
   );
 
@@ -269,6 +277,24 @@ function createGateway(
     );
 
     const payload = await authMiddleware.validateToken(token);
+    if (payload) {
+      connectionManager.updateMetadata(connectionId, {
+        authTokenType: payload.type,
+      });
+
+      if (payload.type === 'pairing') {
+        const pairingRequest = pairingService.getRequestByToken(token);
+        if (pairingRequest?.nodeId) {
+          connectionManager.updateMetadata(connectionId, {
+            pairedNodeId: pairingRequest.nodeId,
+            pairedRequestId: pairingRequest.requestId,
+            pairingToken: token,
+            pairedScopes: pairingRequest.scopes ?? payload.scopes,
+          });
+        }
+      }
+    }
+
     const expiresAt = payload?.exp
       ? new Date(payload.exp * 1000).toISOString()
       : new Date(Date.now() + config.auth.tokenExpiry).toISOString();
@@ -303,6 +329,9 @@ function createGateway(
     }
 
     connectionManager.authenticate(connectionId, payload.sub, payload.scopes);
+    connectionManager.updateMetadata(connectionId, {
+      authTokenType: payload.type,
+    });
 
     return createWSMessage('auth.authenticated', {
       clientId: payload.sub,
@@ -427,6 +456,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     { ...wsConfig, ...options.wsConfig },
     { ...pairingConfig, ...options.pairingConfig },
   );
+  await gateway.pairingService.loadPersistedState();
+  const pluginAuthMiddleware = new AuthMiddleware(gateway.config);
 
   // Start the stream manager
   gateway.streamManager.start();
@@ -473,15 +504,34 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     gateway.connectionManager.registerConnection(connectionId, socket);
     fastify.log.info(`WebSocket connection established: ${connectionId}`);
 
-    const handshakeToken = extractHandshakeToken(req, authMiddleware);
+    const handshakeToken = extractHandshakeToken(req, pluginAuthMiddleware);
     if (handshakeToken) {
-      const authResult = await authMiddleware.authenticate(handshakeToken);
+      const authResult = await pluginAuthMiddleware.authenticate(handshakeToken);
       if (authResult.success && authResult.clientId) {
         gateway.connectionManager.authenticate(
           connectionId,
           authResult.clientId,
           authResult.capabilities ?? [],
         );
+
+        const payload = await pluginAuthMiddleware.validateToken(handshakeToken);
+        if (payload) {
+          gateway.connectionManager.updateMetadata(connectionId, {
+            authTokenType: payload.type,
+          });
+
+          if (payload.type === 'pairing') {
+            const pairingRequest = gateway.pairingService.getRequestByToken(handshakeToken);
+            if (pairingRequest?.nodeId) {
+              gateway.connectionManager.updateMetadata(connectionId, {
+                pairedNodeId: pairingRequest.nodeId,
+                pairedRequestId: pairingRequest.requestId,
+                pairingToken: handshakeToken,
+                pairedScopes: pairingRequest.scopes ?? payload.scopes,
+              });
+            }
+          }
+        }
       } else if (gateway.config.auth.required) {
         const errorMsg = createErrorResponse(
           '0',

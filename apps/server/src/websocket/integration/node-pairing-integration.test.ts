@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyRequest } from 'fastify';
 import { createGateway, type WebSocketGateway } from '../index';
-import type { AppServices } from '../../../app';
+import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 
 // ============================================================================
@@ -26,6 +26,13 @@ const createMockAuthMiddleware = (): AuthMiddleware => {
 // ============================================================================
 
 const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
+  dbAdapter: undefined,
+  scheduler: undefined,
+  jobsRepo: undefined,
+  jobRunsRepo: undefined,
+  sessionsRepo: undefined,
+  pairingRequestsRepo: undefined,
+  devicesRepo: undefined,
   sessions: {
     createSession: vi.fn(),
     getSession: vi.fn(),
@@ -53,11 +60,6 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     getConfig: vi.fn(),
     load: vi.fn(),
   } as any,
-  auth: authMiddleware,
-  llm: {
-    invoke: vi.fn(),
-    invokeStream: vi.fn(),
-  } as any,
   runEvents: {
     createRun: vi.fn(),
     getRun: vi.fn(),
@@ -78,7 +80,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     updateContent: vi.fn(),
     deleteContent: vi.fn(),
   } as any,
-});
+} as AppServices);
 
 // ============================================================================
 // Node & Pairing Integration Tests
@@ -253,7 +255,7 @@ describe('Node & Pairing Handler Integration', () => {
 
       const cameraNodes = gateway.nodeRegistry.findNodesByCapability('camera');
       expect(cameraNodes).toHaveLength(1);
-      expect(cameraNodes[0].nodeId).toBe('node-1');
+      expect(cameraNodes[0]?.nodeId).toBe('node-1');
     });
 
     it('should unregister nodes', () => {
@@ -371,6 +373,70 @@ describe('Node & Pairing Handler Integration', () => {
       
       // For this integration test, we verify the pairing flow works correctly
       // Node registration happens via node.register handler after receiving the token
+    });
+
+    it('should allow an approved device to authenticate and claim its approved node identity', async () => {
+      gateway.connectionManager.registerConnection('device-conn');
+
+      const request = gateway.pairingService.createRequest(
+        'Paired Phone',
+        'mobile',
+        ['camera', 'microphone'],
+      );
+
+      const approved = await gateway.pairingService.approveRequest(
+        request.requestId,
+        'admin',
+        ['camera'],
+      );
+
+      expect(approved?.nodeId).toBeDefined();
+      expect(approved?.token).toBeDefined();
+
+      const authResponse = await gateway.messageRouter.route(
+        'device-conn',
+        {
+          id: 'auth-1',
+          type: 'auth.authenticate',
+          timestamp: new Date().toISOString(),
+          payload: { token: approved!.token },
+        } as any,
+        {
+          connectionManager: gateway.connectionManager,
+          services: mockServices,
+          logger: mockFastify.log as any,
+        },
+      );
+
+      expect(authResponse?.type).toBe('auth.authenticated');
+
+      const registerResponse = await gateway.messageRouter.route(
+        'device-conn',
+        {
+          id: 'node-reg-1',
+          type: 'node.register',
+          timestamp: new Date().toISOString(),
+          payload: {
+            name: 'Paired Phone',
+            type: 'mobile',
+            capabilities: ['camera', 'microphone'],
+            metadata: { platform: 'ios' },
+          },
+        } as any,
+        {
+          connectionManager: gateway.connectionManager,
+          services: mockServices,
+          logger: mockFastify.log as any,
+        },
+      );
+
+      expect(registerResponse?.type).toBe('node.registered');
+
+      const node = gateway.nodeRegistry.getNode(approved!.nodeId!);
+      expect(node).toBeDefined();
+      expect(node?.connectionId).toBe('device-conn');
+      expect(node?.capabilities).toEqual(['camera']);
+      expect(node?.scopes).toEqual(['camera']);
     });
 
     it('should handle multiple pairing requests', async () => {

@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyRequest } from 'fastify';
 import { createGateway, type WebSocketGateway } from '../index';
-import type { AppServices } from '../../../app';
+import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 import { ConnectionManager } from '../connection-manager';
 import { MessageRouter, type HandlerContext } from '../message-router';

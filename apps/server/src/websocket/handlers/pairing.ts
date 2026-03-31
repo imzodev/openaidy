@@ -14,6 +14,7 @@ import {
   type WSResponse,
   type ErrorResponse,
   WS_ERROR_CODES,
+  WS_CAPABILITIES,
   createWSMessage,
 } from '@openaidy/shared-types';
 
@@ -227,25 +228,6 @@ export class PairingHandler {
         } as ErrorResponse;
       }
 
-      // Register the node
-      if (pairingRequest.nodeId && pairingRequest.token) {
-        const node = {
-          nodeId: pairingRequest.nodeId,
-          name: pairingRequest.deviceName,
-          type: pairingRequest.deviceType,
-          status: 'online' as const,
-          capabilities: pairingRequest.capabilities,
-          metadata: pairingRequest.metadata || {},
-          connectionId: connectionId,
-          registeredAt: Date.now(),
-          lastSeen: Date.now(),
-          tokenHash: pairingRequest.token.substring(0, 16),
-          scopes: pairingRequest.scopes,
-        };
-
-        this.nodeRegistry.registerNode(node);
-      }
-
       return {
         ...createWSMessage('pairing.approved', {
           requestId: pairingRequest.requestId,
@@ -372,21 +354,15 @@ export class PairingHandler {
   // ============================================================================
 
   private checkPairingApprovePermission(connectionId: string): boolean {
-    // For now, allow all authenticated connections
-    // In a real implementation, this would check capabilities from the connection
-    return true;
+    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_APPROVE);
   }
 
   private checkPairingDenyPermission(connectionId: string): boolean {
-    // For now, allow all authenticated connections
-    // In a real implementation, this would check capabilities from the connection
-    return true;
+    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_DENY);
   }
 
   private checkPairingListPermission(connectionId: string): boolean {
-    // For now, allow all authenticated connections
-    // In a real implementation, this would check capabilities from the connection
-    return true;
+    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_APPROVE);
   }
 
   // ============================================================================
@@ -421,23 +397,23 @@ export function registerPairingHandlers(
   handler: PairingHandler,
 ): void {
   router.registerHandler('pairing.request', (connId, msg, ctx) =>
-    handler.handleRequest(connId, msg as PairingRequestMessage, ctx),
+    handler.handleRequest(connId, msg as PairingRequestMessage, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('pairing.status', (connId, msg, ctx) =>
-    handler.handleStatus(connId, msg as PairingStatusRequest, ctx),
+    handler.handleStatus(connId, msg as PairingStatusRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('pairing.approve', (connId, msg, ctx) =>
-    handler.handleApprove(connId, msg as PairingApproveRequest, ctx),
+    handler.handleApprove(connId, msg as PairingApproveRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('pairing.deny', (connId, msg, ctx) =>
-    handler.handleDeny(connId, msg as PairingDenyRequest, ctx),
+    handler.handleDeny(connId, msg as PairingDenyRequest, ctx) as Promise<WSResponse>,
   );
 
   router.registerHandler('pairing.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as PairingListRequest, ctx),
+    handler.handleList(connId, msg as PairingListRequest, ctx) as Promise<WSResponse>,
   );
 }
 

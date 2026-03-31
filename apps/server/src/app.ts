@@ -4,8 +4,10 @@ import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import {
   type DatabaseAdapter,
+  type DevicesStore,
   type JobsStore,
   type JobRunsStore,
+  type PairingRequestsStore,
   type SessionsStore,
   createDatabaseAdapter,
 } from '@openaidy/db';
@@ -47,6 +49,8 @@ export type AppServices = {
   jobsRepo: JobsStore | undefined;
   jobRunsRepo: JobRunsStore | undefined;
   sessionsRepo: SessionsStore | undefined;
+  pairingRequestsRepo: PairingRequestsStore | undefined;
+  devicesRepo: DevicesStore | undefined;
 };
 
 /**
@@ -60,6 +64,8 @@ export async function buildApp() {
   let jobsRepo: JobsStore | undefined;
   let jobRunsRepo: JobRunsStore | undefined;
   let sessionsRepo: SessionsStore | undefined;
+  let pairingRequestsRepo: PairingRequestsStore | undefined;
+  let devicesRepo: DevicesStore | undefined;
   let scheduler: SchedulerService | undefined;
 
   const dbConfig =
@@ -74,6 +80,8 @@ export async function buildApp() {
     jobsRepo = dbAdapter.repositories.jobs;
     jobRunsRepo = dbAdapter.repositories.jobRuns;
     sessionsRepo = dbAdapter.repositories.sessions;
+    pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
+    devicesRepo = dbAdapter.repositories.devices;
   }
 
   // Create shared services once per app instance
@@ -125,6 +133,8 @@ export async function buildApp() {
     jobsRepo,
     jobRunsRepo,
     sessionsRepo,
+    pairingRequestsRepo,
+    devicesRepo,
   };
 
   // Decorate the app with services for access in routes/plugins

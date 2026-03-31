@@ -150,7 +150,7 @@ export class ConnectionManager {
       lastHeartbeat: Date.now(),
       createdAt: Date.now(),
       metadata: {},
-      socket,
+      ...(socket !== undefined && { socket }),
     };
 
     this.connections.set(id, context);
@@ -238,6 +238,29 @@ export class ConnectionManager {
   getCapabilities(id: string): string[] {
     const ctx = this.connections.get(id);
     return ctx?.capabilities ?? [];
+  }
+
+  /**
+   * Update connection metadata
+   */
+  updateMetadata(id: string, metadata: Record<string, unknown>): boolean {
+    const ctx = this.connections.get(id);
+    if (!ctx) return false;
+
+    ctx.metadata = {
+      ...ctx.metadata,
+      ...metadata,
+    };
+
+    return true;
+  }
+
+  /**
+   * Get connection metadata
+   */
+  getMetadata(id: string): Record<string, unknown> {
+    const ctx = this.connections.get(id);
+    return ctx?.metadata ?? {};
   }
 
   /**
