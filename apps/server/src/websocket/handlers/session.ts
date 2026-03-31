@@ -7,11 +7,14 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
 import type { ConnectionManager } from '../connection-manager';
+import type { StreamManager } from '../streaming';
+import type { RunEventEmitter } from '../../dispatch/events';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
   type WSResponse,
   type WSError,
+  type WSErrorCode,
   type ErrorResponse,
   type SessionCreateRequest,
   type SessionGetRequest,
@@ -20,6 +23,7 @@ import {
   type SessionMessageRequest,
   type SessionCreatedResponse,
   type SessionMessageResponse,
+  type SessionMessageStreamAck,
   WS_ERROR_CODES,
   createWSMessage,
   isWSMessage,
@@ -85,6 +89,8 @@ export class SessionHandler {
   constructor(
     private sessionService: SessionMessageService,
     private logger: FastifyBaseLogger,
+    private streamManager?: StreamManager,
+    private runEvents?: RunEventEmitter,
   ) {}
 
   /**
@@ -226,20 +232,16 @@ export class SessionHandler {
     context: HandlerContext,
   ): Promise<SessionDeleteResponse | ErrorResponse> {
     try {
-      // Check if session exists
-      const session = await this.sessionService.getSession(request.payload.sessionId);
+      // Attempt to delete the session
+      const deleted = await this.sessionService.deleteSession(request.payload.sessionId);
 
-      if (!session) {
+      if (!deleted) {
         return this.createErrorResponse(
           request.id,
           WS_ERROR_CODES.NOT_FOUND,
           `Session ${request.payload.sessionId} not found`,
         );
       }
-
-      // Note: SessionMessageService doesn't have a delete method yet
-      // For now, return success if session exists
-      // TODO: Add delete method to SessionMessageService
 
       this.logger.info(
         { sessionId: request.payload.sessionId, connectionId },
@@ -261,22 +263,21 @@ export class SessionHandler {
   }
 
   /**
-   * Handle session.message request (non-streaming)
+   * Handle session.message request
+   * 
+   * Supports both streaming and non-streaming modes:
+   * - Non-streaming (stream: false or omitted): Returns full response
+   * - Streaming (stream: true): Returns ack with runId, streams events
    */
   async handleMessage(
     connectionId: string,
     request: SessionMessageRequest,
     context: HandlerContext,
-  ): Promise<SessionMessageResponse | ErrorResponse> {
+  ): Promise<SessionMessageResponse | SessionMessageStreamAck | ErrorResponse> {
     try {
       // Check if streaming is requested
       if (request.payload.stream) {
-        // Streaming will be handled by a separate handler in Task 2.2
-        return this.createErrorResponse(
-          request.id,
-          WS_ERROR_CODES.INVALID_REQUEST,
-          'Streaming not supported in this handler. Use streaming endpoint.',
-        );
+        return this.handleStreamingMessage(connectionId, request, context);
       }
 
       // Submit message via service
@@ -335,6 +336,184 @@ export class SessionHandler {
     }
   }
 
+  /**
+   * Handle streaming session.message request
+   * 
+   * When stream: true:
+   * 1. Validates session exists
+   * 2. Creates run and subscribes connection to run events
+   * 3. Emits run events during streaming invocation
+   * 4. Returns immediate ack with runId
+   * 5. Stream events are delivered via session.stream.* events
+   */
+  private async handleStreamingMessage(
+    connectionId: string,
+    request: SessionMessageRequest,
+    context: HandlerContext,
+  ): Promise<SessionMessageStreamAck | ErrorResponse> {
+    // Check if streaming infrastructure is available
+    if (!this.streamManager || !this.runEvents) {
+      return this.createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+        'Streaming is not available on this server',
+      );
+    }
+
+    try {
+      // Validate session exists
+      const session = await this.sessionService.getSession(request.payload.sessionId);
+      if (!session) {
+        return this.createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.NOT_FOUND,
+          `Session ${request.payload.sessionId} not found`,
+        );
+      }
+
+      // Generate a run ID for tracking
+      const runId = crypto.randomUUID();
+      const agentId = (request.payload.metadata?.agentId as string) ?? 'default';
+
+      // Subscribe the connection to run events BEFORE starting
+      this.streamManager.subscribeToRun(runId, connectionId);
+
+      this.logger.info(
+        { sessionId: request.payload.sessionId, runId, connectionId },
+        'Starting streaming message',
+      );
+
+      // Start the streaming invocation in the background
+      // We don't await this - it will emit events as it progresses
+      this.executeStreamingRun(runId, request, agentId, context).catch((error) => {
+        this.logger.error(
+          { error, runId, sessionId: request.payload.sessionId },
+          'Streaming run failed',
+        );
+        // Emit failure event if not already emitted
+        this.runEvents?.emitFailed({
+          runId,
+          sessionId: request.payload.sessionId,
+          agentId,
+          errorCode: 'internal_error',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+      });
+
+      // Return immediate ack with runId
+      return createWSMessage('session.message.ack', {
+        sessionId: request.payload.sessionId,
+        runId,
+        status: 'streaming',
+      }) as SessionMessageStreamAck;
+    } catch (error) {
+      this.logger.error({ error, connectionId }, 'Failed to start streaming message');
+      return this.createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.INTERNAL_ERROR,
+        'Failed to start streaming message',
+      );
+    }
+  }
+
+  /**
+   * Execute a streaming run, emitting events as it progresses
+   * 
+   * This is called in the background after returning the ack response.
+   */
+  private async executeStreamingRun(
+    runId: string,
+    request: SessionMessageRequest,
+    agentId: string,
+    context: HandlerContext,
+  ): Promise<void> {
+    const sessionId = request.payload.sessionId;
+    const providerId = request.payload.metadata?.providerId as string | undefined;
+    const modelId = request.payload.metadata?.modelId as string | undefined;
+
+    try {
+      // Emit run.started event
+      const resolvedProviderId = providerId ?? 'default';
+      const resolvedModelId = modelId ?? 'default';
+      
+      this.runEvents?.emitStarted({
+        runId,
+        sessionId,
+        agentId,
+        providerId: resolvedProviderId,
+        modelId: resolvedModelId,
+      });
+
+      // Submit the message (non-streaming for now, but we emit delta events)
+      // In a full implementation, this would use streaming invocation
+      const result = await this.sessionService.submitMessage({
+        sessionId,
+        role: request.payload.role,
+        content: request.payload.content,
+        agentId,
+        providerId,
+        modelId,
+      });
+
+      if (result.ok) {
+        const run = result.run as SessionRun;
+        
+        // Emit delta with the full content (simulated streaming)
+        const assistantMessage = result.assistantMessage as SessionMessage;
+        this.runEvents?.emitDelta({
+          runId,
+          sessionId,
+          agentId,
+          content: assistantMessage.content,
+          delta: assistantMessage.content,
+        });
+
+        // Emit completion
+        this.runEvents?.emitCompleted({
+          runId,
+          sessionId,
+          agentId,
+          finishReason: run.finishReason ?? 'stop',
+          usage: run.usage ? {
+            promptTokens: run.usage.promptTokens,
+            completionTokens: run.usage.completionTokens,
+            totalTokens: run.usage.totalTokens,
+          } : undefined,
+        });
+
+        this.logger.info(
+          { sessionId, runId, messageId: assistantMessage.id },
+          'Streaming run completed',
+        );
+      } else {
+        // Emit failure
+        this.runEvents?.emitFailed({
+          runId,
+          sessionId,
+          agentId,
+          errorCode: result.error.code,
+          errorMessage: result.error.message,
+        });
+
+        this.logger.warn(
+          { sessionId, runId, error: result.error },
+          'Streaming run failed',
+        );
+      }
+    } catch (error) {
+      // Emit failure
+      this.runEvents?.emitFailed({
+        runId,
+        sessionId,
+        agentId,
+        errorCode: 'internal_error',
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      throw error;
+    }
+  }
+
   // ============================================================================
   // Helper Methods
   // ============================================================================
@@ -371,8 +550,10 @@ export class SessionHandler {
 export function createSessionHandler(
   sessionService: SessionMessageService,
   logger: FastifyBaseLogger,
+  streamManager?: StreamManager,
+  runEvents?: RunEventEmitter,
 ): SessionHandler {
-  return new SessionHandler(sessionService, logger);
+  return new SessionHandler(sessionService, logger, streamManager, runEvents);
 }
 
 // ============================================================================

@@ -382,6 +382,22 @@ export type SessionStreamEvent =
   | SessionStreamEnd
   | SessionStreamError;
 
+/**
+ * Acknowledgment response for streaming session.message request
+ * 
+ * When a client sends session.message with stream: true, this response
+ * is returned immediately to acknowledge the request and provide the runId.
+ * The actual response content will be delivered via session.stream.* events.
+ */
+export type SessionMessageStreamAck = WSMessage<
+  'session.message.ack',
+  {
+    sessionId: string;
+    runId: string;
+    status: 'streaming';
+  }
+>;
+
 // ============================================================================
 // Agent Types
 // ============================================================================

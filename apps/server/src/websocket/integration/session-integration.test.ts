@@ -144,6 +144,10 @@ const createMockSessionService = () => ({
       updatedAt: new Date().toISOString(),
     },
   ]),
+  deleteSession: vi.fn().mockImplementation(async (id: string) => {
+    if (id === 'non-existent-session') return false;
+    return true;
+  }),
   submitMessage: vi.fn().mockResolvedValue({
     ok: true,
     userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },

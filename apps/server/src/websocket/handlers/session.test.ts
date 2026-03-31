@@ -47,6 +47,7 @@ describe('SessionHandler', () => {
     createSession: vi.Mock;
     getSession: vi.Mock;
     listSessions: vi.Mock;
+    deleteSession: vi.Mock;
     submitMessage: vi.Mock;
   };
 
@@ -57,6 +58,7 @@ describe('SessionHandler', () => {
       createSession: vi.fn(),
       getSession: vi.fn(),
       listSessions: vi.fn(),
+      deleteSession: vi.fn(),
       submitMessage: vi.fn(),
     };
 
@@ -247,14 +249,7 @@ describe('SessionHandler', () => {
 
   describe('handleDelete', () => {
     it('should return success for existing session', async () => {
-      const mockSession: Session = {
-        id: 'session-123',
-        title: 'Test Session',
-        status: 'active',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        metadata: {},
-      };
-      mockSessionService.getSession.mockResolvedValue(mockSession);
+      mockSessionService.deleteSession.mockResolvedValue(true);
 
       const request = createWSMessage('session.delete', {
         sessionId: 'session-123',
@@ -269,10 +264,11 @@ describe('SessionHandler', () => {
       expect(response.type).toBe('session.delete');
       expect((response as any).payload.sessionId).toBe('session-123');
       expect((response as any).payload.deleted).toBe(true);
+      expect(mockSessionService.deleteSession).toHaveBeenCalledWith('session-123');
     });
 
     it('should return NOT_FOUND error if session does not exist', async () => {
-      mockSessionService.getSession.mockResolvedValue(null);
+      mockSessionService.deleteSession.mockResolvedValue(false);
 
       const request = createWSMessage('session.delete', {
         sessionId: 'nonexistent',
@@ -356,7 +352,8 @@ describe('SessionHandler', () => {
       expect((response as any).payload.usage.totalTokens).toBe(30);
     });
 
-    it('should return error for streaming requests', async () => {
+    it('should return SERVICE_UNAVAILABLE for streaming requests when streaming not configured', async () => {
+      // Handler is created without streamManager/runEvents in beforeEach
       const request = createWSMessage('session.message', {
         sessionId: 'session-123',
         role: 'user',
@@ -371,7 +368,7 @@ describe('SessionHandler', () => {
       );
 
       expect(response.type).toBe('error');
-      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.INVALID_REQUEST);
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
     });
 
     it('should handle submit errors', async () => {
@@ -448,5 +445,195 @@ describe('registerSessionHandlers', () => {
       'session.message',
       expect.any(Function),
     );
+  });
+});
+
+// ============================================================================
+// Streaming Tests
+// ============================================================================
+
+describe('SessionHandler Streaming', () => {
+  let handler: SessionHandler;
+  let mockSessionService: {
+    createSession: vi.Mock;
+    getSession: vi.Mock;
+    listSessions: vi.Mock;
+    deleteSession: vi.Mock;
+    submitMessage: vi.Mock;
+  };
+  let mockStreamManager: {
+    subscribeToRun: vi.Mock;
+    unsubscribeFromRun: vi.Mock;
+    unsubscribeAllFromConnection: vi.Mock;
+    start: vi.Mock;
+    stop: vi.Mock;
+  };
+  let mockRunEvents: {
+    subscribe: vi.Mock;
+    emit: vi.Mock;
+    emitStarted: vi.Mock;
+    emitDelta: vi.Mock;
+    emitCompleted: vi.Mock;
+    emitFailed: vi.Mock;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockSessionService = {
+      createSession: vi.fn(),
+      getSession: vi.fn(),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      submitMessage: vi.fn(),
+    };
+
+    mockStreamManager = {
+      subscribeToRun: vi.fn(),
+      unsubscribeFromRun: vi.fn(),
+      unsubscribeAllFromConnection: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+
+    mockRunEvents = {
+      subscribe: vi.fn().mockReturnValue(() => {}),
+      emit: vi.fn(),
+      emitStarted: vi.fn(),
+      emitDelta: vi.fn(),
+      emitCompleted: vi.fn(),
+      emitFailed: vi.fn(),
+    };
+
+    // Create handler with streaming support
+    handler = new SessionHandler(
+      mockSessionService as unknown as SessionMessageService,
+      mockLogger as any,
+      mockStreamManager as any,
+      mockRunEvents as any,
+    );
+  });
+
+  describe('handleMessage with streaming', () => {
+    it('should return session.message.ack for streaming requests when streaming is configured', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
+        assistantMessage: { id: 'msg-2', content: 'Hi there!', role: 'assistant' },
+        run: { 
+          id: 'run-1', 
+          finishReason: 'stop',
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      // Should return ack response
+      expect(response.type).toBe('session.message.ack');
+      expect((response as any).payload.sessionId).toBe('session-123');
+      expect((response as any).payload.runId).toBeDefined();
+      expect((response as any).payload.status).toBe('streaming');
+
+      // Should have subscribed to the run
+      expect(mockStreamManager.subscribeToRun).toHaveBeenCalled();
+    });
+
+    it('should subscribe to run events before starting streaming', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      await handler.handleMessage('conn-1', request, mockContext);
+
+      // Verify subscription happened
+      expect(mockStreamManager.subscribeToRun).toHaveBeenCalledWith(
+        expect.any(String), // runId
+        'conn-1',
+      );
+    });
+
+    it('should return NOT_FOUND for streaming request with non-existent session', async () => {
+      mockSessionService.getSession.mockResolvedValue(null);
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'nonexistent',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+    });
+
+    it('should emit run events during streaming', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
+        assistantMessage: { id: 'msg-2', content: 'Hi there!', role: 'assistant' },
+        run: { 
+          id: 'run-1', 
+          finishReason: 'stop',
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      await handler.handleMessage('conn-1', request, mockContext);
+
+      // Wait for background execution to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify run events were emitted
+      expect(mockRunEvents.emitStarted).toHaveBeenCalled();
+      expect(mockRunEvents.emitDelta).toHaveBeenCalled();
+      expect(mockRunEvents.emitCompleted).toHaveBeenCalled();
+    });
   });
 });

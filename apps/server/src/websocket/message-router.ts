@@ -37,6 +37,7 @@ export type HandlerContext = {
   connectionManager: ConnectionManager;
   services: unknown;
   logger: FastifyBaseLogger;
+  streamManager?: import('./streaming').StreamManager;
 };
 
 /**

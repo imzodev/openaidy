@@ -164,9 +164,6 @@ function createGateway(
 
   const connectionManager = new ConnectionManager(config);
   const messageRouter = new MessageRouter(fastify.log);
-  const sessionHandler = new SessionHandler(fastify.services.sessions, fastify.log);
-  const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
-  const providerHandler = new ProviderHandler(fastify.services.providers, fastify.log);
   
   // Create auth middleware for pairing service
   const authMiddleware = new AuthMiddleware(config);
@@ -191,6 +188,27 @@ function createGateway(
     },
   );
 
+  // Create presence manager
+  const presenceManager = new PresenceManager({}, fastify.log);
+
+  // Create stream manager and subscription manager first (needed for session handler)
+  const streamManager = new StreamManager(
+    fastify.services.runEvents,
+    connectionManager,
+    fastify.log,
+  );
+  const subscriptionManager = new SubscriptionManager(connectionManager, fastify.log);
+
+  // Create handlers with streaming support
+  const sessionHandler = new SessionHandler(
+    fastify.services.sessions,
+    fastify.log,
+    streamManager,
+    fastify.services.runEvents,
+  );
+  const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
+  const providerHandler = new ProviderHandler(fastify.services.providers, fastify.log);
+
   // Create node and pairing handlers
   const nodeHandler = new NodeHandler(
     nodeRegistry,
@@ -204,9 +222,6 @@ function createGateway(
     fastify.log,
   );
 
-  // Create presence manager
-  const presenceManager = new PresenceManager({}, fastify.log);
-
   // Create config and presence handlers
   const configHandler = new ConfigHandler(
     fastify.services.config,
@@ -218,14 +233,6 @@ function createGateway(
     connectionManager,
     fastify.log,
   );
-
-  // Create stream manager and subscription manager
-  const streamManager = new StreamManager(
-    fastify.services.runEvents,
-    connectionManager,
-    fastify.log,
-  );
-  const subscriptionManager = new SubscriptionManager(connectionManager, fastify.log);
 
   // Register session handlers with the message router
   registerSessionHandlers(messageRouter, sessionHandler);
@@ -550,6 +557,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       connectionManager: gateway.connectionManager,
       services: fastify.services,
       logger: fastify.log,
+      streamManager: gateway.streamManager,
     };
 
     // Message handler
