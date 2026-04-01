@@ -6,7 +6,6 @@
  * remaining independent from terminal formatting.
  */
 
-import type { FastifyBaseLogger } from 'fastify';
 import {
   type WorkflowResult,
   type WorkflowError,
@@ -23,11 +22,26 @@ import {
 export type {
   WorkflowResult,
   WorkflowError,
+  WorkflowErrorCode,
   PairingRequestStatus,
   PairingRequestData,
   ListPairingRequestsResult,
   PairingRequestActionResult,
 };
+
+// ============================================================================
+// Logger Interface (platform-agnostic)
+// ============================================================================
+
+/**
+ * Simple logger interface that doesn't depend on fastify.
+ */
+export interface WorkflowLogger {
+  info(message: string, data?: Record<string, unknown>): void;
+  warn(message: string, data?: Record<string, unknown>): void;
+  error(message: string, data?: Record<string, unknown>): void;
+  debug(message: string, data?: Record<string, unknown>): void;
+}
 
 // ============================================================================
 // Workflow Options
@@ -48,7 +62,7 @@ export type PairingWorkflowOptions = {
   /** Filter by status */
   status?: PairingRequestStatus;
   /** Logger instance */
-  logger?: FastifyBaseLogger;
+  logger?: WorkflowLogger;
 };
 
 // ============================================================================
@@ -56,22 +70,27 @@ export type PairingWorkflowOptions = {
 // ============================================================================
 
 /**
+ * Pairing service interface expected by the workflow.
+ */
+export type PairingService = {
+  getPendingRequests(): PairingRequestData[];
+  getAllRequests(): PairingRequestData[];
+  getRequest(requestId: string): PairingRequestData | undefined;
+  approveRequest(requestId: string, approvedBy: string, scopes?: string[]): Promise<PairingRequestData | null>;
+  denyRequest(requestId: string, deniedBy: string): PairingRequestData | null;
+};
+
+/**
  * Context passed to pairing workflows.
  * Provides access to the pairing service.
  */
 export type PairingContext = {
   /** Pairing service instance */
-  pairingService: {
-    getPendingRequests(): PairingRequestData[];
-    getAllRequests(): PairingRequestData[];
-    getRequest(requestId: string): PairingRequestData | undefined;
-    approveRequest(requestId: string, approvedBy: string, scopes?: string[]): Promise<PairingRequestData | null>;
-    denyRequest(requestId: string, deniedBy: string): PairingRequestData | null;
-  };
+  pairingService: PairingService;
   /** Actor performing the action (for audit) */
   actor: string;
   /** Logger instance */
-  logger?: FastifyBaseLogger;
+  logger?: WorkflowLogger;
 };
 
 // ============================================================================
@@ -111,7 +130,7 @@ export class PairingWorkflow {
       requests = requests.filter(r => r.status === status);
     }
 
-    logger?.debug({ count: requests.length, status }, 'Listed pairing requests');
+    logger?.debug('Listed pairing requests', { count: requests.length, status });
 
     return success({
       requests,
@@ -128,7 +147,7 @@ export class PairingWorkflow {
     const request = pairingService.getRequest(requestId);
 
     if (!request) {
-      logger?.warn({ requestId }, 'Pairing request not found');
+      logger?.warn('Pairing request not found', { requestId });
       return failure(
         'PAIRING_REQUEST_NOT_FOUND',
         `Pairing request not found: ${requestId}`,
@@ -148,7 +167,7 @@ export class PairingWorkflow {
   ): Promise<PairingRequestActionResult> {
     const { pairingService, actor, logger } = this.context;
 
-    logger?.info({ requestId, actor, scopes }, 'Approving pairing request');
+    logger?.info('Approving pairing request', { requestId, actor, scopes });
 
     const request = await pairingService.approveRequest(requestId, actor, scopes);
 
@@ -196,7 +215,7 @@ export class PairingWorkflow {
   denyRequest(requestId: string): PairingRequestActionResult {
     const { pairingService, actor, logger } = this.context;
 
-    logger?.info({ requestId, actor }, 'Denying pairing request');
+    logger?.info('Denying pairing request', { requestId, actor });
 
     const request = pairingService.denyRequest(requestId, actor);
 

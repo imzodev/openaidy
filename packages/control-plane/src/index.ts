@@ -34,7 +34,7 @@ export {
   BootstrapAdminWorkflow,
   createBootstrapAdminWorkflow,
   type BootstrapAdminContext,
-  type BootstrapAdminInspectOptions,
+  type WorkflowLogger as BootstrapAdminLogger,
 } from './workflows/bootstrap-admin.js';
 
 // Pairing Workflow
