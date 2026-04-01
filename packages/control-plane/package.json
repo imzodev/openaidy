@@ -1,0 +1,25 @@
+{
+  "name": "@openaidy/control-plane",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Shared control-plane application layer for admin workflows",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bootstrap-admin": "./src/workflows/bootstrap-admin.ts",
+    "./pairing": "./src/workflows/pairing.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@openaidy/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  }
+}
