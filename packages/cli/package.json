@@ -13,6 +13,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@openaidy/control-plane": "workspace:*",
     "@openaidy/server": "workspace:*"
   },
   "devDependencies": {

@@ -253,29 +253,18 @@ Examples:
 registerCommand(
   'devices list',
   async (args: string[]) => {
-    if (args.includes('-h') || args.includes('--help')) {
-      return {
-        exitCode: 0,
-        output: `
-Usage: openaidy devices list
-
-List pending device pairing requests.
-
-This command shows all devices waiting for admin approval.
-
-Examples:
-  pnpm openaidy devices list
-`,
-      };
-    }
-    return {
-      exitCode: 0,
-      output: 'No pending device pairing requests.',
-    };
+    // Import the handler dynamically to avoid circular dependencies
+    const { devicesListHandler } = await import('./devices/list.js');
+    return devicesListHandler(args);
   },
   {
     description: 'List pending device pairing requests',
-    usage: 'openaidy devices list',
+    usage: 'openaidy devices list [--status <status>] [--limit <n>]',
+    examples: [
+      'pnpm openaidy devices list',
+      'pnpm openaidy devices list --status all',
+      'pnpm openaidy devices list --status approved --limit 10',
+    ],
   },
 );
 
