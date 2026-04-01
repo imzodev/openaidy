@@ -7,10 +7,14 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "declaration": true,
     "resolveJsonModule": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@server/*": ["../../apps/server/src/*"]
+    }
   },
   "include": ["src/**/*", "bin/**/*"],
   "exclude": ["node_modules", "dist"]

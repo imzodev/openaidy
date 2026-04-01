@@ -26,7 +26,7 @@
     "lint": "pnpm -r lint",
     "format": "prettier --write .",
     "prepare": "husky",
-    "openaidy": "tsx apps/cli/bin/openaidy.ts"
+    "openaidy": "tsx packages/cli/bin/openaidy.ts"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,mts,cts,tsx,json,md}": [

@@ -45,22 +45,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.0)(jiti@1.21.7)(jsdom@28.1.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  apps/cli:
-    dependencies:
-      '@openaidy/server':
-        specifier: workspace:*
-        version: link:../server
-    devDependencies:
-      '@types/node':
-        specifier: ^24.12.0
-        version: 24.12.0
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.4
-        version: 3.2.4(@types/node@24.12.0)(jiti@1.21.7)(jsdom@28.1.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3)
-
   apps/server:
     dependencies:
       '@fastify/cors':
@@ -173,6 +157,22 @@ importers:
       vite-plugin-solid:
         specifier: ^2.11.10
         version: 2.11.11(@testing-library/jest-dom@6.9.1)(solid-js@1.9.11)(vite@8.0.0(@types/node@24.12.0)(esbuild@0.27.4)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/cli:
+    dependencies:
+      '@openaidy/server':
+        specifier: workspace:*
+        version: link:../../apps/server
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.0
+        version: 24.12.0
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.0)(jiti@1.21.7)(jsdom@28.1.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/config:
     dependencies:
