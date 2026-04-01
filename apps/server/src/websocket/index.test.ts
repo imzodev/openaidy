@@ -1,13 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
-import websocket from '@fastify/websocket';
+import type { FastifyBaseLogger } from 'fastify';
+import type { WebSocket } from '@fastify/websocket';
 import {
   websocketGatewayPlugin,
   createGateway,
   ConnectionManager,
   MessageRouter,
-  type WebSocketGateway,
-  type WebSocketGatewayOptions,
   type MessageHandler,
   type HandlerContext,
 } from './index';
@@ -17,9 +15,8 @@ import {
   WS_ERROR_CODES,
   WS_CAPABILITIES,
   type WSResponse,
-  type WSMessage,
 } from '@openaidy/shared-types';
-import { defaultWebSocketConfig, defaultPairingConfig } from './types';
+import { defaultWebSocketConfig } from './types';
 import { AuthMiddleware } from './middleware/auth';
 import type { AppServices } from '../app';
 
@@ -34,7 +31,11 @@ const mockServices = {
     listProviders: () => [],
   },
   sessions: {
-    createSession: async () => ({ id: 'test-session', title: 'Test', createdAt: new Date().toISOString() }),
+    createSession: async () => ({
+      id: 'test-session',
+      title: 'Test',
+      createdAt: new Date().toISOString(),
+    }),
   },
   agents: {
     getAgent: () => null,
@@ -44,11 +45,14 @@ const mockServices = {
     subscribe: () => () => {},
     emit: () => {},
   },
+  bootstrapAdmin: undefined,
   dbAdapter: undefined,
   scheduler: undefined,
   jobsRepo: undefined,
   jobRunsRepo: undefined,
   sessionsRepo: undefined,
+  pairingRequestsRepo: undefined,
+  devicesRepo: undefined,
 } as unknown as AppServices;
 
 const mockLogger = {
@@ -60,8 +64,8 @@ const mockLogger = {
   trace: () => {},
   child: () => mockLogger,
   level: 'info',
-  silent: false,
-} as any;
+  silent: () => {},
+} as unknown as FastifyBaseLogger;
 
 describe('websocket gateway plugin', () => {
   describe('createGateway', () => {
@@ -71,6 +75,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any);
 
       expect(gateway).toBeDefined();
@@ -87,7 +92,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify as any, {
+      const gateway = createGateway(fastify, {
         enabled: false,
         port: 8080,
         path: '/websocket',
@@ -106,7 +111,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify as any, undefined, {
+      const gateway = createGateway(fastify, undefined, {
         codeLength: 8,
         requireAdminApproval: false,
       });
@@ -121,6 +126,7 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any);
       await expect(gateway.shutdown()).resolves.toBeUndefined();
     });
@@ -143,6 +149,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should register a connection', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ctx = manager.registerConnection('conn-1', mockSocket as any);
 
       expect(ctx.id).toBe('conn-1');
@@ -153,6 +160,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should remove a connection', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
       manager.removeConnection('conn-1');
 
@@ -160,6 +168,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should get a connection by ID', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
       const ctx = manager.getConnection('conn-1');
 
@@ -168,7 +177,9 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should get all connections', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-2', mockSocket as any);
 
       const connections = manager.getAllConnections();
@@ -178,9 +189,11 @@ describe('websocket gateway plugin', () => {
     it('should track connection count', () => {
       expect(manager.getAllConnections().length).toBe(0);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
       expect(manager.getAllConnections().length).toBe(1);
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-2', mockSocket as any);
       expect(manager.getAllConnections().length).toBe(2);
 
@@ -189,12 +202,15 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should update heartbeat', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ctx = manager.registerConnection('conn-1', mockSocket as any);
       const initialHeartbeat = ctx.lastHeartbeat;
 
-      // Wait a tiny bit
+      // Wait a tiny bit to ensure time passes
       const start = Date.now();
-      while (Date.now() === start) {}
+      while (Date.now() === start) {
+        // Empty loop to wait for next timestamp
+      }
 
       manager.updateHeartbeat('conn-1');
       const updated = manager.getConnection('conn-1');
@@ -203,6 +219,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should check rate limits', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
 
       // Should allow first request
@@ -219,6 +236,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should return rate limit info', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
       const result = manager.checkRateLimit('conn-1');
 
@@ -228,6 +246,7 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should check stale connections', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ctx = manager.registerConnection('conn-1', mockSocket as any);
 
       // Not stale initially
@@ -243,7 +262,9 @@ describe('websocket gateway plugin', () => {
     });
 
     it('should close all connections', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-1', mockSocket as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       manager.registerConnection('conn-2', mockSocket as any);
 
       manager.closeAll();
@@ -299,7 +320,11 @@ describe('websocket gateway plugin', () => {
 
     it('should route message to handler', async () => {
       const handler: MessageHandler = async (_connId, msg) => {
-        return createErrorResponse(msg.id, WS_ERROR_CODES.INTERNAL_ERROR, 'test.response') as WSResponse;
+        return createErrorResponse(
+          msg.id,
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          'test.response',
+        ) as WSResponse;
       };
 
       router.registerHandler('test.message', handler);
@@ -385,16 +410,25 @@ describe('websocket gateway plugin', () => {
         services: mockServices,
       };
 
-      const gateway = createGateway(fastify as any);
+      const gateway = createGateway(
+        fastify as Parameters<typeof createGateway>[0],
+      );
 
       // Register a test handler
       gateway.messageRouter.registerHandler('ping', async (_connId, _msg) => {
-        return createErrorResponse('ping-test', WS_ERROR_CODES.INTERNAL_ERROR, 'pong') as WSResponse;
+        return createErrorResponse(
+          'ping-test',
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          'pong',
+        ) as WSResponse;
       });
 
       // Register a connection
       const mockSocket = { send: () => {}, close: () => {} };
-      const ctx = gateway.connectionManager.registerConnection('test-conn', mockSocket as any);
+      const ctx = gateway.connectionManager.registerConnection(
+        'test-conn',
+        mockSocket as unknown as WebSocket,
+      );
 
       expect(ctx.authenticated).toBe(false);
 
@@ -406,7 +440,11 @@ describe('websocket gateway plugin', () => {
       };
 
       const message = createWSMessage('ping', {});
-      const response = await gateway.messageRouter.route('test-conn', message, handlerContext);
+      const response = await gateway.messageRouter.route(
+        'test-conn',
+        message,
+        handlerContext,
+      );
 
       expect(response?.type).toBe('error');
 
@@ -428,7 +466,10 @@ describe('websocket gateway plugin', () => {
         scopes: [WS_CAPABILITIES.SESSIONS_READ],
       });
 
-      gateway.connectionManager.registerConnection('auth-conn', { send: () => {}, close: () => {} } as any);
+      gateway.connectionManager.registerConnection('auth-conn', {
+        send: () => {},
+        close: () => {},
+      } as unknown as WebSocket);
 
       const handlerContext: HandlerContext = {
         connectionManager: gateway.connectionManager,
@@ -444,7 +485,9 @@ describe('websocket gateway plugin', () => {
 
       expect(response?.type).toBe('auth.authenticated');
       expect(gateway.connectionManager.isAuthenticated('auth-conn')).toBe(true);
-      expect(gateway.connectionManager.getConnection('auth-conn')?.clientId).toBe('client-auth');
+      expect(
+        gateway.connectionManager.getConnection('auth-conn')?.clientId,
+      ).toBe('client-auth');
 
       await gateway.shutdown();
     });
@@ -456,15 +499,24 @@ describe('websocket gateway plugin', () => {
       };
 
       const gateway = createGateway(fastify);
-      gateway.connectionManager.registerConnection('unauth-conn', { send: () => {}, close: () => {} } as any);
+      gateway.connectionManager.registerConnection('unauth-conn', {
+        send: () => {},
+        close: () => {},
+      } as unknown as WebSocket);
 
       const message = createWSMessage('session.list', {});
       const connection = gateway.connectionManager.getConnection('unauth-conn');
 
       expect(connection?.authenticated).toBe(false);
 
-      const requiresAuth = gateway.config.auth.required && !connection?.authenticated;
-      const isProtectedType = !['auth.authenticate', 'auth.refresh', 'pairing.request', 'pairing.status'].includes(message.type);
+      const requiresAuth =
+        gateway.config.auth.required && !connection?.authenticated;
+      const isProtectedType = ![
+        'auth.authenticate',
+        'auth.refresh',
+        'pairing.request',
+        'pairing.status',
+      ].includes(message.type);
 
       expect(requiresAuth && isProtectedType).toBe(true);
 
@@ -478,11 +530,26 @@ describe('websocket gateway plugin', () => {
       };
 
       const gateway = createGateway(fastify);
-      gateway.connectionManager.registerConnection('cap-conn', { send: () => {}, close: () => {} } as any);
-      gateway.connectionManager.authenticate('cap-conn', 'client-cap', [WS_CAPABILITIES.SESSIONS_READ]);
+      gateway.connectionManager.registerConnection('cap-conn', {
+        send: () => {},
+        close: () => {},
+      } as unknown as WebSocket);
+      gateway.connectionManager.authenticate('cap-conn', 'client-cap', [
+        WS_CAPABILITIES.SESSIONS_READ,
+      ]);
 
-      expect(gateway.connectionManager.hasCapability('cap-conn', WS_CAPABILITIES.CONFIG_WRITE)).toBe(false);
-      expect(gateway.connectionManager.hasCapability('cap-conn', WS_CAPABILITIES.SESSIONS_READ)).toBe(true);
+      expect(
+        gateway.connectionManager.hasCapability(
+          'cap-conn',
+          WS_CAPABILITIES.CONFIG_WRITE,
+        ),
+      ).toBe(false);
+      expect(
+        gateway.connectionManager.hasCapability(
+          'cap-conn',
+          WS_CAPABILITIES.SESSIONS_READ,
+        ),
+      ).toBe(true);
 
       await gateway.shutdown();
     });

@@ -14,7 +14,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createGateway, type WebSocketGateway } from '../index';
 import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
-import { ConnectionManager } from '../connection-manager';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { WS_ERROR_CODES, createWSMessage } from '@openaidy/shared-types';
 
@@ -83,7 +82,15 @@ const createMockRunEvents = () => ({
   emit: vi.fn(),
 });
 
-const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
+const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
+  bootstrapAdmin: undefined,
+  dbAdapter: undefined,
+  scheduler: undefined,
+  jobsRepo: undefined,
+  jobRunsRepo: undefined,
+  sessionsRepo: undefined,
+  pairingRequestsRepo: undefined,
+  devicesRepo: undefined,
   sessions: {
     createSession: vi.fn().mockResolvedValue({
       id: 'session-test-id',
@@ -108,9 +115,16 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
       status: 'active',
       createdAt: new Date().toISOString(),
     }),
-    listSessions: vi.fn().mockResolvedValue([
-      { id: 'session-1', title: 'Session 1', status: 'active', createdAt: new Date().toISOString() },
-    ]),
+    listSessions: vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: 'session-1',
+          title: 'Session 1',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+        },
+      ]),
     deleteSession: vi.fn().mockResolvedValue(true),
     addMessage: vi.fn(),
     getMessages: vi.fn().mockResolvedValue([]),
@@ -119,31 +133,71 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     submitMessage: vi.fn().mockResolvedValue({
       ok: true,
       userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },
-      assistantMessage: { id: 'msg-assistant', content: 'Hi there!', role: 'assistant' },
-      run: { id: 'run-test', finishReason: 'stop', promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      assistantMessage: {
+        id: 'msg-assistant',
+        content: 'Hi there!',
+        role: 'assistant',
+      },
+      run: {
+        id: 'run-test',
+        finishReason: 'stop',
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30,
+      },
     }),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   agents: {
-    listAgents: vi.fn().mockReturnValue([
-      { id: 'agent-1', name: 'Agent 1', description: 'Test agent', tools: ['chat'], enabled: true },
-    ]),
-    listAllAgents: vi.fn().mockReturnValue([
-      { id: 'agent-1', name: 'Agent 1', description: 'Test agent', tools: ['chat'], enabled: true },
-    ]),
+    listAgents: vi
+      .fn()
+      .mockReturnValue([
+        {
+          id: 'agent-1',
+          name: 'Agent 1',
+          description: 'Test agent',
+          tools: ['chat'],
+          enabled: true,
+        },
+      ]),
+    listAllAgents: vi
+      .fn()
+      .mockReturnValue([
+        {
+          id: 'agent-1',
+          name: 'Agent 1',
+          description: 'Test agent',
+          tools: ['chat'],
+          enabled: true,
+        },
+      ]),
     getAgent: vi.fn().mockImplementation((id: string) => {
       if (id === 'non-existent-agent') return undefined;
-      return { id, name: `Agent ${id}`, description: 'Test', tools: ['chat'], enabled: true };
+      return {
+        id,
+        name: `Agent ${id}`,
+        description: 'Test',
+        tools: ['chat'],
+        enabled: true,
+      };
     }),
     getAgentOrFail: vi.fn(),
     createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   providers: {
     registry: {
-      listDescriptors: vi.fn().mockReturnValue([
-        { id: 'openai', name: 'OpenAI', vendorFamily: 'openai', capabilities: ['chat', 'streaming'], models: [] },
-      ]),
+      listDescriptors: vi
+        .fn()
+        .mockReturnValue([
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            vendorFamily: 'openai',
+            capabilities: ['chat', 'streaming'],
+            models: [],
+          },
+        ]),
       get: vi.fn().mockImplementation((id: string) => {
         if (id === 'non-existent-provider') return undefined;
         return {
@@ -159,7 +213,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     },
     getProvider: vi.fn(),
     listProviders: vi.fn().mockReturnValue([]),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   config: {
     get: vi.fn().mockResolvedValue({
       app: { name: 'OpenAidy', version: '1.0.0' },
@@ -174,20 +228,8 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     load: vi.fn(),
     watch: vi.fn(),
     unwatch: vi.fn(),
-  } as any,
-  auth: authMiddleware,
-  llm: {
-    invoke: vi.fn(),
-    invokeStream: vi.fn(),
-  } as any,
-  runEvents: createMockRunEvents() as any,
-  content: {
-    createContent: vi.fn(),
-    getContent: vi.fn(),
-    listContent: vi.fn(),
-    updateContent: vi.fn(),
-    deleteContent: vi.fn(),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  runEvents: createMockRunEvents() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
 });
 
 // ============================================================================
@@ -230,12 +272,13 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       services: mockServices,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     gateway = createGateway(mockFastify as any);
 
     handlerContext = {
       connectionManager: gateway.connectionManager,
       services: mockServices,
-      logger: mockFastify.log as unknown as HandlerContext['logger'],
+      logger: mockFastify.log as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     };
 
     // Start stream manager
@@ -293,13 +336,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
         gateway.connectionManager.registerConnection('conn-1');
         // Not authenticated - some endpoints may allow this, others may not
 
-        const response = await sendAndReceive<{ type: string; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: string;
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         // Response depends on whether the endpoint requires auth
         expect(response.type).toBeDefined();
@@ -325,13 +365,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
         );
 
         // Now try protected endpoint
-        const response = await sendAndReceive<{ type: 'session.list'; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: 'session.list';
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         expect(response.type).toBe('session.list');
         expect(response.payload.sessions).toBeDefined();
@@ -358,13 +395,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
         );
 
         // Access sessions endpoint with sessions.read capability
-        const response = await sendAndReceive<{ type: 'session.list'; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: 'session.list';
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         expect(response.type).toBe('session.list');
       });
@@ -387,13 +421,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
           handlerContext,
         );
 
-        const response = await sendAndReceive<{ type: 'session.list'; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: 'session.list';
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         expect(response.type).toBe('session.list');
       });
@@ -416,13 +447,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
           handlerContext,
         );
 
-        const response = await sendAndReceive<{ type: 'session.list'; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: 'session.list';
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         expect(response.type).toBe('session.list');
       });
@@ -445,13 +473,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
           handlerContext,
         );
 
-        const response = await sendAndReceive<{ type: 'session.list'; payload: { sessions: unknown[] } }>(
-          gateway.messageRouter,
-          'conn-1',
-          'session.list',
-          {},
-          handlerContext,
-        );
+        const response = await sendAndReceive<{
+          type: 'session.list';
+          payload: { sessions: unknown[] };
+        }>(gateway.messageRouter, 'conn-1', 'session.list', {}, handlerContext);
 
         expect(response.type).toBe('session.list');
       });
@@ -479,7 +504,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
           scopes: ['sessions.read'],
         });
 
-        const successResponse = await sendAndReceive<{ type: 'auth.authenticated'; payload: { clientId: string } }>(
+        const successResponse = await sendAndReceive<{
+          type: 'auth.authenticated';
+          payload: { clientId: string };
+        }>(
           gateway.messageRouter,
           'conn-1',
           'auth.authenticate',
@@ -513,7 +541,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       it('should create and track subscriptions', () => {
         gateway.connectionManager.registerConnection('conn-1');
 
-        const subId = gateway.subscriptionManager.createSubscription('conn-1', 'session-1');
+        const subId = gateway.subscriptionManager.createSubscription(
+          'conn-1',
+          'session-1',
+        );
         expect(subId).toBeDefined();
         expect(subId?.startsWith('sub_')).toBe(true);
       });
@@ -521,7 +552,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       it('should remove subscriptions', () => {
         gateway.connectionManager.registerConnection('conn-1');
 
-        const subId = gateway.subscriptionManager.createSubscription('conn-1', 'session-1');
+        const subId = gateway.subscriptionManager.createSubscription(
+          'conn-1',
+          'session-1',
+        );
         expect(gateway.subscriptionManager.getSubscriptionCount()).toBe(1);
 
         gateway.subscriptionManager.removeSubscription(subId!);
@@ -535,7 +569,8 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
         gateway.subscriptionManager.createSubscription('conn-1', 'session-2');
         gateway.subscriptionManager.createSubscription('conn-1', 'session-3');
 
-        const removed = gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
+        const removed =
+          gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
         expect(removed).toBe(3);
         expect(gateway.subscriptionManager.getSubscriptionCount()).toBe(0);
       });
@@ -559,7 +594,8 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       expect(gateway.subscriptionManager.getSubscriptionCount()).toBe(2);
 
       // Cleanup subscriptions
-      const removed = gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
+      const removed =
+        gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
       expect(removed).toBe(2);
       expect(gateway.subscriptionManager.getSubscriptionCount()).toBe(0);
     });
@@ -572,7 +608,8 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       gateway.subscriptionManager.createSubscription('conn-2', 'session-1');
 
       // Cleanup conn-1 only
-      const removed = gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
+      const removed =
+        gateway.subscriptionManager.removeConnectionSubscriptions('conn-1');
       expect(removed).toBe(1);
 
       // Verify conn-2 still has subscription
@@ -580,7 +617,10 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
     });
 
     it('should handle cleanup of non-existent connection', () => {
-      const removed = gateway.subscriptionManager.removeConnectionSubscriptions('non-existent');
+      const removed =
+        gateway.subscriptionManager.removeConnectionSubscriptions(
+          'non-existent',
+        );
       expect(removed).toBe(0);
     });
   });
@@ -636,20 +676,31 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
   describe('Pairing Flow Edge Cases', () => {
     describe('Approval After Expiry', () => {
       it('should not approve expired pairing request', async () => {
-        const request = gateway.pairingService.createRequest('Device', 'mobile', []);
+        const request = gateway.pairingService.createRequest(
+          'Device',
+          'mobile',
+          [],
+        );
 
         // Advance time past expiry
         vi.advanceTimersByTime(301000);
         gateway.pairingService.cleanupExpiredRequests();
 
-        const approved = await gateway.pairingService.approveRequest(request.requestId, 'admin-1');
+        const approved = await gateway.pairingService.approveRequest(
+          request.requestId,
+          'admin-1',
+        );
         expect(approved).toBeNull();
       });
     });
 
     describe('Pairing Request Creation', () => {
       it('should create pairing request with valid data', () => {
-        const request = gateway.pairingService.createRequest('Test Device', 'mobile', ['camera', 'microphone']);
+        const request = gateway.pairingService.createRequest(
+          'Test Device',
+          'mobile',
+          ['camera', 'microphone'],
+        );
 
         expect(request).toBeDefined();
         expect(request.deviceName).toBe('Test Device');
@@ -670,7 +721,8 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
 
     describe('Token Validation', () => {
       it('should reject unknown token', async () => {
-        const validated = await gateway.pairingService.validateToken('unknown-token-123');
+        const validated =
+          await gateway.pairingService.validateToken('unknown-token-123');
         expect(validated).toBeNull();
       });
     });
@@ -771,7 +823,9 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       );
 
       expect(response.type).toBe('error');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE);
+      expect(response.payload.error.code).toBe(
+        WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE,
+      );
     });
   });
 
@@ -793,7 +847,9 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       for (let i = 0; i < Math.min(maxConns, 100); i++) {
         gateway.connectionManager.registerConnection(`conn-limit-${i}`);
       }
-      expect(gateway.connectionManager.getConnectionCount()).toBe(Math.min(maxConns, 100));
+      expect(gateway.connectionManager.getConnectionCount()).toBe(
+        Math.min(maxConns, 100),
+      );
     });
 
     it('should handle stale connection detection', () => {
@@ -802,7 +858,7 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       // Manually set old heartbeat
       const ctx = gateway.connectionManager.getConnection('conn-stale');
       if (ctx) {
-        ctx.lastHeartbeat = Date.now() - (gateway.config.heartbeatInterval * 3);
+        ctx.lastHeartbeat = Date.now() - gateway.config.heartbeatInterval * 3;
       }
 
       const staleIds = gateway.connectionManager.checkStaleConnections(
@@ -814,7 +870,9 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
     it('should handle multiple concurrent connections', () => {
       const connections = [];
       for (let i = 0; i < 50; i++) {
-        connections.push(gateway.connectionManager.registerConnection(`conn-multi-${i}`));
+        connections.push(
+          gateway.connectionManager.registerConnection(`conn-multi-${i}`),
+        );
       }
       expect(gateway.connectionManager.getConnectionCount()).toBe(50);
     });
@@ -879,7 +937,9 @@ describe('Production-Grade Integration Tests - Issue #131', () => {
       expect(gateway.messageRouter.hasHandler('presence.get')).toBe(true);
       expect(gateway.messageRouter.hasHandler('presence.getAll')).toBe(true);
       expect(gateway.messageRouter.hasHandler('presence.subscribe')).toBe(true);
-      expect(gateway.messageRouter.hasHandler('presence.unsubscribe')).toBe(true);
+      expect(gateway.messageRouter.hasHandler('presence.unsubscribe')).toBe(
+        true,
+      );
     });
   });
 });

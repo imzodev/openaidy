@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger } from 'fastify';
+import type { WebSocket } from '@fastify/websocket';
 import { createGateway, type WebSocketGateway } from '../index';
 import type { AppServices } from '../../../app';
 import { AuthMiddleware } from '../middleware/auth';
@@ -26,6 +27,14 @@ const createMockAuthMiddleware = (): AuthMiddleware => {
 // ============================================================================
 
 const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
+  bootstrapAdmin: undefined,
+  dbAdapter: undefined,
+  scheduler: undefined,
+  jobsRepo: undefined,
+  jobRunsRepo: undefined,
+  sessionsRepo: undefined,
+  pairingRequestsRepo: undefined,
+  devicesRepo: undefined,
   sessions: {
     createSession: vi.fn(),
     getSession: vi.fn(),
@@ -36,7 +45,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     getMessages: vi.fn(),
     updateMetadata: vi.fn(),
     archiveSession: vi.fn(),
-  } as any,
+  } as unknown,
   agents: {
     listAgents: vi.fn().mockReturnValue([]),
     getAgent: vi.fn(),
@@ -44,11 +53,11 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),
-  } as any,
+  } as unknown,
   providers: {
     getProvider: vi.fn(),
     listProviders: vi.fn().mockReturnValue([]),
-  } as any,
+  } as unknown,
   config: {
     getConfig: vi.fn().mockReturnValue({
       app: { name: 'TestApp', version: '1.0.0' },
@@ -65,12 +74,12 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     load: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
-  } as any,
+  } as unknown,
   auth: authMiddleware,
   llm: {
     invoke: vi.fn(),
     invokeStream: vi.fn(),
-  } as any,
+  } as unknown,
   runEvents: {
     createRun: vi.fn(),
     getRun: vi.fn(),
@@ -83,14 +92,14 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     getEvents: vi.fn(),
     subscribeToRun: vi.fn(),
     unsubscribeFromRun: vi.fn(),
-  } as any,
+  } as unknown,
   content: {
     createContent: vi.fn(),
     getContent: vi.fn(),
     listContent: vi.fn(),
     updateContent: vi.fn(),
     deleteContent: vi.fn(),
-  } as any,
+  } as unknown,
 });
 
 // ============================================================================
@@ -102,12 +111,7 @@ describe('Config & Presence Handler Integration', () => {
   let mockServices: AppServices;
   let mockAuth: AuthMiddleware;
   let mockFastify: {
-    log: {
-      info: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      debug: ReturnType<typeof vi.fn>;
-    };
+    log: FastifyBaseLogger;
     services: AppServices;
   };
 
@@ -120,7 +124,12 @@ describe('Config & Presence Handler Integration', () => {
         error: vi.fn(),
         warn: vi.fn(),
         debug: vi.fn(),
-      },
+        fatal: vi.fn(),
+        trace: vi.fn(),
+        child: () => mockFastify.log,
+        level: 'info',
+        silent: vi.fn(),
+      } as unknown as FastifyBaseLogger,
       services: mockServices,
     };
     gateway = createGateway(mockFastify);
@@ -209,13 +218,15 @@ describe('Config & Presence Handler Integration', () => {
     describe('config.update', () => {
       it('should handle config.update request', async () => {
         const connectionId = 'test-conn-3';
-        
+
         // Register and authenticate connection with config.write capability
         gateway.connectionManager.registerConnection(connectionId, {
           send: vi.fn(),
           readyState: 1,
-        } as any);
-        gateway.connectionManager.authenticate(connectionId, 'test-client', ['config.write']);
+        } as unknown as WebSocket);
+        gateway.connectionManager.authenticate(connectionId, 'test-client', [
+          'config.write',
+        ]);
 
         const message = {
           id: 'msg-3',
@@ -279,15 +290,11 @@ describe('Config & Presence Handler Integration', () => {
           timestamp: new Date().toISOString(),
           payload: {},
         };
-        await gateway.messageRouter.route(
-          connectionId,
-          watchMessage,
-          {
-            connectionManager: gateway.connectionManager,
-            services: mockServices,
-            logger: mockFastify.log,
-          },
-        );
+        await gateway.messageRouter.route(connectionId, watchMessage, {
+          connectionManager: gateway.connectionManager,
+          services: mockServices,
+          logger: mockFastify.log,
+        });
 
         // Then unwatch
         const unwatchMessage = {
@@ -383,15 +390,11 @@ describe('Config & Presence Handler Integration', () => {
           timestamp: new Date().toISOString(),
           payload: { status: 'online' },
         };
-        await gateway.messageRouter.route(
-          connectionId,
-          updateMessage,
-          {
-            connectionManager: gateway.connectionManager,
-            services: mockServices,
-            logger: mockFastify.log,
-          },
-        );
+        await gateway.messageRouter.route(connectionId, updateMessage, {
+          connectionManager: gateway.connectionManager,
+          services: mockServices,
+          logger: mockFastify.log,
+        });
 
         // Then get presence
         const getMessage = {
@@ -546,7 +549,8 @@ describe('Config & Presence Handler Integration', () => {
       gateway.presenceManager.updatePresence('conn-2', 'online');
       gateway.presenceManager.updatePresence('conn-3', 'offline');
 
-      const onlineClients = gateway.presenceManager.getPresenceByStatus('online');
+      const onlineClients =
+        gateway.presenceManager.getPresenceByStatus('online');
       expect(onlineClients.length).toBeGreaterThanOrEqual(2);
     });
 

@@ -11,6 +11,10 @@ const defaultAppConfigTemplatePath = resolve(
   workspaceRoot,
   'config/openaidy.template.json',
 );
+const defaultBootstrapAdminTokenPath = resolve(
+  workspaceRoot,
+  '.openaidy/credentials/bootstrap-admin.json',
+);
 
 const envSchema = z
   .object({
@@ -44,11 +48,26 @@ const envSchema = z
     WS_PAIRING_CODE_LENGTH: z.coerce.number().int().min(4).max(12).default(6),
     WS_PAIRING_CODE_EXPIRY_MS: z.coerce.number().positive().default(300000),
     WS_PAIRING_MAX_PENDING: z.coerce.number().int().positive().default(100),
-    WS_PAIRING_TOKEN_EXPIRY_MS: z.coerce.number().positive().default(2592000000),
+    WS_PAIRING_TOKEN_EXPIRY_MS: z.coerce
+      .number()
+      .positive()
+      .default(2592000000),
     WS_PAIRING_REQUIRE_ADMIN: z
       .string()
       .transform((val) => val !== 'false')
       .default('true'),
+    BOOTSTRAP_ADMIN_ENABLED: z
+      .string()
+      .transform((val) => val !== 'false')
+      .default('true'),
+    BOOTSTRAP_ADMIN_TOKEN_PATH: z
+      .string()
+      .default(defaultBootstrapAdminTokenPath),
+    BOOTSTRAP_ADMIN_CLIENT_ID: z.string().default('bootstrap-admin'),
+    BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: z.coerce
+      .number()
+      .positive()
+      .default(31536000000),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {

@@ -16,11 +16,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { FastifyRequest } from 'fastify';
 import { createGateway, type WebSocketGateway } from '../index';
 import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
-import { ConnectionManager } from '../connection-manager';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { WS_ERROR_CODES, createWSMessage } from '@openaidy/shared-types';
 import { defaultWebSocketConfig } from '../types';
@@ -126,7 +124,15 @@ const createMockLogger = () => ({
   silent: false,
 });
 
-const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
+const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
+  bootstrapAdmin: undefined,
+  dbAdapter: undefined,
+  scheduler: undefined,
+  jobsRepo: undefined,
+  jobRunsRepo: undefined,
+  sessionsRepo: undefined,
+  pairingRequestsRepo: undefined,
+  devicesRepo: undefined,
   sessions: {
     createSession: vi.fn().mockResolvedValue({
       id: 'session-e2e-id',
@@ -152,8 +158,18 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
       createdAt: new Date().toISOString(),
     }),
     listSessions: vi.fn().mockResolvedValue([
-      { id: 'session-1', title: 'Session 1', status: 'active', createdAt: new Date().toISOString() },
-      { id: 'session-2', title: 'Session 2', status: 'active', createdAt: new Date().toISOString() },
+      {
+        id: 'session-1',
+        title: 'Session 1',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'session-2',
+        title: 'Session 2',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      },
     ]),
     deleteSession: vi.fn().mockResolvedValue(true),
     addMessage: vi.fn(),
@@ -163,32 +179,80 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     submitMessage: vi.fn().mockResolvedValue({
       ok: true,
       userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },
-      assistantMessage: { id: 'msg-assistant', content: 'Hi there!', role: 'assistant' },
-      run: { id: 'run-e2e', finishReason: 'stop', promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      assistantMessage: {
+        id: 'msg-assistant',
+        content: 'Hi there!',
+        role: 'assistant',
+      },
+      run: {
+        id: 'run-e2e',
+        finishReason: 'stop',
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30,
+      },
     }),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   agents: {
     listAgents: vi.fn().mockReturnValue([
-      { id: 'agent-1', name: 'Agent 1', description: 'Test agent', tools: ['chat'], enabled: true },
-      { id: 'agent-2', name: 'Agent 2', description: 'Test agent 2', tools: ['chat'], enabled: true },
+      {
+        id: 'agent-1',
+        name: 'Agent 1',
+        description: 'Test agent',
+        tools: ['chat'],
+        enabled: true,
+      },
+      {
+        id: 'agent-2',
+        name: 'Agent 2',
+        description: 'Test agent 2',
+        tools: ['chat'],
+        enabled: true,
+      },
     ]),
-    listAllAgents: vi.fn().mockReturnValue([
-      { id: 'agent-1', name: 'Agent 1', description: 'Test agent', tools: ['chat'], enabled: true },
-    ]),
+    listAllAgents: vi
+      .fn()
+      .mockReturnValue([
+        {
+          id: 'agent-1',
+          name: 'Agent 1',
+          description: 'Test agent',
+          tools: ['chat'],
+          enabled: true,
+        },
+      ]),
     getAgent: vi.fn().mockImplementation((id: string) => {
       if (id === 'non-existent-agent') return undefined;
-      return { id, name: `Agent ${id}`, description: 'Test', tools: ['chat'], enabled: true };
+      return {
+        id,
+        name: `Agent ${id}`,
+        description: 'Test',
+        tools: ['chat'],
+        enabled: true,
+      };
     }),
     getAgentOrFail: vi.fn(),
     createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   providers: {
     registry: {
       listDescriptors: vi.fn().mockReturnValue([
-        { id: 'openai', name: 'OpenAI', vendorFamily: 'openai', capabilities: ['chat', 'streaming'], models: [] },
-        { id: 'anthropic', name: 'Anthropic', vendorFamily: 'anthropic', capabilities: ['chat', 'streaming'], models: [] },
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat', 'streaming'],
+          models: [],
+        },
+        {
+          id: 'anthropic',
+          name: 'Anthropic',
+          vendorFamily: 'anthropic',
+          capabilities: ['chat', 'streaming'],
+          models: [],
+        },
       ]),
       get: vi.fn().mockImplementation((id: string) => {
         if (id === 'non-existent-provider') return undefined;
@@ -205,7 +269,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     },
     getProvider: vi.fn(),
     listProviders: vi.fn().mockReturnValue([]),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   config: {
     get: vi.fn().mockResolvedValue({
       app: { name: 'OpenAidy', version: '1.0.0' },
@@ -220,12 +284,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     load: vi.fn(),
     watch: vi.fn(),
     unwatch: vi.fn(),
-  } as any,
-  auth: authMiddleware,
-  llm: {
-    invoke: vi.fn(),
-    invokeStream: vi.fn(),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   runEvents: {
     createRun: vi.fn(),
     getRun: vi.fn(),
@@ -241,14 +300,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     on: vi.fn(),
     off: vi.fn(),
     emit: vi.fn(),
-  } as any,
-  content: {
-    createContent: vi.fn(),
-    getContent: vi.fn(),
-    listContent: vi.fn(),
-    updateContent: vi.fn(),
-    deleteContent: vi.fn(),
-  } as any,
+  } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
 });
 
 // ============================================================================
@@ -290,12 +342,13 @@ describe('E2E Integration Tests', () => {
       services: mockServices,
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     gateway = createGateway(mockFastify as any);
 
     handlerContext = {
       connectionManager: gateway.connectionManager,
       services: mockServices,
-      logger: mockFastify.log as unknown as HandlerContext['logger'],
+      logger: mockFastify.log as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     };
 
     // Start stream manager
@@ -353,7 +406,9 @@ describe('E2E Integration Tests', () => {
     it('should handle multiple concurrent connections', () => {
       const connections = [];
       for (let i = 0; i < 100; i++) {
-        connections.push(gateway.connectionManager.registerConnection(`conn-${i}`));
+        connections.push(
+          gateway.connectionManager.registerConnection(`conn-${i}`),
+        );
       }
       expect(gateway.connectionManager.getConnectionCount()).toBe(100);
     });
@@ -380,7 +435,8 @@ describe('E2E Integration Tests', () => {
       // Manually set old heartbeat (more than 2x heartbeat interval)
       const ctx = gateway.connectionManager.getConnection('conn-1');
       if (ctx) {
-        ctx.lastHeartbeat = Date.now() - (defaultWebSocketConfig.heartbeatInterval * 3);
+        ctx.lastHeartbeat =
+          Date.now() - defaultWebSocketConfig.heartbeatInterval * 3;
       }
 
       const staleIds = gateway.connectionManager.checkStaleConnections(
@@ -416,7 +472,10 @@ describe('E2E Integration Tests', () => {
         scopes: ['sessions.read', 'config.read'],
       });
 
-      const response = await sendAndReceive<{ type: 'auth.authenticated'; payload: { clientId: string; capabilities: string[] } }>(
+      const response = await sendAndReceive<{
+        type: 'auth.authenticated';
+        payload: { clientId: string; capabilities: string[] };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'auth.authenticate',
@@ -426,7 +485,10 @@ describe('E2E Integration Tests', () => {
 
       expect(response.type).toBe('auth.authenticated');
       expect(response.payload.clientId).toBe('e2e-client');
-      expect(response.payload.capabilities).toEqual(['sessions.read', 'config.read']);
+      expect(response.payload.capabilities).toEqual([
+        'sessions.read',
+        'config.read',
+      ]);
       expect(gateway.connectionManager.isAuthenticated('conn-1')).toBe(true);
     });
 
@@ -448,8 +510,12 @@ describe('E2E Integration Tests', () => {
         handlerContext,
       );
 
-      expect(gateway.connectionManager.getCapabilities('conn-2')).toEqual(['config.write']);
-      expect(gateway.connectionManager.hasCapability('conn-2', 'config.write')).toBe(true);
+      expect(gateway.connectionManager.getCapabilities('conn-2')).toEqual([
+        'config.write',
+      ]);
+      expect(
+        gateway.connectionManager.hasCapability('conn-2', 'config.write'),
+      ).toBe(true);
     });
 
     it('should reject invalid token authentication', async () => {
@@ -504,7 +570,10 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should delete a session', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { deleted: boolean } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { deleted: boolean };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'session.delete',
@@ -519,18 +588,30 @@ describe('E2E Integration Tests', () => {
     it('should handle concurrent sessions', async () => {
       const sessions = await Promise.all([
         sendAndReceive<SessionCreatedResponse>(
-          gateway.messageRouter, 'conn-1', 'session.create', {}, handlerContext,
+          gateway.messageRouter,
+          'conn-1',
+          'session.create',
+          {},
+          handlerContext,
         ),
         sendAndReceive<SessionCreatedResponse>(
-          gateway.messageRouter, 'conn-2', 'session.create', {}, handlerContext,
+          gateway.messageRouter,
+          'conn-2',
+          'session.create',
+          {},
+          handlerContext,
         ),
         sendAndReceive<SessionCreatedResponse>(
-          gateway.messageRouter, 'conn-3', 'session.create', {}, handlerContext,
+          gateway.messageRouter,
+          'conn-3',
+          'session.create',
+          {},
+          handlerContext,
         ),
       ]);
 
       expect(sessions).toHaveLength(3);
-      sessions.forEach(s => expect(s.type).toBe('session.created'));
+      sessions.forEach((s) => expect(s.type).toBe('session.created'));
     });
   });
 
@@ -553,7 +634,10 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should get specific agent details', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { agent: { id: string } } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { agent: { id: string } };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'agent.get',
@@ -579,7 +663,10 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should get provider models', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { models: unknown[] } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { models: unknown[] };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'provider.models',
@@ -598,7 +685,10 @@ describe('E2E Integration Tests', () => {
 
   describe('Node & Pairing Operations', () => {
     it('should create pairing request', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { code?: string; pairingCode?: string } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { code?: string; pairingCode?: string };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'pairing.request',
@@ -614,13 +704,10 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should list registered nodes', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { nodes: unknown[] } }>(
-        gateway.messageRouter,
-        'conn-1',
-        'node.list',
-        {},
-        handlerContext,
-      );
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { nodes: unknown[] };
+      }>(gateway.messageRouter, 'conn-1', 'node.list', {}, handlerContext);
 
       expect(response.type).toBe('node.list');
       expect(Array.isArray(response.payload.nodes)).toBe(true);
@@ -682,13 +769,10 @@ describe('E2E Integration Tests', () => {
 
   describe('Configuration & Presence Operations', () => {
     it('should get configuration', async () => {
-      const response = await sendAndReceive<{ type: string; payload: { config?: unknown } }>(
-        gateway.messageRouter,
-        'conn-1',
-        'config.get',
-        {},
-        handlerContext,
-      );
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { config?: unknown };
+      }>(gateway.messageRouter, 'conn-1', 'config.get', {}, handlerContext);
 
       expect(response.type).toBe('config.get');
       // The config service returns config
@@ -697,7 +781,10 @@ describe('E2E Integration Tests', () => {
 
     it('should update presence status', async () => {
       // The handler returns presence.update type (not presence.updated)
-      const response = await sendAndReceive<{ type: string; payload: { success: boolean } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { success: boolean };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'presence.update',
@@ -720,7 +807,10 @@ describe('E2E Integration Tests', () => {
         handlerContext,
       );
 
-      const response = await sendAndReceive<{ type: string; payload: { presence: unknown[] } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { presence: unknown[] };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'presence.getAll',
@@ -734,7 +824,10 @@ describe('E2E Integration Tests', () => {
 
     it('should subscribe to presence events', async () => {
       // The handler returns presence.subscribe type (not presence.subscribed)
-      const response = await sendAndReceive<{ type: string; payload: { subscribed: boolean } }>(
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { subscribed: boolean };
+      }>(
         gateway.messageRouter,
         'conn-1',
         'presence.subscribe',
@@ -763,7 +856,9 @@ describe('E2E Integration Tests', () => {
       );
 
       expect(response.type).toBe('error');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE);
+      expect(response.payload.error.code).toBe(
+        WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE,
+      );
     });
 
     it('should handle non-existent resource', async () => {
@@ -780,7 +875,10 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should handle service errors gracefully', async () => {
-      (mockServices.sessions.listSessions as any).mockRejectedValueOnce(new Error('Database unavailable'));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockServices.sessions.listSessions as any).mockRejectedValueOnce(
+        new Error('Database unavailable'),
+      );
 
       const response = await sendAndReceive<ErrorResponse>(
         gateway.messageRouter,
@@ -855,7 +953,9 @@ describe('E2E Integration Tests', () => {
       expect(gateway.messageRouter.hasHandler('presence.get')).toBe(true);
       expect(gateway.messageRouter.hasHandler('presence.getAll')).toBe(true);
       expect(gateway.messageRouter.hasHandler('presence.subscribe')).toBe(true);
-      expect(gateway.messageRouter.hasHandler('presence.unsubscribe')).toBe(true);
+      expect(gateway.messageRouter.hasHandler('presence.unsubscribe')).toBe(
+        true,
+      );
     });
   });
 
@@ -940,7 +1040,10 @@ describe('E2E Integration Tests', () => {
 
     it('should clear pending requests on connection close', async () => {
       const requestId = gateway.messageRouter.createRequestId();
-      const trackPromise = gateway.messageRouter.trackRequest(requestId, 'conn-1');
+      const trackPromise = gateway.messageRouter.trackRequest(
+        requestId,
+        'conn-1',
+      );
 
       const cleared = gateway.messageRouter.clearPendingRequests('conn-1');
       expect(cleared).toBe(1);
@@ -949,8 +1052,22 @@ describe('E2E Integration Tests', () => {
     });
 
     it('should check if message can be routed', () => {
-      expect(gateway.messageRouter.canRoute({ id: '1', type: 'session.create', timestamp: '', payload: {} })).toBe(true);
-      expect(gateway.messageRouter.canRoute({ id: '1', type: 'unknown.type', timestamp: '', payload: {} })).toBe(false);
+      expect(
+        gateway.messageRouter.canRoute({
+          id: '1',
+          type: 'session.create',
+          timestamp: '',
+          payload: {},
+        }),
+      ).toBe(true);
+      expect(
+        gateway.messageRouter.canRoute({
+          id: '1',
+          type: 'unknown.type',
+          timestamp: '',
+          payload: {},
+        }),
+      ).toBe(false);
     });
   });
 

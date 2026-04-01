@@ -5,21 +5,14 @@
  * and hardcoded route/path behavior is removed.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
-import {
-  websocketGatewayPlugin,
-  createGateway,
-  type WebSocketGateway,
-} from './index';
+import { websocketGatewayPlugin, createGateway } from './index';
 import {
   defaultWebSocketConfig,
-  defaultPairingConfig,
   createWebSocketConfig,
   validateWebSocketConfig,
-  webSocketConfigSchema,
-  type WebSocketConfig,
 } from './types';
 import type { AppServices } from '../app';
 
@@ -34,7 +27,11 @@ const mockServices = {
     listProviders: () => [],
   },
   sessions: {
-    createSession: async () => ({ id: 'test-session', title: 'Test', createdAt: new Date().toISOString() }),
+    createSession: async () => ({
+      id: 'test-session',
+      title: 'Test',
+      createdAt: new Date().toISOString(),
+    }),
   },
   agents: {
     getAgent: () => null,
@@ -44,6 +41,7 @@ const mockServices = {
     subscribe: () => () => {},
     emit: () => {},
   },
+  bootstrapAdmin: undefined,
   dbAdapter: undefined,
   scheduler: undefined,
   jobsRepo: undefined,
@@ -63,7 +61,7 @@ const mockLogger = {
   child: () => mockLogger,
   level: 'info',
   silent: false,
-} as any;
+} as const;
 
 describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
   describe('Config parsing', () => {
@@ -125,7 +123,11 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         path: '/ws',
         maxConnections: 1000,
         heartbeatInterval: 30000,
-        auth: { required: true, tokenExpiry: 86400000, secret: 'test-secret-key-here' },
+        auth: {
+          required: true,
+          tokenExpiry: 86400000,
+          secret: 'test-secret-key-here',
+        },
         rateLimit: { max: 100, window: 60000 },
       };
       const result = validateWebSocketConfig(config);
@@ -141,7 +143,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
     });
 
     it('should reject invalid path types', () => {
-      expect(() => validateWebSocketConfig({ path: 123 as any })).toThrow();
+      expect(() => validateWebSocketConfig({ path: 123 as unknown })).toThrow();
     });
 
     it('should reject invalid maxConnections values', () => {
@@ -160,6 +162,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any);
 
       expect(gateway.config.path).toBe('/ws');
@@ -174,6 +177,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         path: '/custom-ws',
       });
@@ -187,6 +191,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         maxConnections: 500,
       });
@@ -200,6 +205,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         heartbeatInterval: 45000,
       });
@@ -213,6 +219,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         enabled: true,
         port: 8080,
@@ -232,7 +239,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
     it('should not register routes when disabled via options', async () => {
       const app = Fastify();
       await app.register(websocket);
-      
+
       const registeredRoutes: string[] = [];
       app.addHook('onRoute', (routeOptions) => {
         registeredRoutes.push(routeOptions.url || '');
@@ -253,7 +260,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
     it('should skip initialization when disabled', async () => {
       const app = Fastify();
       await app.register(websocket);
-      
+
       const logSpy = vi.fn();
       app.log.info = logSpy;
 
@@ -272,7 +279,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
       const app = Fastify();
       app.decorate('services', mockServices);
       await app.register(websocket);
-      
+
       // Track registered routes
       const registeredRoutes: string[] = [];
       app.addHook('onRoute', (routeOptions) => {
@@ -299,11 +306,15 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
       const app = Fastify();
       app.decorate('services', mockServices);
       await app.register(websocket);
-      
+
       const logMessages: string[] = [];
       const originalInfo = app.log.info.bind(app.log);
-      app.log.info = (msg: any) => {
-        logMessages.push(typeof msg === 'string' ? msg : msg.msg || String(msg));
+      app.log.info = (msg: string | { msg?: unknown }) => {
+        logMessages.push(
+          typeof msg === 'string'
+            ? msg
+            : ((msg as { msg?: unknown }).msg?.toString() ?? String(msg)),
+        );
         return originalInfo(msg);
       };
 
@@ -314,9 +325,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
       });
 
       // Should log the configured path
-      expect(
-        logMessages.some(msg => msg.includes('/realtime'))
-      ).toBe(true);
+      expect(logMessages.some((msg) => msg.includes('/realtime'))).toBe(true);
 
       await app.close();
     });
@@ -327,18 +336,22 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         maxConnections: 3,
       });
 
       // Register 3 connections
-      const mockSocket = { send: vi.fn(), close: vi.fn() };
-      gateway.connectionManager.registerConnection('conn-1', mockSocket as any);
-      gateway.connectionManager.registerConnection('conn-2', mockSocket as any);
-      gateway.connectionManager.registerConnection('conn-3', mockSocket as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockSocket = { send: vi.fn(), close: vi.fn() } as any;
+      gateway.connectionManager.registerConnection('conn-1', mockSocket);
+      gateway.connectionManager.registerConnection('conn-2', mockSocket);
+      gateway.connectionManager.registerConnection('conn-3', mockSocket);
 
       expect(gateway.connectionManager.getConnectionCount()).toBe(3);
-      expect(gateway.connectionManager.getConnectionCount()).toBeLessThanOrEqual(gateway.config.maxConnections);
+      expect(
+        gateway.connectionManager.getConnectionCount(),
+      ).toBeLessThanOrEqual(gateway.config.maxConnections);
     });
 
     it('should use heartbeatInterval from config', async () => {
@@ -347,12 +360,17 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway = createGateway(fastify as any, {
         heartbeatInterval: 10000, // 10 seconds
       });
 
-      const mockSocket = { send: vi.fn(), close: vi.fn() };
-      const ctx = gateway.connectionManager.registerConnection('conn-1', mockSocket as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockSocket = { send: vi.fn(), close: vi.fn() } as any;
+      const ctx = gateway.connectionManager.registerConnection(
+        'conn-1',
+        mockSocket,
+      );
 
       // Not stale within threshold
       const stale1 = gateway.connectionManager.checkStaleConnections(15000); // 15 seconds
@@ -415,6 +433,7 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       createGateway(fastify as any, { path: '/new-path' });
 
       // Default should still be /ws
@@ -427,7 +446,9 @@ describe('WebSocket Gateway Runtime Configuration - Issue #130', () => {
         services: mockServices,
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway1 = createGateway(fastify as any, { path: '/path1' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const gateway2 = createGateway(fastify as any, { path: '/path2' });
 
       expect(gateway1.config.path).toBe('/path1');

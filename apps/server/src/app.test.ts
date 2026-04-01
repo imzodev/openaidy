@@ -3,8 +3,15 @@ import { fileURLToPath } from 'node:url';
 
 vi.mock('./lib/env', () => ({
   env: (() => {
-    const appConfigPath = fileURLToPath(new URL('../../.openaidy/test-app-config.json', import.meta.url));
-    const appConfigTemplatePath = fileURLToPath(new URL('../../../config/openaidy.template.json', import.meta.url));
+    const appConfigPath = fileURLToPath(
+      new URL('../../.openaidy/test-app-config.json', import.meta.url),
+    );
+    const appConfigTemplatePath = fileURLToPath(
+      new URL('../../../config/openaidy.template.json', import.meta.url),
+    );
+    const bootstrapAdminTokenPath = fileURLToPath(
+      new URL('../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+    );
 
     return {
       HOST: '0.0.0.0',
@@ -33,13 +40,24 @@ vi.mock('./lib/env', () => ({
       WS_PAIRING_MAX_PENDING: 100,
       WS_PAIRING_TOKEN_EXPIRY_MS: 2592000000,
       WS_PAIRING_REQUIRE_ADMIN: true,
+      BOOTSTRAP_ADMIN_ENABLED: true,
+      BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapAdminTokenPath,
+      BOOTSTRAP_ADMIN_CLIENT_ID: 'test-bootstrap-admin',
+      BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: 31536000000,
     };
   })(),
 }));
 
 import { buildApp } from './app';
 import { createProviderServices } from './providers';
-import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelStreamEvent, ModelDescriptor } from '@openaidy/runtime';
+import type {
+  ModelProvider,
+  ProviderDescriptor,
+  ModelRequest,
+  ProviderResult,
+  ModelStreamEvent,
+  ModelDescriptor,
+} from '@openaidy/runtime';
 import { err, createProviderError, ok } from '@openaidy/runtime';
 
 describe('buildApp', () => {
@@ -160,10 +178,14 @@ describe('App services lifecycle', () => {
     app1.services.providers.registry.register(mockProvider);
 
     // App1 should see the provider
-    expect(app1.services.providers.registry.has('app1-only-provider')).toBe(true);
+    expect(app1.services.providers.registry.has('app1-only-provider')).toBe(
+      true,
+    );
 
     // App2 should NOT see the provider
-    expect(app2.services.providers.registry.has('app1-only-provider')).toBe(false);
+    expect(app2.services.providers.registry.has('app1-only-provider')).toBe(
+      false,
+    );
 
     // Clean up
     await app1.close();
@@ -244,7 +266,7 @@ function createMockProvider(id: string): ModelProvider {
   const notImplementedError = createProviderError(
     'provider.unknown',
     'Mock provider not implemented',
-    {}
+    {},
   );
 
   const mockModels: ModelDescriptor[] = [
@@ -258,21 +280,34 @@ function createMockProvider(id: string): ModelProvider {
 
   return {
     descriptor,
-    hasCapability: (cap: string) => descriptor.capabilities.includes(cap as never),
-    listModels: async (): Promise<ProviderResult<readonly ModelDescriptor[]>> => {
+    hasCapability: (cap: string) =>
+      descriptor.capabilities.includes(cap as never),
+    listModels: async (): Promise<
+      ProviderResult<readonly ModelDescriptor[]>
+    > => {
       return ok(mockModels);
     },
-    getModel: async (modelId: string): Promise<ProviderResult<ModelDescriptor>> => {
-      const model = mockModels.find(m => m.id === modelId);
+    getModel: async (
+      modelId: string,
+    ): Promise<ProviderResult<ModelDescriptor>> => {
+      const model = mockModels.find((m) => m.id === modelId);
       if (model) {
         return ok(model);
       }
-      return err(createProviderError('provider.model_not_found', `Model ${modelId} not found`, { providerId: id }));
+      return err(
+        createProviderError(
+          'provider.model_not_found',
+          `Model ${modelId} not found`,
+          { providerId: id },
+        ),
+      );
     },
     invoke: async (): Promise<ProviderResult<never>> => {
       return err(notImplementedError);
     },
-    invokeStream: async function* (_request: ModelRequest): AsyncIterable<ProviderResult<ModelStreamEvent>> {
+    invokeStream: async function* (
+      _request: ModelRequest,
+    ): AsyncIterable<ProviderResult<ModelStreamEvent>> {
       yield err(notImplementedError);
     },
   };

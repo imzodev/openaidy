@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger } from 'fastify';
 import { createGateway, type WebSocketGateway } from '../index';
+import type { WSMessage } from '@openaidy/shared-types';
 import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 
@@ -25,62 +26,64 @@ const createMockAuthMiddleware = (): AuthMiddleware => {
 // Mock Services
 // ============================================================================
 
-const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
-  dbAdapter: undefined,
-  scheduler: undefined,
-  jobsRepo: undefined,
-  jobRunsRepo: undefined,
-  sessionsRepo: undefined,
-  pairingRequestsRepo: undefined,
-  devicesRepo: undefined,
-  sessions: {
-    createSession: vi.fn(),
-    getSession: vi.fn(),
-    getSessionOrFail: vi.fn(),
-    listSessions: vi.fn(),
-    deleteSession: vi.fn(),
-    addMessage: vi.fn(),
-    getMessages: vi.fn(),
-    updateMetadata: vi.fn(),
-    archiveSession: vi.fn(),
-  } as any,
-  agents: {
-    listAgents: vi.fn().mockReturnValue([]),
-    getAgent: vi.fn(),
-    getAgentOrFail: vi.fn(),
-    createAgent: vi.fn(),
-    updateAgent: vi.fn(),
-    deleteAgent: vi.fn(),
-  } as any,
-  providers: {
-    getProvider: vi.fn(),
-    listProviders: vi.fn().mockReturnValue([]),
-  } as any,
-  config: {
-    getConfig: vi.fn(),
-    load: vi.fn(),
-  } as any,
-  runEvents: {
-    createRun: vi.fn(),
-    getRun: vi.fn(),
-    listRuns: vi.fn(),
-    updateRun: vi.fn(),
-    completeRun: vi.fn(),
-    failRun: vi.fn(),
-    cancelRun: vi.fn(),
-    addEvent: vi.fn(),
-    getEvents: vi.fn(),
-    subscribeToRun: vi.fn(),
-    unsubscribeFromRun: vi.fn(),
-  } as any,
-  content: {
-    createContent: vi.fn(),
-    getContent: vi.fn(),
-    listContent: vi.fn(),
-    updateContent: vi.fn(),
-    deleteContent: vi.fn(),
-  } as any,
-} as AppServices);
+const createMockServices = (_authMiddleware: AuthMiddleware): AppServices =>
+  ({
+    bootstrapAdmin: undefined,
+    dbAdapter: undefined,
+    scheduler: undefined,
+    jobsRepo: undefined,
+    jobRunsRepo: undefined,
+    sessionsRepo: undefined,
+    pairingRequestsRepo: undefined,
+    devicesRepo: undefined,
+    sessions: {
+      createSession: vi.fn(),
+      getSession: vi.fn(),
+      getSessionOrFail: vi.fn(),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      addMessage: vi.fn(),
+      getMessages: vi.fn(),
+      updateMetadata: vi.fn(),
+      archiveSession: vi.fn(),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    agents: {
+      listAgents: vi.fn().mockReturnValue([]),
+      getAgent: vi.fn(),
+      getAgentOrFail: vi.fn(),
+      createAgent: vi.fn(),
+      updateAgent: vi.fn(),
+      deleteAgent: vi.fn(),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    providers: {
+      getProvider: vi.fn(),
+      listProviders: vi.fn().mockReturnValue([]),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    config: {
+      getConfig: vi.fn(),
+      load: vi.fn(),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    runEvents: {
+      createRun: vi.fn(),
+      getRun: vi.fn(),
+      listRuns: vi.fn(),
+      updateRun: vi.fn(),
+      completeRun: vi.fn(),
+      failRun: vi.fn(),
+      cancelRun: vi.fn(),
+      addEvent: vi.fn(),
+      getEvents: vi.fn(),
+      subscribeToRun: vi.fn(),
+      unsubscribeFromRun: vi.fn(),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    content: {
+      createContent: vi.fn(),
+      getContent: vi.fn(),
+      listContent: vi.fn(),
+      updateContent: vi.fn(),
+      deleteContent: vi.fn(),
+    } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  }) as AppServices;
 
 // ============================================================================
 // Node & Pairing Integration Tests
@@ -91,30 +94,30 @@ describe('Node & Pairing Handler Integration', () => {
   let mockServices: AppServices;
   let mockAuth: AuthMiddleware;
   let mockFastify: {
-    log: {
-      info: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      debug: ReturnType<typeof vi.fn>;
-    };
+    log: FastifyBaseLogger;
     services: AppServices;
   };
 
   beforeEach(() => {
     mockAuth = createMockAuthMiddleware();
     mockServices = createMockServices(mockAuth);
-    
+
     mockFastify = {
       log: {
         info: vi.fn(),
         error: vi.fn(),
         warn: vi.fn(),
         debug: vi.fn(),
-      },
+        fatal: vi.fn(),
+        trace: vi.fn(),
+        child: () => mockFastify.log,
+        level: 'info',
+        silent: vi.fn(),
+      } as unknown as FastifyBaseLogger,
       services: mockServices,
     };
 
-    gateway = createGateway(mockFastify as any);
+    gateway = createGateway(mockFastify);
   });
 
   afterEach(async () => {
@@ -160,7 +163,7 @@ describe('Node & Pairing Handler Integration', () => {
   describe('Message Router Registration', () => {
     it('should have node handlers registered', () => {
       const handlerTypes = gateway.messageRouter.getHandlerTypes();
-      
+
       expect(handlerTypes).toContain('node.list');
       expect(handlerTypes).toContain('node.describe');
       expect(handlerTypes).toContain('node.invoke');
@@ -170,7 +173,7 @@ describe('Node & Pairing Handler Integration', () => {
 
     it('should have pairing handlers registered', () => {
       const handlerTypes = gateway.messageRouter.getHandlerTypes();
-      
+
       expect(handlerTypes).toContain('pairing.request');
       expect(handlerTypes).toContain('pairing.status');
       expect(handlerTypes).toContain('pairing.approve');
@@ -180,14 +183,14 @@ describe('Node & Pairing Handler Integration', () => {
 
     it('should have all required handlers registered', () => {
       const handlerTypes = gateway.messageRouter.getHandlerTypes();
-      
+
       // Node handlers
       expect(handlerTypes).toContain('node.list');
       expect(handlerTypes).toContain('node.describe');
       expect(handlerTypes).toContain('node.invoke');
       expect(handlerTypes).toContain('node.register');
       expect(handlerTypes).toContain('node.unregister');
-      
+
       // Pairing handlers
       expect(handlerTypes).toContain('pairing.request');
       expect(handlerTypes).toContain('pairing.status');
@@ -222,7 +225,7 @@ describe('Node & Pairing Handler Integration', () => {
       gateway.nodeRegistry.registerNode(node);
 
       expect(gateway.nodeRegistry.size).toBe(1);
-      
+
       const retrieved = gateway.nodeRegistry.getNode('test-node-1');
       expect(retrieved).toBeDefined();
       expect(retrieved?.name).toBe('Test Node');
@@ -306,16 +309,26 @@ describe('Node & Pairing Handler Integration', () => {
     });
 
     it('should get request by code', () => {
-      const created = gateway.pairingService.createRequest('Test', 'mobile', []);
-      
-      const found = gateway.pairingService.getRequestByCode(created.pairingCode);
+      const created = gateway.pairingService.createRequest(
+        'Test',
+        'mobile',
+        [],
+      );
+
+      const found = gateway.pairingService.getRequestByCode(
+        created.pairingCode,
+      );
       expect(found).toBeDefined();
       expect(found?.requestId).toBe(created.requestId);
     });
 
     it('should approve requests', async () => {
-      const request = gateway.pairingService.createRequest('Test Device', 'mobile', ['camera']);
-      
+      const request = gateway.pairingService.createRequest(
+        'Test Device',
+        'mobile',
+        ['camera'],
+      );
+
       const approved = await gateway.pairingService.approveRequest(
         request.requestId,
         'admin-user',
@@ -327,13 +340,22 @@ describe('Node & Pairing Handler Integration', () => {
       expect(approved?.nodeId).toBeDefined();
       expect(approved?.token).toBeDefined();
       // Token should be a JWT (three base64url-encoded parts separated by dots)
-      expect(approved?.token).toMatch(/^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/);
+      expect(approved?.token).toMatch(
+        /^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/,
+      );
     });
 
     it('should deny requests', () => {
-      const request = gateway.pairingService.createRequest('Test Device', 'mobile', []);
-      
-      const denied = gateway.pairingService.denyRequest(request.requestId, 'admin-user');
+      const request = gateway.pairingService.createRequest(
+        'Test Device',
+        'mobile',
+        [],
+      );
+
+      const denied = gateway.pairingService.denyRequest(
+        request.requestId,
+        'admin-user',
+      );
 
       expect(denied).toBeDefined();
       expect(denied?.status).toBe('denied');
@@ -365,12 +387,14 @@ describe('Node & Pairing Handler Integration', () => {
       expect(approved?.status).toBe('approved');
       expect(approved?.nodeId).toBeDefined();
       // Token should be a JWT
-      expect(approved?.token).toMatch(/^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/);
+      expect(approved?.token).toMatch(
+        /^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/,
+      );
 
       // 3. Verify node is registered (note: approveRequest does NOT register the node,
       // it just generates a nodeId and token. The node needs to be registered separately
       // via node.register with the connectionId)
-      
+
       // For this integration test, we verify the pairing flow works correctly
       // Node registration happens via node.register handler after receiving the token
     });
@@ -400,11 +424,11 @@ describe('Node & Pairing Handler Integration', () => {
           type: 'auth.authenticate',
           timestamp: new Date().toISOString(),
           payload: { token: approved!.token },
-        } as any,
+        } as unknown as WSMessage,
         {
           connectionManager: gateway.connectionManager,
           services: mockServices,
-          logger: mockFastify.log as any,
+          logger: mockFastify.log,
         },
       );
 
@@ -422,11 +446,11 @@ describe('Node & Pairing Handler Integration', () => {
             capabilities: ['camera', 'microphone'],
             metadata: { platform: 'ios' },
           },
-        } as any,
+        } as unknown as WSMessage,
         {
           connectionManager: gateway.connectionManager,
           services: mockServices,
-          logger: mockFastify.log as any,
+          logger: mockFastify.log,
         },
       );
 
@@ -447,8 +471,12 @@ describe('Node & Pairing Handler Integration', () => {
         { name: 'Browser', type: 'browser' as const, caps: ['notifications'] },
       ];
 
-      const requests = devices.map(device => 
-        gateway.pairingService.createRequest(device.name, device.type, device.caps)
+      const requests = devices.map((device) =>
+        gateway.pairingService.createRequest(
+          device.name,
+          device.type,
+          device.caps,
+        ),
       );
 
       // Verify all requests are pending
@@ -457,10 +485,15 @@ describe('Node & Pairing Handler Integration', () => {
 
       // Approve all
       for (const request of requests) {
-        const approved = await gateway.pairingService.approveRequest(request.requestId, 'admin');
+        const approved = await gateway.pairingService.approveRequest(
+          request.requestId,
+          'admin',
+        );
         expect(approved?.status).toBe('approved');
         // Token should be a JWT
-        expect(approved?.token).toMatch(/^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/);
+        expect(approved?.token).toMatch(
+          /^eyJ[A-Za-z0-9-_]+\.eyJ[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/,
+        );
       }
 
       // Verify no more pending

@@ -15,33 +15,35 @@ import type { WebSocketConfig } from './types';
 // Mock Factories
 // ============================================================================
 
-const createMockLogger = (): FastifyBaseLogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  child: vi.fn(() => createMockLogger()),
-  level: 'info',
-  silent: false,
-} as unknown as FastifyBaseLogger);
+const createMockLogger = (): FastifyBaseLogger =>
+  ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    child: vi.fn(() => createMockLogger()),
+    level: 'info',
+    silent: false,
+  }) as unknown as FastifyBaseLogger;
 
 const createMockConfig = (): WebSocketConfig => ({
+  enabled: true,
+  port: 3001,
+  path: '/ws',
+  maxConnections: 100,
+  heartbeatInterval: 30000,
   auth: {
+    required: true,
     secret: 'test-secret-key-for-pairing-service-tests',
     tokenExpiry: 3600000, // 1 hour
   },
   rateLimit: {
-    enabled: false,
-    maxConnections: 100,
-    windowMs: 60000,
+    max: 100,
+    window: 60000,
   },
-  heartbeat: {
-    interval: 30000,
-    timeout: 10000,
-  },
-} as WebSocketConfig);
+});
 
 const createMockPersistence = () => {
   const pairingRequestsStore: PairingRequestsStore = {
@@ -76,7 +78,7 @@ describe('PairingCodeGenerator', () => {
   it('should generate a code with default length', () => {
     const generator = new PairingCodeGenerator();
     const code = generator.generate();
-    
+
     expect(code).toHaveLength(6);
     expect(/^\d{6}$/.test(code)).toBe(true);
   });
@@ -84,7 +86,7 @@ describe('PairingCodeGenerator', () => {
   it('should generate a code with custom length', () => {
     const generator = new PairingCodeGenerator(8);
     const code = generator.generate();
-    
+
     expect(code).toHaveLength(8);
     expect(/^\d{8}$/.test(code)).toBe(true);
   });
@@ -92,18 +94,18 @@ describe('PairingCodeGenerator', () => {
   it('should generate different codes', () => {
     const generator = new PairingCodeGenerator();
     const codes = new Set<string>();
-    
+
     for (let i = 0; i < 100; i++) {
       codes.add(generator.generate());
     }
-    
+
     // At least 95% should be unique (very high probability)
     expect(codes.size).toBeGreaterThan(95);
   });
 
   it('should validate correct code format', () => {
     const generator = new PairingCodeGenerator(6);
-    
+
     expect(generator.validate('123456')).toBe(true);
     expect(generator.validate('000000')).toBe(true);
     expect(generator.validate('999999')).toBe(true);
@@ -111,7 +113,7 @@ describe('PairingCodeGenerator', () => {
 
   it('should reject invalid code format', () => {
     const generator = new PairingCodeGenerator(6);
-    
+
     expect(generator.validate('12345')).toBe(false);
     expect(generator.validate('1234567')).toBe(false);
     expect(generator.validate('abcdef')).toBe(false);
@@ -136,13 +138,13 @@ describe('PairingService', () => {
     mockConfig = createMockConfig();
     authMiddleware = new AuthMiddleware(mockConfig);
     mockPersistence = createMockPersistence();
-    
+
     // Use short cleanup interval for testing
     const options: PairingServiceOptions = {
       requestExpiry: 1000, // 1 second for testing
       cleanupInterval: 100, // 100ms for testing
     };
-    
+
     service = new PairingService(authMiddleware, mockLogger, options);
   });
 
@@ -157,11 +159,10 @@ describe('PairingService', () => {
 
   describe('createRequest', () => {
     it('should create a pairing request', () => {
-      const request = service.createRequest(
-        'Test Device',
-        'mobile',
-        ['camera', 'microphone'],
-      );
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+        'microphone',
+      ]);
 
       expect(request.requestId).toBeDefined();
       expect(request.pairingCode).toBeDefined();
@@ -188,14 +189,14 @@ describe('PairingService', () => {
 
     it('should generate unique pairing codes', () => {
       const requests: PairingRequest[] = [];
-      
+
       for (let i = 0; i < 10; i++) {
         requests.push(service.createRequest(`Device ${i}`, 'mobile', []));
       }
 
-      const codes = requests.map(r => r.pairingCode);
+      const codes = requests.map((r) => r.pairingCode);
       const uniqueCodes = new Set(codes);
-      
+
       expect(uniqueCodes.size).toBe(10);
     });
 
@@ -219,7 +220,11 @@ describe('PairingService', () => {
         },
       });
 
-      const request = persistentService.createRequest('Persisted Device', 'mobile', ['camera']);
+      const request = persistentService.createRequest(
+        'Persisted Device',
+        'mobile',
+        ['camera'],
+      );
       await persistentService.awaitPendingWrites();
 
       expect(mockPersistence.pairingRequestsStore.create).toHaveBeenCalledWith(
@@ -241,11 +246,9 @@ describe('PairingService', () => {
 
   describe('approveRequest', () => {
     it('should approve a pending request', async () => {
-      const request = service.createRequest(
-        'Test Device',
-        'mobile',
-        ['camera'],
-      );
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+      ]);
 
       const approved = await service.approveRequest(
         request.requestId,
@@ -262,11 +265,10 @@ describe('PairingService', () => {
     });
 
     it('should approve with custom scopes', async () => {
-      const request = service.createRequest(
-        'Test Device',
-        'mobile',
-        ['camera', 'microphone'],
-      );
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+        'microphone',
+      ]);
 
       const approved = await service.approveRequest(
         request.requestId,
@@ -279,7 +281,7 @@ describe('PairingService', () => {
 
     it('should return null for non-existent request', async () => {
       const result = await service.approveRequest('non-existent', 'admin-1');
-      
+
       expect(result).toBeNull();
     });
 
@@ -288,7 +290,7 @@ describe('PairingService', () => {
       await service.approveRequest(request.requestId, 'admin-1');
 
       const result = await service.approveRequest(request.requestId, 'admin-2');
-      
+
       expect(result).toBeNull();
     });
 
@@ -300,13 +302,20 @@ describe('PairingService', () => {
         { requestExpiry: 1 }, // 1ms
       );
 
-      const request = shortExpiryService.createRequest('Test Device', 'mobile', []);
-      
-      // Wait for expiry
-      await new Promise(resolve => setTimeout(resolve, 10));
+      const request = shortExpiryService.createRequest(
+        'Test Device',
+        'mobile',
+        [],
+      );
 
-      const result = await shortExpiryService.approveRequest(request.requestId, 'admin-1');
-      
+      // Wait for expiry
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const result = await shortExpiryService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
+
       expect(result!.status).toBe('expired');
 
       shortExpiryService.destroy();
@@ -314,7 +323,9 @@ describe('PairingService', () => {
     });
 
     it('should log approval', async () => {
-      const request = service.createRequest('Test Device', 'mobile', ['camera']);
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+      ]);
       await service.approveRequest(request.requestId, 'admin-1');
 
       expect(mockLogger.info).toHaveBeenCalledWith(
@@ -334,8 +345,16 @@ describe('PairingService', () => {
         },
       });
 
-      const request = persistentService.createRequest('Approved Device', 'mobile', ['camera', 'microphone']);
-      const approved = await persistentService.approveRequest(request.requestId, 'admin-1', ['camera']);
+      const request = persistentService.createRequest(
+        'Approved Device',
+        'mobile',
+        ['camera', 'microphone'],
+      );
+      const approved = await persistentService.approveRequest(
+        request.requestId,
+        'admin-1',
+        ['camera'],
+      );
       await persistentService.awaitPendingWrites();
 
       expect(mockPersistence.pairingRequestsStore.update).toHaveBeenCalledWith(
@@ -377,7 +396,7 @@ describe('PairingService', () => {
 
     it('should return null for non-existent request', () => {
       const result = service.denyRequest('non-existent', 'admin-1');
-      
+
       expect(result).toBeNull();
     });
 
@@ -386,7 +405,7 @@ describe('PairingService', () => {
       service.denyRequest(request.requestId, 'admin-1');
 
       const result = service.denyRequest(request.requestId, 'admin-2');
-      
+
       expect(result).toBeNull();
     });
 
@@ -418,7 +437,7 @@ describe('PairingService', () => {
 
     it('should return undefined for non-existent ID', () => {
       const result = service.getRequest('non-existent');
-      
+
       expect(result).toBeUndefined();
     });
   });
@@ -433,7 +452,7 @@ describe('PairingService', () => {
 
     it('should return undefined for non-existent code', () => {
       const result = service.getRequestByCode('000000');
-      
+
       expect(result).toBeUndefined();
     });
   });
@@ -455,7 +474,7 @@ describe('PairingService', () => {
 
     it('should return empty array when no pending requests', () => {
       const pending = service.getPendingRequests();
-      
+
       expect(pending).toHaveLength(0);
     });
   });
@@ -477,8 +496,13 @@ describe('PairingService', () => {
 
   describe('validateToken', () => {
     it('should validate an approved token', async () => {
-      const request = service.createRequest('Test Device', 'mobile', ['camera']);
-      const approved = await service.approveRequest(request.requestId, 'admin-1');
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+      ]);
+      const approved = await service.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
 
       const payload = await service.validateToken(approved!.token!);
 
@@ -490,18 +514,23 @@ describe('PairingService', () => {
 
     it('should return null for invalid token', async () => {
       const payload = await service.validateToken('invalid-token');
-      
+
       expect(payload).toBeNull();
     });
 
     it('should return null for revoked token', async () => {
-      const request = service.createRequest('Test Device', 'mobile', ['camera']);
-      const approved = await service.approveRequest(request.requestId, 'admin-1');
+      const request = service.createRequest('Test Device', 'mobile', [
+        'camera',
+      ]);
+      const approved = await service.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
 
       service.revokeToken(approved!.token!);
-      
+
       const payload = await service.validateToken(approved!.token!);
-      
+
       expect(payload).toBeNull();
     });
   });
@@ -509,7 +538,10 @@ describe('PairingService', () => {
   describe('revokeToken', () => {
     it('should revoke a token', async () => {
       const request = service.createRequest('Test Device', 'mobile', []);
-      const approved = await service.approveRequest(request.requestId, 'admin-1');
+      const approved = await service.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
 
       const result = service.revokeToken(approved!.token!);
 
@@ -520,13 +552,16 @@ describe('PairingService', () => {
 
     it('should return false for non-existent token', () => {
       const result = service.revokeToken('non-existent-token');
-      
+
       expect(result).toBe(false);
     });
 
     it('should log token revocation', async () => {
       const request = service.createRequest('Test Device', 'mobile', []);
-      const approved = await service.approveRequest(request.requestId, 'admin-1');
+      const approved = await service.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
 
       service.revokeToken(approved!.token!);
 
@@ -542,7 +577,10 @@ describe('PairingService', () => {
   describe('getRequestByToken', () => {
     it('should get request by token', async () => {
       const request = service.createRequest('Test Device', 'mobile', []);
-      const approved = await service.approveRequest(request.requestId, 'admin-1');
+      const approved = await service.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
 
       const retrieved = service.getRequestByToken(approved!.token!);
 
@@ -552,7 +590,7 @@ describe('PairingService', () => {
 
     it('should return undefined for non-existent token', () => {
       const result = service.getRequestByToken('non-existent');
-      
+
       expect(result).toBeUndefined();
     });
 
@@ -612,7 +650,9 @@ describe('PairingService', () => {
       expect(reloaded).toBeDefined();
       expect(reloaded?.nodeId).toBe('node-persisted');
       expect(reloaded?.scopes).toEqual(['camera']);
-      expect(persistentService.getRequestByToken('persisted-token')?.requestId).toBe('persisted-request');
+      expect(
+        persistentService.getRequestByToken('persisted-token')?.requestId,
+      ).toBe('persisted-request');
 
       persistentService.destroy();
       persistentService.clear();
@@ -632,10 +672,14 @@ describe('PairingService', () => {
         { requestExpiry: 10, cleanupInterval: 10000 }, // 10ms expiry
       );
 
-      const request = shortExpiryService.createRequest('Test Device', 'mobile', []);
-      
+      const request = shortExpiryService.createRequest(
+        'Test Device',
+        'mobile',
+        [],
+      );
+
       // Wait for expiry
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const cleaned = shortExpiryService.cleanupExpiredRequests();
 
@@ -653,9 +697,13 @@ describe('PairingService', () => {
         { requestExpiry: 10, cleanupInterval: 10000 },
       );
 
-      const request = shortExpiryService.createRequest('Test Device', 'mobile', []);
-      
-      await new Promise(resolve => setTimeout(resolve, 50));
+      const request = shortExpiryService.createRequest(
+        'Test Device',
+        'mobile',
+        [],
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       shortExpiryService.cleanupExpiredRequests();
 
@@ -701,9 +749,7 @@ describe('PairingService', () => {
     it('should log clear operation', () => {
       service.clear();
 
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Pairing service cleared',
-      );
+      expect(mockLogger.info).toHaveBeenCalledWith('Pairing service cleared');
     });
   });
 
@@ -730,7 +776,7 @@ describe('PairingService', () => {
   describe('createPairingService', () => {
     it('should create PairingService instance', () => {
       const newService = createPairingService(authMiddleware, mockLogger);
-      
+
       expect(newService).toBeInstanceOf(PairingService);
 
       newService.destroy();

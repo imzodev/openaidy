@@ -29,7 +29,9 @@ import {
   createAppConfigService,
   type AppConfigService,
 } from './config/service';
-import { websocketGatewayPlugin, type WebSocketGateway } from './websocket';
+import { websocketGatewayPlugin } from './websocket';
+import { BootstrapAdminManager } from './bootstrap-admin';
+import { AuthMiddleware } from './websocket/middleware/auth';
 
 /**
  * Application services container
@@ -44,6 +46,7 @@ export type AppServices = {
   sessions: SessionMessageService;
   agents: AgentRegistry;
   runEvents: RunEventEmitter;
+  bootstrapAdmin: BootstrapAdminManager | undefined;
   dbAdapter: DatabaseAdapter | undefined;
   scheduler: SchedulerService | undefined;
   jobsRepo: JobsStore | undefined;
@@ -58,6 +61,29 @@ export type AppServices = {
  */
 export async function buildApp() {
   const app = Fastify({ logger: loggerOptions });
+  const wsConfig = {
+    enabled: env.WS_ENABLED,
+    port: env.WS_PORT,
+    path: env.WS_PATH,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    heartbeatInterval: env.WS_HEARTBEAT_INTERVAL,
+    auth: {
+      required: env.WS_AUTH_REQUIRED,
+      tokenExpiry: env.WS_TOKEN_EXPIRY,
+      secret: env.WS_TOKEN_SECRET,
+    },
+    rateLimit: {
+      max: env.WS_RATE_LIMIT_MAX,
+      window: env.WS_RATE_LIMIT_WINDOW,
+    },
+  };
+  const pairingConfig = {
+    codeLength: env.WS_PAIRING_CODE_LENGTH,
+    codeExpiryMs: env.WS_PAIRING_CODE_EXPIRY_MS,
+    maxPendingRequests: env.WS_PAIRING_MAX_PENDING,
+    defaultTokenExpiryMs: env.WS_PAIRING_TOKEN_EXPIRY_MS,
+    requireAdminApproval: env.WS_PAIRING_REQUIRE_ADMIN,
+  };
 
   // Initialize database if a DB backend is configured.
   let dbAdapter: DatabaseAdapter | undefined;
@@ -110,6 +136,16 @@ export async function buildApp() {
 
   // Create run event emitter for SSE streaming
   const runEvents = new RunEventEmitter();
+  const bootstrapAdmin = env.BOOTSTRAP_ADMIN_ENABLED
+    ? new BootstrapAdminManager(new AuthMiddleware(wsConfig), app.log, {
+        enabled: env.BOOTSTRAP_ADMIN_ENABLED,
+        tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
+        clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
+        tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
+      })
+    : undefined;
+
+  await bootstrapAdmin?.ensureToken();
 
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo) {
@@ -128,6 +164,7 @@ export async function buildApp() {
     sessions: sessionService,
     agents: agentRegistry,
     runEvents,
+    bootstrapAdmin,
     dbAdapter,
     scheduler,
     jobsRepo,
@@ -150,29 +187,8 @@ export async function buildApp() {
   // Register WebSocket gateway
   await app.register(websocketGatewayPlugin, {
     enabled: env.WS_ENABLED,
-    wsConfig: {
-      enabled: env.WS_ENABLED,
-      port: env.WS_PORT,
-      path: env.WS_PATH,
-      maxConnections: env.WS_MAX_CONNECTIONS,
-      heartbeatInterval: env.WS_HEARTBEAT_INTERVAL,
-      auth: {
-        required: env.WS_AUTH_REQUIRED,
-        tokenExpiry: env.WS_TOKEN_EXPIRY,
-        secret: env.WS_TOKEN_SECRET,
-      },
-      rateLimit: {
-        max: env.WS_RATE_LIMIT_MAX,
-        window: env.WS_RATE_LIMIT_WINDOW,
-      },
-    },
-    pairingConfig: {
-      codeLength: env.WS_PAIRING_CODE_LENGTH,
-      codeExpiryMs: env.WS_PAIRING_CODE_EXPIRY_MS,
-      maxPendingRequests: env.WS_PAIRING_MAX_PENDING,
-      defaultTokenExpiryMs: env.WS_PAIRING_TOKEN_EXPIRY_MS,
-      requireAdminApproval: env.WS_PAIRING_REQUIRE_ADMIN,
-    },
+    wsConfig,
+    pairingConfig,
   });
 
   await app.register(healthRoutes);
