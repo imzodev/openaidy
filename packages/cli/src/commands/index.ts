@@ -271,79 +271,30 @@ registerCommand(
 registerCommand(
   'devices approve',
   async (args: string[]) => {
-    if (args.includes('-h') || args.includes('--help')) {
-      return {
-        exitCode: 0,
-        output: `
-Usage: openaidy devices approve <request-id>
-
-Approve a pending device pairing request.
-
-Arguments:
-  request-id    The ID of the pairing request to approve
-
-Examples:
-  pnpm openaidy devices approve abc123
-
-Exit Codes:
-  0  Request approved successfully
-  1  Request not found or already processed
-`,
-      };
-    }
-    if (args.length === 0) {
-      return {
-        exitCode: 2,
-        error: 'Error: Missing required argument <request-id>\n\nUsage: openaidy devices approve <request-id>',
-      };
-    }
-    return {
-      exitCode: 1,
-      output: `Device pairing approval not yet implemented. Request ID: ${args[0]}`,
-    };
+    // Import the handler dynamically to avoid circular dependencies
+    const { devicesApproveHandler } = await import('./devices/approve.js');
+    return devicesApproveHandler(args);
   },
   {
     description: 'Approve a pending device pairing request',
-    usage: 'openaidy devices approve <request-id>',
+    usage: 'openaidy devices approve <request-id> [--scopes <scopes>]',
+    examples: [
+      'pnpm openaidy devices approve abc123',
+      'pnpm openaidy devices approve abc123 --scopes chat,files',
+    ],
   },
 );
 
 registerCommand(
   'devices deny',
   async (args: string[]) => {
-    if (args.includes('-h') || args.includes('--help')) {
-      return {
-        exitCode: 0,
-        output: `
-Usage: openaidy devices deny <request-id>
-
-Deny a pending device pairing request.
-
-Arguments:
-  request-id    The ID of the pairing request to deny
-
-Examples:
-  pnpm openaidy devices deny abc123
-
-Exit Codes:
-  0  Request denied successfully
-  1  Request not found or already processed
-`,
-      };
-    }
-    if (args.length === 0) {
-      return {
-        exitCode: 2,
-        error: 'Error: Missing required argument <request-id>\n\nUsage: openaidy devices deny <request-id>',
-      };
-    }
-    return {
-      exitCode: 1,
-      output: `Device pairing denial not yet implemented. Request ID: ${args[0]}`,
-    };
+    // Import the handler dynamically to avoid circular dependencies
+    const { devicesDenyHandler } = await import('./devices/deny.js');
+    return devicesDenyHandler(args);
   },
   {
     description: 'Deny a pending device pairing request',
     usage: 'openaidy devices deny <request-id>',
+    examples: ['pnpm openaidy devices deny abc123'],
   },
 );
