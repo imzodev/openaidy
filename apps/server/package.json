@@ -32,5 +32,10 @@
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.30.6",
     "ws": "^8.20.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./bootstrap-admin": "./src/bootstrap-admin.ts",
+    "./bootstrap-admin-inspect": "./src/bootstrap-admin-inspect.ts"
   }
 }
