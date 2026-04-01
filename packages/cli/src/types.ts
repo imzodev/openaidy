@@ -24,6 +24,24 @@ export type CommandHandler = (args: string[]) => Promise<CommandResult>;
 export type CommandRegistry = Record<string, CommandHandler>;
 
 /**
+ * Command metadata for help output
+ */
+export type CommandMeta = {
+  description: string;
+  usage?: string;
+  examples?: string[];
+};
+
+/**
+ * Command group metadata
+ */
+export type CommandGroup = {
+  name: string;
+  description: string;
+  commands: Record<string, CommandMeta>;
+};
+
+/**
  * CLI configuration
  */
 export type CLIConfig = {
