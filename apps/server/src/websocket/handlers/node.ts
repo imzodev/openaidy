@@ -2,25 +2,26 @@
  * Node Handler
  *
  * WebSocket message handlers for node operations.
- * 
+ *
  * Issue #127: Implements real node.invoke RPC flow with correlation and timeout.
  */
 
 import type { FastifyBaseLogger } from 'fastify';
 import { NodeRegistry } from '../node-registry';
-import { InvocationManager, type InvocationManagerOptions } from '../invocation-manager';
+import {
+  InvocationManager,
+  type InvocationManagerOptions,
+} from '../invocation-manager';
 import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../message-router';
 import {
   type WSMessage,
   type WSResponse,
   type ErrorResponse,
-  type NodeRpcRequest,
   type NodeRpcResponse,
   type NodeRpcError,
   WS_ERROR_CODES,
   createWSMessage,
-  isWSMessage,
 } from '@openaidy/shared-types';
 import type { Node, NodeType } from '../node-registry';
 
@@ -28,51 +29,78 @@ import type { Node, NodeType } from '../node-registry';
 // Request/Response Types
 // ============================================================================
 
-export type NodeListRequest = WSMessage<'node.list', {}>;
+export type NodeListRequest = WSMessage<'node.list', Record<string, never>>;
 
-export type NodeDescribeRequest = WSMessage<'node.describe', { nodeId: string }>;
+export type NodeDescribeRequest = WSMessage<
+  'node.describe',
+  { nodeId: string }
+>;
 
-export type NodeInvokeRequest = WSMessage<'node.invoke', {
-  nodeId: string;
-  capability: string;
-  params?: Record<string, unknown>;
-  timeout?: number;
-}>;
+export type NodeInvokeRequest = WSMessage<
+  'node.invoke',
+  {
+    nodeId: string;
+    capability: string;
+    params?: Record<string, unknown>;
+    timeout?: number;
+  }
+>;
 
-export type NodeRegisterRequest = WSMessage<'node.register', {
-  name: string;
-  type: NodeType;
-  capabilities: string[];
-  metadata?: Record<string, unknown>;
-  connectionId?: string;
-  tokenHash?: string;
-  scopes?: string[];
-}>;
+export type NodeRegisterRequest = WSMessage<
+  'node.register',
+  {
+    name: string;
+    type: NodeType;
+    capabilities: string[];
+    metadata?: Record<string, unknown>;
+    connectionId?: string;
+    tokenHash?: string;
+    scopes?: string[];
+  }
+>;
 
-export type NodeUnregisterRequest = WSMessage<'node.unregister', {
-  nodeId: string;
-}>;
+export type NodeUnregisterRequest = WSMessage<
+  'node.unregister',
+  {
+    nodeId: string;
+  }
+>;
 
-export type NodeListResponse = WSMessage<'node.list', {
-  nodes: Node[];
-}>;
+export type NodeListResponse = WSMessage<
+  'node.list',
+  {
+    nodes: Node[];
+  }
+>;
 
-export type NodeDescribeResponse = WSMessage<'node.describe', {
-  node: Node;
-}>;
+export type NodeDescribeResponse = WSMessage<
+  'node.describe',
+  {
+    node: Node;
+  }
+>;
 
-export type NodeInvokeResponse = WSMessage<'node.invoke', {
-  result: unknown;
-  duration: number;
-}>;
+export type NodeInvokeResponse = WSMessage<
+  'node.invoke',
+  {
+    result: unknown;
+    duration: number;
+  }
+>;
 
-export type NodeRegisterResponse = WSMessage<'node.registered', {
-  node: Node;
-}>;
+export type NodeRegisterResponse = WSMessage<
+  'node.registered',
+  {
+    node: Node;
+  }
+>;
 
-export type NodeUnregisterResponse = WSMessage<'node.unregistered', {
-  nodeId: string;
-}>;
+export type NodeUnregisterResponse = WSMessage<
+  'node.unregistered',
+  {
+    nodeId: string;
+  }
+>;
 
 // ============================================================================
 // Node Handler
@@ -107,7 +135,7 @@ export class NodeHandler {
   async handleList(
     connectionId: string,
     request: NodeListRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<NodeListResponse | ErrorResponse> {
     try {
       this.logger.info({ connectionId }, 'Listing nodes via WebSocket');
@@ -116,7 +144,7 @@ export class NodeHandler {
 
       return {
         ...createWSMessage('node.list', {
-          nodes: nodes.map(node => ({
+          nodes: nodes.map((node) => ({
             nodeId: node.nodeId,
             name: node.name,
             type: node.type,
@@ -138,10 +166,13 @@ export class NodeHandler {
   async handleDescribe(
     connectionId: string,
     request: NodeDescribeRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<NodeDescribeResponse | ErrorResponse> {
     try {
-      this.logger.info({ connectionId, nodeId: request.payload.nodeId }, 'Describing node via WebSocket');
+      this.logger.info(
+        { connectionId, nodeId: request.payload.nodeId },
+        'Describing node via WebSocket',
+      );
 
       const node = this.nodeRegistry.getNode(request.payload.nodeId);
       if (!node) {
@@ -173,11 +204,15 @@ export class NodeHandler {
   async handleInvoke(
     connectionId: string,
     request: NodeInvokeRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<NodeInvokeResponse | ErrorResponse> {
     try {
       this.logger.info(
-        { connectionId, nodeId: request.payload.nodeId, capability: request.payload.capability },
+        {
+          connectionId,
+          nodeId: request.payload.nodeId,
+          capability: request.payload.capability,
+        },
         'Invoking node capability via WebSocket',
       );
 
@@ -236,6 +271,7 @@ export class NodeHandler {
       // Start invocation through the invocation manager
       const result = this.invocationManager.startInvocation(
         request.payload.nodeId,
+        node.connectionId,
         connectionId,
         request.id,
         request.payload.capability,
@@ -256,7 +292,9 @@ export class NodeHandler {
       }
 
       // Create the RPC request to send to the node
-      const rpcRequest = this.invocationManager.createRpcRequest(result.invocationId);
+      const rpcRequest = this.invocationManager.createRpcRequest(
+        result.invocationId,
+      );
       if (!rpcRequest) {
         // Should not happen, but handle gracefully
         this.invocationManager.failInvocation(
@@ -296,9 +334,9 @@ export class NodeHandler {
       }
 
       this.logger.info(
-        { 
-          connectionId, 
-          nodeId: request.payload.nodeId, 
+        {
+          connectionId,
+          nodeId: request.payload.nodeId,
           capability: request.payload.capability,
           invocationId: result.invocationId,
         },
@@ -318,25 +356,51 @@ export class NodeHandler {
 
   /**
    * Handle a node.rpc.response from a node
-   * 
+   *
    * This should be called when a node sends a response to a pending invocation.
    */
-  handleRpcResponse(
-    connectionId: string,
-    message: NodeRpcResponse,
-  ): boolean {
+  handleRpcResponse(connectionId: string, message: NodeRpcResponse): boolean {
+    if (
+      !this.invocationManager.isExpectedResponder(
+        message.payload.invocationId,
+        connectionId,
+      )
+    ) {
+      this.logger.warn(
+        {
+          connectionId,
+          invocationId: message.payload.invocationId,
+        },
+        'Rejected node.rpc.response from unexpected connection',
+      );
+      return false;
+    }
+
     return this.invocationManager.handleResponse(message);
   }
 
   /**
    * Handle a node.rpc.error from a node
-   * 
+   *
    * This should be called when a node sends an error for a pending invocation.
    */
-  handleRpcError(
-    connectionId: string,
-    message: NodeRpcError,
-  ): boolean {
+  handleRpcError(connectionId: string, message: NodeRpcError): boolean {
+    if (
+      !this.invocationManager.isExpectedResponder(
+        message.payload.invocationId,
+        connectionId,
+      )
+    ) {
+      this.logger.warn(
+        {
+          connectionId,
+          invocationId: message.payload.invocationId,
+        },
+        'Rejected node.rpc.error from unexpected connection',
+      );
+      return false;
+    }
+
     return this.invocationManager.handleError(message);
   }
 
@@ -344,7 +408,10 @@ export class NodeHandler {
    * Clean up invocations when a node disconnects
    */
   handleNodeDisconnect(nodeId: string): number {
-    return this.invocationManager.failNodeInvocations(nodeId, 'Node disconnected');
+    return this.invocationManager.failNodeInvocations(
+      nodeId,
+      'Node disconnected',
+    );
   }
 
   /**
@@ -368,22 +435,32 @@ export class NodeHandler {
   async handleRegister(
     connectionId: string,
     request: NodeRegisterRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<NodeRegisterResponse | ErrorResponse> {
     try {
-      this.logger.info({ connectionId, name: request.payload.name }, 'Registering node via WebSocket');
+      this.logger.info(
+        { connectionId, name: request.payload.name },
+        'Registering node via WebSocket',
+      );
 
-      const connection = this.connectionManager.getConnection(connectionId);
       const metadata = this.connectionManager.getMetadata(connectionId);
-      const claimedNodeId = typeof metadata.pairedNodeId === 'string' ? metadata.pairedNodeId : undefined;
+      const claimedNodeId =
+        typeof metadata.pairedNodeId === 'string'
+          ? metadata.pairedNodeId
+          : undefined;
       const claimedScopes = Array.isArray(metadata.pairedScopes)
-        ? metadata.pairedScopes.filter((scope): scope is string => typeof scope === 'string')
+        ? metadata.pairedScopes.filter(
+            (scope): scope is string => typeof scope === 'string',
+          )
         : undefined;
-      const tokenHash = typeof metadata.pairingToken === 'string'
-        ? metadata.pairingToken.substring(0, 16)
-        : request.payload.tokenHash;
+      const tokenHash =
+        typeof metadata.pairingToken === 'string'
+          ? metadata.pairingToken.substring(0, 16)
+          : request.payload.tokenHash;
 
-      const nodeId = claimedNodeId ?? `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const nodeId =
+        claimedNodeId ??
+        `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const capabilities = claimedScopes ?? request.payload.capabilities;
 
       const existingNode = this.nodeRegistry.getNode(nodeId);
@@ -418,7 +495,9 @@ export class NodeHandler {
         registeredAt: Date.now(),
         lastSeen: Date.now(),
         ...(tokenHash !== undefined && { tokenHash }),
-        ...((claimedScopes ?? request.payload.scopes) !== undefined && { scopes: claimedScopes ?? request.payload.scopes }),
+        ...((claimedScopes ?? request.payload.scopes) !== undefined && {
+          scopes: claimedScopes ?? request.payload.scopes,
+        }),
       };
 
       this.nodeRegistry.registerNode(node);
@@ -440,10 +519,13 @@ export class NodeHandler {
   async handleUnregister(
     connectionId: string,
     request: NodeUnregisterRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<NodeUnregisterResponse | ErrorResponse> {
     try {
-      this.logger.info({ connectionId, nodeId: request.payload.nodeId }, 'Unregistering node via WebSocket');
+      this.logger.info(
+        { connectionId, nodeId: request.payload.nodeId },
+        'Unregistering node via WebSocket',
+      );
 
       const node = this.nodeRegistry.getNode(request.payload.nodeId);
       if (!node) {
@@ -486,7 +568,8 @@ export class NodeHandler {
         requestId,
         error: {
           code: WS_ERROR_CODES.INTERNAL_ERROR,
-          message: error instanceof Error ? error.message : 'Internal server error',
+          message:
+            error instanceof Error ? error.message : 'Internal server error',
         },
       }),
     } as ErrorResponse;
@@ -498,27 +581,66 @@ export class NodeHandler {
 // ============================================================================
 
 export function registerNodeHandlers(
-  router: { registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void },
+  router: {
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
+  },
   handler: NodeHandler,
 ): void {
-  router.registerHandler('node.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as NodeListRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'node.list',
+    (connId, msg, ctx) =>
+      handler.handleList(
+        connId,
+        msg as NodeListRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('node.describe', (connId, msg, ctx) =>
-    handler.handleDescribe(connId, msg as NodeDescribeRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'node.describe',
+    (connId, msg, ctx) =>
+      handler.handleDescribe(
+        connId,
+        msg as NodeDescribeRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('node.invoke', (connId, msg, ctx) =>
-    handler.handleInvoke(connId, msg as NodeInvokeRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'node.invoke',
+    (connId, msg, ctx) =>
+      handler.handleInvoke(
+        connId,
+        msg as NodeInvokeRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('node.register', (connId, msg, ctx) =>
-    handler.handleRegister(connId, msg as NodeRegisterRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'node.register',
+    (connId, msg, ctx) =>
+      handler.handleRegister(
+        connId,
+        msg as NodeRegisterRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('node.unregister', (connId, msg, ctx) =>
-    handler.handleUnregister(connId, msg as NodeUnregisterRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'node.unregister',
+    (connId, msg, ctx) =>
+      handler.handleUnregister(
+        connId,
+        msg as NodeUnregisterRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 }
 

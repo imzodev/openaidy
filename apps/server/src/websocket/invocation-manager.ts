@@ -1,16 +1,15 @@
 /**
  * Node Invocation Manager
- * 
+ *
  * Tracks pending node invocations and correlates responses back to callers.
  * Handles timeout cleanup and disconnect scenarios.
- * 
+ *
  * Issue #127: WebSocket: complete session streaming and real session mutation behavior
  */
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { ConnectionManager } from './connection-manager';
 import {
-  type WSMessage,
   type WSResponse,
   type ErrorResponse,
   type NodeRpcRequest,
@@ -30,6 +29,7 @@ import {
 type PendingInvocation = {
   invocationId: string;
   nodeId: string;
+  targetConnectionId: string;
   callerConnectionId: string;
   callerRequestId: string;
   capability: string;
@@ -54,7 +54,7 @@ export type InvocationManagerOptions = {
 /**
  * Result of starting an invocation
  */
-export type InvocationStartResult = 
+export type InvocationStartResult =
   | { ok: true; invocationId: string; promise: Promise<WSResponse> }
   | { ok: false; error: { code: string; message: string } };
 
@@ -64,7 +64,7 @@ export type InvocationStartResult =
 
 /**
  * Manages pending node invocations
- * 
+ *
  * Responsibilities:
  * - Generate unique invocation IDs
  * - Track pending invocations with correlation
@@ -78,7 +78,7 @@ export class InvocationManager {
   private byCaller: Map<string, Set<string>> = new Map();
   // Index by target node for cleanup
   private byNode: Map<string, Set<string>> = new Map();
-  
+
   private defaultTimeout: number;
   private maxTimeout: number;
 
@@ -97,12 +97,13 @@ export class InvocationManager {
 
   /**
    * Start a new invocation
-   * 
+   *
    * Creates a pending invocation record and returns a promise that will be
    * resolved when the node responds or rejected on timeout/error.
    */
   startInvocation(
     nodeId: string,
+    targetConnectionId: string,
     callerConnectionId: string,
     callerRequestId: string,
     capability: string,
@@ -118,7 +119,7 @@ export class InvocationManager {
     // Create promise for response
     let resolvePromise: (response: WSResponse) => void;
     let rejectPromise: (error: Error) => void;
-    
+
     const promise = new Promise<WSResponse>((resolve, reject) => {
       resolvePromise = resolve;
       rejectPromise = reject;
@@ -128,6 +129,7 @@ export class InvocationManager {
     const pending: PendingInvocation = {
       invocationId,
       nodeId,
+      targetConnectionId,
       callerConnectionId,
       callerRequestId,
       capability,
@@ -145,13 +147,13 @@ export class InvocationManager {
 
     // Store pending invocation
     this.pending.set(invocationId, pending);
-    
+
     // Update caller index
     if (!this.byCaller.has(callerConnectionId)) {
       this.byCaller.set(callerConnectionId, new Set());
     }
     this.byCaller.get(callerConnectionId)!.add(invocationId);
-    
+
     // Update node index
     if (!this.byNode.has(nodeId)) {
       this.byNode.set(nodeId, new Set());
@@ -159,7 +161,14 @@ export class InvocationManager {
     this.byNode.get(nodeId)!.add(invocationId);
 
     this.logger.info(
-      { invocationId, nodeId, capability, callerConnectionId, timeout: effectiveTimeout },
+      {
+        invocationId,
+        nodeId,
+        targetConnectionId,
+        capability,
+        callerConnectionId,
+        timeout: effectiveTimeout,
+      },
       'Invocation started',
     );
 
@@ -212,7 +221,7 @@ export class InvocationManager {
     const callerResponse = createWSMessage('node.invoke', {
       result: response.payload.result,
       duration,
-    }) as WSResponse;
+    }) as unknown as WSResponse;
 
     // Resolve the promise
     pending.resolve(callerResponse);
@@ -259,7 +268,11 @@ export class InvocationManager {
     this.cleanup(pending);
 
     this.logger.info(
-      { invocationId: pending.invocationId, nodeId: pending.nodeId, error: error.payload.error },
+      {
+        invocationId: pending.invocationId,
+        nodeId: pending.nodeId,
+        error: error.payload.error,
+      },
       'Invocation failed with error',
     );
 
@@ -367,7 +380,7 @@ export class InvocationManager {
 
   /**
    * Clean up all invocations for a caller connection
-   * 
+   *
    * Called when the caller disconnects. We let pending invocations complete
    * and just drop the response.
    */
@@ -378,25 +391,22 @@ export class InvocationManager {
     }
 
     const count = invocationIds.size;
-    
-    for (const invocationId of invocationIds) {
+
+    for (const invocationId of Array.from(invocationIds)) {
       const pending = this.pending.get(invocationId);
       if (pending) {
-        // Clear timeout
-        if (pending.timeoutHandle) {
-          clearTimeout(pending.timeoutHandle);
-        }
-        
-        // Reject the promise - caller is gone
-        pending.reject(new Error('Caller disconnected'));
-        
-        // Remove from pending (but not from byNode since we're iterating byCaller)
-        this.pending.delete(invocationId);
+        const errorResponse = createWSMessage('error', {
+          requestId: pending.callerRequestId,
+          error: {
+            code: WS_ERROR_CODES.CONNECTION_CLOSED,
+            message: 'Caller disconnected',
+          },
+        }) as ErrorResponse;
+
+        pending.resolve(errorResponse);
+        this.cleanup(pending);
       }
     }
-
-    // Clear caller index
-    this.byCaller.delete(connectionId);
 
     this.logger.info(
       { connectionId, count },
@@ -408,10 +418,13 @@ export class InvocationManager {
 
   /**
    * Fail all invocations for a target node
-   * 
+   *
    * Called when the target node disconnects. All pending invocations fail.
    */
-  failNodeInvocations(nodeId: string, reason: string = 'Node disconnected'): number {
+  failNodeInvocations(
+    nodeId: string,
+    reason: string = 'Node disconnected',
+  ): number {
     const invocationIds = this.byNode.get(nodeId);
     if (!invocationIds) {
       return 0;
@@ -470,6 +483,13 @@ export class InvocationManager {
     return this.pending.get(invocationId);
   }
 
+  /**
+   * Check whether a connection is the expected responder for an invocation
+   */
+  isExpectedResponder(invocationId: string, connectionId: string): boolean {
+    return this.pending.get(invocationId)?.targetConnectionId === connectionId;
+  }
+
   // ============================================================================
   // Helpers
   // ============================================================================
@@ -491,11 +511,11 @@ export class InvocationManager {
       }
       pending.reject(new Error('Manager cleared'));
     }
-    
+
     this.pending.clear();
     this.byCaller.clear();
     this.byNode.clear();
-    
+
     this.logger.info('Invocation manager cleared');
   }
 }

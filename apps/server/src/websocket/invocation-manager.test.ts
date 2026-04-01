@@ -1,6 +1,6 @@
 /**
  * Tests for Node Invocation Manager
- * 
+ *
  * Issue #127: WebSocket: complete session streaming and real session mutation behavior
  */
 
@@ -44,6 +44,7 @@ const mockConnectionManager = {
   getConnectionCount: vi.fn().mockReturnValue(0),
   getAllConnections: vi.fn().mockReturnValue([]),
   closeAll: vi.fn(),
+  getTargetConnection: vi.fn(),
 };
 
 describe('InvocationManager - Issue #127', () => {
@@ -51,13 +52,33 @@ describe('InvocationManager - Issue #127', () => {
   // Track all pending promises to handle rejections properly
   let pendingPromises: Promise<unknown>[] = [];
 
+  function startTestInvocation(
+    nodeId: string,
+    targetConnectionId: string,
+    callerConnectionId: string,
+    callerRequestId: string,
+    capability: string,
+    params: Record<string, unknown>,
+    timeout?: number,
+  ) {
+    return invocationManager.startInvocation(
+      nodeId,
+      targetConnectionId,
+      callerConnectionId,
+      callerRequestId,
+      capability,
+      params,
+      timeout,
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     pendingPromises = [];
-    
+
     invocationManager = new InvocationManager(
-      mockConnectionManager as any,
+      mockConnectionManager as unknown as ConnectionManager,
       mockLogger,
       { defaultTimeout: 5000, maxTimeout: 10000 },
     );
@@ -66,10 +87,10 @@ describe('InvocationManager - Issue #127', () => {
   afterEach(async () => {
     // Clear the manager
     invocationManager.clear();
-    
+
     // Handle all pending promise rejections
     await Promise.allSettled(pendingPromises);
-    
+
     vi.useRealTimers();
   });
 
@@ -81,8 +102,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('startInvocation', () => {
     it('should start an invocation and return invocation ID', () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'sendMessage',
@@ -97,8 +119,9 @@ describe('InvocationManager - Issue #127', () => {
     });
 
     it('should track pending invocations', () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'sendMessage',
@@ -106,7 +129,7 @@ describe('InvocationManager - Issue #127', () => {
       );
 
       expect(invocationManager.getPendingCount()).toBe(1);
-      
+
       if (result.ok) {
         expect(invocationManager.isPending(result.invocationId)).toBe(true);
         trackPromise(result.promise);
@@ -114,36 +137,79 @@ describe('InvocationManager - Issue #127', () => {
     });
 
     it('should track invocations by node', () => {
-      const r1 = invocationManager.startInvocation('node-1', 'caller-1', 'req-1', 'cap', {});
-      const r2 = invocationManager.startInvocation('node-1', 'caller-2', 'req-2', 'cap', {});
-      const r3 = invocationManager.startInvocation('node-2', 'caller-3', 'req-3', 'cap', {});
+      const r1 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+      const r2 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-2',
+        'req-2',
+        'cap',
+        {},
+      );
+      const r3 = startTestInvocation(
+        'node-2',
+        'node-conn-2',
+        'caller-3',
+        'req-3',
+        'cap',
+        {},
+      );
 
       expect(invocationManager.getNodePendingCount('node-1')).toBe(2);
       expect(invocationManager.getNodePendingCount('node-2')).toBe(1);
       expect(invocationManager.getNodePendingCount('node-3')).toBe(0);
-      
+
       if (r1.ok) trackPromise(r1.promise);
       if (r2.ok) trackPromise(r2.promise);
       if (r3.ok) trackPromise(r3.promise);
     });
 
     it('should track invocations by caller', () => {
-      const r1 = invocationManager.startInvocation('node-1', 'caller-1', 'req-1', 'cap', {});
-      const r2 = invocationManager.startInvocation('node-2', 'caller-1', 'req-2', 'cap', {});
-      const r3 = invocationManager.startInvocation('node-3', 'caller-2', 'req-3', 'cap', {});
+      const r1 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+      const r2 = startTestInvocation(
+        'node-2',
+        'node-conn-2',
+        'caller-1',
+        'req-2',
+        'cap',
+        {},
+      );
+      const r3 = startTestInvocation(
+        'node-3',
+        'node-conn-3',
+        'caller-2',
+        'req-3',
+        'cap',
+        {},
+      );
 
       expect(invocationManager.getCallerPendingCount('caller-1')).toBe(2);
       expect(invocationManager.getCallerPendingCount('caller-2')).toBe(1);
       expect(invocationManager.getCallerPendingCount('caller-3')).toBe(0);
-      
+
       if (r1.ok) trackPromise(r1.promise);
       if (r2.ok) trackPromise(r2.promise);
       if (r3.ok) trackPromise(r3.promise);
     });
 
     it('should respect custom timeout', () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -152,7 +218,7 @@ describe('InvocationManager - Issue #127', () => {
       );
 
       expect(result.ok).toBe(true);
-      
+
       if (result.ok) {
         const inv = invocationManager.getInvocation(result.invocationId);
         expect(inv?.timeout).toBe(3000);
@@ -161,8 +227,9 @@ describe('InvocationManager - Issue #127', () => {
     });
 
     it('should cap timeout to maxTimeout', () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -171,7 +238,7 @@ describe('InvocationManager - Issue #127', () => {
       );
 
       expect(result.ok).toBe(true);
-      
+
       if (result.ok) {
         const inv = invocationManager.getInvocation(result.invocationId);
         expect(inv?.timeout).toBe(10000); // Capped to max
@@ -182,8 +249,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('createRpcRequest', () => {
     it('should create an RPC request for a pending invocation', () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'sendMessage',
@@ -192,13 +260,13 @@ describe('InvocationManager - Issue #127', () => {
 
       if (result.ok) {
         const request = invocationManager.createRpcRequest(result.invocationId);
-        
+
         expect(request).toBeDefined();
         expect(request?.type).toBe('node.rpc.request');
         expect(request?.payload.invocationId).toBe(result.invocationId);
         expect(request?.payload.capability).toBe('sendMessage');
         expect(request?.payload.params).toEqual({ message: 'Hello' });
-        
+
         trackPromise(result.promise);
       }
     });
@@ -211,8 +279,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('handleResponse', () => {
     it('should resolve the promise when response arrives', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -237,17 +306,21 @@ describe('InvocationManager - Issue #127', () => {
 
         // Wait for promise to resolve
         const responseResult = await result.promise;
-        expect(responseResult.type).toBe('node.invoke');
-        if (responseResult.type === 'node.invoke') {
-          expect(responseResult.payload.result).toEqual({ data: 'success' });
-          expect(responseResult.payload.duration).toBeGreaterThanOrEqual(0);
-        }
+        expect((responseResult as { type: string }).type).toBe('node.invoke');
+        expect(
+          (responseResult as { payload: { result: unknown } }).payload.result,
+        ).toEqual({ data: 'success' });
+        expect(
+          (responseResult as unknown as { payload: { duration: number } })
+            .payload.duration,
+        ).toBeGreaterThanOrEqual(0);
       }
     });
 
     it('should clean up after response', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -285,8 +358,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('handleError', () => {
     it('should resolve with error response when node sends error', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -313,8 +387,9 @@ describe('InvocationManager - Issue #127', () => {
     });
 
     it('should clean up after error', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -339,8 +414,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('timeout handling', () => {
     it('should timeout after specified duration', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -360,15 +436,18 @@ describe('InvocationManager - Issue #127', () => {
         const responseResult = await result.promise;
         expect(responseResult.type).toBe('error');
         if (responseResult.type === 'error') {
-          expect(responseResult.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+          expect(responseResult.payload.error.code).toBe(
+            WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+          );
           expect(responseResult.payload.error.message).toContain('timed out');
         }
       }
     });
 
     it('should clean up after timeout', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -389,8 +468,9 @@ describe('InvocationManager - Issue #127', () => {
     });
 
     it('should cancel timeout if response arrives first', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -414,10 +494,9 @@ describe('InvocationManager - Issue #127', () => {
         invocationManager.handleResponse(response);
         const responseResult = await result.promise;
 
-        // Advance past original timeout - should not cause issues
         vi.advanceTimersByTime(4000);
 
-        expect(responseResult.type).toBe('node.invoke');
+        expect((responseResult as { type: string }).type).toBe('node.invoke');
         expect(invocationManager.getPendingCount()).toBe(0);
       }
     });
@@ -425,8 +504,9 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('failInvocation', () => {
     it('should fail an invocation with custom error', async () => {
-      const result = invocationManager.startInvocation(
+      const result = startTestInvocation(
         'node-1',
+        'node-conn-1',
         'caller-1',
         'req-1',
         'cap',
@@ -447,7 +527,9 @@ describe('InvocationManager - Issue #127', () => {
         const responseResult = await result.promise;
         expect(responseResult.type).toBe('error');
         if (responseResult.type === 'error') {
-          expect(responseResult.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+          expect(responseResult.payload.error.code).toBe(
+            WS_ERROR_CODES.NOT_FOUND,
+          );
         }
       }
     });
@@ -464,11 +546,32 @@ describe('InvocationManager - Issue #127', () => {
   });
 
   describe('cleanupCallerConnection', () => {
-    it('should clean up all invocations for a caller', () => {
-      const r1 = invocationManager.startInvocation('node-1', 'caller-1', 'req-1', 'cap', {});
-      const r2 = invocationManager.startInvocation('node-2', 'caller-1', 'req-2', 'cap', {});
-      const r3 = invocationManager.startInvocation('node-3', 'caller-2', 'req-3', 'cap', {});
-      
+    it('should clean up all invocations for a caller', async () => {
+      const r1 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+      const r2 = startTestInvocation(
+        'node-2',
+        'node-conn-2',
+        'caller-1',
+        'req-2',
+        'cap',
+        {},
+      );
+      const r3 = startTestInvocation(
+        'node-3',
+        'node-conn-3',
+        'caller-2',
+        'req-3',
+        'cap',
+        {},
+      );
+
       if (r1.ok) trackPromise(r1.promise);
       if (r2.ok) trackPromise(r2.promise);
       if (r3.ok) trackPromise(r3.promise);
@@ -478,6 +581,20 @@ describe('InvocationManager - Issue #127', () => {
       expect(count).toBe(2);
       expect(invocationManager.getCallerPendingCount('caller-1')).toBe(0);
       expect(invocationManager.getPendingCount()).toBe(1); // caller-2's invocation
+
+      if (r1.ok) {
+        const res = await r1.promise;
+        expect(res.type).toBe('error');
+      }
+
+      if (r2.ok) {
+        const res = await r2.promise;
+        expect(res.type).toBe('error');
+      }
+
+      expect(invocationManager.getNodePendingCount('node-1')).toBe(0);
+      expect(invocationManager.getNodePendingCount('node-2')).toBe(0);
+      expect(invocationManager.getNodePendingCount('node-3')).toBe(1);
     });
 
     it('should return 0 if caller has no invocations', () => {
@@ -488,15 +605,39 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('failNodeInvocations', () => {
     it('should fail all invocations for a node', async () => {
-      const result1 = invocationManager.startInvocation('node-1', 'caller-1', 'req-1', 'cap', {});
-      const result2 = invocationManager.startInvocation('node-1', 'caller-2', 'req-2', 'cap', {});
-      const result3 = invocationManager.startInvocation('node-2', 'caller-3', 'req-3', 'cap', {});
-      
+      const result1 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+      const result2 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-2',
+        'req-2',
+        'cap',
+        {},
+      );
+      const result3 = startTestInvocation(
+        'node-2',
+        'node-conn-2',
+        'caller-3',
+        'req-3',
+        'cap',
+        {},
+      );
+
       if (result1.ok) trackPromise(result1.promise);
       if (result2.ok) trackPromise(result2.promise);
       if (result3.ok) trackPromise(result3.promise);
 
-      const count = invocationManager.failNodeInvocations('node-1', 'Node disconnected');
+      const count = invocationManager.failNodeInvocations(
+        'node-1',
+        'Node disconnected',
+      );
 
       expect(count).toBe(2);
       expect(invocationManager.getNodePendingCount('node-1')).toBe(0);
@@ -521,9 +662,23 @@ describe('InvocationManager - Issue #127', () => {
 
   describe('clear', () => {
     it('should clear all pending invocations', async () => {
-      const result1 = invocationManager.startInvocation('node-1', 'caller-1', 'req-1', 'cap', {});
-      const result2 = invocationManager.startInvocation('node-2', 'caller-2', 'req-2', 'cap', {});
-      
+      const result1 = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+      const result2 = startTestInvocation(
+        'node-2',
+        'node-conn-2',
+        'caller-2',
+        'req-2',
+        'cap',
+        {},
+      );
+
       if (result1.ok) trackPromise(result1.promise);
       if (result2.ok) trackPromise(result2.promise);
 
@@ -532,6 +687,35 @@ describe('InvocationManager - Issue #127', () => {
       expect(invocationManager.getPendingCount()).toBe(0);
       expect(invocationManager.getNodePendingCount('node-1')).toBe(0);
       expect(invocationManager.getCallerPendingCount('caller-1')).toBe(0);
+    });
+
+    it('should validate the expected responder connection', () => {
+      const result = startTestInvocation(
+        'node-1',
+        'node-conn-1',
+        'caller-1',
+        'req-1',
+        'cap',
+        {},
+      );
+
+      expect(result.ok).toBe(true);
+
+      if (result.ok) {
+        expect(
+          invocationManager.isExpectedResponder(
+            result.invocationId,
+            'node-conn-1',
+          ),
+        ).toBe(true);
+        expect(
+          invocationManager.isExpectedResponder(
+            result.invocationId,
+            'node-conn-2',
+          ),
+        ).toBe(false);
+        trackPromise(result.promise);
+      }
     });
   });
 });

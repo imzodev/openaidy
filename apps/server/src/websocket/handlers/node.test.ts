@@ -1,30 +1,38 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
+import type { WebSocket } from '@fastify/websocket';
 import { NodeRegistry, type Node, type NodeType } from '../node-registry';
-import {
-  NodeHandler,
-  registerNodeHandlers,
-  createNodeHandler,
-} from './node';
+import { NodeHandler, registerNodeHandlers, createNodeHandler } from './node';
 import { type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
-import { createWSMessage, WS_ERROR_CODES } from '@openaidy/shared-types';
+import {
+  createWSMessage,
+  WS_ERROR_CODES,
+  type NodeRpcResponse,
+  type NodeRpcError,
+} from '@openaidy/shared-types';
 
 // ============================================================================
 // Mock Factories
 // ============================================================================
 
-const createMockLogger = (): FastifyBaseLogger => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  warn: vi.fn(),
-  debug: vi.fn(),
-  fatal: vi.fn(),
-  trace: vi.fn(),
-  child: vi.fn(() => createMockLogger()),
-  level: 'info',
-  silent: false,
-} as unknown as FastifyBaseLogger);
+const createMockLogger = (): FastifyBaseLogger =>
+  ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    fatal: vi.fn(),
+    trace: vi.fn(),
+    child: vi.fn(() => createMockLogger()),
+    level: 'info',
+    silent: false,
+  }) as unknown as FastifyBaseLogger;
+
+const createMockSocket = () => ({
+  send: vi.fn(),
+  close: vi.fn(),
+});
 
 // Create a test node
 function createTestNode(overrides: Partial<Node> = {}): Node {
@@ -53,6 +61,10 @@ describe('NodeHandler', () => {
     nodeRegistry = new NodeRegistry({}, mockLogger);
     connectionManager = new ConnectionManager();
     handler = new NodeHandler(nodeRegistry, connectionManager, mockLogger);
+    connectionManager.registerConnection(
+      'conn-1',
+      createMockSocket() as unknown as WebSocket,
+    );
     handlerContext = {
       connectionManager,
       services: {},
@@ -70,24 +82,32 @@ describe('NodeHandler', () => {
 
   describe('handleList', () => {
     it('should list all registered nodes', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        name: 'Test Node 1',
-        capabilities: ['camera', 'microphone'],
-      }));
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-2',
-        name: 'Test Node 2',
-        capabilities: ['screen', 'keyboard'],
-      }));
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          name: 'Test Node 1',
+          capabilities: ['camera', 'microphone'],
+        }),
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-2',
+          name: 'Test Node 2',
+          capabilities: ['screen', 'keyboard'],
+        }),
+      );
 
       const request = createWSMessage('node.list', {});
-      const response = await handler.handleList('conn-1', request, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.list') {
         expect(response.payload.nodes).toHaveLength(2);
-        expect(response.payload.nodes.map(n => n.nodeId)).toContain('node-1');
-        expect(response.payload.nodes.map(n => n.nodeId)).toContain('node-2');
+        expect(response.payload.nodes.map((n) => n.nodeId)).toContain('node-1');
+        expect(response.payload.nodes.map((n) => n.nodeId)).toContain('node-2');
       } else {
         expect.fail('Expected node.list response');
       }
@@ -95,7 +115,11 @@ describe('NodeHandler', () => {
 
     it('should return empty array when no nodes registered', async () => {
       const request = createWSMessage('node.list', {});
-      const response = await handler.handleList('conn-1', request, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.list') {
         expect(response.payload.nodes).toHaveLength(0);
@@ -110,7 +134,7 @@ describe('NodeHandler', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         { connectionId: 'conn-1' },
-        'Listing nodes via WebSocket'
+        'Listing nodes via WebSocket',
       );
     });
   });
@@ -130,7 +154,11 @@ describe('NodeHandler', () => {
       nodeRegistry.registerNode(node);
 
       const request = createWSMessage('node.describe', { nodeId: 'node-1' });
-      const response = await handler.handleDescribe('conn-1', request, handlerContext);
+      const response = await handler.handleDescribe(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.describe') {
         expect(response.payload.node.nodeId).toBe('node-1');
@@ -143,8 +171,14 @@ describe('NodeHandler', () => {
     });
 
     it('should return error for non-existent node', async () => {
-      const request = createWSMessage('node.describe', { nodeId: 'non-existent' });
-      const response = await handler.handleDescribe('conn-1', request, handlerContext);
+      const request = createWSMessage('node.describe', {
+        nodeId: 'non-existent',
+      });
+      const response = await handler.handleDescribe(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -162,7 +196,7 @@ describe('NodeHandler', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         { connectionId: 'conn-1', nodeId: 'node-1' },
-        'Describing node via WebSocket'
+        'Describing node via WebSocket',
       );
     });
   });
@@ -177,7 +211,11 @@ describe('NodeHandler', () => {
         nodeId: 'non-existent',
         capability: 'camera',
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -187,20 +225,28 @@ describe('NodeHandler', () => {
     });
 
     it('should return error if node is offline', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        status: 'offline',
-        capabilities: ['camera'],
-      }));
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'offline',
+          capabilities: ['camera'],
+        }),
+      );
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
-        expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+        );
         expect(response.payload.error.message).toContain('not online');
       } else {
         expect.fail('Expected error response');
@@ -208,42 +254,60 @@ describe('NodeHandler', () => {
     });
 
     it('should return error if node is stale', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        status: 'stale',
-        capabilities: ['camera'],
-      }));
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'stale',
+          capabilities: ['camera'],
+        }),
+      );
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
-        expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+        );
       } else {
         expect.fail('Expected error response');
       }
     });
 
     it('should return error if node lacks capability', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        status: 'online',
-        capabilities: ['microphone'],
-        connectionId: 'conn-node',
-      }));
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['microphone'],
+          connectionId: 'conn-node',
+        }),
+      );
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
-        expect(response.payload.error.code).toBe(WS_ERROR_CODES.INSUFFICIENT_CAPABILITY);
-        expect(response.payload.error.message).toContain('does not have capability');
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.INSUFFICIENT_CAPABILITY,
+        );
+        expect(response.payload.error.message).toContain(
+          'does not have capability',
+        );
       } else {
         expect.fail('Expected error response');
       }
@@ -264,56 +328,269 @@ describe('NodeHandler', () => {
         nodeId: 'node-1',
         capability: 'camera',
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
-        expect(response.payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+        );
         expect(response.payload.error.message).toContain('not connected');
       } else {
         expect.fail('Expected error response');
       }
     });
 
-    it('should return placeholder response for valid invocation', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        status: 'online',
-        capabilities: ['camera'],
-        connectionId: 'conn-node',
-      }));
+    it('should send rpc request and resolve when the node responds', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+      const sendSpy = vi.spyOn(connectionManager, 'send');
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
+        params: { mode: 'photo' },
       });
-      const response = await handler.handleInvoke('conn-1', request, handlerContext);
+
+      const responsePromise = handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        'conn-node',
+        expect.objectContaining({
+          type: 'node.rpc.request',
+          payload: expect.objectContaining({
+            capability: 'camera',
+            params: { mode: 'photo' },
+          }),
+        }),
+      );
+
+      const sentMessage = sendSpy.mock.calls[0]?.[1] as {
+        payload: { invocationId: string };
+      };
+      const rpcResponse = createWSMessage('node.rpc.response', {
+        invocationId: sentMessage.payload.invocationId,
+        result: { ok: true },
+        duration: 10,
+      }) as NodeRpcResponse;
+
+      expect(handler.handleRpcResponse('conn-node', rpcResponse)).toBe(true);
+
+      const response = await responsePromise;
 
       if (response.type === 'node.invoke') {
-        expect(response.payload.result).toBeDefined();
-        expect(response.payload.duration).toBe(0);
+        expect(response.payload.result).toEqual({ ok: true });
+        expect(response.payload.duration).toBeGreaterThanOrEqual(0);
       } else {
         expect.fail('Expected node.invoke response');
       }
     });
 
-    it('should log invoke operation', async () => {
-      nodeRegistry.registerNode(createTestNode({
-        nodeId: 'node-1',
-        status: 'online',
-        capabilities: ['camera'],
-        connectionId: 'conn-node',
-      }));
+    it('should return error if sending rpc request to the node fails', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+      vi.spyOn(connectionManager, 'send').mockReturnValue(false);
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',
         capability: 'camera',
       });
-      await handler.handleInvoke('conn-1', request, handlerContext);
+      const response = await handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
+
+      expect(response.type).toBe('error');
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.SERVICE_UNAVAILABLE,
+        );
+      }
+    });
+
+    it('should reject rpc responses from unexpected connections', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+      const sendSpy = vi.spyOn(connectionManager, 'send');
+
+      const request = createWSMessage('node.invoke', {
+        nodeId: 'node-1',
+        capability: 'camera',
+      });
+
+      const responsePromise = handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
+      const sentMessage = sendSpy.mock.calls[0]?.[1] as {
+        payload: { invocationId: string };
+      };
+      const rpcResponse = createWSMessage('node.rpc.response', {
+        invocationId: sentMessage.payload.invocationId,
+        result: { ok: true },
+        duration: 10,
+      }) as NodeRpcResponse;
+
+      expect(handler.handleRpcResponse('wrong-conn', rpcResponse)).toBe(false);
+
+      const cleanupCount = handler.handleNodeDisconnect('node-1');
+      expect(cleanupCount).toBe(1);
+
+      const response = await responsePromise;
+      expect(response.type).toBe('error');
+    });
+
+    it('should route rpc errors back to the caller', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+      const sendSpy = vi.spyOn(connectionManager, 'send');
+
+      const request = createWSMessage('node.invoke', {
+        nodeId: 'node-1',
+        capability: 'camera',
+      });
+
+      const responsePromise = handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
+      const sentMessage = sendSpy.mock.calls[0]?.[1] as {
+        payload: { invocationId: string };
+      };
+      const rpcError = createWSMessage('node.rpc.error', {
+        invocationId: sentMessage.payload.invocationId,
+        error: {
+          code: 'capability_failed',
+          message: 'Camera unavailable',
+        },
+      }) as NodeRpcError;
+
+      expect(handler.handleRpcError('conn-node', rpcError)).toBe(true);
+
+      const response = await responsePromise;
+      expect(response.type).toBe('error');
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe('capability_failed');
+      }
+    });
+
+    it('should clean up caller disconnects', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+
+      const request = createWSMessage('node.invoke', {
+        nodeId: 'node-1',
+        capability: 'camera',
+      });
+
+      const responsePromise = handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
+
+      expect(handler.handleCallerDisconnect('conn-1')).toBe(1);
+
+      const response = await responsePromise;
+      expect(response.type).toBe('error');
+      if (response.type === 'error') {
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.CONNECTION_CLOSED,
+        );
+      }
+    });
+
+    it('should log invoke operation', async () => {
+      connectionManager.registerConnection(
+        'conn-node',
+        createMockSocket() as unknown as WebSocket,
+      );
+      nodeRegistry.registerNode(
+        createTestNode({
+          nodeId: 'node-1',
+          status: 'online',
+          capabilities: ['camera'],
+          connectionId: 'conn-node',
+        }),
+      );
+
+      const request = createWSMessage('node.invoke', {
+        nodeId: 'node-1',
+        capability: 'camera',
+      });
+      const responsePromise = handler.handleInvoke(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         { connectionId: 'conn-1', nodeId: 'node-1', capability: 'camera' },
-        'Invoking node capability via WebSocket'
+        'Invoking node capability via WebSocket',
       );
+
+      expect(handler.handleCallerDisconnect('conn-1')).toBe(1);
+      await responsePromise;
     });
   });
 
@@ -328,7 +605,11 @@ describe('NodeHandler', () => {
         type: 'mobile' as NodeType,
         capabilities: ['camera', 'microphone'],
       });
-      const response = await handler.handleRegister('conn-1', request, handlerContext);
+      const response = await handler.handleRegister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.registered') {
         expect(response.payload.node.name).toBe('New Node');
@@ -348,10 +629,14 @@ describe('NodeHandler', () => {
         capabilities: ['screen'],
         connectionId: 'custom-conn',
       });
-      const response = await handler.handleRegister('conn-1', request, handlerContext);
+      const response = await handler.handleRegister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.registered') {
-        expect(response.payload.node.connectionId).toBe('custom-conn');
+        expect(response.payload.node.connectionId).toBe('conn-1');
       } else {
         expect.fail('Expected node.registered response');
       }
@@ -363,7 +648,11 @@ describe('NodeHandler', () => {
         type: 'browser' as NodeType,
         capabilities: ['notifications'],
       });
-      const response = await handler.handleRegister('conn-handler', request, handlerContext);
+      const response = await handler.handleRegister(
+        'conn-handler',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.registered') {
         expect(response.payload.node.connectionId).toBe('conn-handler');
@@ -379,10 +668,17 @@ describe('NodeHandler', () => {
         capabilities: ['camera'],
         metadata: { version: '1.0', platform: 'ios' },
       });
-      const response = await handler.handleRegister('conn-1', request, handlerContext);
+      const response = await handler.handleRegister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.registered') {
-        expect(response.payload.node.metadata).toEqual({ version: '1.0', platform: 'ios' });
+        expect(response.payload.node.metadata).toEqual({
+          version: '1.0',
+          platform: 'ios',
+        });
       } else {
         expect.fail('Expected node.registered response');
       }
@@ -396,7 +692,11 @@ describe('NodeHandler', () => {
         tokenHash: 'abc123',
         scopes: ['read', 'write'],
       });
-      const response = await handler.handleRegister('conn-1', request, handlerContext);
+      const response = await handler.handleRegister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.registered') {
         expect(response.payload.node.tokenHash).toBe('abc123');
@@ -427,7 +727,7 @@ describe('NodeHandler', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         { connectionId: 'conn-1', name: 'New Node' },
-        'Registering node via WebSocket'
+        'Registering node via WebSocket',
       );
     });
   });
@@ -441,7 +741,11 @@ describe('NodeHandler', () => {
       nodeRegistry.registerNode(createTestNode({ nodeId: 'node-1' }));
 
       const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
-      const response = await handler.handleUnregister('conn-1', request, handlerContext);
+      const response = await handler.handleUnregister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'node.unregistered') {
         expect(response.payload.nodeId).toBe('node-1');
@@ -453,8 +757,14 @@ describe('NodeHandler', () => {
     });
 
     it('should return error for non-existent node', async () => {
-      const request = createWSMessage('node.unregister', { nodeId: 'non-existent' });
-      const response = await handler.handleUnregister('conn-1', request, handlerContext);
+      const request = createWSMessage('node.unregister', {
+        nodeId: 'non-existent',
+      });
+      const response = await handler.handleUnregister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
@@ -472,7 +782,7 @@ describe('NodeHandler', () => {
 
       expect(mockLogger.info).toHaveBeenCalledWith(
         { connectionId: 'conn-1', nodeId: 'node-1' },
-        'Unregistering node via WebSocket'
+        'Unregistering node via WebSocket',
       );
     });
   });
@@ -485,12 +795,22 @@ describe('NodeHandler', () => {
     it('should handle errors in handleList', async () => {
       // Force an error by making getAllNodes throw
       const errorRegistry = {
-        getAllNodes: () => { throw new Error('Test error'); },
+        getAllNodes: () => {
+          throw new Error('Test error');
+        },
       } as unknown as NodeRegistry;
 
-      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const errorHandler = new NodeHandler(
+        errorRegistry,
+        connectionManager,
+        mockLogger,
+      );
       const request = createWSMessage('node.list', {});
-      const response = await errorHandler.handleList('conn-1', request, handlerContext);
+      const response = await errorHandler.handleList(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
@@ -503,12 +823,22 @@ describe('NodeHandler', () => {
     it('should handle errors in handleDescribe', async () => {
       // Force an error by making getNode throw
       const errorRegistry = {
-        getNode: () => { throw new Error('Describe error'); },
+        getNode: () => {
+          throw new Error('Describe error');
+        },
       } as unknown as NodeRegistry;
 
-      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const errorHandler = new NodeHandler(
+        errorRegistry,
+        connectionManager,
+        mockLogger,
+      );
       const request = createWSMessage('node.describe', { nodeId: 'node-1' });
-      const response = await errorHandler.handleDescribe('conn-1', request, handlerContext);
+      const response = await errorHandler.handleDescribe(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
@@ -520,16 +850,26 @@ describe('NodeHandler', () => {
     it('should handle errors in handleRegister', async () => {
       // Force an error by making registerNode throw
       const errorRegistry = {
-        registerNode: () => { throw new Error('Register error'); },
+        registerNode: () => {
+          throw new Error('Register error');
+        },
       } as unknown as NodeRegistry;
 
-      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const errorHandler = new NodeHandler(
+        errorRegistry,
+        connectionManager,
+        mockLogger,
+      );
       const request = createWSMessage('node.register', {
         name: 'Test',
         type: 'mobile' as NodeType,
         capabilities: ['camera'],
       });
-      const response = await errorHandler.handleRegister('conn-1', request, handlerContext);
+      const response = await errorHandler.handleRegister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
@@ -541,13 +881,23 @@ describe('NodeHandler', () => {
     it('should handle errors in handleUnregister', async () => {
       // Force an error by making getNode and unregisterNode throw
       const errorRegistry = {
-        getNode: () => { throw new Error('Unregister error'); },
+        getNode: () => {
+          throw new Error('Unregister error');
+        },
         unregisterNode: () => {},
       } as unknown as NodeRegistry;
 
-      const errorHandler = new NodeHandler(errorRegistry, connectionManager, mockLogger);
+      const errorHandler = new NodeHandler(
+        errorRegistry,
+        connectionManager,
+        mockLogger,
+      );
       const request = createWSMessage('node.unregister', { nodeId: 'node-1' });
-      const response = await errorHandler.handleUnregister('conn-1', request, handlerContext);
+      const response = await errorHandler.handleUnregister(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       if (response.type === 'error') {
         expect(response.payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
@@ -571,17 +921,36 @@ describe('registerNodeHandlers', () => {
     const mockLogger = createMockLogger();
     const nodeRegistry = new NodeRegistry({}, mockLogger);
     const connectionManager = new ConnectionManager();
-    const handler = new NodeHandler(nodeRegistry, connectionManager, mockLogger);
+    const handler = new NodeHandler(
+      nodeRegistry,
+      connectionManager,
+      mockLogger,
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     registerNodeHandlers(mockRouter as any, handler);
 
     expect(mockRouter.registerHandler).toHaveBeenCalledTimes(5);
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.list', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.describe', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.invoke', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.register', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('node.unregister', expect.any(Function));
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'node.list',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'node.describe',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'node.invoke',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'node.register',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'node.unregister',
+      expect.any(Function),
+    );
   });
 });
 
@@ -595,7 +964,11 @@ describe('createNodeHandler', () => {
     const nodeRegistry = new NodeRegistry({}, mockLogger);
     const connectionManager = new ConnectionManager();
 
-    const handler = createNodeHandler(nodeRegistry, connectionManager, mockLogger);
+    const handler = createNodeHandler(
+      nodeRegistry,
+      connectionManager,
+      mockLogger,
+    );
 
     expect(handler).toBeInstanceOf(NodeHandler);
   });
