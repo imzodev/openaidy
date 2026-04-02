@@ -5,7 +5,7 @@
  */
 
 // WebSocket Client SDK
-export { WebSocketClient, createWebSocketClient } from './websocket-client';
+export { WebSocketClient, createWebSocketClient } from './websocket-client.js';
 export {
   type WebSocketClientOptions,
   type WebSocketClientState,
@@ -24,8 +24,8 @@ export {
   type ClientEvent,
   defaultWebSocketClientOptions,
   noopLogger,
-} from './websocket-client.types';
+} from './websocket-client.types.js';
 
 // Legacy exports (for backward compatibility)
-export * from './sessions';
-export * from './stream';
+export * from './sessions.js';
+export * from './stream.js';

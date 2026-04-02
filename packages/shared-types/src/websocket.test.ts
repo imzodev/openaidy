@@ -73,7 +73,7 @@ import {
   isPresenceSubscribedEvent,
   isPresenceUnsubscribedEvent,
   type PresenceStatus,
-} from './websocket';
+} from './websocket.js';
 
 describe('websocket types', () => {
   describe('isWSMessage', () => {
