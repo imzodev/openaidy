@@ -22,59 +22,89 @@ import {
 // Request/Response Types
 // ============================================================================
 
-export type PairingRequestMessage = WSMessage<'pairing.request', {
-  deviceName: string;
-  deviceType: NodeType;
-  capabilities: string[];
-  metadata?: Record<string, unknown>;
-}>;
+export type PairingRequestMessage = WSMessage<
+  'pairing.request',
+  {
+    deviceName: string;
+    deviceType: NodeType;
+    capabilities: string[];
+    metadata?: Record<string, unknown>;
+  }
+>;
 
-export type PairingStatusRequest = WSMessage<'pairing.status', {
-  requestId?: string;
-  pairingCode?: string;
-}>;
+export type PairingStatusRequest = WSMessage<
+  'pairing.status',
+  {
+    requestId?: string;
+    pairingCode?: string;
+  }
+>;
 
-export type PairingApproveRequest = WSMessage<'pairing.approve', {
-  requestId: string;
-  scopes?: string[];
-}>;
+export type PairingApproveRequest = WSMessage<
+  'pairing.approve',
+  {
+    requestId: string;
+    scopes?: string[];
+  }
+>;
 
-export type PairingDenyRequest = WSMessage<'pairing.deny', {
-  requestId: string;
-}>;
+export type PairingDenyRequest = WSMessage<
+  'pairing.deny',
+  {
+    requestId: string;
+  }
+>;
 
-export type PairingListRequest = WSMessage<'pairing.list', {}>;
+export type PairingListRequest = WSMessage<
+  'pairing.list',
+  Record<string, never>
+>;
 
-export type PairingRequestedResponse = WSMessage<'pairing.requested', {
-  requestId: string;
-  pairingCode: string;
-  deviceName: string;
-  deviceType: NodeType;
-  capabilities: string[];
-  requestedAt: number;
-  expiresAt: number;
-}>;
+export type PairingRequestedResponse = WSMessage<
+  'pairing.requested',
+  {
+    requestId: string;
+    pairingCode: string;
+    deviceName: string;
+    deviceType: NodeType;
+    capabilities: string[];
+    requestedAt: number;
+    expiresAt: number;
+  }
+>;
 
-export type PairingStatusResponse = WSMessage<'pairing.status', {
-  request: PairingRequest | null;
-}>;
+export type PairingStatusResponse = WSMessage<
+  'pairing.status',
+  {
+    request: PairingRequest | null;
+  }
+>;
 
-export type PairingApprovedResponse = WSMessage<'pairing.approved', {
-  requestId: string;
-  nodeId: string;
-  token: string;
-  scopes: string[];
-  approvedAt: number;
-}>;
+export type PairingApprovedResponse = WSMessage<
+  'pairing.approved',
+  {
+    requestId: string;
+    nodeId: string;
+    token: string;
+    scopes: string[];
+    approvedAt: number;
+  }
+>;
 
-export type PairingDeniedResponse = WSMessage<'pairing.denied', {
-  requestId: string;
-  deniedAt: number;
-}>;
+export type PairingDeniedResponse = WSMessage<
+  'pairing.denied',
+  {
+    requestId: string;
+    deniedAt: number;
+  }
+>;
 
-export type PairingListResponse = WSMessage<'pairing.list', {
-  requests: PairingRequest[];
-}>;
+export type PairingListResponse = WSMessage<
+  'pairing.list',
+  {
+    requests: PairingRequest[];
+  }
+>;
 
 // ============================================================================
 // Pairing Handler
@@ -105,11 +135,15 @@ export class PairingHandler {
   async handleRequest(
     connectionId: string,
     request: PairingRequestMessage,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<PairingRequestedResponse | ErrorResponse> {
     try {
       this.logger.info(
-        { connectionId, deviceName: request.payload.deviceName, deviceType: request.payload.deviceType },
+        {
+          connectionId,
+          deviceName: request.payload.deviceName,
+          deviceType: request.payload.deviceType,
+        },
         'Creating pairing request via WebSocket',
       );
 
@@ -121,15 +155,19 @@ export class PairingHandler {
       );
 
       return {
-        ...createWSMessage('pairing.requested', {
-          requestId: pairingRequest.requestId,
-          pairingCode: pairingRequest.pairingCode,
-          deviceName: pairingRequest.deviceName,
-          deviceType: pairingRequest.deviceType,
-          capabilities: pairingRequest.capabilities,
-          requestedAt: pairingRequest.requestedAt,
-          expiresAt: pairingRequest.expiresAt,
-        }),
+        ...createWSMessage(
+          'pairing.requested',
+          {
+            requestId: pairingRequest.requestId,
+            pairingCode: pairingRequest.pairingCode,
+            deviceName: pairingRequest.deviceName,
+            deviceType: pairingRequest.deviceType,
+            capabilities: pairingRequest.capabilities,
+            requestedAt: pairingRequest.requestedAt,
+            expiresAt: pairingRequest.expiresAt,
+          },
+          request.id,
+        ),
       } as PairingRequestedResponse;
     } catch (error) {
       return this.handleError('pairing.request', request.id, error);
@@ -143,26 +181,38 @@ export class PairingHandler {
   async handleStatus(
     connectionId: string,
     request: PairingStatusRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<PairingStatusResponse | ErrorResponse> {
     try {
       this.logger.info(
-        { connectionId, requestId: request.payload.requestId, pairingCode: request.payload.pairingCode },
+        {
+          connectionId,
+          requestId: request.payload.requestId,
+          pairingCode: request.payload.pairingCode,
+        },
         'Getting pairing status via WebSocket',
       );
 
       let pairingRequest: PairingRequest | undefined;
 
       if (request.payload.requestId) {
-        pairingRequest = this.pairingService.getRequest(request.payload.requestId);
+        pairingRequest = this.pairingService.getRequest(
+          request.payload.requestId,
+        );
       } else if (request.payload.pairingCode) {
-        pairingRequest = this.pairingService.getRequestByCode(request.payload.pairingCode);
+        pairingRequest = this.pairingService.getRequestByCode(
+          request.payload.pairingCode,
+        );
       }
 
       return {
-        ...createWSMessage('pairing.status', {
-          request: pairingRequest || null,
-        }),
+        ...createWSMessage(
+          'pairing.status',
+          {
+            request: pairingRequest || null,
+          },
+          request.id,
+        ),
       } as PairingStatusResponse;
     } catch (error) {
       return this.handleError('pairing.status', request.id, error);
@@ -176,7 +226,7 @@ export class PairingHandler {
   async handleApprove(
     connectionId: string,
     request: PairingApproveRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<PairingApprovedResponse | ErrorResponse> {
     try {
       this.logger.info(
@@ -229,13 +279,17 @@ export class PairingHandler {
       }
 
       return {
-        ...createWSMessage('pairing.approved', {
-          requestId: pairingRequest.requestId,
-          nodeId: pairingRequest.nodeId!,
-          token: pairingRequest.token!,
-          scopes: pairingRequest.scopes!,
-          approvedAt: pairingRequest.approvedAt!,
-        }),
+        ...createWSMessage(
+          'pairing.approved',
+          {
+            requestId: pairingRequest.requestId,
+            nodeId: pairingRequest.nodeId!,
+            token: pairingRequest.token!,
+            scopes: pairingRequest.scopes!,
+            approvedAt: pairingRequest.approvedAt!,
+          },
+          request.id,
+        ),
       } as PairingApprovedResponse;
     } catch (error) {
       return this.handleError('pairing.approve', request.id, error);
@@ -249,7 +303,7 @@ export class PairingHandler {
   async handleDeny(
     connectionId: string,
     request: PairingDenyRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<PairingDeniedResponse | ErrorResponse> {
     try {
       this.logger.info(
@@ -301,10 +355,14 @@ export class PairingHandler {
       }
 
       return {
-        ...createWSMessage('pairing.denied', {
-          requestId: pairingRequest.requestId,
-          deniedAt: pairingRequest.deniedAt!,
-        }),
+        ...createWSMessage(
+          'pairing.denied',
+          {
+            requestId: pairingRequest.requestId,
+            deniedAt: pairingRequest.deniedAt!,
+          },
+          request.id,
+        ),
       } as PairingDeniedResponse;
     } catch (error) {
       return this.handleError('pairing.deny', request.id, error);
@@ -318,10 +376,13 @@ export class PairingHandler {
   async handleList(
     connectionId: string,
     request: PairingListRequest,
-    ctx: HandlerContext,
+    _ctx: HandlerContext,
   ): Promise<PairingListResponse | ErrorResponse> {
     try {
-      this.logger.info({ connectionId }, 'Listing pending pairing requests via WebSocket');
+      this.logger.info(
+        { connectionId },
+        'Listing pending pairing requests via WebSocket',
+      );
 
       // Check permission
       const hasPermission = this.checkPairingListPermission(connectionId);
@@ -340,9 +401,13 @@ export class PairingHandler {
       const requests = this.pairingService.getPendingRequests();
 
       return {
-        ...createWSMessage('pairing.list', {
-          requests,
-        }),
+        ...createWSMessage(
+          'pairing.list',
+          {
+            requests,
+          },
+          request.id,
+        ),
       } as PairingListResponse;
     } catch (error) {
       return this.handleError('pairing.list', request.id, error);
@@ -354,15 +419,24 @@ export class PairingHandler {
   // ============================================================================
 
   private checkPairingApprovePermission(connectionId: string): boolean {
-    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_APPROVE);
+    return this.connectionManager.hasCapability(
+      connectionId,
+      WS_CAPABILITIES.PAIRING_APPROVE,
+    );
   }
 
   private checkPairingDenyPermission(connectionId: string): boolean {
-    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_DENY);
+    return this.connectionManager.hasCapability(
+      connectionId,
+      WS_CAPABILITIES.PAIRING_DENY,
+    );
   }
 
   private checkPairingListPermission(connectionId: string): boolean {
-    return this.connectionManager.hasCapability(connectionId, WS_CAPABILITIES.PAIRING_APPROVE);
+    return this.connectionManager.hasCapability(
+      connectionId,
+      WS_CAPABILITIES.PAIRING_APPROVE,
+    );
   }
 
   // ============================================================================
@@ -381,7 +455,8 @@ export class PairingHandler {
         requestId,
         error: {
           code: WS_ERROR_CODES.INTERNAL_ERROR,
-          message: error instanceof Error ? error.message : 'Internal server error',
+          message:
+            error instanceof Error ? error.message : 'Internal server error',
         },
       }),
     } as ErrorResponse;
@@ -393,27 +468,66 @@ export class PairingHandler {
 // ============================================================================
 
 export function registerPairingHandlers(
-  router: { registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void },
+  router: {
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
+  },
   handler: PairingHandler,
 ): void {
-  router.registerHandler('pairing.request', (connId, msg, ctx) =>
-    handler.handleRequest(connId, msg as PairingRequestMessage, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'pairing.request',
+    (connId, msg, ctx) =>
+      handler.handleRequest(
+        connId,
+        msg as PairingRequestMessage,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('pairing.status', (connId, msg, ctx) =>
-    handler.handleStatus(connId, msg as PairingStatusRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'pairing.status',
+    (connId, msg, ctx) =>
+      handler.handleStatus(
+        connId,
+        msg as PairingStatusRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('pairing.approve', (connId, msg, ctx) =>
-    handler.handleApprove(connId, msg as PairingApproveRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'pairing.approve',
+    (connId, msg, ctx) =>
+      handler.handleApprove(
+        connId,
+        msg as PairingApproveRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('pairing.deny', (connId, msg, ctx) =>
-    handler.handleDeny(connId, msg as PairingDenyRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'pairing.deny',
+    (connId, msg, ctx) =>
+      handler.handleDeny(
+        connId,
+        msg as PairingDenyRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('pairing.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as PairingListRequest, ctx) as Promise<WSResponse>,
+  router.registerHandler(
+    'pairing.list',
+    (connId, msg, ctx) =>
+      handler.handleList(
+        connId,
+        msg as PairingListRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 }
 
@@ -427,5 +541,10 @@ export function createPairingHandler(
   nodeRegistry: NodeRegistry,
   logger: FastifyBaseLogger,
 ): PairingHandler {
-  return new PairingHandler(pairingService, connectionManager, nodeRegistry, logger);
+  return new PairingHandler(
+    pairingService,
+    connectionManager,
+    nodeRegistry,
+    logger,
+  );
 }

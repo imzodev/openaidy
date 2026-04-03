@@ -6,7 +6,6 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
-import type { ConnectionManager } from '../connection-manager';
 import type { StreamManager } from '../streaming';
 import type { RunEventEmitter } from '../../dispatch/events';
 import type { HandlerContext } from '../index';
@@ -26,7 +25,6 @@ import {
   type SessionMessageStreamAck,
   WS_ERROR_CODES,
   createWSMessage,
-  isWSMessage,
 } from '@openaidy/shared-types';
 import type { Session, SessionMessage, SessionRun } from '@openaidy/db';
 
@@ -99,7 +97,7 @@ export class SessionHandler {
   async handleCreate(
     connectionId: string,
     request: SessionCreateRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionCreatedResponse | ErrorResponse> {
     try {
       // Create session via service
@@ -114,11 +112,15 @@ export class SessionHandler {
         'Session created via WebSocket',
       );
 
-      return createWSMessage('session.created', {
-        sessionId: sessionRecord.id,
-        agentId: request.payload.agentId ?? 'default',
-        createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
-      }) as SessionCreatedResponse;
+      return createWSMessage(
+        'session.created',
+        {
+          sessionId: sessionRecord.id,
+          agentId: request.payload.agentId ?? 'default',
+          createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
+        },
+        request.id,
+      ) as SessionCreatedResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to create session');
       return this.createErrorResponse(
@@ -135,10 +137,12 @@ export class SessionHandler {
   async handleGet(
     connectionId: string,
     request: SessionGetRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionGetResponse | ErrorResponse> {
     try {
-      const session = await this.sessionService.getSession(request.payload.sessionId);
+      const session = await this.sessionService.getSession(
+        request.payload.sessionId,
+      );
 
       if (!session) {
         return this.createErrorResponse(
@@ -150,15 +154,19 @@ export class SessionHandler {
 
       const sessionRecord = session as Session;
 
-      return createWSMessage('session.get', {
-        session: {
-          id: sessionRecord.id,
-          title: sessionRecord.title,
-          status: sessionRecord.status ?? 'active',
-          createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
-          updatedAt: sessionRecord.updatedAt,
+      return createWSMessage(
+        'session.get',
+        {
+          session: {
+            id: sessionRecord.id,
+            title: sessionRecord.title,
+            status: sessionRecord.status ?? 'active',
+            createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
+            updatedAt: sessionRecord.updatedAt,
+          },
         },
-      }) as SessionGetResponse;
+        request.id,
+      ) as SessionGetResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to get session');
       return this.createErrorResponse(
@@ -175,7 +183,7 @@ export class SessionHandler {
   async handleList(
     connectionId: string,
     request: SessionListRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionListResponse | ErrorResponse> {
     try {
       const sessions = await this.sessionService.listSessions();
@@ -190,7 +198,9 @@ export class SessionHandler {
       if (request.payload.agentId) {
         // Filter by agentId if stored in metadata
         filtered = filtered.filter((s) => {
-          const metadata = (s as Session).metadata as Record<string, unknown> | undefined;
+          const metadata = (s as Session).metadata as
+            | Record<string, unknown>
+            | undefined;
           return metadata?.agentId === request.payload.agentId;
         });
       }
@@ -200,19 +210,23 @@ export class SessionHandler {
       const limit = request.payload.limit ?? 50;
       const paginated = filtered.slice(offset, offset + limit);
 
-      return createWSMessage('session.list', {
-        sessions: paginated.map((s) => {
-          const session = s as Session;
-          return {
-            id: session.id,
-            title: session.title,
-            status: session.status ?? 'active',
-            createdAt: session.createdAt ?? new Date().toISOString(),
-            updatedAt: session.updatedAt,
-          };
-        }),
-        total: filtered.length,
-      }) as SessionListResponse;
+      return createWSMessage(
+        'session.list',
+        {
+          sessions: paginated.map((s) => {
+            const session = s as Session;
+            return {
+              id: session.id,
+              title: session.title,
+              status: session.status ?? 'active',
+              createdAt: session.createdAt ?? new Date().toISOString(),
+              updatedAt: session.updatedAt,
+            };
+          }),
+          total: filtered.length,
+        },
+        request.id,
+      ) as SessionListResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to list sessions');
       return this.createErrorResponse(
@@ -229,11 +243,13 @@ export class SessionHandler {
   async handleDelete(
     connectionId: string,
     request: SessionDeleteRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionDeleteResponse | ErrorResponse> {
     try {
       // Attempt to delete the session
-      const deleted = await this.sessionService.deleteSession(request.payload.sessionId);
+      const deleted = await this.sessionService.deleteSession(
+        request.payload.sessionId,
+      );
 
       if (!deleted) {
         return this.createErrorResponse(
@@ -248,10 +264,14 @@ export class SessionHandler {
         'Session deleted via WebSocket',
       );
 
-      return createWSMessage('session.delete', {
-        sessionId: request.payload.sessionId,
-        deleted: true,
-      }) as SessionDeleteResponse;
+      return createWSMessage(
+        'session.delete',
+        {
+          sessionId: request.payload.sessionId,
+          deleted: true,
+        },
+        request.id,
+      ) as SessionDeleteResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to delete session');
       return this.createErrorResponse(
@@ -264,7 +284,7 @@ export class SessionHandler {
 
   /**
    * Handle session.message request
-   * 
+   *
    * Supports both streaming and non-streaming modes:
    * - Non-streaming (stream: false or omitted): Returns full response
    * - Streaming (stream: true): Returns ack with runId, streams events
@@ -272,12 +292,12 @@ export class SessionHandler {
   async handleMessage(
     connectionId: string,
     request: SessionMessageRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionMessageResponse | SessionMessageStreamAck | ErrorResponse> {
     try {
       // Check if streaming is requested
       if (request.payload.stream) {
-        return this.handleStreamingMessage(connectionId, request, context);
+        return this.handleStreamingMessage(connectionId, request, _context);
       }
 
       // Submit message via service
@@ -300,7 +320,7 @@ export class SessionHandler {
       }
 
       const assistantMessage = result.assistantMessage as SessionMessage;
-      const userMessage = result.userMessage as SessionMessage;
+      const _userMessage = result.userMessage as SessionMessage;
       const run = result.run as SessionRun;
 
       this.logger.info(
@@ -312,20 +332,24 @@ export class SessionHandler {
         'Message submitted via WebSocket',
       );
 
-      return createWSMessage('session.message', {
-        sessionId: request.payload.sessionId,
-        messageId: assistantMessage.id,
-        role: 'assistant',
-        content: assistantMessage.content,
-        usage: run.usage
-          ? {
-              promptTokens: run.usage.promptTokens,
-              completionTokens: run.usage.completionTokens,
-              totalTokens: run.usage.totalTokens,
-            }
-          : undefined,
-        finishReason: run.finishReason,
-      }) as SessionMessageResponse;
+      return createWSMessage(
+        'session.message',
+        {
+          sessionId: request.payload.sessionId,
+          messageId: assistantMessage.id,
+          role: 'assistant',
+          content: assistantMessage.content,
+          usage: run.usage
+            ? {
+                promptTokens: run.usage.promptTokens,
+                completionTokens: run.usage.completionTokens,
+                totalTokens: run.usage.totalTokens,
+              }
+            : undefined,
+          finishReason: run.finishReason,
+        },
+        request.id,
+      ) as SessionMessageResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to submit message');
       return this.createErrorResponse(
@@ -338,7 +362,7 @@ export class SessionHandler {
 
   /**
    * Handle streaming session.message request
-   * 
+   *
    * When stream: true:
    * 1. Validates session exists
    * 2. Creates run and subscribes connection to run events
@@ -349,7 +373,7 @@ export class SessionHandler {
   private async handleStreamingMessage(
     connectionId: string,
     request: SessionMessageRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<SessionMessageStreamAck | ErrorResponse> {
     // Check if streaming infrastructure is available
     if (!this.streamManager || !this.runEvents) {
@@ -362,7 +386,9 @@ export class SessionHandler {
 
     try {
       // Validate session exists
-      const session = await this.sessionService.getSession(request.payload.sessionId);
+      const session = await this.sessionService.getSession(
+        request.payload.sessionId,
+      );
       if (!session) {
         return this.createErrorResponse(
           request.id,
@@ -373,7 +399,8 @@ export class SessionHandler {
 
       // Generate a run ID for tracking
       const runId = crypto.randomUUID();
-      const agentId = (request.payload.metadata?.agentId as string) ?? 'default';
+      const agentId =
+        (request.payload.metadata?.agentId as string) ?? 'default';
 
       // Subscribe the connection to run events BEFORE starting
       this.streamManager.subscribeToRun(runId, connectionId);
@@ -385,29 +412,39 @@ export class SessionHandler {
 
       // Start the streaming invocation in the background
       // We don't await this - it will emit events as it progresses
-      this.executeStreamingRun(runId, request, agentId, context).catch((error) => {
-        this.logger.error(
-          { error, runId, sessionId: request.payload.sessionId },
-          'Streaming run failed',
-        );
-        // Emit failure event if not already emitted
-        this.runEvents?.emitFailed({
-          runId,
-          sessionId: request.payload.sessionId,
-          agentId,
-          errorCode: 'internal_error',
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        });
-      });
+      this.executeStreamingRun(runId, request, agentId, _context).catch(
+        (error) => {
+          this.logger.error(
+            { error, runId, sessionId: request.payload.sessionId },
+            'Streaming run failed',
+          );
+          // Emit failure event if not already emitted
+          this.runEvents?.emitFailed({
+            runId,
+            sessionId: request.payload.sessionId,
+            agentId,
+            errorCode: 'internal_error',
+            errorMessage:
+              error instanceof Error ? error.message : 'Unknown error',
+          });
+        },
+      );
 
       // Return immediate ack with runId
-      return createWSMessage('session.message.ack', {
-        sessionId: request.payload.sessionId,
-        runId,
-        status: 'streaming',
-      }) as SessionMessageStreamAck;
+      return createWSMessage(
+        'session.message.ack',
+        {
+          sessionId: request.payload.sessionId,
+          runId,
+          status: 'streaming',
+        },
+        request.id,
+      ) as SessionMessageStreamAck;
     } catch (error) {
-      this.logger.error({ error, connectionId }, 'Failed to start streaming message');
+      this.logger.error(
+        { error, connectionId },
+        'Failed to start streaming message',
+      );
       return this.createErrorResponse(
         request.id,
         WS_ERROR_CODES.INTERNAL_ERROR,
@@ -418,24 +455,26 @@ export class SessionHandler {
 
   /**
    * Execute a streaming run, emitting events as it progresses
-   * 
+   *
    * This is called in the background after returning the ack response.
    */
   private async executeStreamingRun(
     runId: string,
     request: SessionMessageRequest,
     agentId: string,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<void> {
     const sessionId = request.payload.sessionId;
-    const providerId = request.payload.metadata?.providerId as string | undefined;
+    const providerId = request.payload.metadata?.providerId as
+      | string
+      | undefined;
     const modelId = request.payload.metadata?.modelId as string | undefined;
 
     try {
       // Emit run.started event
       const resolvedProviderId = providerId ?? 'default';
       const resolvedModelId = modelId ?? 'default';
-      
+
       this.runEvents?.emitStarted({
         runId,
         sessionId,
@@ -457,7 +496,7 @@ export class SessionHandler {
 
       if (result.ok) {
         const run = result.run as SessionRun;
-        
+
         // Emit delta with the full content (simulated streaming)
         const assistantMessage = result.assistantMessage as SessionMessage;
         this.runEvents?.emitDelta({
@@ -474,11 +513,13 @@ export class SessionHandler {
           sessionId,
           agentId,
           finishReason: run.finishReason ?? 'stop',
-          usage: run.usage ? {
-            promptTokens: run.usage.promptTokens,
-            completionTokens: run.usage.completionTokens,
-            totalTokens: run.usage.totalTokens,
-          } : undefined,
+          usage: run.usage
+            ? {
+                promptTokens: run.usage.promptTokens,
+                completionTokens: run.usage.completionTokens,
+                totalTokens: run.usage.totalTokens,
+              }
+            : undefined,
         });
 
         this.logger.info(
@@ -565,7 +606,14 @@ export function createSessionHandler(
  */
 export function registerSessionHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
   },
   handler: SessionHandler,
 ): void {

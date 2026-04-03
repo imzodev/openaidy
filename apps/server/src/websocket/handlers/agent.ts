@@ -6,7 +6,6 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { AgentRegistry } from '../../agents/registry';
-import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
@@ -19,7 +18,6 @@ import {
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
-import type { Agent } from '../../agents/schema';
 
 // ============================================================================
 // Types
@@ -61,7 +59,7 @@ export class AgentHandler {
   async handleList(
     connectionId: string,
     request: AgentListRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<AgentListResponse | ErrorResponse> {
     try {
       const agents = this.agentRegistry.listAgents();
@@ -95,7 +93,7 @@ export class AgentHandler {
   async handleGet(
     connectionId: string,
     request: AgentGetRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<AgentGetResponse | ErrorResponse> {
     try {
       const agent = this.agentRegistry.getAgent(request.payload.agentId);
@@ -113,16 +111,20 @@ export class AgentHandler {
         'Getting agent via WebSocket',
       );
 
-      return createWSMessage('agent.get', {
-        agent: {
-          id: agent.id,
-          name: agent.name,
-          description: agent.description,
-          systemPrompt: agent.systemPrompt,
-          capabilities: agent.capabilities ?? [],
-          enabled: agent.enabled,
+      return createWSMessage(
+        'agent.get',
+        {
+          agent: {
+            id: agent.id,
+            name: agent.name,
+            description: agent.description,
+            systemPrompt: agent.systemPrompt,
+            capabilities: agent.capabilities ?? [],
+            enabled: agent.enabled,
+          },
         },
-      }) as AgentGetResponse;
+        request.id,
+      ) as AgentGetResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to get agent');
       return this.createErrorResponse(
@@ -182,7 +184,14 @@ export function createAgentHandler(
  */
 export function registerAgentHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
   },
   handler: AgentHandler,
 ): void {
