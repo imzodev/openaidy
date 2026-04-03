@@ -6,6 +6,7 @@ import {
   type JWTPayload,
 } from './auth';
 import { defaultWebSocketConfig } from '../types';
+import { getCapabilityPreset } from '../capability-presets';
 
 describe('AuthMiddleware', () => {
   let middleware: AuthMiddleware;
@@ -36,6 +37,8 @@ describe('AuthMiddleware', () => {
         clientId: 'client-123',
         type: 'access',
         scopes: ['admin'],
+        clientType: 'web',
+        clientVersion: '1.0.0',
       });
 
       const payload = await middleware.validateToken(token);
@@ -44,6 +47,8 @@ describe('AuthMiddleware', () => {
       expect(payload?.sub).toBe('client-123');
       expect(payload?.type).toBe('access');
       expect(payload?.scopes).toEqual(['admin']);
+      expect(payload?.clientType).toBe('web');
+      expect(payload?.clientVersion).toBe('1.0.0');
     });
 
     it('should set expiration time', async () => {
@@ -195,7 +200,10 @@ describe('AuthMiddleware', () => {
       };
 
       // Manually create malformed token (no 'sub' field)
-      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(/=/g, '');
+      const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).replace(
+        /=/g,
+        '',
+      );
       const payload = btoa(JSON.stringify(malformedPayload)).replace(/=/g, '');
       const malformedToken = `${header}.${payload}.signature`;
 
@@ -213,6 +221,8 @@ describe('AuthMiddleware', () => {
     it('should refresh token with valid refresh token', async () => {
       const refreshToken = await middleware.generateToken({
         clientId: 'client-123',
+        clientType: 'mobile',
+        clientVersion: '2.3.4',
         type: 'refresh',
         scopes: ['sessions.read', 'sessions.write'],
       });
@@ -225,6 +235,8 @@ describe('AuthMiddleware', () => {
       expect(payload?.sub).toBe('client-123');
       expect(payload?.type).toBe('access');
       expect(payload?.scopes).toEqual(['sessions.read', 'sessions.write']);
+      expect(payload?.clientType).toBe('mobile');
+      expect(payload?.clientVersion).toBe('2.3.4');
     });
 
     it('should reject refresh with access token', async () => {
@@ -283,7 +295,10 @@ describe('AuthMiddleware', () => {
       const scopes = ['sessions.read'];
 
       expect(
-        middleware.hasAnyCapability(scopes, ['sessions.read', 'sessions.write']),
+        middleware.hasAnyCapability(scopes, [
+          'sessions.read',
+          'sessions.write',
+        ]),
       ).toBe(true);
     });
 
@@ -291,7 +306,10 @@ describe('AuthMiddleware', () => {
       const scopes = ['sessions.read'];
 
       expect(
-        middleware.hasAnyCapability(scopes, ['sessions.write', 'sessions.delete']),
+        middleware.hasAnyCapability(scopes, [
+          'sessions.write',
+          'sessions.delete',
+        ]),
       ).toBe(false);
     });
 
@@ -309,7 +327,10 @@ describe('AuthMiddleware', () => {
       const scopes = ['sessions.read', 'sessions.write'];
 
       expect(
-        middleware.hasAllCapabilities(scopes, ['sessions.read', 'sessions.write']),
+        middleware.hasAllCapabilities(scopes, [
+          'sessions.read',
+          'sessions.write',
+        ]),
       ).toBe(true);
     });
 
@@ -317,7 +338,10 @@ describe('AuthMiddleware', () => {
       const scopes = ['sessions.read'];
 
       expect(
-        middleware.hasAllCapabilities(scopes, ['sessions.read', 'sessions.write']),
+        middleware.hasAllCapabilities(scopes, [
+          'sessions.read',
+          'sessions.write',
+        ]),
       ).toBe(false);
     });
 
@@ -325,7 +349,11 @@ describe('AuthMiddleware', () => {
       const scopes = ['*'];
 
       expect(
-        middleware.hasAllCapabilities(scopes, ['sessions.read', 'admin', 'config.read']),
+        middleware.hasAllCapabilities(scopes, [
+          'sessions.read',
+          'admin',
+          'config.read',
+        ]),
       ).toBe(true);
     });
   });
@@ -347,6 +375,38 @@ describe('AuthMiddleware', () => {
       expect(result.success).toBe(true);
       expect(result.clientId).toBe('client-123');
       expect(result.capabilities).toEqual(['sessions.read', 'sessions.write']);
+      expect(result.clientType).toBe('cli');
+    });
+
+    it('should apply capability preset when token scopes are empty', async () => {
+      const token = await middleware.generateToken({
+        clientId: 'client-web',
+        clientType: 'web',
+        type: 'access',
+        scopes: [],
+      });
+
+      const result = await middleware.authenticate(token);
+
+      expect(result.success).toBe(true);
+      expect(result.clientType).toBe('web');
+      expect(result.capabilities).toEqual(getCapabilityPreset('web'));
+    });
+
+    it('should use requested clientType when token has no clientType', async () => {
+      const token = await middleware.generateToken({
+        clientId: 'client-channel',
+        type: 'access',
+        scopes: [],
+      });
+
+      const result = await middleware.authenticate(token, {
+        clientType: 'channel',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.clientType).toBe('channel');
+      expect(result.capabilities).toEqual(getCapabilityPreset('channel'));
     });
 
     it('should reject invalid token', async () => {

@@ -73,6 +73,7 @@ import {
   isPresenceSubscribedEvent,
   isPresenceUnsubscribedEvent,
   type PresenceStatus,
+  type ClientType,
 } from './websocket.js';
 
 describe('websocket types', () => {
@@ -446,6 +447,33 @@ describe('websocket types', () => {
       expect(WS_CAPABILITIES.CONFIG_READ).toBe('config.read');
       expect(WS_CAPABILITIES.PAIRING_APPROVE).toBe('pairing.approve');
       expect(WS_CAPABILITIES.ADMIN).toBe('*');
+    });
+  });
+
+  describe('client type auth envelope', () => {
+    it('should carry clientType in auth.authenticate payload', () => {
+      const msg = createWSMessage('auth.authenticate', {
+        token: 'token-123',
+        clientType: 'web' as ClientType,
+        clientVersion: '1.2.3',
+        clientMeta: { platform: 'browser' },
+      });
+
+      expect(msg.payload.clientType).toBe('web');
+      expect(msg.payload.clientVersion).toBe('1.2.3');
+      expect(msg.payload.clientMeta).toEqual({ platform: 'browser' });
+    });
+
+    it('should carry clientType in auth.authenticated payload', () => {
+      const msg = createWSMessage('auth.authenticated', {
+        clientId: 'client-1',
+        clientType: 'cli' as ClientType,
+        token: 'token-123',
+        expiresAt: new Date().toISOString(),
+        capabilities: ['sessions.read'],
+      });
+
+      expect(msg.payload.clientType).toBe('cli');
     });
   });
 

@@ -119,6 +119,8 @@ export const WS_CAPABILITIES = {
 export type WSCapability =
   (typeof WS_CAPABILITIES)[keyof typeof WS_CAPABILITIES];
 
+export type ClientType = 'web' | 'cli' | 'mobile' | 'channel';
+
 // ============================================================================
 // Authentication Types
 // ============================================================================
@@ -128,6 +130,9 @@ export type AuthAuthenticateRequest = WSMessage<
   {
     token?: string;
     apiKey?: string;
+    clientType?: ClientType;
+    clientVersion?: string;
+    clientMeta?: Record<string, unknown>;
     credentials?: {
       type: 'pairing' | 'token' | 'api_key';
       data: Record<string, unknown>;
@@ -146,6 +151,7 @@ export type AuthAuthenticatedResponse = WSMessage<
   'auth.authenticated',
   {
     clientId: string;
+    clientType: ClientType;
     token: string;
     expiresAt: string;
     capabilities: string[];

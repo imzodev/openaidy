@@ -18,7 +18,7 @@ import {
   createPairingConfig,
 } from './types';
 import {
-  type WSMessage,
+  type ClientType,
   type WSResponse,
   type AuthAuthenticateRequest,
   type AuthRefreshRequest,
@@ -166,7 +166,7 @@ function createGateway(
 
   const connectionManager = new ConnectionManager(config);
   const messageRouter = new MessageRouter(fastify.log);
-  
+
   // Create auth middleware for pairing service
   const authMiddleware = new AuthMiddleware(config);
   const pairingPersistence =
@@ -176,19 +176,15 @@ function createGateway(
           devices: fastify.services.devicesRepo,
         }
       : undefined;
-  
+
   // Create node registry and pairing service
   const nodeRegistry = new NodeRegistry({}, fastify.log);
-  const pairingService = new PairingService(
-    authMiddleware,
-    fastify.log,
-    {
-      codeLength: pairingConfig.codeLength,
-      requestExpiry: pairingConfig.codeExpiryMs,
-      tokenExpiry: pairingConfig.defaultTokenExpiryMs,
-      ...(pairingPersistence && { persistence: pairingPersistence }),
-    },
-  );
+  const pairingService = new PairingService(authMiddleware, fastify.log, {
+    codeLength: pairingConfig.codeLength,
+    requestExpiry: pairingConfig.codeExpiryMs,
+    tokenExpiry: pairingConfig.defaultTokenExpiryMs,
+    ...(pairingPersistence && { persistence: pairingPersistence }),
+  });
 
   // Create presence manager
   const presenceManager = new PresenceManager({}, fastify.log);
@@ -199,7 +195,10 @@ function createGateway(
     connectionManager,
     fastify.log,
   );
-  const subscriptionManager = new SubscriptionManager(connectionManager, fastify.log);
+  const subscriptionManager = new SubscriptionManager(
+    connectionManager,
+    fastify.log,
+  );
 
   // Create handlers with streaming support
   const sessionHandler = new SessionHandler(
@@ -209,7 +208,10 @@ function createGateway(
     fastify.services.runEvents,
   );
   const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
-  const providerHandler = new ProviderHandler(fastify.services.providers, fastify.log);
+  const providerHandler = new ProviderHandler(
+    fastify.services.providers,
+    fastify.log,
+  );
 
   // Create node and pairing handlers
   const nodeHandler = new NodeHandler(
@@ -258,172 +260,224 @@ function createGateway(
   registerPresenceHandlers(messageRouter, presenceHandler);
 
   // Register node RPC response handlers (for node.invoke responses from nodes)
-  messageRouter.registerHandler('node.rpc.response', async (connectionId, message) => {
-    const rpcResponse = message as NodeRpcResponse;
-    const handled = nodeHandler.handleRpcResponse(connectionId, rpcResponse);
-    if (!handled) {
-      return createErrorResponse(
-        message.id,
-        WS_ERROR_CODES.INVALID_REQUEST,
-        'Unknown invocation ID or invocation already completed',
-      );
-    }
-    // No response needed - the response is routed to the original caller
-    return undefined;
-  });
+  messageRouter.registerHandler(
+    'node.rpc.response',
+    async (connectionId, message) => {
+      const rpcResponse = message as unknown as NodeRpcResponse;
+      const handled = nodeHandler.handleRpcResponse(connectionId, rpcResponse);
+      if (!handled) {
+        return createErrorResponse(
+          message.id,
+          WS_ERROR_CODES.INVALID_REQUEST,
+          'Unknown invocation ID or invocation already completed',
+        );
+      }
+      // No response needed - the response is routed to the original caller
+      return undefined;
+    },
+  );
 
-  messageRouter.registerHandler('node.rpc.error', async (connectionId, message) => {
-    const rpcError = message as NodeRpcError;
-    const handled = nodeHandler.handleRpcError(connectionId, rpcError);
-    if (!handled) {
-      return createErrorResponse(
-        message.id,
-        WS_ERROR_CODES.INVALID_REQUEST,
-        'Unknown invocation ID or invocation already completed',
-      );
-    }
-    // No response needed - the error is routed to the original caller
-    return undefined;
-  });
+  messageRouter.registerHandler(
+    'node.rpc.error',
+    async (connectionId, message) => {
+      const rpcError = message as unknown as NodeRpcError;
+      const handled = nodeHandler.handleRpcError(connectionId, rpcError);
+      if (!handled) {
+        return createErrorResponse(
+          message.id,
+          WS_ERROR_CODES.INVALID_REQUEST,
+          'Unknown invocation ID or invocation already completed',
+        );
+      }
+      // No response needed - the error is routed to the original caller
+      return undefined;
+    },
+  );
 
   // Register subscribe/unsubscribe handlers
-  messageRouter.registerHandler('auth.authenticate', async (connectionId, message) => {
-    const request = message as AuthAuthenticateRequest;
-    const token = authMiddleware.extractFromPayload(request.payload);
+  messageRouter.registerHandler(
+    'auth.authenticate',
+    async (connectionId, message) => {
+      const request = message as AuthAuthenticateRequest;
+      const token = authMiddleware.extractFromPayload(request.payload);
 
-    if (!token) {
-      return createErrorResponse(
-        request.id,
-        WS_ERROR_CODES.AUTH_REQUIRED,
-        'Authentication token is required',
+      if (!token) {
+        return createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.AUTH_REQUIRED,
+          'Authentication token is required',
+        );
+      }
+
+      const result = await authMiddleware.authenticate(token, {
+        ...(request.payload.clientType
+          ? { clientType: request.payload.clientType }
+          : {}),
+        ...(request.payload.clientVersion
+          ? { clientVersion: request.payload.clientVersion }
+          : {}),
+      });
+      if (!result.success || !result.clientId) {
+        return createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.AUTH_FAILED,
+          result.error?.message ?? 'Authentication failed',
+        );
+      }
+
+      connectionManager.authenticate(
+        connectionId,
+        result.clientId,
+        result.capabilities ?? [],
+        result.clientType,
+        result.clientVersion,
       );
-    }
 
-    const result = await authMiddleware.authenticate(token);
-    if (!result.success || !result.clientId) {
-      return createErrorResponse(
-        request.id,
-        WS_ERROR_CODES.AUTH_FAILED,
-        result.error?.message ?? 'Authentication failed',
+      const payload = await authMiddleware.validateToken(token);
+      const resolvedClientType: ClientType =
+        result.clientType ?? request.payload.clientType ?? 'cli';
+      if (payload) {
+        connectionManager.updateMetadata(connectionId, {
+          authTokenType: payload.type,
+          clientMeta: request.payload.clientMeta,
+        });
+
+        if (payload.type === 'pairing') {
+          const pairingRequest = pairingService.getRequestByToken(token);
+          if (pairingRequest?.nodeId) {
+            connectionManager.updateMetadata(connectionId, {
+              pairedNodeId: pairingRequest.nodeId,
+              pairedRequestId: pairingRequest.requestId,
+              pairingToken: token,
+              pairedScopes: pairingRequest.scopes ?? payload.scopes,
+            });
+          }
+        }
+      }
+
+      const expiresAt = payload?.exp
+        ? new Date(payload.exp * 1000).toISOString()
+        : new Date(Date.now() + config.auth.tokenExpiry).toISOString();
+
+      return createWSMessage('auth.authenticated', {
+        clientId: result.clientId,
+        clientType: resolvedClientType,
+        token,
+        expiresAt,
+        capabilities: result.capabilities ?? [],
+      }) as AuthAuthenticatedResponse;
+    },
+  );
+
+  messageRouter.registerHandler(
+    'auth.refresh',
+    async (connectionId, message) => {
+      const request = message as AuthRefreshRequest;
+      const refreshedToken = await authMiddleware.refreshToken(
+        request.payload.refreshToken,
       );
-    }
 
-    connectionManager.authenticate(
-      connectionId,
-      result.clientId,
-      result.capabilities ?? [],
-    );
+      if (!refreshedToken) {
+        return createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.AUTH_FAILED,
+          'Invalid refresh token',
+        );
+      }
 
-    const payload = await authMiddleware.validateToken(token);
-    if (payload) {
+      const payload = await authMiddleware.validateToken(refreshedToken);
+      if (!payload) {
+        return createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.AUTH_FAILED,
+          'Failed to refresh token',
+        );
+      }
+
+      const clientType = payload.clientType ?? 'cli';
+      const capabilities =
+        payload.scopes.length > 0
+          ? payload.scopes
+          : authMiddleware.getDefaultCapabilities(clientType);
+
+      connectionManager.authenticate(
+        connectionId,
+        payload.sub,
+        capabilities,
+        clientType,
+        payload.clientVersion,
+      );
       connectionManager.updateMetadata(connectionId, {
         authTokenType: payload.type,
       });
 
-      if (payload.type === 'pairing') {
-        const pairingRequest = pairingService.getRequestByToken(token);
-        if (pairingRequest?.nodeId) {
-          connectionManager.updateMetadata(connectionId, {
-            pairedNodeId: pairingRequest.nodeId,
-            pairedRequestId: pairingRequest.requestId,
-            pairingToken: token,
-            pairedScopes: pairingRequest.scopes ?? payload.scopes,
-          });
-        }
+      return createWSMessage('auth.authenticated', {
+        clientId: payload.sub,
+        clientType,
+        token: refreshedToken,
+        expiresAt: new Date(payload.exp * 1000).toISOString(),
+        capabilities,
+      }) as AuthAuthenticatedResponse;
+    },
+  );
+
+  messageRouter.registerHandler(
+    'session.subscribe',
+    async (connectionId, message) => {
+      const payload = message.payload as {
+        sessionId: string;
+        events?: string[];
+      };
+      const subscriptionId = subscriptionManager.createSubscription(
+        connectionId,
+        payload.sessionId,
+        payload.events,
+      );
+
+      if (!subscriptionId) {
+        return createErrorResponse(
+          message.id,
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          'Failed to create subscription',
+        );
       }
-    }
 
-    const expiresAt = payload?.exp
-      ? new Date(payload.exp * 1000).toISOString()
-      : new Date(Date.now() + config.auth.tokenExpiry).toISOString();
+      // Return the response as unknown first to satisfy type constraints
+      return {
+        id: message.id,
+        type: 'session.subscribed',
+        timestamp: new Date().toISOString(),
+        payload: {
+          sessionId: payload.sessionId,
+          subscriptionId,
+        },
+      } as unknown as WSResponse;
+    },
+  );
 
-    return createWSMessage('auth.authenticated', {
-      clientId: result.clientId,
-      token,
-      expiresAt,
-      capabilities: result.capabilities ?? [],
-    }) as AuthAuthenticatedResponse;
-  });
-
-  messageRouter.registerHandler('auth.refresh', async (connectionId, message) => {
-    const request = message as AuthRefreshRequest;
-    const refreshedToken = await authMiddleware.refreshToken(request.payload.refreshToken);
-
-    if (!refreshedToken) {
-      return createErrorResponse(
-        request.id,
-        WS_ERROR_CODES.AUTH_FAILED,
-        'Invalid refresh token',
+  messageRouter.registerHandler(
+    'session.unsubscribe',
+    async (connectionId, message) => {
+      const payload = message.payload as { sessionId: string };
+      const subscription = subscriptionManager.findSubscription(
+        connectionId,
+        payload.sessionId,
       );
-    }
 
-    const payload = await authMiddleware.validateToken(refreshedToken);
-    if (!payload) {
-      return createErrorResponse(
-        request.id,
-        WS_ERROR_CODES.AUTH_FAILED,
-        'Failed to refresh token',
-      );
-    }
+      if (subscription) {
+        subscriptionManager.removeSubscription(subscription.id);
+      }
 
-    connectionManager.authenticate(connectionId, payload.sub, payload.scopes);
-    connectionManager.updateMetadata(connectionId, {
-      authTokenType: payload.type,
-    });
-
-    return createWSMessage('auth.authenticated', {
-      clientId: payload.sub,
-      token: refreshedToken,
-      expiresAt: new Date(payload.exp * 1000).toISOString(),
-      capabilities: payload.scopes,
-    }) as AuthAuthenticatedResponse;
-  });
-
-  messageRouter.registerHandler('session.subscribe', async (connectionId, message) => {
-    const payload = message.payload as { sessionId: string; events?: string[] };
-    const subscriptionId = subscriptionManager.createSubscription(
-      connectionId,
-      payload.sessionId,
-      payload.events,
-    );
-
-    if (!subscriptionId) {
-      return createErrorResponse(
-        message.id,
-        WS_ERROR_CODES.INTERNAL_ERROR,
-        'Failed to create subscription',
-      );
-    }
-
-    // Return the response as unknown first to satisfy type constraints
-    return {
-      id: message.id,
-      type: 'session.subscribed',
-      timestamp: new Date().toISOString(),
-      payload: {
-        sessionId: payload.sessionId,
-        subscriptionId,
-      },
-    } as unknown as WSResponse;
-  });
-
-  messageRouter.registerHandler('session.unsubscribe', async (connectionId, message) => {
-    const payload = message.payload as { sessionId: string };
-    const subscription = subscriptionManager.findSubscription(connectionId, payload.sessionId);
-
-    if (subscription) {
-      subscriptionManager.removeSubscription(subscription.id);
-    }
-
-    return {
-      id: message.id,
-      type: 'session.unsubscribed',
-      timestamp: new Date().toISOString(),
-      payload: {
-        sessionId: payload.sessionId,
-      },
-    } as unknown as WSResponse;
-  });
+      return {
+        id: message.id,
+        type: 'session.unsubscribed',
+        timestamp: new Date().toISOString(),
+        payload: {
+          sessionId: payload.sessionId,
+        },
+      } as unknown as WSResponse;
+    },
+  );
 
   return {
     config,
@@ -475,10 +529,9 @@ export type WebSocketGatewayOptions = {
  *
  * Registers the /ws endpoint and initializes gateway infrastructure.
  */
-export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions> = async (
-  fastify,
-  options = {},
-) => {
+export const websocketGatewayPlugin: FastifyPluginAsync<
+  WebSocketGatewayOptions
+> = async (fastify, options = {}) => {
   const enabled = options.enabled ?? true;
   if (!enabled) {
     fastify.log.info('WebSocket gateway is disabled');
@@ -508,9 +561,13 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     // Cleanup expired pairing requests
     gateway.pairingService.cleanupExpiredRequests();
     // Cleanup stale nodes (nodes that haven't been seen in 2x heartbeat interval)
-    gateway.nodeRegistry.cleanupStaleNodes(gateway.config.heartbeatInterval * 2);
+    gateway.nodeRegistry.cleanupStaleNodes(
+      gateway.config.heartbeatInterval * 2,
+    );
     // Cleanup stale presence (presence that hasn't been updated in 3x heartbeat interval)
-    gateway.presenceManager.cleanupStalePresence(gateway.config.heartbeatInterval * 3);
+    gateway.presenceManager.cleanupStalePresence(
+      gateway.config.heartbeatInterval * 3,
+    );
   }, 60000); // Every minute
 
   // Generate unique connection IDs
@@ -527,7 +584,10 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     const socket = connection.socket;
 
     // Check connection limit
-    if (gateway.connectionManager.getConnectionCount() >= gateway.config.maxConnections) {
+    if (
+      gateway.connectionManager.getConnectionCount() >=
+      gateway.config.maxConnections
+    ) {
       const errorMsg = createErrorResponse(
         '0',
         WS_ERROR_CODES.CONNECTION_LIMIT,
@@ -544,22 +604,27 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
 
     const handshakeToken = extractHandshakeToken(req, pluginAuthMiddleware);
     if (handshakeToken) {
-      const authResult = await pluginAuthMiddleware.authenticate(handshakeToken);
+      const authResult =
+        await pluginAuthMiddleware.authenticate(handshakeToken);
       if (authResult.success && authResult.clientId) {
         gateway.connectionManager.authenticate(
           connectionId,
           authResult.clientId,
           authResult.capabilities ?? [],
+          authResult.clientType,
+          authResult.clientVersion,
         );
 
-        const payload = await pluginAuthMiddleware.validateToken(handshakeToken);
+        const payload =
+          await pluginAuthMiddleware.validateToken(handshakeToken);
         if (payload) {
           gateway.connectionManager.updateMetadata(connectionId, {
             authTokenType: payload.type,
           });
 
           if (payload.type === 'pairing') {
-            const pairingRequest = gateway.pairingService.getRequestByToken(handshakeToken);
+            const pairingRequest =
+              gateway.pairingService.getRequestByToken(handshakeToken);
             if (pairingRequest?.nodeId) {
               gateway.connectionManager.updateMetadata(connectionId, {
                 pairedNodeId: pairingRequest.nodeId,
@@ -594,7 +659,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     // Message handler
     socket.on('message', async (data: Buffer | string) => {
       // Rate limit check
-      const rateLimitResult = gateway.connectionManager.checkRateLimit(connectionId);
+      const rateLimitResult =
+        gateway.connectionManager.checkRateLimit(connectionId);
       if (!rateLimitResult.allowed) {
         const errorMsg = createErrorResponse(
           '0',
@@ -678,15 +744,22 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       }
 
       // Handle streaming messages specially
-      if (message.type === 'session.message' && (message.payload as { stream?: boolean })?.stream) {
+      if (
+        message.type === 'session.message' &&
+        (message.payload as { stream?: boolean })?.stream
+      ) {
         // Subscribe connection to the run's stream events
-        const payload = message.payload as { sessionId: string };
+        // const payload = message.payload as { sessionId: string };
         // The run ID will be created by the handler, we'll subscribe after
         // For now, route to handler which will handle streaming setup
       }
 
       // Route message to handler
-      const response = await gateway.messageRouter.route(connectionId, message, handlerContext);
+      const response = await gateway.messageRouter.route(
+        connectionId,
+        message,
+        handlerContext,
+      );
 
       // Send response if any
       if (response) {
@@ -695,7 +768,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
     });
 
     // Handle close
-    socket.on('close', (code: number, reason: Buffer) => {
+    socket.on('close', (code: number, _reason: Buffer) => {
       // Clean up stream subscriptions
       gateway.streamManager.unsubscribeAllFromConnection(connectionId);
       // Clean up session subscriptions
@@ -713,7 +786,9 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
       gateway.connectionManager.removeConnection(connectionId);
       // Clear pending requests
       gateway.messageRouter.clearPendingRequests(connectionId);
-      fastify.log.info(`WebSocket connection closed: ${connectionId} (code: ${code})`);
+      fastify.log.info(
+        `WebSocket connection closed: ${connectionId} (code: ${code})`,
+      );
     });
 
     // Handle error
@@ -745,12 +820,18 @@ export const websocketGatewayPlugin: FastifyPluginAsync<WebSocketGatewayOptions>
   };
 
   // Register WebSocket route
-  fastify.get(gateway.config.path, { websocket: true }, async (connection, req) => {
-    // In @fastify/websocket, connection is { socket: WebSocket } in newer versions
-    // The socket is directly accessible as connection for the WebSocket handler
-    const socket = (connection as unknown as { socket: WebSocket }).socket || connection as WebSocket;
-    await handleConnection({ socket, req }, req);
-  });
+  fastify.get(
+    gateway.config.path,
+    { websocket: true },
+    async (connection, req) => {
+      // In @fastify/websocket, connection is { socket: WebSocket } in newer versions
+      // The socket is directly accessible as connection for the WebSocket handler
+      const socket =
+        (connection as unknown as { socket: WebSocket }).socket ||
+        (connection as WebSocket);
+      await handleConnection({ socket, req }, req);
+    },
+  );
 
   // Heartbeat check interval
   const heartbeatInterval = setInterval(() => {

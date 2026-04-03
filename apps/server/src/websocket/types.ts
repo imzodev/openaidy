@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import type { ClientType } from '@openaidy/shared-types';
 
 // ============================================================================
 // WebSocket Configuration Schema
@@ -165,7 +166,9 @@ export function parseWSEnv(source: NodeJS.ProcessEnv): WSEnv {
 /**
  * Create WebSocket configuration from environment variables
  */
-export function createWebSocketConfig(env: NodeJS.ProcessEnv = process.env): WebSocketConfig {
+export function createWebSocketConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): WebSocketConfig {
   const parsed = parseWSEnv(env);
 
   return {
@@ -189,7 +192,9 @@ export function createWebSocketConfig(env: NodeJS.ProcessEnv = process.env): Web
 /**
  * Create pairing configuration from environment variables
  */
-export function createPairingConfig(env: NodeJS.ProcessEnv = process.env): PairingConfig {
+export function createPairingConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): PairingConfig {
   const parsed = parseWSEnv(env);
 
   return {
@@ -230,7 +235,9 @@ export function validatePairingConfig(config: unknown): PairingConfig {
 /**
  * Check if WebSocket configuration is valid
  */
-export function isValidWebSocketConfig(config: unknown): config is WebSocketConfig {
+export function isValidWebSocketConfig(
+  config: unknown,
+): config is WebSocketConfig {
   const result = webSocketConfigSchema.safeParse(config);
   return result.success;
 }
@@ -289,7 +296,11 @@ export const defaultPairingConfig: PairingConfig = {
 /**
  * Connection status
  */
-export type ConnectionStatus = 'connecting' | 'connected' | 'disconnecting' | 'disconnected';
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'disconnected';
 
 /**
  * Connection context information
@@ -303,6 +314,10 @@ export type ConnectionContext = {
   authenticated: boolean;
   /** Client ID (set after authentication) */
   clientId?: string;
+  /** Client type (set after authentication) */
+  clientType?: ClientType;
+  /** Client version (set after authentication) */
+  clientVersion?: string;
   /** Granted capabilities */
   capabilities: string[];
   /** Active subscriptions */
