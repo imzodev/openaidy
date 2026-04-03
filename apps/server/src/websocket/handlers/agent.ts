@@ -54,7 +54,7 @@ export class AgentHandler {
           id: agent.id,
           name: agent.name,
           description: agent.description,
-          capabilities: agent.tags ?? [],
+          tools: agent.tools ?? [],
         })),
       }) as AgentListResponse;
     } catch (error) {
@@ -99,7 +99,7 @@ export class AgentHandler {
             name: agent.name,
             description: agent.description,
             systemPrompt: agent.systemPrompt,
-            capabilities: agent.tools ?? [],
+            tools: agent.tools ?? [],
             enabled: agent.enabled,
           },
         },

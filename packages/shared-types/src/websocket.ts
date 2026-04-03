@@ -469,7 +469,7 @@ export type AgentListResponse = WSMessage<
       id: string;
       name: string;
       description?: string;
-      capabilities: string[];
+      tools: string[];
     }>;
   }
 >;
@@ -482,7 +482,7 @@ export type AgentGetResponse = WSMessage<
       name: string;
       description?: string;
       systemPrompt?: string;
-      capabilities: string[];
+      tools: string[];
       enabled: boolean;
     };
   }
