@@ -110,7 +110,66 @@ export async function submitMessage(
   sessionId: string,
   input: SubmitMessageInput,
 ): Promise<SubmitMessageResult> {
-  return submitMessageRest(sessionId, input);
+  return withWebSocketFallback(
+    async (client) => {
+      const response = await client.sendMessage(sessionId, input.content, {
+        stream: false,
+        providerId: input.providerId,
+        modelId: input.modelId,
+      });
+
+      if (response.type !== 'session.message') {
+        throw new Error('Unexpected response type for session.message');
+      }
+
+      const timestamp = new Date().toISOString();
+      const providerId = input.providerId ?? 'unknown-provider';
+      const modelId = input.modelId ?? 'unknown-model';
+
+      return {
+        ok: true,
+        userMessage: {
+          id: `local-user-${Date.now()}`,
+          sessionId,
+          role: input.role,
+          content: input.content,
+          sequence: 0,
+          createdAt: timestamp,
+        },
+        assistantMessage: {
+          id: response.payload.messageId,
+          sessionId,
+          role: response.payload.role,
+          content: response.payload.content,
+          sequence: 1,
+          createdAt: timestamp,
+          ...(response.payload.usage
+            ? {
+                metadata: {
+                  usage: response.payload.usage,
+                  ...(response.payload.finishReason
+                    ? { finishReason: response.payload.finishReason }
+                    : {}),
+                },
+              }
+            : {}),
+        },
+        run: {
+          id: `ws-run-${Date.now()}`,
+          sessionId,
+          providerId,
+          modelId,
+          status: 'succeeded',
+          createdAt: timestamp,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+          ...(response.payload.finishReason
+            ? { finishReason: response.payload.finishReason }
+            : {}),
+        },
+      };
+    },
+    () => submitMessageRest(sessionId, input),
+  );
 }
 
 export async function listAgents(): Promise<{ items: Agent[] }> {
