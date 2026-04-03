@@ -117,7 +117,7 @@ export class SessionHandler {
         {
           sessionId: sessionRecord.id,
           agentId: request.payload.agentId ?? 'default',
-          createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
+          createdAt: new Date(sessionRecord.createdAt).toISOString(),
         },
         request.id,
       ) as SessionCreatedResponse;
@@ -161,8 +161,10 @@ export class SessionHandler {
             id: sessionRecord.id,
             title: sessionRecord.title,
             status: sessionRecord.status ?? 'active',
-            createdAt: sessionRecord.createdAt ?? new Date().toISOString(),
-            updatedAt: sessionRecord.updatedAt,
+            createdAt: new Date(sessionRecord.createdAt).toISOString(),
+            updatedAt: sessionRecord.updatedAt
+              ? new Date(sessionRecord.updatedAt).toISOString()
+              : undefined,
           },
         },
         request.id,
@@ -186,7 +188,7 @@ export class SessionHandler {
     _context: HandlerContext,
   ): Promise<SessionListResponse | ErrorResponse> {
     try {
-      const sessions = await this.sessionService.listSessions();
+      const sessions = (await this.sessionService.listSessions()) as Session[];
 
       // Apply filters
       let filtered = sessions;
@@ -198,7 +200,7 @@ export class SessionHandler {
       if (request.payload.agentId) {
         // Filter by agentId if stored in metadata
         filtered = filtered.filter((s) => {
-          const metadata = (s as Session).metadata as
+          const metadata = (s as Record<string, unknown>).metadata as
             | Record<string, unknown>
             | undefined;
           return metadata?.agentId === request.payload.agentId;
@@ -219,8 +221,10 @@ export class SessionHandler {
               id: session.id,
               title: session.title,
               status: session.status ?? 'active',
-              createdAt: session.createdAt ?? new Date().toISOString(),
-              updatedAt: session.updatedAt,
+              createdAt: new Date(session.createdAt).toISOString(),
+              updatedAt: session.updatedAt
+                ? new Date(session.updatedAt).toISOString()
+                : undefined,
             };
           }),
           total: filtered.length,
@@ -305,9 +309,15 @@ export class SessionHandler {
         sessionId: request.payload.sessionId,
         role: request.payload.role,
         content: request.payload.content,
-        agentId: request.payload.metadata?.agentId as string | undefined,
-        providerId: request.payload.metadata?.providerId as string | undefined,
-        modelId: request.payload.metadata?.modelId as string | undefined,
+        ...(request.payload.metadata?.agentId != null && {
+          agentId: request.payload.metadata.agentId as string,
+        }),
+        ...(request.payload.metadata?.providerId != null && {
+          providerId: request.payload.metadata.providerId as string,
+        }),
+        ...(request.payload.metadata?.modelId != null && {
+          modelId: request.payload.metadata.modelId as string,
+        }),
       });
 
       if (!result.ok) {
@@ -339,13 +349,14 @@ export class SessionHandler {
           messageId: assistantMessage.id,
           role: 'assistant',
           content: assistantMessage.content,
-          usage: run.usage
-            ? {
-                promptTokens: run.usage.promptTokens,
-                completionTokens: run.usage.completionTokens,
-                totalTokens: run.usage.totalTokens,
-              }
-            : undefined,
+          usage:
+            run.promptTokens != null
+              ? {
+                  promptTokens: run.promptTokens,
+                  completionTokens: run.completionTokens ?? 0,
+                  totalTokens: run.totalTokens ?? 0,
+                }
+              : undefined,
           finishReason: run.finishReason,
         },
         request.id,
@@ -490,8 +501,8 @@ export class SessionHandler {
         role: request.payload.role,
         content: request.payload.content,
         agentId,
-        providerId,
-        modelId,
+        ...(providerId != null && { providerId }),
+        ...(modelId != null && { modelId }),
       });
 
       if (result.ok) {
@@ -513,13 +524,13 @@ export class SessionHandler {
           sessionId,
           agentId,
           finishReason: run.finishReason ?? 'stop',
-          usage: run.usage
-            ? {
-                promptTokens: run.usage.promptTokens,
-                completionTokens: run.usage.completionTokens,
-                totalTokens: run.usage.totalTokens,
-              }
-            : undefined,
+          ...(run.promptTokens != null && {
+            usage: {
+              promptTokens: run.promptTokens,
+              completionTokens: run.completionTokens ?? 0,
+              totalTokens: run.totalTokens ?? 0,
+            },
+          }),
         });
 
         this.logger.info(
@@ -617,24 +628,54 @@ export function registerSessionHandlers(
   },
   handler: SessionHandler,
 ): void {
-  router.registerHandler('session.create', (connId, msg, ctx) =>
-    handler.handleCreate(connId, msg as SessionCreateRequest, ctx),
+  router.registerHandler(
+    'session.create',
+    (connId, msg, ctx) =>
+      handler.handleCreate(
+        connId,
+        msg as SessionCreateRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('session.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as SessionGetRequest, ctx),
+  router.registerHandler(
+    'session.get',
+    (connId, msg, ctx) =>
+      handler.handleGet(
+        connId,
+        msg as SessionGetRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('session.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as SessionListRequest, ctx),
+  router.registerHandler(
+    'session.list',
+    (connId, msg, ctx) =>
+      handler.handleList(
+        connId,
+        msg as SessionListRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('session.delete', (connId, msg, ctx) =>
-    handler.handleDelete(connId, msg as SessionDeleteRequest, ctx),
+  router.registerHandler(
+    'session.delete',
+    (connId, msg, ctx) =>
+      handler.handleDelete(
+        connId,
+        msg as SessionDeleteRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('session.message', (connId, msg, ctx) =>
-    handler.handleMessage(connId, msg as SessionMessageRequest, ctx),
+  router.registerHandler(
+    'session.message',
+    (connId, msg, ctx) =>
+      handler.handleMessage(
+        connId,
+        msg as SessionMessageRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 }
 

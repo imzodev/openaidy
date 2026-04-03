@@ -195,12 +195,24 @@ export function registerAgentHandlers(
   },
   handler: AgentHandler,
 ): void {
-  router.registerHandler('agent.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as AgentListRequest, ctx),
+  router.registerHandler(
+    'agent.list',
+    (connId, msg, ctx) =>
+      handler.handleList(
+        connId,
+        msg as AgentListRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('agent.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as AgentGetRequest, ctx),
+  router.registerHandler(
+    'agent.get',
+    (connId, msg, ctx) =>
+      handler.handleGet(
+        connId,
+        msg as AgentGetRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 }
 
