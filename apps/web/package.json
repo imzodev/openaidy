@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@openaidy/sdk": "workspace:*",
     "@solidjs/router": "^0.15.4",
     "@tanstack/solid-query": "^5.90.26",
     "lucide-solid": "^0.577.0",

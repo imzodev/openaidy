@@ -17,8 +17,9 @@ import {
   type SessionMessage,
   type Agent,
   type SessionRun,
-} from './lib/api';
+} from './lib/ws-api';
 import { ThemeProvider } from './lib/theme';
+import { WebSocketProvider } from './lib/ws-provider';
 import { Sidebar } from './components/Sidebar';
 import type { ViewType } from './components/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
@@ -390,9 +391,11 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <AppContent />
-      </QueryClientProvider>
+      <WebSocketProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppContent />
+        </QueryClientProvider>
+      </WebSocketProvider>
     </ThemeProvider>
   );
 }
