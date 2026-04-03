@@ -88,23 +88,37 @@ export class ProviderHandler {
         );
       }
 
-      const descriptor = provider.descriptor;
+      const modelsResult = await provider.listModels();
+
+      if (!modelsResult.ok) {
+        this.logger.error(
+          { error: modelsResult.error, connectionId, providerId },
+          'Failed to list models from provider',
+        );
+        return this.createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          `Failed to list models for provider ${providerId}`,
+        );
+      }
+
+      const models = modelsResult.value;
 
       this.logger.info(
         {
           providerId,
           connectionId,
-          modelCount: descriptor.models?.length ?? 0,
+          modelCount: models.length,
         },
         'Getting provider models via WebSocket',
       );
 
       return createWSMessage('provider.models', {
         providerId,
-        models: (descriptor.models ?? []).map((model) => ({
+        models: models.map((model) => ({
           id: model.id,
           name: model.name,
-          capabilities: model.capabilities,
+          capabilities: [...model.capabilities],
         })),
       }) as ProviderModelsResponse;
     } catch (error) {
