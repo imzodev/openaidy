@@ -26,6 +26,26 @@ export {
   noopLogger,
 } from './websocket-client.types.js';
 
+// Client adapters
+export {
+  WebUIAdapter,
+  createWebUIAdapter,
+  CLIAdapter,
+  createCLIAdapter,
+  MobileAdapter,
+  createMobileAdapter,
+  ChannelAdapter,
+  createChannelAdapter,
+} from './adapters/index.js';
+export type {
+  ClientAdapter,
+  AdapterBaseOptions,
+  WebUIAdapterOptions,
+  CLIAdapterOptions,
+  MobileAdapterOptions,
+  ChannelAdapterOptions,
+} from './adapters/index.js';
+
 // Legacy exports (for backward compatibility)
 export * from './sessions.js';
 export * from './stream.js';
