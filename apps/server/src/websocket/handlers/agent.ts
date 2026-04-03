@@ -15,30 +15,10 @@ import {
   type AgentListRequest,
   type AgentGetRequest,
   type AgentListResponse,
+  type AgentGetResponse,
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Agent get response type
- */
-export type AgentGetResponse = WSMessage<
-  'agent.get',
-  {
-    agent: {
-      id: string;
-      name: string;
-      description?: string;
-      systemPrompt?: string;
-      capabilities: string[];
-      enabled: boolean;
-    };
-  }
->;
 
 // ============================================================================
 // Agent Handler Class

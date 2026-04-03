@@ -13,13 +13,16 @@ import {
   type WSMessage,
   type WSResponse,
   type ErrorResponse,
+  type PairingApproveRequest,
+  type PairingDenyRequest,
   WS_ERROR_CODES,
   WS_CAPABILITIES,
   createWSMessage,
 } from '@openaidy/shared-types';
 
 // ============================================================================
-// Request/Response Types
+// Server-Internal Request/Response Types
+// (These have extended fields beyond shared-types or depend on server-internal types)
 // ============================================================================
 
 export type PairingRequestMessage = WSMessage<
@@ -37,21 +40,6 @@ export type PairingStatusRequest = WSMessage<
   {
     requestId?: string;
     pairingCode?: string;
-  }
->;
-
-export type PairingApproveRequest = WSMessage<
-  'pairing.approve',
-  {
-    requestId: string;
-    scopes?: string[];
-  }
->;
-
-export type PairingDenyRequest = WSMessage<
-  'pairing.deny',
-  {
-    requestId: string;
   }
 >;
 

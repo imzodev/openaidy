@@ -23,58 +23,13 @@ import {
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessageStreamAck,
+  type SessionGetResponse,
+  type SessionListResponse,
+  type SessionDeleteResponse,
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
 import type { Session, SessionMessage, SessionRun } from '@openaidy/db';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Session list response type
- */
-export type SessionListResponse = WSMessage<
-  'session.list',
-  {
-    sessions: Array<{
-      id: string;
-      title?: string;
-      status: string;
-      createdAt: string;
-      updatedAt?: string;
-    }>;
-    total: number;
-  }
->;
-
-/**
- * Session get response type
- */
-export type SessionGetResponse = WSMessage<
-  'session.get',
-  {
-    session: {
-      id: string;
-      title?: string;
-      status: string;
-      createdAt: string;
-      updatedAt?: string;
-    };
-  }
->;
-
-/**
- * Session delete response type
- */
-export type SessionDeleteResponse = WSMessage<
-  'session.delete',
-  {
-    sessionId: string;
-    deleted: boolean;
-  }
->;
 
 // ============================================================================
 // Session Handler Class

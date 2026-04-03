@@ -15,25 +15,11 @@ import { createGateway, type WebSocketGateway } from '../index';
 import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 import { MessageRouter, type HandlerContext } from '../message-router';
-import { WS_ERROR_CODES, createWSMessage } from '@openaidy/shared-types';
-
-// ============================================================================
-// Test Types
-// ============================================================================
-
-type ErrorResponse = {
-  id: string;
-  type: 'error';
-  timestamp: string;
-  payload: {
-    requestId: string;
-    error: {
-      code: string;
-      message: string;
-      details?: unknown;
-    };
-  };
-};
+import {
+  type ErrorResponse,
+  WS_ERROR_CODES,
+  createWSMessage,
+} from '@openaidy/shared-types';
 
 // ============================================================================
 // Mock Factories
@@ -115,16 +101,14 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
       status: 'active',
       createdAt: new Date().toISOString(),
     }),
-    listSessions: vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: 'session-1',
-          title: 'Session 1',
-          status: 'active',
-          createdAt: new Date().toISOString(),
-        },
-      ]),
+    listSessions: vi.fn().mockResolvedValue([
+      {
+        id: 'session-1',
+        title: 'Session 1',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      },
+    ]),
     deleteSession: vi.fn().mockResolvedValue(true),
     addMessage: vi.fn(),
     getMessages: vi.fn().mockResolvedValue([]),
@@ -148,28 +132,24 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
     }),
   } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   agents: {
-    listAgents: vi
-      .fn()
-      .mockReturnValue([
-        {
-          id: 'agent-1',
-          name: 'Agent 1',
-          description: 'Test agent',
-          tools: ['chat'],
-          enabled: true,
-        },
-      ]),
-    listAllAgents: vi
-      .fn()
-      .mockReturnValue([
-        {
-          id: 'agent-1',
-          name: 'Agent 1',
-          description: 'Test agent',
-          tools: ['chat'],
-          enabled: true,
-        },
-      ]),
+    listAgents: vi.fn().mockReturnValue([
+      {
+        id: 'agent-1',
+        name: 'Agent 1',
+        description: 'Test agent',
+        tools: ['chat'],
+        enabled: true,
+      },
+    ]),
+    listAllAgents: vi.fn().mockReturnValue([
+      {
+        id: 'agent-1',
+        name: 'Agent 1',
+        description: 'Test agent',
+        tools: ['chat'],
+        enabled: true,
+      },
+    ]),
     getAgent: vi.fn().mockImplementation((id: string) => {
       if (id === 'non-existent-agent') return undefined;
       return {
@@ -187,17 +167,15 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   providers: {
     registry: {
-      listDescriptors: vi
-        .fn()
-        .mockReturnValue([
-          {
-            id: 'openai',
-            name: 'OpenAI',
-            vendorFamily: 'openai',
-            capabilities: ['chat', 'streaming'],
-            models: [],
-          },
-        ]),
+      listDescriptors: vi.fn().mockReturnValue([
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai',
+          capabilities: ['chat', 'streaming'],
+          models: [],
+        },
+      ]),
       get: vi.fn().mockImplementation((id: string) => {
         if (id === 'non-existent-provider') return undefined;
         return {

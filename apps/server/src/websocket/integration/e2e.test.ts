@@ -20,80 +20,16 @@ import { createGateway, type WebSocketGateway } from '../index';
 import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 import { MessageRouter, type HandlerContext } from '../message-router';
-import { WS_ERROR_CODES, createWSMessage } from '@openaidy/shared-types';
+import {
+  type ErrorResponse,
+  type SessionCreatedResponse,
+  type SessionListResponse,
+  type AgentListResponse,
+  type ProviderListResponse,
+  WS_ERROR_CODES,
+  createWSMessage,
+} from '@openaidy/shared-types';
 import { defaultWebSocketConfig } from '../types';
-
-// ============================================================================
-// Test Types
-// ============================================================================
-
-type ErrorResponse = {
-  id: string;
-  type: 'error';
-  timestamp: string;
-  payload: {
-    requestId: string;
-    error: {
-      code: string;
-      message: string;
-      details?: unknown;
-    };
-  };
-};
-
-type SessionCreatedResponse = {
-  id: string;
-  type: 'session.created';
-  timestamp: string;
-  payload: {
-    sessionId: string;
-    agentId: string;
-    createdAt: string;
-  };
-};
-
-type SessionListResponse = {
-  id: string;
-  type: 'session.list';
-  timestamp: string;
-  payload: {
-    sessions: Array<{
-      id: string;
-      title?: string;
-      status: string;
-      createdAt: string;
-    }>;
-    total: number;
-  };
-};
-
-type AgentListResponse = {
-  id: string;
-  type: 'agent.list';
-  timestamp: string;
-  payload: {
-    agents: Array<{
-      id: string;
-      name: string;
-      description?: string;
-      capabilities: string[];
-    }>;
-  };
-};
-
-type ProviderListResponse = {
-  id: string;
-  type: 'provider.list';
-  timestamp: string;
-  payload: {
-    providers: Array<{
-      id: string;
-      name: string;
-      vendorFamily: string;
-      capabilities: string[];
-    }>;
-  };
-};
 
 // ============================================================================
 // Mock Factories
@@ -210,17 +146,15 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
         enabled: true,
       },
     ]),
-    listAllAgents: vi
-      .fn()
-      .mockReturnValue([
-        {
-          id: 'agent-1',
-          name: 'Agent 1',
-          description: 'Test agent',
-          tools: ['chat'],
-          enabled: true,
-        },
-      ]),
+    listAllAgents: vi.fn().mockReturnValue([
+      {
+        id: 'agent-1',
+        name: 'Agent 1',
+        description: 'Test agent',
+        tools: ['chat'],
+        enabled: true,
+      },
+    ]),
     getAgent: vi.fn().mockImplementation((id: string) => {
       if (id === 'non-existent-agent') return undefined;
       return {
