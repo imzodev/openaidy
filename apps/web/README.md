@@ -1,28 +1,85 @@
-## Usage
+# OpenAidy Web Client
+
+Real-time WebSocket-enabled web client for the OpenAidy platform.
+
+## Quick Start
 
 ```bash
-$ npm install # or pnpm install or yarn install
+# Install dependencies
+pnpm install
+
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+## WebSocket Architecture
 
-## Available Scripts
+The web client uses WebSocket for real-time communication with the server:
 
-In the project directory, you can run:
+```
+Web UI → WebSocketProvider → WebUIAdapter → WebSocketClient → ws://server/ws
+```
 
-### `npm run dev`
+### Connection States
 
-Runs the app in the development mode.<br>
-Open [http://localhost:5173](http://localhost:5173) to view it in the browser.
+The client tracks these connection states:
 
-### `npm run build`
+- `connecting` - Attempting to connect
+- `connected` - Successfully connected
+- `reconnecting` - Attempting to reconnect after disconnect
+- `disconnected` - Not connected
+- `error` - Connection error occurred
 
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
+Use the `ConnectionStatus` component to display connection state in your UI.
 
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+### Presence
 
-## Deployment
+The client subscribes to presence events (`presence.changed`) to track other connected clients. Use the `PresenceIndicator` component to display presence information.
 
-Learn more about deploying your application with the [documentations](https://vite.dev/guide/static-deploy.html)
+## Environment Variables
+
+| Variable           | Description     | Default                  |
+| ------------------ | --------------- | ------------------------ |
+| `VITE_API_URL`     | REST API URL    | `window.location.origin` |
+| `VITE_WS_TOKEN`    | WebSocket token | -                        |
+| `VITE_APP_VERSION` | App version     | `web-dev`                |
+
+## API Layers
+
+### WebSocket API (`lib/ws-api.ts`)
+
+Primary API using WebSocket for real-time communication:
+
+- `listSessions()`, `createSession()`, `getSession()`
+- `submitMessage()`, `submitMessageStreaming()`
+- `listAgents()`, `listRuns()`
+
+### REST API (`lib/api.ts`)
+
+Fallback API using REST when WebSocket is unavailable.
+
+## Components
+
+### ConnectionStatus
+
+Displays WebSocket connection state with visual indicator.
+
+### PresenceIndicator
+
+Displays presence information for connected clients.
+
+## Testing
+
+```bash
+# Run tests
+pnpm test
+
+# Run tests in watch mode
+pnpm test:watch
+
+# Build verification
+pnpm build
+```

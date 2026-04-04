@@ -9,14 +9,25 @@ Implement multi-client type support for the WebSocket control plane, focusing on
 3. Migrating the Web UI from REST polling to WebSocket real-time communication
 4. Providing reference implementations for each adapter
 
-## Current State
+## Current State (Updated: 2026-04-04)
 
-| Client Type        | Status         | Details                                              |
-| ------------------ | -------------- | ---------------------------------------------------- |
-| **CLI**            | ✅ Working     | Uses `WebSocketClient` via `connectToServer()`       |
-| **Web UI**         | ❌ REST-only   | `api.ts` uses `fetch()` — no WebSocket, no streaming |
-| **Mobile**         | ❌ Not started | No adapter exists                                    |
-| **Channel Bridge** | ❌ Stub only   | `example-channel` is just `{id, kind}`               |
+| Client Type        | Status      | Details                                             |
+| ------------------ | ----------- | --------------------------------------------------- |
+| **CLI**            | ✅ Working  | Uses `WebSocketClient` via `connectToServer()`      |
+| **Web UI**         | ✅ Complete | WebSocket streaming, real-time, presence indicators |
+| **Mobile**         | ✅ Complete | MobileAdapter implemented                           |
+| **Channel Bridge** | ✅ Complete | ChannelAdapter implemented                          |
+
+### Implementation Complete ✅
+
+All phases A-F have been implemented:
+
+1. **Phase A: ClientType awareness** - Complete
+2. **Phase B: Adapter interfaces** - Complete
+3. **Phase C: Web UI migration** - Complete
+4. **Phase D: Capability presets** - Complete
+5. **Phase E: Subscriptions** - Complete
+6. **Phase E: Presence UI** - Complete
 
 ### Key Gaps
 
@@ -573,3 +584,181 @@ flowchart LR
 - **Offline support**: Service worker caching for WebSocket messages
 - **Authentication UI**: Login/token management in Web UI (currently relies on server-side auth)
 - **Multi-tab sync**: Broadcasting WebSocket events across browser tabs
+
+---
+
+## Environment Configuration
+
+### Required Environment Variables
+
+#### Server (.env)
+
+| Variable       | Required | Description                    |
+| -------------- | -------- | ------------------------------ |
+| `PORT`         | Yes      | Server port (default: 3001)    |
+| `DATABASE_URL` | Yes      | SQLite database path           |
+| `JWT_SECRET`   | Yes      | JWT signing secret             |
+| `WS_TOKEN`     | No       | WebSocket authentication token |
+
+#### Web Client (.env)
+
+| Variable           | Required | Description        |
+| ------------------ | -------- | ------------------ |
+| `VITE_API_URL`     | No       | REST API base URL  |
+| `VITE_WS_TOKEN`    | No       | WebSocket token    |
+| `VITE_APP_VERSION` | No       | App version string |
+
+#### CLI
+
+| Variable              | Required | Description                                 |
+| --------------------- | -------- | ------------------------------------------- |
+| `OPENAI_API_KEY`      | Yes      | OpenAI API key                              |
+| `OPENAIDY_SERVER_URL` | No       | Server URL (default: http://localhost:3001) |
+
+### Local Development Setup
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start development server
+cd apps/server && pnpm dev
+
+# Start web client (separate terminal)
+cd apps/web && pnpm dev
+
+# Start CLI
+cd packages/cli && pnpm start
+```
+
+---
+
+## Troubleshooting Guide
+
+### Common Issues
+
+#### 1. WebSocket Connection Fails
+
+**Symptoms:** Connection status shows "error" or "disconnected"
+
+**Diagnosis:**
+
+```bash
+# Check server is running
+curl http://localhost:3001/health
+
+# Check WebSocket endpoint
+curl -i -N \
+  -H "Connection: Upgrade" \
+  -H "Upgrade: websocket" \
+  http://localhost:3001/ws
+```
+
+**Solutions:**
+
+- Verify server is running on correct port
+- Check `WS_TOKEN` is set if required
+- Check browser console for CORS errors
+
+#### 2. Capability Denied
+
+**Symptoms:** "Capability denied" error in server logs
+
+**Diagnosis:**
+
+```bash
+# Check capability presets
+grep -r "capability" apps/server/src/websocket/capability-presets.ts
+```
+
+**Solutions:**
+
+- Ensure client sends correct `clientType`
+- Verify capability preset exists for your client type
+
+#### 3. REST Fallback Issues
+
+**Symptoms:** Web client falls back to REST but doesn't work
+
+**Diagnosis:**
+
+- Check network tab for failed WebSocket upgrade
+- Check server REST endpoints respond
+
+**Solutions:**
+
+- Start server with `pnpm dev`
+- Verify `VITE_API_URL` points to correct server
+
+#### 4. Reconnection Issues
+
+**Symptoms:** Client reconnects repeatedly or fails to reconnect
+
+**Diagnosis:**
+
+- Check browser console for reconnection logs
+- Check server `checkStaleConnections` timeout
+
+**Solutions:**
+
+- Verify heartbeat is enabled
+- Check server logs for connection cleanup
+
+---
+
+## Verification Commands
+
+### Run All Tests
+
+```bash
+# Root level - all packages
+pnpm test
+
+# Individual packages
+cd apps/server && pnpm test
+cd apps/web && pnpm test
+cd packages/sdk && pnpm test
+```
+
+### Build Verification
+
+```bash
+# Build all packages
+pnpm build
+
+# Individual builds
+cd apps/server && pnpm build
+cd apps/web && pnpm build
+cd packages/sdk && pnpm build
+```
+
+### Integration Tests
+
+```bash
+# Server E2E tests
+cd apps/server && pnpm test:e2e
+
+# SDK adapter tests
+cd packages/sdk && pnpm test
+```
+
+---
+
+## Migration Status Table (REST vs WebSocket)
+
+| Endpoint/Feature     | REST | WebSocket | Status   |
+| -------------------- | ---- | --------- | -------- |
+| Sessions - list      | ✅   | ✅        | Migrated |
+| Sessions - create    | ✅   | ✅        | Migrated |
+| Sessions - get       | ✅   | ✅        | Migrated |
+| Messages - send      | ✅   | ✅        | Migrated |
+| Messages - list      | ✅   | ✅        | Migrated |
+| Messages - stream    | ❌   | ✅        | WS Only  |
+| Agents - list        | ✅   | ✅        | Migrated |
+| Runs - list          | ✅   | ✅        | Migrated |
+| Config - get         | ✅   | ✅        | Migrated |
+| Config - update      | ✅   | ✅        | Migrated |
+| Presence - subscribe | ❌   | ✅        | WS Only  |
+| Session - subscribe  | ❌   | ✅        | WS Only  |
+
+All major features are now on WebSocket with REST fallback available.
