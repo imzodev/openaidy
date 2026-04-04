@@ -317,11 +317,9 @@ describe('SessionHandler', () => {
         modelId: 'model-1',
         status: 'succeeded',
         finishReason: 'stop',
-        usage: {
-          promptTokens: 10,
-          completionTokens: 20,
-          totalTokens: 30,
-        },
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30,
         createdAt: '2024-01-01T00:00:00.000Z',
       };
 
