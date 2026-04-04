@@ -35,6 +35,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [{ path: '/project' }],
@@ -56,6 +57,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: false,
             workspaces: [],
@@ -85,6 +87,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project' }] },
         },
       ];
@@ -103,6 +106,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [{ path: 'agent-2', permissions: { read: true, write: false, delete: false, list: true } }],
@@ -114,6 +118,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: false, workspaces: [] },
         },
       ];
@@ -132,6 +137,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [
@@ -145,6 +151,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project2' }] },
         },
       ];
@@ -162,6 +169,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [
@@ -175,6 +183,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project2' }] },
         },
       ];
@@ -193,6 +202,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             defaultPermissions: { read: true, write: true, delete: false, list: true },
@@ -205,6 +215,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project2' }] },
         },
       ];
@@ -223,6 +234,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [{ path: 'agent-2' }],
@@ -234,6 +246,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project2' }] },
         },
       ];
@@ -253,6 +266,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             defaultPermissions: { read: true, write: true, delete: true, list: true },
@@ -279,6 +293,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
         },
       ];
       registry = createMockRegistry(agents);
@@ -295,6 +310,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [{ path: '/project' }],
@@ -322,6 +338,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
         },
       ];
       registry = createMockRegistry(agents);
@@ -337,6 +354,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             defaultPermissions: { read: true, write: true, delete: false, list: true },
@@ -349,6 +367,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [] },
         },
       ];
@@ -365,6 +384,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [{ path: 'agent-2' }],
@@ -376,6 +396,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [] },
         },
       ];
@@ -394,6 +415,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project' }] },
         },
       ];
@@ -411,6 +433,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [
@@ -424,6 +447,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [] },
         },
       ];
@@ -444,6 +468,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             defaultPermissions: { read: true, write: true, delete: false, list: true },
@@ -465,6 +490,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [{ path: '/project' }] },
         },
       ];
@@ -482,6 +508,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             workspaces: [
@@ -495,6 +522,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: { enabled: true, workspaces: [] },
         },
       ];
@@ -514,6 +542,7 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
+          version: 1,
           workspace: {
             enabled: true,
             defaultPermissions: { read: true, write: false, delete: false, list: true },

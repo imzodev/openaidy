@@ -1,0 +1,304 @@
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
+import {
+  WorkspaceService,
+  type FileInfo,
+} from '../workspace/service';
+import {
+  validateWorkspaceAccess,
+  type PermissionMode,
+} from '../workspace/permissions';
+import type { AgentRegistry } from '../agents/registry';
+
+/**
+ * Workspace routes options
+ */
+export type WorkspaceRoutesOptions = {
+  agentRegistry: AgentRegistry;
+  workspaceService: WorkspaceService;
+  /** Base directory for agent workspaces */
+  workspaceBaseDir: string;
+};
+
+/**
+ * Request body for file write operations
+ */
+export interface FileWriteBody {
+  content: string;
+}
+
+/**
+ * File metadata response
+ */
+export interface FileMetadataResponse {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: string;
+}
+
+/**
+ * Error response
+ */
+export interface WorkspaceErrorResponse {
+  error: string;
+  code: string;
+}
+
+/**
+ * Workspace routes plugin
+ */
+export const workspaceRoutes: FastifyPluginAsync<WorkspaceRoutesOptions> = async (app, options) => {
+  const { agentRegistry, workspaceService } = options;
+
+  /**
+   * Get requesting agent ID from header
+   */
+  const getRequestingAgent = (headers: Record<string, string | undefined>): string | null => {
+    const agentId = headers['x-agent-id'];
+    if (typeof agentId !== 'string' || !agentId) {
+      return null;
+    }
+    return agentId;
+  };
+
+  /**
+   * Validate access and return error response if denied
+   */
+  const validateAccess = (
+    requestingAgentId: string,
+    targetAgentId: string,
+    mode: PermissionMode,
+  ): { allowed: boolean; error?: WorkspaceErrorResponse } => {
+    const result = validateWorkspaceAccess(
+      requestingAgentId,
+      targetAgentId,
+      mode,
+      agentRegistry,
+    );
+    if (!result.allowed) {
+      return {
+        allowed: false,
+        error: { error: result.reason, code: 'ACCESS_DENIED' },
+      };
+    }
+    return { allowed: true };
+  };
+
+  /**
+   * GET /workspace/:agentId/files
+   * List files in workspace root
+   */
+  app.get('/workspace/:agentId/files', async (request: FastifyRequest<{ Params: { agentId: string } }>, reply) => {
+    const requestingAgentId = getRequestingAgent(request.headers as Record<string, string | undefined>);
+    if (!requestingAgentId) {
+      reply.code(401);
+      return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+    }
+
+    const { agentId: targetAgentId } = request.params;
+
+    // Validate list permission
+    const access = validateAccess(requestingAgentId, targetAgentId, 'list');
+    if (!access.allowed) {
+      reply.code(403);
+      return access.error;
+    }
+
+    try {
+      const files = await workspaceService.listFiles(targetAgentId);
+      const response: FileMetadataResponse[] = files.map((f: FileInfo) => ({
+        name: f.name,
+        path: f.path,
+        isDirectory: f.isDirectory,
+        size: f.size,
+        modifiedAt: f.modifiedAt.toISOString(),
+      }));
+      return { items: response };
+    } catch (error) {
+      app.log.error('Failed to list files: %s', error instanceof Error ? error.message : String(error));
+      reply.code(500);
+      return { error: 'Failed to list files', code: 'INTERNAL_ERROR' };
+    }
+  });
+
+  /**
+   * GET /workspace/:agentId/files/*
+   * List files in subdirectory or read file content
+   */
+  app.get('/workspace/:agentId/files/*', async (request: FastifyRequest<{ Params: { agentId: string; '*': string } }>, reply) => {
+    const requestingAgentId = getRequestingAgent(request.headers as Record<string, string | undefined>);
+    if (!requestingAgentId) {
+      reply.code(401);
+      return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+    }
+
+    const { agentId: targetAgentId, '*': filePath } = request.params;
+    const fullPath = filePath || '';
+
+    // Check if it's a file or directory by trying to read as file first
+    try {
+      // Try reading as file
+      const access = validateAccess(requestingAgentId, targetAgentId, 'read');
+      if (!access.allowed) {
+        reply.code(403);
+        return access.error;
+      }
+
+      const content = await workspaceService.readFile(targetAgentId, fullPath);
+      return { content, path: fullPath };
+    } catch {
+      // If read fails, try listing as directory
+      const access = validateAccess(requestingAgentId, targetAgentId, 'list');
+      if (!access.allowed) {
+        reply.code(403);
+        return access.error;
+      }
+
+      try {
+        const files = await workspaceService.listFiles(targetAgentId, fullPath);
+        const response: FileMetadataResponse[] = files.map((f: FileInfo) => ({
+          name: f.name,
+          path: f.path,
+          isDirectory: f.isDirectory,
+          size: f.size,
+          modifiedAt: f.modifiedAt.toISOString(),
+        }));
+        return { items: response, path: fullPath };
+      } catch {
+        // Not a file or directory
+        reply.code(404);
+        return { error: 'Path not found', code: 'NOT_FOUND' };
+      }
+    }
+  });
+
+  /**
+   * POST /workspace/:agentId/files/*
+   * Create a new file
+   */
+  app.post('/workspace/:agentId/files/*', async (request: FastifyRequest<{ Params: { agentId: string; '*': string }; Body: FileWriteBody }>, reply) => {
+    const requestingAgentId = getRequestingAgent(request.headers as Record<string, string | undefined>);
+    if (!requestingAgentId) {
+      reply.code(401);
+      return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+    }
+
+    const { agentId: targetAgentId, '*': filePath } = request.params;
+    const { content } = request.body as FileWriteBody;
+
+    if (!filePath) {
+      reply.code(400);
+      return { error: 'File path is required', code: 'BAD_REQUEST' };
+    }
+
+    if (typeof content !== 'string') {
+      reply.code(400);
+      return { error: 'Content must be a string', code: 'BAD_REQUEST' };
+    }
+
+    const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+    if (!access.allowed) {
+      reply.code(403);
+      return access.error;
+    }
+
+    try {
+      // Ensure workspace exists
+      await workspaceService.ensureWorkspace(targetAgentId);
+      await workspaceService.writeFile(targetAgentId, filePath, content);
+      reply.code(201);
+      return { success: true, path: filePath };
+    } catch (error) {
+      app.log.error('Failed to create file: %s', error instanceof Error ? error.message : String(error));
+      reply.code(500);
+      return { error: 'Failed to create file', code: 'INTERNAL_ERROR' };
+    }
+  });
+
+  /**
+   * PUT /workspace/:agentId/files/*
+   * Update an existing file
+   */
+  app.put('/workspace/:agentId/files/*', async (request: FastifyRequest<{ Params: { agentId: string; '*': string }; Body: FileWriteBody }>, reply) => {
+    const requestingAgentId = getRequestingAgent(request.headers as Record<string, string | undefined>);
+    if (!requestingAgentId) {
+      reply.code(401);
+      return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+    }
+
+    const { agentId: targetAgentId, '*': filePath } = request.params;
+    const { content } = request.body as FileWriteBody;
+
+    if (!filePath) {
+      reply.code(400);
+      return { error: 'File path is required', code: 'BAD_REQUEST' };
+    }
+
+    if (typeof content !== 'string') {
+      reply.code(400);
+      return { error: 'Content must be a string', code: 'BAD_REQUEST' };
+    }
+
+    const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+    if (!access.allowed) {
+      reply.code(403);
+      return access.error;
+    }
+
+    try {
+      // Check if file exists first
+      await workspaceService.readFile(targetAgentId, filePath);
+      await workspaceService.writeFile(targetAgentId, filePath, content);
+      return { success: true, path: filePath };
+    } catch (error) {
+      const workspaceError = error as { code?: string };
+      if (workspaceError.code === 'FILE_NOT_FOUND') {
+        reply.code(404);
+        return { error: 'File not found', code: 'NOT_FOUND' };
+      }
+      app.log.error('Failed to update file: %s', error instanceof Error ? error.message : String(error));
+      reply.code(500);
+      return { error: 'Failed to update file', code: 'INTERNAL_ERROR' };
+    }
+  });
+
+  /**
+   * DELETE /workspace/:agentId/files/*
+   * Delete a file
+   */
+  app.delete('/workspace/:agentId/files/*', async (request: FastifyRequest<{ Params: { agentId: string; '*': string } }>, reply) => {
+    const requestingAgentId = getRequestingAgent(request.headers as Record<string, string | undefined>);
+    if (!requestingAgentId) {
+      reply.code(401);
+      return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+    }
+
+    const { agentId: targetAgentId, '*': filePath } = request.params;
+
+    if (!filePath) {
+      reply.code(400);
+      return { error: 'File path is required', code: 'BAD_REQUEST' };
+    }
+
+    const access = validateAccess(requestingAgentId, targetAgentId, 'delete');
+    if (!access.allowed) {
+      reply.code(403);
+      return access.error;
+    }
+
+    try {
+      await workspaceService.deleteFile(targetAgentId, filePath);
+      return { success: true, path: filePath };
+    } catch (error) {
+      const workspaceError = error as { code?: string };
+      if (workspaceError.code === 'FILE_NOT_FOUND') {
+        reply.code(404);
+        return { error: 'File not found', code: 'NOT_FOUND' };
+      }
+      app.log.error('Failed to delete file: %s', error instanceof Error ? error.message : String(error));
+      reply.code(500);
+      return { error: 'Failed to delete file', code: 'INTERNAL_ERROR' };
+    }
+  });
+};

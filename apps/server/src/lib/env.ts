@@ -68,6 +68,8 @@ const envSchema = z
       .number()
       .positive()
       .default(31536000000),
+    // Workspace configuration
+    WORKSPACE_BASE_DIR: z.string().default('./data/workspaces'),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {
