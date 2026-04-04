@@ -6,10 +6,7 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { ConnectionManager } from './connection-manager';
-import {
-  type WSMessage,
-  createWSMessage,
-} from '@openaidy/shared-types';
+import type { WSMessage } from '@openaidy/shared-types';
 
 // ============================================================================
 // Types
@@ -168,7 +165,9 @@ export class SubscriptionManager {
     }
 
     // Remove from connection index
-    const connSubs = this.connectionSubscriptions.get(subscription.connectionId);
+    const connSubs = this.connectionSubscriptions.get(
+      subscription.connectionId,
+    );
     if (connSubs) {
       connSubs.delete(subscriptionId);
       if (connSubs.size === 0) {
@@ -177,7 +176,11 @@ export class SubscriptionManager {
     }
 
     this.logger.info(
-      { subscriptionId, connectionId: subscription.connectionId, sessionId: subscription.sessionId },
+      {
+        subscriptionId,
+        connectionId: subscription.connectionId,
+        sessionId: subscription.sessionId,
+      },
       'Subscription removed',
     );
 
@@ -244,10 +247,7 @@ export class SubscriptionManager {
 
     this.sessionSubscriptions.delete(sessionId);
 
-    this.logger.info(
-      { sessionId, count },
-      'Removed all session subscriptions',
-    );
+    this.logger.info({ sessionId, count }, 'Removed all session subscriptions');
 
     return count;
   }
@@ -290,7 +290,10 @@ export class SubscriptionManager {
   /**
    * Find an existing subscription by connection and session
    */
-  findSubscription(connectionId: string, sessionId: string): Subscription | undefined {
+  findSubscription(
+    connectionId: string,
+    sessionId: string,
+  ): Subscription | undefined {
     const connSubs = this.connectionSubscriptions.get(connectionId);
     if (!connSubs) return undefined;
 
@@ -328,6 +331,68 @@ export class SubscriptionManager {
   }
 
   // ============================================================================
+  // Reconnection Support
+  // ============================================================================
+
+  /**
+   * Get all session IDs a connection is subscribed to
+   * Used for reconnect-safe resubscription
+   */
+  getConnectionSessionIds(connectionId: string): string[] {
+    const subs = this.getConnectionSubscriptions(connectionId);
+    return [...new Set(subs.map((sub) => sub.sessionId))];
+  }
+
+  /**
+   * Export all subscriptions for a connection (for cache sync)
+   * Returns serialized subscription data that can be used to restore subscriptions
+   */
+  exportConnectionSubscriptions(connectionId: string): {
+    sessionId: string;
+    eventTypes: string[];
+  }[] {
+    const subs = this.getConnectionSubscriptions(connectionId);
+    return subs.map((sub) => ({
+      sessionId: sub.sessionId,
+      eventTypes: sub.eventTypes,
+    }));
+  }
+
+  /**
+   * Import subscriptions for a connection (for cache sync after reconnect)
+   * Restores subscriptions from exported data
+   */
+  importConnectionSubscriptions(
+    connectionId: string,
+    subscriptions: { sessionId: string; eventTypes: string[] }[],
+  ): number {
+    let imported = 0;
+    for (const sub of subscriptions) {
+      // Check if subscription already exists
+      const existing = this.findSubscription(connectionId, sub.sessionId);
+      if (!existing) {
+        this.createSubscription(connectionId, sub.sessionId, sub.eventTypes);
+        imported++;
+      }
+    }
+    return imported;
+  }
+
+  /**
+   * Get all subscription data for a session (for cache sync)
+   */
+  exportSessionSubscriptions(sessionId: string): {
+    connectionId: string;
+    eventTypes: string[];
+  }[] {
+    const subs = this.getSessionSubscriptions(sessionId);
+    return subs.map((sub) => ({
+      connectionId: sub.connectionId,
+      eventTypes: sub.eventTypes,
+    }));
+  }
+
+  // ============================================================================
   // Broadcasting
   // ============================================================================
 
@@ -344,7 +409,11 @@ export class SubscriptionManager {
 
     for (const sub of subs) {
       // Check event type filter
-      if (eventType && sub.eventTypes.length > 0 && !sub.eventTypes.includes(eventType)) {
+      if (
+        eventType &&
+        sub.eventTypes.length > 0 &&
+        !sub.eventTypes.includes(eventType)
+      ) {
         continue;
       }
 

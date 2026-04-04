@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   SubscriptionManager,
   createSubscriptionManager,
-  type Subscription,
 } from './subscriptions';
 import type { ConnectionManager } from './connection-manager';
 import { createWSMessage } from '@openaidy/shared-types';
+import type { FastifyBaseLogger } from 'fastify';
 
 // Mock logger
 const mockLogger = {
@@ -39,7 +39,12 @@ const createMockConnectionManager = () => ({
   updateHeartbeat: vi.fn(),
   checkStaleConnections: vi.fn().mockReturnValue([]),
   getLastHeartbeat: vi.fn(),
-  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, info: { remaining: 10, reset: Date.now(), limit: 100 } }),
+  checkRateLimit: vi
+    .fn()
+    .mockReturnValue({
+      allowed: true,
+      info: { remaining: 10, reset: Date.now(), limit: 100 },
+    }),
   recordRequest: vi.fn(),
   resetRateLimit: vi.fn(),
   broadcast: vi.fn().mockReturnValue(0),
@@ -55,7 +60,7 @@ describe('SubscriptionManager', () => {
     mockConnectionManager = createMockConnectionManager();
     manager = new SubscriptionManager(
       mockConnectionManager as unknown as ConnectionManager,
-      mockLogger as any,
+      mockLogger as unknown as FastifyBaseLogger,
     );
   });
 
@@ -73,7 +78,10 @@ describe('SubscriptionManager', () => {
     });
 
     it('should create subscription with event types', () => {
-      const subId = manager.createSubscription('conn-1', 'session-1', ['message', 'status']);
+      const subId = manager.createSubscription('conn-1', 'session-1', [
+        'message',
+        'status',
+      ]);
 
       const sub = manager.getSubscription(subId!);
       expect(sub?.eventTypes).toEqual(['message', 'status']);
@@ -108,7 +116,7 @@ describe('SubscriptionManager', () => {
     it('should enforce max subscriptions per connection', () => {
       const limitedManager = new SubscriptionManager(
         mockConnectionManager as unknown as ConnectionManager,
-        mockLogger as any,
+        mockLogger as unknown as FastifyBaseLogger,
         { maxSubscriptionsPerConnection: 2 },
       );
 
@@ -123,7 +131,7 @@ describe('SubscriptionManager', () => {
     it('should enforce max subscriptions per session', () => {
       const limitedManager = new SubscriptionManager(
         mockConnectionManager as unknown as ConnectionManager,
-        mockLogger as any,
+        mockLogger as unknown as FastifyBaseLogger,
         { maxSubscriptionsPerSession: 2 },
       );
 
@@ -286,11 +294,18 @@ describe('SubscriptionManager', () => {
       manager.createSubscription('conn-2', 'session-1', ['status']);
 
       const messageEvent = createWSMessage('message', { data: 'test' });
-      const sent = manager.broadcastToSession('session-1', messageEvent, 'message');
+      const sent = manager.broadcastToSession(
+        'session-1',
+        messageEvent,
+        'message',
+      );
 
       // Only conn-1 should receive it
       expect(sent).toBe(1);
-      expect(mockConnectionManager.send).toHaveBeenCalledWith('conn-1', messageEvent);
+      expect(mockConnectionManager.send).toHaveBeenCalledWith(
+        'conn-1',
+        messageEvent,
+      );
     });
 
     it('should send to all subscribers if no event type filter', () => {
@@ -305,7 +320,9 @@ describe('SubscriptionManager', () => {
     });
 
     it('should handle failed sends', () => {
-      mockConnectionManager.send.mockReturnValueOnce(false).mockReturnValue(true);
+      mockConnectionManager.send
+        .mockReturnValueOnce(false)
+        .mockReturnValue(true);
 
       manager.createSubscription('conn-1', 'session-1');
       manager.createSubscription('conn-2', 'session-1');
@@ -362,11 +379,23 @@ describe('SubscriptionManager', () => {
 });
 
 describe('createSubscriptionManager', () => {
+  let manager: SubscriptionManager;
+  let mockConnectionManager: ReturnType<typeof createMockConnectionManager>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockConnectionManager = createMockConnectionManager();
+    manager = createSubscriptionManager(
+      mockConnectionManager as unknown as ConnectionManager,
+      mockLogger as unknown as FastifyBaseLogger,
+    );
+  });
+
   it('should create a SubscriptionManager instance', () => {
     const mockConnectionManager = createMockConnectionManager();
     const manager = createSubscriptionManager(
       mockConnectionManager as unknown as ConnectionManager,
-      mockLogger as any,
+      mockLogger as unknown as FastifyBaseLogger,
     );
 
     expect(manager).toBeInstanceOf(SubscriptionManager);
@@ -376,7 +405,7 @@ describe('createSubscriptionManager', () => {
     const mockConnectionManager = createMockConnectionManager();
     const manager = createSubscriptionManager(
       mockConnectionManager as unknown as ConnectionManager,
-      mockLogger as any,
+      mockLogger as unknown as FastifyBaseLogger,
       { maxSubscriptionsPerConnection: 5 },
     );
 
@@ -386,5 +415,90 @@ describe('createSubscriptionManager', () => {
     }
 
     expect(manager.getSubscriptionCount()).toBe(5);
+  });
+
+  describe('Reconnection Support', () => {
+    it('should get all session IDs for a connection', () => {
+      manager.createSubscription('conn-1', 'session-1', ['message']);
+      manager.createSubscription('conn-1', 'session-2', ['status']);
+      manager.createSubscription('conn-1', 'session-3', ['message', 'status']);
+      manager.createSubscription('conn-2', 'session-1');
+
+      const sessionIds = manager.getConnectionSessionIds('conn-1');
+      expect(sessionIds).toHaveLength(3);
+      expect(sessionIds).toContain('session-1');
+      expect(sessionIds).toContain('session-2');
+      expect(sessionIds).toContain('session-3');
+    });
+
+    it('should export connection subscriptions', () => {
+      manager.createSubscription('conn-1', 'session-1', ['message']);
+      manager.createSubscription('conn-1', 'session-2', ['status', 'typing']);
+
+      const exported = manager.exportConnectionSubscriptions('conn-1');
+      expect(exported).toHaveLength(2);
+      expect(exported).toContainEqual({
+        sessionId: 'session-1',
+        eventTypes: ['message'],
+      });
+      expect(exported).toContainEqual({
+        sessionId: 'session-2',
+        eventTypes: ['status', 'typing'],
+      });
+    });
+
+    it('should import connection subscriptions', () => {
+      const imported = manager.importConnectionSubscriptions('conn-1', [
+        { sessionId: 'session-1', eventTypes: ['message'] },
+        { sessionId: 'session-2', eventTypes: ['status'] },
+      ]);
+
+      expect(imported).toBe(2);
+      expect(manager.getConnectionSubscriptionCount('conn-1')).toBe(2);
+    });
+
+    it('should not duplicate existing subscriptions on import', () => {
+      manager.createSubscription('conn-1', 'session-1', ['message']);
+
+      const imported = manager.importConnectionSubscriptions('conn-1', [
+        { sessionId: 'session-1', eventTypes: ['message'] },
+        { sessionId: 'session-2', eventTypes: ['status'] },
+      ]);
+
+      expect(imported).toBe(1); // Only session-2 is new
+      expect(manager.getConnectionSubscriptionCount('conn-1')).toBe(2);
+    });
+
+    it('should export session subscriptions', () => {
+      manager.createSubscription('conn-1', 'session-1', ['message']);
+      manager.createSubscription('conn-2', 'session-1', ['status']);
+      manager.createSubscription('conn-3', 'session-1', ['typing']);
+
+      const exported = manager.exportSessionSubscriptions('session-1');
+      expect(exported).toHaveLength(3);
+      expect(exported).toContainEqual({
+        connectionId: 'conn-1',
+        eventTypes: ['message'],
+      });
+      expect(exported).toContainEqual({
+        connectionId: 'conn-2',
+        eventTypes: ['status'],
+      });
+      expect(exported).toContainEqual({
+        connectionId: 'conn-3',
+        eventTypes: ['typing'],
+      });
+    });
+
+    it('should return empty array for connection with no subscriptions', () => {
+      const sessionIds = manager.getConnectionSessionIds('nonexistent');
+      expect(sessionIds).toEqual([]);
+    });
+
+    it('should handle empty import gracefully', () => {
+      const imported = manager.importConnectionSubscriptions('conn-1', []);
+      expect(imported).toBe(0);
+      expect(manager.getConnectionSubscriptionCount('conn-1')).toBe(0);
+    });
   });
 });
