@@ -10,39 +10,49 @@
       "id": "openai",
       "name": "OpenAI",
       "vendorFamily": "openai-compatible",
-      "enabled": true,
-      "baseUrl": "https://api.openai.com/v1",
-      "apiKeyEnv": "OPENAI_API_KEY",
-      "defaultModel": "gpt-4o-mini",
-      "chatModel": "gpt-4o-mini",
-      "enableTools": true,
-      "enableVision": true,
-      "enableStreaming": true,
-      "defaultTemperature": 0.7,
-      "defaultMaxTokens": 4096,
       "models": [
         {
           "id": "gpt-4o-mini",
           "name": "GPT-4o Mini",
-          "enabled": true,
-          "capabilities": [
-            "text_generation",
-            "streaming",
-            "tool_calls",
-            "vision"
-          ],
+          "contextWindow": 128000,
           "maxOutputTokens": 4096
         },
         {
           "id": "gpt-4o",
           "name": "GPT-4o",
-          "enabled": true,
-          "capabilities": [
-            "text_generation",
-            "streaming",
-            "tool_calls",
-            "vision"
-          ],
+          "contextWindow": 128000,
+          "maxOutputTokens": 4096
+        }
+      ]
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "vendorFamily": "anthropic",
+      "models": [
+        {
+          "id": "claude-3-5-sonnet",
+          "name": "Claude 3.5 Sonnet",
+          "contextWindow": 200000,
+          "maxOutputTokens": 8192
+        },
+        {
+          "id": "claude-3-5-haiku",
+          "name": "Claude 3.5 Haiku",
+          "contextWindow": 200000,
+          "maxOutputTokens": 8192
+        }
+      ]
+    },
+    {
+      "id": "google-genai",
+      "name": "Google Generative AI",
+      "vendorFamily": "gemini",
+      "models": [
+        {
+          "id": "gemini-2.0-flash",
+          "name": "Gemini 2.0 Flash",
+          "contextWindow": 1000000,
           "maxOutputTokens": 8192
         }
       ]
@@ -52,22 +62,71 @@
     {
       "id": "default",
       "name": "Default Assistant",
-      "description": "A general-purpose assistant for everyday tasks",
+      "description": "A general-purpose assistant that can read from the code assistant's workspace for context",
       "enabled": true,
-      "systemPrompt": "You are a helpful AI assistant. Be concise, accurate, and helpful. When unsure, say so.",
+      "systemPrompt": "You are an AI assistant. You are helpful, friendly, and knowledgeable. You can assist with a wide range of tasks including answering questions, providing explanations, and helping with various requests.",
       "model": "openai/gpt-4o-mini",
+      "tools": [],
       "tags": ["general", "default"],
-      "version": 1
+      "workspace": {
+        "enabled": true,
+        "defaultPermissions": {
+          "read": true,
+          "write": true,
+          "delete": false,
+          "list": true
+        },
+        "workspaces": [
+          {
+            "path": "default",
+            "permissions": {
+              "read": true,
+              "write": true,
+              "delete": false,
+              "list": true
+            }
+          },
+          {
+            "path": "code-assistant",
+            "permissions": {
+              "read": true,
+              "write": false,
+              "delete": false,
+              "list": true
+            }
+          }
+        ]
+      }
     },
     {
       "id": "code-assistant",
       "name": "Code Assistant",
-      "description": "An assistant specialized in programming and software development",
+      "description": "An assistant specialized in programming, software development, and code review. Has access to workspace files for reading and modifying code.",
       "enabled": true,
-      "systemPrompt": "You are an expert software developer. Provide clear, well-structured code examples. Explain your reasoning. Follow best practices and consider edge cases.",
+      "systemPrompt": "You are an expert code assistant with deep knowledge of software development, programming languages, and best practices. You help with:\n\n1. Writing and editing code\n2. Code review and debugging\n3. Explaining programming concepts\n4. Suggesting improvements and optimizations\n\nWhen working with code:\n- Follow established patterns in the codebase\n- Write clear, well-documented code\n- Consider performance implications\n- Handle edge cases appropriately",
       "model": "openai/gpt-4o",
+      "tools": [],
       "tags": ["coding", "development", "technical"],
-      "version": 1
+      "workspace": {
+        "enabled": true,
+        "defaultPermissions": {
+          "read": true,
+          "write": true,
+          "delete": true,
+          "list": true
+        },
+        "workspaces": [
+          {
+            "path": "code-assistant",
+            "permissions": {
+              "read": true,
+              "write": true,
+              "delete": true,
+              "list": true
+            }
+          }
+        ]
+      }
     }
   ]
 }
