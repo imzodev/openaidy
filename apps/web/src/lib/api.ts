@@ -517,6 +517,14 @@ export async function listWorkspaceFiles(
   });
   return response.json();
 }
+  const url = path
+    ? `${API_BASE}/workspace/${agentId}/files/${path}`
+    : `${API_BASE}/workspace/${agentId}/files`;
+  const response = await fetch(url, {
+    headers: { 'X-Agent-Id': requestingAgentId },
+  });
+  return response.json();
+}
 
 /**
  * Read a file from an agent's workspace
