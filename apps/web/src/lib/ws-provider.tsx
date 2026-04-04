@@ -49,6 +49,20 @@ function resolveBaseUrl(): string {
   return 'http://localhost:3001';
 }
 
+// Try to get bootstrap token from the default location
+async function loadBootstrapToken(): Promise<string | undefined> {
+  try {
+    const response = await fetch('/.openaidy/credentials/bootstrap-admin.json');
+    if (response.ok) {
+      const data = await response.json();
+      return data.token;
+    }
+  } catch {
+    // Token file not found or not accessible
+  }
+  return undefined;
+}
+
 export const WebSocketProvider: ParentComponent = (props) => {
   const [client, setClient] = createSignal<WebSocketClient | null>(null);
   const [state, setState] = createSignal<WebSocketClientState>('disconnected');
@@ -90,11 +104,16 @@ export const WebSocketProvider: ParentComponent = (props) => {
     }
   };
 
-  onMount(() => {
+  onMount(async () => {
+    // Try to get token from env, otherwise load bootstrap token
+    const envToken = import.meta.env.VITE_WS_TOKEN as string | undefined;
+    const bootstrapToken = await loadBootstrapToken();
+    const token = envToken || bootstrapToken;
+
     const adapter = createWebUIAdapter();
     const wsClient = adapter.createClient({
       baseUrl: resolveBaseUrl(),
-      token: import.meta.env.VITE_WS_TOKEN as string | undefined,
+      token: token,
       clientVersion:
         (import.meta.env.VITE_APP_VERSION as string | undefined) ?? 'web-dev',
       clientMeta: {
