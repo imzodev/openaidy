@@ -21,6 +21,8 @@ import {
 } from './lib/ws-api';
 import { ThemeProvider } from './lib/theme';
 import { WebSocketProvider } from './lib/ws-provider';
+import { ConnectionStatus } from './components/ConnectionStatus';
+import { PresenceIndicator } from './components/PresenceIndicator';
 import { Sidebar } from './components/Sidebar';
 import type { ViewType } from './components/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
@@ -296,6 +298,9 @@ function AppContent() {
                     : 'No session selected'}
               </span>
             </div>
+
+            <ConnectionStatus />
+            <PresenceIndicator class="hidden md:flex" />
           </div>
         </header>
 

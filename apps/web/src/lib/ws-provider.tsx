@@ -9,16 +9,29 @@ import {
 } from 'solid-js';
 import {
   createWebUIAdapter,
+  type PresenceChangedEvent,
+  type PresenceStatus,
   type WebSocketClient,
   type WebSocketClientState,
 } from '@openaidy/sdk';
 import { setWebSocketApiClient } from './ws-api';
+
+export type PresenceEntry = {
+  clientId: string;
+  status: PresenceStatus;
+  metadata?: Record<string, unknown>;
+};
 
 type WebSocketContextValue = {
   client: Accessor<WebSocketClient | null>;
   state: Accessor<WebSocketClientState>;
   isConnected: Accessor<boolean>;
   error: Accessor<string | undefined>;
+  presence: Accessor<PresenceEntry[]>;
+  updatePresence: (
+    status: PresenceStatus,
+    metadata?: Record<string, unknown>,
+  ) => Promise<void>;
 };
 
 const WebSocketContext = createContext<WebSocketContextValue>();
@@ -40,6 +53,42 @@ export const WebSocketProvider: ParentComponent = (props) => {
   const [client, setClient] = createSignal<WebSocketClient | null>(null);
   const [state, setState] = createSignal<WebSocketClientState>('disconnected');
   const [error, setError] = createSignal<string | undefined>(undefined);
+  const [presence, setPresence] = createSignal<PresenceEntry[]>([]);
+
+  // Handler for presence changes from other clients
+  const handlePresenceChange = (event: PresenceChangedEvent) => {
+    setPresence((prev) => {
+      const filtered = prev.filter((p) => p.clientId !== event.clientId);
+      if (event.status !== 'offline') {
+        return [
+          ...filtered,
+          {
+            clientId: event.clientId,
+            status: event.status,
+            metadata: event.metadata,
+          },
+        ];
+      }
+      return filtered;
+    });
+  };
+
+  // Update local presence status
+  const updatePresenceStatus = async (
+    newStatus: 'online' | 'away' | 'busy' | 'offline',
+    metadata?: Record<string, unknown>,
+  ) => {
+    const wsClient = client();
+    if (!wsClient) return;
+
+    try {
+      await wsClient.updatePresence(newStatus, metadata);
+      // Optimistically update local presence - use connectionId from client
+      // The connectionId is set after authentication
+    } catch (err) {
+      console.error('Failed to update presence:', err);
+    }
+  };
 
   onMount(() => {
     const adapter = createWebUIAdapter();
@@ -66,6 +115,12 @@ export const WebSocketProvider: ParentComponent = (props) => {
       setError(wsError.message);
     });
 
+    // Subscribe to presence changes
+    const unsubscribePresence = wsClient.on<PresenceChangedEvent>(
+      'presence.changed',
+      handlePresenceChange,
+    );
+
     void wsClient.connect().catch((connectError: Error) => {
       setError(connectError.message);
     });
@@ -73,6 +128,7 @@ export const WebSocketProvider: ParentComponent = (props) => {
     onCleanup(() => {
       unsubscribeState();
       unsubscribeError();
+      unsubscribePresence();
       wsClient.destroy();
       setWebSocketApiClient(null);
       setClient(null);
@@ -86,6 +142,8 @@ export const WebSocketProvider: ParentComponent = (props) => {
         state,
         isConnected: () => state() === 'connected',
         error,
+        presence,
+        updatePresence: updatePresenceStatus,
       }}
     >
       {props.children}

@@ -18,6 +18,14 @@ vi.mock('./lib/ws-api', () => ({
 
 vi.mock('./lib/ws-provider', () => ({
   WebSocketProvider: (props: { children: unknown }) => props.children,
+  useWebSocketContext: () => ({
+    client: () => null,
+    state: () => 'disconnected',
+    isConnected: () => false,
+    error: () => undefined,
+    presence: () => [],
+    updatePresence: async () => {},
+  }),
 }));
 
 // Mock lucide-solid

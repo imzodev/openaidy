@@ -20,6 +20,7 @@ export {
   type ConnectionEstablishedEvent,
   type SessionEvent,
   type PresenceChangedEvent,
+  type PresenceStatus,
   type ConfigUpdatedEvent,
   type ClientEvent,
   defaultWebSocketClientOptions,
