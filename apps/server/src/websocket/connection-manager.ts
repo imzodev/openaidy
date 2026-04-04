@@ -6,6 +6,7 @@
  */
 
 import type { WebSocket } from '@fastify/websocket';
+import type { ClientType } from '@openaidy/shared-types';
 import {
   type WebSocketConfig,
   type RateLimitInfo,
@@ -20,7 +21,11 @@ import {
 /**
  * Connection status
  */
-export type ConnectionStatus = 'connecting' | 'connected' | 'disconnecting' | 'disconnected';
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'disconnected';
 
 /**
  * Connection context - metadata for each active connection
@@ -34,6 +39,10 @@ export type ConnectionContext = {
   authenticated: boolean;
   /** Client ID (set after authentication) */
   clientId?: string;
+  /** Client type (set after authentication) */
+  clientType?: ClientType;
+  /** Client version (set after authentication) */
+  clientVersion?: string;
   /** Granted capabilities */
   capabilities: string[];
   /** Active subscriptions */
@@ -213,13 +222,25 @@ export class ConnectionManager {
   /**
    * Mark a connection as authenticated
    */
-  authenticate(id: string, clientId: string, capabilities: string[] = []): boolean {
+  authenticate(
+    id: string,
+    clientId: string,
+    capabilities: string[] = [],
+    clientType?: ClientType,
+    clientVersion?: string,
+  ): boolean {
     const ctx = this.connections.get(id);
     if (!ctx) return false;
 
     ctx.authenticated = true;
     ctx.clientId = clientId;
     ctx.capabilities = capabilities;
+    if (clientType) {
+      ctx.clientType = clientType;
+    }
+    if (clientVersion) {
+      ctx.clientVersion = clientVersion;
+    }
 
     return true;
   }
@@ -354,7 +375,8 @@ export class ConnectionManager {
     }
 
     try {
-      const data = typeof message === 'string' ? message : JSON.stringify(message);
+      const data =
+        typeof message === 'string' ? message : JSON.stringify(message);
       ctx.socket.send(data);
       return true;
     } catch {
@@ -367,7 +389,8 @@ export class ConnectionManager {
    */
   broadcast(message: unknown, exclude: string[] = []): number {
     const excludeSet = new Set(exclude);
-    const data = typeof message === 'string' ? message : JSON.stringify(message);
+    const data =
+      typeof message === 'string' ? message : JSON.stringify(message);
     let sent = 0;
 
     for (const [id, ctx] of this.connections) {
@@ -389,7 +412,8 @@ export class ConnectionManager {
    */
   sendToTopic(topic: string, message: unknown): number {
     const subscribers = this.getSubscribers(topic);
-    const data = typeof message === 'string' ? message : JSON.stringify(message);
+    const data =
+      typeof message === 'string' ? message : JSON.stringify(message);
     let sent = 0;
 
     for (const ctx of subscribers) {

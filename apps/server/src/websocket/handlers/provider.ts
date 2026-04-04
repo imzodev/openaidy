@@ -6,7 +6,6 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../../providers';
-import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
@@ -16,28 +15,10 @@ import {
   type ProviderListRequest,
   type ProviderModelsRequest,
   type ProviderListResponse,
+  type ProviderModelsResponse,
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Provider models response type
- */
-export type ProviderModelsResponse = WSMessage<
-  'provider.models',
-  {
-    providerId: string;
-    models: Array<{
-      id: string;
-      name: string;
-      capabilities?: string[];
-    }>;
-  }
->;
 
 // ============================================================================
 // Provider Handler Class
@@ -58,7 +39,7 @@ export class ProviderHandler {
   async handleList(
     connectionId: string,
     request: ProviderListRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ProviderListResponse | ErrorResponse> {
     try {
       const descriptors = this.providerServices.registry.listDescriptors();
@@ -92,7 +73,7 @@ export class ProviderHandler {
   async handleModels(
     connectionId: string,
     request: ProviderModelsRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ProviderModelsResponse | ErrorResponse> {
     try {
       const { providerId } = request.payload;
@@ -107,23 +88,44 @@ export class ProviderHandler {
         );
       }
 
-      const descriptor = provider.descriptor;
+      const modelsResult = await provider.listModels();
+
+      if (!modelsResult.ok) {
+        this.logger.error(
+          { error: modelsResult.error, connectionId, providerId },
+          'Failed to list models from provider',
+        );
+        return this.createErrorResponse(
+          request.id,
+          WS_ERROR_CODES.INTERNAL_ERROR,
+          `Failed to list models for provider ${providerId}`,
+        );
+      }
+
+      const models = modelsResult.value;
 
       this.logger.info(
-        { providerId, connectionId, modelCount: descriptor.models?.length ?? 0 },
+        {
+          providerId,
+          connectionId,
+          modelCount: models.length,
+        },
         'Getting provider models via WebSocket',
       );
 
       return createWSMessage('provider.models', {
         providerId,
-        models: (descriptor.models ?? []).map((model) => ({
+        models: models.map((model) => ({
           id: model.id,
           name: model.name,
-          capabilities: model.capabilities,
+          capabilities: [...model.capabilities],
         })),
       }) as ProviderModelsResponse;
     } catch (error) {
-      this.logger.error({ error, connectionId }, 'Failed to get provider models');
+      this.logger.error(
+        { error, connectionId },
+        'Failed to get provider models',
+      );
       return this.createErrorResponse(
         request.id,
         WS_ERROR_CODES.INTERNAL_ERROR,
@@ -181,7 +183,14 @@ export function createProviderHandler(
  */
 export function registerProviderHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
   },
   handler: ProviderHandler,
 ): void {

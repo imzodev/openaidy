@@ -11,81 +11,17 @@ import { MessageRouter, type HandlerContext } from '../message-router';
 import { SessionHandler, registerSessionHandlers } from '../handlers/session';
 import { StreamManager } from '../streaming';
 import { SubscriptionManager } from '../subscriptions';
-import { RunEventEmitter, type RunEvent } from '../../dispatch/events';
+import { RunEventEmitter } from '../../dispatch/events';
 import {
-  type WSMessage,
-  type WSResponse,
-  type SessionStreamEvent,
+  type SessionCreatedResponse,
+  type SessionGetResponse,
+  type SessionListResponse,
+  type SessionDeleteResponse,
+  type SessionMessageResponse,
+  type ErrorResponse,
   createWSMessage,
-  isSessionStreamEvent,
-  isErrorResponse,
   WS_ERROR_CODES,
 } from '@openaidy/shared-types';
-
-// ============================================================================
-// Test Types
-// ============================================================================
-
-type SessionCreatedResponse = WSMessage<'session.created', {
-  sessionId: string;
-  agentId: string;
-  createdAt: string;
-}>;
-
-type SessionGetResponse = WSMessage<'session.get', {
-  session: {
-    id: string;
-    title?: string;
-    status: string;
-    createdAt: string;
-    updatedAt?: string;
-  };
-}>;
-
-type SessionListResponse = WSMessage<'session.list', {
-  sessions: Array<{
-    id: string;
-    title?: string;
-    status: string;
-    createdAt: string;
-  }>;
-  total: number;
-}>;
-
-type SessionDeleteResponse = WSMessage<'session.delete', {
-  sessionId: string;
-  deleted: boolean;
-}>;
-
-type SessionMessageResponse = WSMessage<'session.message', {
-  sessionId: string;
-  messageId: string;
-  role: 'assistant';
-  content: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  finishReason?: string;
-}>;
-
-type SessionSubscribedResponse = WSMessage<'session.subscribed', {
-  sessionId: string;
-  subscriptionId: string;
-}>;
-
-type SessionUnsubscribedResponse = WSMessage<'session.unsubscribed', {
-  sessionId: string;
-}>;
-
-type ErrorResponse = WSMessage<'error', {
-  requestId: string;
-  error: {
-    code: string;
-    message: string;
-  };
-}>;
 
 // ============================================================================
 // Mock Factories
@@ -151,9 +87,13 @@ const createMockSessionService = () => ({
   submitMessage: vi.fn().mockResolvedValue({
     ok: true,
     userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },
-    assistantMessage: { id: 'msg-assistant', content: 'Hi there! How can I help you?', role: 'assistant' },
-    run: { 
-      id: 'run-test-id', 
+    assistantMessage: {
+      id: 'msg-assistant',
+      content: 'Hi there! How can I help you?',
+      role: 'assistant',
+    },
+    run: {
+      id: 'run-test-id',
       finishReason: 'stop',
       promptTokens: 10,
       completionTokens: 20,
@@ -217,7 +157,9 @@ describe('Session Integration Tests', () => {
     // Create managers
     connectionManager = new ConnectionManager();
     runEvents = new RunEventEmitter();
-    messageRouter = new MessageRouter(mockLogger as unknown as HandlerContext['logger']);
+    messageRouter = new MessageRouter(
+      mockLogger as unknown as HandlerContext['logger'],
+    );
     sessionHandler = new SessionHandler(
       mockSessionService as unknown as Parameters<typeof SessionHandler>[0],
       mockLogger as unknown as HandlerContext['logger'],
@@ -236,7 +178,10 @@ describe('Session Integration Tests', () => {
     registerSessionHandlers(messageRouter, sessionHandler);
 
     // Create handler context
-    handlerContext = createMockHandlerContext(connectionManager, mockLogger as unknown as HandlerContext['logger']);
+    handlerContext = createMockHandlerContext(
+      connectionManager,
+      mockLogger as unknown as HandlerContext['logger'],
+    );
 
     // Start stream manager
     streamManager.start();
@@ -332,7 +277,9 @@ describe('Session Integration Tests', () => {
     });
 
     it('should handle session creation error', async () => {
-      mockSessionService.createSession.mockRejectedValueOnce(new Error('Database error'));
+      mockSessionService.createSession.mockRejectedValueOnce(
+        new Error('Database error'),
+      );
 
       const response = await sendAndReceive<ErrorResponse>(
         messageRouter,
@@ -403,7 +350,9 @@ describe('Session Integration Tests', () => {
       );
 
       expect(response.type).toBe('session.list');
-      expect(response.payload.sessions.every(s => s.status === 'active')).toBe(true);
+      expect(
+        response.payload.sessions.every((s) => s.status === 'active'),
+      ).toBe(true);
     });
 
     it('should list sessions with pagination', async () => {
@@ -581,7 +530,10 @@ describe('Session Integration Tests', () => {
     it('should create subscription', () => {
       connectionManager.registerConnection('conn-1');
 
-      const subId = subscriptionManager.createSubscription('conn-1', 'session-123');
+      const subId = subscriptionManager.createSubscription(
+        'conn-1',
+        'session-123',
+      );
       expect(subId).toBeDefined();
       expect(subId?.startsWith('sub_')).toBe(true);
     });
@@ -609,7 +561,10 @@ describe('Session Integration Tests', () => {
     it('should remove subscription', () => {
       connectionManager.registerConnection('conn-1');
 
-      const subId = subscriptionManager.createSubscription('conn-1', 'session-123');
+      const subId = subscriptionManager.createSubscription(
+        'conn-1',
+        'session-123',
+      );
       subscriptionManager.removeSubscription(subId!);
 
       expect(subscriptionManager.getSubscriptionCount()).toBe(0);
@@ -621,7 +576,8 @@ describe('Session Integration Tests', () => {
       subscriptionManager.createSubscription('conn-1', 'session-123');
       subscriptionManager.createSubscription('conn-1', 'session-456');
 
-      const removed = subscriptionManager.removeConnectionSubscriptions('conn-1');
+      const removed =
+        subscriptionManager.removeConnectionSubscriptions('conn-1');
       expect(removed).toBe(2);
       expect(subscriptionManager.getSubscriptionCount()).toBe(0);
     });
@@ -653,7 +609,9 @@ describe('Session Integration Tests', () => {
       );
 
       expect(response.type).toBe('error');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE);
+      expect(response.payload.error.code).toBe(
+        WS_ERROR_CODES.UNKNOWN_MESSAGE_TYPE,
+      );
     });
 
     it('should handle invalid session ID format', async () => {
@@ -670,7 +628,9 @@ describe('Session Integration Tests', () => {
     });
 
     it('should handle service errors gracefully', async () => {
-      mockSessionService.listSessions.mockRejectedValueOnce(new Error('Service unavailable'));
+      mockSessionService.listSessions.mockRejectedValueOnce(
+        new Error('Service unavailable'),
+      );
 
       const response = await sendAndReceive<ErrorResponse>(
         messageRouter,
@@ -700,7 +660,7 @@ describe('Session Integration Tests', () => {
 
     it('should have exactly 5 session handlers', () => {
       const types = messageRouter.getHandlerTypes();
-      const sessionHandlers = types.filter(t => t.startsWith('session.'));
+      const sessionHandlers = types.filter((t) => t.startsWith('session.'));
       expect(sessionHandlers).toHaveLength(5);
     });
   });
@@ -774,8 +734,22 @@ describe('Session Integration Tests', () => {
     });
 
     it('should check if message can be routed', () => {
-      expect(messageRouter.canRoute({ id: '1', type: 'session.create', timestamp: '', payload: {} })).toBe(true);
-      expect(messageRouter.canRoute({ id: '1', type: 'unknown.type', timestamp: '', payload: {} })).toBe(false);
+      expect(
+        messageRouter.canRoute({
+          id: '1',
+          type: 'session.create',
+          timestamp: '',
+          payload: {},
+        }),
+      ).toBe(true);
+      expect(
+        messageRouter.canRoute({
+          id: '1',
+          type: 'unknown.type',
+          timestamp: '',
+          payload: {},
+        }),
+      ).toBe(false);
     });
   });
 });

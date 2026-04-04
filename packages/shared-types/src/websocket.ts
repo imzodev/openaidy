@@ -116,7 +116,10 @@ export const WS_CAPABILITIES = {
   ADMIN: '*',
 } as const;
 
-export type WSCapability = (typeof WS_CAPABILITIES)[keyof typeof WS_CAPABILITIES];
+export type WSCapability =
+  (typeof WS_CAPABILITIES)[keyof typeof WS_CAPABILITIES];
+
+export type ClientType = 'web' | 'cli' | 'mobile' | 'channel';
 
 // ============================================================================
 // Authentication Types
@@ -127,6 +130,9 @@ export type AuthAuthenticateRequest = WSMessage<
   {
     token?: string;
     apiKey?: string;
+    clientType?: ClientType;
+    clientVersion?: string;
+    clientMeta?: Record<string, unknown>;
     credentials?: {
       type: 'pairing' | 'token' | 'api_key';
       data: Record<string, unknown>;
@@ -145,6 +151,7 @@ export type AuthAuthenticatedResponse = WSMessage<
   'auth.authenticated',
   {
     clientId: string;
+    clientType: ClientType;
     token: string;
     expiresAt: string;
     capabilities: string[];
@@ -237,6 +244,56 @@ export type SessionMessageResponse = WSMessage<
       totalTokens: number;
     };
     finishReason?: string;
+  }
+>;
+
+export type SessionGetResponse = WSMessage<
+  'session.get',
+  {
+    session: {
+      id: string;
+      title?: string;
+      status: string;
+      createdAt: string;
+      updatedAt?: string;
+    };
+  }
+>;
+
+export type SessionListResponse = WSMessage<
+  'session.list',
+  {
+    sessions: Array<{
+      id: string;
+      title?: string;
+      status: string;
+      createdAt: string;
+      updatedAt?: string;
+    }>;
+    total: number;
+  }
+>;
+
+export type SessionDeleteResponse = WSMessage<
+  'session.delete',
+  {
+    sessionId: string;
+    deleted: boolean;
+  }
+>;
+
+export type SessionSubscribedResponse = WSMessage<
+  'session.subscribed',
+  {
+    sessionId: string;
+    subscriptionId: string;
+  }
+>;
+
+export type SessionUnsubscribedResponse = WSMessage<
+  'session.unsubscribed',
+  {
+    sessionId: string;
   }
 >;
 
@@ -384,7 +441,7 @@ export type SessionStreamEvent =
 
 /**
  * Acknowledgment response for streaming session.message request
- * 
+ *
  * When a client sends session.message with stream: true, this response
  * is returned immediately to acknowledge the request and provide the runId.
  * The actual response content will be delivered via session.stream.* events.
@@ -402,10 +459,7 @@ export type SessionMessageStreamAck = WSMessage<
 // Agent Types
 // ============================================================================
 
-export type AgentListRequest = WSMessage<
-  'agent.list',
-  Record<string, never>
->;
+export type AgentListRequest = WSMessage<'agent.list', Record<string, never>>;
 
 export type AgentGetRequest = WSMessage<
   'agent.get',
@@ -421,8 +475,22 @@ export type AgentListResponse = WSMessage<
       id: string;
       name: string;
       description?: string;
-      capabilities: string[];
+      tools: string[];
     }>;
+  }
+>;
+
+export type AgentGetResponse = WSMessage<
+  'agent.get',
+  {
+    agent: {
+      id: string;
+      name: string;
+      description?: string;
+      systemPrompt?: string;
+      tools: string[];
+      enabled: boolean;
+    };
   }
 >;
 
@@ -472,10 +540,7 @@ export type ProviderModelsResponse = WSMessage<
 
 export type NodeType = 'mobile' | 'desktop' | 'browser' | 'channel' | 'service';
 
-export type NodeListRequest = WSMessage<
-  'node.list',
-  Record<string, never>
->;
+export type NodeListRequest = WSMessage<'node.list', Record<string, never>>;
 
 export type NodeDescribeRequest = WSMessage<
   'node.describe',
@@ -524,7 +589,7 @@ export type NodeInvokedResponse = WSMessage<
 
 /**
  * Node RPC request - sent from server to node for invocation
- * 
+ *
  * This is the envelope sent to the target node when a client calls node.invoke.
  * The node should respond with node.rpc.response or node.rpc.error.
  */
@@ -794,9 +859,16 @@ export type WSResponse =
   | AuthAuthenticatedResponse
   | SessionCreatedResponse
   | SessionMessageResponse
+  | SessionGetResponse
+  | SessionListResponse
+  | SessionDeleteResponse
+  | SessionSubscribedResponse
+  | SessionUnsubscribedResponse
   | SessionStreamEvent
   | AgentListResponse
+  | AgentGetResponse
   | ProviderListResponse
+  | ProviderModelsResponse
   | NodeRegisteredResponse
   | NodeInvokedResponse
   | NodeOnlineEvent
@@ -849,6 +921,11 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'auth.authenticated',
   'session.created',
   'session.message',
+  'session.get',
+  'session.list',
+  'session.delete',
+  'session.subscribed',
+  'session.unsubscribed',
   'session.stream.start',
   'session.stream.delta',
   'session.stream.tool_call',
@@ -856,7 +933,9 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.end',
   'session.stream.error',
   'agent.list',
+  'agent.get',
   'provider.list',
+  'provider.models',
   'node.registered',
   'node.invoked',
   'node.online',
@@ -923,7 +1002,9 @@ export function isResponseType(type: string): type is WSResponseType {
 /**
  * Check if a message type is a stream event type
  */
-export function isStreamEventType(type: string): type is SessionStreamEvent['type'] {
+export function isStreamEventType(
+  type: string,
+): type is SessionStreamEvent['type'] {
   return STREAM_EVENT_TYPES.has(type);
 }
 
@@ -983,28 +1064,36 @@ export function isSessionEvent(msg: unknown): msg is SessionEvent {
 /**
  * Check if a message is a SessionCreatedEvent
  */
-export function isSessionCreatedEvent(msg: unknown): msg is SessionCreatedEvent {
+export function isSessionCreatedEvent(
+  msg: unknown,
+): msg is SessionCreatedEvent {
   return isWSMessage(msg) && msg.type === 'session.created';
 }
 
 /**
  * Check if a message is a SessionMessageEvent
  */
-export function isSessionMessageEvent(msg: unknown): msg is SessionMessageEvent {
+export function isSessionMessageEvent(
+  msg: unknown,
+): msg is SessionMessageEvent {
   return isWSMessage(msg) && msg.type === 'session.message';
 }
 
 /**
  * Check if a message is a SessionDeletedEvent
  */
-export function isSessionDeletedEvent(msg: unknown): msg is SessionDeletedEvent {
+export function isSessionDeletedEvent(
+  msg: unknown,
+): msg is SessionDeletedEvent {
   return isWSMessage(msg) && msg.type === 'session.deleted';
 }
 
 /**
  * Check if a message is a SessionUpdatedEvent
  */
-export function isSessionUpdatedEvent(msg: unknown): msg is SessionUpdatedEvent {
+export function isSessionUpdatedEvent(
+  msg: unknown,
+): msg is SessionUpdatedEvent {
   return isWSMessage(msg) && msg.type === 'session.updated';
 }
 
@@ -1029,7 +1118,9 @@ export function isSessionStreamDelta(msg: unknown): msg is SessionStreamDelta {
 /**
  * Check if a message is a SessionStreamToolCall
  */
-export function isSessionStreamToolCall(msg: unknown): msg is SessionStreamToolCall {
+export function isSessionStreamToolCall(
+  msg: unknown,
+): msg is SessionStreamToolCall {
   return isWSMessage(msg) && msg.type === 'session.stream.tool_call';
 }
 
@@ -1265,7 +1356,9 @@ const PROVIDER_EVENT_TYPES: Set<string> = new Set([
 /**
  * Check if a message type is a provider event type
  */
-export function isProviderEventType(type: string): type is ProviderEvent['type'] {
+export function isProviderEventType(
+  type: string,
+): type is ProviderEvent['type'] {
   return PROVIDER_EVENT_TYPES.has(type);
 }
 
@@ -1279,21 +1372,27 @@ export function isProviderEvent(msg: unknown): msg is ProviderEvent {
 /**
  * Check if a message is a ProviderRegisteredEvent
  */
-export function isProviderRegisteredEvent(msg: unknown): msg is ProviderRegisteredEvent {
+export function isProviderRegisteredEvent(
+  msg: unknown,
+): msg is ProviderRegisteredEvent {
   return isWSMessage(msg) && msg.type === 'provider.registered';
 }
 
 /**
  * Check if a message is a ProviderUpdatedEvent
  */
-export function isProviderUpdatedEvent(msg: unknown): msg is ProviderUpdatedEvent {
+export function isProviderUpdatedEvent(
+  msg: unknown,
+): msg is ProviderUpdatedEvent {
   return isWSMessage(msg) && msg.type === 'provider.updated';
 }
 
 /**
  * Check if a message is a ProviderUnregisteredEvent
  */
-export function isProviderUnregisteredEvent(msg: unknown): msg is ProviderUnregisteredEvent {
+export function isProviderUnregisteredEvent(
+  msg: unknown,
+): msg is ProviderUnregisteredEvent {
   return isWSMessage(msg) && msg.type === 'provider.unregistered';
 }
 
@@ -1425,7 +1524,9 @@ export function isNodeEvent(msg: unknown): msg is NodeEvent {
 /**
  * Check if a message is a NodeRegisteredEvent
  */
-export function isNodeRegisteredEvent(msg: unknown): msg is NodeRegisteredEvent {
+export function isNodeRegisteredEvent(
+  msg: unknown,
+): msg is NodeRegisteredEvent {
   return isWSMessage(msg) && msg.type === 'node.registered';
 }
 
@@ -1460,7 +1561,9 @@ export function isNodeUpdatedEvent(msg: unknown): msg is NodeUpdatedEvent {
 /**
  * Check if a message is a NodeUnregisteredEvent
  */
-export function isNodeUnregisteredEvent(msg: unknown): msg is NodeUnregisteredEvent {
+export function isNodeUnregisteredEvent(
+  msg: unknown,
+): msg is NodeUnregisteredEvent {
   return isWSMessage(msg) && msg.type === 'node.unregistered';
 }
 
@@ -1543,14 +1646,18 @@ export function isPairingEvent(msg: unknown): msg is PairingEvent {
 /**
  * Check if a message is a PairingRequestedEvent
  */
-export function isPairingRequestedEvent(msg: unknown): msg is PairingRequestedEvent {
+export function isPairingRequestedEvent(
+  msg: unknown,
+): msg is PairingRequestedEvent {
   return isWSMessage(msg) && msg.type === 'pairing.requested';
 }
 
 /**
  * Check if a message is a PairingApprovedEvent
  */
-export function isPairingApprovedEvent(msg: unknown): msg is PairingApprovedEvent {
+export function isPairingApprovedEvent(
+  msg: unknown,
+): msg is PairingApprovedEvent {
   return isWSMessage(msg) && msg.type === 'pairing.approved';
 }
 
@@ -1595,14 +1702,18 @@ export function isConfigUpdatedEvent(msg: unknown): msg is ConfigUpdatedEvent {
 /**
  * Check if a message is a ConfigReloadedEvent
  */
-export function isConfigReloadedEvent(msg: unknown): msg is ConfigReloadedEvent {
+export function isConfigReloadedEvent(
+  msg: unknown,
+): msg is ConfigReloadedEvent {
   return isWSMessage(msg) && msg.type === 'config.reloaded';
 }
 
 /**
  * Check if a message is a ConfigValidationErrorEvent
  */
-export function isConfigValidationErrorEvent(msg: unknown): msg is ConfigValidationErrorEvent {
+export function isConfigValidationErrorEvent(
+  msg: unknown,
+): msg is ConfigValidationErrorEvent {
   return isWSMessage(msg) && msg.type === 'config.validation_error';
 }
 
@@ -1621,7 +1732,9 @@ const PRESENCE_EVENT_TYPES: Set<string> = new Set([
 /**
  * Check if a message type is a presence event type
  */
-export function isPresenceEventType(type: string): type is PresenceEvent['type'] {
+export function isPresenceEventType(
+  type: string,
+): type is PresenceEvent['type'] {
   return PRESENCE_EVENT_TYPES.has(type);
 }
 
@@ -1635,35 +1748,45 @@ export function isPresenceEvent(msg: unknown): msg is PresenceEvent {
 /**
  * Check if a message is a PresenceChangedEvent
  */
-export function isPresenceChangedEvent(msg: unknown): msg is PresenceChangedEvent {
+export function isPresenceChangedEvent(
+  msg: unknown,
+): msg is PresenceChangedEvent {
   return isWSMessage(msg) && msg.type === 'presence.changed';
 }
 
 /**
  * Check if a message is a PresenceOnlineEvent
  */
-export function isPresenceOnlineEvent(msg: unknown): msg is PresenceOnlineEvent {
+export function isPresenceOnlineEvent(
+  msg: unknown,
+): msg is PresenceOnlineEvent {
   return isWSMessage(msg) && msg.type === 'presence.online';
 }
 
 /**
  * Check if a message is a PresenceOfflineEvent
  */
-export function isPresenceOfflineEvent(msg: unknown): msg is PresenceOfflineEvent {
+export function isPresenceOfflineEvent(
+  msg: unknown,
+): msg is PresenceOfflineEvent {
   return isWSMessage(msg) && msg.type === 'presence.offline';
 }
 
 /**
  * Check if a message is a PresenceSubscribedEvent
  */
-export function isPresenceSubscribedEvent(msg: unknown): msg is PresenceSubscribedEvent {
+export function isPresenceSubscribedEvent(
+  msg: unknown,
+): msg is PresenceSubscribedEvent {
   return isWSMessage(msg) && msg.type === 'presence.subscribed';
 }
 
 /**
  * Check if a message is a PresenceUnsubscribedEvent
  */
-export function isPresenceUnsubscribedEvent(msg: unknown): msg is PresenceUnsubscribedEvent {
+export function isPresenceUnsubscribedEvent(
+  msg: unknown,
+): msg is PresenceUnsubscribedEvent {
   return isWSMessage(msg) && msg.type === 'presence.unsubscribed';
 }
 

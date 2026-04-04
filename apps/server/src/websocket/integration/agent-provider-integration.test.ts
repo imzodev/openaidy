@@ -8,89 +8,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConnectionManager } from '../connection-manager';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { AgentHandler, registerAgentHandlers } from '../handlers/agent';
-import { ProviderHandler, registerProviderHandlers } from '../handlers/provider';
 import {
+  ProviderHandler,
+  registerProviderHandlers,
+} from '../handlers/provider';
+import {
+  type AgentListResponse,
+  type AgentGetResponse,
+  type ProviderListResponse,
+  type ProviderModelsResponse,
+  type ErrorResponse,
   createWSMessage,
   WS_ERROR_CODES,
 } from '@openaidy/shared-types';
 import type { AgentRegistry } from '../../agents/registry';
 import type { ProviderServices } from '../../providers';
-
-// ============================================================================
-// Test Types
-// ============================================================================
-
-type AgentListResponse = {
-  id: string;
-  type: 'agent.list';
-  timestamp: string;
-  payload: {
-    agents: Array<{
-      id: string;
-      name: string;
-      description?: string;
-      capabilities: string[];
-    }>;
-  };
-};
-
-type AgentGetResponse = {
-  id: string;
-  type: 'agent.get';
-  timestamp: string;
-  payload: {
-    agent: {
-      id: string;
-      name: string;
-      description?: string;
-      systemPrompt?: string;
-      enabled: boolean;
-      model?: string;
-      capabilities: string[];
-    };
-  };
-};
-
-type ProviderListResponse = {
-  id: string;
-  type: 'provider.list';
-  timestamp: string;
-  payload: {
-    providers: Array<{
-      id: string;
-      name: string;
-      vendorFamily: string;
-      capabilities: string[];
-    }>;
-  };
-};
-
-type ProviderModelsResponse = {
-  id: string;
-  type: 'provider.models';
-  timestamp: string;
-  payload: {
-    providerId: string;
-    models: Array<{
-      id: string;
-      name: string;
-      capabilities?: string[];
-    }>;
-  };
-};
-
-type ErrorResponse = {
-  id: string;
-  type: 'error';
-  timestamp: string;
-  payload: {
-    requestId: string;
-    error: {
-      code: string;
-      message: string;
-    };
-  };
-};
 
 // ============================================================================
 // Mock Factories
@@ -194,8 +126,16 @@ const createMockProviderServices = (): ProviderServices => {
             vendorFamily: 'openai',
             capabilities: ['chat', 'streaming'],
             models: [
-              { id: 'gpt-4', name: 'GPT-4', capabilities: ['chat', 'streaming'] },
-              { id: 'gpt-4o-mini', name: 'GPT-4o Mini', capabilities: ['chat', 'streaming'] },
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                capabilities: ['chat', 'streaming'],
+              },
+              {
+                id: 'gpt-4o-mini',
+                name: 'GPT-4o Mini',
+                capabilities: ['chat', 'streaming'],
+              },
             ],
           },
         },
@@ -212,7 +152,11 @@ const createMockProviderServices = (): ProviderServices => {
             vendorFamily: 'anthropic',
             capabilities: ['chat', 'streaming'],
             models: [
-              { id: 'claude-3-opus', name: 'Claude 3 Opus', capabilities: ['chat', 'streaming'] },
+              {
+                id: 'claude-3-opus',
+                name: 'Claude 3 Opus',
+                capabilities: ['chat', 'streaming'],
+              },
             ],
           },
         },
@@ -257,7 +201,8 @@ const createMockProviderServices = (): ProviderServices => {
     disable: vi.fn(),
     isEnabled: vi.fn(),
     size: providers.size,
-    enabledCount: Array.from(providers.values()).filter((p) => p.enabled).length,
+    enabledCount: Array.from(providers.values()).filter((p) => p.enabled)
+      .length,
   };
 
   return {
@@ -322,13 +267,22 @@ describe('Agent & Provider Integration Tests', () => {
     connectionManager = new ConnectionManager();
     messageRouter = new MessageRouter(mockLogger as HandlerContext['logger']);
 
-    agentHandler = new AgentHandler(mockAgentRegistry, mockLogger as HandlerContext['logger']);
-    providerHandler = new ProviderHandler(mockProviderServices, mockLogger as HandlerContext['logger']);
+    agentHandler = new AgentHandler(
+      mockAgentRegistry,
+      mockLogger as HandlerContext['logger'],
+    );
+    providerHandler = new ProviderHandler(
+      mockProviderServices,
+      mockLogger as HandlerContext['logger'],
+    );
 
     registerAgentHandlers(messageRouter, agentHandler);
     registerProviderHandlers(messageRouter, providerHandler);
 
-    handlerContext = createMockHandlerContext(connectionManager, mockLogger as HandlerContext['logger']);
+    handlerContext = createMockHandlerContext(
+      connectionManager,
+      mockLogger as HandlerContext['logger'],
+    );
   });
 
   // ============================================================================
@@ -361,7 +315,9 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        const disabledAgent = response.payload.agents.find((a) => a.id === 'agent-disabled');
+        const disabledAgent = response.payload.agents.find(
+          (a) => a.id === 'agent-disabled',
+        );
         expect(disabledAgent).toBeUndefined();
       });
 
@@ -375,7 +331,9 @@ describe('Agent & Provider Integration Tests', () => {
         );
 
         expect(response.payload.agents[0].capabilities).toBeDefined();
-        expect(Array.isArray(response.payload.agents[0].capabilities)).toBe(true);
+        expect(Array.isArray(response.payload.agents[0].capabilities)).toBe(
+          true,
+        );
       });
     });
 
@@ -432,7 +390,9 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        expect(response.payload.agent.systemPrompt).toBe('You are a helpful assistant.');
+        expect(response.payload.agent.systemPrompt).toBe(
+          'You are a helpful assistant.',
+        );
       });
 
       it('should include enabled status in get response', async () => {
@@ -479,7 +439,9 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        const disabledProvider = response.payload.providers.find((p) => p.id === 'disabled-provider');
+        const disabledProvider = response.payload.providers.find(
+          (p) => p.id === 'disabled-provider',
+        );
         expect(disabledProvider).toBeUndefined();
       });
 
@@ -493,7 +455,9 @@ describe('Agent & Provider Integration Tests', () => {
         );
 
         expect(response.payload.providers[0].capabilities).toBeDefined();
-        expect(Array.isArray(response.payload.providers[0].capabilities)).toBe(true);
+        expect(Array.isArray(response.payload.providers[0].capabilities)).toBe(
+          true,
+        );
       });
     });
 

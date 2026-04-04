@@ -1,6 +1,6 @@
 /**
  * OpenAidy CLI
- * 
+ *
  * Local administration tool for OpenAidy.
  */
 
@@ -8,13 +8,12 @@ import {
   commands,
   commandMeta,
   commandGroups,
-  listCommands,
   listGroups,
   getGroup,
   getGroupCommands,
-} from './commands/index';
-import type { CommandResult } from './types';
-import { defaultCLIConfig, ExitCodes } from './types';
+} from './commands/index.js';
+import type { CommandResult, CommandMeta } from './types.js';
+import { defaultCLIConfig, ExitCodes } from './types.js';
 
 // ============================================================================
 // Help Output Functions
@@ -64,7 +63,7 @@ function printGroupHelp(groupName: string): boolean {
   }
 
   const groupCommands = getGroupCommands(groupName);
-  
+
   console.log(`
 ${group.name} - ${group.description}
 
@@ -86,9 +85,9 @@ ${formatGroupExamples(groupName, groupCommands)}
 /**
  * Format commands within a group for help output
  */
-function formatGroupCommands(group: typeof commandGroups[0]): string {
+function formatGroupCommands(group: (typeof commandGroups)[0]): string {
   return Object.entries(group.commands)
-    .map(([name, meta]) => {
+    .map(([name, meta]: [string, CommandMeta]) => {
       const shortName = name.replace(`${group.name} `, '');
       return `  ${shortName.padEnd(16)} ${meta.description}`;
     })
@@ -98,11 +97,11 @@ function formatGroupCommands(group: typeof commandGroups[0]): string {
 /**
  * Format examples for a command group
  */
-function formatGroupExamples(groupName: string, commands: string[]): string {
+function formatGroupExamples(groupName: string, cmds: string[]): string {
   const examples: string[] = [];
-  
+
   // Show examples from command metadata
-  for (const cmd of commands.slice(0, 2)) {
+  for (const cmd of cmds.slice(0, 2)) {
     const meta = commandMeta[cmd];
     if (meta?.examples) {
       examples.push(...meta.examples);
@@ -110,9 +109,11 @@ function formatGroupExamples(groupName: string, commands: string[]): string {
       examples.push(`  pnpm ${defaultCLIConfig.name} ${cmd}`);
     }
   }
-  
-  examples.push(`  pnpm ${defaultCLIConfig.name} ${groupName} <command> --help`);
-  
+
+  examples.push(
+    `  pnpm ${defaultCLIConfig.name} ${groupName} <command> --help`,
+  );
+
   return examples.join('\n');
 }
 
@@ -125,14 +126,13 @@ function printCommandHelp(command: string): boolean {
     return false;
   }
 
-  const parts = command.split(' ');
   const usage = meta.usage || `${defaultCLIConfig.name} ${command}`;
 
   console.log(`
 Usage: ${usage}
 
 ${meta.description}
-${meta.examples ? `\nExamples:\n${meta.examples.map((e) => `  ${e}`).join('\n')}` : ''}
+${meta.examples ? `\nExamples:\n${meta.examples.map((e: string) => `  ${e}`).join('\n')}` : ''}
 `);
   return true;
 }
@@ -151,7 +151,10 @@ function printVersion(): void {
 /**
  * Create a standardized error result
  */
-function createError(message: string, exitCode: number = ExitCodes.ERROR): CommandResult {
+function createError(
+  message: string,
+  exitCode: number = ExitCodes.ERROR,
+): CommandResult {
   return {
     exitCode,
     error: message,
@@ -163,7 +166,7 @@ function createError(message: string, exitCode: number = ExitCodes.ERROR): Comma
  */
 function handleUnknownCommand(argv: string[]): CommandResult {
   const command = argv[0];
-  
+
   // Check if it's a valid group name
   const group = getGroup(command);
   if (group) {
@@ -173,23 +176,10 @@ function handleUnknownCommand(argv: string[]): CommandResult {
       output: '', // Will be handled by printGroupHelp
     };
   }
-  
+
   return createError(
     `Unknown command: ${argv.join(' ')}\n\nRun "${defaultCLIConfig.name} --help" for usage information.`,
     ExitCodes.NOT_FOUND,
-  );
-}
-
-/**
- * Handle missing argument error
- */
-function handleMissingArgument(command: string, argName: string): CommandResult {
-  const meta = commandMeta[command];
-  const usage = meta?.usage || `${defaultCLIConfig.name} ${command}`;
-  
-  return createError(
-    `Error: Missing required argument <${argName}>\n\nUsage: ${usage}`,
-    ExitCodes.INVALID_ARGS,
   );
 }
 
@@ -199,7 +189,7 @@ function handleMissingArgument(command: string, argName: string): CommandResult 
 
 /**
  * Run the CLI with given arguments
- * 
+ *
  * @param argv - Command line arguments (without node and script name)
  * @returns Exit code
  */
@@ -237,14 +227,14 @@ export async function runCli(argv: string[]): Promise<number> {
     if (matches) {
       const args = argv.slice(parts.length);
       const handler = commands[key];
-      
+
       // Check for command-level help
       if (args.includes('-h') || args.includes('--help')) {
         if (printCommandHelp(key)) {
           return ExitCodes.SUCCESS;
         }
       }
-      
+
       try {
         const result: CommandResult = await handler(args);
 
@@ -272,14 +262,14 @@ export async function runCli(argv: string[]): Promise<number> {
     printGroupHelp(firstArg);
     return ExitCodes.SUCCESS;
   }
-  
+
   // Handle partial matches for groups
   if (group) {
     const subCommand = argv.slice(1).join(' ');
     return createError(
       `Unknown ${firstArg} command: ${subCommand}\n\nRun "${defaultCLIConfig.name} ${firstArg} --help" for available commands.`,
       ExitCodes.NOT_FOUND,
-    );
+    ).exitCode;
   }
 
   // Unknown command
@@ -289,5 +279,12 @@ export async function runCli(argv: string[]): Promise<number> {
 }
 
 // Re-export for external use
-export { type CommandResult, type CommandHandler, ExitCodes } from './types';
-export { commands, commandMeta, commandGroups, listCommands, listGroups, registerCommand, getGroup } from './commands/index';
+export { type CommandResult, type CommandHandler, ExitCodes } from './types.js';
+export {
+  commands,
+  commandMeta,
+  commandGroups,
+  listGroups,
+  registerCommand,
+  getGroup,
+} from './commands/index.js';

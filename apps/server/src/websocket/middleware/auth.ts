@@ -7,6 +7,8 @@
 
 import type { WebSocketConfig } from '../types';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { ClientType } from '@openaidy/shared-types';
+import { getCapabilityPreset } from '../capability-presets';
 
 // ============================================================================
 // Types
@@ -18,6 +20,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export type JWTPayload = {
   /** Subject - client ID */
   sub: string;
+  /** Client type */
+  clientType?: ClientType;
+  /** Client version */
+  clientVersion?: string;
   /** Token type */
   type: 'access' | 'refresh' | 'pairing';
   /** Granted scopes/capabilities */
@@ -38,6 +44,10 @@ export type JWTPayload = {
 export type TokenOptions = {
   /** Client ID */
   clientId: string;
+  /** Client type */
+  clientType?: ClientType;
+  /** Client version */
+  clientVersion?: string;
   /** Token type */
   type: JWTPayload['type'];
   /** Granted capabilities */
@@ -54,6 +64,8 @@ export type TokenOptions = {
 export type AuthResult = {
   success: boolean;
   clientId?: string;
+  clientType?: ClientType;
+  clientVersion?: string;
   capabilities?: string[];
   error?: {
     code: string;
@@ -100,6 +112,11 @@ export const CAPABILITIES = {
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
+
+export type AuthenticateOptions = {
+  clientType?: ClientType;
+  clientVersion?: string;
+};
 
 // ============================================================================
 // Auth Middleware Class
@@ -166,9 +183,14 @@ export class AuthMiddleware {
         return null;
       }
 
+      const payloadPart = parts[1];
+      if (!payloadPart) {
+        return null;
+      }
+
       // Decode payload (middle part)
       const payload = JSON.parse(
-        this.base64UrlDecode(parts[1]),
+        this.base64UrlDecode(payloadPart),
       ) as JWTPayload;
 
       return payload;
@@ -203,6 +225,10 @@ export class AuthMiddleware {
       iat: now,
       exp,
       jti: options.jti ?? crypto.randomUUID(),
+      ...(options.clientType ? { clientType: options.clientType } : {}),
+      ...(options.clientVersion
+        ? { clientVersion: options.clientVersion }
+        : {}),
     };
 
     return this.encodeToken(payload);
@@ -231,9 +257,7 @@ export class AuthMiddleware {
    * Sign data with secret (simple HMAC simulation)
    */
   private sign(data: string): string {
-    return createHmac('sha256', this.secret)
-      .update(data)
-      .digest('base64url');
+    return createHmac('sha256', this.secret).update(data).digest('base64url');
   }
 
   /**
@@ -247,6 +271,9 @@ export class AuthMiddleware {
       }
 
       const [header, payload, signature] = parts;
+      if (!header || !payload || !signature) {
+        return false;
+      }
       const expectedSignature = this.sign(`${header}.${payload}`);
       const provided = Buffer.from(signature, 'utf-8');
       const expected = Buffer.from(expectedSignature, 'utf-8');
@@ -276,6 +303,10 @@ export class AuthMiddleware {
       clientId: payload.sub,
       type: 'access',
       scopes: payload.scopes,
+      ...(payload.clientType ? { clientType: payload.clientType } : {}),
+      ...(payload.clientVersion
+        ? { clientVersion: payload.clientVersion }
+        : {}),
     });
   }
 
@@ -309,6 +340,13 @@ export class AuthMiddleware {
     return capabilities.every((cap) => this.hasCapability(scopes, cap));
   }
 
+  /**
+   * Get default capabilities for a client type
+   */
+  getDefaultCapabilities(clientType: ClientType): string[] {
+    return getCapabilityPreset(clientType);
+  }
+
   // ============================================================================
   // Authentication
   // ============================================================================
@@ -318,7 +356,10 @@ export class AuthMiddleware {
    *
    * @returns Authentication result with client ID and capabilities
    */
-  async authenticate(token: string): Promise<AuthResult> {
+  async authenticate(
+    token: string,
+    options: AuthenticateOptions = {},
+  ): Promise<AuthResult> {
     const payload = await this.validateToken(token);
 
     if (!payload) {
@@ -331,10 +372,20 @@ export class AuthMiddleware {
       };
     }
 
+    const clientType = payload.clientType ?? options.clientType ?? 'cli';
+    const capabilities =
+      payload.scopes.length > 0
+        ? payload.scopes
+        : getCapabilityPreset(clientType);
+
     return {
       success: true,
       clientId: payload.sub,
-      capabilities: payload.scopes,
+      clientType,
+      capabilities,
+      ...((payload.clientVersion ?? options.clientVersion)
+        ? { clientVersion: payload.clientVersion ?? options.clientVersion }
+        : {}),
     };
   }
 
@@ -383,7 +434,10 @@ export class AuthMiddleware {
   /**
    * Extract token from message payload
    */
-  extractFromPayload(payload: { token?: string; apiKey?: string }): string | null {
+  extractFromPayload(payload: {
+    token?: string;
+    apiKey?: string;
+  }): string | null {
     return payload.token ?? null;
   }
 }

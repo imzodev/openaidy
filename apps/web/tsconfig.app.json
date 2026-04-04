@@ -6,6 +6,11 @@
     "module": "ESNext",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@openaidy/sdk": ["../../packages/sdk/src/index.ts"],
+      "@openaidy/shared-types": ["../../packages/shared-types/src/index.ts"]
+    },
     "skipLibCheck": true,
 
     /* Bundler mode */

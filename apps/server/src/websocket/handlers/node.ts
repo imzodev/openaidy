@@ -26,7 +26,8 @@ import {
 import type { Node, NodeType } from '../node-registry';
 
 // ============================================================================
-// Request/Response Types
+// Server-Internal Request/Response Types
+// (These have extended fields beyond shared-types or depend on server-internal Node type)
 // ============================================================================
 
 export type NodeListRequest = WSMessage<'node.list', Record<string, never>>;

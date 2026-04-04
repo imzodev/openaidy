@@ -479,15 +479,23 @@ describe('websocket gateway plugin', () => {
 
       const response = await gateway.messageRouter.route(
         'auth-conn',
-        createWSMessage('auth.authenticate', { token }),
+        createWSMessage('auth.authenticate', {
+          token,
+          clientType: 'web',
+          clientVersion: '9.9.9',
+        }),
         handlerContext,
       );
 
       expect(response?.type).toBe('auth.authenticated');
+      if (response?.type === 'auth.authenticated') {
+        expect(response.payload.clientType).toBe('web');
+      }
       expect(gateway.connectionManager.isAuthenticated('auth-conn')).toBe(true);
-      expect(
-        gateway.connectionManager.getConnection('auth-conn')?.clientId,
-      ).toBe('client-auth');
+      const authConn = gateway.connectionManager.getConnection('auth-conn');
+      expect(authConn?.clientId).toBe('client-auth');
+      expect(authConn?.clientType).toBe('web');
+      expect(authConn?.clientVersion).toBe('9.9.9');
 
       await gateway.shutdown();
     });

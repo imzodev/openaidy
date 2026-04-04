@@ -18,7 +18,7 @@ import {
   type Logger,
   defaultWebSocketClientOptions,
   noopLogger,
-} from './websocket-client.types';
+} from './websocket-client.types.js';
 import {
   createWSMessage,
   type WSMessage,
@@ -678,17 +678,17 @@ export class WebSocketClient {
    * Approve pairing
    */
   async approvePairing(
-    code: string,
-    capabilities?: string[],
+    requestId: string,
+    scopes?: string[],
   ): Promise<WSResponse> {
-    return this.sendRequest('pairing.approve', { code, capabilities });
+    return this.sendRequest('pairing.approve', { requestId, scopes });
   }
 
   /**
    * Deny pairing
    */
-  async denyPairing(code: string): Promise<WSResponse> {
-    return this.sendRequest('pairing.deny', { code });
+  async denyPairing(requestId: string): Promise<WSResponse> {
+    return this.sendRequest('pairing.deny', { requestId });
   }
 
   // ============================================================================

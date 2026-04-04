@@ -160,9 +160,15 @@ importers:
 
   packages/cli:
     dependencies:
+      '@openaidy/config':
+        specifier: workspace:*
+        version: link:../config
       '@openaidy/control-plane':
         specifier: workspace:*
         version: link:../control-plane
+      '@openaidy/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@openaidy/server':
         specifier: workspace:*
         version: link:../../apps/server

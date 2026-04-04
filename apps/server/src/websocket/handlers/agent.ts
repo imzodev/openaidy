@@ -6,7 +6,6 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { AgentRegistry } from '../../agents/registry';
-import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
@@ -16,31 +15,10 @@ import {
   type AgentListRequest,
   type AgentGetRequest,
   type AgentListResponse,
+  type AgentGetResponse,
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
-import type { Agent } from '../../agents/schema';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Agent get response type
- */
-export type AgentGetResponse = WSMessage<
-  'agent.get',
-  {
-    agent: {
-      id: string;
-      name: string;
-      description?: string;
-      systemPrompt?: string;
-      capabilities: string[];
-      enabled: boolean;
-    };
-  }
->;
 
 // ============================================================================
 // Agent Handler Class
@@ -61,7 +39,7 @@ export class AgentHandler {
   async handleList(
     connectionId: string,
     request: AgentListRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<AgentListResponse | ErrorResponse> {
     try {
       const agents = this.agentRegistry.listAgents();
@@ -76,7 +54,7 @@ export class AgentHandler {
           id: agent.id,
           name: agent.name,
           description: agent.description,
-          capabilities: agent.capabilities ?? [],
+          tools: agent.tools ?? [],
         })),
       }) as AgentListResponse;
     } catch (error) {
@@ -95,7 +73,7 @@ export class AgentHandler {
   async handleGet(
     connectionId: string,
     request: AgentGetRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<AgentGetResponse | ErrorResponse> {
     try {
       const agent = this.agentRegistry.getAgent(request.payload.agentId);
@@ -113,16 +91,20 @@ export class AgentHandler {
         'Getting agent via WebSocket',
       );
 
-      return createWSMessage('agent.get', {
-        agent: {
-          id: agent.id,
-          name: agent.name,
-          description: agent.description,
-          systemPrompt: agent.systemPrompt,
-          capabilities: agent.capabilities ?? [],
-          enabled: agent.enabled,
+      return createWSMessage(
+        'agent.get',
+        {
+          agent: {
+            id: agent.id,
+            name: agent.name,
+            description: agent.description,
+            systemPrompt: agent.systemPrompt,
+            tools: agent.tools ?? [],
+            enabled: agent.enabled,
+          },
         },
-      }) as AgentGetResponse;
+        request.id,
+      ) as AgentGetResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to get agent');
       return this.createErrorResponse(
@@ -182,16 +164,35 @@ export function createAgentHandler(
  */
 export function registerAgentHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
   },
   handler: AgentHandler,
 ): void {
-  router.registerHandler('agent.list', (connId, msg, ctx) =>
-    handler.handleList(connId, msg as AgentListRequest, ctx),
+  router.registerHandler(
+    'agent.list',
+    (connId, msg, ctx) =>
+      handler.handleList(
+        connId,
+        msg as AgentListRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 
-  router.registerHandler('agent.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as AgentGetRequest, ctx),
+  router.registerHandler(
+    'agent.get',
+    (connId, msg, ctx) =>
+      handler.handleGet(
+        connId,
+        msg as AgentGetRequest,
+        ctx,
+      ) as Promise<WSResponse>,
   );
 }
 
