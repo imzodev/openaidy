@@ -5,6 +5,10 @@ import {
   validateAgentIdMatch,
   toAgentSummary,
   parseModelString,
+  WorkspacePermissionsSchema,
+  WorkspaceSchema,
+  WorkspaceConfigSchema,
+  getAgentWorkspace,
 } from './schema';
 
 describe('AgentSchema', () => {
@@ -125,5 +129,204 @@ describe('toAgentSummary', () => {
     expect(summary.tags).toEqual(['test']);
     expect(summary.model).toBe('openai/gpt-4o-mini');
     expect('systemPrompt' in summary).toBe(false);
+  });
+});
+
+describe('WorkspacePermissionsSchema', () => {
+  it('should parse valid permissions', () => {
+    const permissions = WorkspacePermissionsSchema.parse({
+      read: true,
+      write: true,
+      delete: false,
+      list: true,
+    });
+    expect(permissions.read).toBe(true);
+    expect(permissions.write).toBe(true);
+    expect(permissions.delete).toBe(false);
+    expect(permissions.list).toBe(true);
+  });
+
+  it('should apply default values', () => {
+    const permissions = WorkspacePermissionsSchema.parse({});
+    expect(permissions.read).toBe(true);
+    expect(permissions.write).toBe(false);
+    expect(permissions.delete).toBe(false);
+    expect(permissions.list).toBe(true);
+  });
+
+  it('should reject invalid permission types', () => {
+    const result = WorkspacePermissionsSchema.safeParse({
+      read: 'yes',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('WorkspaceSchema', () => {
+  it('should parse valid workspace with required fields', () => {
+    const workspace = WorkspaceSchema.parse({
+      path: '/home/user/project',
+    });
+    expect(workspace.path).toBe('/home/user/project');
+  });
+
+  it('should parse workspace with permissions', () => {
+    const workspace = WorkspaceSchema.parse({
+      path: '/home/user/project',
+      permissions: {
+        read: true,
+        write: true,
+      },
+    });
+    expect(workspace.path).toBe('/home/user/project');
+    expect(workspace.permissions?.read).toBe(true);
+    expect(workspace.permissions?.write).toBe(true);
+  });
+
+  it('should parse workspace with include/exclude patterns', () => {
+    const workspace = WorkspaceSchema.parse({
+      path: '/home/user/project',
+      include: ['**/*.ts'],
+      exclude: ['node_modules/**'],
+    });
+    expect(workspace.include).toEqual(['**/*.ts']);
+    expect(workspace.exclude).toEqual(['node_modules/**']);
+  });
+
+  it('should reject workspace without path', () => {
+    const result = WorkspaceSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject workspace with empty path', () => {
+    const result = WorkspaceSchema.safeParse({
+      path: '',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('WorkspaceConfigSchema', () => {
+  it('should parse valid workspace config', () => {
+    const config = WorkspaceConfigSchema.parse({
+      enabled: true,
+      workspaces: [
+        { path: '/home/user/project1' },
+        { path: '/home/user/project2' },
+      ],
+    });
+    expect(config.enabled).toBe(true);
+    expect(config.workspaces).toHaveLength(2);
+  });
+
+  it('should apply default values', () => {
+    const config = WorkspaceConfigSchema.parse({});
+    expect(config.enabled).toBe(true);
+    expect(config.workspaces).toEqual([]);
+  });
+
+  it('should parse config with default permissions', () => {
+    const config = WorkspaceConfigSchema.parse({
+      defaultPermissions: {
+        read: true,
+        write: false,
+      },
+      workspaces: [{ path: '/project' }],
+    });
+    expect(config.defaultPermissions?.read).toBe(true);
+    expect(config.defaultPermissions?.write).toBe(false);
+  });
+});
+
+describe('AgentSchema with workspace', () => {
+  it('should parse agent with workspace config', () => {
+    const agent = AgentSchema.parse({
+      id: 'workspace-agent',
+      name: 'Workspace Agent',
+      enabled: true,
+      systemPrompt: 'You have workspace access.',
+      model: 'openai/gpt-4o-mini',
+      workspace: {
+        enabled: true,
+        workspaces: [
+          { path: '/home/user/project' },
+        ],
+      },
+    });
+    expect(agent.workspace?.enabled).toBe(true);
+    expect(agent.workspace?.workspaces).toHaveLength(1);
+  });
+
+  it('should parse agent without workspace config (backward compatible)', () => {
+    const agent = AgentSchema.parse({
+      id: 'no-workspace-agent',
+      name: 'No Workspace Agent',
+      enabled: true,
+      systemPrompt: 'You do not have workspace access.',
+      model: 'openai/gpt-4o-mini',
+    });
+    expect(agent.workspace).toBeUndefined();
+  });
+
+  it('should parse agent with disabled workspace', () => {
+    const agent = AgentSchema.parse({
+      id: 'disabled-workspace-agent',
+      name: 'Disabled Workspace Agent',
+      enabled: true,
+      systemPrompt: 'Your workspace is disabled.',
+      model: 'openai/gpt-4o-mini',
+      workspace: {
+        enabled: false,
+        workspaces: [],
+      },
+    });
+    expect(agent.workspace?.enabled).toBe(false);
+  });
+});
+
+describe('getAgentWorkspace', () => {
+  it('should return workspace config when enabled', () => {
+    const agent = AgentSchema.parse({
+      id: 'test-agent',
+      name: 'Test Agent',
+      enabled: true,
+      systemPrompt: 'Test',
+      model: 'openai/gpt-4o-mini',
+      workspace: {
+        enabled: true,
+        workspaces: [{ path: '/project' }],
+      },
+    });
+    const workspace = getAgentWorkspace(agent);
+    expect(workspace).toBeDefined();
+    expect(workspace?.workspaces).toHaveLength(1);
+  });
+
+  it('should return undefined when workspace is not configured', () => {
+    const agent = AgentSchema.parse({
+      id: 'test-agent',
+      name: 'Test Agent',
+      enabled: true,
+      systemPrompt: 'Test',
+      model: 'openai/gpt-4o-mini',
+    });
+    const workspace = getAgentWorkspace(agent);
+    expect(workspace).toBeUndefined();
+  });
+
+  it('should return undefined when workspace is disabled', () => {
+    const agent = AgentSchema.parse({
+      id: 'test-agent',
+      name: 'Test Agent',
+      enabled: true,
+      systemPrompt: 'Test',
+      model: 'openai/gpt-4o-mini',
+      workspace: {
+        enabled: false,
+        workspaces: [{ path: '/project' }],
+      },
+    });
+    const workspace = getAgentWorkspace(agent);
+    expect(workspace).toBeUndefined();
   });
 });
