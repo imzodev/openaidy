@@ -1,0 +1,645 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  SessionHandler,
+  createSessionHandler,
+  registerSessionHandlers,
+} from './session';
+import { SessionMessageService } from '../../sessions/service';
+import {
+  type Session,
+  type SessionMessage,
+  type SessionRun,
+} from '@openaidy/db';
+import {
+  createWSMessage,
+  WS_ERROR_CODES,
+  type SessionCreateRequest,
+  type SessionGetRequest,
+  type SessionListRequest,
+  type SessionDeleteRequest,
+  type SessionMessageRequest,
+} from '@openaidy/shared-types';
+
+// Mock logger
+const mockLogger = {
+  info: vi.fn(),
+  error: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+  fatal: vi.fn(),
+  child: () => mockLogger,
+};
+
+// Mock context
+const mockContext = {
+  connectionManager: {
+    getConnection: vi.fn(),
+    hasCapability: vi.fn().mockReturnValue(true),
+  } as any,
+  services: {} as any,
+  logger: mockLogger as any,
+};
+
+describe('SessionHandler', () => {
+  let handler: SessionHandler;
+  let mockSessionService: {
+    createSession: vi.Mock;
+    getSession: vi.Mock;
+    listSessions: vi.Mock;
+    deleteSession: vi.Mock;
+    submitMessage: vi.Mock;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockSessionService = {
+      createSession: vi.fn(),
+      getSession: vi.fn(),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      submitMessage: vi.fn(),
+    };
+
+    handler = new SessionHandler(
+      mockSessionService as unknown as SessionMessageService,
+      mockLogger as any,
+    );
+  });
+
+  describe('handleCreate', () => {
+    it('should create a session and return response', async () => {
+      const mockSession: Session = {
+        id: 'session-123',
+        title: 'Session 2024-01-01T00:00:00.000Z',
+        status: 'active',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        metadata: {},
+      };
+      mockSessionService.createSession.mockResolvedValue(mockSession);
+
+      const request = createWSMessage('session.create', {
+        agentId: 'agent-1',
+      }) as SessionCreateRequest;
+
+      const response = await handler.handleCreate(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('session.created');
+      expect((response as any).payload.sessionId).toBe('session-123');
+      expect(mockSessionService.createSession).toHaveBeenCalled();
+    });
+
+    it('should handle create errors', async () => {
+      mockSessionService.createSession.mockRejectedValue(new Error('DB error'));
+
+      const request = createWSMessage('session.create', {}) as SessionCreateRequest;
+
+      const response = await handler.handleCreate(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
+    });
+  });
+
+  describe('handleGet', () => {
+    it('should return session if found', async () => {
+      const mockSession: Session = {
+        id: 'session-123',
+        title: 'Test Session',
+        status: 'active',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:01:00.000Z',
+        metadata: {},
+      };
+      mockSessionService.getSession.mockResolvedValue(mockSession);
+
+      const request = createWSMessage('session.get', {
+        sessionId: 'session-123',
+      }) as SessionGetRequest;
+
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('session.get');
+      expect((response as any).payload.session.id).toBe('session-123');
+      expect((response as any).payload.session.title).toBe('Test Session');
+    });
+
+    it('should return NOT_FOUND error if session does not exist', async () => {
+      mockSessionService.getSession.mockResolvedValue(null);
+
+      const request = createWSMessage('session.get', {
+        sessionId: 'nonexistent',
+      }) as SessionGetRequest;
+
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+    });
+  });
+
+  describe('handleList', () => {
+    it('should return list of sessions', async () => {
+      const mockSessions: Session[] = [
+        {
+          id: 'session-1',
+          title: 'Session 1',
+          status: 'active',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          metadata: {},
+        },
+        {
+          id: 'session-2',
+          title: 'Session 2',
+          status: 'active',
+          createdAt: '2024-01-02T00:00:00.000Z',
+          metadata: {},
+        },
+      ];
+      mockSessionService.listSessions.mockResolvedValue(mockSessions);
+
+      const request = createWSMessage('session.list', {}) as SessionListRequest;
+
+      const response = await handler.handleList(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('session.list');
+      expect((response as any).payload.sessions).toHaveLength(2);
+      expect((response as any).payload.total).toBe(2);
+    });
+
+    it('should filter by status', async () => {
+      const mockSessions: Session[] = [
+        {
+          id: 'session-1',
+          title: 'Session 1',
+          status: 'active',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          metadata: {},
+        },
+        {
+          id: 'session-2',
+          title: 'Session 2',
+          status: 'archived',
+          createdAt: '2024-01-02T00:00:00.000Z',
+          metadata: {},
+        },
+      ];
+      mockSessionService.listSessions.mockResolvedValue(mockSessions);
+
+      const request = createWSMessage('session.list', {
+        status: 'active',
+      }) as SessionListRequest;
+
+      const response = await handler.handleList(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect((response as any).payload.sessions).toHaveLength(1);
+      expect((response as any).payload.sessions[0].status).toBe('active');
+    });
+
+    it('should apply pagination', async () => {
+      const mockSessions: Session[] = Array.from({ length: 100 }, (_, i) => ({
+        id: `session-${i}`,
+        title: `Session ${i}`,
+        status: 'active',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        metadata: {},
+      }));
+      mockSessionService.listSessions.mockResolvedValue(mockSessions);
+
+      const request = createWSMessage('session.list', {
+        offset: 10,
+        limit: 10,
+      }) as SessionListRequest;
+
+      const response = await handler.handleList(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect((response as any).payload.sessions).toHaveLength(10);
+      expect((response as any).payload.total).toBe(100);
+    });
+  });
+
+  describe('handleDelete', () => {
+    it('should return success for existing session', async () => {
+      mockSessionService.deleteSession.mockResolvedValue(true);
+
+      const request = createWSMessage('session.delete', {
+        sessionId: 'session-123',
+      }) as SessionDeleteRequest;
+
+      const response = await handler.handleDelete(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('session.delete');
+      expect((response as any).payload.sessionId).toBe('session-123');
+      expect((response as any).payload.deleted).toBe(true);
+      expect(mockSessionService.deleteSession).toHaveBeenCalledWith('session-123');
+    });
+
+    it('should return NOT_FOUND error if session does not exist', async () => {
+      mockSessionService.deleteSession.mockResolvedValue(false);
+
+      const request = createWSMessage('session.delete', {
+        sessionId: 'nonexistent',
+      }) as SessionDeleteRequest;
+
+      const response = await handler.handleDelete(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+    });
+  });
+
+  describe('handleMessage', () => {
+    it('should submit message and return response', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+        metadata: {},
+      });
+
+      const userMessage: SessionMessage = {
+        id: 'msg-1',
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      };
+
+      const assistantMessage: SessionMessage = {
+        id: 'msg-2',
+        sessionId: 'session-123',
+        role: 'assistant',
+        content: 'Hi there!',
+        createdAt: '2024-01-01T00:00:01.000Z',
+      };
+
+      const run: SessionRun = {
+        id: 'run-1',
+        sessionId: 'session-123',
+        agentId: 'agent-1',
+        providerId: 'provider-1',
+        modelId: 'model-1',
+        status: 'succeeded',
+        finishReason: 'stop',
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30,
+        createdAt: '2024-01-01T00:00:00.000Z',
+      };
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage,
+        assistantMessage,
+        run,
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('session.message');
+      expect((response as any).payload.sessionId).toBe('session-123');
+      expect((response as any).payload.messageId).toBe('msg-2');
+      expect((response as any).payload.role).toBe('assistant');
+      expect((response as any).payload.content).toBe('Hi there!');
+      expect((response as any).payload.usage.totalTokens).toBe(30);
+    });
+
+    it('should return SERVICE_UNAVAILABLE for streaming requests when streaming not configured', async () => {
+      // Handler is created without streamManager/runEvents in beforeEach
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.SERVICE_UNAVAILABLE);
+    });
+
+    it('should handle submit errors', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+        metadata: {},
+      });
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'provider.error',
+          message: 'Provider failed',
+        },
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.message).toBe('Provider failed');
+    });
+  });
+});
+
+describe('createSessionHandler', () => {
+  it('should create handler instance', () => {
+    const mockService = {} as SessionMessageService;
+    const handler = createSessionHandler(mockService, mockLogger as any);
+
+    expect(handler).toBeInstanceOf(SessionHandler);
+  });
+});
+
+describe('registerSessionHandlers', () => {
+  it('should register all session handlers', () => {
+    const mockRouter = {
+      registerHandler: vi.fn(),
+    };
+
+    const mockService = {} as SessionMessageService;
+    const handler = createSessionHandler(mockService, mockLogger as any);
+
+    registerSessionHandlers(mockRouter, handler);
+
+    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(7);
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.create',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.get',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.list',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.delete',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.message',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.messages',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.runs',
+      expect.any(Function),
+    );
+  });
+});
+
+// ============================================================================
+// Streaming Tests
+// ============================================================================
+
+describe('SessionHandler Streaming', () => {
+  let handler: SessionHandler;
+  let mockSessionService: {
+    createSession: vi.Mock;
+    getSession: vi.Mock;
+    listSessions: vi.Mock;
+    deleteSession: vi.Mock;
+    submitMessage: vi.Mock;
+  };
+  let mockStreamManager: {
+    subscribeToRun: vi.Mock;
+    unsubscribeFromRun: vi.Mock;
+    unsubscribeAllFromConnection: vi.Mock;
+    start: vi.Mock;
+    stop: vi.Mock;
+  };
+  let mockRunEvents: {
+    subscribe: vi.Mock;
+    emit: vi.Mock;
+    emitStarted: vi.Mock;
+    emitDelta: vi.Mock;
+    emitCompleted: vi.Mock;
+    emitFailed: vi.Mock;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockSessionService = {
+      createSession: vi.fn(),
+      getSession: vi.fn(),
+      listSessions: vi.fn(),
+      deleteSession: vi.fn(),
+      submitMessage: vi.fn(),
+    };
+
+    mockStreamManager = {
+      subscribeToRun: vi.fn(),
+      unsubscribeFromRun: vi.fn(),
+      unsubscribeAllFromConnection: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+
+    mockRunEvents = {
+      subscribe: vi.fn().mockReturnValue(() => {}),
+      emit: vi.fn(),
+      emitStarted: vi.fn(),
+      emitDelta: vi.fn(),
+      emitCompleted: vi.fn(),
+      emitFailed: vi.fn(),
+    };
+
+    // Create handler with streaming support
+    handler = new SessionHandler(
+      mockSessionService as unknown as SessionMessageService,
+      mockLogger as any,
+      mockStreamManager as any,
+      mockRunEvents as any,
+    );
+  });
+
+  describe('handleMessage with streaming', () => {
+    it('should return session.message.ack for streaming requests when streaming is configured', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
+        assistantMessage: { id: 'msg-2', content: 'Hi there!', role: 'assistant' },
+        run: { 
+          id: 'run-1', 
+          finishReason: 'stop',
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      // Should return ack response
+      expect(response.type).toBe('session.message.ack');
+      expect((response as any).payload.sessionId).toBe('session-123');
+      expect((response as any).payload.runId).toBeDefined();
+      expect((response as any).payload.status).toBe('streaming');
+
+      // Should have subscribed to the run
+      expect(mockStreamManager.subscribeToRun).toHaveBeenCalled();
+    });
+
+    it('should subscribe to run events before starting streaming', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      await handler.handleMessage('conn-1', request, mockContext);
+
+      // Verify subscription happened
+      expect(mockStreamManager.subscribeToRun).toHaveBeenCalledWith(
+        expect.any(String), // runId
+        'conn-1',
+      );
+    });
+
+    it('should return NOT_FOUND for streaming request with non-existent session', async () => {
+      mockSessionService.getSession.mockResolvedValue(null);
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'nonexistent',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      const response = await handler.handleMessage(
+        'conn-1',
+        request,
+        mockContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect((response as any).payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+    });
+
+    it('should emit run events during streaming', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        id: 'session-123',
+        status: 'active',
+      });
+
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
+        assistantMessage: { id: 'msg-2', content: 'Hi there!', role: 'assistant' },
+        run: { 
+          id: 'run-1', 
+          finishReason: 'stop',
+          promptTokens: 10,
+          completionTokens: 20,
+          totalTokens: 30,
+        },
+      });
+
+      const request = createWSMessage('session.message', {
+        sessionId: 'session-123',
+        role: 'user',
+        content: 'Hello',
+        stream: true,
+      }) as SessionMessageRequest;
+
+      await handler.handleMessage('conn-1', request, mockContext);
+
+      // Wait for background execution to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Verify run events were emitted
+      expect(mockRunEvents.emitStarted).toHaveBeenCalled();
+      expect(mockRunEvents.emitDelta).toHaveBeenCalled();
+      expect(mockRunEvents.emitCompleted).toHaveBeenCalled();
+    });
+  });
+});

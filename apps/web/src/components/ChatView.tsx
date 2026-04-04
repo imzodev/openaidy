@@ -6,6 +6,7 @@ type ChatViewProps = {
   messages: SessionMessage[];
   isLoading: boolean;
   error?: string;
+  streamingContent?: string;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -110,6 +111,32 @@ export function ChatView(props: ChatViewProps) {
             </div>
           )}
         </For>
+      </Show>
+
+      {/* Streaming content display */}
+      <Show when={props.streamingContent}>
+        <div class="rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+          <div class="flex items-start gap-3">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
+              <Bot class="w-4 h-4" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="font-medium text-sm text-text-primary">
+                  Assistant
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  <span class="text-xs text-text-tertiary">Streaming...</span>
+                </span>
+              </div>
+              <p class="text-text-secondary whitespace-pre-wrap">
+                {props.streamingContent}
+                <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+              </p>
+            </div>
+          </div>
+        </div>
       </Show>
     </div>
   );

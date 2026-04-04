@@ -4,17 +4,8 @@ import {
   createMutation,
   useQueryClient,
 } from '@tanstack/solid-query';
-import {
-  getConfig,
-  updateConfig,
-  type AppConfig,
-  type ConfigStatus,
-} from '../../../lib/api';
-import type { SaveMessage } from '../types';
-
-type ConfigResponse =
-  | { config: AppConfig; status: ConfigStatus }
-  | { error: string };
+import { getConfig, updateConfig, type AppConfig } from '../../../lib/api';
+import type { SaveMessage, ConfigResponse } from '../types';
 
 export function useConfig() {
   const queryClient = useQueryClient();

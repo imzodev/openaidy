@@ -6,12 +6,12 @@
  * Get the API base URL
  *
  * Priority:
- * 1. VITE_API_URL environment variable
+ * 1. VITE_SERVER_URL environment variable
  * 2. In development: http://localhost:3001 (server default port)
  * 3. In production: throw error if not configured
  */
 function getApiBase(): string {
-  const envUrl = import.meta.env.VITE_API_URL;
+  const envUrl = import.meta.env.VITE_SERVER_URL;
 
   if (envUrl) {
     return envUrl;
@@ -22,9 +22,9 @@ function getApiBase(): string {
     return 'http://localhost:3001';
   }
 
-  // Production without VITE_API_URL - throw clear error
+  // Production without VITE_SERVER_URL - throw clear error
   throw new Error(
-    'VITE_API_URL environment variable is required in production. ' +
+    'VITE_SERVER_URL environment variable is required in production. ' +
       'Set it in your .env file or build environment.',
   );
 }
@@ -67,6 +67,7 @@ export type SessionMessage = {
 export type RunStatus =
   | 'queued'
   | 'running'
+  | 'streaming'
   | 'succeeded'
   | 'failed'
   | 'cancelled';

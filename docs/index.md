@@ -29,6 +29,15 @@ Use these docs to move from product idea to implementation foundation.
 - [OpenAidy Plugin SDK](./plugin-sdk) — public plugin contracts, permissions, manifests, and lifecycle design.
 - [OpenAidy API Design](./api-design) — suggested API surface for sessions, scheduler, channels, pairing, config, plugins, and MCP.
 
+## WebSocket Control Plane
+
+Real-time communication layer for OpenAidy:
+
+- [WebSocket Protocol](./websocket-protocol) — complete protocol reference, message types, examples, and best practices.
+- [WebSocket Client SDK](./websocket-client-sdk) — TypeScript client SDK API reference and usage examples.
+- [WebSocket Integration Guide](./websocket-integration-guide) — integration patterns for web, mobile, CLI, and services.
+- [WebSocket Architecture](./websocket-architecture) — component architecture, data flows, and design decisions.
+
 ## Recommended reading order
 
 If you are just starting:

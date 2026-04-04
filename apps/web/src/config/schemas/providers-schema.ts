@@ -270,47 +270,6 @@ const geminiFields: Record<string, FieldSchema> = {
 };
 
 /**
- * Model configuration schema (used within provider)
- */
-const _modelSchema: FieldSchema = {
-  type: 'object',
-  key: 'models',
-  label: 'Model',
-  properties: {
-    id: {
-      type: 'string',
-      key: 'id',
-      label: 'Model ID',
-      required: true,
-      description: 'Unique identifier for this model',
-      placeholder: 'e.g., gpt-4o-mini',
-    },
-    name: {
-      type: 'string',
-      key: 'name',
-      label: 'Display Name',
-      required: true,
-      description: 'Human-readable name',
-      placeholder: 'e.g., GPT-4o Mini',
-    },
-    enabled: {
-      type: 'boolean',
-      key: 'enabled',
-      label: 'Enabled',
-      defaultValue: true,
-      description: 'Enable or disable this model',
-    },
-    maxOutputTokens: {
-      type: 'number',
-      key: 'maxOutputTokens',
-      label: 'Max Output Tokens',
-      min: 1,
-      description: 'Maximum tokens this model can generate',
-    },
-  },
-};
-
-/**
  * Provider schema with discriminated union based on vendorFamily
  */
 const providerSchema: FieldSchema = {

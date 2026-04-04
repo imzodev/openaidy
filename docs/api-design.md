@@ -18,6 +18,78 @@ Recommended transport split:
 - WebSocket or Server-Sent Events for live updates and stream events
 - optional MCP server transport for external automation and tool access
 
+## WebSocket API
+
+The WebSocket gateway provides real-time, bidirectional communication. Connect to `/ws` with a valid JWT token:
+
+```
+wss://api.openaidy.com/ws?token=<jwt-token>
+```
+
+### Connection Lifecycle
+
+- `connection.established` - Sent when connection is ready
+- `heartbeat` - Keep-alive ping/pong
+- `error` - Error notifications
+
+### Message Types
+
+All messages follow a consistent format:
+
+```typescript
+{
+  id: string;          // Unique request ID
+  type: string;        // Message type (e.g., "session.create")
+  timestamp: string;   // ISO 8601 timestamp
+  payload: object;     // Message-specific data
+}
+```
+
+### Session Operations
+
+| Type | Description |
+|------|-------------|
+| `session.create` | Create a new session |
+| `session.get` | Get session details |
+| `session.list` | List sessions |
+| `session.delete` | Delete a session |
+| `session.subscribe` | Subscribe to session events |
+| `session.unsubscribe` | Unsubscribe from session |
+| `session.message` | Send message to session |
+| `session.stream.start` | Streaming started |
+| `session.stream.delta` | Stream token chunk |
+| `session.stream.done` | Stream completed |
+
+### Agent & Provider Operations
+
+| Type | Description |
+|------|-------------|
+| `agent.list` | List available agents |
+| `agent.get` | Get agent details |
+| `provider.list` | List providers |
+| `provider.models` | Get provider models |
+
+### Node & Pairing Operations
+
+| Type | Description |
+|------|-------------|
+| `node.list` | List registered nodes |
+| `node.register` | Register a node |
+| `node.invoke` | Invoke node capability |
+| `pairing.request` | Request pairing |
+| `pairing.approve` | Approve pairing |
+
+### Presence & Config Operations
+
+| Type | Description |
+|------|-------------|
+| `presence.update` | Update presence status |
+| `presence.get` | Get presence |
+| `config.get` | Get configuration |
+| `config.update` | Update configuration |
+
+For complete protocol reference, see [WebSocket Protocol](./websocket-protocol).
+
 ## Auth model
 
 Use:

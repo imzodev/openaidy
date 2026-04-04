@@ -3,19 +3,29 @@ import { render, screen } from '@solidjs/testing-library';
 import App from './App';
 
 // Mock the API module
-vi.mock('./lib/api', () => ({
+vi.mock('./lib/ws-api', () => ({
   listSessions: vi.fn().mockResolvedValue({ items: [] }),
-  createSession: vi
-    .fn()
-    .mockResolvedValue({
-      id: '1',
-      title: 'Test Session',
-      createdAt: '2024-01-01T00:00:00Z',
-    }),
+  createSession: vi.fn().mockResolvedValue({
+    id: '1',
+    title: 'Test Session',
+    createdAt: '2024-01-01T00:00:00Z',
+  }),
   listMessages: vi.fn().mockResolvedValue({ items: [] }),
   submitMessage: vi.fn().mockResolvedValue({ ok: true }),
   listAgents: vi.fn().mockResolvedValue({ items: [] }),
   listRuns: vi.fn().mockResolvedValue({ items: [] }),
+}));
+
+vi.mock('./lib/ws-provider', () => ({
+  WebSocketProvider: (props: { children: unknown }) => props.children,
+  useWebSocketContext: () => ({
+    client: () => null,
+    state: () => 'disconnected',
+    isConnected: () => false,
+    error: () => undefined,
+    presence: () => [],
+    updatePresence: async () => {},
+  }),
 }));
 
 // Mock lucide-solid

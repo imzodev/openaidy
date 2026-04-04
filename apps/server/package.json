@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
+    "bench": "vitest bench --run",
     "lint": "eslint ."
   },
   "dependencies": {
@@ -15,6 +16,7 @@
     "@openaidy/config": "workspace:*",
     "@openaidy/db": "workspace:*",
     "@openaidy/runtime": "workspace:*",
+    "@openaidy/shared-types": "workspace:*",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.41.0",
@@ -27,6 +29,13 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.6"
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.30.6",
+    "ws": "^8.20.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./bootstrap-admin": "./src/bootstrap-admin.ts",
+    "./bootstrap-admin-inspect": "./src/bootstrap-admin-inspect.ts"
   }
 }

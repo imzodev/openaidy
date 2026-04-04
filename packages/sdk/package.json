@@ -9,5 +9,11 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
+  },
+  "dependencies": {
+    "@openaidy/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }
