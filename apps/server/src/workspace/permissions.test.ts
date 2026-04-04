@@ -514,7 +514,11 @@ describe('workspace permissions', () => {
           enabled: true,
           systemPrompt: 'test',
           model: 'openai/gpt-4o-mini',
-          workspace: { enabled: true, workspaces: [{ path: '/project' }] },
+          workspace: {
+            enabled: true,
+            defaultPermissions: { read: true, write: false, delete: false, list: true },
+            workspaces: [{ path: '/project' }],
+          },
         },
       ];
       registry = createMockRegistry(agents);
