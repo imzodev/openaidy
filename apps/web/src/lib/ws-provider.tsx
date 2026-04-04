@@ -37,15 +37,23 @@ type WebSocketContextValue = {
 const WebSocketContext = createContext<WebSocketContextValue>();
 
 function resolveBaseUrl(): string {
-  const envUrl = import.meta.env.VITE_API_URL as string | undefined;
-  if (envUrl) {
-    return envUrl;
+  // Priority 1: Single server URL via env var (for local dev or custom deployments)
+  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
+  if (serverUrl) {
+    return serverUrl;
   }
 
+  // Priority 2: In development, connect to the backend server (3001)
+  if (import.meta.env.DEV) {
+    return 'http://localhost:3001';
+  }
+
+  // Priority 3: In production, use the frontend origin (handles custom domains)
   if (typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
 
+  // Fallback for development
   return 'http://localhost:3001';
 }
 
