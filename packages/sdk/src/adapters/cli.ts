@@ -19,6 +19,11 @@ export class CLIAdapter implements ClientAdapter<CLIAdapterOptions> {
       url,
       ...(options.token ? { token: options.token } : {}),
       ...(options.clientId ? { clientId: options.clientId } : {}),
+      clientType: this.clientType,
+      ...(options.clientVersion
+        ? { clientVersion: options.clientVersion }
+        : {}),
+      ...(options.clientMeta ? { clientMeta: options.clientMeta } : {}),
       ...(options.autoReconnect !== undefined
         ? { autoReconnect: options.autoReconnect }
         : {}),

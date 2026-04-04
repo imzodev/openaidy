@@ -23,6 +23,7 @@ import {
   createWSMessage,
   type WSMessage,
   type WSResponse,
+  type AuthAuthenticatedResponse,
 } from '@openaidy/shared-types';
 
 type ConnectionEstablishedMessage = {
@@ -215,13 +216,7 @@ class ReconnectionManager {
  * WebSocket client for OpenAidy gateway
  */
 export class WebSocketClient {
-  private options: Required<
-    Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>
-  > & {
-    token?: string;
-    logger: Logger;
-    clientId?: string;
-  };
+  private options: WebSocketClientOptions & { logger: Logger };
   private socket: WebSocket | null = null;
   private state: WebSocketClientState = 'disconnected';
   private correlator: RequestCorrelator;
@@ -232,16 +227,20 @@ export class WebSocketClient {
   private requestIdCounter: number = 0;
 
   constructor(options: WebSocketClientOptions) {
+    // Merge with defaults to ensure required fields have values
+    const defaults = defaultWebSocketClientOptions;
     this.options = {
-      ...defaultWebSocketClientOptions,
+      ...defaults,
       ...options,
       logger: options.logger ?? noopLogger,
-    };
+    } as WebSocketClientOptions & { logger: Logger };
 
-    this.correlator = new RequestCorrelator(this.options.requestTimeout);
+    this.correlator = new RequestCorrelator(
+      this.options.requestTimeout ?? defaults.requestTimeout,
+    );
     this.reconnectManager = new ReconnectionManager(
-      this.options.maxReconnectAttempts,
-      this.options.reconnectInterval,
+      this.options.maxReconnectAttempts ?? defaults.maxReconnectAttempts,
+      this.options.reconnectInterval ?? defaults.reconnectInterval,
     );
   }
 
@@ -272,12 +271,26 @@ export class WebSocketClient {
 
         this.socket = new WebSocket(url.toString());
 
-        this.socket.onopen = () => {
+        this.socket.onopen = async () => {
           this.setState('connected');
           this.options.logger.info('WebSocket connected', {
             url: this.options.url,
           });
           this.startHeartbeat();
+
+          // Send explicit auth.authenticate if we have a token and client info
+          if (this.options.token) {
+            try {
+              await this.sendAuthenticate();
+            } catch (authError) {
+              this.options.logger.error('Post-connect authentication failed', {
+                error: authError,
+              });
+              // Still resolve - auth failure doesn't prevent connection
+              // Client can check auth state separately
+            }
+          }
+
           resolve();
         };
 
@@ -363,6 +376,36 @@ export class WebSocketClient {
   async authenticate(token: string): Promise<void> {
     this.options.token = token;
     await this.reconnect();
+  }
+
+  /**
+   * Send explicit auth.authenticate message with client envelope
+   */
+  private async sendAuthenticate(): Promise<AuthAuthenticatedResponse> {
+    const payload: Record<string, unknown> = {
+      token: this.options.token,
+    };
+
+    // Add client envelope if provided
+    if (this.options.clientType) {
+      payload.clientType = this.options.clientType;
+    }
+    if (this.options.clientVersion) {
+      payload.clientVersion = this.options.clientVersion;
+    }
+    if (this.options.clientMeta) {
+      payload.clientMeta = this.options.clientMeta;
+    }
+
+    this.options.logger.info('Sending auth.authenticate', {
+      clientType: this.options.clientType,
+      clientVersion: this.options.clientVersion,
+    });
+
+    return this.sendRequest<AuthAuthenticatedResponse>(
+      'auth.authenticate',
+      payload,
+    );
   }
 
   /**

@@ -12,6 +12,7 @@ import type {
   AgentListResponse,
   ProviderListResponse,
   PresenceStatus,
+  ClientType,
 } from '@openaidy/shared-types';
 
 // ============================================================================
@@ -40,13 +41,27 @@ export type WebSocketClientOptions = {
   logger?: Logger;
   /** Client ID for presence tracking */
   clientId?: string;
+  /** Client type for capability presets (web, cli, mobile, channel) */
+  clientType?: ClientType;
+  /** Client version string */
+  clientVersion?: string;
+  /** Additional client metadata */
+  clientMeta?: Record<string, unknown>;
 };
 
 /**
  * Default client options
  */
 export const defaultWebSocketClientOptions: Required<
-  Omit<WebSocketClientOptions, 'token' | 'logger' | 'clientId'>
+  Omit<
+    WebSocketClientOptions,
+    | 'token'
+    | 'logger'
+    | 'clientId'
+    | 'clientType'
+    | 'clientVersion'
+    | 'clientMeta'
+  >
 > = {
   url: 'ws://localhost:3000/ws',
   autoReconnect: true,
