@@ -454,5 +454,138 @@ export async function updateConfig(
   return response.json();
 }
 
+// ============================================================================
+// Workspace Types and API Functions
+// ============================================================================
+
+/**
+ * Workspace file metadata
+ */
+export type WorkspaceFileInfo = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: string;
+};
+
+/**
+ * Workspace file list response
+ */
+export type WorkspaceFileListResponse = {
+  items: WorkspaceFileInfo[];
+  path?: string;
+};
+
+/**
+ * Workspace file content response
+ */
+export type WorkspaceFileContentResponse = {
+  content: string;
+  path: string;
+};
+
+/**
+ * Workspace write response
+ */
+export type WorkspaceWriteResponse = {
+  success: boolean;
+  path: string;
+};
+
+/**
+ * Workspace error response
+ */
+export type WorkspaceErrorResponse = {
+  error: string;
+  code: string;
+};
+
+/**
+ * List files in an agent's workspace
+ */
+export async function listWorkspaceFiles(
+  agentId: string,
+  path?: string,
+  requestingAgentId: string,
+): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
+  const url = path
+    ? `${API_BASE}/workspace/${agentId}/files/${path}`
+    : `${API_BASE}/workspace/${agentId}/files`;
+  const response = await fetch(url, {
+    headers: { 'X-Agent-Id': requestingAgentId },
+  });
+  return response.json();
+}
+
+/**
+ * Read a file from an agent's workspace
+ */
+export async function readWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
+    headers: { 'X-Agent-Id': requestingAgentId },
+  });
+  return response.json();
+}
+
+/**
+ * Write a file to an agent's workspace
+ */
+export async function writeWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  content: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Id': requestingAgentId,
+    },
+    body: JSON.stringify({ content }),
+  });
+  return response.json();
+}
+
+/**
+ * Update an existing file in an agent's workspace
+ */
+export async function updateWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  content: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Id': requestingAgentId,
+    },
+    body: JSON.stringify({ content }),
+  });
+  return response.json();
+}
+
+/**
+ * Delete a file from an agent's workspace
+ */
+export async function deleteWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
+    method: 'DELETE',
+    headers: { 'X-Agent-Id': requestingAgentId },
+  });
+  return response.json();
+}
+
 // Export getApiBase for testing
 export { getApiBase };
