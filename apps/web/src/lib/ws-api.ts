@@ -202,6 +202,71 @@ export async function submitMessage(
   );
 }
 
+/**
+ * Submit a message with streaming enabled
+ * Returns a stream-ready response - actual streaming happens via events
+ */
+export async function submitMessageStreaming(
+  sessionId: string,
+  input: SubmitMessageInput,
+): Promise<SubmitMessageResult> {
+  return withWebSocketFallback(
+    async (client) => {
+      const response = await client.sendMessage(sessionId, input.content, {
+        stream: true,
+        providerId: input.providerId,
+        modelId: input.modelId,
+      });
+
+      if (response.type !== 'session.message') {
+        throw new Error('Unexpected response type for session.message');
+      }
+
+      const timestamp = new Date().toISOString();
+      const providerId = input.providerId ?? 'unknown-provider';
+      const modelId = input.modelId ?? 'unknown-model';
+
+      // Generate a runId - the server may provide one via streaming events
+      // For the initial response, we generate one locally
+      const runId = `ws-stream-run-${Date.now()}`;
+
+      return {
+        ok: true,
+        userMessage: {
+          id: `local-user-${Date.now()}`,
+          sessionId,
+          role: input.role,
+          content: input.content,
+          sequence: 0,
+          createdAt: timestamp,
+        },
+        assistantMessage: {
+          id: response.payload.messageId,
+          sessionId,
+          role: response.payload.role,
+          content: '', // Empty initially - will be filled via streaming
+          sequence: 1,
+          createdAt: timestamp,
+          metadata: {
+            streaming: true,
+            runId,
+          },
+        },
+        run: {
+          id: runId,
+          sessionId,
+          providerId,
+          modelId,
+          status: 'streaming',
+          createdAt: timestamp,
+          ...(input.agentId ? { agentId: input.agentId } : {}),
+        },
+      };
+    },
+    () => submitMessageRest(sessionId, input),
+  );
+}
+
 export async function listAgents(): Promise<{ items: Agent[] }> {
   return withWebSocketFallback(
     async (client) => {

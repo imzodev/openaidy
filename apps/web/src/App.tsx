@@ -11,6 +11,7 @@ import {
   createSession,
   listMessages,
   submitMessage,
+  submitMessageStreaming,
   listAgents,
   listRuns,
   type Session,
@@ -63,6 +64,8 @@ function AppContent() {
     string | undefined
   >(undefined);
   const [currentView, setCurrentView] = createSignal<ViewType>('sessions');
+  const [streamingContent, setStreamingContent] = createSignal('');
+  const [isStreaming, setIsStreaming] = createSignal(false);
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({
@@ -148,9 +151,17 @@ function AppContent() {
     await createSessionMutation.mutateAsync(title);
   };
 
-  // Handle message submission
+  // Handle message submission with streaming
   const handleSubmit = async (content: string, agentId?: string) => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) {
+      setSubmitError('No session selected');
+      return;
+    }
+
     setSubmitError(undefined);
+    setIsStreaming(true);
+    setStreamingContent('');
 
     // Find agent and extract provider/model from model field
     let providerId: string | undefined;
@@ -169,18 +180,37 @@ function AppContent() {
       }
     }
 
-    console.log('[DEBUG] Submitting with:', {
+    console.log('[DEBUG] Submitting with streaming:', {
       agentId,
       providerId,
       modelId,
       content,
     });
-    await submitMessageMutation.mutateAsync({
-      content,
-      agentId,
-      providerId,
-      modelId,
-    });
+
+    try {
+      // Call the submitMessageStreaming to get initial response
+      const result = await submitMessageStreaming(sessionId, {
+        role: 'user',
+        content,
+        agentId,
+        providerId,
+        modelId,
+      });
+
+      if (!result.ok) {
+        setSubmitError(result.error.message);
+        setIsStreaming(false);
+        return;
+      }
+
+      // Start listening to streaming events
+      // The streaming hook will handle the events
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to submit message';
+      setSubmitError(errorMessage);
+      setIsStreaming(false);
+    }
   };
 
   // Get messages array
@@ -356,6 +386,7 @@ function AppContent() {
               messages={messages()}
               isLoading={messagesQuery.isLoading}
               error={messagesQuery.error?.message}
+              streamingContent={isStreaming() ? streamingContent() : undefined}
             />
 
             {/* Runs panel */}

@@ -67,6 +67,7 @@ export type SessionMessage = {
 export type RunStatus =
   | 'queued'
   | 'running'
+  | 'streaming'
   | 'succeeded'
   | 'failed'
   | 'cancelled';
