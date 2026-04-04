@@ -478,6 +478,32 @@ export class WebSocketClient {
     return this.sendRequest('session.unsubscribe', { sessionId });
   }
 
+  /**
+   * List messages for a session
+   */
+  async listMessages(
+    sessionId: string,
+    options?: { limit?: number; offset?: number },
+  ): Promise<WSResponse> {
+    return this.sendRequest('session.messages', {
+      sessionId,
+      ...options,
+    });
+  }
+
+  /**
+   * List runs for a session
+   */
+  async listRuns(
+    sessionId: string,
+    options?: { limit?: number; offset?: number },
+  ): Promise<WSResponse> {
+    return this.sendRequest('session.runs', {
+      sessionId,
+      ...options,
+    });
+  }
+
   // ============================================================================
   // Agent Operations
   // ============================================================================

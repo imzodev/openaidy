@@ -222,6 +222,61 @@ export type SessionUnsubscribeRequest = WSMessage<
   }
 >;
 
+export type SessionMessagesRequest = WSMessage<
+  'session.messages',
+  {
+    sessionId: string;
+    limit?: number;
+    offset?: number;
+  }
+>;
+
+export type SessionRunsRequest = WSMessage<
+  'session.runs',
+  {
+    sessionId: string;
+    limit?: number;
+    offset?: number;
+  }
+>;
+
+export type SessionMessagesResponse = WSMessage<
+  'session.messages',
+  {
+    sessionId: string;
+    messages: Array<{
+      id: string;
+      sessionId: string;
+      role: string;
+      content: string;
+      sequence: number;
+      createdAt: string;
+      metadata?: Record<string, unknown>;
+    }>;
+    total: number;
+  }
+>;
+
+export type SessionRunsResponse = WSMessage<
+  'session.runs',
+  {
+    sessionId: string;
+    runs: Array<{
+      id: string;
+      sessionId: string;
+      agentId?: string;
+      providerId: string;
+      modelId: string;
+      status: string;
+      finishReason?: string;
+      errorCode?: string;
+      errorMessage?: string;
+      createdAt: string;
+    }>;
+    total: number;
+  }
+>;
+
 export type SessionCreatedResponse = WSMessage<
   'session.created',
   {
@@ -834,6 +889,8 @@ export type WSRequest =
   | SessionMessageRequest
   | SessionSubscribeRequest
   | SessionUnsubscribeRequest
+  | SessionMessagesRequest
+  | SessionRunsRequest
   | AgentListRequest
   | AgentGetRequest
   | ProviderListRequest
@@ -859,6 +916,8 @@ export type WSResponse =
   | AuthAuthenticatedResponse
   | SessionCreatedResponse
   | SessionMessageResponse
+  | SessionMessagesResponse
+  | SessionRunsResponse
   | SessionGetResponse
   | SessionListResponse
   | SessionDeleteResponse
@@ -899,6 +958,8 @@ const REQUEST_TYPES: Set<string> = new Set([
   'session.list',
   'session.delete',
   'session.message',
+  'session.messages',
+  'session.runs',
   'session.subscribe',
   'session.unsubscribe',
   'agent.list',
@@ -921,6 +982,8 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'auth.authenticated',
   'session.created',
   'session.message',
+  'session.messages',
+  'session.runs',
   'session.get',
   'session.list',
   'session.delete',

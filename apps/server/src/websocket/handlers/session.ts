@@ -20,8 +20,12 @@ import {
   type SessionListRequest,
   type SessionDeleteRequest,
   type SessionMessageRequest,
+  type SessionMessagesRequest,
+  type SessionRunsRequest,
   type SessionCreatedResponse,
   type SessionMessageResponse,
+  type SessionMessagesResponse,
+  type SessionRunsResponse,
   type SessionMessageStreamAck,
   type SessionGetResponse,
   type SessionListResponse,
@@ -237,6 +241,119 @@ export class SessionHandler {
         request.id,
         WS_ERROR_CODES.INTERNAL_ERROR,
         'Failed to delete session',
+      );
+    }
+  }
+
+  /**
+   * Handle session.messages request
+   */
+  async handleMessages(
+    connectionId: string,
+    request: SessionMessagesRequest,
+    _context: HandlerContext,
+  ): Promise<SessionMessagesResponse | ErrorResponse> {
+    try {
+      const messages = (await this.sessionService.listMessages(
+        request.payload.sessionId,
+      )) as SessionMessage[];
+
+      // Apply pagination
+      const offset = request.payload.offset ?? 0;
+      const limit = request.payload.limit ?? 50;
+      const paginated = messages.slice(offset, offset + limit);
+
+      this.logger.info(
+        {
+          sessionId: request.payload.sessionId,
+          count: paginated.length,
+          total: messages.length,
+          connectionId,
+        },
+        'Listing messages via WebSocket',
+      );
+
+      return createWSMessage(
+        'session.messages',
+        {
+          sessionId: request.payload.sessionId,
+          messages: paginated.map((msg) => ({
+            id: msg.id,
+            sessionId: msg.sessionId,
+            role: msg.role,
+            content: msg.content,
+            sequence: msg.sequence,
+            createdAt: new Date(msg.createdAt).toISOString(),
+            metadata: msg.metadata as Record<string, unknown> | undefined,
+          })),
+          total: messages.length,
+        },
+        request.id,
+      ) as SessionMessagesResponse;
+    } catch (error) {
+      this.logger.error({ error, connectionId }, 'Failed to list messages');
+      return this.createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.INTERNAL_ERROR,
+        'Failed to list messages',
+      );
+    }
+  }
+
+  /**
+   * Handle session.runs request
+   */
+  async handleRuns(
+    connectionId: string,
+    request: SessionRunsRequest,
+    _context: HandlerContext,
+  ): Promise<SessionRunsResponse | ErrorResponse> {
+    try {
+      const runs = (await this.sessionService.listRuns(
+        request.payload.sessionId,
+      )) as SessionRun[];
+
+      // Apply pagination
+      const offset = request.payload.offset ?? 0;
+      const limit = request.payload.limit ?? 50;
+      const paginated = runs.slice(offset, offset + limit);
+
+      this.logger.info(
+        {
+          sessionId: request.payload.sessionId,
+          count: paginated.length,
+          total: runs.length,
+          connectionId,
+        },
+        'Listing runs via WebSocket',
+      );
+
+      return createWSMessage(
+        'session.runs',
+        {
+          sessionId: request.payload.sessionId,
+          runs: paginated.map((run) => ({
+            id: run.id,
+            sessionId: run.sessionId,
+            agentId: run.agentId ?? undefined,
+            providerId: run.providerId,
+            modelId: run.modelId,
+            status: run.status,
+            finishReason: run.finishReason ?? undefined,
+            errorCode: run.errorCode ?? undefined,
+            errorMessage: run.errorMessage ?? undefined,
+            createdAt: new Date(run.createdAt).toISOString(),
+          })),
+          total: runs.length,
+        },
+        request.id,
+      ) as SessionRunsResponse;
+    } catch (error) {
+      this.logger.error({ error, connectionId }, 'Failed to list runs');
+      return this.createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.INTERNAL_ERROR,
+        'Failed to list runs',
       );
     }
   }
@@ -629,6 +746,26 @@ export function registerSessionHandlers(
       handler.handleMessage(
         connId,
         msg as SessionMessageRequest,
+        ctx,
+      ) as Promise<WSResponse>,
+  );
+
+  router.registerHandler(
+    'session.messages',
+    (connId, msg, ctx) =>
+      handler.handleMessages(
+        connId,
+        msg as SessionMessagesRequest,
+        ctx,
+      ) as Promise<WSResponse>,
+  );
+
+  router.registerHandler(
+    'session.runs',
+    (connId, msg, ctx) =>
+      handler.handleRuns(
+        connId,
+        msg as SessionRunsRequest,
         ctx,
       ) as Promise<WSResponse>,
   );

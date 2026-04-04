@@ -424,7 +424,7 @@ describe('registerSessionHandlers', () => {
 
     registerSessionHandlers(mockRouter, handler);
 
-    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(5);
+    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(7);
     expect(mockRouter.registerHandler).toHaveBeenCalledWith(
       'session.create',
       expect.any(Function),
@@ -443,6 +443,14 @@ describe('registerSessionHandlers', () => {
     );
     expect(mockRouter.registerHandler).toHaveBeenCalledWith(
       'session.message',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.messages',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.runs',
       expect.any(Function),
     );
   });

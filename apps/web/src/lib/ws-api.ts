@@ -103,7 +103,37 @@ export async function getSession(id: string): Promise<Session | ApiError> {
 export async function listMessages(
   sessionId: string,
 ): Promise<{ items: SessionMessage[] } | ApiError> {
-  return listMessagesRest(sessionId);
+  return withWebSocketFallback(
+    async (client) => {
+      const response = await client.listMessages(sessionId);
+      if (response.type !== 'session.messages') {
+        throw new Error('Unexpected response type for session.messages');
+      }
+
+      return {
+        items: response.payload.messages.map(
+          (msg: {
+            id: string;
+            sessionId: string;
+            role: string;
+            content: string;
+            sequence: number;
+            createdAt: string;
+            metadata?: Record<string, unknown>;
+          }) => ({
+            id: msg.id,
+            sessionId: msg.sessionId,
+            role: msg.role as SessionMessage['role'],
+            content: msg.content,
+            sequence: msg.sequence,
+            createdAt: msg.createdAt,
+            metadata: msg.metadata,
+          }),
+        ),
+      };
+    },
+    () => listMessagesRest(sessionId),
+  );
 }
 
 export async function submitMessage(
@@ -173,13 +203,76 @@ export async function submitMessage(
 }
 
 export async function listAgents(): Promise<{ items: Agent[] }> {
-  return listAgentsRest();
+  return withWebSocketFallback(
+    async (client) => {
+      const response = await client.listAgents();
+      if (response.type !== 'agent.list') {
+        throw new Error('Unexpected response type for agent.list');
+      }
+
+      return {
+        items: response.payload.agents.map(
+          (agent: {
+            id: string;
+            name: string;
+            description?: string;
+            tools?: string[];
+          }) => ({
+            id: agent.id,
+            name: agent.name,
+            description: agent.description,
+            enabled: true,
+            systemPrompt: '',
+            model: '',
+            defaults: {},
+          }),
+        ),
+      };
+    },
+    () => listAgentsRest(),
+  );
 }
 
 export async function listRuns(
   sessionId: string,
 ): Promise<{ items: SessionRun[] } | ApiError> {
-  return listRunsRest(sessionId);
+  return withWebSocketFallback(
+    async (client) => {
+      const response = await client.listRuns(sessionId);
+      if (response.type !== 'session.runs') {
+        throw new Error('Unexpected response type for session.runs');
+      }
+
+      return {
+        items: response.payload.runs.map(
+          (run: {
+            id: string;
+            sessionId: string;
+            agentId?: string;
+            providerId: string;
+            modelId: string;
+            status: string;
+            finishReason?: string;
+            errorCode?: string;
+            errorMessage?: string;
+            createdAt: string;
+          }) => ({
+            id: run.id,
+            sessionId: run.sessionId,
+            providerId: run.providerId,
+            modelId: run.modelId,
+            status: run.status as SessionRun['status'],
+            createdAt: run.createdAt,
+            ...(run.agentId ? { agentId: run.agentId } : {}),
+            ...(run.finishReason ? { finishReason: run.finishReason } : {}),
+            ...(run.errorCode ? { errorCode: run.errorCode } : {}),
+            ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
+          }),
+        ),
+      };
+    },
+    () => listRunsRest(sessionId),
+  );
 }
 
 export type {
