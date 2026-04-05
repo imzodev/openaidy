@@ -10,3 +10,6 @@ export * from './repositories/session-runs';
 export * from './repositories/jobs';
 export * from './repositories/job-runs';
 export * from './repositories/pairing';
+export * from './repositories/tasks';
+export * from './repositories/subtasks';
+export * from './repositories/task-agents';

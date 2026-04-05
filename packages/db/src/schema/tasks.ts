@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, boolean, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, integer, boolean, pgEnum, primaryKey } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 
 /**
