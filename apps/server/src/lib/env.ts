@@ -6,16 +6,15 @@ const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../../',
 );
-const defaultAppConfigPath = resolve(workspaceRoot, '.openaidy/openaidy.json');
+const defaultOpenAidyHome = resolve(workspaceRoot, '.openaidy');
 const defaultAppConfigTemplatePath = resolve(
   workspaceRoot,
   'config/openaidy.template.json',
 );
-const defaultBootstrapAdminTokenPath = resolve(
-  workspaceRoot,
-  '.openaidy/credentials/bootstrap-admin.json',
-);
-const defaultWorkspaceBaseDir = resolve(workspaceRoot, '.openaidy/workspaces');
+const resolveOpenAidyPath = (
+  openAidyHome: string,
+  relativePath: string,
+): string => resolve(openAidyHome, relativePath);
 
 const envSchema = z
   .object({
@@ -25,7 +24,8 @@ const envSchema = z
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),
-    APP_CONFIG_PATH: z.string().default(defaultAppConfigPath),
+    OPENAIDY_HOME: z.string().default(defaultOpenAidyHome),
+    APP_CONFIG_PATH: z.string().optional(),
     APP_CONFIG_TEMPLATE_PATH: z.string().default(defaultAppConfigTemplatePath),
     LOG_LEVEL: z.string().default('info'),
     // WebSocket configuration
@@ -61,16 +61,14 @@ const envSchema = z
       .string()
       .transform((val) => val !== 'false')
       .default('true'),
-    BOOTSTRAP_ADMIN_TOKEN_PATH: z
-      .string()
-      .default(defaultBootstrapAdminTokenPath),
+    BOOTSTRAP_ADMIN_TOKEN_PATH: z.string().optional(),
     BOOTSTRAP_ADMIN_CLIENT_ID: z.string().default('bootstrap-admin'),
     BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: z.coerce
       .number()
       .positive()
       .default(31536000000),
     // Workspace configuration
-    WORKSPACE_BASE_DIR: z.string().default(defaultWorkspaceBaseDir),
+    WORKSPACE_BASE_DIR: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {
@@ -80,6 +78,21 @@ const envSchema = z
         message: 'DATABASE_URL is required when DB_KIND=postgres',
       });
     }
+  })
+  .transform((value) => {
+    const openAidyHome = value.OPENAIDY_HOME;
+    return {
+      ...value,
+      APP_CONFIG_PATH:
+        value.APP_CONFIG_PATH ??
+        resolveOpenAidyPath(openAidyHome, 'openaidy.json'),
+      BOOTSTRAP_ADMIN_TOKEN_PATH:
+        value.BOOTSTRAP_ADMIN_TOKEN_PATH ??
+        resolveOpenAidyPath(openAidyHome, 'credentials/bootstrap-admin.json'),
+      WORKSPACE_BASE_DIR:
+        value.WORKSPACE_BASE_DIR ??
+        resolveOpenAidyPath(openAidyHome, 'workspaces'),
+    };
   });
 
 export type AppEnv = z.infer<typeof envSchema>;

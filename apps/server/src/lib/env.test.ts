@@ -15,6 +15,7 @@ describe('parseEnv', () => {
 
     expect(parsed.DB_KIND).toBe('sqlite');
     expect(parsed.SQLITE_PATH).toBe('./data/openaidy.db');
+    expect(parsed.OPENAIDY_HOME).toBe(resolve(workspaceRoot, '.openaidy'));
     expect(parsed.APP_CONFIG_PATH).toBe(
       resolve(workspaceRoot, '.openaidy/openaidy.json'),
     );
@@ -24,6 +25,34 @@ describe('parseEnv', () => {
     expect(parsed.WORKSPACE_BASE_DIR).toBe(
       resolve(workspaceRoot, '.openaidy/workspaces'),
     );
+  });
+
+  it('derives openaidy paths from OPENAIDY_HOME', () => {
+    const parsed = parseEnv({
+      OPENAIDY_HOME: '/tmp/custom-openaidy',
+    });
+
+    expect(parsed.OPENAIDY_HOME).toBe('/tmp/custom-openaidy');
+    expect(parsed.APP_CONFIG_PATH).toBe('/tmp/custom-openaidy/openaidy.json');
+    expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(
+      '/tmp/custom-openaidy/credentials/bootstrap-admin.json',
+    );
+    expect(parsed.WORKSPACE_BASE_DIR).toBe('/tmp/custom-openaidy/workspaces');
+  });
+
+  it('prefers explicit path overrides over OPENAIDY_HOME derived defaults', () => {
+    const parsed = parseEnv({
+      OPENAIDY_HOME: '/tmp/custom-openaidy',
+      APP_CONFIG_PATH: '/tmp/other/config.json',
+      BOOTSTRAP_ADMIN_TOKEN_PATH: '/tmp/other/bootstrap-admin.json',
+      WORKSPACE_BASE_DIR: '/tmp/other/workspaces',
+    });
+
+    expect(parsed.APP_CONFIG_PATH).toBe('/tmp/other/config.json');
+    expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(
+      '/tmp/other/bootstrap-admin.json',
+    );
+    expect(parsed.WORKSPACE_BASE_DIR).toBe('/tmp/other/workspaces');
   });
 
   it('uses a provided sqlite path', () => {
