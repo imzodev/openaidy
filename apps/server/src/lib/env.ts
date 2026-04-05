@@ -15,6 +15,7 @@ const defaultBootstrapAdminTokenPath = resolve(
   workspaceRoot,
   '.openaidy/credentials/bootstrap-admin.json',
 );
+const defaultWorkspaceBaseDir = resolve(workspaceRoot, '.openaidy/workspaces');
 
 const envSchema = z
   .object({
@@ -69,7 +70,7 @@ const envSchema = z
       .positive()
       .default(31536000000),
     // Workspace configuration
-    WORKSPACE_BASE_DIR: z.string().default('./data/workspaces'),
+    WORKSPACE_BASE_DIR: z.string().default(defaultWorkspaceBaseDir),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {

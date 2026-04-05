@@ -21,6 +21,9 @@ describe('parseEnv', () => {
     expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(
       resolve(workspaceRoot, 'config/openaidy.template.json'),
     );
+    expect(parsed.WORKSPACE_BASE_DIR).toBe(
+      resolve(workspaceRoot, '.openaidy/workspaces'),
+    );
   });
 
   it('uses a provided sqlite path', () => {

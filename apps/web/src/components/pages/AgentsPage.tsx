@@ -384,9 +384,7 @@ export function AgentsPage() {
                         </h3>
                         <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                           <FileExplorer
-                            agentId={
-                              selectedAgent()!.workspace!.workspaces[0].path
-                            }
+                            agentId={selectedAgent()!.id}
                             requestingAgentId={selectedAgent()!.id}
                             class="h-96"
                           />
