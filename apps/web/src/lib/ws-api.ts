@@ -10,6 +10,7 @@ import {
   type Session,
   type SessionMessage,
   type Agent,
+  type AgentWorkspaceConfig,
   type SessionRun,
   type ApiError,
   type SubmitMessageInput,
@@ -282,14 +283,19 @@ export async function listAgents(): Promise<{ items: Agent[] }> {
             name: string;
             description?: string;
             tools?: string[];
+            enabled?: boolean;
+            model?: string;
+            workspace?: AgentWorkspaceConfig;
           }) => ({
             id: agent.id,
             name: agent.name,
             description: agent.description,
-            enabled: true,
+            tools: agent.tools,
+            enabled: agent.enabled ?? true,
             systemPrompt: '',
-            model: '',
+            model: agent.model ?? '',
             defaults: {},
+            workspace: agent.workspace,
           }),
         ),
       };

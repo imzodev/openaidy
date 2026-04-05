@@ -75,6 +75,24 @@ export type RunStatus =
 /**
  * Agent configuration
  */
+export type AgentWorkspacePermission = {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  list: boolean;
+};
+
+export type AgentWorkspace = {
+  path: string;
+  permissions: AgentWorkspacePermission;
+};
+
+export type AgentWorkspaceConfig = {
+  enabled: boolean;
+  defaultPermissions?: AgentWorkspacePermission;
+  workspaces: AgentWorkspace[];
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -82,12 +100,15 @@ export type Agent = {
   enabled: boolean;
   systemPrompt: string;
   model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  tags?: string[];
+  tools?: string[];
   defaults: {
     providerId?: string;
     modelId?: string;
     temperature?: number;
     maxTokens?: number;
   };
+  workspace?: AgentWorkspaceConfig;
 };
 
 /**

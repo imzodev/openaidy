@@ -97,6 +97,7 @@ export type AgentSummary = {
   tags?: string[] | undefined;
   tools?: string[] | undefined;
   model: string; // Format: "providerId/modelId"
+  workspace?: WorkspaceConfig | undefined;
 };
 
 /**
@@ -162,6 +163,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     tags: agent.tags,
     tools: agent.tools,
     model: agent.model,
+    workspace: agent.workspace,
   };
 }
 
