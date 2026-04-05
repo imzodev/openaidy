@@ -6,7 +6,16 @@ import {
   on,
   onCleanup,
 } from 'solid-js';
-import { FileText, Save, RotateCcw, Loader2, FileWarning } from 'lucide-solid';
+import {
+  FileText,
+  Save,
+  RotateCcw,
+  Loader2,
+  FileWarning,
+  Image,
+  FileArchive,
+  AlertTriangle,
+} from 'lucide-solid';
 import {
   readWorkspaceFile,
   updateWorkspaceFile,
@@ -15,6 +24,7 @@ import {
   type WorkspaceFileContentResponse,
   type WorkspaceWriteResponse,
 } from '../../lib/api';
+import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 type WorkspaceEditorProps = {
   agentId: string;
@@ -40,6 +50,13 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [isTextFile, setIsTextFile] = createSignal(true);
   const [mimeType, setMimeType] = createSignal('text/plain');
   const [detectedSize, setDetectedSize] = createSignal<number | null>(null);
+  const [isTooLarge, setIsTooLarge] = createSignal(false);
+  const [maxEditableBytes, setMaxEditableBytes] = createSignal<number | null>(
+    null,
+  );
+  const [lastKnownModifiedAt, setLastKnownModifiedAt] = createSignal<
+    string | null
+  >(null);
   const [isLoading, setIsLoading] = createSignal(false);
   const [isSaving, setIsSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -47,8 +64,29 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
 
   const canWrite = createMemo(() => props.canWrite ?? true);
   const currentPath = createMemo(() => props.selectedFile?.path ?? null);
-  const canEditCurrentFile = createMemo(() => canWrite() && isTextFile());
+  const canRenderTextFile = createMemo(() => isTextFile() && !isTooLarge());
+  const canSaveCurrentFile = createMemo(
+    () => canWrite() && canRenderTextFile(),
+  );
   const isDirty = createMemo(() => content() !== originalContent());
+
+  const previewKind = createMemo<'image' | 'pdf' | 'archive' | 'other'>(() => {
+    const currentMime = mimeType().toLowerCase();
+    if (currentMime.startsWith('image/')) {
+      return 'image';
+    }
+    if (currentMime.includes('pdf')) {
+      return 'pdf';
+    }
+    if (
+      currentMime.includes('zip') ||
+      currentMime.includes('gzip') ||
+      currentMime.includes('7z')
+    ) {
+      return 'archive';
+    }
+    return 'other';
+  });
 
   createEffect(() => {
     props.onDirtyChange?.(isDirty());
@@ -60,6 +98,9 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
     setIsTextFile(true);
     setMimeType('text/plain');
     setDetectedSize(null);
+    setIsTooLarge(false);
+    setMaxEditableBytes(null);
+    setLastKnownModifiedAt(null);
     setError(null);
     setLastSavedAt(null);
   };
@@ -88,6 +129,9 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
       setIsTextFile(response.isText);
       setMimeType(response.mimeType);
       setDetectedSize(response.size);
+      setIsTooLarge(response.isTooLarge);
+      setMaxEditableBytes(response.maxEditableBytes ?? null);
+      setLastKnownModifiedAt(response.modifiedAt);
       setContent(response.isText ? response.content : '');
       setOriginalContent(response.isText ? response.content : '');
       setLastSavedAt(null);
@@ -98,6 +142,9 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
       setIsTextFile(true);
       setMimeType('text/plain');
       setDetectedSize(null);
+      setIsTooLarge(false);
+      setMaxEditableBytes(null);
+      setLastKnownModifiedAt(null);
     } finally {
       setIsLoading(false);
     }
@@ -105,7 +152,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
 
   const saveFile = async () => {
     const filePath = currentPath();
-    if (!filePath || !canEditCurrentFile() || !isDirty() || isSaving()) {
+    if (!filePath || !canSaveCurrentFile() || !isDirty() || isSaving()) {
       return;
     }
 
@@ -118,14 +165,21 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         filePath,
         content(),
         props.requestingAgentId,
+        lastKnownModifiedAt() ?? undefined,
       );
 
       if (isWorkspaceError(response)) {
-        setError(response.error);
+        if (response.code === 'CONFLICT') {
+          setError('This file changed on disk. Reload and reapply your edits.');
+        } else if (response.code === 'FILE_TOO_LARGE') {
+          setError('This file is too large to edit in the workspace editor.');
+        } else {
+          setError(response.error);
+        }
         return;
       }
 
-      setOriginalContent(content());
+      await loadFile(filePath);
       setLastSavedAt(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save file');
@@ -163,7 +217,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         return;
       }
 
-      if (!currentPath() || !canEditCurrentFile() || !isDirty()) {
+      if (!currentPath() || !canSaveCurrentFile() || !isDirty()) {
         return;
       }
 
@@ -245,7 +299,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             onClick={() => void saveFile()}
             disabled={
               !isDirty() ||
-              !canEditCurrentFile() ||
+              !canSaveCurrentFile() ||
               isSaving() ||
               isLoading() ||
               !props.selectedFile
@@ -285,25 +339,71 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
           }
         >
           <Show
-            when={isTextFile()}
+            when={canRenderTextFile()}
             fallback={
-              <div class="flex-1 flex items-center justify-center p-6 text-sm text-text-tertiary text-center">
-                <div>
-                  <FileWarning class="w-8 h-8 mx-auto mb-3 text-gray-400" />
-                  <p class="font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    This file cannot be edited here.
-                  </p>
-                  <p>Detected type: {mimeType()}</p>
+              <div class="flex-1 flex items-center justify-center p-6">
+                <div class="w-full max-w-md rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 p-4 text-sm text-center text-text-tertiary">
+                  <Show
+                    when={isTooLarge()}
+                    fallback={
+                      <>
+                        <Show
+                          when={previewKind() === 'image'}
+                          fallback={
+                            <Show
+                              when={previewKind() === 'archive'}
+                              fallback={
+                                <Show
+                                  when={previewKind() === 'pdf'}
+                                  fallback={
+                                    <FileWarning class="w-8 h-8 mx-auto mb-3 text-gray-400" />
+                                  }
+                                >
+                                  <FileText class="w-8 h-8 mx-auto mb-3 text-gray-400" />
+                                </Show>
+                              }
+                            >
+                              <FileArchive class="w-8 h-8 mx-auto mb-3 text-gray-400" />
+                            </Show>
+                          }
+                        >
+                          <Image class="w-8 h-8 mx-auto mb-3 text-gray-400" />
+                        </Show>
+
+                        <p class="font-medium text-gray-700 dark:text-gray-200 mb-1">
+                          Preview only
+                        </p>
+                        <p class="mb-2">
+                          This file type is not editable in the workspace
+                          editor.
+                        </p>
+                        <p>Detected type: {mimeType()}</p>
+                      </>
+                    }
+                  >
+                    <AlertTriangle class="w-8 h-8 mx-auto mb-3 text-amber-500" />
+                    <p class="font-medium text-gray-700 dark:text-gray-200 mb-1">
+                      File too large
+                    </p>
+                    <p class="mb-2">
+                      This file exceeds the inline editor limit.
+                    </p>
+                    <p>
+                      Size: {detectedSize() ?? 0} bytes
+                      <Show when={maxEditableBytes()}>
+                        {(limit) => ` (max editable ${limit()} bytes)`}
+                      </Show>
+                    </p>
+                  </Show>
                 </div>
               </div>
             }
           >
-            <textarea
+            <CodeMirrorEditor
               value={content()}
-              onInput={(event) => setContent(event.currentTarget.value)}
+              onChange={setContent}
               readOnly={!canWrite()}
-              spellcheck={false}
-              class="flex-1 w-full p-4 resize-none border-0 focus:outline-none bg-white dark:bg-gray-900 text-sm font-mono text-gray-900 dark:text-gray-100"
+              filePath={props.selectedFile?.path}
             />
           </Show>
         </Show>

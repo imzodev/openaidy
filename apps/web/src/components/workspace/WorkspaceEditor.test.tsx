@@ -9,6 +9,21 @@ import {
 import { WorkspaceEditor } from './WorkspaceEditor';
 import * as api from '../../lib/api';
 
+vi.mock('./CodeMirrorEditor', () => ({
+  CodeMirrorEditor: (props: {
+    value: string;
+    onChange: (nextValue: string) => void;
+    readOnly?: boolean;
+  }) => (
+    <textarea
+      data-testid="mock-codemirror"
+      value={props.value}
+      onInput={(event) => props.onChange(event.currentTarget.value)}
+      readOnly={props.readOnly}
+    />
+  ),
+}));
+
 vi.mock('../../lib/api', () => ({
   readWorkspaceFile: vi.fn(),
   updateWorkspaceFile: vi.fn(),
@@ -52,6 +67,8 @@ describe('WorkspaceEditor', () => {
       isText: true,
       mimeType: 'text/plain',
       size: 11,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
     });
 
     render(() => (
@@ -79,6 +96,8 @@ describe('WorkspaceEditor', () => {
       isText: true,
       mimeType: 'text/plain',
       size: 7,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
     });
     vi.mocked(api.updateWorkspaceFile).mockResolvedValue({
       success: true,
@@ -110,6 +129,7 @@ describe('WorkspaceEditor', () => {
         'test.txt',
         'updated',
         'default',
+        '2026-04-05T10:00:00Z',
       );
     });
 
@@ -123,6 +143,8 @@ describe('WorkspaceEditor', () => {
       isText: true,
       mimeType: 'text/plain',
       size: 8,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
     });
 
     render(() => (
@@ -146,6 +168,8 @@ describe('WorkspaceEditor', () => {
       isText: false,
       mimeType: 'application/octet-stream',
       size: 128,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
     });
 
     render(() => (
@@ -157,7 +181,7 @@ describe('WorkspaceEditor', () => {
       />
     ));
 
-    await screen.findByText('This file cannot be edited here.');
+    await screen.findByText('Preview only');
     expect(screen.getByText('Non-text file')).toBeInTheDocument();
     expect(
       screen.getByText('Detected type: application/octet-stream'),
