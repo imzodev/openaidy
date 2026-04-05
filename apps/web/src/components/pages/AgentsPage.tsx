@@ -97,6 +97,29 @@ export function AgentsPage() {
     setHasUnsavedWorkspaceChanges(false);
   };
 
+  const handleWorkspaceFileDelete = (deletedPath: string) => {
+    if (selectedWorkspaceFile()?.path !== deletedPath) {
+      return;
+    }
+    setSelectedWorkspaceFile(null);
+    setHasUnsavedWorkspaceChanges(false);
+  };
+
+  const handleWorkspaceFileRename = (fromPath: string, toPath: string) => {
+    const currentFile = selectedWorkspaceFile();
+    if (!currentFile || currentFile.path !== fromPath) {
+      return;
+    }
+
+    const pathParts = toPath.split('/');
+    const nextName = pathParts[pathParts.length - 1] || currentFile.name;
+    setSelectedWorkspaceFile({
+      ...currentFile,
+      name: nextName,
+      path: toPath,
+    });
+  };
+
   createEffect(() => {
     if (!hasUnsavedWorkspaceChanges()) {
       return;
@@ -483,10 +506,13 @@ export function AgentsPage() {
                             <FileExplorer
                               agentId={selectedAgent()!.id}
                               requestingAgentId={selectedAgent()!.id}
+                              canWrite={workspaceCanWrite()}
                               selectedFilePath={
                                 selectedWorkspaceFile()?.path ?? null
                               }
                               onFileSelect={handleWorkspaceFileSelect}
+                              onFileDelete={handleWorkspaceFileDelete}
+                              onFileRename={handleWorkspaceFileRename}
                               class="h-[32rem]"
                             />
                           </div>

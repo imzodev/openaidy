@@ -6,6 +6,9 @@ import * as api from '../../lib/api';
 // Mock the API functions
 vi.mock('../../lib/api', () => ({
   listWorkspaceFiles: vi.fn(),
+  writeWorkspaceFile: vi.fn(),
+  renameWorkspaceFile: vi.fn(),
+  deleteWorkspaceFile: vi.fn(),
 }));
 
 describe('FileExplorer', () => {
@@ -163,6 +166,49 @@ describe('FileExplorer', () => {
     fireEvent.click(refreshButton);
 
     expect(api.listWorkspaceFiles).toHaveBeenCalledTimes(2);
+  });
+
+  it('should create file from toolbar action', async () => {
+    vi.mocked(api.listWorkspaceFiles)
+      .mockResolvedValueOnce({ items: mockFiles })
+      .mockResolvedValueOnce({
+        items: [
+          ...mockFiles,
+          {
+            name: 'new.txt',
+            path: 'new.txt',
+            isDirectory: false,
+            size: 0,
+            modifiedAt: '2026-04-04T13:00:00Z',
+          },
+        ],
+      });
+    vi.mocked(api.writeWorkspaceFile).mockResolvedValue({
+      success: true,
+      path: 'new.txt',
+    });
+
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new.txt');
+
+    render(() => (
+      <FileExplorer
+        agentId="test-agent"
+        requestingAgentId="requester"
+        canWrite={true}
+      />
+    ));
+
+    await screen.findByText('folder1');
+    fireEvent.click(screen.getByTitle('Create file'));
+
+    expect(api.writeWorkspaceFile).toHaveBeenCalledWith(
+      'test-agent',
+      'new.txt',
+      '',
+      'requester',
+    );
+
+    promptSpy.mockRestore();
   });
 
   it('should sort directories before files', async () => {

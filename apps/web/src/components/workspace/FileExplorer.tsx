@@ -1,9 +1,21 @@
 import { For, Show, createSignal, createEffect, on } from 'solid-js';
-import { Folder, File, ChevronRight, RefreshCw } from 'lucide-solid';
 import {
+  Folder,
+  File,
+  ChevronRight,
+  RefreshCw,
+  Plus,
+  Pencil,
+  Trash2,
+} from 'lucide-solid';
+import {
+  writeWorkspaceFile,
+  deleteWorkspaceFile,
+  renameWorkspaceFile,
   listWorkspaceFiles,
   type WorkspaceFileInfo,
   type WorkspaceFileListResponse,
+  type WorkspaceWriteResponse,
   type WorkspaceErrorResponse,
 } from '../../lib/api';
 
@@ -14,8 +26,14 @@ type FileExplorerProps = {
   requestingAgentId: string;
   /** Optional controlled selected file path */
   selectedFilePath?: string | null;
+  /** Whether write operations are allowed */
+  canWrite?: boolean;
   /** Callback when a file is selected */
   onFileSelect?: (file: WorkspaceFileInfo) => void;
+  /** Callback when a file is renamed */
+  onFileRename?: (fromPath: string, toPath: string) => void;
+  /** Callback when a file is deleted */
+  onFileDelete?: (path: string) => void;
   /** Callback when a directory is selected */
   onDirectorySelect?: (path: string) => void;
   /** Optional class for styling */
@@ -29,7 +47,10 @@ type FileNode = WorkspaceFileInfo & {
 };
 
 function isErrorResponse(
-  response: WorkspaceFileListResponse | WorkspaceErrorResponse,
+  response:
+    | WorkspaceFileListResponse
+    | WorkspaceWriteResponse
+    | WorkspaceErrorResponse,
 ): response is WorkspaceErrorResponse {
   return 'error' in response;
 }
@@ -40,6 +61,8 @@ export function FileExplorer(props: FileExplorerProps) {
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
+
+  const canWrite = () => props.canWrite ?? true;
 
   const fetchFiles = async (path: string = '') => {
     setIsLoading(true);
@@ -115,6 +138,108 @@ export function FileExplorer(props: FileExplorerProps) {
     fetchFiles(currentPath());
   };
 
+  const makePathInCurrentDirectory = (name: string): string => {
+    const trimmedName = name.trim().replace(/^\/+/, '');
+    return currentPath() ? `${currentPath()}/${trimmedName}` : trimmedName;
+  };
+
+  const handleCreateFile = async () => {
+    if (!canWrite()) {
+      return;
+    }
+
+    const requestedName = window.prompt('Enter new file name');
+    if (!requestedName) {
+      return;
+    }
+
+    const filePath = makePathInCurrentDirectory(requestedName);
+    if (!filePath) {
+      return;
+    }
+
+    setError(null);
+    const response = await writeWorkspaceFile(
+      props.agentId,
+      filePath,
+      '',
+      props.requestingAgentId,
+    );
+
+    if (isErrorResponse(response)) {
+      setError(response.error);
+      return;
+    }
+
+    await fetchFiles(currentPath());
+  };
+
+  const handleRenameFile = async (item: FileNode, event: MouseEvent) => {
+    event.stopPropagation();
+    if (!canWrite() || item.isDirectory) {
+      return;
+    }
+
+    const nextName = window.prompt('Rename file', item.name);
+    if (!nextName || nextName === item.name) {
+      return;
+    }
+
+    const pathSegments = item.path.split('/');
+    pathSegments.pop();
+    const parentPath = pathSegments.join('/');
+    const destinationPath = parentPath ? `${parentPath}/${nextName}` : nextName;
+
+    setError(null);
+    const response = await renameWorkspaceFile(
+      props.agentId,
+      item.path,
+      destinationPath,
+      props.requestingAgentId,
+    );
+
+    if (isErrorResponse(response)) {
+      setError(response.error);
+      return;
+    }
+
+    if (selectedFile() === item.path) {
+      setSelectedFile(destinationPath);
+    }
+    props.onFileRename?.(item.path, destinationPath);
+    await fetchFiles(currentPath());
+  };
+
+  const handleDeleteFile = async (item: FileNode, event: MouseEvent) => {
+    event.stopPropagation();
+    if (!canWrite() || item.isDirectory) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete file "${item.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+    const response = await deleteWorkspaceFile(
+      props.agentId,
+      item.path,
+      props.requestingAgentId,
+    );
+
+    if (isErrorResponse(response)) {
+      setError(response.error);
+      return;
+    }
+
+    if (selectedFile() === item.path) {
+      setSelectedFile(null);
+    }
+    props.onFileDelete?.(item.path);
+    await fetchFiles(currentPath());
+  };
+
   const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -148,6 +273,14 @@ export function FileExplorer(props: FileExplorerProps) {
           <span class="truncate font-mono text-xs">/{currentPath()}</span>
         </div>
         <div class="flex items-center gap-1">
+          <button
+            onClick={handleCreateFile}
+            disabled={!canWrite() || isLoading()}
+            class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded disabled:opacity-50"
+            title={canWrite() ? 'Create file' : 'Read-only workspace'}
+          >
+            <Plus class="w-4 h-4" />
+          </button>
           <button
             onClick={handleRefresh}
             disabled={isLoading()}
@@ -223,6 +356,27 @@ export function FileExplorer(props: FileExplorerProps) {
                   <span class="text-xs text-text-tertiary hidden lg:inline">
                     {formatDate(item.modifiedAt)}
                   </span>
+
+                  <Show when={!item.isDirectory && canWrite()}>
+                    <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                        title="Rename file"
+                        onClick={(event) => handleRenameFile(item, event)}
+                      >
+                        <Pencil class="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400"
+                        title="Delete file"
+                        onClick={(event) => handleDeleteFile(item, event)}
+                      >
+                        <Trash2 class="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </Show>
                 </div>
               </li>
             )}
