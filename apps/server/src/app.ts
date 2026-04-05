@@ -219,11 +219,11 @@ export async function buildApp() {
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
-    }
+    });
+  }
 
   // Register log routes
   await app.register(logRoutes);
-  }
 
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {
