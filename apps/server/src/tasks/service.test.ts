@@ -1,19 +1,56 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskService, createTaskService } from './service';
-import type { TasksRepository, SubtasksRepository, TaskAgentsRepository, Task, Subtask, TaskAgent } from '@openaidy/db';
+import type { Task, Subtask, TaskAgent, AgentRole } from '@openaidy/db';
 
-// Mock repositories
-const createMockTasksRepo = (): TasksRepository => ({
+// Mock repository types - use interface-like types for mocking
+interface MockTasksRepository {
+  create: ReturnType<typeof vi.fn>;
+  findById: ReturnType<typeof vi.fn>;
+  list: ReturnType<typeof vi.fn>;
+  listByStatuses: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  updateStatus: ReturnType<typeof vi.fn>;
+  updatePlanningStatus: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+}
+
+interface MockSubtasksRepository {
+  create: ReturnType<typeof vi.fn>;
+  findById: ReturnType<typeof vi.fn>;
+  listByTask: ReturnType<typeof vi.fn>;
+  listByStatus: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  updateStatus: ReturnType<typeof vi.fn>;
+  assignAgent: ReturnType<typeof vi.fn>;
+  setResult: ReturnType<typeof vi.fn>;
+  getCountsByStatus: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
+}
+
+interface MockTaskAgentsRepository {
+  assign: ReturnType<typeof vi.fn>;
+  assignMultiple: ReturnType<typeof vi.fn>;
+  remove: ReturnType<typeof vi.fn>;
+  listByTask: ReturnType<typeof vi.fn>;
+}
+
+interface MockAgentRegistry {
+  getAgent: ReturnType<typeof vi.fn>;
+}
+
+// Mock factory functions
+const createMockTasksRepo = (): MockTasksRepository => ({
   create: vi.fn(),
   findById: vi.fn(),
   list: vi.fn(),
+  listByStatuses: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
   updatePlanningStatus: vi.fn(),
   delete: vi.fn(),
 });
 
-const createMockSubtasksRepo = (): SubtasksRepository => ({
+const createMockSubtasksRepo = (): MockSubtasksRepository => ({
   create: vi.fn(),
   findById: vi.fn(),
   listByTask: vi.fn(),
@@ -26,19 +63,15 @@ const createMockSubtasksRepo = (): SubtasksRepository => ({
   delete: vi.fn(),
 });
 
-const createMockTaskAgentsRepo = (): TaskAgentsRepository => ({
+const createMockTaskAgentsRepo = (): MockTaskAgentsRepository => ({
   assign: vi.fn(),
   assignMultiple: vi.fn(),
   remove: vi.fn(),
   listByTask: vi.fn(),
-  findByTaskAndAgent: vi.fn(),
 });
 
-// Mock agent registry
-const createMockAgentRegistry = () => ({
+const createMockAgentRegistry = (): MockAgentRegistry => ({
   getAgent: vi.fn(),
-  listAgents: vi.fn(),
-  registerAgent: vi.fn(),
 });
 
 describe('TaskService', () => {
@@ -88,10 +121,10 @@ describe('TaskService', () => {
     agentRegistry = createMockAgentRegistry();
 
     service = createTaskService({
-      tasksRepo,
-      subtasksRepo,
-      taskAgentsRepo,
-      agents: agentRegistry,
+      tasksRepo: tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+      subtasksRepo: subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+      taskAgentsRepo: taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+      agents: agentRegistry as unknown as import('../agents').AgentRegistry,
     });
   });
 
