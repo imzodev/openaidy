@@ -506,17 +506,9 @@ export type WorkspaceErrorResponse = {
  */
 export async function listWorkspaceFiles(
   agentId: string,
-  path?: string,
   requestingAgentId: string,
+  path?: string,
 ): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
-  const url = path
-    ? `${API_BASE}/workspace/${agentId}/files/${path}`
-    : `${API_BASE}/workspace/${agentId}/files`;
-  const response = await fetch(url, {
-    headers: { 'X-Agent-Id': requestingAgentId },
-  });
-  return response.json();
-}
   const url = path
     ? `${API_BASE}/workspace/${agentId}/files/${path}`
     : `${API_BASE}/workspace/${agentId}/files`;
@@ -534,9 +526,12 @@ export async function readWorkspaceFile(
   filePath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
-  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
-    headers: { 'X-Agent-Id': requestingAgentId },
-  });
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      headers: { 'X-Agent-Id': requestingAgentId },
+    },
+  );
   return response.json();
 }
 
@@ -549,14 +544,17 @@ export async function writeWorkspaceFile(
   content: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Id': requestingAgentId,
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': requestingAgentId,
+      },
+      body: JSON.stringify({ content }),
     },
-    body: JSON.stringify({ content }),
-  });
+  );
   return response.json();
 }
 
@@ -569,14 +567,17 @@ export async function updateWorkspaceFile(
   content: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Id': requestingAgentId,
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': requestingAgentId,
+      },
+      body: JSON.stringify({ content }),
     },
-    body: JSON.stringify({ content }),
-  });
+  );
   return response.json();
 }
 
@@ -588,10 +589,13 @@ export async function deleteWorkspaceFile(
   filePath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(`${API_BASE}/workspace/${agentId}/files/${filePath}`, {
-    method: 'DELETE',
-    headers: { 'X-Agent-Id': requestingAgentId },
-  });
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'DELETE',
+      headers: { 'X-Agent-Id': requestingAgentId },
+    },
+  );
   return response.json();
 }
 

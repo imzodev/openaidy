@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createEffect, on } from 'solid-js';
-import { Folder, File, ChevronRight, ChevronDown, RefreshCw, Trash2, FilePlus } from 'lucide-solid';
+import { Folder, File, ChevronRight, RefreshCw } from 'lucide-solid';
 import {
   listWorkspaceFiles,
   type WorkspaceFileInfo,
@@ -46,8 +46,8 @@ export function FileExplorer(props: FileExplorerProps) {
     try {
       const response = await listWorkspaceFiles(
         props.agentId,
-        path || undefined,
         props.requestingAgentId,
+        path || undefined,
       );
 
       if (isErrorResponse(response)) {
@@ -81,7 +81,9 @@ export function FileExplorer(props: FileExplorerProps) {
 
   const handleItemClick = (item: FileNode) => {
     if (item.isDirectory) {
-      const newPath = currentPath() ? `${currentPath()}/${item.name}` : item.name;
+      const newPath = currentPath()
+        ? `${currentPath()}/${item.name}`
+        : item.name;
       setCurrentPath(newPath);
       fetchFiles(newPath);
       props.onDirectorySelect?.(newPath);
@@ -133,9 +135,7 @@ export function FileExplorer(props: FileExplorerProps) {
               <ChevronRight class="w-4 h-4 rotate-180" />
             </button>
           </Show>
-          <span class="truncate font-mono text-xs">
-            /{currentPath()}
-          </span>
+          <span class="truncate font-mono text-xs">/{currentPath()}</span>
         </div>
         <div class="flex items-center gap-1">
           <button
@@ -190,7 +190,12 @@ export function FileExplorer(props: FileExplorerProps) {
                   }`}
                 >
                   {/* Icon */}
-                  <Show when={item.isDirectory} fallback={<File class="w-4 h-4 flex-shrink-0 text-gray-400" />}>
+                  <Show
+                    when={item.isDirectory}
+                    fallback={
+                      <File class="w-4 h-4 flex-shrink-0 text-gray-400" />
+                    }
+                  >
                     <Folder class="w-4 h-4 flex-shrink-0 text-yellow-500" />
                   </Show>
 
