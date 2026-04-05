@@ -5,10 +5,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { workspaceRoutes } from './workspace';
 import { createAgentRegistry, type AgentRegistry } from '../agents/registry';
-import {
-  createWorkspaceService,
-  WorkspaceService,
-} from '../workspace/service';
+import { createWorkspaceService, WorkspaceService } from '../workspace/service';
 import type { Agent } from '../agents/schema';
 
 describe('workspace routes', () => {
@@ -138,7 +135,13 @@ describe('workspace routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().content).toBe('file content');
+      expect(response.json()).toMatchObject({
+        content: 'file content',
+        path: 'test.txt',
+        isText: true,
+        mimeType: 'text/plain',
+        size: 12,
+      });
     });
 
     it('should return 403 for unauthorized access', async () => {
@@ -188,7 +191,12 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: false,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
@@ -205,7 +213,10 @@ describe('workspace routes', () => {
       expect(response.json().success).toBe(true);
 
       // Verify file was created
-      const content = await workspaceService.readFile('agent-1', 'new-file.txt');
+      const content = await workspaceService.readFile(
+        'agent-1',
+        'new-file.txt',
+      );
       expect(content).toBe('new content');
     });
 
@@ -265,7 +276,12 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: false,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
@@ -293,7 +309,12 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: false,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
@@ -308,6 +329,46 @@ describe('workspace routes', () => {
 
       expect(response.statusCode).toBe(404);
     });
+
+    it('should return 415 when updating a non-text file', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: false,
+            list: true,
+          },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+
+      const workspacePath = workspaceService.getWorkspacePath('agent-1');
+      await writeFile(
+        resolve(workspacePath, 'binary.bin'),
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]),
+      );
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/workspace/agent-1/files/binary.bin',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'attempted text overwrite' },
+      });
+
+      expect(response.statusCode).toBe(415);
+      expect(response.json()).toMatchObject({
+        code: 'UNSUPPORTED_MEDIA_TYPE',
+      });
+    });
   });
 
   describe('DELETE /workspace/:agentId/files/*', () => {
@@ -320,7 +381,12 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: true, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: true,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
@@ -347,13 +413,22 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: false,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
       addAgent(agent);
       await workspaceService.ensureWorkspace('agent-1');
-      await workspaceService.writeFile('agent-1', 'protected.txt', 'cannot delete');
+      await workspaceService.writeFile(
+        'agent-1',
+        'protected.txt',
+        'cannot delete',
+      );
 
       const response = await app.inject({
         method: 'DELETE',
@@ -373,7 +448,12 @@ describe('workspace routes', () => {
         model: 'openai/gpt-4o-mini',
         workspace: {
           enabled: true,
-          defaultPermissions: { read: true, write: true, delete: true, list: true },
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: true,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };

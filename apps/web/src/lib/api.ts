@@ -504,6 +504,9 @@ export type WorkspaceFileListResponse = {
 export type WorkspaceFileContentResponse = {
   content: string;
   path: string;
+  isText: boolean;
+  mimeType: string;
+  size: number;
 };
 
 /**

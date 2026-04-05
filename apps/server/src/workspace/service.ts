@@ -1,4 +1,11 @@
-import { mkdir, readdir, readFile, writeFile, unlink, stat } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+  unlink,
+  stat,
+} from 'node:fs/promises';
 import { join, resolve, relative, dirname } from 'node:path';
 import { createLogger } from '../lib/logger';
 import type { Agent } from '../agents/schema';
@@ -14,6 +21,13 @@ export interface FileInfo {
   isDirectory: boolean;
   size: number;
   modifiedAt: Date;
+}
+
+export interface FileReadResult {
+  content: string;
+  isText: boolean;
+  mimeType: string;
+  size: number;
 }
 
 /**
@@ -45,9 +59,74 @@ export interface WorkspaceServiceOptions {
 export class WorkspaceService {
   private readonly baseDir: string;
 
+  private static readonly BINARY_SIGNATURES: Array<{
+    mimeType: string;
+    signature: number[];
+  }> = [
+    { mimeType: 'application/pdf', signature: [0x25, 0x50, 0x44, 0x46] },
+    { mimeType: 'image/png', signature: [0x89, 0x50, 0x4e, 0x47] },
+    { mimeType: 'image/jpeg', signature: [0xff, 0xd8, 0xff] },
+    { mimeType: 'image/gif', signature: [0x47, 0x49, 0x46, 0x38] },
+    { mimeType: 'image/webp', signature: [0x52, 0x49, 0x46, 0x46] },
+    { mimeType: 'application/zip', signature: [0x50, 0x4b, 0x03, 0x04] },
+    { mimeType: 'application/gzip', signature: [0x1f, 0x8b] },
+    {
+      mimeType: 'application/x-7z-compressed',
+      signature: [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c],
+    },
+  ];
+
   constructor(options: WorkspaceServiceOptions) {
     this.baseDir = resolve(options.baseDir);
     log.info('WorkspaceService initialized with baseDir:', this.baseDir);
+  }
+
+  private detectMimeTypeFromContent(buffer: Buffer): string {
+    for (const item of WorkspaceService.BINARY_SIGNATURES) {
+      const matches = item.signature.every(
+        (byte, index) => buffer[index] === byte,
+      );
+      if (matches) {
+        return item.mimeType;
+      }
+    }
+
+    return 'application/octet-stream';
+  }
+
+  private isLikelyTextContent(buffer: Buffer): boolean {
+    if (buffer.length === 0) {
+      return true;
+    }
+
+    const sampleSize = Math.min(buffer.length, 8192);
+    const sample = buffer.subarray(0, sampleSize);
+
+    for (const byte of sample) {
+      if (byte === 0) {
+        return false;
+      }
+    }
+
+    let suspiciousControlBytes = 0;
+    for (const byte of sample) {
+      const isControl = byte < 32 && byte !== 9 && byte !== 10 && byte !== 13;
+      if (isControl) {
+        suspiciousControlBytes += 1;
+      }
+    }
+
+    if (suspiciousControlBytes / sample.length > 0.05) {
+      return false;
+    }
+
+    const decoded = sample.toString('utf-8');
+    const replacementCount = (decoded.match(/\uFFFD/g) ?? []).length;
+    if (replacementCount > 0 && replacementCount / decoded.length > 0.02) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -71,6 +150,48 @@ export class WorkspaceService {
       throw new WorkspaceError(
         `Failed to create workspace for agent ${agentId}`,
         'WORKSPACE_CREATE_FAILED',
+        err,
+      );
+    }
+  }
+
+  async readFileWithType(
+    agentId: string,
+    filePath: string,
+  ): Promise<FileReadResult> {
+    const absolutePath = this.validatePath(agentId, filePath);
+    log.debug('Reading file with type detection:', {
+      agentId,
+      filePath,
+      absolutePath,
+    });
+
+    try {
+      const buffer = await readFile(absolutePath);
+      const isText = this.isLikelyTextContent(buffer);
+      const mimeType = isText
+        ? 'text/plain'
+        : this.detectMimeTypeFromContent(buffer);
+
+      return {
+        content: isText ? buffer.toString('utf-8') : '',
+        isText,
+        mimeType,
+        size: buffer.length,
+      };
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new WorkspaceError(
+          `File not found: ${filePath}`,
+          'FILE_NOT_FOUND',
+          err,
+        );
+      }
+      log.error('Failed to read file:', { agentId, filePath }, err);
+      throw new WorkspaceError(
+        `Failed to read file: ${filePath}`,
+        'READ_FILE_FAILED',
         err,
       );
     }
@@ -236,7 +357,9 @@ export class WorkspaceService {
    * Check if an agent has workspace access configured
    */
   hasWorkspaceAccess(agent: Agent): boolean {
-    return !!(agent.workspace?.enabled && agent.workspace.workspaces.length > 0);
+    return !!(
+      agent.workspace?.enabled && agent.workspace.workspaces.length > 0
+    );
   }
 }
 

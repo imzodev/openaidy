@@ -12,6 +12,8 @@ type FileExplorerProps = {
   agentId: string;
   /** The agent making the request (for permission check) */
   requestingAgentId: string;
+  /** Optional controlled selected file path */
+  selectedFilePath?: string | null;
   /** Callback when a file is selected */
   onFileSelect?: (file: WorkspaceFileInfo) => void;
   /** Callback when a directory is selected */
@@ -79,6 +81,13 @@ export function FileExplorer(props: FileExplorerProps) {
       },
     ),
   );
+
+  createEffect(() => {
+    if (props.selectedFilePath === undefined) {
+      return;
+    }
+    setSelectedFile(props.selectedFilePath);
+  });
 
   const handleItemClick = (item: FileNode) => {
     if (item.isDirectory) {

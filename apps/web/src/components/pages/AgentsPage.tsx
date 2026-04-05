@@ -1,8 +1,19 @@
 import { Layout } from './Layout';
-import { For, Show, createSignal, onMount } from 'solid-js';
+import {
+  For,
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+} from 'solid-js';
 import { Bot, Folder, FileText, Wrench, Power, PowerOff } from 'lucide-solid';
 import { listAgents, type Agent } from '../../lib/api';
-import { FileExplorer } from '../workspace';
+import {
+  FileExplorer,
+  WorkspaceEditor,
+  type WorkspaceFileInfo,
+} from '../workspace';
 
 export function AgentsPage() {
   const [agents, setAgents] = createSignal<Agent[]>([]);
@@ -14,8 +25,93 @@ export function AgentsPage() {
     'overview' | 'workspace' | 'tools'
   >('overview');
   const [error, setError] = createSignal<string | null>(null);
+  const [selectedWorkspaceFile, setSelectedWorkspaceFile] =
+    createSignal<WorkspaceFileInfo | null>(null);
+  const [hasUnsavedWorkspaceChanges, setHasUnsavedWorkspaceChanges] =
+    createSignal(false);
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
+
+  const workspaceCanWrite = () => {
+    const workspace = selectedAgent()?.workspace;
+    if (!workspace?.enabled) {
+      return false;
+    }
+
+    const hasWorkspaceWritePermission = workspace.workspaces.some(
+      (item) => item.permissions.write,
+    );
+
+    return (
+      hasWorkspaceWritePermission ||
+      workspace.defaultPermissions?.write === true
+    );
+  };
+
+  const confirmDiscardWorkspaceChanges = () => {
+    if (!hasUnsavedWorkspaceChanges()) {
+      return true;
+    }
+
+    return window.confirm(
+      'You have unsaved workspace changes. Discard them and continue?',
+    );
+  };
+
+  const handleAgentSelection = (agentId: string) => {
+    if (selectedAgentId() === agentId) {
+      return;
+    }
+
+    if (!confirmDiscardWorkspaceChanges()) {
+      return;
+    }
+
+    setSelectedAgentId(agentId);
+    setSelectedWorkspaceFile(null);
+    setHasUnsavedWorkspaceChanges(false);
+  };
+
+  const handleTabChange = (tab: 'overview' | 'workspace' | 'tools') => {
+    if (activeTab() === tab) {
+      return;
+    }
+
+    if (activeTab() === 'workspace' && !confirmDiscardWorkspaceChanges()) {
+      return;
+    }
+
+    setActiveTab(tab);
+  };
+
+  const handleWorkspaceFileSelect = (file: WorkspaceFileInfo) => {
+    if (selectedWorkspaceFile()?.path === file.path) {
+      return;
+    }
+
+    if (!confirmDiscardWorkspaceChanges()) {
+      return;
+    }
+
+    setSelectedWorkspaceFile(file);
+    setHasUnsavedWorkspaceChanges(false);
+  };
+
+  createEffect(() => {
+    if (!hasUnsavedWorkspaceChanges()) {
+      return;
+    }
+
+    const beforeUnloadHandler = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    onCleanup(() => {
+      window.removeEventListener('beforeunload', beforeUnloadHandler);
+    });
+  });
 
   onMount(async () => {
     try {
@@ -85,7 +181,7 @@ export function AgentsPage() {
                         ? 'bg-primary/10 border-l-4 border-l-primary'
                         : 'border-l-4 border-l-transparent'
                     }`}
-                    onClick={() => setSelectedAgentId(agent.id)}
+                    onClick={() => handleAgentSelection(agent.id)}
                   >
                     <div class="flex items-center gap-3">
                       <div
@@ -176,7 +272,7 @@ export function AgentsPage() {
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
-                    onClick={() => setActiveTab('overview')}
+                    onClick={() => handleTabChange('overview')}
                   >
                     <span class="flex items-center gap-2">
                       <FileText class="w-4 h-4" />
@@ -191,7 +287,7 @@ export function AgentsPage() {
                           ? 'border-primary text-primary'
                           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                       }`}
-                      onClick={() => setActiveTab('workspace')}
+                      onClick={() => handleTabChange('workspace')}
                     >
                       <span class="flex items-center gap-2">
                         <Folder class="w-4 h-4" />
@@ -206,7 +302,7 @@ export function AgentsPage() {
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
-                    onClick={() => setActiveTab('tools')}
+                    onClick={() => handleTabChange('tools')}
                   >
                     <span class="flex items-center gap-2">
                       <Wrench class="w-4 h-4" />
@@ -374,20 +470,36 @@ export function AgentsPage() {
                       </div>
                     </div>
 
-                    {/* File Explorer */}
+                    {/* File Explorer + Editor */}
                     <Show
                       when={selectedAgent()!.workspace!.workspaces.length > 0}
                     >
-                      <div>
-                        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
-                          File Browser
+                      <div class="space-y-4">
+                        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          Workspace Files
                         </h3>
-                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                          <FileExplorer
-                            agentId={selectedAgent()!.id}
-                            requestingAgentId={selectedAgent()!.id}
-                            class="h-96"
-                          />
+                        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                          <div class="lg:col-span-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <FileExplorer
+                              agentId={selectedAgent()!.id}
+                              requestingAgentId={selectedAgent()!.id}
+                              selectedFilePath={
+                                selectedWorkspaceFile()?.path ?? null
+                              }
+                              onFileSelect={handleWorkspaceFileSelect}
+                              class="h-[32rem]"
+                            />
+                          </div>
+                          <div class="lg:col-span-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <WorkspaceEditor
+                              agentId={selectedAgent()!.id}
+                              requestingAgentId={selectedAgent()!.id}
+                              selectedFile={selectedWorkspaceFile()}
+                              canWrite={workspaceCanWrite()}
+                              onDirtyChange={setHasUnsavedWorkspaceChanges}
+                              class="h-[32rem]"
+                            />
+                          </div>
                         </div>
                       </div>
                     </Show>
