@@ -3,6 +3,7 @@ export * from './adapter';
 export * from './schema/sessions';
 export * from './schema/jobs';
 export * from './schema/pairing';
+export * from './schema/tasks';
 export * from './repositories/sessions';
 export * from './repositories/session-messages';
 export * from './repositories/session-runs';
