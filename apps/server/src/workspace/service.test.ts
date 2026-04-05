@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, rm, writeFile as fsWriteFile, readFile as fsReadFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { mkdir, rm, writeFile as fsWriteFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   WorkspaceService,
   createWorkspaceService,
@@ -18,6 +18,38 @@ describe('WorkspaceService', () => {
     testBaseDir = join(tmpdir(), `workspace-test-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
     service = createWorkspaceService({ baseDir: testBaseDir });
+  });
+
+  describe('readFileWithType', () => {
+    it('should return text metadata for text files', async () => {
+      const agentId = 'typed-read-agent';
+      await service.ensureWorkspace(agentId);
+      await service.writeFile(agentId, 'typed.txt', 'typed content');
+
+      const result = await service.readFileWithType(agentId, 'typed.txt');
+      expect(result.isText).toBe(true);
+      expect(result.mimeType).toBe('text/plain');
+      expect(result.content).toBe('typed content');
+      expect(result.isTooLarge).toBe(false);
+      expect(result.modifiedAt).toBeTruthy();
+    });
+
+    it('should mark oversized files as too large and skip content', async () => {
+      const agentId = 'large-typed-read-agent';
+      await service.ensureWorkspace(agentId);
+      const largeContent = 'a'.repeat(3000);
+      await service.writeFile(agentId, 'large.txt', largeContent);
+
+      const result = await service.readFileWithType(agentId, 'large.txt', {
+        maxContentBytes: 1000,
+      });
+
+      expect(result.isText).toBe(true);
+      expect(result.isTooLarge).toBe(true);
+      expect(result.maxEditableBytes).toBe(1000);
+      expect(result.content).toBe('');
+      expect(result.size).toBeGreaterThan(1000);
+    });
   });
 
   afterEach(async () => {
@@ -45,7 +77,6 @@ describe('WorkspaceService', () => {
   describe('ensureWorkspace', () => {
     it('should create workspace directory if it does not exist', async () => {
       await service.ensureWorkspace('new-agent');
-      const workspacePath = service.getWorkspacePath('new-agent');
 
       // Verify directory exists by trying to read it
       const files = await service.listFiles('new-agent');
@@ -160,9 +191,9 @@ describe('WorkspaceService', () => {
       const agentId = 'read-nonexistent-agent';
       await service.ensureWorkspace(agentId);
 
-      await expect(service.readFile(agentId, 'nonexistent.txt')).rejects.toThrow(
-        WorkspaceError,
-      );
+      await expect(
+        service.readFile(agentId, 'nonexistent.txt'),
+      ).rejects.toThrow(WorkspaceError);
     });
 
     it('should block path traversal in read', async () => {
@@ -250,6 +281,34 @@ describe('WorkspaceService', () => {
       await expect(
         service.deleteFile(agentId, '../../../tmp/important.txt'),
       ).rejects.toThrow(WorkspaceError);
+    });
+  });
+
+  describe('renameFile', () => {
+    it('should rename an existing file', async () => {
+      const agentId = 'rename-test-agent';
+      await service.ensureWorkspace(agentId);
+      await service.writeFile(agentId, 'old.txt', 'content');
+
+      await service.renameFile(agentId, 'old.txt', 'new.txt');
+
+      await expect(service.readFile(agentId, 'old.txt')).rejects.toThrow(
+        WorkspaceError,
+      );
+      await expect(service.readFile(agentId, 'new.txt')).resolves.toBe(
+        'content',
+      );
+    });
+
+    it('should reject rename when destination exists', async () => {
+      const agentId = 'rename-conflict-agent';
+      await service.ensureWorkspace(agentId);
+      await service.writeFile(agentId, 'first.txt', 'first');
+      await service.writeFile(agentId, 'second.txt', 'second');
+
+      await expect(
+        service.renameFile(agentId, 'first.txt', 'second.txt'),
+      ).rejects.toMatchObject({ code: 'FILE_ALREADY_EXISTS' });
     });
   });
 

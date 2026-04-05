@@ -5,6 +5,8 @@ import {
   writeFile,
   unlink,
   stat,
+  rename,
+  open,
 } from 'node:fs/promises';
 import { join, resolve, relative, dirname } from 'node:path';
 import { createLogger } from '../lib/logger';
@@ -28,6 +30,13 @@ export interface FileReadResult {
   isText: boolean;
   mimeType: string;
   size: number;
+  modifiedAt: string;
+  isTooLarge: boolean;
+  maxEditableBytes?: number;
+}
+
+export interface ReadFileWithTypeOptions {
+  maxContentBytes?: number;
 }
 
 /**
@@ -158,6 +167,7 @@ export class WorkspaceService {
   async readFileWithType(
     agentId: string,
     filePath: string,
+    options: ReadFileWithTypeOptions = {},
   ): Promise<FileReadResult> {
     const absolutePath = this.validatePath(agentId, filePath);
     log.debug('Reading file with type detection:', {
@@ -167,6 +177,40 @@ export class WorkspaceService {
     });
 
     try {
+      const stats = await stat(absolutePath);
+      if (stats.isDirectory()) {
+        throw new WorkspaceError(
+          `Path is a directory: ${filePath}`,
+          'NOT_A_FILE',
+        );
+      }
+
+      const maxContentBytes = options.maxContentBytes;
+      if (maxContentBytes && stats.size > maxContentBytes) {
+        const sampleLength = Math.min(stats.size, 8192);
+        const fileHandle = await open(absolutePath, 'r');
+        try {
+          const sample = Buffer.alloc(sampleLength);
+          await fileHandle.read(sample, 0, sampleLength, 0);
+          const isText = this.isLikelyTextContent(sample);
+          const mimeType = isText
+            ? 'text/plain'
+            : this.detectMimeTypeFromContent(sample);
+
+          return {
+            content: '',
+            isText,
+            mimeType,
+            size: stats.size,
+            modifiedAt: stats.mtime.toISOString(),
+            isTooLarge: true,
+            maxEditableBytes: maxContentBytes,
+          };
+        } finally {
+          await fileHandle.close();
+        }
+      }
+
       const buffer = await readFile(absolutePath);
       const isText = this.isLikelyTextContent(buffer);
       const mimeType = isText
@@ -178,6 +222,8 @@ export class WorkspaceService {
         isText,
         mimeType,
         size: buffer.length,
+        modifiedAt: stats.mtime.toISOString(),
+        isTooLarge: false,
       };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -348,6 +394,75 @@ export class WorkspaceService {
       throw new WorkspaceError(
         `Failed to delete file: ${filePath}`,
         'DELETE_FILE_FAILED',
+        err,
+      );
+    }
+  }
+
+  async renameFile(
+    agentId: string,
+    sourcePath: string,
+    destinationPath: string,
+  ): Promise<void> {
+    const sourceAbsolutePath = this.validatePath(agentId, sourcePath);
+    const destinationAbsolutePath = this.validatePath(agentId, destinationPath);
+
+    log.debug('Renaming file:', {
+      agentId,
+      sourcePath,
+      destinationPath,
+      sourceAbsolutePath,
+      destinationAbsolutePath,
+    });
+
+    try {
+      await stat(sourceAbsolutePath);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new WorkspaceError(
+          `File not found: ${sourcePath}`,
+          'FILE_NOT_FOUND',
+          err,
+        );
+      }
+      throw err;
+    }
+
+    try {
+      await stat(destinationAbsolutePath);
+      throw new WorkspaceError(
+        `File already exists: ${destinationPath}`,
+        'FILE_ALREADY_EXISTS',
+      );
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'ENOENT') {
+        if (error instanceof WorkspaceError) {
+          throw error;
+        }
+        throw new WorkspaceError(
+          `Failed to validate destination path: ${destinationPath}`,
+          'RENAME_FILE_FAILED',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+    }
+
+    try {
+      await mkdir(dirname(destinationAbsolutePath), { recursive: true });
+      await rename(sourceAbsolutePath, destinationAbsolutePath);
+      log.info('File renamed:', { agentId, sourcePath, destinationPath });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.error(
+        'Failed to rename file:',
+        { agentId, sourcePath, destinationPath },
+        err,
+      );
+      throw new WorkspaceError(
+        `Failed to rename file: ${sourcePath}`,
+        'RENAME_FILE_FAILED',
         err,
       );
     }

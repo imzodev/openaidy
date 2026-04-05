@@ -507,6 +507,9 @@ export type WorkspaceFileContentResponse = {
   isText: boolean;
   mimeType: string;
   size: number;
+  modifiedAt: string;
+  isTooLarge: boolean;
+  maxEditableBytes?: number;
 };
 
 /**
@@ -583,6 +586,26 @@ export async function writeWorkspaceFile(
 }
 
 /**
+ * Rename a file in an agent's workspace
+ */
+export async function renameWorkspaceFile(
+  agentId: string,
+  sourcePath: string,
+  destinationPath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/rename`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Id': requestingAgentId,
+    },
+    body: JSON.stringify({ sourcePath, destinationPath }),
+  });
+  return response.json();
+}
+
+/**
  * Update an existing file in an agent's workspace
  */
 export async function updateWorkspaceFile(
@@ -590,6 +613,7 @@ export async function updateWorkspaceFile(
   filePath: string,
   content: string,
   requestingAgentId: string,
+  expectedModifiedAt?: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await fetch(
     `${API_BASE}/workspace/${agentId}/files/${filePath}`,
@@ -599,7 +623,7 @@ export async function updateWorkspaceFile(
         'Content-Type': 'application/json',
         'X-Agent-Id': requestingAgentId,
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, expectedModifiedAt }),
     },
   );
   return response.json();

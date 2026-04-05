@@ -21,6 +21,12 @@ export type WorkspaceRoutesOptions = {
  */
 export interface FileWriteBody {
   content: string;
+  expectedModifiedAt?: string;
+}
+
+export interface FileRenameBody {
+  sourcePath: string;
+  destinationPath: string;
 }
 
 /**
@@ -40,6 +46,9 @@ export interface FileContentResponse {
   isText: boolean;
   mimeType: string;
   size: number;
+  modifiedAt: string;
+  isTooLarge: boolean;
+  maxEditableBytes?: number;
 }
 
 /**
@@ -57,6 +66,7 @@ export const workspaceRoutes: FastifyPluginAsync<
   WorkspaceRoutesOptions
 > = async (app, options) => {
   const { agentRegistry, workspaceService } = options;
+  const MAX_EDITABLE_FILE_BYTES = 1_000_000;
 
   /**
    * Get requesting agent ID from header
@@ -172,6 +182,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         const file = await workspaceService.readFileWithType(
           targetAgentId,
           fullPath,
+          { maxContentBytes: MAX_EDITABLE_FILE_BYTES },
         );
         const response: FileContentResponse = {
           content: file.content,
@@ -179,6 +190,11 @@ export const workspaceRoutes: FastifyPluginAsync<
           isText: file.isText,
           mimeType: file.mimeType,
           size: file.size,
+          modifiedAt: file.modifiedAt,
+          isTooLarge: file.isTooLarge,
+          ...(file.maxEditableBytes !== undefined
+            ? { maxEditableBytes: file.maxEditableBytes }
+            : {}),
         };
         return response;
       } catch {
@@ -290,7 +306,7 @@ export const workspaceRoutes: FastifyPluginAsync<
       }
 
       const { agentId: targetAgentId, '*': filePath } = request.params;
-      const { content } = request.body as FileWriteBody;
+      const { content, expectedModifiedAt } = request.body as FileWriteBody;
 
       if (!filePath) {
         reply.code(400);
@@ -313,12 +329,32 @@ export const workspaceRoutes: FastifyPluginAsync<
         const existingFile = await workspaceService.readFileWithType(
           targetAgentId,
           filePath,
+          { maxContentBytes: MAX_EDITABLE_FILE_BYTES },
         );
         if (!existingFile.isText) {
           reply.code(415);
           return {
             error: `Cannot edit non-text file (${existingFile.mimeType})`,
             code: 'UNSUPPORTED_MEDIA_TYPE',
+          };
+        }
+
+        if (existingFile.isTooLarge) {
+          reply.code(413);
+          return {
+            error: `File is too large to edit (${existingFile.size} bytes)`,
+            code: 'FILE_TOO_LARGE',
+          };
+        }
+
+        if (
+          expectedModifiedAt &&
+          existingFile.modifiedAt !== expectedModifiedAt
+        ) {
+          reply.code(409);
+          return {
+            error: 'File changed on disk. Reload before saving.',
+            code: 'CONFLICT',
           };
         }
 
@@ -386,6 +422,67 @@ export const workspaceRoutes: FastifyPluginAsync<
         );
         reply.code(500);
         return { error: 'Failed to delete file', code: 'INTERNAL_ERROR' };
+      }
+    },
+  );
+
+  app.post(
+    '/workspace/:agentId/rename',
+    async (
+      request: FastifyRequest<{
+        Params: { agentId: string };
+        Body: FileRenameBody;
+      }>,
+      reply,
+    ) => {
+      const requestingAgentId = getRequestingAgent(
+        request.headers as Record<string, string | undefined>,
+      );
+      if (!requestingAgentId) {
+        reply.code(401);
+        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
+      }
+
+      const { agentId: targetAgentId } = request.params;
+      const { sourcePath, destinationPath } = request.body as FileRenameBody;
+
+      if (!sourcePath || !destinationPath) {
+        reply.code(400);
+        return {
+          error: 'Both sourcePath and destinationPath are required',
+          code: 'BAD_REQUEST',
+        };
+      }
+
+      const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+      if (!access.allowed) {
+        reply.code(403);
+        return access.error;
+      }
+
+      try {
+        await workspaceService.renameFile(
+          targetAgentId,
+          sourcePath,
+          destinationPath,
+        );
+        return { success: true, path: destinationPath };
+      } catch (error) {
+        const workspaceError = error as { code?: string };
+        if (workspaceError.code === 'FILE_NOT_FOUND') {
+          reply.code(404);
+          return { error: 'File not found', code: 'NOT_FOUND' };
+        }
+        if (workspaceError.code === 'FILE_ALREADY_EXISTS') {
+          reply.code(409);
+          return { error: 'Destination already exists', code: 'CONFLICT' };
+        }
+        app.log.error(
+          'Failed to rename file: %s',
+          error instanceof Error ? error.message : String(error),
+        );
+        reply.code(500);
+        return { error: 'Failed to rename file', code: 'INTERNAL_ERROR' };
       }
     },
   );
