@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, screen } from '@solidjs/testing-library';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, fireEvent, screen, cleanup } from '@solidjs/testing-library';
 import { FileExplorer } from './FileExplorer';
 import * as api from '../../lib/api';
 
@@ -34,11 +34,17 @@ describe('FileExplorer', () => {
   ];
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it('should render loading state initially', () => {
-    vi.mocked(api.listWorkspaceFiles).mockImplementation(() => new Promise(() => {})); // Never resolves
+    vi.mocked(api.listWorkspaceFiles).mockImplementation(
+      () => new Promise(() => {}),
+    ); // Never resolves
 
     render(() => (
       <FileExplorer agentId="test-agent" requestingAgentId="requester" />
@@ -138,8 +144,8 @@ describe('FileExplorer', () => {
     expect(api.listWorkspaceFiles).toHaveBeenNthCalledWith(
       2,
       'test-agent',
-      'folder1',
       'requester',
+      'folder1',
     );
   });
 

@@ -71,11 +71,12 @@ export function FileExplorer(props: FileExplorerProps) {
   // Initial load
   createEffect(
     on(
-      () => props.agentId,
+      () => [props.agentId, props.requestingAgentId],
       () => {
-        fetchFiles(currentPath());
+        setCurrentPath('');
+        setSelectedFile(null);
+        fetchFiles('');
       },
-      { defer: true },
     ),
   );
 
