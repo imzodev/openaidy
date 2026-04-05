@@ -454,5 +454,140 @@ export async function updateConfig(
   return response.json();
 }
 
+// ============================================================================
+// Log Types and API
+// ============================================================================
+
+/**
+ * Log level
+ */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+/**
+ * Log entry
+ */
+export type LogEntry = {
+  id: string;
+  timestamp: string;
+  level: LogLevel;
+  context: string;
+  message: string;
+  args?: unknown[];
+  requestId?: string;
+  sessionId?: string;
+  runId?: string;
+};
+
+/**
+ * Log filter options
+ */
+export type LogFilter = {
+  levels?: LogLevel[];
+  contexts?: string[];
+  since?: string;
+  until?: string;
+  search?: string;
+  requestId?: string;
+  sessionId?: string;
+  runId?: string;
+  limit?: number;
+  offset?: number;
+};
+
+/**
+ * Log query result
+ */
+export type LogQueryResult = {
+  items: LogEntry[];
+  total: number;
+  hasMore: boolean;
+};
+
+/**
+ * Log statistics
+ */
+export type LogStats = {
+  total: number;
+  byLevel: Record<LogLevel, number>;
+  byContext: Record<string, number>;
+  timeRange: {
+    earliest: string | null;
+    latest: string | null;
+  };
+};
+
+/**
+ * Query logs with optional filters
+ */
+export async function queryLogs(
+  filter: LogFilter = {},
+): Promise<LogQueryResult> {
+  const params = new URLSearchParams();
+
+  if (filter.levels && filter.levels.length > 0) {
+    params.set('levels', filter.levels.join(','));
+  }
+  if (filter.contexts && filter.contexts.length > 0) {
+    params.set('contexts', filter.contexts.join(','));
+  }
+  if (filter.since) {
+    params.set('since', filter.since);
+  }
+  if (filter.until) {
+    params.set('until', filter.until);
+  }
+  if (filter.search) {
+    params.set('search', filter.search);
+  }
+  if (filter.requestId) {
+    params.set('requestId', filter.requestId);
+  }
+  if (filter.sessionId) {
+    params.set('sessionId', filter.sessionId);
+  }
+  if (filter.runId) {
+    params.set('runId', filter.runId);
+  }
+  if (filter.limit !== undefined) {
+    params.set('limit', String(filter.limit));
+  }
+  if (filter.offset !== undefined) {
+    params.set('offset', String(filter.offset));
+  }
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/api/logs${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to query logs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get log statistics
+ */
+export async function getLogStats(): Promise<LogStats> {
+  const response = await fetch(`${API_BASE}/api/logs/stats`);
+  if (!response.ok) {
+    throw new Error(`Failed to get log stats: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Clear all logs
+ */
+export async function clearLogs(): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/api/logs`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clear logs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 // Export getApiBase for testing
 export { getApiBase };
