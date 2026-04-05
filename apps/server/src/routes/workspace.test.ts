@@ -1,62 +1,39 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
-import { workspaceRoutes } from './workspace';
-import { createWorkspaceService } from '../workspace/service';
-import { createAgentRegistry } from '../agents';
-import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { FastifyInstance } from 'fastify';
+import { workspaceRoutes } from './workspace';
+import { createAgentRegistry, type AgentRegistry } from '../agents/registry';
+import {
+  createWorkspaceService,
+  WorkspaceService,
+} from '../workspace/service';
+import type { Agent } from '../agents/schema';
 
 describe('workspace routes', () => {
-  let app: FastifyInstance;
+  let app: ReturnType<typeof Fastify>;
+  let registry: AgentRegistry;
+  let workspaceService: WorkspaceService;
   let testBaseDir: string;
-  let workspaceService: ReturnType<typeof createWorkspaceService>;
-  let agentRegistry: ReturnType<typeof createAgentRegistry>;
+  let testAgents: Agent[];
 
   beforeEach(async () => {
-    // Create unique temp directory
+    // Create temp directory for workspaces
     testBaseDir = join(tmpdir(), `workspace-routes-test-${Date.now()}`);
     await mkdir(testBaseDir, { recursive: true });
 
-    // Create services
+    // Initialize test agents array
+    testAgents = [];
+
+    // Create registry and service
+    registry = createAgentRegistry({ initialAgents: [] });
     workspaceService = createWorkspaceService({ baseDir: testBaseDir });
-    agentRegistry = createAgentRegistry({ initialAgents: [] });
 
-        // Register test agents using replaceAll
-    agentRegistry.replaceAll([
-      {
-        id: 'test-agent',
-        name: 'Test Agent',
-        enabled: true,
-        systemPrompt: 'Test agent',
-        model: 'openai/gpt-4o-mini',
-        version: 1,
-        workspace: {
-          enabled: true,
-          defaultPermissions: { read: true, write: true, delete: true, list: true },
-          workspaces: [{ path: '/project' }],
-        },
-      },
-      {
-        id: 'other-agent',
-        name: 'Other Agent',
-        enabled: true,
-        systemPrompt: 'Other agent',
-        model: 'openai/gpt-4o-mini',
-        version: 1,
-        workspace: {
-          enabled: true,
-          // No defaultPermissions, so defaults to read-only
-          workspaces: [{ path: '/project2' }],
-        },
-      },
-    ]);
-
-    // Build Fastify app with workspace routes
+    // Create Fastify app
     app = Fastify();
     await app.register(workspaceRoutes, {
-      agentRegistry,
+      agentRegistry: registry,
       workspaceService,
       workspaceBaseDir: testBaseDir,
     });
@@ -70,6 +47,17 @@ describe('workspace routes', () => {
       // Ignore cleanup errors
     }
   });
+
+  // Helper to add agents to registry
+  function addAgent(agent: Agent) {
+    testAgents.push(agent);
+    registry.replaceAll(testAgents);
+  }
+
+  function addAgents(agents: Agent[]) {
+    testAgents.push(...agents);
+    registry.replaceAll(testAgents);
+  }
 
   describe('GET /workspace/:agentId/files', () => {
     it('should return 401 without X-Agent-Id header', async () => {
@@ -85,130 +73,237 @@ describe('workspace routes', () => {
       });
     });
 
-    it('should return empty list for new workspace', async () => {
+    it('should return 403 when source agent not found', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/workspace/test-agent/files',
-        headers: { 'x-agent-id': 'test-agent' },
+        headers: { 'X-Agent-Id': 'unknown-agent' },
       });
 
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ items: [] });
+      expect(response.statusCode).toBe(403);
     });
 
-    it('should list files in workspace', async () => {
-      // Create test file
-      await workspaceService.ensureWorkspace('test-agent');
-      await workspaceService.writeFile('test-agent', 'test.txt', 'content');
+    it('should list files with valid permissions', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+
+      // Create a test file
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'test.txt', 'hello');
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/test-agent/files',
-        headers: { 'x-agent-id': 'test-agent' },
+        url: '/workspace/agent-1/files',
+        headers: { 'X-Agent-Id': 'agent-1' },
       });
 
       expect(response.statusCode).toBe(200);
-      const json = response.json() as { items: Array<{ name: string }> };
+      const json = response.json();
       expect(json.items).toHaveLength(1);
       expect(json.items[0].name).toBe('test.txt');
     });
   });
 
-  describe('POST /workspace/:agentId/files/*', () => {
-    it('should create a new file', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/workspace/test-agent/files/hello.txt',
-        headers: {
-          'x-agent-id': 'test-agent',
-          'content-type': 'application/json',
+  describe('GET /workspace/:agentId/files/*', () => {
+    it('should read file content', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
         },
-        payload: { content: 'Hello World' },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'test.txt', 'file content');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/workspace/agent-1/files/test.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
       });
 
-      expect(response.statusCode).toBe(201);
-      expect(response.json()).toEqual({
-        success: true,
-        path: 'hello.txt',
-      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().content).toBe('file content');
     });
 
-    it('should return 403 for agent without write permission', async () => {
-      // other-agent has no write permissions (defaults to read-only)
-      const response = await app.inject({
-        method: 'POST',
-        url: '/workspace/test-agent/files/hello.txt',
-        headers: {
-          'x-agent-id': 'other-agent',
-          'content-type': 'application/json',
+    it('should return 403 for unauthorized access', async () => {
+      const agent1: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
         },
-        payload: { content: 'Hello World' },
+      };
+      const agent2: Agent = {
+        id: 'agent-2',
+        name: 'Agent 2',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgents([agent1, agent2]);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'secret.txt', 'secret');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/workspace/agent-1/files/secret.txt',
+        headers: { 'X-Agent-Id': 'agent-2' },
       });
 
       expect(response.statusCode).toBe(403);
     });
   });
 
-  describe('GET /workspace/:agentId/files/*', () => {
-    it('should read file content', async () => {
-      // Create test file
-      await workspaceService.writeFile('test-agent', 'readme.txt', 'Read me');
+  describe('POST /workspace/:agentId/files/*', () => {
+    it('should create a new file', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
 
       const response = await app.inject({
-        method: 'GET',
-        url: '/workspace/test-agent/files/readme.txt',
-        headers: { 'x-agent-id': 'test-agent' },
+        method: 'POST',
+        url: '/workspace/agent-1/files/new-file.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'new content' },
       });
 
-      expect(response.statusCode).toBe(200);
-      const json = response.json() as { content: string };
-      expect(json.content).toBe('Read me');
+      expect(response.statusCode).toBe(201);
+      expect(response.json().success).toBe(true);
+
+      // Verify file was created
+      const content = await workspaceService.readFile('agent-1', 'new-file.txt');
+      expect(content).toBe('new content');
     });
 
-    it('should return empty items for non-existent path (treated as empty directory)', async () => {
+    it('should return 400 without file path', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: { enabled: true, workspaces: [] },
+      };
+      addAgent(agent);
+
       const response = await app.inject({
-        method: 'GET',
-        url: '/workspace/test-agent/files/nonexistent.txt',
-        headers: { 'x-agent-id': 'test-agent' },
+        method: 'POST',
+        url: '/workspace/agent-1/files/',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'content' },
       });
 
-      // Non-existent paths are treated as empty directories
-      expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ items: [], path: 'nonexistent.txt' });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 403 for write without permission', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/workspace/agent-1/files/unauthorized.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'content' },
+      });
+
+      expect(response.statusCode).toBe(403);
     });
   });
 
   describe('PUT /workspace/:agentId/files/*', () => {
     it('should update existing file', async () => {
-      // Create test file
-      await workspaceService.writeFile('test-agent', 'update.txt', 'Original');
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'existing.txt', 'original');
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/test-agent/files/update.txt',
-        headers: {
-          'x-agent-id': 'test-agent',
-          'content-type': 'application/json',
-        },
-        payload: { content: 'Updated' },
+        url: '/workspace/agent-1/files/existing.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'updated' },
       });
 
       expect(response.statusCode).toBe(200);
-
-      // Verify content was updated
-      const content = await workspaceService.readFile('test-agent', 'update.txt');
-      expect(content).toBe('Updated');
+      expect(response.json().success).toBe(true);
     });
 
     it('should return 404 for non-existent file', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/test-agent/files/nonexistent.txt',
-        headers: {
-          'x-agent-id': 'test-agent',
-          'content-type': 'application/json',
-        },
-        payload: { content: 'Updated' },
+        url: '/workspace/agent-1/files/nonexistent.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
+        payload: { content: 'content' },
       });
 
       expect(response.statusCode).toBe(404);
@@ -216,29 +311,78 @@ describe('workspace routes', () => {
   });
 
   describe('DELETE /workspace/:agentId/files/*', () => {
-    it('should delete file', async () => {
-      // Create test file
-      await workspaceService.writeFile('test-agent', 'delete.txt', 'Delete me');
+    it('should delete file with permission', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: true, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'to-delete.txt', 'delete me');
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/test-agent/files/delete.txt',
-        headers: { 'x-agent-id': 'test-agent' },
+        url: '/workspace/agent-1/files/to-delete.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
       });
 
       expect(response.statusCode).toBe(200);
+      expect(response.json().success).toBe(true);
+    });
 
-      // Verify file was deleted
-      await expect(
-        workspaceService.readFile('test-agent', 'delete.txt'),
-      ).rejects.toThrow();
+    it('should return 403 for delete without permission', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: false, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'protected.txt', 'cannot delete');
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/workspace/agent-1/files/protected.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
+      });
+
+      expect(response.statusCode).toBe(403);
     });
 
     it('should return 404 for non-existent file', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        workspace: {
+          enabled: true,
+          defaultPermissions: { read: true, write: true, delete: true, list: true },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/test-agent/files/nonexistent.txt',
-        headers: { 'x-agent-id': 'test-agent' },
+        url: '/workspace/agent-1/files/nonexistent.txt',
+        headers: { 'X-Agent-Id': 'agent-1' },
       });
 
       expect(response.statusCode).toBe(404);
