@@ -1,6 +1,58 @@
 import { z } from 'zod';
 import { httpTimeoutSchema, retrySchema, vendorFamilySchema } from './provider';
 
+// ============================================================================
+// MCP Server Configuration
+// ============================================================================
+
+/**
+ * MCP server transport type - stdio for local processes, http for remote servers
+ */
+export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
+
+/**
+ * MCP server configuration schema
+ *
+ * Supports two transport types:
+ * - stdio: Local process communication (e.g., npx @modelcontextprotocol/server-filesystem)
+ * - http: Remote HTTP server communication
+ */
+export const mcpServerConfigSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().optional(),
+    transport: mcpServerTransportSchema,
+    // stdio transport fields
+    command: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string()).optional(),
+    // http transport fields
+    url: z.string().url().optional(),
+    headers: z.record(z.string()).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.transport === 'stdio') {
+        return !!data.command;
+      }
+      if (data.transport === 'http') {
+        return !!data.url;
+      }
+      return false;
+    },
+    {
+      message:
+        'stdio transport requires command, http transport requires url',
+    },
+  );
+
+export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
+export type McpServerTransport = z.infer<typeof mcpServerTransportSchema>;
+
+// ============================================================================
+// Provider Configuration
+// ============================================================================
+
 const providerCapabilitySchema = z.enum([
   'text_generation',
   'streaming',
@@ -146,6 +198,7 @@ export const appConfigSchema = z
     defaults: appDefaultsSchema,
     providers: z.array(appProviderConfigSchema).min(1),
     agents: z.array(appAgentConfigSchema).min(1),
+    mcpServers: z.array(mcpServerConfigSchema).optional(),
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();
@@ -271,6 +324,21 @@ export const appConfigSchema = z
         code: z.ZodIssueCode.custom,
         path: ['agents'],
         message: 'At least one agent must be enabled',
+      });
+    }
+
+    // Validate MCP server IDs are unique
+    if (config.mcpServers) {
+      const mcpServerIds = new Set<string>();
+      config.mcpServers.forEach((server, serverIndex) => {
+        if (mcpServerIds.has(server.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['mcpServers', serverIndex, 'id'],
+            message: `Duplicate MCP server id "${server.id}"`,
+          });
+        }
+        mcpServerIds.add(server.id);
       });
     }
   });
