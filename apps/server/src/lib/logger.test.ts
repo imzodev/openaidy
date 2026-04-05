@@ -49,8 +49,8 @@ describe('LogBuffer', () => {
 
       const result = smallBuffer.query();
       expect(result.items).toHaveLength(5);
-      expect(result.items[0].message).toBe('Message 5');
-      expect(result.items[4].message).toBe('Message 9');
+      expect(result.items[0]!.message).toBe('Message 5');
+      expect(result.items[4]!.message).toBe('Message 9');
     });
   });
 
@@ -99,7 +99,7 @@ describe('LogBuffer', () => {
     it('should filter by search term', () => {
       const result = buffer.query({ search: 'error' });
       expect(result.items).toHaveLength(1);
-      expect(result.items[0].message).toBe('Error msg');
+      expect(result.items[0]!.message).toBe('Error msg');
     });
 
     it('should search in context as well', () => {
@@ -119,7 +119,7 @@ describe('LogBuffer', () => {
 
       const result = buffer.query({ sessionId: 'session-123' });
       expect(result.items).toHaveLength(1);
-      expect(result.items[0].sessionId).toBe('session-123');
+      expect(result.items[0]!.sessionId).toBe('session-123');
     });
 
     it('should support pagination', () => {

@@ -19,6 +19,7 @@ import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
+import { schedulerRoutes } from './routes/scheduler';
 import { logRoutes } from './routes/logs';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';

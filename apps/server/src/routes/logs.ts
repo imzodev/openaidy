@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   getLogBuffer,
+  type LogLevel,
   type LogFilter,
   type LogQueryResult,
   type LogStats,
@@ -26,18 +27,36 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: LogsQuerystring }>('/api/logs', async (request, reply) => {
     const query = request.query;
 
+    // Build filter object conditionally to avoid undefined assignment issues with exactOptionalPropertyTypes
     const filter: LogFilter = {
-      levels: query.levels ? query.levels.split(',').filter(Boolean) as LogFilter['levels'] : undefined,
-      contexts: query.contexts ? query.contexts.split(',').filter(Boolean) : undefined,
-      search: query.search,
-      since: query.since,
-      until: query.until,
-      requestId: query.requestId,
-      sessionId: query.sessionId,
-      runId: query.runId,
       limit: query.limit ? Math.min(query.limit, 100) : 100,
       offset: query.offset ? Math.max(0, query.offset) : 0,
     };
+
+    if (query.levels) {
+      filter.levels = query.levels.split(',').filter(Boolean) as LogLevel[];
+    }
+    if (query.contexts) {
+      filter.contexts = query.contexts.split(',').filter(Boolean);
+    }
+    if (query.search) {
+      filter.search = query.search;
+    }
+    if (query.since) {
+      filter.since = query.since;
+    }
+    if (query.until) {
+      filter.until = query.until;
+    }
+    if (query.requestId) {
+      filter.requestId = query.requestId;
+    }
+    if (query.sessionId) {
+      filter.sessionId = query.sessionId;
+    }
+    if (query.runId) {
+      filter.runId = query.runId;
+    }
 
     const result: LogQueryResult = buffer.query(filter);
     return reply.send(result);

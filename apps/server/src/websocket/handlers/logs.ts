@@ -17,10 +17,10 @@ import {
 import {
   getLogBuffer,
   type LogFilter,
-  type LogEntry
-  type LogQueryResult
-  type LogStats
-  type LogLevel
+  type LogEntry,
+  type LogQueryResult,
+  type LogStats,
+  type LogLevel,
 } from '../../lib/logger';
 
 // ============================================================================
