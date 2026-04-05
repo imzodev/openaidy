@@ -6,7 +6,7 @@ import {
   on,
   onCleanup,
 } from 'solid-js';
-import { FileText, Save, RotateCcw, Loader2 } from 'lucide-solid';
+import { FileText, Save, RotateCcw, Loader2, FileWarning } from 'lucide-solid';
 import {
   readWorkspaceFile,
   updateWorkspaceFile,
@@ -289,6 +289,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             fallback={
               <div class="flex-1 flex items-center justify-center p-6 text-sm text-text-tertiary text-center">
                 <div>
+                  <FileWarning class="w-8 h-8 mx-auto mb-3 text-gray-400" />
                   <p class="font-medium text-gray-700 dark:text-gray-200 mb-2">
                     This file cannot be edited here.
                   </p>
