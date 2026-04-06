@@ -904,7 +904,8 @@ export class DispatchService {
    * Get MCP tools for an agent
    *
    * Collects tools from all MCP servers configured for the agent.
-   * Tool names are prefixed with server ID to avoid collisions.
+   * Tool names are prefixed with server ID using `::` separator to avoid collisions.
+   * Using `::` instead of `/` prevents conflicts with tool names that naturally contain `/`.
    */
   getMcpToolsForAgent(agentId: string): McpToolDefinition[] {
     if (!this.mcp) {
@@ -921,10 +922,10 @@ export class DispatchService {
       }
 
       const tools = this.mcp.getFilteredTools(ref.id, ref.tools);
-      // Prefix tool names with server ID to avoid collisions
+      // Prefix tool names with server ID using `::` separator to avoid collisions
       const prefixedTools = tools.map((tool) => ({
         ...tool,
-        name: `${ref.id}/${tool.name}`,
+        name: `${ref.id}::${tool.name}`,
       }));
       allTools.push(...prefixedTools);
     }
@@ -935,7 +936,7 @@ export class DispatchService {
   /**
    * Execute an MCP tool call
    *
-   * @param prefixedToolName - Tool name in format "serverId/toolName"
+   * @param prefixedToolName - Tool name in format "serverId::toolName"
    * @param args - Tool arguments
    * @param agentId - Agent ID to validate server is configured
    * @returns Tool execution result
@@ -951,16 +952,18 @@ export class DispatchService {
       return { ok: false, error: 'MCP service not available' };
     }
 
-    // Parse prefixed tool name
-    const parts = prefixedToolName.split('/');
-    if (parts.length !== 2) {
+    // Parse prefixed tool name (format: "serverId::toolName")
+    const separatorIndex = prefixedToolName.indexOf('::');
+    if (separatorIndex === -1) {
       return {
         ok: false,
-        error: `Invalid tool name format: ${prefixedToolName}. Expected "serverId/toolName"`,
+        error: `Invalid tool name format: ${prefixedToolName}. Expected "serverId::toolName"`,
       };
     }
 
-    const [serverId, toolName] = parts;
+    const serverId = prefixedToolName.substring(0, separatorIndex);
+    const toolName = prefixedToolName.substring(separatorIndex + 2);
+
     if (!serverId || !toolName) {
       return {
         ok: false,

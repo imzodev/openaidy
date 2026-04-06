@@ -673,13 +673,13 @@ describe('MCP Tool Integration', () => {
       it('should collect tools from configured MCP servers', () => {
         const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
         expect(tools).toHaveLength(2);
-        expect(tools[0].name).toBe('filesystem/read_file');
-        expect(tools[1].name).toBe('filesystem/write_file');
+        expect(tools[0].name).toBe('filesystem::read_file');
+        expect(tools[1].name).toBe('filesystem::write_file');
       });
 
       it('should prefix tool names with server ID', () => {
         const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
-        expect(tools[0].name.startsWith('filesystem/')).toBe(true);
+        expect(tools[0].name.startsWith('filesystem::')).toBe(true);
       });
 
       it('should skip disconnected servers', () => {
@@ -696,7 +696,7 @@ describe('MCP Tool Integration', () => {
           providers: dispatchService['providers'],
         });
         const result = await service.executeMcpToolCall(
-          'filesystem/read_file',
+          'filesystem::read_file',
           { path: '/test.txt' },
           'mcp-agent',
         );
@@ -720,7 +720,7 @@ describe('MCP Tool Integration', () => {
 
       it('should fail for unconfigured server', async () => {
         const result = await dispatchService.executeMcpToolCall(
-          'unknown-server/tool',
+          'unknown-server::tool',
           {},
           'mcp-agent',
         );
@@ -733,7 +733,7 @@ describe('MCP Tool Integration', () => {
       it('should fail when server not connected', async () => {
         mockMcp.isConnected.mockReturnValue(false);
         const result = await dispatchService.executeMcpToolCall(
-          'filesystem/read_file',
+          'filesystem::read_file',
           { path: '/test.txt' },
           'mcp-agent',
         );
@@ -746,7 +746,7 @@ describe('MCP Tool Integration', () => {
       it('should fail for disallowed tool', async () => {
         // The agent only allows read_file and write_file
         const result = await dispatchService.executeMcpToolCall(
-          'filesystem/delete_file',
+          'filesystem::delete_file',
           { path: '/test.txt' },
           'mcp-agent',
         );
@@ -758,7 +758,7 @@ describe('MCP Tool Integration', () => {
 
       it('should execute allowed tool successfully', async () => {
         const result = await dispatchService.executeMcpToolCall(
-          'filesystem/read_file',
+          'filesystem::read_file',
           { path: '/test.txt' },
           'mcp-agent',
         );
@@ -776,7 +776,7 @@ describe('MCP Tool Integration', () => {
       it('should handle tool execution errors', async () => {
         mockMcp.callTool.mockRejectedValue(new Error('Tool failed'));
         const result = await dispatchService.executeMcpToolCall(
-          'filesystem/read_file',
+          'filesystem::read_file',
           { path: '/test.txt' },
           'mcp-agent',
         );
