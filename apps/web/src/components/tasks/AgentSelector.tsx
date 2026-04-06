@@ -34,6 +34,7 @@ export type AgentSelectorProps = {
   selectedAgents: SelectedAgent[];
   onChange: (selectedAgents: SelectedAgent[]) => void;
   disabled?: boolean;
+  maxAgents?: number;
 };
 
 /**
@@ -55,6 +56,27 @@ const ROLE_COLORS: Record<AgentRole, string> = {
  */
 export function AgentSelector(props: AgentSelectorProps) {
   const [isOpen, setIsOpen] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal('');
+
+  /**
+   * Filter agents by search query
+   */
+  function filteredAgents(): Agent[] {
+    const query = searchQuery().toLowerCase().trim();
+    if (!query) return props.agents;
+    return props.agents.filter(
+      (a) =>
+        a.name.toLowerCase().includes(query) ||
+        (a.description?.toLowerCase().includes(query) ?? false)
+    );
+  }
+
+  /**
+   * Check if max agents limit is reached
+   */
+  function isMaxReached(): boolean {
+    return props.maxAgents !== undefined && props.selectedAgents.length >= props.maxAgents;
+  }
 
   /**
    * Toggle agent selection
@@ -63,7 +85,7 @@ export function AgentSelector(props: AgentSelectorProps) {
     const isSelected = props.selectedAgents.some((a) => a.agentId === agentId);
     if (isSelected) {
       props.onChange(props.selectedAgents.filter((a) => a.agentId !== agentId));
-    } else {
+    } else if (!isMaxReached()) {
       props.onChange([...props.selectedAgents, { agentId, role: 'primary' }]);
     }
   }
@@ -153,6 +175,24 @@ export function AgentSelector(props: AgentSelectorProps) {
         {/* Dropdown menu */}
         <Show when={isOpen()}>
           <div class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+            {/* Search input */}
+            <div class="p-2 border-b border-gray-100">
+              <input
+                type="text"
+                class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search agents..."
+                value={searchQuery()}
+                onInput={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {/* Max agents indicator */}
+            <Show when={props.maxAgents !== undefined}>
+              <div class="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-100">
+                {props.selectedAgents.length} / {props.maxAgents} agents selected
+              </div>
+            </Show>
+
             {/* Clear all button */}
             <Show when={props.selectedAgents.length > 0}>
               <button
@@ -166,21 +206,25 @@ export function AgentSelector(props: AgentSelectorProps) {
             </Show>
 
             {/* Agent list */}
-            <Show when={props.agents.length === 0}>
-              <div class="px-3 py-2 text-sm text-gray-500">No agents available</div>
+            <Show when={filteredAgents().length === 0}>
+              <div class="px-3 py-2 text-sm text-gray-500">
+                {searchQuery() ? 'No agents match your search' : 'No agents available'}
+              </div>
             </Show>
 
-            <For each={props.agents}>
+            <For each={filteredAgents()}>
               {(agent) => {
                 const isSelected = () =>
                   props.selectedAgents.some((a) => a.agentId === agent.id);
+                const canSelect = () => isSelected() || !isMaxReached();
                 return (
                   <button
                     type="button"
                     class={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
                       isSelected() ? 'bg-blue-50' : ''
-                    }`}
-                    onClick={() => toggleAgent(agent.id)}
+                    } ${!canSelect() ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    onClick={() => canSelect() && toggleAgent(agent.id)}
+                    disabled={!canSelect()}
                   >
                     <div
                       class={`w-4 h-4 border rounded flex items-center justify-center ${
