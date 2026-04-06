@@ -23,7 +23,7 @@ describe('Subtask Execution', () => {
       updateStatus: vi.fn().mockResolvedValue({}),
       create: vi.fn(),
       delete: vi.fn(),
-    };
+    } as any;
     mockTasksRepo = {
       findById: vi.fn(),
       list: vi.fn(),
@@ -31,20 +31,18 @@ describe('Subtask Execution', () => {
       update: vi.fn(),
       updateStatus: vi.fn(),
       delete: vi.fn(),
-      listByWorkspace: vi.fn(),
-      listByAssignee: vi.fn(),
-    };
+      listByStatuses: vi.fn(),
+    } as any;
     mockSessionService = {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
       submitMessage: vi.fn().mockResolvedValue({}),
-      getMessages: vi.fn(),
-      getSession: vi.fn(),
-    };
+      deleteSession: vi.fn(),
+    } as any;
     const mockTaskAgentsRepo = {
       create: vi.fn(),
       delete: vi.fn(),
       listByTask: vi.fn(),
-    };
+    } as any;
     taskService = new TaskService({
       tasksRepo: mockTasksRepo,
       subtasksRepo: mockSubtasksRepo,
