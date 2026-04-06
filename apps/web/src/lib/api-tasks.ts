@@ -35,6 +35,7 @@ export type Task = {
   priority: TaskPriority;
   planningEnabled: boolean;
   planningStatus: PlanningStatus | null;
+  sessionId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -65,6 +66,7 @@ export type Subtask = {
   description: string;
   status: SubtaskStatus;
   assignedAgentId: string | null;
+  sessionId?: string | null;
   orderIndex: number;
   result: string | null;
   createdAt: string;
@@ -298,5 +300,41 @@ export async function updateSubtaskStatus(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
   });
+  return response.json();
+}
+
+/**
+ * Execute a task (creates a session)
+ */
+export async function executeTask(taskId: string): Promise<ApiResult<{ sessionId: string }>> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/execute`, {
+    method: 'POST',
+  });
+  return response.json();
+}
+
+/**
+ * Execute a subtask (creates a session)
+ */
+export async function executeSubtask(subtaskId: string): Promise<ApiResult<{ sessionId: string }>> {
+  const response = await fetch(`${API_BASE}/subtasks/${subtaskId}/execute`, {
+    method: 'POST',
+  });
+  return response.json();
+}
+
+/**
+ * Get the session linked to a task
+ */
+export async function getTaskSession(taskId: string): Promise<ApiResult<{ sessionId: string | null }>> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/session`);
+  return response.json();
+}
+
+/**
+ * Get the session linked to a subtask
+ */
+export async function getSubtaskSession(subtaskId: string): Promise<ApiResult<{ sessionId: string | null }>> {
+  const response = await fetch(`${API_BASE}/subtasks/${subtaskId}/session`);
   return response.json();
 }

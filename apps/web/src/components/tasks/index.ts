@@ -11,3 +11,4 @@ export { TaskModal, type TaskModalProps } from './TaskModal';
 export { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 export { SubtaskList, type SubtaskListProps } from './SubtaskList';
 export { TaskDetailPanel, type TaskDetailPanelProps } from './TaskDetailPanel';
+export { TaskExecutionView, type TaskExecutionViewProps } from './TaskExecutionView';
