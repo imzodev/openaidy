@@ -113,10 +113,22 @@ export async function registerMcpRoutes(
       }
 
       try {
+        const startTime = Date.now();
         const result = await mcpService.callTool(serverId, tool, args);
+        const duration = Date.now() - startTime;
+
+        fastify.log.info(
+          { serverId, tool, duration, success: true },
+          'MCP tool call completed',
+        );
+
         return { result };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
+        fastify.log.error(
+          { serverId, tool, error: message },
+          'MCP tool call failed',
+        );
         return reply.status(500).send({
           error: 'INTERNAL_ERROR',
           message: `Failed to call MCP tool: ${message}`,
