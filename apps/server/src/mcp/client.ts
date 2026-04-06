@@ -45,6 +45,8 @@ type McpConnection = {
   transport: StdioClientTransport | null;
   process: ChildProcess | null;
   tools: McpToolDefinition[];
+  config: McpServerConfig; // Store original config for reconnection
+  manuallyDisconnected: boolean; // Track if disconnect was intentional
 };
 
 /**
@@ -165,7 +167,11 @@ export class McpClientService {
 
     childProcess.on('exit', (code, signal) => {
       this.logger?.info({ serverId: id, code, signal }, 'MCP process exited');
-      this.cleanup(id);
+      // Attempt reconnection if not manually disconnected
+      this.attemptReconnection(id).catch((error) => {
+        this.logger?.error({ serverId: id, error: error.message }, 'Reconnection failed');
+        this.cleanup(id);
+      });
     });
 
     // Create the stdio transport
@@ -189,12 +195,14 @@ export class McpClientService {
     // Connect the client
     await client.connect(transport);
 
-    // Store the connection
+    // Store the connection with config for reconnection
     this.connections.set(id, {
       client,
       transport,
       process: childProcess,
       tools: [],
+      config: serverConfig,
+      manuallyDisconnected: false,
     });
 
     // Discover tools
@@ -322,6 +330,68 @@ export class McpClientService {
   }
 
   /**
+   * Attempt to reconnect to an MCP server with exponential backoff
+   * 
+   * @param serverId - Server to reconnect to
+   * @param attempt - Current attempt number (starts at 1)
+   */
+  private async attemptReconnection(serverId: string, attempt: number = 1): Promise<void> {
+    const connection = this.connections.get(serverId);
+    
+    // Don't reconnect if:
+    // - No connection exists
+    // - Connection was manually disconnected
+    // - Connection is still active
+    if (!connection || connection.manuallyDisconnected) {
+      return;
+    }
+    
+    const maxRetries = 3;
+    const baseDelayMs = 1000; // 1 second base delay
+    
+    if (attempt > maxRetries) {
+      this.logger?.warn(
+        { serverId, attempts: attempt, maxRetries },
+        'Max reconnection attempts reached, giving up',
+      );
+      throw new Error(`Failed to reconnect to MCP server ${serverId} after ${maxRetries} attempts`);
+    }
+    
+    // Exponential backoff: 1s, 2s, 4s
+    const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
+    
+    this.logger?.info(
+      { serverId, attempt, maxRetries, delayMs },
+      'Attempting to reconnect to MCP server',
+    );
+    
+    // Wait before retrying
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    
+    try {
+      // Clean up old connection state
+      this.connections.delete(serverId);
+      
+      // Attempt to reconnect using stored config
+      await this.connect(connection.config);
+      
+      this.logger?.info({ serverId, attempt }, 'Successfully reconnected to MCP server');
+    } catch (error) {
+      this.logger?.warn(
+        { 
+          serverId, 
+          attempt, 
+          error: error instanceof Error ? error.message : String(error) 
+        },
+        'Reconnection attempt failed, will retry',
+      );
+      
+      // Recursively try again
+      await this.attemptReconnection(serverId, attempt + 1);
+    }
+  }
+
+  /**
    * Disconnect from an MCP server
    */
   async disconnect(serverId: string): Promise<void> {
@@ -331,6 +401,9 @@ export class McpClientService {
     }
 
     this.logger?.info({ serverId }, 'Disconnecting from MCP server');
+
+    // Mark as manually disconnected to prevent reconnection attempts
+    connection.manuallyDisconnected = true;
 
     try {
       await connection.client.close();
