@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { taskRoutes, type TaskRoutesOptions } from './tasks';
-import type { TaskService } from '../tasks/service';
-import type { Task, TaskWithDetails, KanbanBoard } from '../tasks/service';
+import type { TaskService, TaskWithDetails, KanbanBoard } from '../tasks/service';
+import type { Task } from '@openaidy/db';
 
 // Mock TaskService
 const createMockTaskService = () => ({
