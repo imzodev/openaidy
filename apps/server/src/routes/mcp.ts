@@ -5,7 +5,39 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import type { McpClientService } from '../mcp/client';
+
+/**
+ * Schema for POST /mcp/call request body
+ */
+const mcpCallSchema = z.object({
+  serverId: z.string().min(1, 'serverId is required'),
+  tool: z.string().min(1, 'tool is required'),
+  arguments: z.record(z.unknown()).optional().default({}),
+});
+
+/**
+ * Schema for POST /mcp/connect request body
+ */
+const mcpConnectSchema = z.object({
+  config: z.object({
+    id: z.string().min(1, 'config.id is required'),
+    transport: z.enum(['stdio', 'http']),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string()).optional(),
+    url: z.string().optional(),
+    headers: z.record(z.string()).optional(),
+  }),
+});
+
+/**
+ * Schema for POST /mcp/disconnect request body
+ */
+const mcpDisconnectSchema = z.object({
+  serverId: z.string().min(1, 'serverId is required'),
+});
 
 /**
  * MCP routes options
@@ -55,19 +87,23 @@ export async function registerMcpRoutes(
         Body: {
           serverId: string;
           tool: string;
-          arguments: Record<string, unknown>;
+          arguments?: Record<string, unknown>;
         };
       }>,
       reply: FastifyReply,
     ) => {
-      const { serverId, tool, arguments: args } = request.body;
-
-      if (!serverId || !tool) {
+      // Validate request body with Zod
+      let body;
+      try {
+        body = mcpCallSchema.parse(request.body);
+      } catch (error) {
         return reply.status(400).send({
           error: 'INVALID_PAYLOAD',
-          message: 'serverId and tool are required',
+          message: error instanceof Error ? error.message : 'Invalid request body',
         });
       }
+
+      const { serverId, tool, arguments: args } = body;
 
       if (!mcpService.isConnected(serverId)) {
         return reply.status(404).send({
@@ -77,7 +113,7 @@ export async function registerMcpRoutes(
       }
 
       try {
-        const result = await mcpService.callTool(serverId, tool, args ?? {});
+        const result = await mcpService.callTool(serverId, tool, args);
         return { result };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -112,14 +148,18 @@ export async function registerMcpRoutes(
       }>,
       reply: FastifyReply,
     ) => {
-      const { config } = request.body;
-
-      if (!config?.id) {
+      // Validate request body with Zod
+      let body;
+      try {
+        body = mcpConnectSchema.parse(request.body);
+      } catch (error) {
         return reply.status(400).send({
           error: 'INVALID_PAYLOAD',
-          message: 'config with id is required',
+          message: error instanceof Error ? error.message : 'Invalid request body',
         });
       }
+
+      const { config } = body;
 
       // Check if already connected
       if (mcpService.isConnected(config.id)) {
@@ -152,14 +192,18 @@ export async function registerMcpRoutes(
       }>,
       reply: FastifyReply,
     ) => {
-      const { serverId } = request.body;
-
-      if (!serverId) {
+      // Validate request body with Zod
+      let body;
+      try {
+        body = mcpDisconnectSchema.parse(request.body);
+      } catch (error) {
         return reply.status(400).send({
           error: 'INVALID_PAYLOAD',
-          message: 'serverId is required',
+          message: error instanceof Error ? error.message : 'Invalid request body',
         });
       }
+
+      const { serverId } = body;
 
       try {
         await mcpService.disconnect(serverId);
