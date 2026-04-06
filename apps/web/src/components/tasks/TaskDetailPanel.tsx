@@ -7,7 +7,7 @@
 
 import { createSignal, createEffect, Show, For } from 'solid-js';
 import { X, Edit2, Trash2 } from 'lucide-solid';
-import { getTask, updateTask, deleteTask, listSubtasks, getTaskProgress } from '../../lib/api-tasks';
+import { getTask, updateTask, deleteTask, listSubtasks, getTaskProgress, assignAgents } from '../../lib/api-tasks';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
 import type { Task, TaskStatus, TaskPriority, Subtask } from '../../lib/api-tasks';
@@ -152,9 +152,18 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   /**
    * Handle agent change
    */
-  function handleAgentChange(selectedAgents: SelectedAgent[]) {
-    // In a real implementation, this would call an API to update agents
-    console.log('Agent change:', selectedAgents);
+  async function handleAgentChange(selectedAgents: SelectedAgent[]) {
+    try {
+      const result = await assignAgents(props.taskId, selectedAgents);
+      if (result.ok) {
+        await loadTaskData();
+        props.onTaskUpdated();
+      } else {
+        setError(result.error.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign agents');
+    }
   }
 
   /**
