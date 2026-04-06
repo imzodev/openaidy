@@ -81,6 +81,36 @@ export class McpClientService {
   }
 
   /**
+   * Validate environment variable placeholders in config
+   * Checks for placeholders like ${VAR_NAME} and ensures they exist in process.env
+   */
+  private validateEnvPlaceholders(env: Record<string, string> | undefined, serverId: string): void {
+    if (!env) return;
+
+    const placeholderPattern = /\$\{([^}]+)\}/g;
+    const missingVars: string[] = [];
+
+    for (const [key, value] of Object.entries(env)) {
+      const matches = value.match(placeholderPattern);
+      if (matches) {
+        for (const match of matches) {
+          const varName = match.slice(2, -1); // Extract VAR_NAME from ${VAR_NAME}
+          if (!process.env[varName]) {
+            missingVars.push(`${key}: ${varName}`);
+          }
+        }
+      }
+    }
+
+    if (missingVars.length > 0) {
+      throw new Error(
+        `MCP server ${serverId}: Missing required environment variables: ${missingVars.join(', ')}. ` +
+        `Please set these environment variables before starting the server.`
+      );
+    }
+  }
+
+  /**
    * Connect to a stdio-based MCP server
    */
   private async connectStdio(serverConfig: McpServerConfig): Promise<void> {
@@ -90,9 +120,12 @@ export class McpClientService {
       throw new Error(`stdio transport requires command for server ${id}`);
     }
 
+    // Validate environment variable placeholders before spawning
+    this.validateEnvPlaceholders(env, id);
+
     this.logger?.info({ serverId: id, command }, 'Connecting to MCP server via stdio');
 
-    // Spawn the MCP server process
+    // Spawn the MCP server process (note: env is not logged to prevent sensitive data exposure)
     const childProcess = spawn(command, args || [], {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
