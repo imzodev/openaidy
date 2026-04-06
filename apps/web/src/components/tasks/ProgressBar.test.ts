@@ -6,125 +6,116 @@ import { describe, it, expect } from 'vitest';
 
 // Simple unit tests for ProgressBar logic
 describe('ProgressBar', () => {
-  describe('calculatePercentage', () => {
-    it('calculates percentage correctly', () => {
-      const progress = { total: 4, completed: 2, inProgress: 1, failed: 0, pending: 1 };
-      const percentage = Math.round((progress.completed / progress.total) * 100);
-
-      expect(percentage).toBe(50);
-    });
-
-    it('returns 0 when total is 0', () => {
-      const progress = { total: 0, completed: 0, inProgress: 0, failed: 0, pending: 0 };
-      const percentage = progress.total === 0 ? 0 : Math.round((progress.completed / progress.total) * 100);
-
-      expect(percentage).toBe(0);
-    });
-
-    it('returns 100 when all completed', () => {
-      const progress = { total: 5, completed: 5, inProgress: 0, failed: 0, pending: 0 };
-      const percentage = Math.round((progress.completed / progress.total) * 100);
-
-      expect(percentage).toBe(100);
-    });
-  });
-
   describe('getStatusColor', () => {
-    it('returns red when there are failures', () => {
-      const progress = { total: 4, completed: 2, inProgress: 1, failed: 1, pending: 0 };
-      const color = progress.failed > 0 ? 'bg-red-500' : 'bg-gray-300';
+    const getStatusColor = (progress: { failed: number; percentage: number; inProgress: number }): string => {
+      if (progress.failed > 0) return 'bg-red-500';
+      if (progress.percentage === 100) return 'bg-green-500';
+      if (progress.inProgress > 0) return 'bg-blue-500';
+      return 'bg-gray-300';
+    };
 
-      expect(color).toBe('bg-red-500');
+    it('returns red when there are failures', () => {
+      const progress = { failed: 1, percentage: 50, inProgress: 1 };
+      expect(getStatusColor(progress)).toBe('bg-red-500');
     });
 
-    it('returns green when all completed', () => {
-      const progress = { total: 4, completed: 4, inProgress: 0, failed: 0, pending: 0 };
-      const color = progress.completed === progress.total && progress.total > 0 ? 'bg-green-500' : 'bg-gray-300';
-
-      expect(color).toBe('bg-green-500');
+    it('returns green when 100% complete', () => {
+      const progress = { failed: 0, percentage: 100, inProgress: 0 };
+      expect(getStatusColor(progress)).toBe('bg-green-500');
     });
 
     it('returns blue when in progress', () => {
-      const progress = { total: 4, completed: 1, inProgress: 2, failed: 0, pending: 1 };
-      let color = 'bg-gray-300';
-      if (progress.failed > 0) color = 'bg-red-500';
-      else if (progress.completed === progress.total && progress.total > 0) color = 'bg-green-500';
-      else if (progress.inProgress > 0) color = 'bg-blue-500';
-
-      expect(color).toBe('bg-blue-500');
+      const progress = { failed: 0, percentage: 50, inProgress: 1 };
+      expect(getStatusColor(progress)).toBe('bg-blue-500');
     });
 
     it('returns gray when pending', () => {
-      const progress = { total: 4, completed: 0, inProgress: 0, failed: 0, pending: 4 };
-      let color = 'bg-gray-300';
-      if (progress.failed > 0) color = 'bg-red-500';
-      else if (progress.completed === progress.total && progress.total > 0) color = 'bg-green-500';
-      else if (progress.inProgress > 0) color = 'bg-blue-500';
+      const progress = { failed: 0, percentage: 0, inProgress: 0 };
+      expect(getStatusColor(progress)).toBe('bg-gray-300');
+    });
 
-      expect(color).toBe('bg-gray-300');
+    it('prioritizes failures over completion', () => {
+      const progress = { failed: 1, percentage: 100, inProgress: 0 };
+      expect(getStatusColor(progress)).toBe('bg-red-500');
     });
   });
 
-  describe('progress display', () => {
-    it('shows correct summary format', () => {
-      const progress = { total: 10, completed: 7, inProgress: 2, failed: 1, pending: 0 };
-      const summary = `${progress.completed} / ${progress.total} subtasks`;
+  describe('calculatePercentage', () => {
+    const calculatePercentage = (total: number, completed: number): number => {
+      if (total === 0) return 0;
+      return Math.round((completed / total) * 100);
+    };
 
-      expect(summary).toBe('7 / 10 subtasks');
+    it('returns 0 when total is 0', () => {
+      expect(calculatePercentage(0, 0)).toBe(0);
     });
 
-    it('shows correct detail format', () => {
-      const progress = { total: 4, completed: 2, inProgress: 1, failed: 0, pending: 1 };
-      const details = {
-        completed: progress.completed,
-        inProgress: progress.inProgress,
-        pending: progress.pending,
-        failed: progress.failed,
+    it('calculates 50% correctly', () => {
+      expect(calculatePercentage(4, 2)).toBe(50);
+    });
+
+    it('calculates 100% when all complete', () => {
+      expect(calculatePercentage(5, 5)).toBe(100);
+    });
+
+    it('rounds to nearest integer', () => {
+      expect(calculatePercentage(3, 1)).toBe(33);
+    });
+  });
+
+  describe('TaskProgress', () => {
+    it('creates default progress', () => {
+      const progress = {
+        taskId: 'task-1',
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        failed: 0,
+        percentage: 0,
       };
 
-      expect(details.completed).toBe(2);
-      expect(details.inProgress).toBe(1);
-      expect(details.pending).toBe(1);
-      expect(details.failed).toBe(0);
+      expect(progress.taskId).toBe('task-1');
+      expect(progress.total).toBe(0);
+      expect(progress.percentage).toBe(0);
+    });
+
+    it('merges partial progress', () => {
+      const base = {
+        taskId: 'task-1',
+        total: 4,
+        completed: 0,
+        inProgress: 0,
+        pending: 4,
+        failed: 0,
+        percentage: 0,
+      };
+
+      const update = { completed: 2, pending: 2, percentage: 50 };
+      const merged = { ...base, ...update };
+
+      expect(merged.completed).toBe(2);
+      expect(merged.pending).toBe(2);
+      expect(merged.percentage).toBe(50);
+      expect(merged.total).toBe(4); // unchanged
     });
   });
 
-  describe('completion detection', () => {
-    it('detects completion when all subtasks done', () => {
-      const progress = { total: 5, completed: 5, inProgress: 0, failed: 0, pending: 0 };
-      const isComplete = progress.completed === progress.total && progress.total > 0;
+  describe('progress state transitions', () => {
+    it('transitions from pending to in_progress', () => {
+      const before = { pending: 4, inProgress: 0, completed: 0 };
+      const after = { pending: 3, inProgress: 1, completed: 0 };
 
-      expect(isComplete).toBe(true);
+      expect(after.pending).toBe(before.pending - 1);
+      expect(after.inProgress).toBe(before.inProgress + 1);
     });
 
-    it('does not detect completion with pending subtasks', () => {
-      const progress = { total: 5, completed: 3, inProgress: 1, failed: 0, pending: 1 };
-      const isComplete = progress.completed === progress.total && progress.total > 0;
+    it('transitions from in_progress to completed', () => {
+      const before = { pending: 0, inProgress: 1, completed: 0 };
+      const after = { pending: 0, inProgress: 0, completed: 1 };
 
-      expect(isComplete).toBe(false);
-    });
-
-    it('does not detect completion with zero total', () => {
-      const progress = { total: 0, completed: 0, inProgress: 0, failed: 0, pending: 0 };
-      const isComplete = progress.completed === progress.total && progress.total > 0;
-
-      expect(isComplete).toBe(false);
-    });
-  });
-
-  describe('polling', () => {
-    it('calculates poll interval in milliseconds', () => {
-      const pollIntervalSeconds = 5;
-      const pollIntervalMs = pollIntervalSeconds * 1000;
-
-      expect(pollIntervalMs).toBe(5000);
-    });
-
-    it('does not poll when interval is 0', () => {
-      const pollInterval = 0;
-      const shouldPoll = pollInterval && pollInterval > 0;
-
-      expect(shouldPoll).toBeFalsy();
+      expect(after.inProgress).toBe(before.inProgress - 1);
+      expect(after.completed).toBe(before.completed + 1);
     });
   });
 });
