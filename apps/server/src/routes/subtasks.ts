@@ -141,16 +141,29 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
       };
     }
 
-    // Note: We need to add an updateSubtask method to the service
-    // For now, return not implemented
-    reply.code(501);
-    return {
-      ok: false,
-      error: {
-        code: 'not_implemented',
-        message: 'Subtask update not yet implemented in service',
-      },
-    };
+    const updateInput: { title?: string; description?: string; orderIndex?: number } = {};
+    if (parsed.title !== undefined) {
+      updateInput.title = parsed.title;
+    }
+    if (parsed.description !== undefined) {
+      updateInput.description = parsed.description;
+    }
+    if (parsed.orderIndex !== undefined) {
+      updateInput.orderIndex = parsed.orderIndex;
+    }
+
+    const result = await taskService.updateSubtask(id, updateInput);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
   });
 
   /**
