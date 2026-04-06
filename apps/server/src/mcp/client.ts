@@ -174,6 +174,11 @@ export class McpClientService {
       });
     });
 
+    // Capture stderr from MCP server for debugging
+    childProcess.stderr?.on('data', (data) => {
+      this.logger?.warn({ serverId: id, stderr: data.toString() }, 'MCP server stderr');
+    });
+
     // Create the stdio transport
     const transport = new StdioClientTransport({
       stdin: childProcess.stdin!,
