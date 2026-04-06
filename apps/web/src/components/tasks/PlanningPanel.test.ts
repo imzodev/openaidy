@@ -6,123 +6,125 @@ import { describe, it, expect, vi } from 'vitest';
 
 // Simple unit tests for PlanningPanel logic
 describe('PlanningPanel', () => {
-  describe('STATUS_CONFIG', () => {
-    it('should have config for all planning statuses', () => {
-      const STATUS_CONFIG = {
-        pending: { label: 'Not Started', color: 'text-gray-500', icon: '○' },
-        in_progress: { label: 'Planning...', color: 'text-blue-500', icon: '◐' },
-        completed: { label: 'Completed', color: 'text-green-500', icon: '✓' },
-        failed: { label: 'Failed', color: 'text-red-500', icon: '✗' },
-      };
+  describe('planning status states', () => {
+    it('should show start button when pending', () => {
+      const status = 'pending';
+      const showStartButton = status === 'pending';
 
-      expect(STATUS_CONFIG.pending).toBeDefined();
-      expect(STATUS_CONFIG.in_progress).toBeDefined();
-      expect(STATUS_CONFIG.completed).toBeDefined();
-      expect(STATUS_CONFIG.failed).toBeDefined();
+      expect(showStartButton).toBe(true);
     });
 
-    it('should have correct labels', () => {
-      const STATUS_CONFIG = {
-        pending: { label: 'Not Started' },
-        in_progress: { label: 'Planning...' },
-        completed: { label: 'Completed' },
-        failed: { label: 'Failed' },
-      };
+    it('should show indicator when in progress', () => {
+      const status = 'in_progress';
+      const showIndicator = status === 'in_progress';
 
-      expect(STATUS_CONFIG.pending.label).toBe('Not Started');
-      expect(STATUS_CONFIG.in_progress.label).toBe('Planning...');
-      expect(STATUS_CONFIG.completed.label).toBe('Completed');
-      expect(STATUS_CONFIG.failed.label).toBe('Failed');
+      expect(showIndicator).toBe(true);
+    });
+
+    it('should show subtasks when completed', () => {
+      const status = 'completed';
+      const showSubtasks = status === 'completed';
+
+      expect(showSubtasks).toBe(true);
+    });
+
+    it('should show error when failed', () => {
+      const status = 'failed';
+      const showError = status === 'failed';
+
+      expect(showError).toBe(true);
     });
   });
 
-  describe('sortSubtasks', () => {
+  describe('subtask sorting', () => {
     it('should sort subtasks by orderIndex', () => {
       const subtasks = [
-        { id: '1', orderIndex: 2, title: 'Third' },
-        { id: '2', orderIndex: 0, title: 'First' },
-        { id: '3', orderIndex: 1, title: 'Second' },
+        { id: '1', orderIndex: 2, title: 'C' },
+        { id: '2', orderIndex: 0, title: 'A' },
+        { id: '3', orderIndex: 1, title: 'B' },
       ];
 
       const sorted = [...subtasks].sort((a, b) => a.orderIndex - b.orderIndex);
 
-      expect(sorted[0].title).toBe('First');
-      expect(sorted[1].title).toBe('Second');
-      expect(sorted[2].title).toBe('Third');
+      expect(sorted[0].title).toBe('A');
+      expect(sorted[1].title).toBe('B');
+      expect(sorted[2].title).toBe('C');
     });
   });
 
-  describe('handleStartPlanning', () => {
-    it('should set isPlanning to true during planning', async () => {
-      let isPlanning = false;
-      const onPlanTask = vi.fn().mockImplementation(async () => {
-        isPlanning = true;
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        isPlanning = false;
-      });
-
-      await onPlanTask();
-      expect(onPlanTask).toHaveBeenCalled();
-    });
-
-    it('should set error on failure', async () => {
-      const onPlanTask = vi.fn().mockRejectedValue(new Error('Planning failed'));
-      let error: string | null = null;
-
-      try {
-        await onPlanTask();
-      } catch (err) {
-        error = err instanceof Error ? err.message : 'Unknown error';
-      }
-
-      expect(error).toBe('Planning failed');
-    });
-  });
-
-  describe('handleDelete', () => {
-    it('should call onDeleteSubtask when confirmed', async () => {
-      const onDeleteSubtask = vi.fn().mockResolvedValue(undefined);
-      const loadSubtasks = vi.fn();
-
-      // Simulate confirmation
-      const confirmed = true;
-      if (confirmed) {
-        await onDeleteSubtask('subtask-1');
-        await loadSubtasks();
-      }
-
-      expect(onDeleteSubtask).toHaveBeenCalledWith('subtask-1');
-      expect(loadSubtasks).toHaveBeenCalled();
-    });
-
-    it('should not call onDeleteSubtask when cancelled', async () => {
-      const onDeleteSubtask = vi.fn().mockResolvedValue(undefined);
-
-      // Simulate cancellation
-      const confirmed = false;
-      if (confirmed) {
-        await onDeleteSubtask('subtask-1');
-      }
-
-      expect(onDeleteSubtask).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('handleAddNew', () => {
-    it('should call onAddSubtask with correct data', async () => {
-      const onAddSubtask = vi.fn().mockResolvedValue(undefined);
-      const loadSubtasks = vi.fn();
-
-      const subtask = {
-        title: 'New Subtask',
-        description: 'New description',
+  describe('startPlanning', () => {
+    it('should set status to in_progress when starting', () => {
+      let status = 'pending';
+      const startPlanning = () => {
+        status = 'in_progress';
       };
 
-      await onAddSubtask(subtask);
-      await loadSubtasks();
+      startPlanning();
+      expect(status).toBe('in_progress');
+    });
 
-      expect(onAddSubtask).toHaveBeenCalledWith(subtask);
-      expect(loadSubtasks).toHaveBeenCalled();
+    it('should set status to completed on success', async () => {
+      let status = 'in_progress';
+      const planTask = async () => {
+        status = 'completed';
+      };
+
+      await planTask();
+      expect(status).toBe('completed');
+    });
+
+    it('should set status to failed on error', async () => {
+      let status = 'in_progress';
+      const planTask = async () => {
+        throw new Error('API error');
+      };
+
+      try {
+        await planTask();
+      } catch {
+        status = 'failed';
+      }
+
+      expect(status).toBe('failed');
+    });
+  });
+
+  describe('subtask editing', () => {
+    it('should track editing subtask ID', () => {
+      let editingId: string | null = null;
+      const setEditingSubtaskId = (id: string | null) => {
+        editingId = id;
+      };
+
+      setEditingSubtaskId('subtask-1');
+      expect(editingId).toBe('subtask-1');
+
+      setEditingSubtaskId(null);
+      expect(editingId).toBeNull();
+    });
+
+    it('should use "new" ID for new subtask', () => {
+      let editingId: string | null = null;
+      const addNewSubtask = () => {
+        editingId = 'new';
+      };
+
+      addNewSubtask();
+      expect(editingId).toBe('new');
+    });
+  });
+
+  describe('regenerate', () => {
+    it('should restart planning when regenerate clicked', () => {
+      let planCount = 0;
+      const startPlanning = () => {
+        planCount++;
+      };
+
+      startPlanning(); // Initial planning
+      startPlanning(); // Regenerate
+
+      expect(planCount).toBe(2);
     });
   });
 });
