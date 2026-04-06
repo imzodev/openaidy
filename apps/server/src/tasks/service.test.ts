@@ -89,6 +89,7 @@ describe('TaskService', () => {
     priority: 'medium',
     planningEnabled: false,
     planningStatus: null,
+    sessionId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -101,6 +102,7 @@ describe('TaskService', () => {
     description: 'Subtask description',
     status: 'pending',
     assignedAgentId: null,
+    sessionId: null,
     orderIndex: 0,
     result: null,
     createdAt: new Date(),

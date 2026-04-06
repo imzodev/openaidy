@@ -1,4 +1,5 @@
 import type { AgentRegistry } from '../agents';
+import type { SessionMessageService } from '../sessions/service';
 import {
   type TasksRepository,
   type SubtasksRepository,
@@ -23,6 +24,7 @@ export type TaskServiceOptions = {
   subtasksRepo: SubtasksRepository;
   taskAgentsRepo: TaskAgentsRepository;
   agents?: AgentRegistry;
+  sessionService?: SessionMessageService;
 };
 
 /**
@@ -47,6 +49,7 @@ export type UpdateTaskInput = {
   description?: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
+  sessionId?: string | null;
 };
 
 /**
@@ -100,12 +103,14 @@ export class TaskService {
   private readonly subtasksRepo: SubtasksRepository;
   private readonly taskAgentsRepo: TaskAgentsRepository;
   private readonly agents: AgentRegistry | undefined;
+  private readonly sessionService: SessionMessageService | undefined;
 
   constructor(options: TaskServiceOptions) {
     this.tasksRepo = options.tasksRepo;
     this.subtasksRepo = options.subtasksRepo;
     this.taskAgentsRepo = options.taskAgentsRepo;
     this.agents = options.agents;
+    this.sessionService = options.sessionService;
   }
 
   // ========================================
@@ -522,6 +527,131 @@ export class TaskService {
     }
 
     return { ok: true, data: created };
+  }
+
+  // ========================================
+  // Session Integration
+  // ========================================
+
+  /**
+   * Execute a task by creating a session
+   */
+  async executeTask(taskId: string): Promise<ServiceResult<{ sessionId: string }>> {
+    if (!this.sessionService) {
+      return {
+        ok: false,
+        error: {
+          code: 'session.not_configured',
+          message: 'Session service is not configured',
+        },
+      };
+    }
+
+    const task = await this.tasksRepo.findById(taskId);
+    if (!task) {
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
+    }
+
+    // Create session for task execution
+    const session = await this.sessionService.createSession(`Task: ${task.title}`);
+
+    // Link session to task
+    await this.tasksRepo.update(taskId, { sessionId: session.id });
+
+    // Submit initial message with task description
+    await this.sessionService.submitMessage({
+      sessionId: session.id,
+      content: task.description,
+      role: 'user',
+    });
+
+    return { ok: true, data: { sessionId: session.id } };
+  }
+
+  /**
+   * Execute a subtask by creating a session
+   */
+  async executeSubtask(subtaskId: string): Promise<ServiceResult<{ sessionId: string }>> {
+    if (!this.sessionService) {
+      return {
+        ok: false,
+        error: {
+          code: 'session.not_configured',
+          message: 'Session service is not configured',
+        },
+      };
+    }
+
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+
+    // Create session for subtask execution
+    const session = await this.sessionService.createSession(`Subtask: ${subtask.title}`);
+
+    // Link session to subtask
+    await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
+
+    // Update status to in_progress
+    await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
+
+    // Submit initial message with subtask description
+    await this.sessionService.submitMessage({
+      sessionId: session.id,
+      content: subtask.description,
+      role: 'user',
+    });
+
+    return { ok: true, data: { sessionId: session.id } };
+  }
+
+  /**
+   * Get the session linked to a task
+   */
+  async getTaskSession(taskId: string): Promise<ServiceResult<{ sessionId: string | null }>> {
+    const task = await this.tasksRepo.findById(taskId);
+    if (!task) {
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
+    }
+
+    return { ok: true, data: { sessionId: task.sessionId } };
+  }
+
+  /**
+   * Get the session linked to a subtask
+   */
+  async getSubtaskSession(subtaskId: string): Promise<ServiceResult<{ sessionId: string | null }>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+
+    return { ok: true, data: { sessionId: subtask.sessionId } };
   }
 }
 

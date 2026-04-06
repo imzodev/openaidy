@@ -67,6 +67,7 @@ describe('taskRoutes', () => {
     priority: 'medium',
     planningEnabled: false,
     planningStatus: null,
+    sessionId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

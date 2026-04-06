@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, integer, boolean, pgEnum, primaryKey } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
+import { sessions } from './sessions';
 
 /**
  * Task status enum
@@ -57,6 +58,7 @@ export const tasks = pgTable('tasks', {
   priority: taskPriorityEnum('priority').notNull().default('medium'),
   planningEnabled: boolean('planning_enabled').notNull().default(false),
   planningStatus: planningStatusEnum('planning_status'),
+  sessionId: text('session_id').references(() => sessions.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -91,6 +93,7 @@ export const subtasks = pgTable('subtasks', {
   description: text('description').notNull(),
   status: subtaskStatusEnum('status').notNull().default('pending'),
   assignedAgentId: text('assigned_agent_id'),
+  sessionId: text('session_id').references(() => sessions.id, { onDelete: 'set null' }),
   orderIndex: integer('order_index').notNull().default(0),
   result: text('result'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

@@ -87,6 +87,7 @@ export class TasksRepository {
       description?: string;
       priority?: schema.TaskPriority;
       planningEnabled?: boolean;
+      sessionId?: string | null;
     }
   ): Promise<schema.Task | null> {
     const results = await this.db.update(schema.tasks)

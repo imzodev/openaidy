@@ -322,4 +322,92 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     const progress = await taskService.getTaskProgress(taskId);
     return { ok: true, data: progress };
   });
+
+  /**
+   * POST /tasks/:id/execute
+   * Execute a task by creating a session
+   */
+  app.post('/tasks/:id/execute', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.executeTask(id);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'task.not_found') {
+        reply.code(404);
+      } else if (result.error.code === 'session.not_configured') {
+        reply.code(503);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * GET /tasks/:id/session
+   * Get the session linked to a task
+   */
+  app.get('/tasks/:id/session', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.getTaskSession(id);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'task.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /subtasks/:id/execute
+   * Execute a subtask by creating a session
+   */
+  app.post('/subtasks/:id/execute', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.executeSubtask(id);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else if (result.error.code === 'session.not_configured') {
+        reply.code(503);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * GET /subtasks/:id/session
+   * Get the session linked to a subtask
+   */
+  app.get('/subtasks/:id/session', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.getSubtaskSession(id);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
 };
