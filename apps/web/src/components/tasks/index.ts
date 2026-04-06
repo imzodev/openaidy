@@ -14,3 +14,4 @@ export { TaskDetailPanel, type TaskDetailPanelProps } from './TaskDetailPanel';
 export { SubtaskEditor, type SubtaskEdit, type SubtaskEditorProps } from './SubtaskEditor';
 export { PlanningPanel, type PlanningPanelProps } from './PlanningPanel';
 export { TaskExecutionView, type TaskExecutionViewProps } from './TaskExecutionView';
+export { ProgressBar, type ProgressBarProps, type TaskProgress } from './ProgressBar';

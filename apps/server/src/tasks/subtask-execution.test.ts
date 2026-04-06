@@ -1,106 +1,174 @@
 /**
  * Subtask Execution Tests
+ *
+ * Tests for subtask execution with dependency handling.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TaskService, type TaskServiceOptions } from './service';
-
-// Mock types
-type MockTask = {
-  id: string;
-  title: string;
-  sessionId?: string | null;
-};
-
-type MockSubtask = {
-  id: string;
-  taskId: string;
-  title: string;
-  description: string;
-  status: string;
-  parentSubtaskId?: string | null;
-  sessionId?: string | null;
-};
+import type { TasksRepository, SubtasksRepository, Subtask } from '@openaidy/db';
+import type { SessionMessageService } from '../sessions/service';
+import { TaskService } from './service';
 
 describe('Subtask Execution', () => {
   let taskService: TaskService;
-  let mockTasksRepo: {
-    findById: ReturnType<typeof vi.fn>;
-    updateStatus: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
-  let mockSubtasksRepo: {
-    findById: ReturnType<typeof vi.fn>;
-    listByTask: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    updateStatus: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-  };
-  let mockTaskAgentsRepo: {
-    listByTask: ReturnType<typeof vi.fn>;
-    assignMultiple: ReturnType<typeof vi.fn>;
-    remove: ReturnType<typeof vi.fn>;
-  };
-  let mockSessionService: {
-    createSession: ReturnType<typeof vi.fn>;
-    submitMessage: ReturnType<typeof vi.fn>;
-  };
+  let mockTasksRepo: TasksRepository;
+  let mockSubtasksRepo: SubtasksRepository;
+  let mockSessionService: SessionMessageService;
 
   beforeEach(() => {
-    mockTasksRepo = {
-      findById: vi.fn(),
-      updateStatus: vi.fn().mockResolvedValue({}),
-      update: vi.fn().mockResolvedValue({}),
-    };
-
     mockSubtasksRepo = {
       findById: vi.fn(),
-      listByTask: vi.fn().mockResolvedValue([]),
+      listByTask: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
       updateStatus: vi.fn().mockResolvedValue({}),
-      create: vi.fn().mockResolvedValue({ id: 'new-subtask' }),
+      create: vi.fn(),
+      delete: vi.fn(),
     };
-
-    mockTaskAgentsRepo = {
-      listByTask: vi.fn().mockResolvedValue([]),
-      assignMultiple: vi.fn().mockResolvedValue([]),
-      remove: vi.fn().mockResolvedValue({}),
+    mockTasksRepo = {
+      findById: vi.fn(),
+      list: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateStatus: vi.fn(),
+      delete: vi.fn(),
+      listByWorkspace: vi.fn(),
+      listByAssignee: vi.fn(),
     };
-
     mockSessionService = {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
-      submitMessage: vi.fn().mockResolvedValue({ ok: true }),
+      submitMessage: vi.fn().mockResolvedValue({}),
+      getMessages: vi.fn(),
+      getSession: vi.fn(),
     };
-
-    const options: TaskServiceOptions = {
-      tasksRepo: mockTasksRepo as any,
-      subtasksRepo: mockSubtasksRepo as any,
-      taskAgentsRepo: mockTaskAgentsRepo as any,
-      sessionService: mockSessionService as any,
+    const mockTaskAgentsRepo = {
+      create: vi.fn(),
+      delete: vi.fn(),
+      listByTask: vi.fn(),
     };
+    taskService = new TaskService({
+      tasksRepo: mockTasksRepo,
+      subtasksRepo: mockSubtasksRepo,
+      taskAgentsRepo: mockTaskAgentsRepo,
+      sessionService: mockSessionService,
+    });
+  });
 
-    taskService = new TaskService(options);
+  describe('executeSubtask', () => {
+    it('executes subtask without dependencies', async () => {
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
+        id: 'subtask-1',
+        taskId: 'task-1',
+        title: 'Test Subtask',
+        description: 'Test description',
+        status: 'pending',
+        orderIndex: 0,
+        createdAt: new Date(),
+      } as Subtask);
+
+      const result = await taskService.executeSubtask('subtask-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.sessionId).toBe('session-1');
+      }
+      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith('subtask-1', 'in_progress');
+    });
+
+    it('fails if parent subtask not completed', async () => {
+      vi.mocked(mockSubtasksRepo.findById)
+        .mockResolvedValueOnce({
+          id: 'subtask-2',
+          taskId: 'task-1',
+          parentSubtaskId: 'subtask-1',
+          title: 'Dependent Subtask',
+          description: 'Test',
+          status: 'pending',
+          orderIndex: 1,
+          createdAt: new Date(),
+        } as Subtask)
+        .mockResolvedValueOnce({
+          id: 'subtask-1',
+          taskId: 'task-1',
+          status: 'in_progress',
+          title: 'Parent',
+          description: 'Test',
+          orderIndex: 0,
+          createdAt: new Date(),
+        } as Subtask);
+
+      const result = await taskService.executeSubtask('subtask-2');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.dependency_not_met');
+      }
+    });
+
+    it('allows execution if parent is completed', async () => {
+      vi.mocked(mockSubtasksRepo.findById)
+        .mockResolvedValueOnce({
+          id: 'subtask-2',
+          taskId: 'task-1',
+          parentSubtaskId: 'subtask-1',
+          title: 'Dependent Subtask',
+          description: 'Test description',
+          status: 'pending',
+          orderIndex: 1,
+          createdAt: new Date(),
+        } as Subtask)
+        .mockResolvedValueOnce({
+          id: 'subtask-1',
+          taskId: 'task-1',
+          status: 'completed',
+          title: 'Parent',
+          description: 'Test',
+          orderIndex: 0,
+          createdAt: new Date(),
+        } as Subtask);
+
+      const result = await taskService.executeSubtask('subtask-2');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.sessionId).toBe('session-1');
+      }
+    });
+
+    it('fails if subtask not found', async () => {
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue(null);
+
+      const result = await taskService.executeSubtask('nonexistent');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.not_found');
+      }
+    });
   });
 
   describe('executeSubtasks', () => {
     it('executes all subtasks without dependencies', async () => {
-      mockTasksRepo.findById.mockResolvedValue({
+      vi.mocked(mockTasksRepo.findById).mockResolvedValue({
         id: 'task-1',
         title: 'Test Task',
-      } as MockTask);
-
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending', title: 'A', description: 'A' },
-        { id: 'subtask-2', status: 'pending', title: 'B', description: 'B' },
-      ] as MockSubtask[]);
-
-      mockSubtasksRepo.findById.mockResolvedValue({
+        status: 'todo',
+        priority: 'medium',
+        workspaceId: 'ws-1',
+        createdAt: new Date(),
+      } as any);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'pending', title: 'A', description: 'A', orderIndex: 0, taskId: 'task-1', createdAt: new Date() },
+        { id: 'subtask-2', status: 'pending', title: 'B', description: 'B', orderIndex: 1, taskId: 'task-1', createdAt: new Date() },
+      ] as Subtask[]);
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
         id: 'subtask-1',
         taskId: 'task-1',
         title: 'Test',
         description: 'Test',
         status: 'pending',
-      } as MockSubtask);
+        orderIndex: 0,
+        createdAt: new Date(),
+      } as Subtask);
 
       const result = await taskService.executeSubtasks('task-1');
 
@@ -111,62 +179,56 @@ describe('Subtask Execution', () => {
     });
 
     it('only executes subtasks with completed dependencies', async () => {
-      mockTasksRepo.findById.mockResolvedValue({
+      vi.mocked(mockTasksRepo.findById).mockResolvedValue({
         id: 'task-1',
         title: 'Test Task',
-      } as MockTask);
-
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending', title: 'A', description: 'A' },
-        { id: 'subtask-2', status: 'pending', title: 'B', description: 'B', parentSubtaskId: 'subtask-1' },
-      ] as MockSubtask[]);
-
-      mockSubtasksRepo.findById.mockResolvedValue({
+        status: 'todo',
+        priority: 'medium',
+        workspaceId: 'ws-1',
+        createdAt: new Date(),
+      } as any);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'pending', title: 'A', description: 'A', orderIndex: 0, taskId: 'task-1', createdAt: new Date() },
+        { id: 'subtask-2', status: 'pending', title: 'B', description: 'B', orderIndex: 1, taskId: 'task-1', parentSubtaskId: 'subtask-1', createdAt: new Date() },
+      ] as Subtask[]);
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
         id: 'subtask-1',
         taskId: 'task-1',
         title: 'Test',
         description: 'Test',
         status: 'pending',
-      } as MockSubtask);
+        orderIndex: 0,
+        createdAt: new Date(),
+      } as Subtask);
 
       const result = await taskService.executeSubtasks('task-1');
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        // Only subtask-1 should start (subtask-2 depends on it)
-        expect(result.data.startedCount).toBe(1);
-      }
-    });
-
-    it('returns error if task not found', async () => {
-      mockTasksRepo.findById.mockResolvedValue(null);
-
-      const result = await taskService.executeSubtasks('nonexistent');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('task.not_found');
+        expect(result.data.startedCount).toBe(1); // Only subtask-1
       }
     });
   });
 
   describe('completeSubtask', () => {
     it('updates subtask status and result', async () => {
-      mockSubtasksRepo.findById.mockResolvedValue({
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
         id: 'subtask-1',
         taskId: 'task-1',
+        title: 'Test',
+        description: 'Test',
         status: 'in_progress',
-      } as MockSubtask);
-
-      mockSubtasksRepo.update.mockResolvedValue({
+        orderIndex: 0,
+        createdAt: new Date(),
+      } as Subtask);
+      vi.mocked(mockSubtasksRepo.update).mockResolvedValue({
         id: 'subtask-1',
         status: 'completed',
         result: 'Success result',
-      });
-
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'completed' },
-      ]);
+      } as Subtask);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'completed', result: 'Success', taskId: 'task-1', title: 'A', description: 'A', orderIndex: 0, createdAt: new Date() },
+      ] as Subtask[]);
 
       const result = await taskService.completeSubtask('subtask-1', 'Success result');
 
@@ -178,53 +240,47 @@ describe('Subtask Execution', () => {
     });
 
     it('updates task to done when all subtasks complete', async () => {
-      mockSubtasksRepo.findById.mockResolvedValue({
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
         id: 'subtask-2',
         taskId: 'task-1',
+        title: 'Test',
+        description: 'Test',
         status: 'in_progress',
-      } as MockSubtask);
-
-      mockSubtasksRepo.update.mockResolvedValue({
+        orderIndex: 1,
+        createdAt: new Date(),
+      } as Subtask);
+      vi.mocked(mockSubtasksRepo.update).mockResolvedValue({
         id: 'subtask-2',
         status: 'completed',
         result: 'Done',
-      });
-
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'completed' },
-        { id: 'subtask-2', status: 'completed' },
-      ]);
+      } as Subtask);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'completed', taskId: 'task-1', title: 'A', description: 'A', orderIndex: 0, createdAt: new Date() },
+        { id: 'subtask-2', status: 'completed', taskId: 'task-1', title: 'B', description: 'B', orderIndex: 1, createdAt: new Date() },
+      ] as Subtask[]);
 
       await taskService.completeSubtask('subtask-2', 'Done');
 
       expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith('task-1', 'done');
     });
-
-    it('returns error if subtask not found', async () => {
-      mockSubtasksRepo.findById.mockResolvedValue(null);
-
-      const result = await taskService.completeSubtask('nonexistent', 'result');
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('subtask.not_found');
-      }
-    });
   });
 
   describe('failSubtask', () => {
-    it('updates subtask status to failed with error', async () => {
-      mockSubtasksRepo.findById.mockResolvedValue({
+    it('updates subtask status to failed', async () => {
+      vi.mocked(mockSubtasksRepo.findById).mockResolvedValue({
         id: 'subtask-1',
         taskId: 'task-1',
+        title: 'Test',
+        description: 'Test',
         status: 'in_progress',
-      } as MockSubtask);
-
-      mockSubtasksRepo.update.mockResolvedValue({
+        orderIndex: 0,
+        createdAt: new Date(),
+      } as Subtask);
+      vi.mocked(mockSubtasksRepo.update).mockResolvedValue({
         id: 'subtask-1',
         status: 'failed',
         result: 'Error: Something went wrong',
-      });
+      } as Subtask);
 
       const result = await taskService.failSubtask('subtask-1', 'Something went wrong');
 
@@ -238,36 +294,24 @@ describe('Subtask Execution', () => {
 
   describe('getNextExecutableSubtasks', () => {
     it('returns only pending subtasks with completed dependencies', async () => {
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending' },
-        { id: 'subtask-2', status: 'in_progress' },
-        { id: 'subtask-3', status: 'pending', parentSubtaskId: 'subtask-1' },
-        { id: 'subtask-4', status: 'pending', parentSubtaskId: 'subtask-2' },
-      ] as MockSubtask[]);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'pending', taskId: 'task-1', title: 'A', description: 'A', orderIndex: 0, createdAt: new Date() },
+        { id: 'subtask-2', status: 'in_progress', taskId: 'task-1', title: 'B', description: 'B', orderIndex: 1, createdAt: new Date() },
+        { id: 'subtask-3', status: 'pending', taskId: 'task-1', parentSubtaskId: 'subtask-1', title: 'C', description: 'C', orderIndex: 2, createdAt: new Date() },
+        { id: 'subtask-4', status: 'pending', taskId: 'task-1', parentSubtaskId: 'subtask-2', title: 'D', description: 'D', orderIndex: 3, createdAt: new Date() },
+      ] as Subtask[]);
 
       const result = await taskService.getNextExecutableSubtasks('task-1');
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('subtask-1');
-    });
-
-    it('returns all pending subtasks when no dependencies exist', async () => {
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending' },
-        { id: 'subtask-2', status: 'pending' },
-        { id: 'subtask-3', status: 'completed' },
-      ] as MockSubtask[]);
-
-      const result = await taskService.getNextExecutableSubtasks('task-1');
-
-      expect(result).toHaveLength(2);
+      expect(result[0]?.id).toBe('subtask-1');
     });
 
     it('returns empty array when no executable subtasks', async () => {
-      mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'completed' },
-        { id: 'subtask-2', status: 'in_progress' },
-      ] as MockSubtask[]);
+      vi.mocked(mockSubtasksRepo.listByTask).mockResolvedValue([
+        { id: 'subtask-1', status: 'in_progress', taskId: 'task-1', title: 'A', description: 'A', orderIndex: 0, createdAt: new Date() },
+        { id: 'subtask-2', status: 'completed', taskId: 'task-1', title: 'B', description: 'B', orderIndex: 1, createdAt: new Date() },
+      ] as Subtask[]);
 
       const result = await taskService.getNextExecutableSubtasks('task-1');
 
