@@ -2,7 +2,7 @@
  * Task Execution View Component
  *
  * Displays the session execution for a task or subtask, showing the conversation
- * and allowing interaction.
+ * and allowing interaction via WebSocket streaming.
  */
 
 import { createSignal, createEffect, Show, For, onCleanup } from 'solid-js';
@@ -11,11 +11,10 @@ import {
   getTask,
   executeTask,
   executeSubtask,
-  getTaskSession,
-  getSubtaskSession,
-  type Task,
   type TaskWithDetails,
 } from '../../lib/api-tasks';
+import { useWebSocketContext } from '../../lib/ws-provider';
+import { submitMessageStreaming } from '../../lib/ws-api';
 
 /**
  * Session message type
@@ -41,13 +40,73 @@ export type TaskExecutionViewProps = {
  * TaskExecutionView Component
  */
 export function TaskExecutionView(props: TaskExecutionViewProps) {
+  const { client, isConnected } = useWebSocketContext();
+  
   const [task, setTask] = createSignal<TaskWithDetails | null>(null);
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [messages, setMessages] = createSignal<SessionMessage[]>([]);
+  const [streamingContent, setStreamingContent] = createSignal('');
   const [inputValue, setInputValue] = createSignal('');
   const [isExecuting, setIsExecuting] = createSignal(false);
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+
+  // Subscribe to streaming events when we have a session and WebSocket is connected
+  createEffect(() => {
+    const sid = sessionId();
+    const wsClient = client();
+    
+    if (!sid || !wsClient || !isConnected()) return;
+
+    // Subscribe to session stream events
+    const handleStreamStart = () => {
+      setIsStreaming(true);
+      setStreamingContent('');
+    };
+
+    const handleStreamDelta = (event: { payload: { content: string } }) => {
+      setStreamingContent((prev) => prev + event.payload.content);
+    };
+
+    const handleStreamEnd = () => {
+      // Add the completed assistant message
+      const content = streamingContent();
+      if (content) {
+        const assistantMessage: SessionMessage = {
+          id: `msg-${Date.now()}`,
+          role: 'assistant',
+          content,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+      setIsStreaming(false);
+      setStreamingContent('');
+    };
+
+    const handleStreamError = (event: { payload: { error: { message: string } } }) => {
+      setError(event.payload.error.message);
+      setIsStreaming(false);
+      setStreamingContent('');
+    };
+
+    const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
+    const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
+    const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
+    const unsubError = wsClient.on('session.stream.error', handleStreamError);
+
+    // Subscribe to the session
+    wsClient.subscribeToSession(sid).catch((err) => {
+      console.error('Failed to subscribe to session:', err);
+    });
+
+    onCleanup(() => {
+      unsubStart();
+      unsubDelta();
+      unsubEnd();
+      unsubError();
+    });
+  });
 
   // Load task on mount
   createEffect(() => {
@@ -65,18 +124,8 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
       // Check for existing session
       if (result.data.sessionId) {
         setSessionId(result.data.sessionId);
-        loadMessages(result.data.sessionId);
       }
     }
-  }
-
-  /**
-   * Load messages for a session (simplified - would use WebSocket in production)
-   */
-  async function loadMessages(sid: string) {
-    // In a real implementation, this would subscribe to WebSocket messages
-    // For now, we'll just set an empty array
-    setMessages([]);
   }
 
   /**
@@ -95,7 +144,6 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
 
       if (result.ok) {
         setSessionId(result.data.sessionId);
-        loadMessages(result.data.sessionId);
       } else {
         setError(result.error.message);
       }
@@ -107,7 +155,7 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
   }
 
   /**
-   * Send a message
+   * Send a message via WebSocket streaming
    */
   async function sendMessage() {
     if (!inputValue().trim() || !sessionId()) return;
@@ -124,19 +172,30 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
     };
     setMessages((prev) => [...prev, userMessage]);
 
-    // In a real implementation, this would send via WebSocket
+    // Use WebSocket streaming if connected, otherwise show error
+    if (!isConnected()) {
+      setError('WebSocket not connected. Cannot send message.');
+      return;
+    }
+
     setIsStreaming(true);
-    // Simulate streaming for demo
-    setTimeout(() => {
-      const assistantMessage: SessionMessage = {
-        id: `msg-${Date.now()}`,
-        role: 'assistant',
-        content: 'This is a placeholder response. In production, this would be streamed from the agent.',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+    setStreamingContent('');
+
+    try {
+      const result = await submitMessageStreaming(sessionId()!, {
+        content,
+        role: 'user',
+      });
+
+      if (!result.ok) {
+        setError('Failed to send message');
+        setIsStreaming(false);
+      }
+      // Streaming events will handle the response
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
       setIsStreaming(false);
-    }, 1000);
+    }
   }
 
   /**
@@ -160,6 +219,16 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
           <Show when={props.subtaskId}>
             <span class="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
               Subtask
+            </span>
+          </Show>
+          {/* WebSocket connection status */}
+          <Show when={sessionId()}>
+            <span class={`px-2 py-0.5 text-xs rounded ${
+              isConnected() 
+                ? 'bg-green-100 text-green-700' 
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {isConnected() ? 'WS Connected' : 'WS Disconnected'}
             </span>
           </Show>
         </div>
@@ -235,13 +304,24 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
             )}
           </For>
 
-          {/* Streaming indicator */}
+          {/* Streaming indicator with live content */}
           <Show when={isStreaming()}>
             <div class="p-3 bg-gray-50 rounded-lg mr-8">
-              <div class="flex items-center gap-2 text-gray-500">
-                <Loader2 class="w-4 h-4 animate-spin" />
-                <span class="text-sm">Agent is typing...</span>
-              </div>
+              <Show when={streamingContent()} fallback={
+                <div class="flex items-center gap-2 text-gray-500">
+                  <Loader2 class="w-4 h-4 animate-spin" />
+                  <span class="text-sm">Agent is typing...</span>
+                </div>
+              }>
+                <div class="text-xs text-gray-500 mb-1">assistant</div>
+                <div class="text-sm text-gray-900 whitespace-pre-wrap">
+                  {streamingContent()}
+                </div>
+                <div class="flex items-center gap-1 mt-1 text-xs text-gray-400">
+                  <Loader2 class="w-3 h-3 animate-spin" />
+                  <span>streaming...</span>
+                </div>
+              </Show>
             </div>
           </Show>
         </div>
