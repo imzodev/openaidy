@@ -23,10 +23,17 @@ export type McpToolDefinition = {
 };
 
 /**
+ * Content types in an MCP tool result
+ */
+export type McpTextContent = { type: 'text'; text: string };
+export type McpImageContent = { type: 'image'; data: string; mimeType?: string };
+export type McpResourceContent = { type: 'resource'; data: string; mimeType?: string };
+
+/**
  * Tool call result from an MCP server
  */
 export type McpToolResult = {
-  content: Array<{ type: string; text: string } | { type: string; data: string; mimeType?: string }>;
+  content: Array<McpTextContent | McpImageContent | McpResourceContent>;
   isError?: boolean;
 };
 
