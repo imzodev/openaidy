@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
+import { createSignal, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
 import { RefreshCw, Trash2, Search, Filter, Activity, AlertCircle, AlertTriangle, Info, Bug } from 'lucide-solid';
 import { Layout } from './Layout';
 import { queryLogs, getLogStats, clearLogs, type LogEntry, type LogLevel, type LogStats } from '../../lib/api';
@@ -109,8 +109,8 @@ export function LogsPage() {
     });
   };
 
-  // Load on mount and when filters change
-  createEffect(() => {
+  // Load on mount
+  onMount(() => {
     loadLogs(true);
     loadStats();
   });
@@ -126,12 +126,13 @@ export function LogsPage() {
       clearInterval(refreshInterval);
       refreshInterval = null;
     }
-    
-    onCleanup(() => {
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
-      }
-    });
+  });
+
+  // Cleanup interval on component unmount
+  onCleanup(() => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
   });
 
   return (
