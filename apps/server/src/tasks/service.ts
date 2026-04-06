@@ -376,6 +376,47 @@ export class TaskService {
   }
 
   /**
+   * Update a subtask
+   */
+  async updateSubtask(
+    id: string,
+    input: { title?: string; description?: string; orderIndex?: number }
+  ): Promise<ServiceResult<Subtask>> {
+    const existing = await this.subtasksRepo.findById(id);
+    if (!existing) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${id}" not found`,
+        },
+      };
+    }
+
+    const updated = await this.subtasksRepo.update(id, input);
+    return { ok: true, data: updated! };
+  }
+
+  /**
+   * Delete a subtask
+   */
+  async deleteSubtask(id: string): Promise<ServiceResult<true>> {
+    const existing = await this.subtasksRepo.findById(id);
+    if (!existing) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${id}" not found`,
+        },
+      };
+    }
+
+    await this.subtasksRepo.delete(id);
+    return { ok: true, data: true };
+  }
+
+  /**
    * Update a subtask's status
    */
   async updateSubtaskStatus(id: string, status: SubtaskStatus): Promise<ServiceResult<Subtask>> {

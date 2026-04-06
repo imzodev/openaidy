@@ -173,16 +173,18 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
   app.delete('/subtasks/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    // Note: We need to add a deleteSubtask method to the service
-    // For now, return not implemented
-    reply.code(501);
-    return {
-      ok: false,
-      error: {
-        code: 'not_implemented',
-        message: 'Subtask delete not yet implemented in service',
-      },
-    };
+    const result = await taskService.deleteSubtask(id);
+
+    if (result.ok) {
+      return { ok: true };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
   });
 
   /**
