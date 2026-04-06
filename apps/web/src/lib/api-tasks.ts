@@ -338,3 +338,13 @@ export async function getSubtaskSession(subtaskId: string): Promise<ApiResult<{ 
   const response = await fetch(`${API_BASE}/subtasks/${subtaskId}/session`);
   return response.json();
 }
+
+/**
+ * Plan a task (decompose into subtasks using AI)
+ */
+export async function planTask(taskId: string): Promise<ApiResult<{ subtasks: Subtask[] }>> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/plan`, {
+    method: 'POST',
+  });
+  return response.json();
+}

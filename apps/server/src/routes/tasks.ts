@@ -410,4 +410,27 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       return { ok: false, error: result.error };
     }
   });
+
+  /**
+   * POST /tasks/:id/plan
+   * Plan a task (decompose into subtasks using AI)
+   * Note: This is a placeholder that returns existing subtasks.
+   * Full implementation requires PlanningService integration.
+   */
+  app.post('/tasks/:id/plan', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    // Check if task exists
+    const task = await taskService.getTaskWithDetails(id);
+    if (!task) {
+      reply.code(404);
+      return { ok: false, error: { code: 'task.not_found', message: `Task "${id}" not found` } };
+    }
+
+    // Get existing subtasks
+    const subtasks = await taskService.getSubtasks(id);
+
+    // Return the subtasks (placeholder for actual planning)
+    return { ok: true, data: { subtasks } };
+  });
 };
