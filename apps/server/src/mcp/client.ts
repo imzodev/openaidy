@@ -230,7 +230,12 @@ export class McpClientService {
 
     // HTTP transport not fully implemented yet
     // This would use SSE (Server-Sent Events) for HTTP-based MCP servers
-    throw new Error(`HTTP transport for MCP server ${id} is not yet implemented`);
+    // See: https://github.com/imzodev/openaidy/issues/200
+    throw new Error(
+      `HTTP transport for MCP server ${id} is not yet implemented. ` +
+        `Please use stdio transport for now. ` +
+        `See https://github.com/imzodev/openaidy/issues/200 for updates.`,
+    );
   }
 
   /**
