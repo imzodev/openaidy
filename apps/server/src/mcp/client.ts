@@ -62,9 +62,29 @@ export type McpClientServiceOptions = {
 export class McpClientService {
   private connections = new Map<string, McpConnection>();
   private logger?: FastifyBaseLogger;
+  private shutdownHandlersRegistered = false;
 
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
+    this.registerShutdownHandlers();
+  }
+
+  /**
+   * Register shutdown handlers for graceful termination
+   * Ensures child processes are cleaned up when the parent process terminates
+   */
+  private registerShutdownHandlers(): void {
+    if (this.shutdownHandlersRegistered) return;
+
+    const handleShutdown = async () => {
+      this.logger?.info('Received shutdown signal, disconnecting MCP servers');
+      await this.disconnectAll();
+    };
+
+    process.on('SIGTERM', handleShutdown);
+    process.on('SIGINT', handleShutdown);
+
+    this.shutdownHandlersRegistered = true;
   }
 
   /**
