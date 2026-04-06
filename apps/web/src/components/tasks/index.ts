@@ -8,4 +8,4 @@ export { KanbanBoard, type KanbanBoardProps } from './KanbanBoard';
 export { KanbanColumn, type KanbanColumnProps } from './KanbanColumn';
 export { TaskCard, type TaskCardProps } from './TaskCard';
 export { TaskModal, type TaskModalProps } from './TaskModal';
-export { AgentSelector, type AgentSelectorProps } from './AgentSelector';
+export { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
