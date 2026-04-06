@@ -266,6 +266,23 @@ function createGateway(
   // Register logs handlers with the message router
   registerLogsHandlers(messageRouter, logsHandler);
 
+  // Wire up log buffer to broadcast to subscribers
+  const { getLogBuffer, getLogSubscriptionManager } = await import('./handlers/logs');
+  const logBuffer = getLogBuffer();
+  const subscriptionManager = getLogSubscriptionManager();
+  
+  // Set up broadcaster to push new log entries to subscribed WebSocket clients
+  logBuffer.setOnEntryAdded((entry) => {
+    const subscribedConnections = subscriptionManager.getAllSubscribed();
+    
+    for (const connId of subscribedConnections) {
+      if (subscriptionManager.shouldReceive(connId, entry)) {
+        const message = createWSMessage('log.entry', entry);
+        connectionManager.send(connId, message);
+      }
+    }
+  });
+
   // Register node RPC response handlers (for node.invoke responses from nodes)
   messageRouter.registerHandler(
     'node.rpc.response',

@@ -77,14 +77,25 @@ export type LogStats = {
 
 export type LogBufferOptions = {
   maxSize?: number;
+  onEntryAdded?: (entry: LogEntry) => void;
 };
 
 export class LogBuffer {
   private entries: LogEntry[] = [];
   private maxSize: number;
+  private onEntryAdded?: (entry: LogEntry) => void;
 
   constructor(options?: LogBufferOptions) {
     this.maxSize = options?.maxSize ?? 10000;
+    this.onEntryAdded = options?.onEntryAdded;
+  }
+
+  /**
+   * Set the callback to be called when a new entry is added
+   * This allows external systems (like WebSocket) to react to new logs
+   */
+  setOnEntryAdded(callback: (entry: LogEntry) => void): void {
+    this.onEntryAdded = callback;
   }
 
   add(entry: LogEntry): void {
@@ -92,6 +103,10 @@ export class LogBuffer {
     // Prune if over max size
     if (this.entries.length > this.maxSize) {
       this.entries = this.entries.slice(-this.maxSize);
+    }
+    // Notify listeners
+    if (this.onEntryAdded) {
+      this.onEntryAdded(entry);
     }
   }
 
