@@ -1,10 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
 import {
   getLogBuffer,
-  type LogLevel,
-  type LogFilter,
-  type LogQueryResult,
-  type LogStats,
+  type LogLevel
+  type LogFilter
+  type LogQueryResult
+  type LogStats
 } from '../lib/logger';
 
 interface LogsQuerystring {
@@ -27,11 +27,8 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: LogsQuerystring }>('/api/logs', async (request, reply) => {
     const query = request.query;
 
-    // Build filter object conditionally to avoid undefined assignment issues with exactOptionalPropertyTypes
-    const filter: LogFilter = {
-      limit: query.limit ? Math.min(query.limit, 100) : 100,
-      offset: query.offset ? Math.max(0, query.offset) : 0,
-    };
+    // Build filter object
+    const filter: LogFilter = {};
 
     if (query.levels) {
       filter.levels = query.levels.split(',').filter(Boolean) as LogLevel[];
@@ -47,6 +44,12 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
     }
     if (query.until) {
       filter.until = query.until;
+    }
+    if (query.limit !== undefined) {
+      filter.limit = Math.min(query.limit, 100);
+    }
+    if (query.offset !== undefined) {
+      filter.offset = Math.max(0, query.offset);
     }
     if (query.requestId) {
       filter.requestId = query.requestId;
@@ -69,8 +72,27 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // DELETE /api/logs - Clear log buffer
-  app.delete('/api/logs', async (_request, reply) => {
+  // NOTE: This endpoint requires authentication in production deployments.
+  // For now, we require either:
+  //   - A Bearer token in Authorization header (indicating authenticated user)
+  //   - An X-Admin-Secret header (for internal/development use)
+  // TODO: Integrate with proper auth middleware when available
+  app.delete('/api/logs', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    const adminSecret = request.headers['x-admin-secret'];
+    
+    // Require some form of authentication
+    const hasAuth = (authHeader && typeof authHeader === 'string' && authHeader.length > 0) ||
+                     (adminSecret && typeof adminSecret === 'string' && adminSecret.length > 0);
+    
+    if (!hasAuth) {
+      return reply.code(401).send({
+        error: 'unauthorized',
+        message: 'Authentication required to clear logs. Provide Authorization: Bearer <token> or X-Admin-Secret header.',
+      });
+    }
+    
     buffer.clear();
-    return reply.send({ success: true });
+    return reply.send({ success: true, cleared: true });
   });
-};
+});
