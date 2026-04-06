@@ -262,7 +262,9 @@ export function createLogger(context: string = ''): Logger {
       };
 
       buffer.add(entry);
-      console.log(formatMessage(level, context, message), ...args);
+      // Use appropriate console method based on level
+      const consoleFn = level === 'warn' ? console.warn : level === 'error' ? console.error : console.log;
+      consoleFn(formatMessage(level, context, message), ...args);
     }
   };
 
