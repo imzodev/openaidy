@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
+import type { PlanningService } from '../planning/service';
 
 // Validation schemas
 const createTaskSchema = z.object({
@@ -43,6 +44,7 @@ const assignAgentsSchema = z.object({
  */
 export type TaskRoutesOptions = {
   taskService: TaskService;
+  planningService?: PlanningService;
 };
 
 export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
@@ -414,8 +416,6 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   /**
    * POST /tasks/:id/plan
    * Plan a task (decompose into subtasks using AI)
-   * Note: This is a placeholder that returns existing subtasks.
-   * Full implementation requires PlanningService integration.
    */
   app.post('/tasks/:id/plan', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -427,10 +427,20 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       return { ok: false, error: { code: 'task.not_found', message: `Task "${id}" not found` } };
     }
 
-    // Get existing subtasks
-    const subtasks = await taskService.getSubtasks(id);
+    // Use PlanningService if available, otherwise fall back to returning existing subtasks
+    if (options.planningService) {
+      const planningResult = await options.planningService.planTask(id);
+      if (!planningResult.ok) {
+        reply.code(400);
+        return { ok: false, error: planningResult.error };
+      }
+      // Get all subtasks after planning (including newly created ones)
+      const subtasks = await taskService.getSubtasks(id);
+      return { ok: true, data: { subtasks } };
+    }
 
-    // Return the subtasks (placeholder for actual planning)
+    // Fallback: return existing subtasks without AI planning
+    const subtasks = await taskService.getSubtasks(id);
     return { ok: true, data: { subtasks } };
   });
 
