@@ -86,6 +86,8 @@ export class SubtasksRepository {
       description?: string;
       orderIndex?: number;
       sessionId?: string | null;
+      status?: schema.SubtaskStatus;
+      result?: string | null;
     }
   ): Promise<schema.Subtask | null> {
     const results = await this.db.update(schema.subtasks)

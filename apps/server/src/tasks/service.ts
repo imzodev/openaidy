@@ -599,6 +599,20 @@ export class TaskService {
       };
     }
 
+    // Check dependencies
+    if (subtask.parentSubtaskId) {
+      const parent = await this.subtasksRepo.findById(subtask.parentSubtaskId);
+      if (parent?.status !== 'completed') {
+        return {
+          ok: false,
+          error: {
+            code: 'subtask.dependency_not_met',
+            message: 'Parent subtask not completed',
+          },
+        };
+      }
+    }
+
     // Create session for subtask execution
     const session = await this.sessionService.createSession(`Subtask: ${subtask.title}`);
 
@@ -652,6 +666,126 @@ export class TaskService {
     }
 
     return { ok: true, data: { sessionId: subtask.sessionId } };
+  }
+
+  // ========================================
+  // Subtask Execution
+  // ========================================
+
+  /**
+   * Execute all pending subtasks for a task
+   */
+  async executeSubtasks(taskId: string): Promise<ServiceResult<{ startedCount: number }>> {
+    const task = await this.tasksRepo.findById(taskId);
+    if (!task) {
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
+    }
+
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+    const pending = subtasks.filter((s) => s.status === 'pending');
+
+    // Find subtasks with no pending dependencies
+    const executable = pending.filter((subtask) => {
+      if (!subtask.parentSubtaskId) return true;
+      const parent = subtasks.find((s) => s.id === subtask.parentSubtaskId);
+      return parent?.status === 'completed';
+    });
+
+    // Start execution for each executable subtask
+    let startedCount = 0;
+    for (const subtask of executable) {
+      const result = await this.executeSubtask(subtask.id);
+      if (result.ok) {
+        startedCount++;
+      }
+    }
+
+    return { ok: true, data: { startedCount } };
+  }
+
+  /**
+   * Complete a subtask with result
+   */
+  async completeSubtask(
+    subtaskId: string,
+    result: string
+  ): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+
+    const updated = await this.subtasksRepo.update(subtaskId, {
+      status: 'completed',
+      result,
+    });
+
+    // Check if parent task should be updated
+    await this.checkTaskCompletion(subtask.taskId);
+
+    return { ok: true, data: updated! };
+  }
+
+  /**
+   * Fail a subtask with error
+   */
+  async failSubtask(subtaskId: string, error: string): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+
+    const updated = await this.subtasksRepo.update(subtaskId, {
+      status: 'failed',
+      result: error,
+    });
+
+    return { ok: true, data: updated! };
+  }
+
+  /**
+   * Get next executable subtasks
+   */
+  async getNextExecutableSubtasks(taskId: string): Promise<Subtask[]> {
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+
+    return subtasks.filter((subtask) => {
+      if (subtask.status !== 'pending') return false;
+      if (!subtask.parentSubtaskId) return true;
+
+      const parent = subtasks.find((s) => s.id === subtask.parentSubtaskId);
+      return parent?.status === 'completed';
+    });
+  }
+
+  /**
+   * Check if all subtasks are complete and update task
+   */
+  private async checkTaskCompletion(taskId: string): Promise<void> {
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+    const allComplete = subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
+
+    if (allComplete) {
+      await this.tasksRepo.updateStatus(taskId, 'done');
+    }
   }
 }
 

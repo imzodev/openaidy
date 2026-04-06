@@ -433,4 +433,102 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     // Return the subtasks (placeholder for actual planning)
     return { ok: true, data: { subtasks } };
   });
+
+  /**
+   * POST /tasks/:taskId/subtasks/execute
+   * Execute all pending subtasks for a task
+   */
+  app.post('/tasks/:taskId/subtasks/execute', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    const result = await taskService.executeSubtasks(taskId);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'task.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * GET /tasks/:taskId/subtasks/next
+   * Get next executable subtasks
+   */
+  app.get('/tasks/:taskId/subtasks/next', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    const subtasks = await taskService.getNextExecutableSubtasks(taskId);
+    return { ok: true, data: subtasks };
+  });
+
+  /**
+   * POST /subtasks/:subtaskId/complete
+   * Complete a subtask with result
+   */
+  app.post('/subtasks/:subtaskId/complete', async (request, reply) => {
+    const { subtaskId } = request.params as { subtaskId: string };
+    const body = request.body as { result: string } | undefined;
+
+    if (!body?.result) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.missing_result',
+          message: 'Result is required',
+        },
+      };
+    }
+
+    const result = await taskService.completeSubtask(subtaskId, body.result);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /subtasks/:subtaskId/fail
+   * Fail a subtask with error
+   */
+  app.post('/subtasks/:subtaskId/fail', async (request, reply) => {
+    const { subtaskId } = request.params as { subtaskId: string };
+    const body = request.body as { error: string } | undefined;
+
+    if (!body?.error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.missing_error',
+          message: 'Error message is required',
+        },
+      };
+    }
+
+    const result = await taskService.failSubtask(subtaskId, body.error);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
 };
