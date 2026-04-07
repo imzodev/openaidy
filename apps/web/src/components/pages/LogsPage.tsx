@@ -1,7 +1,31 @@
-import { createSignal, createEffect, onCleanup, onMount, For, Show } from 'solid-js';
-import { RefreshCw, Trash2, Search, Filter, Activity, AlertCircle, AlertTriangle, Info, Bug } from 'lucide-solid';
+import {
+  createSignal,
+  createEffect,
+  onCleanup,
+  onMount,
+  For,
+  Show,
+} from 'solid-js';
+import {
+  RefreshCw,
+  Trash2,
+  Search,
+  Filter,
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  Bug,
+} from 'lucide-solid';
 import { Layout } from './Layout';
-import { queryLogs, getLogStats, clearLogs, type LogEntry, type LogLevel, type LogStats } from '../../lib/api';
+import {
+  queryLogs,
+  getLogStats,
+  clearLogs,
+  type LogEntry,
+  type LogLevel,
+  type LogStats,
+} from '../../lib/api';
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   debug: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -22,12 +46,13 @@ export function LogsPage() {
   const [stats, setStats] = createSignal<LogStats | null>(null);
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
-  
+
   // Filters
   const [selectedLevels, setSelectedLevels] = createSignal<LogLevel[]>([]);
   const [searchQuery, setSearchQuery] = createSignal('');
-  const [contexts, setContexts] = createSignal<string[]>([]);
-  
+   
+  const [_contexts, setContexts] = createSignal<string[]>([]);
+
   // Pagination
   const [hasMore, setHasMore] = createSignal(false);
   const [offset, setOffset] = createSignal(0);
@@ -40,7 +65,7 @@ export function LogsPage() {
   const loadLogs = async (resetOffset = true) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const newOffset = resetOffset ? 0 : offset();
       const result = await queryLogs({
@@ -49,7 +74,7 @@ export function LogsPage() {
         limit,
         offset: newOffset,
       });
-      
+
       if (resetOffset) {
         setLogs(result.items);
         setOffset(0);
@@ -78,7 +103,7 @@ export function LogsPage() {
 
   const handleClearLogs = async () => {
     if (!confirm('Are you sure you want to clear all logs?')) return;
-    
+
     try {
       await clearLogs();
       setLogs([]);
@@ -92,7 +117,7 @@ export function LogsPage() {
   const toggleLevel = (level: LogLevel) => {
     const current = selectedLevels();
     if (current.includes(level)) {
-      setSelectedLevels(current.filter(l => l !== level));
+      setSelectedLevels(current.filter((l) => l !== level));
     } else {
       setSelectedLevels([...current, level]);
     }
@@ -100,12 +125,12 @@ export function LogsPage() {
 
   const formatTimestamp = (ts: string) => {
     const date = new Date(ts);
-    return date.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
+    return date.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
       second: '2-digit',
-      fractionalSecondDigits: 3 
+      fractionalSecondDigits: 3,
     });
   };
 
@@ -142,7 +167,10 @@ export function LogsPage() {
       actions={
         <div class="flex items-center gap-2">
           <button
-            onClick={() => { loadLogs(true); loadStats(); }}
+            onClick={() => {
+              loadLogs(true);
+              loadStats();
+            }}
             disabled={isLoading()}
             class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
           >
@@ -152,8 +180,8 @@ export function LogsPage() {
           <button
             onClick={() => setAutoRefresh(!autoRefresh())}
             class={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-              autoRefresh() 
-                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+              autoRefresh()
+                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
                 : 'text-text-secondary hover:text-text-primary hover:bg-gray-100 dark:hover:bg-gray-700'
             }`}
           >
@@ -174,23 +202,33 @@ export function LogsPage() {
       <Show when={stats()}>
         <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <div class="text-2xl font-bold text-text-primary">{stats()!.total}</div>
+            <div class="text-2xl font-bold text-text-primary">
+              {stats()!.total}
+            </div>
             <div class="text-xs text-text-tertiary">Total Logs</div>
           </div>
           <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <div class="text-2xl font-bold text-gray-600 dark:text-gray-400">{stats()!.byLevel.debug}</div>
+            <div class="text-2xl font-bold text-gray-600 dark:text-gray-400">
+              {stats()!.byLevel.debug}
+            </div>
             <div class="text-xs text-text-tertiary">Debug</div>
           </div>
           <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats()!.byLevel.info}</div>
+            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              {stats()!.byLevel.info}
+            </div>
             <div class="text-xs text-text-tertiary">Info</div>
           </div>
           <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats()!.byLevel.warn}</div>
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+              {stats()!.byLevel.warn}
+            </div>
             <div class="text-xs text-text-tertiary">Warnings</div>
           </div>
           <div class="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
-            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{stats()!.byLevel.error}</div>
+            <div class="text-2xl font-bold text-red-600 dark:text-red-400">
+              {stats()!.byLevel.error}
+            </div>
             <div class="text-xs text-text-tertiary">Errors</div>
           </div>
         </div>
@@ -203,7 +241,7 @@ export function LogsPage() {
             <Filter class="w-4 h-4 text-text-tertiary" />
             <span class="text-sm font-medium text-text-primary">Filter:</span>
           </div>
-          
+
           {/* Level filters */}
           <div class="flex items-center gap-2">
             <For each={['debug', 'info', 'warn', 'error'] as LogLevel[]}>
@@ -225,7 +263,7 @@ export function LogsPage() {
               }}
             </For>
           </div>
-          
+
           {/* Search */}
           <div class="flex-1 min-w-48">
             <div class="relative">
@@ -240,7 +278,7 @@ export function LogsPage() {
               />
             </div>
           </div>
-          
+
           {/* Apply button */}
           <button
             onClick={() => loadLogs(true)}
@@ -269,11 +307,13 @@ export function LogsPage() {
             <div class="animate-pulse text-text-tertiary">Loading logs...</div>
           </div>
         </Show>
-        
+
         <Show when={!isLoading() && logs().length === 0}>
           <div class="text-center py-12">
             <Bug class="w-12 h-12 mx-auto mb-4 text-text-muted" />
-            <h3 class="text-lg font-medium text-text-primary mb-2">No logs found</h3>
+            <h3 class="text-lg font-medium text-text-primary mb-2">
+              No logs found
+            </h3>
             <p class="text-text-secondary">
               {searchQuery() || selectedLevels().length > 0
                 ? 'Try adjusting your filters'
@@ -281,7 +321,7 @@ export function LogsPage() {
             </p>
           </div>
         </Show>
-        
+
         <Show when={logs().length > 0}>
           <div class="divide-y divide-gray-100 dark:divide-gray-700">
             <For each={logs()}>
@@ -291,15 +331,19 @@ export function LogsPage() {
                   <div class="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <div class="flex items-start gap-3">
                       {/* Level badge */}
-                      <div class={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${LEVEL_COLORS[log.level]}`}>
+                      <div
+                        class={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${LEVEL_COLORS[log.level]}`}
+                      >
                         <LevelIcon class="w-3 h-3" />
                         {log.level.toUpperCase()}
                       </div>
-                      
+
                       {/* Content */}
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 text-xs text-text-tertiary mb-1">
-                          <span class="font-mono">{formatTimestamp(log.timestamp)}</span>
+                          <span class="font-mono">
+                            {formatTimestamp(log.timestamp)}
+                          </span>
                           <Show when={log.context}>
                             <span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-text-secondary">
                               {log.context}
@@ -331,7 +375,7 @@ export function LogsPage() {
               }}
             </For>
           </div>
-          
+
           {/* Load More */}
           <Show when={hasMore()}>
             <div class="p-4 border-t border-gray-100 dark:border-gray-700 text-center">

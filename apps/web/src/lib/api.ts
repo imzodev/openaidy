@@ -458,62 +458,20 @@ export async function updateConfig(
 // Log Types and API
 // ============================================================================
 
-/**
- * Log level
- */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+import {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+} from '@openaidy/shared-types';
 
-/**
- * Log entry
- */
-export type LogEntry = {
-  id: string;
-  timestamp: string;
-  level: LogLevel;
-  context: string;
-  message: string;
-  args?: unknown[];
-  requestId?: string;
-  sessionId?: string;
-  runId?: string;
-};
-
-/**
- * Log filter options
- */
-export type LogFilter = {
-  levels?: LogLevel[];
-  contexts?: string[];
-  since?: string;
-  until?: string;
-  search?: string;
-  requestId?: string;
-  sessionId?: string;
-  runId?: string;
-  limit?: number;
-  offset?: number;
-};
-
-/**
- * Log query result
- */
-export type LogQueryResult = {
-  items: LogEntry[];
-  total: number;
-  hasMore: boolean;
-};
-
-/**
- * Log statistics
- */
-export type LogStats = {
-  total: number;
-  byLevel: Record<LogLevel, number>;
-  byContext: Record<string, number>;
-  timeRange: {
-    earliest: string | null;
-    latest: string | null;
-  };
+export {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
 };
 
 /**

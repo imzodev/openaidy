@@ -1,6 +1,19 @@
 import { nanoid } from 'nanoid';
+import {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+} from '@openaidy/shared-types';
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+};
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -27,51 +40,6 @@ function formatMessage(
 }
 
 // ============================================================================
-// Log Entry Types
-// ============================================================================
-
-export type LogEntry = {
-  id: string;
-  timestamp: string;
-  level: LogLevel;
-  context: string;
-  message: string;
-  args?: unknown[];
-  requestId?: string;
-  sessionId?: string;
-  runId?: string;
-};
-
-export type LogFilter = {
-  levels?: LogLevel[];
-  contexts?: string[];
-  since?: string;
-  until?: string;
-  search?: string;
-  requestId?: string;
-  sessionId?: string;
-  runId?: string;
-  limit?: number;
-  offset?: number;
-};
-
-export type LogQueryResult = {
-  items: LogEntry[];
-  total: number;
-  hasMore: boolean;
-};
-
-export type LogStats = {
-  total: number;
-  byLevel: Record<LogLevel, number>;
-  byContext: Record<string, number>;
-  timeRange: {
-    earliest: string | null;
-    latest: string | null;
-  };
-};
-
-// ============================================================================
 // Log Buffer
 // ============================================================================
 
@@ -87,7 +55,7 @@ export class LogBuffer {
 
   constructor(options?: LogBufferOptions) {
     this.maxSize = options?.maxSize ?? 10000;
-    this.onEntryAdded = options?.onEntryAdded;
+    this.onEntryAdded = options?.onEntryAdded ?? (() => {});
   }
 
   /**
@@ -128,11 +96,15 @@ export class LogBuffer {
     // Filter by time range
     if (filter.since) {
       const since = new Date(filter.since).getTime();
-      filtered = filtered.filter((e) => new Date(e.timestamp).getTime() >= since);
+      filtered = filtered.filter(
+        (e) => new Date(e.timestamp).getTime() >= since,
+      );
     }
     if (filter.until) {
       const until = new Date(filter.until).getTime();
-      filtered = filtered.filter((e) => new Date(e.timestamp).getTime() <= until);
+      filtered = filtered.filter(
+        (e) => new Date(e.timestamp).getTime() <= until,
+      );
     }
 
     // Filter by search
@@ -141,7 +113,7 @@ export class LogBuffer {
       filtered = filtered.filter(
         (e) =>
           e.message.toLowerCase().includes(searchLower) ||
-          e.context.toLowerCase().includes(searchLower)
+          e.context.toLowerCase().includes(searchLower),
       );
     }
 
@@ -180,10 +152,11 @@ export class LogBuffer {
       byContext[entry.context] = (byContext[entry.context] ?? 0) + 1;
     }
 
-    const timeRange = {
-      earliest: this.entries.length > 0 ? this.entries[0].timestamp : null,
-      latest:
-        this.entries.length > 0 ? this.entries[this.entries.length - 1].timestamp : null,
+    const firstEntry = this.entries[0];
+    const lastEntry = this.entries[this.entries.length - 1];
+    const timeRange: LogStats['timeRange'] = {
+      earliest: firstEntry?.timestamp ?? null,
+      latest: lastEntry?.timestamp ?? null,
     };
 
     return {
@@ -278,16 +251,25 @@ export function createLogger(context: string = ''): Logger {
 
       buffer.add(entry);
       // Use appropriate console method based on level
-      const consoleFn = level === 'warn' ? console.warn : level === 'error' ? console.error : console.log;
+      const consoleFn =
+        level === 'warn'
+          ? console.warn
+          : level === 'error'
+            ? console.error
+            : console.log;
       consoleFn(formatMessage(level, context, message), ...args);
     }
   };
 
   return {
-    debug: (message: string, ...args: unknown[]) => log('debug', message, ...args),
-    info: (message: string, ...args: unknown[]) => log('info', message, ...args),
-    warn: (message: string, ...args: unknown[]) => log('warn', message, ...args),
-    error: (message: string, ...args: unknown[]) => log('error', message, ...args),
+    debug: (message: string, ...args: unknown[]) =>
+      log('debug', message, ...args),
+    info: (message: string, ...args: unknown[]) =>
+      log('info', message, ...args),
+    warn: (message: string, ...args: unknown[]) =>
+      log('warn', message, ...args),
+    error: (message: string, ...args: unknown[]) =>
+      log('error', message, ...args),
   };
 }
 

@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
-import {
-  getLogBuffer,
-  type LogLevel
-  type LogFilter
-  type LogQueryResult
-  type LogStats
-} from '../lib/logger';
+import { getLogBuffer } from '../lib/logger';
+import type {
+  LogLevel,
+  LogFilter,
+  LogQueryResult,
+  LogStats,
+} from '@openaidy/shared-types';
 
 interface LogsQuerystring {
   levels?: string;
@@ -24,46 +24,49 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
   const buffer = getLogBuffer();
 
   // GET /api/logs - Query logs with filters
-  app.get<{ Querystring: LogsQuerystring }>('/api/logs', async (request, reply) => {
-    const query = request.query;
+  app.get<{ Querystring: LogsQuerystring }>(
+    '/api/logs',
+    async (request, reply) => {
+      const query = request.query;
 
-    // Build filter object
-    const filter: LogFilter = {};
+      // Build filter object
+      const filter: LogFilter = {};
 
-    if (query.levels) {
-      filter.levels = query.levels.split(',').filter(Boolean) as LogLevel[];
-    }
-    if (query.contexts) {
-      filter.contexts = query.contexts.split(',').filter(Boolean);
-    }
-    if (query.search) {
-      filter.search = query.search;
-    }
-    if (query.since) {
-      filter.since = query.since;
-    }
-    if (query.until) {
-      filter.until = query.until;
-    }
-    if (query.limit !== undefined) {
-      filter.limit = Math.min(query.limit, 100);
-    }
-    if (query.offset !== undefined) {
-      filter.offset = Math.max(0, query.offset);
-    }
-    if (query.requestId) {
-      filter.requestId = query.requestId;
-    }
-    if (query.sessionId) {
-      filter.sessionId = query.sessionId;
-    }
-    if (query.runId) {
-      filter.runId = query.runId;
-    }
+      if (query.levels) {
+        filter.levels = query.levels.split(',').filter(Boolean) as LogLevel[];
+      }
+      if (query.contexts) {
+        filter.contexts = query.contexts.split(',').filter(Boolean);
+      }
+      if (query.search) {
+        filter.search = query.search;
+      }
+      if (query.since) {
+        filter.since = query.since;
+      }
+      if (query.until) {
+        filter.until = query.until;
+      }
+      if (query.limit !== undefined) {
+        filter.limit = Math.min(query.limit, 100);
+      }
+      if (query.offset !== undefined) {
+        filter.offset = Math.max(0, query.offset);
+      }
+      if (query.requestId) {
+        filter.requestId = query.requestId;
+      }
+      if (query.sessionId) {
+        filter.sessionId = query.sessionId;
+      }
+      if (query.runId) {
+        filter.runId = query.runId;
+      }
 
-    const result: LogQueryResult = buffer.query(filter);
-    return reply.send(result);
-  });
+      const result: LogQueryResult = buffer.query(filter);
+      return reply.send(result);
+    },
+  );
 
   // GET /api/logs/stats - Get log statistics
   app.get('/api/logs/stats', async (_request, reply) => {
@@ -80,19 +83,23 @@ export const logRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/api/logs', async (request, reply) => {
     const authHeader = request.headers.authorization;
     const adminSecret = request.headers['x-admin-secret'];
-    
+
     // Require some form of authentication
-    const hasAuth = (authHeader && typeof authHeader === 'string' && authHeader.length > 0) ||
-                     (adminSecret && typeof adminSecret === 'string' && adminSecret.length > 0);
-    
+    const hasAuth =
+      (authHeader && typeof authHeader === 'string' && authHeader.length > 0) ||
+      (adminSecret &&
+        typeof adminSecret === 'string' &&
+        adminSecret.length > 0);
+
     if (!hasAuth) {
       return reply.code(401).send({
         error: 'unauthorized',
-        message: 'Authentication required to clear logs. Provide Authorization: Bearer <token> or X-Admin-Secret header.',
+        message:
+          'Authentication required to clear logs. Provide Authorization: Bearer <token> or X-Admin-Secret header.',
       });
     }
-    
+
     buffer.clear();
     return reply.send({ success: true, cleared: true });
   });
-});
+};
