@@ -498,5 +498,98 @@ export async function callMcpTool(input: {
   return response.json();
 }
 
+// ============================================================================
+// Log Types and API
+// ============================================================================
+
+import {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+} from '@openaidy/shared-types';
+
+export {
+  type LogLevel,
+  type LogEntry,
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+};
+
+/**
+ * Query logs with optional filters
+ */
+export async function queryLogs(
+  filter: LogFilter = {},
+): Promise<LogQueryResult> {
+  const params = new URLSearchParams();
+
+  if (filter.levels && filter.levels.length > 0) {
+    params.set('levels', filter.levels.join(','));
+  }
+  if (filter.contexts && filter.contexts.length > 0) {
+    params.set('contexts', filter.contexts.join(','));
+  }
+  if (filter.since) {
+    params.set('since', filter.since);
+  }
+  if (filter.until) {
+    params.set('until', filter.until);
+  }
+  if (filter.search) {
+    params.set('search', filter.search);
+  }
+  if (filter.requestId) {
+    params.set('requestId', filter.requestId);
+  }
+  if (filter.sessionId) {
+    params.set('sessionId', filter.sessionId);
+  }
+  if (filter.runId) {
+    params.set('runId', filter.runId);
+  }
+  if (filter.limit !== undefined) {
+    params.set('limit', String(filter.limit));
+  }
+  if (filter.offset !== undefined) {
+    params.set('offset', String(filter.offset));
+  }
+
+  const queryString = params.toString();
+  const url = `${API_BASE}/api/logs${queryString ? `?${queryString}` : ''}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to query logs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get log statistics
+ */
+export async function getLogStats(): Promise<LogStats> {
+  const response = await fetch(`${API_BASE}/api/logs/stats`);
+  if (!response.ok) {
+    throw new Error(`Failed to get log stats: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Clear all logs
+ */
+export async function clearLogs(): Promise<{ success: boolean }> {
+  const response = await fetch(`${API_BASE}/api/logs`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clear logs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 // Export getApiBase for testing
 export { getApiBase };
