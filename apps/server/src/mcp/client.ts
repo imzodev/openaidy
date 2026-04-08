@@ -10,6 +10,8 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpServerConfig } from '@openaidy/config';
 
@@ -18,7 +20,7 @@ import type { McpServerConfig } from '@openaidy/config';
  */
 export type McpToolDefinition = {
   name: string;
-  description?: string;
+  description: string | undefined;
   inputSchema: Record<string, unknown>;
 };
 
@@ -26,8 +28,16 @@ export type McpToolDefinition = {
  * Content types in an MCP tool result
  */
 export type McpTextContent = { type: 'text'; text: string };
-export type McpImageContent = { type: 'image'; data: string; mimeType?: string };
-export type McpResourceContent = { type: 'resource'; data: string; mimeType?: string };
+export type McpImageContent = {
+  type: 'image';
+  data: string;
+  mimeType?: string;
+};
+export type McpResourceContent = {
+  type: 'resource';
+  data: string;
+  mimeType?: string;
+};
 
 /**
  * Tool call result from an MCP server
@@ -42,7 +52,7 @@ export type McpToolResult = {
  */
 type McpConnection = {
   client: Client;
-  transport: StdioClientTransport | null;
+  transport: StdioClientTransport | StreamableHTTPClientTransport | null;
   process: ChildProcess | null;
   tools: McpToolDefinition[];
   config: McpServerConfig; // Store original config for reconnection
@@ -53,7 +63,7 @@ type McpConnection = {
  * Options for creating an MCP client service
  */
 export type McpClientServiceOptions = {
-  logger?: FastifyBaseLogger;
+  logger?: FastifyBaseLogger | undefined;
 };
 
 /**
@@ -63,7 +73,7 @@ export type McpClientServiceOptions = {
  */
 export class McpClientService {
   private connections = new Map<string, McpConnection>();
-  private logger?: FastifyBaseLogger;
+  private logger: FastifyBaseLogger | undefined;
   private shutdownHandlersRegistered = false;
 
   constructor(options?: McpClientServiceOptions) {
@@ -113,7 +123,10 @@ export class McpClientService {
    * Validate environment variable placeholders in config
    * Checks for placeholders like ${VAR_NAME} and ensures they exist in process.env
    */
-  private validateEnvPlaceholders(env: Record<string, string> | undefined, serverId: string): void {
+  private validateEnvPlaceholders(
+    env: Record<string, string> | undefined,
+    serverId: string,
+  ): void {
     if (!env) return;
 
     const placeholderPattern = /\$\{([^}]+)\}/g;
@@ -134,7 +147,7 @@ export class McpClientService {
     if (missingVars.length > 0) {
       throw new Error(
         `MCP server ${serverId}: Missing required environment variables: ${missingVars.join(', ')}. ` +
-        `Please set these environment variables before starting the server.`
+          `Please set these environment variables before starting the server.`,
       );
     }
   }
@@ -152,7 +165,10 @@ export class McpClientService {
     // Validate environment variable placeholders before spawning
     this.validateEnvPlaceholders(env, id);
 
-    this.logger?.info({ serverId: id, command }, 'Connecting to MCP server via stdio');
+    this.logger?.info(
+      { serverId: id, command },
+      'Connecting to MCP server via stdio',
+    );
 
     // Spawn the MCP server process (note: env is not logged to prevent sensitive data exposure)
     const childProcess = spawn(command, args || [], {
@@ -161,7 +177,10 @@ export class McpClientService {
     });
 
     childProcess.on('error', (error) => {
-      this.logger?.error({ serverId: id, error: error.message }, 'MCP process error');
+      this.logger?.error(
+        { serverId: id, error: error.message },
+        'MCP process error',
+      );
       this.cleanup(id);
     });
 
@@ -169,21 +188,35 @@ export class McpClientService {
       this.logger?.info({ serverId: id, code, signal }, 'MCP process exited');
       // Attempt reconnection if not manually disconnected
       this.attemptReconnection(id).catch((error) => {
-        this.logger?.error({ serverId: id, error: error.message }, 'Reconnection failed');
+        this.logger?.error(
+          { serverId: id, error: error.message },
+          'Reconnection failed',
+        );
         this.cleanup(id);
       });
     });
 
     // Capture stderr from MCP server for debugging
     childProcess.stderr?.on('data', (data) => {
-      this.logger?.warn({ serverId: id, stderr: data.toString() }, 'MCP server stderr');
+      this.logger?.warn(
+        { serverId: id, stderr: data.toString() },
+        'MCP server stderr',
+      );
     });
 
-    // Create the stdio transport
-    const transport = new StdioClientTransport({
-      stdin: childProcess.stdin!,
-      stdout: childProcess.stdout!,
-    });
+    // Create the stdio transport - use a partial type to avoid strict optional issues
+    const transportOptions: {
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    } = {
+      command,
+      args: args || [],
+    };
+    if (env) {
+      transportOptions.env = env as Record<string, string>;
+    }
+    const transport = new StdioClientTransport(transportOptions);
 
     // Create the MCP client
     const client = new Client(
@@ -226,16 +259,67 @@ export class McpClientService {
       throw new Error(`http transport requires url for server ${id}`);
     }
 
-    this.logger?.info({ serverId: id, url }, 'Connecting to MCP server via HTTP');
-
-    // HTTP transport not fully implemented yet
-    // This would use SSE (Server-Sent Events) for HTTP-based MCP servers
-    // See: https://github.com/imzodev/openaidy/issues/200
-    throw new Error(
-      `HTTP transport for MCP server ${id} is not yet implemented. ` +
-        `Please use stdio transport for now. ` +
-        `See https://github.com/imzodev/openaidy/issues/200 for updates.`,
+    this.logger?.info(
+      { serverId: id, url },
+      'Connecting to MCP server via HTTP',
     );
+
+    try {
+      // Create Streamable HTTP transport with optional headers via requestInit
+      const httpTransportOptions: { requestInit?: RequestInit } = {};
+      if (headers && Object.keys(headers).length > 0) {
+        httpTransportOptions.requestInit = {
+          headers,
+        };
+      }
+      const transport = new StreamableHTTPClientTransport(
+        new URL(url),
+        httpTransportOptions,
+      );
+
+      // Create the MCP client
+      const client = new Client(
+        { name: `openaidy-${id}`, version: '1.0.0' },
+        {
+          capabilities: {},
+        },
+      );
+
+      client.onerror = (error: Error) => {
+        this.logger?.error(
+          { serverId: id, error: error.message },
+          'MCP client error',
+        );
+      };
+
+      // Connect the client
+      await client.connect(transport as Transport);
+
+      // Store the connection (no process for HTTP)
+      this.connections.set(id, {
+        client,
+        transport: transport,
+        process: null,
+        tools: [],
+        config: serverConfig,
+        manuallyDisconnected: false,
+      });
+
+      // Discover tools
+      await this.discoverTools(id);
+
+      this.logger?.info({ serverId: id }, 'Connected to MCP server via HTTP');
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger?.error(
+        { serverId: id, url, error: errorMessage },
+        'Failed to connect to MCP server via HTTP',
+      );
+      throw new Error(
+        `Failed to connect to MCP server ${id} via HTTP: ${errorMessage}`,
+      );
+    }
   }
 
   /**
@@ -248,24 +332,25 @@ export class McpClientService {
     }
 
     try {
-      const response = await connection.client.request(
-        { method: 'tools/list' },
-        {},
-      );
+      const response = await connection.client.listTools();
 
-      const tools: McpToolDefinition[] = (response.tools || []).map(
-        (tool: { name: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema || {},
-        }),
-      );
+      const tools: McpToolDefinition[] = (response.tools || []).map((tool) => ({
+        name: tool.name,
+        description: tool.description ?? undefined,
+        inputSchema: tool.inputSchema ?? {},
+      }));
 
       connection.tools = tools;
-      this.logger?.debug({ serverId, toolCount: tools.length }, 'Discovered MCP tools');
+      this.logger?.debug(
+        { serverId, toolCount: tools.length },
+        'Discovered MCP tools',
+      );
     } catch (error) {
       this.logger?.warn(
-        { serverId, error: error instanceof Error ? error.message : String(error) },
+        {
+          serverId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'Failed to discover tools from MCP server',
       );
       connection.tools = [];
@@ -283,7 +368,10 @@ export class McpClientService {
   /**
    * Get filtered tools from an MCP server
    */
-  getFilteredTools(serverId: string, toolNames?: string[]): McpToolDefinition[] {
+  getFilteredTools(
+    serverId: string,
+    toolNames?: string[],
+  ): McpToolDefinition[] {
     const allTools = this.getTools(serverId);
     if (!toolNames || toolNames.length === 0) {
       return allTools;
@@ -321,18 +409,19 @@ export class McpClientService {
     this.logger?.debug({ serverId, toolName }, 'Calling MCP tool');
 
     try {
-      const response = await connection.client.request(
-        { method: 'tools/call' },
-        {
-          name: toolName,
-          arguments: args,
-        },
-      );
+      const response = await connection.client.callTool({
+        name: toolName,
+        arguments: args,
+      });
 
       return response as McpToolResult;
     } catch (error) {
       this.logger?.error(
-        { serverId, toolName, error: error instanceof Error ? error.message : String(error) },
+        {
+          serverId,
+          toolName,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'MCP tool call failed',
       );
       throw error;
@@ -341,13 +430,16 @@ export class McpClientService {
 
   /**
    * Attempt to reconnect to an MCP server with exponential backoff
-   * 
+   *
    * @param serverId - Server to reconnect to
    * @param attempt - Current attempt number (starts at 1)
    */
-  private async attemptReconnection(serverId: string, attempt: number = 1): Promise<void> {
+  private async attemptReconnection(
+    serverId: string,
+    attempt: number = 1,
+  ): Promise<void> {
     const connection = this.connections.get(serverId);
-    
+
     // Don't reconnect if:
     // - No connection exists
     // - Connection was manually disconnected
@@ -355,47 +447,52 @@ export class McpClientService {
     if (!connection || connection.manuallyDisconnected) {
       return;
     }
-    
+
     const maxRetries = 3;
     const baseDelayMs = 1000; // 1 second base delay
-    
+
     if (attempt > maxRetries) {
       this.logger?.warn(
         { serverId, attempts: attempt, maxRetries },
         'Max reconnection attempts reached, giving up',
       );
-      throw new Error(`Failed to reconnect to MCP server ${serverId} after ${maxRetries} attempts`);
+      throw new Error(
+        `Failed to reconnect to MCP server ${serverId} after ${maxRetries} attempts`,
+      );
     }
-    
+
     // Exponential backoff: 1s, 2s, 4s
     const delayMs = baseDelayMs * Math.pow(2, attempt - 1);
-    
+
     this.logger?.info(
       { serverId, attempt, maxRetries, delayMs },
       'Attempting to reconnect to MCP server',
     );
-    
+
     // Wait before retrying
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    
+
     try {
       // Clean up old connection state
       this.connections.delete(serverId);
-      
+
       // Attempt to reconnect using stored config
       await this.connect(connection.config);
-      
-      this.logger?.info({ serverId, attempt }, 'Successfully reconnected to MCP server');
+
+      this.logger?.info(
+        { serverId, attempt },
+        'Successfully reconnected to MCP server',
+      );
     } catch (error) {
       this.logger?.warn(
-        { 
-          serverId, 
-          attempt, 
-          error: error instanceof Error ? error.message : String(error) 
+        {
+          serverId,
+          attempt,
+          error: error instanceof Error ? error.message : String(error),
         },
         'Reconnection attempt failed, will retry',
       );
-      
+
       // Recursively try again
       await this.attemptReconnection(serverId, attempt + 1);
     }
@@ -419,7 +516,10 @@ export class McpClientService {
       await connection.client.close();
     } catch (error) {
       this.logger?.warn(
-        { serverId, error: error instanceof Error ? error.message : String(error) },
+        {
+          serverId,
+          error: error instanceof Error ? error.message : String(error),
+        },
         'Error closing MCP client',
       );
     }
