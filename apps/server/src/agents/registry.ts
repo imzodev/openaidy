@@ -5,6 +5,7 @@ import {
   type Agent,
   type AgentSummary,
   type AgentValidationError,
+  type McpServerRef,
   validateAgentIdMatch,
   toAgentSummary,
 } from './schema';
@@ -175,6 +176,18 @@ export class AgentRegistry {
   hasAgent(id: string): boolean {
     this.ensureLoaded();
     return this.agents.has(id);
+  }
+
+  /**
+   * Get MCP server references for an agent
+   * Returns empty array if agent has no MCP servers configured
+   */
+  getMcpServers(agentId: string): McpServerRef[] {
+    const agent = this.getAgent(agentId);
+    if (!agent) {
+      return [];
+    }
+    return agent.mcpServers ?? [];
   }
 
   /**

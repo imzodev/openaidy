@@ -455,6 +455,50 @@ export async function updateConfig(
 }
 
 // ============================================================================
+// MCP Server Types and API
+// ============================================================================
+
+/**
+ * MCP Server status
+ */
+export type McpServer = {
+  id: string;
+  name?: string;
+  connected: boolean;
+  tools: Array<{ name: string; description?: string }>;
+};
+
+/**
+ * List MCP servers and their status
+ */
+export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
+  const response = await fetch(`${API_BASE}/mcp/servers`);
+  if (!response.ok) {
+    throw new Error(`Failed to list MCP servers: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Call an MCP tool
+ */
+export async function callMcpTool(input: {
+  serverId: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+}): Promise<{ result: unknown }> {
+  const response = await fetch(`${API_BASE}/mcp/call`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to call MCP tool: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
 // Log Types and API
 // ============================================================================
 

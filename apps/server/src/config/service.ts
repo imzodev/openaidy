@@ -11,6 +11,7 @@ import {
   appConfigSchema,
   envSecret,
   type AppProviderConfig,
+  type McpServerConfig,
   type OpenAidyAppConfig,
   type ProviderConfig,
   providerConfigSchema,
@@ -59,6 +60,20 @@ export class AppConfigService {
     }
 
     return this.currentConfig;
+  }
+
+  /**
+   * Get all MCP server configurations
+   */
+  getMcpServers(): McpServerConfig[] {
+    return this.getConfig().mcpServers ?? [];
+  }
+
+  /**
+   * Get a specific MCP server configuration by ID
+   */
+  getMcpServer(id: string): McpServerConfig | undefined {
+    return this.getConfig().mcpServers?.find((server) => server.id === id);
   }
 
   getStatus(): AppConfigStatus {

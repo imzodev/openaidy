@@ -1,0 +1,261 @@
+import { describe, it, expect } from 'vitest';
+import {
+  mcpServerConfigSchema,
+  appConfigSchema,
+  type McpServerConfig,
+} from './app-config';
+
+describe('mcpServerConfigSchema', () => {
+  describe('stdio transport', () => {
+    it('should parse valid stdio server config with minimal fields', () => {
+      const config = {
+        id: 'filesystem',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '/workspace'],
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.id).toBe('filesystem');
+        expect(result.data.transport).toBe('stdio');
+        expect(result.data.command).toBe('npx');
+        expect(result.data.args).toEqual([
+          '-y',
+          '@modelcontextprotocol/server-filesystem',
+          '/workspace',
+        ]);
+      }
+    });
+
+    it('should parse valid stdio server config with all fields', () => {
+      const config = {
+        id: 'github',
+        name: 'GitHub Tools',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        env: { GITHUB_TOKEN: '${GITHUB_TOKEN}' },
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.name).toBe('GitHub Tools');
+        expect(result.data.env).toEqual({ GITHUB_TOKEN: '${GITHUB_TOKEN}' });
+      }
+    });
+
+    it('should reject stdio without command', () => {
+      const config = {
+        id: 'bad',
+        transport: 'stdio',
+        args: ['-y', 'something'],
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some((i) =>
+          i.message.includes('stdio transport requires command'),
+        )).toBe(true);
+      }
+    });
+  });
+
+  describe('http transport', () => {
+    it('should parse valid http server config', () => {
+      const config = {
+        id: 'http-api',
+        name: 'HTTP API Server',
+        transport: 'http',
+        url: 'http://localhost:3000/mcp',
+        headers: { Authorization: 'Bearer test-key' },
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.transport).toBe('http');
+        expect(result.data.url).toBe('http://localhost:3000/mcp');
+        expect(result.data.headers).toEqual({ Authorization: 'Bearer test-key' });
+      }
+    });
+
+    it('should reject http without url', () => {
+      const config = {
+        id: 'bad',
+        transport: 'http',
+        headers: { Authorization: 'Bearer test' },
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some((i) =>
+          i.message.includes('http transport requires url'),
+        )).toBe(true);
+      }
+    });
+
+    it('should reject invalid url', () => {
+      const config = {
+        id: 'bad',
+        transport: 'http',
+        url: 'not-a-valid-url',
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('common validation', () => {
+    it('should require id field', () => {
+      const config = {
+        transport: 'stdio',
+        command: 'npx',
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject empty id', () => {
+      const config = {
+        id: '',
+        transport: 'stdio',
+        command: 'npx',
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject invalid transport type', () => {
+      const config = {
+        id: 'test',
+        transport: 'websocket',
+        command: 'npx',
+      };
+      const result = mcpServerConfigSchema.safeParse(config);
+      expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe('appConfigSchema with mcpServers', () => {
+  const minimalValidConfig = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [
+          {
+            id: 'gpt-4o-mini',
+            name: 'GPT-4o Mini',
+          },
+        ],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('should parse config without mcpServers', () => {
+    const result = appConfigSchema.safeParse(minimalValidConfig);
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse config with empty mcpServers array', () => {
+    const config = {
+      ...minimalValidConfig,
+      mcpServers: [],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mcpServers).toEqual([]);
+    }
+  });
+
+  it('should parse config with valid mcpServers', () => {
+    const config = {
+      ...minimalValidConfig,
+      mcpServers: [
+        {
+          id: 'filesystem',
+          name: 'Filesystem Tools',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-filesystem', '/workspace'],
+        },
+        {
+          id: 'github',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-github'],
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mcpServers).toHaveLength(2);
+      expect(result.data.mcpServers?.[0]?.id).toBe('filesystem');
+      expect(result.data.mcpServers?.[1]?.id).toBe('github');
+    }
+  });
+
+  it('should reject duplicate mcpServer ids', () => {
+    const config = {
+      ...minimalValidConfig,
+      mcpServers: [
+        {
+          id: 'duplicate',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['server1'],
+        },
+        {
+          id: 'duplicate',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['server2'],
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) =>
+          i.message.includes('Duplicate MCP server id'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject invalid mcpServer config in array', () => {
+    const config = {
+      ...minimalValidConfig,
+      mcpServers: [
+        {
+          id: 'bad',
+          transport: 'stdio',
+          // missing command
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+});

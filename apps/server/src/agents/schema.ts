@@ -1,6 +1,24 @@
 import { z } from 'zod';
 
 /**
+ * MCP server reference schema
+ *
+ * References an MCP server from the app configuration.
+ * Allows agents to use tools provided by MCP servers.
+ */
+export const McpServerRefSchema = z.object({
+  /** MCP server ID from config */
+  id: z.string().min(1),
+  /** Specific tools to expose (empty = all tools from server) */
+  tools: z.array(z.string()).optional(),
+});
+
+/**
+ * TypeScript type for MCP server reference
+ */
+export type McpServerRef = z.infer<typeof McpServerRefSchema>;
+
+/**
  * Agent definition schema
  *
  * Defines an agent with its configuration and metadata.
@@ -16,7 +34,13 @@ export const AgentSchema = z.object({
 
   // Optional fields
   description: z.string().optional(),
+
+  // MCP server references - tools from MCP servers
+  mcpServers: z.array(McpServerRefSchema).optional(),
+
+  // Legacy/custom tools (non-MCP)
   tools: z.array(z.string()).optional(),
+
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
   version: z.number().int().positive().default(1),
@@ -43,6 +67,7 @@ export type AgentSummary = {
   enabled: boolean;
   tags?: string[] | undefined;
   tools?: string[] | undefined;
+  mcpServers?: McpServerRef[];
   model: string; // Format: "providerId/modelId"
 };
 
@@ -108,6 +133,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     enabled: agent.enabled,
     tags: agent.tags,
     tools: agent.tools,
+    mcpServers: agent.mcpServers,
     model: agent.model,
   };
 }

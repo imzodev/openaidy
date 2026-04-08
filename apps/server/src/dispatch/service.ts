@@ -7,6 +7,8 @@ import type {
 } from '@openaidy/runtime';
 import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
+import type { McpClientService } from '../mcp';
+import type { McpToolDefinition } from '../mcp/client';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -99,6 +101,8 @@ export type SystemDefaults = {
 export type DispatchServiceOptions = {
   agents: AgentRegistry;
   providers: ProviderServices;
+  /** MCP client service for tool execution */
+  mcp?: McpClientService;
   repositories?:
     | {
         sessions: SessionsStore;
@@ -131,6 +135,7 @@ export type DispatchServiceOptions = {
 export class DispatchService {
   private readonly agents: AgentRegistry;
   private readonly providers: ProviderServices;
+  private readonly mcp: McpClientService | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
   private readonly messagesRepo: SessionMessagesStore | undefined;
   private readonly runsRepo: SessionRunsStore | undefined;
@@ -140,6 +145,7 @@ export class DispatchService {
   constructor(options: DispatchServiceOptions) {
     this.agents = options.agents;
     this.providers = options.providers;
+    this.mcp = options.mcp;
     this.runEvents = options.runEvents;
 
     // Default system defaults
@@ -888,6 +894,128 @@ export class DispatchService {
         message: errorMessage,
       },
     };
+  }
+
+  // ============================================================================
+  // MCP Integration Methods
+  // ============================================================================
+
+  /**
+   * Get MCP tools for an agent
+   *
+   * Collects tools from all MCP servers configured for the agent.
+   * Tool names are prefixed with server ID using `::` separator to avoid collisions.
+   * Using `::` instead of `/` prevents conflicts with tool names that naturally contain `/`.
+   */
+  getMcpToolsForAgent(agentId: string): McpToolDefinition[] {
+    if (!this.mcp) {
+      return [];
+    }
+
+    const mcpServerRefs = this.agents.getMcpServers(agentId);
+    const allTools: McpToolDefinition[] = [];
+
+    for (const ref of mcpServerRefs) {
+      if (!this.mcp.isConnected(ref.id)) {
+        // MCP server not connected, skip
+        continue;
+      }
+
+      const tools = this.mcp.getFilteredTools(ref.id, ref.tools);
+      // Prefix tool names with server ID using `::` separator to avoid collisions
+      const prefixedTools = tools.map((tool) => ({
+        ...tool,
+        name: `${ref.id}::${tool.name}`,
+      }));
+      allTools.push(...prefixedTools);
+    }
+
+    return allTools;
+  }
+
+  /**
+   * Execute an MCP tool call
+   *
+   * @param prefixedToolName - Tool name in format "serverId::toolName"
+   * @param args - Tool arguments
+   * @param agentId - Agent ID to validate server is configured
+   * @returns Tool execution result
+   */
+  async executeMcpToolCall(
+    prefixedToolName: string,
+    args: Record<string, unknown>,
+    agentId: string,
+  ): Promise<
+    { ok: true; content: string } | { ok: false; error: string }
+  > {
+    if (!this.mcp) {
+      return { ok: false, error: 'MCP service not available' };
+    }
+
+    // Parse prefixed tool name (format: "serverId::toolName")
+    const separatorIndex = prefixedToolName.indexOf('::');
+    if (separatorIndex === -1) {
+      return {
+        ok: false,
+        error: `Invalid tool name format: ${prefixedToolName}. Expected "serverId::toolName"`,
+      };
+    }
+
+    const serverId = prefixedToolName.substring(0, separatorIndex);
+    const toolName = prefixedToolName.substring(separatorIndex + 2);
+
+    if (!serverId || !toolName) {
+      return {
+        ok: false,
+        error: `Invalid tool name format: ${prefixedToolName}`,
+      };
+    }
+
+    // Validate server is configured for this agent
+    const mcpServerRefs = this.agents.getMcpServers(agentId);
+    const serverRef = mcpServerRefs.find((ref) => ref.id === serverId);
+
+    if (!serverRef) {
+      return {
+        ok: false,
+        error: `MCP server ${serverId} is not configured for agent ${agentId}`,
+      };
+    }
+
+    // Check if server is connected
+    if (!this.mcp.isConnected(serverId)) {
+      return {
+        ok: false,
+        error: `MCP server ${serverId} is not connected`,
+      };
+    }
+
+    // If tools filter is specified, validate tool is allowed
+    if (serverRef.tools && !serverRef.tools.includes(toolName)) {
+      return {
+        ok: false,
+        error: `Tool ${toolName} is not allowed for MCP server ${serverId}`,
+      };
+    }
+
+    try {
+      const result = await this.mcp.callTool(serverId, toolName, args);
+
+      // Extract content from result
+      const content =
+        typeof result === 'string'
+          ? result
+          : JSON.stringify(result, null, 2);
+
+      return { ok: true, content };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      return {
+        ok: false,
+        error: `MCP tool execution failed: ${errorMessage}`,
+      };
+    }
   }
 }
 

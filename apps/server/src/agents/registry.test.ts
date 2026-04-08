@@ -203,6 +203,46 @@ describe('AgentRegistry', () => {
     });
   });
 
+  describe('getMcpServers', () => {
+    it('should return MCP server references for agent with mcpServers', () => {
+      createAgentFile('mcp-agent', {
+        name: 'MCP Agent',
+        mcpServers: [
+          { id: 'filesystem', tools: ['read_file', 'write_file'] },
+          { id: 'github' },
+        ],
+      });
+
+      const registry = createAgentRegistry({ agentsDir: tempDir });
+      const mcpServers = registry.getMcpServers('mcp-agent');
+
+      expect(mcpServers).toHaveLength(2);
+      expect(mcpServers[0].id).toBe('filesystem');
+      expect(mcpServers[0].tools).toEqual(['read_file', 'write_file']);
+      expect(mcpServers[1].id).toBe('github');
+      expect(mcpServers[1].tools).toBeUndefined();
+    });
+
+    it('should return empty array for agent without mcpServers', () => {
+      createAgentFile('legacy-agent', {
+        name: 'Legacy Agent',
+        tools: ['custom_tool'],
+      });
+
+      const registry = createAgentRegistry({ agentsDir: tempDir });
+      const mcpServers = registry.getMcpServers('legacy-agent');
+
+      expect(mcpServers).toEqual([]);
+    });
+
+    it('should return empty array for unknown agent', () => {
+      const registry = createAgentRegistry({ agentsDir: tempDir });
+      const mcpServers = registry.getMcpServers('unknown');
+
+      expect(mcpServers).toEqual([]);
+    });
+  });
+
   describe('reload', () => {
     it('should reload agents from disk', () => {
       createAgentFile('test1', { name: 'Test 1' });

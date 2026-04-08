@@ -5,6 +5,26 @@
     "modelId": "gpt-4o-mini",
     "agentId": "default"
   },
+  "mcpServers": [
+    {
+      "id": "filesystem",
+      "name": "Filesystem Tools",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      "env": {}
+    },
+    {
+      "id": "github",
+      "name": "GitHub Tools",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  ],
   "providers": [
     {
       "id": "openai",
