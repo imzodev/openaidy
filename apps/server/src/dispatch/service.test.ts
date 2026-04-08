@@ -6,6 +6,7 @@ import { DispatchService, createDispatchService } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
 import { RunEventEmitter, type RunEvent } from './events';
+import type { McpClientService } from '../mcp';
 import type {
   ModelProvider,
   ProviderDescriptor,
@@ -547,11 +548,12 @@ describe('DispatchService streaming', () => {
     });
   });
 
-describe('MCP Tool Integration', () => {
+  describe('MCP Tool Integration', () => {
     let dispatchService: DispatchService;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockMcp: any;
     let tempDir: string;
-    let sessionId: string;
+    let _sessionId: string;
 
     beforeEach(async () => {
       // Create temp directory
@@ -609,7 +611,6 @@ describe('MCP Tool Integration', () => {
 
       const agents = createAgentRegistry({
         agentsDir: tempDir,
-        logger: console as any,
       });
 
       // Create agent config with MCP servers
@@ -635,7 +636,7 @@ describe('MCP Tool Integration', () => {
       dispatchService = createDispatchService({
         agents,
         providers,
-        mcp: mockMcp,
+        mcp: mockMcp as unknown as McpClientService,
       });
 
       // Create a session
@@ -673,13 +674,13 @@ describe('MCP Tool Integration', () => {
       it('should collect tools from configured MCP servers', () => {
         const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
         expect(tools).toHaveLength(2);
-        expect(tools[0].name).toBe('filesystem::read_file');
-        expect(tools[1].name).toBe('filesystem::write_file');
+        expect(tools[0]?.name).toBe('filesystem::read_file');
+        expect(tools[1]?.name).toBe('filesystem::write_file');
       });
 
       it('should prefix tool names with server ID', () => {
         const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
-        expect(tools[0].name.startsWith('filesystem::')).toBe(true);
+        expect(tools[0]?.name.startsWith('filesystem::')).toBe(true);
       });
 
       it('should skip disconnected servers', () => {

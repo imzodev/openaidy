@@ -1,6 +1,6 @@
 /**
  * Bootstrap Admin Inspection Workflow
- * 
+ *
  * Provides read-only inspection of bootstrap-admin token state.
  * Reuses the authoritative logic from BootstrapAdminManager without side effects.
  */
@@ -35,13 +35,13 @@ export type BootstrapAdminInspectOptions = {
 
 /**
  * Inspect bootstrap-admin token state without side effects.
- * 
+ *
  * This is a read-only operation that:
  * - Checks if bootstrap-admin is disabled
  * - Checks if token file exists
  * - Validates token file format
  * - Verifies token signature and expiration
- * 
+ *
  * Does NOT create or modify any tokens.
  */
 export async function inspectBootstrapAdminToken(
@@ -77,7 +77,10 @@ export async function inspectBootstrapAdminToken(
   try {
     raw = await readFile(tokenPath, 'utf-8');
   } catch (err) {
-    logger?.error({ tokenPath, err }, 'Failed to read bootstrap admin token file');
+    logger?.error(
+      { tokenPath, err },
+      'Failed to read bootstrap admin token file',
+    );
     return {
       status: 'malformed',
       tokenPath,
@@ -90,7 +93,10 @@ export async function inspectBootstrapAdminToken(
   try {
     parsed = JSON.parse(raw) as Partial<BootstrapAdminRecord>;
   } catch (err) {
-    logger?.error({ tokenPath, err }, 'Bootstrap admin token file is not valid JSON');
+    logger?.error(
+      { tokenPath, err },
+      'Bootstrap admin token file is not valid JSON',
+    );
     return {
       status: 'malformed',
       tokenPath,
@@ -107,7 +113,10 @@ export async function inspectBootstrapAdminToken(
     typeof parsed.createdAt !== 'string' ||
     typeof parsed.expiresAt !== 'string'
   ) {
-    logger?.error({ tokenPath }, 'Bootstrap admin token file has invalid structure');
+    logger?.error(
+      { tokenPath },
+      'Bootstrap admin token file has invalid structure',
+    );
     return {
       status: 'malformed',
       tokenPath,
@@ -119,6 +128,7 @@ export async function inspectBootstrapAdminToken(
   // Create auth middleware for token validation
   const authMiddleware = new AuthMiddleware({
     enabled: true,
+    port: parseInt(process.env.WS_PORT || '3001', 10),
     path: '/ws',
     maxConnections: 1,
     heartbeatInterval: 0,
@@ -147,7 +157,10 @@ export async function inspectBootstrapAdminToken(
 
   // Verify token subject matches clientId
   if (payload.sub !== parsed.clientId) {
-    logger?.error({ tokenPath, payload, clientId: parsed.clientId }, 'Token subject mismatch');
+    logger?.error(
+      { tokenPath, payload, clientId: parsed.clientId },
+      'Token subject mismatch',
+    );
     return {
       status: 'invalid',
       tokenPath,
@@ -158,7 +171,10 @@ export async function inspectBootstrapAdminToken(
 
   // Verify admin capability
   if (!parsed.scopes.includes(CAPABILITIES.ADMIN)) {
-    logger?.error({ tokenPath, scopes: parsed.scopes }, 'Token lacks admin capability');
+    logger?.error(
+      { tokenPath, scopes: parsed.scopes },
+      'Token lacks admin capability',
+    );
     return {
       status: 'invalid',
       tokenPath,
@@ -170,9 +186,12 @@ export async function inspectBootstrapAdminToken(
   // Check expiration
   const expiresAt = new Date(parsed.expiresAt);
   const now = new Date();
-  
+
   if (expiresAt <= now) {
-    logger?.warn({ tokenPath, expiresAt: parsed.expiresAt }, 'Bootstrap admin token has expired');
+    logger?.warn(
+      { tokenPath, expiresAt: parsed.expiresAt },
+      'Bootstrap admin token has expired',
+    );
     return {
       status: 'expired',
       record: {
@@ -189,8 +208,11 @@ export async function inspectBootstrapAdminToken(
   }
 
   // Token is valid
-  logger?.info({ tokenPath, clientId: parsed.clientId, expiresAt: parsed.expiresAt }, 'Bootstrap admin token is valid');
-  
+  logger?.info(
+    { tokenPath, clientId: parsed.clientId, expiresAt: parsed.expiresAt },
+    'Bootstrap admin token is valid',
+  );
+
   return {
     status: 'valid',
     record: {
@@ -209,9 +231,11 @@ export async function inspectBootstrapAdminToken(
  * Format bootstrap-admin inspection result for display.
  * Shows token value intentionally only for this explicit command.
  */
-export function formatTokenDisplay(result: BootstrapAdminInspectResult): string {
+export function formatTokenDisplay(
+  result: BootstrapAdminInspectResult,
+): string {
   const lines: string[] = [];
-  
+
   lines.push('Bootstrap Admin Token');
   lines.push('='.repeat(24));
   lines.push('');
@@ -226,7 +250,7 @@ export function formatTokenDisplay(result: BootstrapAdminInspectResult): string 
     lines.push(`Expires:   ${result.record.expiresAt}`);
     lines.push(`Scopes:    ${result.record.scopes.join(', ')}`);
     lines.push('');
-    
+
     // Only show token value for valid or expired tokens
     if (result.status === 'valid' || result.status === 'expired') {
       lines.push('Token:');
