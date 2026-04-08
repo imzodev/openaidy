@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { AsyncLocalStorage } from 'async_hooks';
 import {
   type LogLevel,
   type LogEntry,
@@ -207,7 +208,7 @@ export interface Logger {
 }
 
 // ============================================================================
-// Correlation ID Context
+// Correlation ID Context (using AsyncLocalStorage for request isolation)
 // ============================================================================
 
 type CorrelationContext = {
@@ -216,18 +217,19 @@ type CorrelationContext = {
   runId?: string;
 };
 
-let currentCorrelation: CorrelationContext = {};
+// AsyncLocalStorage ensures correlation context is isolated per async execution context
+const correlationStorage = new AsyncLocalStorage<CorrelationContext>();
 
 export function setCorrelationContext(ctx: CorrelationContext): void {
-  currentCorrelation = { ...ctx };
+  correlationStorage.enterWith({ ...ctx });
 }
 
 export function getCorrelationContext(): CorrelationContext {
-  return { ...currentCorrelation };
+  return correlationStorage.getStore() ?? {};
 }
 
 export function clearCorrelationContext(): void {
-  currentCorrelation = {};
+  correlationStorage.enterWith({});
 }
 
 // ============================================================================
@@ -239,6 +241,7 @@ export function createLogger(context: string = ''): Logger {
 
   const log = (level: LogLevel, message: string, ...args: unknown[]): void => {
     if (shouldLog(level)) {
+      const correlation = getCorrelationContext();
       const entry: LogEntry = {
         id: nanoid(),
         timestamp: new Date().toISOString(),
@@ -246,7 +249,7 @@ export function createLogger(context: string = ''): Logger {
         context,
         message,
         args: args.length > 0 ? args : undefined,
-        ...currentCorrelation,
+        ...correlation,
       };
 
       buffer.add(entry);
