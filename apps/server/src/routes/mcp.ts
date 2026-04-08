@@ -5,39 +5,8 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { z } from 'zod';
 import type { McpClientService } from '../mcp/client';
-
-/**
- * Schema for POST /mcp/call request body
- */
-const mcpCallSchema = z.object({
-  serverId: z.string().min(1, 'serverId is required'),
-  tool: z.string().min(1, 'tool is required'),
-  arguments: z.record(z.unknown()).optional().default({}),
-});
-
-/**
- * Schema for POST /mcp/connect request body
- */
-const mcpConnectSchema = z.object({
-  config: z.object({
-    id: z.string().min(1, 'config.id is required'),
-    transport: z.enum(['stdio', 'http']),
-    command: z.string().optional(),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
-    url: z.string().optional(),
-    headers: z.record(z.string()).optional(),
-  }),
-});
-
-/**
- * Schema for POST /mcp/disconnect request body
- */
-const mcpDisconnectSchema = z.object({
-  serverId: z.string().min(1, 'serverId is required'),
-});
+import type { McpServerConfig } from '@openaidy/config';
 
 /**
  * MCP routes options
@@ -60,28 +29,50 @@ export async function registerMcpRoutes(
    *
    * List all configured MCP servers and their status
    */
-  fastify.get('/mcp/servers', async (_request: FastifyRequest, reply: FastifyReply) => {
-    const connectedServers = mcpService.getConnectedServers();
+  fastify.get(
+    '/mcp/servers',
+    async (_request: FastifyRequest, _reply: FastifyReply) => {
+      const connectedServers = mcpService.getConnectedServers();
 
-    const servers = connectedServers.map((id) => ({
-      id,
-      connected: true,
-      tools: mcpService.getTools(id).map((t) => ({
-        name: t.name,
-        description: t.description,
-      })),
-    }));
+      const servers = connectedServers.map((id) => ({
+        id,
+        connected: true,
+        tools: mcpService.getTools(id).map((t) => ({
+          name: t.name,
+          description: t.description,
+        })),
+      }));
 
-    return { servers };
-  });
+      return { servers };
+    },
+  );
 
   /**
    * POST /mcp/call
    *
    * Execute an MCP tool call
    */
-  fastify.post(
+  fastify.post<{
+    Body: {
+      serverId: string;
+      tool: string;
+      arguments?: Record<string, unknown>;
+    };
+  }>(
     '/mcp/call',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['serverId', 'tool'],
+          properties: {
+            serverId: { type: 'string', minLength: 1 },
+            tool: { type: 'string', minLength: 1 },
+            arguments: { type: 'object', default: {} },
+          },
+        },
+      },
+    },
     async (
       request: FastifyRequest<{
         Body: {
@@ -92,18 +83,17 @@ export async function registerMcpRoutes(
       }>,
       reply: FastifyReply,
     ) => {
-      // Validate request body with Zod
-      let body;
-      try {
-        body = mcpCallSchema.parse(request.body);
-      } catch (error) {
-        return reply.status(400).send({
-          error: 'INVALID_PAYLOAD',
-          message: error instanceof Error ? error.message : 'Invalid request body',
-        });
-      }
-
-      const { serverId, tool, arguments: args } = body;
+      // Fastify now validates the body with the schema above, so we can use request.body directly
+      const {
+        serverId,
+        tool,
+        arguments: args,
+      } = request.body as {
+        serverId: string;
+        tool: string;
+        arguments?: Record<string, unknown>;
+      };
+      const toolArgs = args ?? {};
 
       if (!mcpService.isConnected(serverId)) {
         return reply.status(404).send({
@@ -114,7 +104,7 @@ export async function registerMcpRoutes(
 
       try {
         const startTime = Date.now();
-        const result = await mcpService.callTool(serverId, tool, args);
+        const result = await mcpService.callTool(serverId, tool, toolArgs);
         const duration = Date.now() - startTime;
 
         fastify.log.info(
@@ -124,7 +114,8 @@ export async function registerMcpRoutes(
 
         return { result };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
         fastify.log.error(
           { serverId, tool, error: message },
           'MCP tool call failed',
@@ -142,8 +133,49 @@ export async function registerMcpRoutes(
    *
    * Connect to an MCP server
    */
-  fastify.post(
+  fastify.post<{
+    Body: {
+      config: {
+        id: string;
+        transport: 'stdio' | 'http';
+        command?: string;
+        args?: string[];
+        env?: Record<string, string>;
+        url?: string;
+        headers?: Record<string, string>;
+      };
+    };
+  }>(
     '/mcp/connect',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['config'],
+          properties: {
+            config: {
+              type: 'object',
+              required: ['id', 'transport'],
+              properties: {
+                id: { type: 'string', minLength: 1 },
+                transport: { type: 'string', enum: ['stdio', 'http'] },
+                command: { type: 'string' },
+                args: { type: 'array', items: { type: 'string' } },
+                env: {
+                  type: 'object',
+                  additionalProperties: { type: 'string' },
+                },
+                url: { type: 'string' },
+                headers: {
+                  type: 'object',
+                  additionalProperties: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     async (
       request: FastifyRequest<{
         Body: {
@@ -158,20 +190,11 @@ export async function registerMcpRoutes(
           };
         };
       }>,
-      reply: FastifyReply,
+      _reply: FastifyReply,
     ) => {
-      // Validate request body with Zod
-      let body;
-      try {
-        body = mcpConnectSchema.parse(request.body);
-      } catch (error) {
-        return reply.status(400).send({
-          error: 'INVALID_PAYLOAD',
-          message: error instanceof Error ? error.message : 'Invalid request body',
-        });
-      }
-
-      const { config } = body;
+      const { config } = request.body as {
+        config: McpServerConfig;
+      };
 
       // Check if already connected
       if (mcpService.isConnected(config.id)) {
@@ -179,11 +202,12 @@ export async function registerMcpRoutes(
       }
 
       try {
-        await mcpService.connect(config as any);
+        await mcpService.connect(config);
         return { serverId: config.id, connected: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return reply.status(500).send({
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        return _reply.status(500).send({
           error: 'INTERNAL_ERROR',
           message: `Failed to connect to MCP server: ${message}`,
         });
@@ -196,33 +220,36 @@ export async function registerMcpRoutes(
    *
    * Disconnect from an MCP server
    */
-  fastify.post(
+  fastify.post<{
+    Body: { serverId: string };
+  }>(
     '/mcp/disconnect',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['serverId'],
+          properties: {
+            serverId: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+    },
     async (
       request: FastifyRequest<{
         Body: { serverId: string };
       }>,
-      reply: FastifyReply,
+      _reply: FastifyReply,
     ) => {
-      // Validate request body with Zod
-      let body;
-      try {
-        body = mcpDisconnectSchema.parse(request.body);
-      } catch (error) {
-        return reply.status(400).send({
-          error: 'INVALID_PAYLOAD',
-          message: error instanceof Error ? error.message : 'Invalid request body',
-        });
-      }
-
-      const { serverId } = body;
+      const { serverId } = request.body as { serverId: string };
 
       try {
         await mcpService.disconnect(serverId);
         return { serverId, disconnected: true };
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return reply.status(500).send({
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        return _reply.status(500).send({
           error: 'INTERNAL_ERROR',
           message: `Failed to disconnect from MCP server: ${message}`,
         });
