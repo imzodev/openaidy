@@ -217,10 +217,10 @@ describe('AgentRegistry', () => {
       const mcpServers = registry.getMcpServers('mcp-agent');
 
       expect(mcpServers).toHaveLength(2);
-      expect(mcpServers[0].id).toBe('filesystem');
-      expect(mcpServers[0].tools).toEqual(['read_file', 'write_file']);
-      expect(mcpServers[1].id).toBe('github');
-      expect(mcpServers[1].tools).toBeUndefined();
+      expect(mcpServers[0]?.id).toBe('filesystem');
+      expect(mcpServers[0]?.tools).toEqual(['read_file', 'write_file']);
+      expect(mcpServers[1]?.id).toBe('github');
+      expect(mcpServers[1]?.tools).toBeUndefined();
     });
 
     it('should return empty array for agent without mcpServers', () => {
