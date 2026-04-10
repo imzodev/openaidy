@@ -50,12 +50,12 @@ describe('McpHandler', () => {
       vi.mocked(mockMcpService.getTools).mockImplementation((id) => {
         if (id === 'filesystem') {
           return [
-            { name: 'read_file', inputSchema: {} },
-            { name: 'write_file', inputSchema: {} },
+            { name: 'read_file', description: 'Read a file', inputSchema: {} },
+            { name: 'write_file', description: 'Write a file', inputSchema: {} },
           ];
         }
         if (id === 'github') {
-          return [{ name: 'search_repos', inputSchema: {} }];
+          return [{ name: 'search_repos', description: 'Search repositories', inputSchema: {} }];
         }
         return [];
       });
@@ -66,9 +66,9 @@ describe('McpHandler', () => {
       expect(response.type).toBe('mcp.list');
       if (response.type === 'mcp.list') {
         expect(response.payload.servers).toHaveLength(2);
-        expect(response.payload.servers[0].id).toBe('filesystem');
-        expect(response.payload.servers[0].connected).toBe(true);
-        expect(response.payload.servers[0].tools).toEqual([
+        expect(response.payload.servers[0]?.id).toBe('filesystem');
+        expect(response.payload.servers[0]?.connected).toBe(true);
+        expect(response.payload.servers[0]?.tools).toEqual([
           'read_file',
           'write_file',
         ]);
@@ -78,7 +78,7 @@ describe('McpHandler', () => {
     it('should list specific server when serverId provided', async () => {
       vi.mocked(mockMcpService.isConnected).mockReturnValue(true);
       vi.mocked(mockMcpService.getTools).mockReturnValue([
-        { name: 'read_file', inputSchema: {} },
+        { name: 'read_file', description: 'Read a file', inputSchema: {} },
       ]);
 
       const request = createWSMessage('mcp.list', { serverId: 'filesystem' });
@@ -87,9 +87,9 @@ describe('McpHandler', () => {
       expect(response.type).toBe('mcp.list');
       if (response.type === 'mcp.list') {
         expect(response.payload.servers).toHaveLength(1);
-        expect(response.payload.servers[0].id).toBe('filesystem');
-        expect(response.payload.servers[0].connected).toBe(true);
-        expect(response.payload.servers[0].tools).toEqual(['read_file']);
+        expect(response.payload.servers[0]?.id).toBe('filesystem');
+        expect(response.payload.servers[0]?.connected).toBe(true);
+        expect(response.payload.servers[0]?.tools).toEqual(['read_file']);
       }
     });
 
@@ -101,8 +101,8 @@ describe('McpHandler', () => {
 
       expect(response.type).toBe('mcp.list');
       if (response.type === 'mcp.list') {
-        expect(response.payload.servers[0].connected).toBe(false);
-        expect(response.payload.servers[0].tools).toEqual([]);
+        expect(response.payload.servers[0]?.connected).toBe(false);
+        expect(response.payload.servers[0]?.tools).toEqual([]);
       }
     });
 
@@ -212,7 +212,7 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.connect', {
         config: {
           id: 'filesystem',
-          transport: 'stdio',
+          transport: 'stdio' as const,
           command: 'npx',
           args: [],
         },
@@ -234,7 +234,7 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.connect', {
         config: {
           id: 'filesystem',
-          transport: 'stdio',
+          transport: 'stdio' as const,
           command: 'npx',
           args: [],
         },
@@ -258,7 +258,7 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.connect', {
         config: {
           id: 'filesystem',
-          transport: 'stdio',
+          transport: 'stdio' as const,
           command: 'npx',
           args: [],
         },

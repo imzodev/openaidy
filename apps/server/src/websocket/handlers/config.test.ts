@@ -96,7 +96,8 @@ describe('ConfigHandler', () => {
       expect(response.type).toBe('config.get');
       if ('config' in response.payload) {
         expect(response.payload.config).toBeDefined();
-        expect(response.payload.config.app.name).toBe('TestApp');
+        const config = response.payload.config as { app: { name: string } };
+        expect(config.app.name).toBe('TestApp');
       }
     });
 

@@ -44,11 +44,11 @@ const mockContext = {
 describe('SessionHandler', () => {
   let handler: SessionHandler;
   let mockSessionService: {
-    createSession: vi.Mock;
-    getSession: vi.Mock;
-    listSessions: vi.Mock;
-    deleteSession: vi.Mock;
-    submitMessage: vi.Mock;
+    createSession: ReturnType<typeof vi.fn>;
+    getSession: ReturnType<typeof vi.fn>;
+    listSessions: ReturnType<typeof vi.fn>;
+    deleteSession: ReturnType<typeof vi.fn>;
+    submitMessage: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -74,8 +74,9 @@ describe('SessionHandler', () => {
         id: 'session-123',
         title: 'Session 2024-01-01T00:00:00.000Z',
         status: 'active',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        metadata: {},
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        archivedAt: null,
       };
       mockSessionService.createSession.mockResolvedValue(mockSession);
 
@@ -116,9 +117,9 @@ describe('SessionHandler', () => {
         id: 'session-123',
         title: 'Test Session',
         status: 'active',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-01T00:01:00.000Z',
-        metadata: {},
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:01:00.000Z'),
+        archivedAt: null,
       };
       mockSessionService.getSession.mockResolvedValue(mockSession);
 
@@ -162,15 +163,17 @@ describe('SessionHandler', () => {
           id: 'session-1',
           title: 'Session 1',
           status: 'active',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          metadata: {},
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          archivedAt: null,
+          
         },
         {
           id: 'session-2',
           title: 'Session 2',
           status: 'active',
-          createdAt: '2024-01-02T00:00:00.000Z',
-          metadata: {},
+          createdAt: new Date('2024-01-02T00:00:00.000Z'),
+          
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -194,15 +197,15 @@ describe('SessionHandler', () => {
           id: 'session-1',
           title: 'Session 1',
           status: 'active',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          metadata: {},
+          createdAt: new Date('2024-01-01T00:00:00.000Z'),
+          
         },
         {
           id: 'session-2',
           title: 'Session 2',
           status: 'archived',
-          createdAt: '2024-01-02T00:00:00.000Z',
-          metadata: {},
+          createdAt: new Date('2024-01-02T00:00:00.000Z'),
+          
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -226,8 +229,8 @@ describe('SessionHandler', () => {
         id: `session-${i}`,
         title: `Session ${i}`,
         status: 'active',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        metadata: {},
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        
       }));
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
 
@@ -290,7 +293,7 @@ describe('SessionHandler', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
-        metadata: {},
+        
       });
 
       const userMessage: SessionMessage = {
@@ -298,7 +301,7 @@ describe('SessionHandler', () => {
         sessionId: 'session-123',
         role: 'user',
         content: 'Hello',
-        createdAt: '2024-01-01T00:00:00.000Z',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
       };
 
       const assistantMessage: SessionMessage = {
@@ -306,7 +309,7 @@ describe('SessionHandler', () => {
         sessionId: 'session-123',
         role: 'assistant',
         content: 'Hi there!',
-        createdAt: '2024-01-01T00:00:01.000Z',
+        createdAt: new Date('2024-01-01T00:00:01.000Z'),
       };
 
       const run: SessionRun = {
@@ -320,7 +323,7 @@ describe('SessionHandler', () => {
         promptTokens: 10,
         completionTokens: 20,
         totalTokens: 30,
-        createdAt: '2024-01-01T00:00:00.000Z',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
       };
 
       mockSessionService.submitMessage.mockResolvedValue({
@@ -373,7 +376,7 @@ describe('SessionHandler', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
-        metadata: {},
+        
       });
 
       mockSessionService.submitMessage.mockResolvedValue({
@@ -461,26 +464,26 @@ describe('registerSessionHandlers', () => {
 describe('SessionHandler Streaming', () => {
   let handler: SessionHandler;
   let mockSessionService: {
-    createSession: vi.Mock;
-    getSession: vi.Mock;
-    listSessions: vi.Mock;
-    deleteSession: vi.Mock;
-    submitMessage: vi.Mock;
+    createSession: ReturnType<typeof vi.fn>;
+    getSession: ReturnType<typeof vi.fn>;
+    listSessions: ReturnType<typeof vi.fn>;
+    deleteSession: ReturnType<typeof vi.fn>;
+    submitMessage: ReturnType<typeof vi.fn>;
   };
   let mockStreamManager: {
-    subscribeToRun: vi.Mock;
-    unsubscribeFromRun: vi.Mock;
-    unsubscribeAllFromConnection: vi.Mock;
-    start: vi.Mock;
-    stop: vi.Mock;
+    subscribeToRun: ReturnType<typeof vi.fn>;
+    unsubscribeFromRun: ReturnType<typeof vi.fn>;
+    unsubscribeAllFromConnection: ReturnType<typeof vi.fn>;
+    start: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
   };
   let mockRunEvents: {
-    subscribe: vi.Mock;
-    emit: vi.Mock;
-    emitStarted: vi.Mock;
-    emitDelta: vi.Mock;
-    emitCompleted: vi.Mock;
-    emitFailed: vi.Mock;
+    subscribe: ReturnType<typeof vi.fn>;
+    emit: ReturnType<typeof vi.fn>;
+    emitStarted: ReturnType<typeof vi.fn>;
+    emitDelta: ReturnType<typeof vi.fn>;
+    emitCompleted: ReturnType<typeof vi.fn>;
+    emitFailed: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {

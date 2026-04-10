@@ -329,7 +329,7 @@ export class ConfigHandler {
     return {
       valid: errors.length === 0,
       errors: errors.length > 0 ? errors : undefined,
-    };
+    } as { valid: boolean; errors?: string[] };
   }
 
   /**
@@ -360,14 +360,14 @@ export class ConfigHandler {
     let current = obj;
 
     for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
+      const part = parts[i]!;
       if (!(part in current)) {
         current[part] = {};
       }
       current = current[part] as Record<string, unknown>;
     }
 
-    current[parts[parts.length - 1]] = value;
+    current[parts[parts.length - 1]!] = value;
   }
 
   /**
@@ -467,19 +467,19 @@ export function registerConfigHandlers(
   handler: ConfigHandler,
 ): void {
   router.registerHandler('config.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as ConfigGetRequest, ctx),
+    handler.handleGet(connId, msg as ConfigGetRequest, ctx) as unknown as Promise<WSResponse | void>,
   );
 
   router.registerHandler('config.update', (connId, msg, ctx) =>
-    handler.handleUpdate(connId, msg as ConfigUpdateRequest, ctx),
+    handler.handleUpdate(connId, msg as ConfigUpdateRequest, ctx) as unknown as Promise<WSResponse | void>,
   );
 
   router.registerHandler('config.watch', (connId, msg, ctx) =>
-    handler.handleWatch(connId, msg as ConfigWatchRequest, ctx),
+    handler.handleWatch(connId, msg as ConfigWatchRequest, ctx) as unknown as Promise<WSResponse | void>,
   );
 
   router.registerHandler('config.unwatch', (connId, msg, ctx) =>
-    handler.handleUnwatch(connId, msg as ConfigUnwatchRequest, ctx),
+    handler.handleUnwatch(connId, msg as ConfigUnwatchRequest, ctx) as unknown as Promise<WSResponse | void>,
   );
 }
 
