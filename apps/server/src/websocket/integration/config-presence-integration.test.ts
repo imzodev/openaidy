@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import { createGateway, type WebSocketGateway } from '../index';
-import type { AppServices } from '../../../app';
+import type { AppServices } from '../../app';
 import { AuthMiddleware } from '../middleware/auth';
 
 // ============================================================================
@@ -26,7 +26,7 @@ const createMockAuthMiddleware = (): AuthMiddleware => {
 // Mock Services
 // ============================================================================
 
-const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
+const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   bootstrapAdmin: undefined,
   dbAdapter: undefined,
   scheduler: undefined,
@@ -38,50 +38,35 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
   sessions: {
     createSession: vi.fn(),
     getSession: vi.fn(),
-    getSessionOrFail: vi.fn(),
     listSessions: vi.fn(),
     deleteSession: vi.fn(),
     addMessage: vi.fn(),
     getMessages: vi.fn(),
     updateMetadata: vi.fn(),
     archiveSession: vi.fn(),
-  } as unknown,
+  } as unknown as AppServices['sessions'],
   agents: {
     listAgents: vi.fn().mockReturnValue([]),
     getAgent: vi.fn(),
-    getAgentOrFail: vi.fn(),
     createAgent: vi.fn(),
     updateAgent: vi.fn(),
     deleteAgent: vi.fn(),
-  } as unknown,
+  } as unknown as AppServices['agents'],
   providers: {
-    getProvider: vi.fn(),
     listProviders: vi.fn().mockReturnValue([]),
-  } as unknown,
+  } as unknown as AppServices['providers'],
   config: {
     getConfig: vi.fn().mockReturnValue({
       app: { name: 'TestApp', version: '1.0.0' },
       server: { port: 3000 },
-    }),
-    get: vi.fn().mockImplementation((path: string) => {
-      if (path === 'app.name') return 'TestApp';
-      if (path === 'app.version') return '1.0.0';
-      if (path === 'server.port') return 3000;
-      return undefined;
     }),
     set: vi.fn(),
     save: vi.fn(),
     load: vi.fn(),
     on: vi.fn(),
     off: vi.fn(),
-  } as unknown,
-  auth: authMiddleware,
-  llm: {
-    invoke: vi.fn(),
-    invokeStream: vi.fn(),
-  } as unknown,
+  } as unknown as AppServices['config'],
   runEvents: {
-    createRun: vi.fn(),
     getRun: vi.fn(),
     listRuns: vi.fn(),
     updateRun: vi.fn(),
@@ -92,14 +77,7 @@ const createMockServices = (authMiddleware: AuthMiddleware): AppServices => ({
     getEvents: vi.fn(),
     subscribeToRun: vi.fn(),
     unsubscribeFromRun: vi.fn(),
-  } as unknown,
-  content: {
-    createContent: vi.fn(),
-    getContent: vi.fn(),
-    listContent: vi.fn(),
-    updateContent: vi.fn(),
-    deleteContent: vi.fn(),
-  } as unknown,
+  } as unknown as AppServices['runEvents'],
 });
 
 // ============================================================================
@@ -534,7 +512,7 @@ describe('Config & Presence Handler Integration', () => {
     it('should track presence correctly', () => {
       const connectionId = 'test-conn-20';
       gateway.presenceManager.updatePresence(connectionId, 'online', {
-        device: 'mobile',
+        metadata: { device: 'mobile' },
       });
 
       const presence = gateway.presenceManager.getPresence(connectionId);

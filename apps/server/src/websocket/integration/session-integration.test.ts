@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConnectionManager } from '../connection-manager';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { SessionHandler, registerSessionHandlers } from '../handlers/session';
+import { SessionMessageService } from '../../sessions/service';
 import { StreamManager } from '../streaming';
 import { SubscriptionManager } from '../subscriptions';
 import { RunEventEmitter } from '../../dispatch/events';
@@ -161,7 +162,7 @@ describe('Session Integration Tests', () => {
       mockLogger as unknown as HandlerContext['logger'],
     );
     sessionHandler = new SessionHandler(
-      mockSessionService as unknown as Parameters<typeof SessionHandler>[0],
+      mockSessionService as unknown as SessionMessageService,
       mockLogger as unknown as HandlerContext['logger'],
     );
     streamManager = new StreamManager(

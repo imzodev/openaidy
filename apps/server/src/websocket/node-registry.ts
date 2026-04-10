@@ -37,7 +37,7 @@ export type NodeRegistryOptions = {
 
 /**
  * Node registry service
- * 
+ *
  * Tracks registered nodes with capabilities and metadata.
  */
 export class NodeRegistry {
@@ -160,7 +160,7 @@ export class NodeRegistry {
   }
 
   getOnlineNodes(): Node[] {
-    return Array.from(this.nodes.values()).filter(n => n.status === 'online');
+    return Array.from(this.nodes.values()).filter((n) => n.status === 'online');
   }
 
   // Query
@@ -170,7 +170,7 @@ export class NodeRegistry {
       return [];
     }
     return Array.from(nodeIds)
-      .map(id => this.nodes.get(id))
+      .map((id) => this.nodes.get(id))
       .filter((node): node is Node => node !== undefined);
   }
 
@@ -180,21 +180,21 @@ export class NodeRegistry {
     }
 
     // Find nodes with ALL capabilities (AND)
-    const nodeIds = this.capabilityIndex.get(capabilities[0]);
+    const nodeIds = this.capabilityIndex.get(capabilities[0]!);
     if (!nodeIds) {
       return [];
     }
 
     return Array.from(nodeIds)
-      .map(id => this.nodes.get(id))
+      .map((id) => this.nodes.get(id))
       .filter((node): node is Node => node !== undefined)
-      .filter((node) => 
-        capabilities.every(cap => node.capabilities.includes(cap))
+      .filter((node) =>
+        capabilities.every((cap) => node.capabilities.includes(cap)),
       );
   }
 
   findNodesByType(type: NodeType): Node[] {
-    return Array.from(this.nodes.values()).filter(n => n.type === type);
+    return Array.from(this.nodes.values()).filter((n) => n.type === type);
   }
 
   // Status management
@@ -221,7 +221,7 @@ export class NodeRegistry {
     const staleNodeIds: string[] = [];
 
     for (const [nodeId, node] of this.nodes) {
-      if (node.status === 'online' && (now - node.lastSeen > timeoutMs)) {
+      if (node.status === 'online' && now - node.lastSeen > timeoutMs) {
         this.markStale(nodeId);
         staleNodeIds.push(nodeId);
       }

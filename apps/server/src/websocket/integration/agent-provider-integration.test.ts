@@ -37,7 +37,7 @@ const createMockLogger = () => ({
   trace: vi.fn(),
   child: vi.fn(() => createMockLogger()),
   level: 'info',
-  silent: false,
+  silent: vi.fn(),
 });
 
 const createMockAgentRegistry = (): AgentRegistry => {
@@ -206,7 +206,7 @@ const createMockProviderServices = (): ProviderServices => {
   };
 
   return {
-    registry,
+    registry: registry as unknown as ProviderServices['registry'],
     selection: {} as ProviderServices['selection'],
     invocation: {} as ProviderServices['invocation'],
   };
@@ -330,10 +330,8 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        expect(response.payload.agents[0].capabilities).toBeDefined();
-        expect(Array.isArray(response.payload.agents[0].capabilities)).toBe(
-          true,
-        );
+        expect(response.payload.agents[0]!.tools).toBeDefined();
+        expect(Array.isArray(response.payload.agents[0]!.tools)).toBe(true);
       });
     });
 
@@ -454,8 +452,8 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        expect(response.payload.providers[0].capabilities).toBeDefined();
-        expect(Array.isArray(response.payload.providers[0].capabilities)).toBe(
+        expect(response.payload.providers[0]!.capabilities).toBeDefined();
+        expect(Array.isArray(response.payload.providers[0]!.capabilities)).toBe(
           true,
         );
       });
@@ -513,8 +511,8 @@ describe('Agent & Provider Integration Tests', () => {
           handlerContext,
         );
 
-        expect(response.payload.models[0].capabilities).toBeDefined();
-        expect(response.payload.models[0].capabilities).toContain('chat');
+        expect(response.payload.models[0]!.capabilities).toBeDefined();
+        expect(response.payload.models[0]!.capabilities).toContain('chat');
       });
     });
   });
