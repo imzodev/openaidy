@@ -27,54 +27,12 @@ import {
   type SessionRecord,
   type FinishReason,
 } from './store';
-
-/**
- * Input for submitting a message to a session
- */
-export type SubmitMessageInput = {
-  sessionId: string;
-  role: 'user' | 'system';
-  content: string;
-  agentId?: string;
-  providerId?: string;
-  modelId?: string;
-};
-
-/**
- * Result of submitting a message
- */
-export type SubmitMessageResult =
-  | {
-      ok: true;
-      userMessage: SessionMessageRecord | SessionMessage;
-      assistantMessage: SessionMessageRecord | SessionMessage;
-      run: SessionRunRecord | SessionRun;
-    }
-  | {
-      ok: false;
-      error: {
-        code: string;
-        message: string;
-        providerId?: string;
-        modelId?: string;
-      };
-    };
-
-/**
- * Session message service options
- */
-export type SessionMessageServiceOptions = {
-  providers: ProviderServices;
-  agents?: AgentRegistry;
-  getDefaultAgentId?: () => string | undefined;
-  repositories?:
-    | {
-        sessions: SessionsStore;
-        messages: SessionMessagesStore;
-        runs: SessionRunsStore;
-      }
-    | undefined;
-};
+import type {
+  SubmitMessageInput,
+  SubmitMessageStreamingInput,
+  SubmitMessageResult,
+  SessionMessageServiceOptions,
+} from './types';
 
 /**
  * Session message service
@@ -148,10 +106,10 @@ export class SessionMessageService {
 
   /**
    * Delete a session
-   * 
+   *
    * Performs a soft delete by setting status to 'deleted' (when using DB repo),
    * or removes from in-memory store.
-   * 
+   *
    * @returns true if session was deleted, false if not found
    */
   async deleteSession(id: string): Promise<boolean> {
@@ -165,7 +123,7 @@ export class SessionMessageService {
       const result = await this.sessionsRepo.delete(id);
       return result !== null;
     }
-    
+
     // For in-memory store, we need to implement delete
     // Since store.ts doesn't have deleteSessionRecord, we'll return true
     // The session exists (checked above) but we can't actually delete from in-memory
@@ -327,6 +285,249 @@ export class SessionMessageService {
         userMessage,
         result.error.code,
         result.error.message,
+      );
+    }
+  }
+
+  /**
+   * Submit a message with streaming response
+   *
+   * Similar to submitMessage but yields content as it arrives via the callback.
+   * Returns the final result once streaming is complete.
+   */
+  async submitMessageStreaming(
+    input: SubmitMessageStreamingInput,
+  ): Promise<SubmitMessageResult> {
+    const { onStreamEvent } = input;
+
+    // 1. Validate session exists
+    const session = await this.getSession(input.sessionId);
+    if (!session) {
+      return {
+        ok: false,
+        error: {
+          code: 'session.not_found',
+          message: `Session "${input.sessionId}" not found`,
+        },
+      };
+    }
+
+    // 2. Persist user message
+    const userMessage = await this.appendMessage({
+      sessionId: input.sessionId,
+      role: input.role,
+      content: input.content,
+    });
+
+    // 3. Create run record
+    const configuredDefaultAgentId = this.getDefaultAgentId?.();
+    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const agent = resolvedAgentId
+      ? this.agents?.getAgent(resolvedAgentId)
+      : undefined;
+    const defaultProviderConfig = this.providers.registry.getDefault();
+    const agentModelParts = agent?.model ? agent.model.split('/') : null;
+    const agentProviderId = agentModelParts?.[0];
+    const agentModelId = agentModelParts?.[1];
+
+    const providerEntry = input.providerId
+      ? this.providers.registry.getEntry(input.providerId)
+      : agentProviderId
+        ? this.providers.registry.getEntry(agentProviderId)
+        : defaultProviderConfig
+          ? this.providers.registry.getEntry(defaultProviderConfig.providerId)
+          : undefined;
+    const providerId =
+      input.providerId ??
+      agentProviderId ??
+      defaultProviderConfig?.providerId ??
+      providerEntry?.provider.descriptor.id ??
+      'default';
+    const modelId =
+      input.modelId ??
+      agentModelId ??
+      (providerId === defaultProviderConfig?.providerId && defaultProviderConfig
+        ? defaultProviderConfig.modelId
+        : undefined) ??
+      providerEntry?.defaultModel ??
+      'default';
+    const agentId = resolvedAgentId ?? 'default';
+
+    const run = await this.createRun({
+      sessionId: input.sessionId,
+      agentId,
+      providerId,
+      modelId,
+    });
+
+    // 4. Mark run as running
+    await this.markRunRunning(run.id);
+
+    // 5. Build request from session history + new message
+    const history = await this.listMessages(input.sessionId);
+    const messages: Message[] = history.map((m) => {
+      const msgRole = (m as { role: string }).role;
+      const msgContent = (m as { content: string }).content;
+      const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
+
+      if (msgRole === 'tool') {
+        return {
+          role: 'tool' as const,
+          content: msgContent,
+          toolCallId: msgToolCallId ?? '',
+        };
+      }
+      return {
+        role: msgRole as 'system' | 'user' | 'assistant',
+        content: msgContent,
+      } as Message;
+    });
+
+    // 6. Invoke provider with streaming
+    const modelRequest: ModelRequest = {
+      model: modelId,
+      messages,
+    };
+
+    const invokeOptions = {
+      ...(input.providerId !== undefined && { providerId: input.providerId }),
+      ...(input.modelId !== undefined && { modelId: input.modelId }),
+    };
+
+    // Accumulate streaming content
+    let accumulatedContent = '';
+    let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    let finalFinishReason: string | undefined;
+    const toolCalls: Array<{
+      id: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }> = [];
+
+    try {
+      const stream = this.providers.invocation.invokeStream(
+        modelRequest,
+        invokeOptions,
+      );
+
+      let finalProviderId = providerId;
+      let finalModelId = modelId;
+      let hasError = false;
+      let errorCode = '';
+      let errorMessage = '';
+
+      // Iterate through stream events
+      for await (const event of stream) {
+        if (!event.ok) {
+          hasError = true;
+          errorCode = event.error.code;
+          errorMessage = event.error.message;
+          onStreamEvent({
+            type: 'error',
+            error: { code: event.error.code, message: event.error.message },
+          });
+          break;
+        }
+
+        const value = event.value;
+
+        // Handle different stream event types
+        switch (value.type) {
+          case 'stream.content_delta': {
+            accumulatedContent += value.delta;
+            onStreamEvent({
+              type: 'delta',
+              content: value.delta,
+            });
+            break;
+          }
+          case 'stream.tool_call': {
+            const toolArgs =
+              typeof value.toolCall.arguments === 'string'
+                ? JSON.parse(value.toolCall.arguments)
+                : value.toolCall.arguments;
+            toolCalls.push({
+              id: value.toolCall.id,
+              name: value.toolCall.name,
+              arguments: toolArgs as Record<string, unknown>,
+            });
+            onStreamEvent({
+              type: 'tool_call',
+              toolCall: {
+                id: value.toolCall.id,
+                name: value.toolCall.name,
+                arguments: toolArgs as Record<string, unknown>,
+              },
+            });
+            break;
+          }
+          case 'stream.usage': {
+            finalUsage = {
+              promptTokens: value.usage.promptTokens,
+              completionTokens: value.usage.completionTokens,
+              totalTokens: value.usage.totalTokens,
+            };
+            onStreamEvent({
+              type: 'usage',
+              usage: finalUsage,
+            });
+            break;
+          }
+          case 'stream.started': {
+            if (value.providerId) finalProviderId = value.providerId;
+            if (value.model) finalModelId = value.model;
+            break;
+          }
+          case 'stream.finished': {
+            finalFinishReason = value.finishReason;
+            break;
+          }
+        }
+      }
+
+      if (hasError) {
+        return this.handleFailure(run.id, userMessage, errorCode, errorMessage);
+      }
+
+      // 7. Persist assistant message with accumulated content
+      const assistantMessage = await this.appendMessage({
+        sessionId: input.sessionId,
+        role: 'assistant',
+        content: accumulatedContent,
+        metadata: {
+          providerId: finalProviderId,
+          model: finalModelId,
+          runId: run.id,
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+        },
+      });
+
+      // 8. Update run with success
+      const updatedRun = await this.markRunSucceeded(run.id, {
+        finishReason: (finalFinishReason as FinishReason) ?? 'stop',
+        promptTokens: finalUsage.promptTokens,
+        completionTokens: finalUsage.completionTokens,
+        totalTokens: finalUsage.totalTokens,
+        metadata: {
+          providerId: finalProviderId,
+          model: finalModelId,
+        },
+      });
+
+      return {
+        ok: true,
+        userMessage,
+        assistantMessage,
+        run: updatedRun!,
+      };
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : 'Streaming failed';
+      return this.handleFailure(
+        run.id,
+        userMessage,
+        'streaming_error',
+        errorMsg,
       );
     }
   }

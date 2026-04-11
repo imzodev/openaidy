@@ -32,7 +32,7 @@ export type RunEventEmitterOptions = {
 
 /**
  * Run event emitter
- * 
+ *
  * Provides event-based streaming for run execution.
  * Each run has its own event channel, enabling concurrent runs.
  */
@@ -54,20 +54,22 @@ export class RunEventEmitter {
 
   /**
    * Subscribe to events for a specific run
-   * 
+   *
    * Returns an unsubscribe function.
    */
   subscribe(runId: string, listener: (event: RunEvent) => void): () => void {
     const channel = this.getRunChannel(runId);
-    
+
     // Track listener count
     const currentCount = this.emitter.listenerCount(channel);
     if (currentCount >= this.maxListeners) {
-      console.warn(`RunEventEmitter: Max listeners (${this.maxListeners}) reached for run ${runId}`);
+      console.warn(
+        `RunEventEmitter: Max listeners (${this.maxListeners}) reached for run ${runId}`,
+      );
     }
-    
+
     this.emitter.on(channel, listener);
-    
+
     return () => {
       this.emitter.off(channel, listener);
     };
@@ -141,6 +143,27 @@ export class RunEventEmitter {
       data: {
         content: params.content,
         delta: params.delta ?? params.content,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.tool_call event (tool execution during streaming)
+   */
+  emitToolCall(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    toolCall: { id: string; name: string; arguments: Record<string, unknown> };
+  }): void {
+    this.emit({
+      type: 'run.delta',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        toolCall: params.toolCall,
       },
     });
   }

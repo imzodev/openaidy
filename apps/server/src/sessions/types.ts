@@ -1,0 +1,77 @@
+import type { SessionMessage, SessionRun } from '@openaidy/db';
+import type { SessionMessageRecord, SessionRunRecord } from './store';
+
+/**
+ * Input for submitting a message to a session
+ */
+export type SubmitMessageInput = {
+  sessionId: string;
+  role: 'user' | 'system';
+  content: string;
+  agentId?: string;
+  providerId?: string;
+  modelId?: string;
+};
+
+/**
+ * Input for submitting a streaming message to a session
+ */
+export type SubmitMessageStreamingInput = SubmitMessageInput & {
+  /** Callback for stream events */
+  onStreamEvent: (event: {
+    type: 'delta' | 'tool_call' | 'usage' | 'error';
+    content?: string;
+    toolCall?: { id: string; name: string; arguments: Record<string, unknown> };
+    usage?: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+    error?: { code: string; message: string };
+  }) => void;
+};
+
+/**
+ * Result of submitting a message
+ */
+export type SubmitMessageResult =
+  | {
+      ok: true;
+      userMessage: SessionMessageRecord | SessionMessage;
+      assistantMessage: SessionMessageRecord | SessionMessage;
+      run: SessionRunRecord | SessionRun;
+    }
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        providerId?: string;
+        modelId?: string;
+      };
+    };
+
+// Import types needed for SessionMessageServiceOptions
+import type { ProviderServices } from '../providers';
+import type { AgentRegistry } from '../agents';
+import type {
+  SessionsStore,
+  SessionMessagesStore,
+  SessionRunsStore,
+} from '@openaidy/db';
+
+/**
+ * Session message service options
+ */
+export type SessionMessageServiceOptions = {
+  providers: ProviderServices;
+  agents?: AgentRegistry;
+  getDefaultAgentId?: () => string | undefined;
+  repositories?:
+    | {
+        sessions: SessionsStore;
+        messages: SessionMessagesStore;
+        runs: SessionRunsStore;
+      }
+    | undefined;
+};

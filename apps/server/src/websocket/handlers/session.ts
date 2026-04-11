@@ -540,6 +540,7 @@ export class SessionHandler {
    * Execute a streaming run, emitting events as it progresses
    *
    * This is called in the background after returning the ack response.
+   * Uses true streaming invocation to emit deltas in real-time.
    */
   private async executeStreamingRun(
     runId: string,
@@ -566,31 +567,54 @@ export class SessionHandler {
         modelId: resolvedModelId,
       });
 
-      // Submit the message (non-streaming for now, but we emit delta events)
-      // In a full implementation, this would use streaming invocation
-      const result = await this.sessionService.submitMessage({
+      // Submit the message with streaming - emits events as they arrive
+      const result = await this.sessionService.submitMessageStreaming({
         sessionId,
         role: request.payload.role,
         content: request.payload.content,
         agentId,
         ...(providerId != null && { providerId }),
         ...(modelId != null && { modelId }),
+        onStreamEvent: (event) => {
+          switch (event.type) {
+            case 'delta':
+              this.runEvents?.emitDelta({
+                runId,
+                sessionId,
+                agentId,
+                content: event.content ?? '',
+                delta: event.content ?? '',
+              });
+              break;
+            case 'tool_call':
+              this.runEvents?.emitToolCall({
+                runId,
+                sessionId,
+                agentId,
+                toolCall: event.toolCall!,
+              });
+              break;
+            case 'usage':
+              // Usage will be included in completion
+              break;
+            case 'error':
+              this.runEvents?.emitFailed({
+                runId,
+                sessionId,
+                agentId,
+                errorCode: event.error?.code ?? 'streaming_error',
+                errorMessage: event.error?.message ?? 'Streaming error',
+              });
+              break;
+          }
+        },
       });
 
       if (result.ok) {
         const run = result.run as SessionRun;
-
-        // Emit delta with the full content (simulated streaming)
         const assistantMessage = result.assistantMessage as SessionMessage;
-        this.runEvents?.emitDelta({
-          runId,
-          sessionId,
-          agentId,
-          content: assistantMessage.content,
-          delta: assistantMessage.content,
-        });
 
-        // Emit completion
+        // Emit completion with final usage
         this.runEvents?.emitCompleted({
           runId,
           sessionId,
