@@ -87,6 +87,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           workspaces: [{ path: '/project' }],
@@ -119,6 +120,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           workspaces: [{ path: '/project' }],
@@ -151,6 +153,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           workspaces: [{ path: '/project' }],
@@ -162,6 +165,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           workspaces: [{ path: '/project' }],
@@ -189,6 +193,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -227,6 +232,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: { enabled: true, workspaces: [] },
       };
       addAgent(agent);
@@ -248,6 +254,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           workspaces: [{ path: '/project' }],
@@ -274,6 +281,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -307,6 +315,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -337,6 +346,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -379,6 +389,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -411,6 +422,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
@@ -446,6 +458,7 @@ describe('workspace routes', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
+        version: 1,
         workspace: {
           enabled: true,
           defaultPermissions: {
