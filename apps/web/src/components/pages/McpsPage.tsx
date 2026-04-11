@@ -1,6 +1,6 @@
 import { Layout } from './Layout';
 import { For, Show, createSignal, onMount } from 'solid-js';
-import { listMcpServers, type McpServer } from '../lib/api';
+import { listMcpServers, type McpServer } from '../../lib/api';
 
 export function McpsPage() {
   const [servers, setServers] = createSignal<McpServer[]>([]);
@@ -18,7 +18,9 @@ export function McpsPage() {
         setSelectedServer(data.servers[0]?.id ?? null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load MCP servers');
+      setError(
+        err instanceof Error ? err.message : 'Failed to load MCP servers',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -28,7 +30,8 @@ export function McpsPage() {
     void loadServers();
   });
 
-  const selectedServerData = () => servers().find((s) => s.id === selectedServer());
+  const selectedServerData = () =>
+    servers().find((s) => s.id === selectedServer());
 
   const connectedCount = () => servers().filter((s) => s.connected).length;
   const totalTools = () =>
@@ -37,7 +40,10 @@ export function McpsPage() {
       .reduce((sum, s) => sum + s.tools.length, 0);
 
   return (
-    <Layout title="MCP Servers" description="Model Context Protocol connections">
+    <Layout
+      title="MCP Servers"
+      description="Model Context Protocol connections"
+    >
       {/* Loading State */}
       <Show when={isLoading()}>
         <div class="flex items-center justify-center h-64">
@@ -83,7 +89,9 @@ export function McpsPage() {
         {/* Stats Bar */}
         <div class="grid grid-cols-3 gap-4 mb-6">
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-            <div class="text-2xl font-bold text-primary">{servers().length}</div>
+            <div class="text-2xl font-bold text-primary">
+              {servers().length}
+            </div>
             <div class="text-sm text-text-secondary">Configured Servers</div>
           </div>
           <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
@@ -170,7 +178,8 @@ export function McpsPage() {
                 Tools
                 <Show when={selectedServerData()}>
                   <span class="font-normal text-text-tertiary ml-2">
-                    from {selectedServerData()?.name ?? selectedServerData()?.id}
+                    from{' '}
+                    {selectedServerData()?.name ?? selectedServerData()?.id}
                   </span>
                 </Show>
               </h2>
