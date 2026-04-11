@@ -5,7 +5,7 @@
  * Supports hierarchical command groups with help output.
  */
 
-import type { CommandHandler, CommandRegistry, CommandMeta, CommandGroup } from '../types';
+import type { CommandHandler, CommandRegistry, CommandMeta, CommandGroup } from '../types.js';
 
 /**
  * All registered command handlers
