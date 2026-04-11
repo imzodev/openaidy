@@ -134,7 +134,7 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.items).toHaveLength(1);
+      expect((result as { items: unknown[] }).items).toHaveLength(1);
       expect(mockService.listTasks).toHaveBeenCalledWith(undefined);
     });
 
@@ -183,7 +183,7 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.backlog).toHaveLength(1);
+      expect((result as { backlog: unknown[] }).backlog).toHaveLength(1);
     });
   });
 
@@ -205,8 +205,12 @@ describe('taskRoutes', () => {
         reply,
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.title).toBe('Test Task');
+      expect((result as { ok: boolean; data: { title: string } }).ok).toBe(
+        true,
+      );
+      expect(
+        (result as { ok: boolean; data: { title: string } }).data.title,
+      ).toBe('Test Task');
       expect(reply.code).toHaveBeenCalledWith(201);
     });
 
@@ -225,8 +229,12 @@ describe('taskRoutes', () => {
         reply,
       );
 
-      expect(result.ok).toBe(false);
-      expect(result.error.code).toBe('validation.invalid_request');
+      expect((result as { ok: boolean; error: { code: string } }).ok).toBe(
+        false,
+      );
+      expect(
+        (result as { ok: boolean; error: { code: string } }).error.code,
+      ).toBe('validation.invalid_request');
       expect(reply.code).toHaveBeenCalledWith(400);
     });
   });
@@ -248,8 +256,10 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.id).toBe('task1');
+      expect((result as { ok: boolean; data: { id: string } }).ok).toBe(true);
+      expect((result as { ok: boolean; data: { id: string } }).data.id).toBe(
+        'task1',
+      );
     });
 
     it('should return 404 for non-existent task', async () => {
@@ -269,7 +279,7 @@ describe('taskRoutes', () => {
         reply,
       );
 
-      expect(result.ok).toBe(false);
+      expect((result as { ok: boolean }).ok).toBe(false);
       expect(reply.code).toHaveBeenCalledWith(404);
     });
   });
@@ -294,8 +304,12 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.status).toBe('in_progress');
+      expect((result as { ok: boolean; data: { status: string } }).ok).toBe(
+        true,
+      );
+      expect(
+        (result as { ok: boolean; data: { status: string } }).data.status,
+      ).toBe('in_progress');
     });
   });
 
@@ -316,7 +330,7 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
+      expect((result as { ok: boolean }).ok).toBe(true);
     });
   });
 
@@ -350,8 +364,8 @@ describe('taskRoutes', () => {
         { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data).toHaveLength(1);
+      expect((result as { ok: boolean; data: unknown[] }).ok).toBe(true);
+      expect((result as { ok: boolean; data: unknown[] }).data).toHaveLength(1);
     });
   });
 });
