@@ -19,6 +19,7 @@
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
+    "@openaidy/config": "workspace:*",
     "@openaidy/sdk": "workspace:*",
     "@openaidy/shared-types": "workspace:*",
     "@solidjs/router": "^0.15.4",

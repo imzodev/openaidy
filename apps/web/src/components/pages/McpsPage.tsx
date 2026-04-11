@@ -1,6 +1,7 @@
 import { Layout } from './Layout';
 import { For, Show, createSignal, onMount } from 'solid-js';
-import { listMcpServers, type McpServer } from '../../lib/api';
+import { listMcpServers } from '../../lib/api';
+import type { McpServer } from '@openaidy/config';
 
 export function McpsPage() {
   const [servers, setServers] = createSignal<McpServer[]>([]);

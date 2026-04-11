@@ -7,7 +7,7 @@ import { httpTimeoutSchema, retrySchema, vendorFamilySchema } from './provider';
 
 /**
  * MCP server transport type - stdio for local processes, http for remote servers
- * 
+ *
  * NOTE: HTTP transport is not yet implemented. Use stdio for now.
  * See: https://github.com/imzodev/openaidy/issues/200
  */
@@ -44,13 +44,24 @@ export const mcpServerConfigSchema = z
       return false;
     },
     {
-      message:
-        'stdio transport requires command, http transport requires url',
+      message: 'stdio transport requires command, http transport requires url',
     },
   );
 
 export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
 export type McpServerTransport = z.infer<typeof mcpServerTransportSchema>;
+
+/**
+ * MCP Server runtime status (returned by API)
+ */
+export type McpServer = {
+  id: string;
+  connected: boolean;
+  tools: Array<{
+    name: string;
+    description?: string;
+  }>;
+};
 
 // ============================================================================
 // Provider Configuration

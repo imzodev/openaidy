@@ -649,3 +649,16 @@ export async function deleteWorkspaceFile(
 
 // Export getApiBase for testing
 export { getApiBase };
+
+import type { McpServer } from '@openaidy/config';
+
+/**
+ * List all configured MCP servers and their status
+ */
+export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
+  const response = await fetch(`${API_BASE}/mcp/servers`);
+  if (!response.ok) {
+    throw new Error(`Failed to list MCP servers: ${response.statusText}`);
+  }
+  return response.json();
+}
