@@ -1,5 +1,13 @@
-import { Show, For } from 'solid-js';
-import { Clock, CheckCircle, XCircle, Loader, AlertCircle } from 'lucide-solid';
+import { Show, For, createSignal } from 'solid-js';
+import {
+  Clock,
+  CheckCircle,
+  XCircle,
+  Loader,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-solid';
 import type { SessionRun, RunStatus } from '../lib/api';
 
 type RunListProps = {
@@ -63,11 +71,24 @@ function truncateId(id: string): string {
 }
 
 export function RunList(props: RunListProps) {
+  const [isCollapsed, setIsCollapsed] = createSignal(false);
+
   return (
     <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
       {/* Header */}
-      <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
+      <div
+        class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors"
+        onClick={() => setIsCollapsed(!isCollapsed())}
+      >
+        <div class="flex items-center gap-2">
+          <Show
+            when={isCollapsed()}
+            fallback={<ChevronDown class="w-4 h-4 text-text-tertiary" />}
+          >
+            <ChevronUp class="w-4 h-4 text-text-tertiary" />
+          </Show>
+          <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
+        </div>
         <Show when={props.runs.length > 0}>
           <span class="text-xs text-text-tertiary">
             {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
@@ -75,78 +96,83 @@ export function RunList(props: RunListProps) {
         </Show>
       </div>
 
-      {/* Loading state */}
-      <Show when={props.isLoading}>
-        <div class="px-4 py-4 text-center text-sm text-text-tertiary">
-          <Loader class="w-4 h-4 animate-spin inline mr-2" />
-          Loading runs...
-        </div>
-      </Show>
+      {/* Content - hidden when collapsed */}
+      <Show when={!isCollapsed()}>
+        {/* Loading state */}
+        <Show when={props.isLoading}>
+          <div class="px-4 py-4 text-center text-sm text-text-tertiary">
+            <Loader class="w-4 h-4 animate-spin inline mr-2" />
+            Loading runs...
+          </div>
+        </Show>
 
-      {/* Error state */}
-      <Show when={props.error}>
-        <div class="px-4 py-4 text-center text-sm text-error">
-          {props.error}
-        </div>
-      </Show>
+        {/* Error state */}
+        <Show when={props.error}>
+          <div class="px-4 py-4 text-center text-sm text-error">
+            {props.error}
+          </div>
+        </Show>
 
-      {/* Empty state */}
-      <Show when={!props.isLoading && !props.error && props.runs.length === 0}>
-        <div class="px-4 py-4 text-center text-sm text-text-tertiary">
-          No runs yet
-        </div>
-      </Show>
+        {/* Empty state */}
+        <Show
+          when={!props.isLoading && !props.error && props.runs.length === 0}
+        >
+          <div class="px-4 py-4 text-center text-sm text-text-tertiary">
+            No runs yet
+          </div>
+        </Show>
 
-      {/* Runs list */}
-      <Show when={!props.isLoading && props.runs.length > 0}>
-        <div class="max-h-48 overflow-y-auto">
-          <For each={props.runs}>
-            {(run) => (
-              <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors">
-                <div class="flex items-center justify-between gap-2">
-                  {/* Left side: status and ID */}
-                  <div class="flex items-center gap-2">
-                    {getStatusIcon(run.status)}
-                    <code class="text-xs font-mono text-text-tertiary">
-                      {truncateId(run.id)}
-                    </code>
-                    <Show when={run.agentId}>
-                      <span class="text-xs text-text-tertiary">
-                        • {run.agentId}
+        {/* Runs list */}
+        <Show when={!props.isLoading && props.runs.length > 0}>
+          <div class="max-h-48 overflow-y-auto">
+            <For each={props.runs}>
+              {(run) => (
+                <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                  <div class="flex items-center justify-between gap-2">
+                    {/* Left side: status and ID */}
+                    <div class="flex items-center gap-2">
+                      {getStatusIcon(run.status)}
+                      <code class="text-xs font-mono text-text-tertiary">
+                        {truncateId(run.id)}
+                      </code>
+                      <Show when={run.agentId}>
+                        <span class="text-xs text-text-tertiary">
+                          • {run.agentId}
+                        </span>
+                      </Show>
+                    </div>
+
+                    {/* Right side: status badge and time */}
+                    <div class="flex items-center gap-2">
+                      <span
+                        class={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(run.status)}`}
+                      >
+                        {run.status}
                       </span>
-                    </Show>
+                      <span class="text-xs text-text-tertiary">
+                        {formatTime(run.createdAt)}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Right side: status badge and time */}
-                  <div class="flex items-center gap-2">
-                    <span
-                      class={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(run.status)}`}
-                    >
-                      {run.status}
-                    </span>
-                    <span class="text-xs text-text-tertiary">
-                      {formatTime(run.createdAt)}
-                    </span>
+                  {/* Provider/Model info */}
+                  <div class="mt-1 flex items-center gap-2 text-xs text-text-tertiary">
+                    <span>{run.providerId}</span>
+                    <span>•</span>
+                    <span>{run.modelId}</span>
                   </div>
+
+                  {/* Error message */}
+                  <Show when={run.status === 'failed' && run.errorMessage}>
+                    <div class="mt-1 text-xs text-red-600 dark:text-red-400">
+                      {run.errorMessage}
+                    </div>
+                  </Show>
                 </div>
-
-                {/* Provider/Model info */}
-                <div class="mt-1 flex items-center gap-2 text-xs text-text-tertiary">
-                  <span>{run.providerId}</span>
-                  <span>•</span>
-                  <span>{run.modelId}</span>
-                </div>
-
-                {/* Error message */}
-                <Show when={run.status === 'failed' && run.errorMessage}>
-                  <div class="mt-1 text-xs text-red-600 dark:text-red-400">
-                    {run.errorMessage}
-                  </div>
-                </Show>
-              </div>
-            )}
-          </For>
-        </div>
+              )}
+            </For>
+          </div>
+        </Show>
       </Show>
     </div>
   );
