@@ -14,7 +14,7 @@ const createTaskSchema = z.object({
       z.object({
         agentId: z.string(),
         role: z.enum(['primary', 'secondary', 'reviewer']).optional(),
-      })
+      }),
     )
     .optional(),
 });
@@ -27,7 +27,14 @@ const updateTaskSchema = z.object({
 });
 
 const updateTaskStatusSchema = z.object({
-  status: z.enum(['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled']),
+  status: z.enum([
+    'backlog',
+    'todo',
+    'in_progress',
+    'review',
+    'done',
+    'cancelled',
+  ]),
 });
 
 const assignAgentsSchema = z.object({
@@ -35,7 +42,7 @@ const assignAgentsSchema = z.object({
     z.object({
       agentId: z.string(),
       role: z.enum(['primary', 'secondary', 'reviewer']).optional(),
-    })
+    }),
   ),
 });
 
@@ -49,7 +56,7 @@ export type TaskRoutesOptions = {
 
 export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   app,
-  options
+  options,
 ) => {
   const { taskService } = options;
 
@@ -60,7 +67,12 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   app.get('/tasks', async (request) => {
     const query = request.query as { status?: string };
     const status = query.status as
-      | 'backlog' | 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled'
+      | 'backlog'
+      | 'todo'
+      | 'in_progress'
+      | 'review'
+      | 'done'
+      | 'cancelled'
       | undefined;
 
     const items = await taskService.listTasks(status);
@@ -90,7 +102,8 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -100,7 +113,10 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       description: string;
       priority?: 'low' | 'medium' | 'high' | 'urgent';
       planningEnabled?: boolean;
-      agents?: Array<{ agentId: string; role?: 'primary' | 'secondary' | 'reviewer' }>;
+      agents?: Array<{
+        agentId: string;
+        role?: 'primary' | 'secondary' | 'reviewer';
+      }>;
     } = {
       title: parsed.title,
       description: parsed.description,
@@ -143,7 +159,10 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     const task = await taskService.getTaskWithDetails(id);
     if (!task) {
       reply.code(404);
-      return { ok: false, error: { code: 'task.not_found', message: `Task "${id}" not found` } };
+      return {
+        ok: false,
+        error: { code: 'task.not_found', message: `Task "${id}" not found` },
+      };
     }
 
     return { ok: true, data: task };
@@ -165,7 +184,8 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -236,7 +256,8 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -271,7 +292,8 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -302,7 +324,10 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    * Remove an agent from a task
    */
   app.delete('/tasks/:taskId/agents/:agentId', async (request, reply) => {
-    const { taskId, agentId } = request.params as { taskId: string; agentId: string };
+    const { taskId, agentId } = request.params as {
+      taskId: string;
+      agentId: string;
+    };
 
     const result = await taskService.removeAgent(taskId, agentId);
 
@@ -318,7 +343,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    * GET /tasks/:taskId/progress
    * Get task progress info
    */
-  app.get('/tasks/:taskId/progress', async (request, reply) => {
+  app.get('/tasks/:taskId/progress', async (request, _reply) => {
     const { taskId } = request.params as { taskId: string };
 
     const progress = await taskService.getTaskProgress(taskId);
@@ -424,7 +449,10 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     const task = await taskService.getTaskWithDetails(id);
     if (!task) {
       reply.code(404);
-      return { ok: false, error: { code: 'task.not_found', message: `Task "${id}" not found` } };
+      return {
+        ok: false,
+        error: { code: 'task.not_found', message: `Task "${id}" not found` },
+      };
     }
 
     // Use PlanningService if available, otherwise fall back to returning existing subtasks
@@ -469,7 +497,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    * GET /tasks/:taskId/subtasks/next
    * Get next executable subtasks
    */
-  app.get('/tasks/:taskId/subtasks/next', async (request, reply) => {
+  app.get('/tasks/:taskId/subtasks/next', async (request, _reply) => {
     const { taskId } = request.params as { taskId: string };
 
     const subtasks = await taskService.getNextExecutableSubtasks(taskId);

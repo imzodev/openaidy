@@ -12,17 +12,18 @@ import type { FastifyBaseLogger } from 'fastify';
 // Mock Logger
 // ============================================================================
 
-const createMockLogger = (): FastifyBaseLogger => ({
-  info: () => {},
-  error: () => {},
-  warn: () => {},
-  debug: () => {},
-  fatal: () => {},
-  trace: () => {},
-  child: () => createMockLogger(),
-  level: 'info',
-  silent: false,
-} as unknown as FastifyBaseLogger);
+const createMockLogger = (): FastifyBaseLogger =>
+  ({
+    info: () => {},
+    error: () => {},
+    warn: () => {},
+    debug: () => {},
+    fatal: () => {},
+    trace: () => {},
+    child: () => createMockLogger(),
+    level: 'info',
+    silent: false,
+  }) as unknown as FastifyBaseLogger;
 
 // ============================================================================
 // Benchmarks
@@ -105,10 +106,10 @@ describe('Subscription Benchmarks', () => {
     manager.createSubscription('conn_bench', sessionId, []);
     // Broadcast without actual send (just measure iteration)
     let count = 0;
-    for (const sub of manager.getSessionSubscriptions(sessionId)) {
+    for (const _sub of manager.getSessionSubscriptions(sessionId)) {
       count++;
     }
-    count; // Use the value
+    void count; // Use the value
   });
 
   bench('cleanup', () => {
@@ -117,7 +118,11 @@ describe('Subscription Benchmarks', () => {
       getConnections: () => [],
       send: async () => {},
     } as unknown as import('../connection-manager').ConnectionManager;
-    const tempManager = new SubscriptionManager(mockConnectionManager, mockLogger, {});
+    const tempManager = new SubscriptionManager(
+      mockConnectionManager,
+      mockLogger,
+      {},
+    );
     for (let i = 0; i < 100; i++) {
       tempManager.createSubscription(`conn_${i}`, `sub_${i}`, []);
     }

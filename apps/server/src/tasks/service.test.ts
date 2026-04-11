@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskService, createTaskService } from './service';
-import type { Task, Subtask, TaskAgent, AgentRole } from '@openaidy/db';
+import type { Task, Subtask, TaskAgent } from '@openaidy/db';
 
 // Mock repository types - use interface-like types for mocking
 interface MockTasksRepository {
@@ -124,8 +124,10 @@ describe('TaskService', () => {
 
     service = createTaskService({
       tasksRepo: tasksRepo as unknown as import('@openaidy/db').TasksRepository,
-      subtasksRepo: subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
-      taskAgentsRepo: taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+      subtasksRepo:
+        subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+      taskAgentsRepo:
+        taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
       agents: agentRegistry as unknown as import('../agents').AgentRegistry,
     });
   });
@@ -150,7 +152,9 @@ describe('TaskService', () => {
     });
 
     it('should create a task with priority', async () => {
-      tasksRepo.create = vi.fn().mockResolvedValue({ ...mockTask, priority: 'high' });
+      tasksRepo.create = vi
+        .fn()
+        .mockResolvedValue({ ...mockTask, priority: 'high' });
 
       const result = await service.createTask({
         title: 'Test Task',
@@ -169,7 +173,9 @@ describe('TaskService', () => {
     });
 
     it('should create a task with planning enabled', async () => {
-      tasksRepo.create = vi.fn().mockResolvedValue({ ...mockTask, planningEnabled: true });
+      tasksRepo.create = vi
+        .fn()
+        .mockResolvedValue({ ...mockTask, planningEnabled: true });
 
       const result = await service.createTask({
         title: 'Test Task',
@@ -204,8 +210,12 @@ describe('TaskService', () => {
 
     it('should assign agents when creating task', async () => {
       tasksRepo.create = vi.fn().mockResolvedValue(mockTask);
-      agentRegistry.getAgent = vi.fn().mockReturnValue({ id: 'agent1', name: 'Agent 1' });
-      taskAgentsRepo.assignMultiple = vi.fn().mockResolvedValue([mockTaskAgent]);
+      agentRegistry.getAgent = vi
+        .fn()
+        .mockReturnValue({ id: 'agent1', name: 'Agent 1' });
+      taskAgentsRepo.assignMultiple = vi
+        .fn()
+        .mockResolvedValue([mockTaskAgent]);
 
       const result = await service.createTask({
         title: 'Test Task',
@@ -283,7 +293,7 @@ describe('TaskService', () => {
     it('should list tasks filtered by status', async () => {
       tasksRepo.list = vi.fn().mockResolvedValue([mockTask]);
 
-      const result = await service.listTasks('backlog');
+      await service.listTasks('backlog');
 
       expect(tasksRepo.list).toHaveBeenCalledWith('backlog');
     });
@@ -305,7 +315,9 @@ describe('TaskService', () => {
   describe('updateTask', () => {
     it('should update a task', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
-      tasksRepo.update = vi.fn().mockResolvedValue({ ...mockTask, title: 'Updated' });
+      tasksRepo.update = vi
+        .fn()
+        .mockResolvedValue({ ...mockTask, title: 'Updated' });
 
       const result = await service.updateTask('task1', { title: 'Updated' });
 
@@ -318,7 +330,9 @@ describe('TaskService', () => {
     it('should fail for non-existent task', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(null);
 
-      const result = await service.updateTask('nonexistent', { title: 'Updated' });
+      const result = await service.updateTask('nonexistent', {
+        title: 'Updated',
+      });
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -330,7 +344,9 @@ describe('TaskService', () => {
   describe('updateTaskStatus', () => {
     it('should update task status', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
-      tasksRepo.updateStatus = vi.fn().mockResolvedValue({ ...mockTask, status: 'in_progress' });
+      tasksRepo.updateStatus = vi
+        .fn()
+        .mockResolvedValue({ ...mockTask, status: 'in_progress' });
 
       const result = await service.updateTaskStatus('task1', 'in_progress');
 
@@ -368,9 +384,13 @@ describe('TaskService', () => {
     it('should assign agents to a task', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
       agentRegistry.getAgent = vi.fn().mockReturnValue({ id: 'agent1' });
-      taskAgentsRepo.assignMultiple = vi.fn().mockResolvedValue([mockTaskAgent]);
+      taskAgentsRepo.assignMultiple = vi
+        .fn()
+        .mockResolvedValue([mockTaskAgent]);
 
-      const result = await service.assignAgents('task1', [{ agentId: 'agent1' }]);
+      const result = await service.assignAgents('task1', [
+        { agentId: 'agent1' },
+      ]);
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -381,7 +401,9 @@ describe('TaskService', () => {
     it('should fail if task does not exist', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(null);
 
-      const result = await service.assignAgents('nonexistent', [{ agentId: 'agent1' }]);
+      const result = await service.assignAgents('nonexistent', [
+        { agentId: 'agent1' },
+      ]);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -393,7 +415,9 @@ describe('TaskService', () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
       agentRegistry.getAgent = vi.fn().mockReturnValue(null);
 
-      const result = await service.assignAgents('task1', [{ agentId: 'nonexistent' }]);
+      const result = await service.assignAgents('task1', [
+        { agentId: 'nonexistent' },
+      ]);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -465,7 +489,9 @@ describe('TaskService', () => {
 
   describe('updateSubtaskStatus', () => {
     it('should update subtask status', async () => {
-      subtasksRepo.updateStatus = vi.fn().mockResolvedValue({ ...mockSubtask, status: 'completed' });
+      subtasksRepo.updateStatus = vi
+        .fn()
+        .mockResolvedValue({ ...mockSubtask, status: 'completed' });
 
       const result = await service.updateSubtaskStatus('subtask1', 'completed');
 
@@ -478,7 +504,10 @@ describe('TaskService', () => {
     it('should fail if subtask does not exist', async () => {
       subtasksRepo.updateStatus = vi.fn().mockResolvedValue(null);
 
-      const result = await service.updateSubtaskStatus('nonexistent', 'completed');
+      const result = await service.updateSubtaskStatus(
+        'nonexistent',
+        'completed',
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -490,7 +519,9 @@ describe('TaskService', () => {
   describe('assignSubtaskAgent', () => {
     it('should assign an agent to a subtask', async () => {
       agentRegistry.getAgent = vi.fn().mockReturnValue({ id: 'agent1' });
-      subtasksRepo.assignAgent = vi.fn().mockResolvedValue({ ...mockSubtask, assignedAgentId: 'agent1' });
+      subtasksRepo.assignAgent = vi
+        .fn()
+        .mockResolvedValue({ ...mockSubtask, assignedAgentId: 'agent1' });
 
       const result = await service.assignSubtaskAgent('subtask1', 'agent1');
 
@@ -503,7 +534,10 @@ describe('TaskService', () => {
     it('should fail if agent does not exist', async () => {
       agentRegistry.getAgent = vi.fn().mockReturnValue(null);
 
-      const result = await service.assignSubtaskAgent('subtask1', 'nonexistent');
+      const result = await service.assignSubtaskAgent(
+        'subtask1',
+        'nonexistent',
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -514,7 +548,9 @@ describe('TaskService', () => {
 
   describe('setSubtaskResult', () => {
     it('should set subtask result', async () => {
-      subtasksRepo.setResult = vi.fn().mockResolvedValue({ ...mockSubtask, result: 'Done!' });
+      subtasksRepo.setResult = vi
+        .fn()
+        .mockResolvedValue({ ...mockSubtask, result: 'Done!' });
 
       const result = await service.setSubtaskResult('subtask1', 'Done!');
 
@@ -559,7 +595,9 @@ describe('TaskService', () => {
   describe('updatePlanningStatus', () => {
     it('should update planning status', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
-      tasksRepo.updatePlanningStatus = vi.fn().mockResolvedValue({ ...mockTask, planningStatus: 'in_progress' });
+      tasksRepo.updatePlanningStatus = vi
+        .fn()
+        .mockResolvedValue({ ...mockTask, planningStatus: 'in_progress' });
 
       const result = await service.updatePlanningStatus('task1', 'in_progress');
 
@@ -572,7 +610,10 @@ describe('TaskService', () => {
     it('should fail if task does not exist', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(null);
 
-      const result = await service.updatePlanningStatus('nonexistent', 'in_progress');
+      const result = await service.updatePlanningStatus(
+        'nonexistent',
+        'in_progress',
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -584,7 +625,8 @@ describe('TaskService', () => {
   describe('createSubtasks', () => {
     it('should create multiple subtasks', async () => {
       tasksRepo.findById = vi.fn().mockResolvedValue(mockTask);
-      subtasksRepo.create = vi.fn()
+      subtasksRepo.create = vi
+        .fn()
         .mockResolvedValueOnce({ ...mockSubtask, id: 'sub1', orderIndex: 0 })
         .mockResolvedValueOnce({ ...mockSubtask, id: 'sub2', orderIndex: 1 });
 

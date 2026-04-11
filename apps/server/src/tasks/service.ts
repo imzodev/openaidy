@@ -5,9 +5,7 @@ import {
   type SubtasksRepository,
   type TaskAgentsRepository,
   type Task,
-  type NewTask,
   type Subtask,
-  type NewSubtask,
   type TaskAgent,
   type TaskStatus,
   type TaskPriority,
@@ -140,7 +138,9 @@ export class TaskService {
       title: input.title,
       description: input.description,
       ...(input.priority !== undefined && { priority: input.priority }),
-      ...(input.planningEnabled !== undefined && { planningEnabled: input.planningEnabled }),
+      ...(input.planningEnabled !== undefined && {
+        planningEnabled: input.planningEnabled,
+      }),
     });
 
     // Assign agents if provided
@@ -222,7 +222,10 @@ export class TaskService {
   /**
    * Update a task
    */
-  async updateTask(id: string, input: UpdateTaskInput): Promise<ServiceResult<Task>> {
+  async updateTask(
+    id: string,
+    input: UpdateTaskInput,
+  ): Promise<ServiceResult<Task>> {
     const existingTask = await this.tasksRepo.findById(id);
     if (!existingTask) {
       return {
@@ -241,7 +244,10 @@ export class TaskService {
   /**
    * Update a task's status
    */
-  async updateTaskStatus(id: string, status: TaskStatus): Promise<ServiceResult<Task>> {
+  async updateTaskStatus(
+    id: string,
+    status: TaskStatus,
+  ): Promise<ServiceResult<Task>> {
     const existingTask = await this.tasksRepo.findById(id);
     if (!existingTask) {
       return {
@@ -285,7 +291,7 @@ export class TaskService {
    */
   async assignAgents(
     taskId: string,
-    agents: Array<{ agentId: string; role?: AgentRole }>
+    agents: Array<{ agentId: string; role?: AgentRole }>,
   ): Promise<ServiceResult<TaskAgent[]>> {
     const existingTask = await this.tasksRepo.findById(taskId);
     if (!existingTask) {
@@ -313,14 +319,20 @@ export class TaskService {
       }
     }
 
-    const assignments = await this.taskAgentsRepo.assignMultiple(taskId, agents);
+    const assignments = await this.taskAgentsRepo.assignMultiple(
+      taskId,
+      agents,
+    );
     return { ok: true, data: assignments };
   }
 
   /**
    * Remove an agent from a task
    */
-  async removeAgent(taskId: string, agentId: string): Promise<ServiceResult<true>> {
+  async removeAgent(
+    taskId: string,
+    agentId: string,
+  ): Promise<ServiceResult<true>> {
     await this.taskAgentsRepo.remove(taskId, agentId);
     return { ok: true, data: true };
   }
@@ -339,7 +351,9 @@ export class TaskService {
   /**
    * Create a subtask
    */
-  async createSubtask(input: CreateSubtaskInput): Promise<ServiceResult<Subtask>> {
+  async createSubtask(
+    input: CreateSubtaskInput,
+  ): Promise<ServiceResult<Subtask>> {
     const existingTask = await this.tasksRepo.findById(input.taskId);
     if (!existingTask) {
       return {
@@ -380,7 +394,7 @@ export class TaskService {
    */
   async updateSubtask(
     id: string,
-    input: { title?: string; description?: string; orderIndex?: number }
+    input: { title?: string; description?: string; orderIndex?: number },
   ): Promise<ServiceResult<Subtask>> {
     const existing = await this.subtasksRepo.findById(id);
     if (!existing) {
@@ -419,7 +433,10 @@ export class TaskService {
   /**
    * Update a subtask's status
    */
-  async updateSubtaskStatus(id: string, status: SubtaskStatus): Promise<ServiceResult<Subtask>> {
+  async updateSubtaskStatus(
+    id: string,
+    status: SubtaskStatus,
+  ): Promise<ServiceResult<Subtask>> {
     const updated = await this.subtasksRepo.updateStatus(id, status);
     if (!updated) {
       return {
@@ -436,7 +453,10 @@ export class TaskService {
   /**
    * Assign an agent to a subtask
    */
-  async assignSubtaskAgent(id: string, agentId: string): Promise<ServiceResult<Subtask>> {
+  async assignSubtaskAgent(
+    id: string,
+    agentId: string,
+  ): Promise<ServiceResult<Subtask>> {
     // Validate agent exists
     if (this.agents && !this.agents.getAgent(agentId)) {
       return {
@@ -464,7 +484,10 @@ export class TaskService {
   /**
    * Set a subtask's result
    */
-  async setSubtaskResult(id: string, result: string): Promise<ServiceResult<Subtask>> {
+  async setSubtaskResult(
+    id: string,
+    result: string,
+  ): Promise<ServiceResult<Subtask>> {
     const updated = await this.subtasksRepo.setResult(id, result);
     if (!updated) {
       return {
@@ -507,7 +530,7 @@ export class TaskService {
    */
   async updatePlanningStatus(
     taskId: string,
-    status: PlanningStatus
+    status: PlanningStatus,
   ): Promise<ServiceResult<Task>> {
     const existingTask = await this.tasksRepo.findById(taskId);
     if (!existingTask) {
@@ -533,7 +556,7 @@ export class TaskService {
       title: string;
       description: string;
       assignedAgentId?: string;
-    }>
+    }>,
   ): Promise<ServiceResult<Subtask[]>> {
     const existingTask = await this.tasksRepo.findById(taskId);
     if (!existingTask) {
@@ -577,7 +600,9 @@ export class TaskService {
   /**
    * Execute a task by creating a session
    */
-  async executeTask(taskId: string): Promise<ServiceResult<{ sessionId: string }>> {
+  async executeTask(
+    taskId: string,
+  ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
         ok: false,
@@ -600,7 +625,9 @@ export class TaskService {
     }
 
     // Create session for task execution
-    const session = await this.sessionService.createSession(`Task: ${task.title}`);
+    const session = await this.sessionService.createSession(
+      `Task: ${task.title}`,
+    );
 
     // Link session to task
     await this.tasksRepo.update(taskId, { sessionId: session.id });
@@ -618,7 +645,9 @@ export class TaskService {
   /**
    * Execute a subtask by creating a session
    */
-  async executeSubtask(subtaskId: string): Promise<ServiceResult<{ sessionId: string }>> {
+  async executeSubtask(
+    subtaskId: string,
+  ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
         ok: false,
@@ -655,7 +684,9 @@ export class TaskService {
     }
 
     // Create session for subtask execution
-    const session = await this.sessionService.createSession(`Subtask: ${subtask.title}`);
+    const session = await this.sessionService.createSession(
+      `Subtask: ${subtask.title}`,
+    );
 
     // Link session to subtask
     await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
@@ -676,7 +707,9 @@ export class TaskService {
   /**
    * Get the session linked to a task
    */
-  async getTaskSession(taskId: string): Promise<ServiceResult<{ sessionId: string | null }>> {
+  async getTaskSession(
+    taskId: string,
+  ): Promise<ServiceResult<{ sessionId: string | null }>> {
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
       return {
@@ -694,7 +727,9 @@ export class TaskService {
   /**
    * Get the session linked to a subtask
    */
-  async getSubtaskSession(subtaskId: string): Promise<ServiceResult<{ sessionId: string | null }>> {
+  async getSubtaskSession(
+    subtaskId: string,
+  ): Promise<ServiceResult<{ sessionId: string | null }>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) {
       return {
@@ -716,7 +751,9 @@ export class TaskService {
   /**
    * Execute all pending subtasks for a task
    */
-  async executeSubtasks(taskId: string): Promise<ServiceResult<{ startedCount: number }>> {
+  async executeSubtasks(
+    taskId: string,
+  ): Promise<ServiceResult<{ startedCount: number }>> {
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
       return {
@@ -755,7 +792,7 @@ export class TaskService {
    */
   async completeSubtask(
     subtaskId: string,
-    result: string
+    result: string,
   ): Promise<ServiceResult<Subtask>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) {
@@ -782,7 +819,10 @@ export class TaskService {
   /**
    * Fail a subtask with error
    */
-  async failSubtask(subtaskId: string, error: string): Promise<ServiceResult<Subtask>> {
+  async failSubtask(
+    subtaskId: string,
+    error: string,
+  ): Promise<ServiceResult<Subtask>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) {
       return {
@@ -822,7 +862,8 @@ export class TaskService {
    */
   private async checkTaskCompletion(taskId: string): Promise<void> {
     const subtasks = await this.subtasksRepo.listByTask(taskId);
-    const allComplete = subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
+    const allComplete =
+      subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
 
     if (allComplete) {
       await this.tasksRepo.updateStatus(taskId, 'done');
