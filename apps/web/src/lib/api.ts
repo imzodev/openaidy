@@ -1,3 +1,9 @@
+import type {
+  LogFilter,
+  LogQueryResult,
+  LogStats,
+} from '@openaidy/shared-types';
+
 /**
  * API client for session endpoints
  */
@@ -649,6 +655,58 @@ export async function deleteWorkspaceFile(
 
 // Export getApiBase for testing
 export { getApiBase };
+
+/**
+ * Query logs with filters
+ */
+export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
+  const params = new URLSearchParams();
+  if (filter.levels?.length) params.set('levels', filter.levels.join(','));
+  if (filter.contexts?.length)
+    params.set('contexts', filter.contexts.join(','));
+  if (filter.search) params.set('search', filter.search);
+  if (filter.since) params.set('since', filter.since);
+  if (filter.until) params.set('until', filter.until);
+  if (filter.requestId) params.set('requestId', filter.requestId);
+  if (filter.sessionId) params.set('sessionId', filter.sessionId);
+  if (filter.runId) params.set('runId', filter.runId);
+  if (filter.limit !== undefined) params.set('limit', String(filter.limit));
+  if (filter.offset !== undefined) params.set('offset', String(filter.offset));
+
+  const response = await fetch(`${API_BASE}/logs?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error(`Failed to query logs: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get log statistics
+ */
+export async function getLogStats(): Promise<LogStats> {
+  const response = await fetch(`${API_BASE}/logs/stats`);
+  if (!response.ok) {
+    throw new Error(`Failed to get log stats: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Clear log buffer
+ */
+export async function clearLogs(): Promise<{
+  success: boolean;
+  cleared: boolean;
+}> {
+  const response = await fetch(`${API_BASE}/logs`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to clear logs: ${response.statusText}`);
+  }
+  return response.json();
+}
 
 import type { McpServer } from '@openaidy/config';
 

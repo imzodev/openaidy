@@ -18,14 +18,8 @@ import {
   Bug,
 } from 'lucide-solid';
 import { Layout } from './Layout';
-import {
-  queryLogs,
-  getLogStats,
-  clearLogs,
-  type LogEntry,
-  type LogLevel,
-  type LogStats,
-} from '../../lib/api';
+import { queryLogs, getLogStats, clearLogs } from '../../lib/api';
+import type { LogEntry, LogLevel, LogStats } from '@openaidy/shared-types';
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   debug: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -50,7 +44,7 @@ export function LogsPage() {
   // Filters
   const [selectedLevels, setSelectedLevels] = createSignal<LogLevel[]>([]);
   const [searchQuery, setSearchQuery] = createSignal('');
-   
+
   const [_contexts, setContexts] = createSignal<string[]>([]);
 
   // Pagination
