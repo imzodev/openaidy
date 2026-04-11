@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import {
   QueryClient,
   QueryClientProvider,
@@ -20,7 +20,7 @@ import {
   type SessionRun,
 } from './lib/ws-api';
 import { ThemeProvider } from './lib/theme';
-import { WebSocketProvider } from './lib/ws-provider';
+import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
 import { Sidebar } from './components/Sidebar';
@@ -56,6 +56,9 @@ function AppContent() {
   // Use the router hook
   const { currentView, navigate } = createRouter();
 
+  // Get WebSocket client for streaming events
+  const { client, isConnected } = useWebSocketContext();
+
   const [selectedSessionId, setSelectedSessionId] = createSignal<
     string | undefined
   >(undefined);
@@ -70,6 +73,61 @@ function AppContent() {
   >(undefined);
   const [streamingContent, setStreamingContent] = createSignal('');
   const [isStreaming, setIsStreaming] = createSignal(false);
+
+  // Subscribe to streaming events when a session is selected
+  createEffect(() => {
+    const sessionId = selectedSessionId();
+    const wsClient = client();
+
+    if (!sessionId || !wsClient || !isConnected()) return;
+
+    // Subscribe to session stream events
+    const handleStreamStart = () => {
+      setIsStreaming(true);
+      setStreamingContent('');
+    };
+
+    const handleStreamDelta = (event: { payload: { content: string } }) => {
+      setStreamingContent((prev) => prev + event.payload.content);
+    };
+
+    const handleStreamEnd = () => {
+      setIsStreaming(false);
+      setStreamingContent('');
+      // Refresh messages to show the completed response
+      queryClient.invalidateQueries({
+        queryKey: ['messages', sessionId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['runs', sessionId],
+      });
+    };
+
+    const handleStreamError = (event: {
+      payload: { error: { message: string } };
+    }) => {
+      setSubmitError(event.payload.error.message);
+      setIsStreaming(false);
+      setStreamingContent('');
+    };
+
+    const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
+    const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
+    const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
+    const unsubError = wsClient.on('session.stream.error', handleStreamError);
+
+    // Subscribe to the session
+    wsClient.subscribeToSession(sessionId).catch((err) => {
+      console.error('Failed to subscribe to session:', err);
+    });
+
+    onCleanup(() => {
+      unsubStart();
+      unsubDelta();
+      unsubEnd();
+      unsubError();
+    });
+  });
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({

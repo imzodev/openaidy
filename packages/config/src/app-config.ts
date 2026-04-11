@@ -56,6 +56,7 @@ export type McpServerTransport = z.infer<typeof mcpServerTransportSchema>;
  */
 export type McpServer = {
   id: string;
+  name?: string;
   connected: boolean;
   tools: Array<{
     name: string;
