@@ -5,7 +5,7 @@
  * priority selection, planning toggle, and agent assignment.
  */
 
-import { createSignal, Show, createEffect, on } from 'solid-js';
+import { createSignal, Show, For, createEffect, on } from 'solid-js';
 import { X } from 'lucide-solid';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
