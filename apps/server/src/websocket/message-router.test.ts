@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MessageRouter, type MessageHandler, type HandlerContext } from './message-router';
-import { createWSMessage, WS_ERROR_CODES } from '@openaidy/shared-types';
+import { createWSMessage, WS_ERROR_CODES, type WSResponse } from '@openaidy/shared-types';
 import { ConnectionManager } from './connection-manager';
 
 // Mock logger
@@ -148,7 +148,7 @@ describe('MessageRouter', () => {
 
       const handler: MessageHandler = async (connId, msg) => {
         received = { connId, msg };
-        return createWSMessage('test.response', { echo: msg.payload });
+        return createWSMessage('test.response', { echo: msg.payload }) as unknown as WSResponse;
       };
 
       router.registerHandler('test.message', handler);

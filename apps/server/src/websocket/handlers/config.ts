@@ -72,7 +72,7 @@ export type ConfigWatchResponse = WSMessage<
  */
 export type ConfigUnwatchRequest = WSMessage<
   'config.unwatch',
-  {}
+  Record<string, never>
 >;
 
 /**
@@ -115,7 +115,7 @@ export class ConfigHandler {
   async handleGet(
     connectionId: string,
     request: ConfigGetRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ConfigGetResponse | ErrorResponse> {
     try {
       const config = this.configService.getConfig();
@@ -149,7 +149,7 @@ export class ConfigHandler {
   async handleUpdate(
     connectionId: string,
     request: ConfigUpdateRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ConfigUpdateResponse | ErrorResponse> {
     try {
       // Check permission
@@ -163,7 +163,10 @@ export class ConfigHandler {
       }
 
       // Check if connection has config.write capability
-      if (!conn.capabilities.includes('config.write') && !conn.capabilities.includes('*')) {
+      if (
+        !conn.capabilities.includes('config.write') &&
+        !conn.capabilities.includes('*')
+      ) {
         return this.createErrorResponse(
           request.id,
           WS_ERROR_CODES.FORBIDDEN,
@@ -172,7 +175,7 @@ export class ConfigHandler {
       }
 
       const updates = request.payload.updates;
-      
+
       // Validate updates
       const validation = this.validateConfigUpdates(updates);
       if (!validation.valid) {
@@ -184,13 +187,16 @@ export class ConfigHandler {
       }
 
       // Get current config
-      const currentConfig = this.configService.getConfig() as unknown as Record<string, unknown>;
-      
+      const currentConfig = this.configService.getConfig() as unknown as Record<
+        string,
+        unknown
+      >;
+
       // Apply updates
       const updatedConfig = this.applyUpdates(currentConfig, updates);
 
       // Save updated config (sync operation)
-      this.configService.save(updatedConfig as any);
+      this.configService.save(updatedConfig as Record<string, unknown>);
 
       this.logger.info(
         { connectionId, updates: Object.keys(updates) },
@@ -220,10 +226,12 @@ export class ConfigHandler {
   async handleWatch(
     connectionId: string,
     request: ConfigWatchRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ConfigWatchResponse | ErrorResponse> {
     try {
-      const paths = request.payload.paths ? new Set(request.payload.paths) : new Set(['*']);
+      const paths = request.payload.paths
+        ? new Set(request.payload.paths)
+        : new Set(['*']);
 
       this.watchers.set(connectionId, {
         connectionId,
@@ -255,7 +263,7 @@ export class ConfigHandler {
   async handleUnwatch(
     connectionId: string,
     request: ConfigUnwatchRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<ConfigUnwatchResponse | ErrorResponse> {
     try {
       const removed = this.watchers.delete(connectionId);
@@ -313,9 +321,10 @@ export class ConfigHandler {
   /**
    * Validate config updates
    */
-  private validateConfigUpdates(
-    updates: Record<string, unknown>,
-  ): { valid: boolean; errors?: string[] } {
+  private validateConfigUpdates(updates: Record<string, unknown>): {
+    valid: boolean;
+    errors?: string[];
+  } {
     const errors: string[] = [];
 
     // Check for invalid paths
@@ -329,7 +338,7 @@ export class ConfigHandler {
     return {
       valid: errors.length === 0,
       errors: errors.length > 0 ? errors : undefined,
-    };
+    } as { valid: boolean; errors?: string[] };
   }
 
   /**
@@ -360,14 +369,14 @@ export class ConfigHandler {
     let current = obj;
 
     for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
+      const part = parts[i]!;
       if (!(part in current)) {
         current[part] = {};
       }
       current = current[part] as Record<string, unknown>;
     }
 
-    current[parts[parts.length - 1]] = value;
+    current[parts[parts.length - 1]!] = value;
   }
 
   /**
@@ -396,8 +405,12 @@ export class ConfigHandler {
 
       // Check if any updated path matches watched paths
       const hasMatchingPath = Object.keys(updates).some((path) => {
-        return watcher.paths.has(path) || 
-               Array.from(watcher.paths).some((watched) => path.startsWith(watched + '.'));
+        return (
+          watcher.paths.has(path) ||
+          Array.from(watcher.paths).some((watched) =>
+            path.startsWith(watched + '.'),
+          )
+        );
       });
 
       if (hasMatchingPath) {
@@ -462,24 +475,55 @@ export function createConfigHandler(
  */
 export function registerConfigHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (
+      type: string,
+      handler: (
+        connId: string,
+        msg: WSMessage,
+        ctx: HandlerContext,
+      ) => Promise<WSResponse | void>,
+    ) => void;
   },
   handler: ConfigHandler,
 ): void {
-  router.registerHandler('config.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as ConfigGetRequest, ctx),
+  router.registerHandler(
+    'config.get',
+    (connId, msg, ctx) =>
+      handler.handleGet(
+        connId,
+        msg as ConfigGetRequest,
+        ctx,
+      ) as unknown as Promise<WSResponse | void>,
   );
 
-  router.registerHandler('config.update', (connId, msg, ctx) =>
-    handler.handleUpdate(connId, msg as ConfigUpdateRequest, ctx),
+  router.registerHandler(
+    'config.update',
+    (connId, msg, ctx) =>
+      handler.handleUpdate(
+        connId,
+        msg as ConfigUpdateRequest,
+        ctx,
+      ) as unknown as Promise<WSResponse | void>,
   );
 
-  router.registerHandler('config.watch', (connId, msg, ctx) =>
-    handler.handleWatch(connId, msg as ConfigWatchRequest, ctx),
+  router.registerHandler(
+    'config.watch',
+    (connId, msg, ctx) =>
+      handler.handleWatch(
+        connId,
+        msg as ConfigWatchRequest,
+        ctx,
+      ) as unknown as Promise<WSResponse | void>,
   );
 
-  router.registerHandler('config.unwatch', (connId, msg, ctx) =>
-    handler.handleUnwatch(connId, msg as ConfigUnwatchRequest, ctx),
+  router.registerHandler(
+    'config.unwatch',
+    (connId, msg, ctx) =>
+      handler.handleUnwatch(
+        connId,
+        msg as ConfigUnwatchRequest,
+        ctx,
+      ) as unknown as Promise<WSResponse | void>,
   );
 }
 

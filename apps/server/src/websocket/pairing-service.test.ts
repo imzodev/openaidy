@@ -469,7 +469,7 @@ describe('PairingService', () => {
       const pending = service.getPendingRequests();
 
       expect(pending).toHaveLength(1);
-      expect(pending[0].requestId).toBe(req1.requestId);
+      expect(pending[0]!.requestId).toBe(req1.requestId);
     });
 
     it('should return empty array when no pending requests', () => {

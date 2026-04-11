@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -6,6 +6,7 @@ import { DispatchService, createDispatchService } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
 import { RunEventEmitter, type RunEvent } from './events';
+import type { McpClientService } from '../mcp';
 import type {
   ModelProvider,
   ProviderDescriptor,
@@ -544,6 +545,247 @@ describe('DispatchService streaming', () => {
       expect(receivedEvents[0]!.type).toBe('run.queued');
 
       unsubscribe();
+    });
+  });
+
+  describe('MCP Tool Integration', () => {
+    let dispatchService: DispatchService;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockMcp: any;
+    let tempDir: string;
+    let _sessionId: string;
+
+    beforeEach(async () => {
+      // Create temp directory
+      tempDir = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'openaidy-dispatch-mcp-test-'),
+      );
+
+      // Create mock MCP service
+      mockMcp = {
+        isConnected: vi.fn().mockReturnValue(true),
+        getFilteredTools: vi.fn().mockReturnValue([
+          {
+            name: 'read_file',
+            description: 'Read a file from the filesystem',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'File path to read' },
+              },
+              required: ['path'],
+            },
+          },
+          {
+            name: 'write_file',
+            description: 'Write content to a file',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                path: { type: 'string' },
+                content: { type: 'string' },
+              },
+              required: ['path', 'content'],
+            },
+          },
+        ]),
+        callTool: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: 'file content here' }],
+        }),
+      };
+
+      // Create mock provider
+      const mockProvider = createMockProvider('test-provider');
+
+      // Create services
+      const providers = createProviderServices();
+      providers.registry.register(mockProvider, {
+        enabled: true,
+        priority: 50,
+        defaultModel: 'test-model',
+      });
+      providers.registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
+
+      const agents = createAgentRegistry({
+        agentsDir: tempDir,
+      });
+
+      // Create agent config with MCP servers
+      await fs.promises.writeFile(
+        path.join(tempDir, 'mcp-agent.json'),
+        JSON.stringify({
+          id: 'mcp-agent',
+          name: 'MCP Agent',
+          enabled: true,
+          systemPrompt: 'You have access to filesystem tools.',
+          model: 'test-provider/test-model',
+          mcpServers: [
+            {
+              id: 'filesystem',
+              tools: ['read_file', 'write_file'],
+            },
+          ],
+        }),
+      );
+
+      agents.load();
+
+      dispatchService = createDispatchService({
+        agents,
+        providers,
+        mcp: mockMcp as unknown as McpClientService,
+      });
+
+      // Create a session
+      const result = await dispatchService.dispatch({
+        sessionId: 'test-session-mcp',
+        agentId: 'mcp-agent',
+        input: { role: 'user', content: 'Hello' },
+      });
+
+      if (result.ok) {
+        sessionId = result.userMessage.sessionId;
+      }
+    });
+
+    afterEach(async () => {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    });
+
+    describe('getMcpToolsForAgent', () => {
+      it('should return empty array when MCP service not available', () => {
+        const service = createDispatchService({
+          agents: dispatchService['agents'],
+          providers: dispatchService['providers'],
+        });
+        const tools = service.getMcpToolsForAgent('mcp-agent');
+        expect(tools).toEqual([]);
+      });
+
+      it('should return empty array for agent without MCP servers', () => {
+        // Create agent without MCP servers
+        const tools = dispatchService.getMcpToolsForAgent('non-mcp-agent');
+        expect(tools).toEqual([]);
+      });
+
+      it('should collect tools from configured MCP servers', () => {
+        const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
+        expect(tools).toHaveLength(2);
+        expect(tools[0]?.name).toBe('filesystem::read_file');
+        expect(tools[1]?.name).toBe('filesystem::write_file');
+      });
+
+      it('should prefix tool names with server ID', () => {
+        const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
+        expect(tools[0]?.name.startsWith('filesystem::')).toBe(true);
+      });
+
+      it('should skip disconnected servers', () => {
+        mockMcp.isConnected.mockReturnValue(false);
+        const tools = dispatchService.getMcpToolsForAgent('mcp-agent');
+        expect(tools).toEqual([]);
+      });
+    });
+
+    describe('executeMcpToolCall', () => {
+      it('should fail when MCP service not available', async () => {
+        const service = createDispatchService({
+          agents: dispatchService['agents'],
+          providers: dispatchService['providers'],
+        });
+        const result = await service.executeMcpToolCall(
+          'filesystem::read_file',
+          { path: '/test.txt' },
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('MCP service not available');
+        }
+      });
+
+      it('should fail for invalid tool name format', async () => {
+        const result = await dispatchService.executeMcpToolCall(
+          'invalid-tool-name',
+          {},
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('Invalid tool name format');
+        }
+      });
+
+      it('should fail for unconfigured server', async () => {
+        const result = await dispatchService.executeMcpToolCall(
+          'unknown-server::tool',
+          {},
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('not configured');
+        }
+      });
+
+      it('should fail when server not connected', async () => {
+        mockMcp.isConnected.mockReturnValue(false);
+        const result = await dispatchService.executeMcpToolCall(
+          'filesystem::read_file',
+          { path: '/test.txt' },
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('not connected');
+        }
+      });
+
+      it('should fail for disallowed tool', async () => {
+        // The agent only allows read_file and write_file
+        const result = await dispatchService.executeMcpToolCall(
+          'filesystem::delete_file',
+          { path: '/test.txt' },
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('not allowed');
+        }
+      });
+
+      it('should execute allowed tool successfully', async () => {
+        const result = await dispatchService.executeMcpToolCall(
+          'filesystem::read_file',
+          { path: '/test.txt' },
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.content).toContain('file content');
+        }
+        expect(mockMcp.callTool).toHaveBeenCalledWith(
+          'filesystem',
+          'read_file',
+          { path: '/test.txt' },
+        );
+      });
+
+      it('should handle tool execution errors', async () => {
+        mockMcp.callTool.mockRejectedValue(new Error('Tool failed'));
+        const result = await dispatchService.executeMcpToolCall(
+          'filesystem::read_file',
+          { path: '/test.txt' },
+          'mcp-agent',
+        );
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error).toContain('Tool failed');
+        }
+      });
     });
   });
 });

@@ -41,6 +41,8 @@ import { NodeHandler, registerNodeHandlers } from './handlers/node';
 import { PairingHandler, registerPairingHandlers } from './handlers/pairing';
 import { ConfigHandler, registerConfigHandlers } from './handlers/config';
 import { PresenceHandler, registerPresenceHandlers } from './handlers/presence';
+import { LogsHandler, registerLogsHandlers, getLogSubscriptionManager } from './handlers/logs';
+import { getLogBuffer } from '../lib/logger';
 import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
 import { PresenceManager } from './presence-manager';
@@ -238,6 +240,9 @@ function createGateway(
     fastify.log,
   );
 
+  // Create logs handler
+  const logsHandler = new LogsHandler(fastify.log);
+
   // Register session handlers with the message router
   registerSessionHandlers(messageRouter, sessionHandler);
 
@@ -258,6 +263,26 @@ function createGateway(
 
   // Register presence handlers with the message router
   registerPresenceHandlers(messageRouter, presenceHandler);
+
+  // Register logs handlers with the message router
+  registerLogsHandlers(messageRouter, logsHandler);
+
+  // Wire up log buffer to broadcast to subscribers
+  // getLogBuffer from lib/logger, getLogSubscriptionManager from handlers/logs
+  const logBuffer = getLogBuffer();
+  const logSubscriptionManager = getLogSubscriptionManager();
+  
+  // Set up broadcaster to push new log entries to subscribed WebSocket clients
+  logBuffer.setOnEntryAdded((entry) => {
+    const subscribedConnections = logSubscriptionManager.getAllSubscribed();
+    
+    for (const connId of subscribedConnections) {
+      if (logSubscriptionManager.shouldReceive(connId, entry)) {
+        const message = createWSMessage('log.entry', entry);
+        connectionManager.send(connId, message);
+      }
+    }
+  });
 
   // Register node RPC response handlers (for node.invoke responses from nodes)
   messageRouter.registerHandler(

@@ -20,6 +20,7 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
     "@openaidy/sdk": "workspace:*",
+    "@openaidy/shared-types": "workspace:*",
     "@solidjs/router": "^0.15.4",
     "@tanstack/solid-query": "^5.90.26",
     "lucide-solid": "^0.577.0",

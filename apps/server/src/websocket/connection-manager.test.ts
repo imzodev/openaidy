@@ -8,7 +8,7 @@ import { defaultWebSocketConfig } from './types';
 
 // Mock WebSocket
 const createMockSocket = () => ({
-  send: () => {},
+  send: (_data?: string) => {},
   close: () => {},
   readyState: 1, // OPEN
 });
@@ -361,7 +361,7 @@ describe('ConnectionManager', () => {
     it('should send message to connection', () => {
       const socket = { send: () => {}, close: () => {}, readyState: 1 };
       let sentData: string | undefined;
-      socket.send = (data: string) => {
+      socket.send = (data?: string) => {
         sentData = data;
       };
 
@@ -380,7 +380,7 @@ describe('ConnectionManager', () => {
     it('should handle string messages', () => {
       const socket = { send: () => {}, close: () => {}, readyState: 1 };
       let sentData: string | undefined;
-      socket.send = (data: string) => {
+      socket.send = (data?: string) => {
         sentData = data;
       };
 

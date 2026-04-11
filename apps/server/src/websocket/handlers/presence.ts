@@ -141,10 +141,10 @@ export class PresenceHandler {
       const conn = this.connectionManager.getConnection(connectionId);
       
       // Update presence
-      const presence = this.presenceManager.updatePresence(connectionId, status, {
-        clientId: conn?.clientId,
-        metadata: request.payload.metadata,
-      });
+      const presenceOptions: { clientId?: string; metadata?: Record<string, unknown> } = {};
+      if (conn?.clientId) presenceOptions.clientId = conn.clientId;
+      if (request.payload.metadata) presenceOptions.metadata = request.payload.metadata;
+      const presence = this.presenceManager.updatePresence(connectionId, status, presenceOptions);
 
       this.logger.info(
         { connectionId, status },
@@ -399,23 +399,28 @@ export function registerPresenceHandlers(
   handler: PresenceHandler,
 ): void {
   router.registerHandler('presence.update', (connId, msg, ctx) =>
-    handler.handleUpdate(connId, msg as PresenceUpdateRequest, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleUpdate(connId, msg as PresenceUpdateRequest, ctx) as any,
   );
 
   router.registerHandler('presence.get', (connId, msg, ctx) =>
-    handler.handleGet(connId, msg as PresenceGetRequest, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleGet(connId, msg as PresenceGetRequest, ctx) as any,
   );
 
   router.registerHandler('presence.getAll', (connId, msg, ctx) =>
-    handler.handleGetAll(connId, msg as WSMessage<'presence.getAll', {}>, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleGetAll(connId, msg as WSMessage<'presence.getAll', {}>, ctx) as any,
   );
 
   router.registerHandler('presence.subscribe', (connId, msg, ctx) =>
-    handler.handleSubscribe(connId, msg as PresenceSubscribeRequest, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleSubscribe(connId, msg as PresenceSubscribeRequest, ctx) as any,
   );
 
   router.registerHandler('presence.unsubscribe', (connId, msg, ctx) =>
-    handler.handleUnsubscribe(connId, msg as PresenceUnsubscribeRequest, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleUnsubscribe(connId, msg as PresenceUnsubscribeRequest, ctx) as any,
   );
 }
 

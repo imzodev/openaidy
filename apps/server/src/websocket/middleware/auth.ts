@@ -32,6 +32,8 @@ export type JWTPayload = {
   exp: number;
   /** Issued at timestamp (seconds) */
   iat: number;
+  /** Client ID for pairing tokens (node/device identifier) */
+  clientId?: string;
   /** Issuer */
   iss?: string;
   /** JWT ID */

@@ -21,6 +21,7 @@ import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
 import { schedulerRoutes } from './routes/scheduler';
 import { workspaceRoutes } from './routes/workspace';
+import { logRoutes } from './routes/logs';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
@@ -234,12 +235,15 @@ export async function buildApp() {
     });
   }
 
-  // Register workspace routes
+// Register workspace routes
   await app.register(workspaceRoutes, {
     agentRegistry: services.agents,
     workspaceService: services.workspace,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
   });
+
+  // Register log routes
+  await app.register(logRoutes);
 
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {

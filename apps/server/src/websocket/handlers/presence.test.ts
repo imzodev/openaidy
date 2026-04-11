@@ -377,7 +377,7 @@ describe('PresenceHandler', () => {
 
       // conn-2 should receive presence.changed event
       expect(mockSend).toHaveBeenCalled();
-      const sentMessage = JSON.parse(mockSend.mock.calls[0][0]);
+      const sentMessage = JSON.parse(mockSend.mock.calls[0]?.[0] ?? '{}');
       expect(sentMessage.type).toBe('presence.changed');
     });
 

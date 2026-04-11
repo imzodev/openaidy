@@ -34,7 +34,7 @@ describe('Presence Manager Benchmarks', () => {
 
   beforeAll(() => {
     mockLogger = createMockLogger();
-    manager = new PresenceManager({ logger: mockLogger });
+    manager = new PresenceManager({}, mockLogger);
   });
 
   afterAll(() => {
@@ -43,23 +43,17 @@ describe('Presence Manager Benchmarks', () => {
 
   bench('update presence', () => {
     const connId = `conn_bench_${Date.now()}_${Math.random()}`;
-    manager.updatePresence(connId, {
-      status: 'online',
-    });
+    manager.updatePresence(connId, 'online');
   });
 
   bench('update presence with client ID', () => {
     const connId = `conn_bench_client_${Date.now()}_${Math.random()}`;
-    manager.updatePresence(connId, {
-      status: 'online',
-      clientId: 'client_123',
-    });
+    manager.updatePresence(connId, 'online', { clientId: 'client_123' });
   });
 
   bench('update presence with metadata', () => {
     const connId = `conn_bench_meta_${Date.now()}_${Math.random()}`;
-    manager.updatePresence(connId, {
-      status: 'online',
+    manager.updatePresence(connId, 'online', {
       metadata: {
         device: 'iPhone',
         appVersion: '1.0.0',
@@ -79,9 +73,7 @@ describe('Presence Manager Benchmarks', () => {
   bench('update presence 100 times', () => {
     const connId = 'conn_bench_100';
     for (let i = 0; i < 100; i++) {
-      manager.updatePresence(connId, {
-        status: 'online',
-      });
+      manager.updatePresence(connId, 'online');
     }
   });
 
@@ -119,18 +111,16 @@ describe('Presence Manager Benchmarks', () => {
   });
 
   bench('clear all presence', () => {
-    const tempManager = new PresenceManager({ logger: mockLogger });
+    const tempManager = new PresenceManager({}, mockLogger);
     for (let i = 0; i < 100; i++) {
-      tempManager.updatePresence(`conn_${i}`, {
-        status: 'online',
-      });
+      tempManager.updatePresence(`conn_${i}`, 'online');
     }
     tempManager.clear();
   });
 
   bench('remove connection', () => {
     const connId = `conn_bench_remove_${Date.now()}_${Math.random()}`;
-    manager.updatePresence(connId, { status: 'online' });
+    manager.updatePresence(connId, 'online');
     manager.removeConnection(connId);
   });
 });

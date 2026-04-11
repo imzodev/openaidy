@@ -322,7 +322,7 @@ describe('NodeHandler', () => {
       nodeRegistry.registerNode({
         ...nodeWithoutConnection,
         connectionId: undefined,
-      } as Node);
+      } as unknown as Node);
 
       const request = createWSMessage('node.invoke', {
         nodeId: 'node-1',

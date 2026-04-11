@@ -34,7 +34,7 @@ describe('Node Registry Benchmarks', () => {
 
   beforeAll(() => {
     mockLogger = createMockLogger();
-    registry = new NodeRegistry({ logger: mockLogger });
+    registry = new NodeRegistry({}, mockLogger);
   });
 
   afterAll(() => {
@@ -162,7 +162,7 @@ describe('Node Registry Benchmarks', () => {
   });
 
   bench('clear all nodes', () => {
-    const tempRegistry = new NodeRegistry({ logger: mockLogger });
+    const tempRegistry = new NodeRegistry({}, mockLogger);
     for (let i = 0; i < 100; i++) {
       tempRegistry.registerNode({
         nodeId: `node_${i}`,

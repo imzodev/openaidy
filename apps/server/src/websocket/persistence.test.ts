@@ -361,7 +361,7 @@ describe('Persistence Strategy - Issue #129', () => {
       // Verify state is restored
       const pending = newService.getPendingRequests();
       expect(pending.length).toBe(1); // Only r2 should be pending
-      expect(pending[0].requestId).toBe(r2.requestId);
+      expect(pending[0]!.requestId).toBe(r2.requestId);
       
       newService.destroy();
     });
