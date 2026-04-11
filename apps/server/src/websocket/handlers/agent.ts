@@ -55,6 +55,7 @@ export class AgentHandler {
           name: agent.name,
           description: agent.description,
           tools: agent.tools ?? [],
+          workspace: agent.workspace,
         })),
       }) as AgentListResponse;
     } catch (error) {

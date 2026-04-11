@@ -1,6 +1,57 @@
 import { z } from 'zod';
 
 /**
+ * Workspace permissions schema
+ *
+ * Defines what operations an agent can perform on a workspace.
+ */
+export const WorkspacePermissionsSchema = z.object({
+  read: z.boolean().default(true),
+  write: z.boolean().default(false),
+  delete: z.boolean().default(false),
+  list: z.boolean().default(true),
+});
+
+/**
+ * TypeScript type for workspace permissions
+ */
+export type WorkspacePermissions = z.infer<typeof WorkspacePermissionsSchema>;
+
+/**
+ * Workspace schema
+ *
+ * Defines a single workspace with its path and permissions.
+ */
+export const WorkspaceSchema = z.object({
+  path: z.string().min(1),
+  permissions: WorkspacePermissionsSchema.optional(),
+  // Optional glob patterns for file filtering
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
+});
+
+/**
+ * TypeScript type for workspace
+ */
+export type Workspace = z.infer<typeof WorkspaceSchema>;
+
+/**
+ * Workspace configuration schema
+ *
+ * Top-level workspace configuration for an agent.
+ */
+export const WorkspaceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  defaultPermissions: WorkspacePermissionsSchema.optional(),
+  workspaces: z.array(WorkspaceSchema).default([]),
+});
+
+/**
+ * TypeScript type for workspace config
+ */
+export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
+
+/**
  * MCP server reference schema
  *
  * References an MCP server from the app configuration.
@@ -50,6 +101,8 @@ export const AgentSchema = z.object({
       maxTokens: z.number().int().positive().optional(),
     })
     .optional(),
+  // Workspace configuration (optional)
+  workspace: WorkspaceConfigSchema.optional(),
 });
 
 /**
@@ -69,6 +122,7 @@ export type AgentSummary = {
   tools: string[] | undefined;
   mcpServers: McpServerRef[] | undefined;
   model: string; // Format: "providerId/modelId"
+  workspace?: WorkspaceConfig | undefined;
 };
 
 /**
@@ -135,6 +189,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     tools: agent.tools,
     mcpServers: agent.mcpServers,
     model: agent.model,
+    workspace: agent.workspace,
   };
 }
 
@@ -150,4 +205,15 @@ export function parseModelString(
     return null;
   }
   return { providerId: parts[0], modelId: parts[1] };
+}
+
+/**
+ * Get workspace configuration from an agent
+ * Returns undefined if workspace is not configured or disabled
+ */
+export function getAgentWorkspace(agent: Agent): WorkspaceConfig | undefined {
+  if (!agent.workspace || !agent.workspace.enabled) {
+    return undefined;
+  }
+  return agent.workspace;
 }

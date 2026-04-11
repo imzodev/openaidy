@@ -20,6 +20,7 @@ import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
 import { schedulerRoutes } from './routes/scheduler';
+import { workspaceRoutes } from './routes/workspace';
 import { logRoutes } from './routes/logs';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
@@ -33,6 +34,10 @@ import {
 import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
+import {
+  createWorkspaceService,
+  WorkspaceService,
+} from './workspace';
 
 /**
  * Application services container
@@ -55,6 +60,7 @@ export type AppServices = {
   sessionsRepo: SessionsStore | undefined;
   pairingRequestsRepo: PairingRequestsStore | undefined;
   devicesRepo: DevicesStore | undefined;
+  workspace: WorkspaceService;
 };
 
 /**
@@ -148,6 +154,11 @@ export async function buildApp() {
 
   await bootstrapAdmin?.ensureToken();
 
+  // Create workspace service
+  const workspaceService = createWorkspaceService({
+    baseDir: env.WORKSPACE_BASE_DIR,
+  });
+
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo) {
     scheduler = createSchedulerService(
@@ -173,6 +184,7 @@ export async function buildApp() {
     sessionsRepo,
     pairingRequestsRepo,
     devicesRepo,
+    workspace: workspaceService,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -222,6 +234,13 @@ export async function buildApp() {
       sessionsRepo: services.sessionsRepo,
     });
   }
+
+// Register workspace routes
+  await app.register(workspaceRoutes, {
+    agentRegistry: services.agents,
+    workspaceService: services.workspace,
+    workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+  });
 
   // Register log routes
   await app.register(logRoutes);

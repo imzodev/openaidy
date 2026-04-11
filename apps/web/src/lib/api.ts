@@ -75,6 +75,24 @@ export type RunStatus =
 /**
  * Agent configuration
  */
+export type AgentWorkspacePermission = {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  list: boolean;
+};
+
+export type AgentWorkspace = {
+  path: string;
+  permissions: AgentWorkspacePermission;
+};
+
+export type AgentWorkspaceConfig = {
+  enabled: boolean;
+  defaultPermissions?: AgentWorkspacePermission;
+  workspaces: AgentWorkspace[];
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -82,12 +100,15 @@ export type Agent = {
   enabled: boolean;
   systemPrompt: string;
   model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  tags?: string[];
+  tools?: string[];
   defaults: {
     providerId?: string;
     modelId?: string;
     temperature?: number;
     maxTokens?: number;
   };
+  workspace?: AgentWorkspaceConfig;
 };
 
 /**
@@ -455,139 +476,174 @@ export async function updateConfig(
 }
 
 // ============================================================================
-// MCP Server Types and API
+// Workspace Types and API Functions
 // ============================================================================
 
 /**
- * MCP Server status
+ * Workspace file metadata
  */
-export type McpServer = {
-  id: string;
-  name?: string;
-  connected: boolean;
-  tools: Array<{ name: string; description?: string }>;
+export type WorkspaceFileInfo = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: string;
 };
 
 /**
- * List MCP servers and their status
+ * Workspace file list response
  */
-export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
-  const response = await fetch(`${API_BASE}/mcp/servers`);
-  if (!response.ok) {
-    throw new Error(`Failed to list MCP servers: ${response.statusText}`);
-  }
+export type WorkspaceFileListResponse = {
+  items: WorkspaceFileInfo[];
+  path?: string;
+};
+
+/**
+ * Workspace file content response
+ */
+export type WorkspaceFileContentResponse = {
+  content: string;
+  path: string;
+  isText: boolean;
+  mimeType: string;
+  size: number;
+  modifiedAt: string;
+  isTooLarge: boolean;
+  maxEditableBytes?: number;
+};
+
+/**
+ * Workspace write response
+ */
+export type WorkspaceWriteResponse = {
+  success: boolean;
+  path: string;
+};
+
+/**
+ * Workspace error response
+ */
+export type WorkspaceErrorResponse = {
+  error: string;
+  code: string;
+};
+
+/**
+ * List files in an agent's workspace
+ */
+export async function listWorkspaceFiles(
+  agentId: string,
+  requestingAgentId: string,
+  path?: string,
+): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
+  const url = path
+    ? `${API_BASE}/workspace/${agentId}/files/${path}`
+    : `${API_BASE}/workspace/${agentId}/files`;
+  const response = await fetch(url, {
+    headers: { 'X-Agent-Id': requestingAgentId },
+  });
   return response.json();
 }
 
 /**
- * Call an MCP tool
+ * Read a file from an agent's workspace
  */
-export async function callMcpTool(input: {
-  serverId: string;
-  tool: string;
-  arguments: Record<string, unknown>;
-}): Promise<{ result: unknown }> {
-  const response = await fetch(`${API_BASE}/mcp/call`, {
+export async function readWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      headers: { 'X-Agent-Id': requestingAgentId },
+    },
+  );
+  return response.json();
+}
+
+/**
+ * Write a file to an agent's workspace
+ */
+export async function writeWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  content: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': requestingAgentId,
+      },
+      body: JSON.stringify({ content }),
+    },
+  );
+  return response.json();
+}
+
+/**
+ * Rename a file in an agent's workspace
+ */
+export async function renameWorkspaceFile(
+  agentId: string,
+  sourcePath: string,
+  destinationPath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(`${API_BASE}/workspace/${agentId}/rename`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Id': requestingAgentId,
+    },
+    body: JSON.stringify({ sourcePath, destinationPath }),
   });
-  if (!response.ok) {
-    throw new Error(`Failed to call MCP tool: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-// ============================================================================
-// Log Types and API
-// ============================================================================
-
-import {
-  type LogLevel,
-  type LogEntry,
-  type LogFilter,
-  type LogQueryResult,
-  type LogStats,
-} from '@openaidy/shared-types';
-
-export {
-  type LogLevel,
-  type LogEntry,
-  type LogFilter,
-  type LogQueryResult,
-  type LogStats,
-};
-
-/**
- * Query logs with optional filters
- */
-export async function queryLogs(
-  filter: LogFilter = {},
-): Promise<LogQueryResult> {
-  const params = new URLSearchParams();
-
-  if (filter.levels && filter.levels.length > 0) {
-    params.set('levels', filter.levels.join(','));
-  }
-  if (filter.contexts && filter.contexts.length > 0) {
-    params.set('contexts', filter.contexts.join(','));
-  }
-  if (filter.since) {
-    params.set('since', filter.since);
-  }
-  if (filter.until) {
-    params.set('until', filter.until);
-  }
-  if (filter.search) {
-    params.set('search', filter.search);
-  }
-  if (filter.requestId) {
-    params.set('requestId', filter.requestId);
-  }
-  if (filter.sessionId) {
-    params.set('sessionId', filter.sessionId);
-  }
-  if (filter.runId) {
-    params.set('runId', filter.runId);
-  }
-  if (filter.limit !== undefined) {
-    params.set('limit', String(filter.limit));
-  }
-  if (filter.offset !== undefined) {
-    params.set('offset', String(filter.offset));
-  }
-
-  const queryString = params.toString();
-  const url = `${API_BASE}/api/logs${queryString ? `?${queryString}` : ''}`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to query logs: ${response.statusText}`);
-  }
   return response.json();
 }
 
 /**
- * Get log statistics
+ * Update an existing file in an agent's workspace
  */
-export async function getLogStats(): Promise<LogStats> {
-  const response = await fetch(`${API_BASE}/api/logs/stats`);
-  if (!response.ok) {
-    throw new Error(`Failed to get log stats: ${response.statusText}`);
-  }
+export async function updateWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  content: string,
+  requestingAgentId: string,
+  expectedModifiedAt?: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': requestingAgentId,
+      },
+      body: JSON.stringify({ content, expectedModifiedAt }),
+    },
+  );
   return response.json();
 }
 
 /**
- * Clear all logs
+ * Delete a file from an agent's workspace
  */
-export async function clearLogs(): Promise<{ success: boolean }> {
-  const response = await fetch(`${API_BASE}/api/logs`, {
-    method: 'DELETE',
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to clear logs: ${response.statusText}`);
-  }
+export async function deleteWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  requestingAgentId: string,
+): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
+  const response = await fetch(
+    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    {
+      method: 'DELETE',
+      headers: { 'X-Agent-Id': requestingAgentId },
+    },
+  );
   return response.json();
 }
 

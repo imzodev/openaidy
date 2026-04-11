@@ -176,6 +176,26 @@ export const appProviderConfigSchema = z.discriminatedUnion('vendorFamily', [
   appGeminiProviderConfigSchema,
 ]);
 
+const appAgentWorkspacePermissionSchema = z.object({
+  read: z.boolean().default(true),
+  write: z.boolean().default(false),
+  delete: z.boolean().default(false),
+  list: z.boolean().default(true),
+});
+
+const appAgentWorkspaceSchema = z.object({
+  path: z.string().min(1),
+  permissions: appAgentWorkspacePermissionSchema.optional(),
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
+});
+
+const appAgentWorkspaceConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  defaultPermissions: appAgentWorkspacePermissionSchema.optional(),
+  workspaces: z.array(appAgentWorkspaceSchema).default([]),
+});
+
 export const appAgentConfigSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -185,6 +205,7 @@ export const appAgentConfigSchema = z.object({
   model: z.string().min(1), // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
   tools: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
+  workspace: appAgentWorkspaceConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
   version: z.number().int().positive().optional().default(1),
 });
