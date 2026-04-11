@@ -63,11 +63,11 @@ export type Agent = z.infer<typeof AgentSchema>;
 export type AgentSummary = {
   id: string;
   name: string;
-  description?: string | undefined;
+  description: string | undefined;
   enabled: boolean;
-  tags?: string[] | undefined;
-  tools?: string[] | undefined;
-  mcpServers?: McpServerRef[];
+  tags: string[] | undefined;
+  tools: string[] | undefined;
+  mcpServers: McpServerRef[] | undefined;
   model: string; // Format: "providerId/modelId"
 };
 

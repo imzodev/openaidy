@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { taskRoutes, type TaskRoutesOptions } from './tasks';
-import type { TaskService, TaskWithDetails, KanbanBoard } from '../tasks/service';
+import { taskRoutes } from './tasks';
+import type {
+  TaskService,
+  TaskWithDetails,
+  KanbanBoard,
+} from '../tasks/service';
 import type { Task } from '@openaidy/db';
 
 // Mock TaskService
@@ -29,25 +33,35 @@ const createMockTaskService = () => ({
 
 type MockTaskService = ReturnType<typeof createMockTaskService>;
 
+// Route handler type
+type RouteHandler = (
+  request: {
+    params?: Record<string, string>;
+    query?: Record<string, unknown>;
+    body?: unknown;
+  },
+  reply: { code?: () => { mockReturnThis: () => unknown } },
+) => Promise<unknown>;
+
 // Helper to build a fastify-like app mock
 const buildApp = () => {
   const routes: Array<{
     method: string;
     url: string;
-    handler: Function;
+    handler: RouteHandler;
   }> = [];
 
   const app = {
-    get: vi.fn((url: string, handler: Function) => {
+    get: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'GET', url, handler });
     }),
-    post: vi.fn((url: string, handler: Function) => {
+    post: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'POST', url, handler });
     }),
-    patch: vi.fn((url: string, handler: Function) => {
+    patch: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'PATCH', url, handler });
     }),
-    delete: vi.fn((url: string, handler: Function) => {
+    delete: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'DELETE', url, handler });
     }),
     _routes: routes,
@@ -85,7 +99,9 @@ describe('taskRoutes', () => {
 
   it('should register all task routes', async () => {
     const app = buildApp();
-    await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+    await taskRoutes(app, {
+      taskService: mockService as unknown as TaskService,
+    });
 
     const registeredRoutes = app._routes.map((r) => `${r.method} ${r.url}`);
 
@@ -104,30 +120,38 @@ describe('taskRoutes', () => {
   describe('GET /tasks', () => {
     it('should list all tasks', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.listTasks.mockResolvedValue([mockTask]);
 
-      const route = app._routes.find((r) => r.method === 'GET' && r.url === '/tasks');
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks',
+      );
       const result = await route!.handler(
         { query: {} },
-        { code: vi.fn().mockReturnThis() }
+        { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.items).toHaveLength(1);
+      expect((result as { items: unknown[] }).items).toHaveLength(1);
       expect(mockService.listTasks).toHaveBeenCalledWith(undefined);
     });
 
     it('should filter tasks by status', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.listTasks.mockResolvedValue([mockTask]);
 
-      const route = app._routes.find((r) => r.method === 'GET' && r.url === '/tasks');
-      const result = await route!.handler(
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks',
+      );
+      await route!.handler(
         { query: { status: 'backlog' } },
-        { code: vi.fn().mockReturnThis() }
+        { code: vi.fn().mockReturnThis() },
       );
 
       expect(mockService.listTasks).toHaveBeenCalledWith('backlog');
@@ -137,7 +161,9 @@ describe('taskRoutes', () => {
   describe('GET /tasks/kanban', () => {
     it('should return tasks grouped by status', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       const kanbanBoard: KanbanBoard = {
         backlog: [mockTask],
@@ -149,45 +175,66 @@ describe('taskRoutes', () => {
       };
       mockService.listTasksForKanban.mockResolvedValue(kanbanBoard);
 
-      const route = app._routes.find((r) => r.method === 'GET' && r.url === '/tasks/kanban');
-      const result = await route!.handler({}, { code: vi.fn().mockReturnThis() });
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/kanban',
+      );
+      const result = await route!.handler(
+        {},
+        { code: vi.fn().mockReturnThis() },
+      );
 
-      expect(result.backlog).toHaveLength(1);
+      expect((result as { backlog: unknown[] }).backlog).toHaveLength(1);
     });
   });
 
   describe('POST /tasks', () => {
     it('should create a task', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.createTask.mockResolvedValue({ ok: true, data: mockTask });
 
-      const route = app._routes.find((r) => r.method === 'POST' && r.url === '/tasks');
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks',
+      );
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await route!.handler(
         { body: { title: 'Test', description: 'Test desc' } },
-        reply
+        reply,
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.title).toBe('Test Task');
+      expect((result as { ok: boolean; data: { title: string } }).ok).toBe(
+        true,
+      );
+      expect(
+        (result as { ok: boolean; data: { title: string } }).data.title,
+      ).toBe('Test Task');
       expect(reply.code).toHaveBeenCalledWith(201);
     });
 
     it('should return 400 for invalid input', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
-      const route = app._routes.find((r) => r.method === 'POST' && r.url === '/tasks');
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks',
+      );
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await route!.handler(
         { body: { title: '' } }, // Missing required fields
-        reply
+        reply,
       );
 
-      expect(result.ok).toBe(false);
-      expect(result.error.code).toBe('validation.invalid_request');
+      expect((result as { ok: boolean; error: { code: string } }).ok).toBe(
+        false,
+      );
+      expect(
+        (result as { ok: boolean; error: { code: string } }).error.code,
+      ).toBe('validation.invalid_request');
       expect(reply.code).toHaveBeenCalledWith(400);
     });
   });
@@ -195,34 +242,44 @@ describe('taskRoutes', () => {
   describe('GET /tasks/:id', () => {
     it('should return task with details', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.getTaskWithDetails.mockResolvedValue(mockTaskWithDetails);
 
-      const route = app._routes.find((r) => r.method === 'GET' && r.url === '/tasks/:id');
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:id',
+      );
       const result = await route!.handler(
         { params: { id: 'task1' } },
-        { code: vi.fn().mockReturnThis() }
+        { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.id).toBe('task1');
+      expect((result as { ok: boolean; data: { id: string } }).ok).toBe(true);
+      expect((result as { ok: boolean; data: { id: string } }).data.id).toBe(
+        'task1',
+      );
     });
 
     it('should return 404 for non-existent task', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.getTaskWithDetails.mockResolvedValue(null);
 
-      const route = app._routes.find((r) => r.method === 'GET' && r.url === '/tasks/:id');
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:id',
+      );
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await route!.handler(
         { params: { id: 'nonexistent' } },
-        reply
+        reply,
       );
 
-      expect(result.ok).toBe(false);
+      expect((result as { ok: boolean }).ok).toBe(false);
       expect(reply.code).toHaveBeenCalledWith(404);
     });
   });
@@ -230,59 +287,85 @@ describe('taskRoutes', () => {
   describe('PATCH /tasks/:id/status', () => {
     it('should update task status', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.updateTaskStatus.mockResolvedValue({
         ok: true,
         data: { ...mockTask, status: 'in_progress' },
       });
 
-      const route = app._routes.find((r) => r.method === 'PATCH' && r.url === '/tasks/:id/status');
+      const route = app._routes.find(
+        (r) => r.method === 'PATCH' && r.url === '/tasks/:id/status',
+      );
       const result = await route!.handler(
         { params: { id: 'task1' }, body: { status: 'in_progress' } },
-        { code: vi.fn().mockReturnThis() }
+        { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data.status).toBe('in_progress');
+      expect((result as { ok: boolean; data: { status: string } }).ok).toBe(
+        true,
+      );
+      expect(
+        (result as { ok: boolean; data: { status: string } }).data.status,
+      ).toBe('in_progress');
     });
   });
 
   describe('DELETE /tasks/:id', () => {
     it('should delete a task', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.deleteTask.mockResolvedValue({ ok: true, data: true });
 
-      const route = app._routes.find((r) => r.method === 'DELETE' && r.url === '/tasks/:id');
+      const route = app._routes.find(
+        (r) => r.method === 'DELETE' && r.url === '/tasks/:id',
+      );
       const result = await route!.handler(
         { params: { id: 'task1' } },
-        { code: vi.fn().mockReturnThis() }
+        { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
+      expect((result as { ok: boolean }).ok).toBe(true);
     });
   });
 
   describe('POST /tasks/:taskId/agents', () => {
     it('should assign agents to a task', async () => {
       const app = buildApp();
-      await taskRoutes(app, { taskService: mockService as unknown as TaskService });
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+      });
 
       mockService.assignAgents.mockResolvedValue({
         ok: true,
-        data: [{ taskId: 'task1', agentId: 'agent1', role: 'primary', assignedAt: new Date() }],
+        data: [
+          {
+            taskId: 'task1',
+            agentId: 'agent1',
+            role: 'primary',
+            assignedAt: new Date(),
+          },
+        ],
       });
 
-      const route = app._routes.find((r) => r.method === 'POST' && r.url === '/tasks/:taskId/agents');
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/agents',
+      );
       const result = await route!.handler(
-        { params: { taskId: 'task1' }, body: { agents: [{ agentId: 'agent1' }] } },
-        { code: vi.fn().mockReturnThis() }
+        {
+          params: { taskId: 'task1' },
+          body: { agents: [{ agentId: 'agent1' }] },
+        },
+        { code: vi.fn().mockReturnThis() },
       );
 
-      expect(result.ok).toBe(true);
-      expect(result.data).toHaveLength(1);
+      expect((result as { ok: boolean; data: unknown[] }).ok).toBe(true);
+      expect((result as { ok: boolean; data: unknown[] }).data).toHaveLength(1);
     });
   });
 });

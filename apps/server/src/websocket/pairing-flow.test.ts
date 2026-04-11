@@ -40,27 +40,27 @@ const createMockLogger = (): FastifyBaseLogger => ({
   silent: false,
 } as unknown as FastifyBaseLogger);
 
-const createMockConfig = (): WebSocketConfig => ({
-  auth: {
-    secret: 'test-secret-key-for-pairing-flow-tests-min-32-chars',
-    tokenExpiry: 3600000,
-    required: false,
-  },
-  rateLimit: {
-    enabled: false,
+const createMockConfig = (): WebSocketConfig =>
+  ({
+    auth: {
+      secret: 'test-secret-key-for-pairing-flow-tests-min-32-chars',
+      tokenExpiry: 3600000,
+      required: false,
+    },
+    rateLimit: {
+      max: 100,
+      window: 60000,
+    },
+    heartbeat: {
+      interval: 30000,
+      timeout: 10000,
+    },
+    enabled: true,
+    path: '/ws',
+    port: 3000,
     maxConnections: 100,
-    windowMs: 60000,
-  },
-  heartbeat: {
-    interval: 30000,
-    timeout: 10000,
-  },
-  enabled: true,
-  path: '/ws',
-  port: 3000,
-  maxConnections: 100,
-  heartbeatInterval: 30000,
-} as WebSocketConfig);
+    heartbeatInterval: 30000,
+  }) as unknown as WebSocketConfig;
 
 // ============================================================================
 // State Transition Tests
@@ -455,7 +455,7 @@ describe('Pairing Permission Enforcement - Issue #128', () => {
     it('should allow unauthenticated connection to create pairing request', async () => {
       const request = createWSMessage('pairing.request', {
         deviceName: 'My Phone',
-        deviceType: 'mobile',
+        deviceType: 'mobile' as NodeType,
         capabilities: ['sendMessage'],
       });
       const response = await pairingHandler.handleRequest('unauthorized', request, handlerContext);

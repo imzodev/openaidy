@@ -86,8 +86,8 @@ ${formatGroupExamples(groupName, groupCommands)}
  * Format commands within a group for help output
  */
 function formatGroupCommands(group: (typeof commandGroups)[0]): string {
-  return Object.entries(group.commands)
-    .map(([name, meta]: [string, CommandMeta]) => {
+  return Object.entries(group.commands as Record<string, CommandMeta>)
+    .map(([name, meta]) => {
       const shortName = name.replace(`${group.name} `, '');
       return `  ${shortName.padEnd(16)} ${meta.description}`;
     })

@@ -167,7 +167,7 @@ describe('CLI Integration', () => {
       // Results are sorted by date desc (newest first), so Device 1 should be first
       expect(result.output).toContain('Device 1');
       // Should only show 3 devices
-      const deviceMatches = result.output.match(/Request ID: req-/g) || [];
+      const deviceMatches = result.output!.match(/Request ID: req-/g) || [];
       expect(deviceMatches.length).toBeLessThanOrEqual(3);
     });
   });

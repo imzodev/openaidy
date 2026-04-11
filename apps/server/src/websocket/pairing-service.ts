@@ -16,7 +16,11 @@ import { AuthMiddleware, type JWTPayload } from './middleware/auth';
 /**
  * Pairing request status
  */
-export type PairingRequestStatus = 'pending' | 'approved' | 'denied' | 'expired';
+export type PairingRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'denied'
+  | 'expired';
 
 /**
  * Pairing request
@@ -68,7 +72,7 @@ export type PairingServiceOptions = {
  */
 export class PairingCodeGenerator {
   private length: number;
-  private charset: string;
+  private charset: string = '0123456789';
 
   constructor(length: number = 6) {
     this.length = length;
@@ -80,14 +84,16 @@ export class PairingCodeGenerator {
    * Generate a new pairing code
    */
   generate(): string {
-    let code = '';
     const randomValues = new Uint32Array(this.length);
     crypto.getRandomValues(randomValues);
-    
+
+    let code = '';
     for (let i = 0; i < this.length; i++) {
-      code += this.charset[randomValues[i] % this.charset.length];
+      const index = (randomValues[i] as number) % 10;
+      // Using charCodeAt since it's guaranteed to return a character
+      code += String.fromCharCode(48 + index); // 48 is '0' in ASCII
     }
-    
+
     return code;
   }
 
@@ -136,16 +142,16 @@ export class PairingService {
     this.authMiddleware = authMiddleware;
     this.logger = logger;
     this.persistence = options.persistence;
-    
+
     this.options = {
       codeLength: options.codeLength ?? 6,
       requestExpiry: options.requestExpiry ?? 5 * 60 * 1000, // 5 minutes
       tokenExpiry: options.tokenExpiry ?? 30 * 24 * 60 * 60 * 1000, // 30 days
       cleanupInterval: options.cleanupInterval ?? 60 * 1000, // 1 minute
     };
-    
+
     this.codeGenerator = new PairingCodeGenerator(this.options.codeLength);
-    
+
     // Start cleanup timer
     this.startCleanupTimer();
   }
@@ -172,7 +178,8 @@ export class PairingService {
         status: record.status,
         requestedAt: record.requestedAt.getTime(),
         expiresAt: record.expiresAt.getTime(),
-        ...(record.metadata !== null && record.metadata !== undefined && { metadata: record.metadata }),
+        ...(record.metadata !== null &&
+          record.metadata !== undefined && { metadata: record.metadata }),
         ...(record.approvedAt && { approvedAt: record.approvedAt.getTime() }),
         ...(record.approvedBy && { approvedBy: record.approvedBy }),
         ...(record.deniedAt && { deniedAt: record.deniedAt.getTime() }),
@@ -192,7 +199,11 @@ export class PairingService {
     }
 
     for (const device of devices) {
-      if (device.token && device.pairingRequestId && !this.tokenIndex.has(device.token)) {
+      if (
+        device.token &&
+        device.pairingRequestId &&
+        !this.tokenIndex.has(device.token)
+      ) {
         this.tokenIndex.set(device.token, device.pairingRequestId);
       }
     }
@@ -263,7 +274,7 @@ export class PairingService {
     scopes?: string[],
   ): Promise<PairingRequest | null> {
     const request = this.requests.get(requestId);
-    
+
     if (!request) {
       this.logger.warn({ requestId }, 'Pairing request not found');
       return null;
@@ -344,7 +355,7 @@ export class PairingService {
    */
   denyRequest(requestId: string, deniedBy: string): PairingRequest | null {
     const request = this.requests.get(requestId);
-    
+
     if (!request) {
       this.logger.warn({ requestId }, 'Pairing request not found');
       return null;
@@ -369,10 +380,7 @@ export class PairingService {
       }),
     );
 
-    this.logger.info(
-      { requestId, deniedBy },
-      'Pairing request denied',
-    );
+    this.logger.info({ requestId, deniedBy }, 'Pairing request denied');
 
     return request;
   }
@@ -404,7 +412,7 @@ export class PairingService {
    */
   getPendingRequests(): PairingRequest[] {
     return Array.from(this.requests.values()).filter(
-      request => request.status === 'pending',
+      (request) => request.status === 'pending',
     );
   }
 
@@ -424,7 +432,7 @@ export class PairingService {
    */
   async validateToken(token: string): Promise<JWTPayload | null> {
     const payload = await this.authMiddleware.validateToken(token);
-    
+
     if (!payload || payload.type !== 'pairing') {
       return null;
     }
@@ -442,13 +450,13 @@ export class PairingService {
    */
   revokeToken(token: string): boolean {
     const requestId = this.tokenIndex.get(token);
-    
+
     if (!requestId) {
       return false;
     }
 
     this.tokenIndex.delete(token);
-    
+
     const request = this.requests.get(requestId);
     if (request) {
       delete request.token;
@@ -470,7 +478,7 @@ export class PairingService {
     }
 
     this.logger.info({ requestId }, 'Pairing token revoked');
-    
+
     return true;
   }
 
@@ -506,13 +514,16 @@ export class PairingService {
             status: 'expired',
           }),
         );
-        
+
         this.logger.debug({ requestId }, 'Pairing request expired');
       }
     }
 
     if (cleanedCount > 0) {
-      this.logger.info({ count: cleanedCount }, 'Cleaned up expired pairing requests');
+      this.logger.info(
+        { count: cleanedCount },
+        'Cleaned up expired pairing requests',
+      );
     }
 
     return cleanedCount;
@@ -548,11 +559,11 @@ export class PairingService {
 
     while (attempts < maxAttempts) {
       const code = this.codeGenerator.generate();
-      
+
       if (!this.codeIndex.has(code)) {
         return code;
       }
-      
+
       attempts++;
     }
 

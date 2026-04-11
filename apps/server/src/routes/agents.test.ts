@@ -99,6 +99,9 @@ describe('Agent Routes', () => {
       jobsRepo: undefined,
       jobRunsRepo: undefined,
       sessionsRepo: undefined,
+      bootstrapAdmin: undefined,
+      pairingRequestsRepo: undefined,
+      devicesRepo: undefined,
     });
 
     await app.register(cors, { origin: '*' });

@@ -4,7 +4,7 @@
  * Inline editor for creating and editing subtasks.
  */
 
-import { createSignal, Show } from 'solid-js';
+import { createSignal } from 'solid-js';
 
 /**
  * Subtask type for editing

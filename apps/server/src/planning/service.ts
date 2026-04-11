@@ -5,8 +5,12 @@
  */
 
 import type { ProviderServices } from '../providers';
-import type { TasksRepository, SubtasksRepository, Task } from '@openaidy/db';
-import { PLANNING_AGENT_CONFIG, type PlanningOptions, type PlannedSubtask } from './config';
+import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
+import {
+  PLANNING_AGENT_CONFIG,
+  type PlanningOptions,
+  type PlannedSubtask,
+} from './config';
 import { buildPlanningPrompt } from './prompts';
 
 /**
@@ -44,7 +48,10 @@ export class PlanningService {
   /**
    * Plan a task by decomposing it into subtasks
    */
-  async planTask(taskId: string, options?: PlanningOptions): Promise<PlanningResult> {
+  async planTask(
+    taskId: string,
+    options?: PlanningOptions,
+  ): Promise<PlanningResult> {
     // Get task
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
@@ -89,7 +96,7 @@ export class PlanningService {
             { role: 'user', content: prompt },
           ],
         },
-        { providerId: defaultConfig.providerId }
+        { providerId: defaultConfig.providerId },
       );
 
       if (!result.ok) {
@@ -97,7 +104,10 @@ export class PlanningService {
       }
 
       // Parse response
-      const subtasks = this.parsePlanningResponse(result.value.content, options);
+      const subtasks = this.parsePlanningResponse(
+        result.value.content,
+        options,
+      );
 
       // Create subtasks in database
       await this.createSubtasks(taskId, subtasks);
@@ -123,7 +133,10 @@ export class PlanningService {
   /**
    * Parse the planning response from AI
    */
-  parsePlanningResponse(content: string, options?: PlanningOptions): PlannedSubtask[] {
+  parsePlanningResponse(
+    content: string,
+    options?: PlanningOptions,
+  ): PlannedSubtask[] {
     let subtasks: PlannedSubtask[];
 
     try {
@@ -148,7 +161,8 @@ export class PlanningService {
     }
 
     // Validate and limit subtasks
-    const maxSubtasks = options?.maxSubtasks ?? PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
+    const maxSubtasks =
+      options?.maxSubtasks ?? PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
     return subtasks.slice(0, maxSubtasks).map((s, index) => ({
       title: s.title || `Subtask ${index + 1}`,
       description: s.description || '',
@@ -159,7 +173,10 @@ export class PlanningService {
   /**
    * Create subtasks in the database
    */
-  private async createSubtasks(taskId: string, planned: PlannedSubtask[]): Promise<void> {
+  private async createSubtasks(
+    taskId: string,
+    planned: PlannedSubtask[],
+  ): Promise<void> {
     // Create subtasks in order, respecting dependencies
     const created = new Map<number, string>();
 
@@ -189,6 +206,8 @@ export class PlanningService {
 /**
  * Create a planning service instance
  */
-export function createPlanningService(options: PlanningServiceOptions): PlanningService {
+export function createPlanningService(
+  options: PlanningServiceOptions,
+): PlanningService {
   return new PlanningService(options);
 }

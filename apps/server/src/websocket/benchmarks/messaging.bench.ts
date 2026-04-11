@@ -43,8 +43,9 @@ describe('Messaging Benchmarks', () => {
   });
 
   bench('register handler', () => {
-    router.registerHandler('test.bench', async () => {
-      return createWSMessage('test.response', { ok: true });
+    router.registerHandler('test.bench', async (_connectionId, _message, _context) => {
+      // Note: This is a benchmark test - use unknown cast for testing purposes
+      return createWSMessage('test.response', { ok: true }) as unknown as import('@openaidy/shared-types').WSResponse;
     });
   });
 

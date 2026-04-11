@@ -28,7 +28,8 @@ const createMockLogger = () => ({
 });
 
 const createMockProviderServices = (): ProviderServices => {
-  const providers: Map<string, { provider: ModelProvider; enabled: boolean }> = new Map([
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const providers: Map<string, { provider: any; enabled: boolean }> = new Map([
     [
       'openai',
       {
@@ -43,7 +44,7 @@ const createMockProviderServices = (): ProviderServices => {
               { id: 'gpt-4o-mini', name: 'GPT-4o Mini', capabilities: ['chat', 'streaming'] },
             ],
           },
-        } as ModelProvider,
+        } as unknown as ModelProvider,
         enabled: true,
       },
     ],
@@ -60,7 +61,7 @@ const createMockProviderServices = (): ProviderServices => {
               { id: 'claude-3-opus', name: 'Claude 3 Opus', capabilities: ['chat', 'streaming'] },
             ],
           },
-        } as ModelProvider,
+        } as unknown as ModelProvider,
         enabled: true,
       },
     ],
@@ -75,7 +76,7 @@ const createMockProviderServices = (): ProviderServices => {
             capabilities: [],
             models: [],
           },
-        } as ModelProvider,
+        } as unknown as ModelProvider,
         enabled: false,
       },
     ],
@@ -145,24 +146,27 @@ describe('ProviderHandler', () => {
       const response = await handler.handleList('conn-1', request as never, handlerContext);
 
       expect(response.type).toBe('provider.list');
-      expect(response.payload.providers).toHaveLength(2);
-      expect(response.payload.providers[0].id).toBe('openai');
-      expect(response.payload.providers[1].name).toBe('Anthropic');
+      const payload = response.payload as { providers: Array<{ id: string; name: string; capabilities: string[] }> };
+      expect(payload.providers).toHaveLength(2);
+      expect(payload.providers[0]!.id).toBe('openai');
+      expect(payload.providers[1]!.name).toBe('Anthropic');
     });
 
     it('should only include enabled providers', async () => {
       const request = createWSMessage('provider.list', {});
       const response = await handler.handleList('conn-1', request as never, handlerContext);
 
-      expect(response.payload.providers.find((p) => p.id === 'disabled-provider')).toBeUndefined();
+      const payload = response.payload as { providers: Array<{ id: string }> };
+      expect(payload.providers.find((p) => p.id === 'disabled-provider')).toBeUndefined();
     });
 
     it('should include provider capabilities', async () => {
       const request = createWSMessage('provider.list', {});
       const response = await handler.handleList('conn-1', request as never, handlerContext);
 
-      expect(response.payload.providers[0].capabilities).toContain('chat');
-      expect(response.payload.providers[0].capabilities).toContain('streaming');
+      const payload = response.payload as { providers: Array<{ capabilities: string[] }> };
+      expect(payload.providers[0]!.capabilities).toContain('chat');
+      expect(payload.providers[0]!.capabilities).toContain('streaming');
     });
 
     it('should log provider list operation', async () => {
@@ -186,10 +190,11 @@ describe('ProviderHandler', () => {
       const response = await handler.handleModels('conn-1', request as never, handlerContext);
 
       expect(response.type).toBe('provider.models');
-      expect(response.payload.providerId).toBe('openai');
-      expect(response.payload.models).toHaveLength(2);
-      expect(response.payload.models[0].id).toBe('gpt-4');
-      expect(response.payload.models[1].name).toBe('GPT-4o Mini');
+      const payload = response.payload as { providerId: string; models: Array<{ id: string; name: string; capabilities?: string[] }> };
+      expect(payload.providerId).toBe('openai');
+      expect(payload.models).toHaveLength(2);
+      expect(payload.models[0]!.id).toBe('gpt-4');
+      expect(payload.models[1]!.name).toBe('GPT-4o Mini');
     });
 
     it('should return error for non-existent provider', async () => {
@@ -197,8 +202,9 @@ describe('ProviderHandler', () => {
       const response = await handler.handleModels('conn-1', request as never, handlerContext);
 
       expect(response.type).toBe('error');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
-      expect(response.payload.error.message).toContain('non-existent');
+      const errorPayload = response.payload as { error: { code: string; message: string } };
+      expect(errorPayload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+      expect(errorPayload.error.message).toContain('non-existent');
     });
 
     it('should return error for disabled provider', async () => {
@@ -206,15 +212,17 @@ describe('ProviderHandler', () => {
       const response = await handler.handleModels('conn-1', request as never, handlerContext);
 
       expect(response.type).toBe('error');
-      expect(response.payload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
+      const errorPayload = response.payload as { error: { code: string } };
+      expect(errorPayload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
     });
 
     it('should include model capabilities when available', async () => {
       const request = createWSMessage('provider.models', { providerId: 'openai' });
       const response = await handler.handleModels('conn-1', request as never, handlerContext);
 
-      expect(response.payload.models[0].capabilities).toContain('chat');
-      expect(response.payload.models[0].capabilities).toContain('streaming');
+      const payload = response.payload as { models: Array<{ capabilities: string[] }> };
+      expect(payload.models[0]!.capabilities).toContain('chat');
+      expect(payload.models[0]!.capabilities).toContain('streaming');
     });
 
     it('should log provider models operation', async () => {

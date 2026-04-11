@@ -144,7 +144,7 @@ export class RateLimitMiddleware {
   private connectionLimiters: Map<string, RateLimiter> = new Map();
   private ipLimiters: Map<string, RateLimiter> = new Map();
   private globalLimiter: RateLimiter;
-  private cleanupTimer?: ReturnType<typeof setInterval>;
+  private cleanupTimer?: ReturnType<typeof setInterval> | undefined;
 
   private readonly connectionLimit: number;
   private readonly connectionWindow: number;
@@ -211,7 +211,10 @@ export class RateLimitMiddleware {
   /**
    * Check all rate limits (connection, global, IP)
    */
-  checkAll(connectionId: string, ip?: string): {
+  checkAll(
+    connectionId: string,
+    ip?: string,
+  ): {
     allowed: boolean;
     connection: RateLimitResult;
     global: RateLimitResult;
@@ -221,14 +224,23 @@ export class RateLimitMiddleware {
     const global = this.checkGlobal();
     const ipResult = ip ? this.checkIP(ip) : undefined;
 
-    const allowed = connection.allowed && global.allowed && (!ipResult || ipResult.allowed);
+    const allowed =
+      connection.allowed && global.allowed && (!ipResult || ipResult.allowed);
 
-    return {
+    const result: {
+      allowed: boolean;
+      connection: RateLimitResult;
+      global: RateLimitResult;
+      ip?: RateLimitResult;
+    } = {
       allowed,
       connection,
       global,
-      ip: ipResult,
     };
+    if (ipResult) {
+      result.ip = ipResult;
+    }
+    return result;
   }
 
   // ============================================================================
@@ -242,7 +254,10 @@ export class RateLimitMiddleware {
     // Record for connection
     let connectionLimiter = this.connectionLimiters.get(connectionId);
     if (!connectionLimiter) {
-      connectionLimiter = new RateLimiter(this.connectionLimit, this.connectionWindow);
+      connectionLimiter = new RateLimiter(
+        this.connectionLimit,
+        this.connectionWindow,
+      );
       this.connectionLimiters.set(connectionId, connectionLimiter);
     }
     connectionLimiter.recordRequest();

@@ -20,9 +20,9 @@ export type PresenceStatus = 'online' | 'away' | 'busy' | 'offline';
  */
 export type PresenceInfo = {
   connectionId: string;
-  clientId?: string;
+  clientId?: string | undefined;
   status: PresenceStatus;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
   lastSeen: number;
   updatedAt: number;
 };
@@ -62,10 +62,11 @@ export class PresenceManager {
 
     if (options.initialPresence) {
       for (const info of options.initialPresence) {
-        this.updatePresence(info.connectionId, info.status, {
-          clientId: info.clientId,
-          metadata: info.metadata,
-        });
+        const updateOptions =
+          info.clientId || info.metadata
+            ? { clientId: info.clientId, metadata: info.metadata }
+            : undefined;
+        this.updatePresence(info.connectionId, info.status, updateOptions);
       }
     }
   }
@@ -81,8 +82,8 @@ export class PresenceManager {
     connectionId: string,
     status: PresenceStatus,
     options?: {
-      clientId?: string;
-      metadata?: Record<string, unknown>;
+      clientId?: string | undefined;
+      metadata?: Record<string, unknown> | undefined;
     },
   ): PresenceInfo {
     const now = Date.now();
@@ -146,7 +147,7 @@ export class PresenceManager {
       return [];
     }
     return Array.from(connectionIds)
-      .map(id => this.presence.get(id))
+      .map((id) => this.presence.get(id))
       .filter((info): info is PresenceInfo => info !== undefined);
   }
 
@@ -166,7 +167,7 @@ export class PresenceManager {
       return [];
     }
     return Array.from(connectionIds)
-      .map(id => this.presence.get(id))
+      .map((id) => this.presence.get(id))
       .filter((info): info is PresenceInfo => info !== undefined);
   }
 

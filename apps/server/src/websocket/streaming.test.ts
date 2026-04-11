@@ -6,6 +6,12 @@ import {
 } from './streaming';
 import type { RunEvent, RunEventEmitter } from '../dispatch/events';
 import type { ConnectionManager } from './connection-manager';
+import type {
+  SessionStreamStart,
+  SessionStreamDelta,
+  SessionStreamEnd,
+  SessionStreamError,
+} from '@openaidy/shared-types';
 
 // Mock logger
 const mockLogger = {
@@ -87,7 +93,7 @@ describe('mapRunEventToStreamEvent', () => {
       },
     };
 
-    const result = mapRunEventToStreamEvent(event);
+    const result = mapRunEventToStreamEvent(event) as SessionStreamStart | null;
 
     expect(result).not.toBeNull();
     expect(result?.type).toBe('session.stream.start');
@@ -110,7 +116,7 @@ describe('mapRunEventToStreamEvent', () => {
       },
     };
 
-    const result = mapRunEventToStreamEvent(event);
+    const result = mapRunEventToStreamEvent(event) as SessionStreamDelta | null;
 
     expect(result).not.toBeNull();
     expect(result?.type).toBe('session.stream.delta');
@@ -135,7 +141,7 @@ describe('mapRunEventToStreamEvent', () => {
       },
     };
 
-    const result = mapRunEventToStreamEvent(event);
+    const result = mapRunEventToStreamEvent(event) as SessionStreamEnd | null;
 
     expect(result).not.toBeNull();
     expect(result?.type).toBe('session.stream.end');
@@ -155,7 +161,7 @@ describe('mapRunEventToStreamEvent', () => {
       },
     };
 
-    const result = mapRunEventToStreamEvent(event);
+    const result = mapRunEventToStreamEvent(event) as SessionStreamError | null;
 
     expect(result).not.toBeNull();
     expect(result?.type).toBe('session.stream.error');
@@ -173,7 +179,7 @@ describe('mapRunEventToStreamEvent', () => {
       data: {},
     };
 
-    const result = mapRunEventToStreamEvent(event);
+    const result = mapRunEventToStreamEvent(event) as SessionStreamError | null;
 
     expect(result).not.toBeNull();
     expect(result?.type).toBe('session.stream.error');
@@ -189,7 +195,7 @@ describe('mapRunEventToStreamEvent', () => {
       agentId: 'agent-789',
       timestamp: '2024-01-01T00:00:00.000Z',
       data: {},
-    } as RunEvent;
+    } as unknown as RunEvent;
 
     const result = mapRunEventToStreamEvent(event);
 

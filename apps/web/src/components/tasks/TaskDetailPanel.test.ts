@@ -2,7 +2,7 @@
  * Task Detail Panel Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Simple unit tests for TaskDetailPanel logic
 describe('TaskDetailPanel', () => {
@@ -45,7 +45,6 @@ describe('TaskDetailPanel', () => {
 
   describe('handleSaveEdit', () => {
     it('should update task with new values', async () => {
-      const taskId = 'task-1';
       const newTitle = 'Updated Task';
       const newDescription = 'Updated description';
 

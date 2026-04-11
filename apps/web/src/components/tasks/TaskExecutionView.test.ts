@@ -2,7 +2,7 @@
  * Task Execution View Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Simple unit tests for TaskExecutionView logic
 describe('TaskExecutionView', () => {
@@ -40,7 +40,6 @@ describe('TaskExecutionView', () => {
 
   describe('startExecution', () => {
     it('should call executeTask for task execution', async () => {
-      const taskId = 'task-1';
       const expectedSessionId = 'session-1';
 
       // Simulate executeTask call
@@ -53,7 +52,6 @@ describe('TaskExecutionView', () => {
     });
 
     it('should call executeSubtask for subtask execution', async () => {
-      const subtaskId = 'subtask-1';
       const expectedSessionId = 'session-2';
 
       // Simulate executeSubtask call
@@ -121,14 +119,12 @@ describe('TaskExecutionView', () => {
 
   describe('message display', () => {
     it('should apply correct styles for user message', () => {
-      const role = 'user';
       const expectedClass = 'bg-blue-50 ml-8';
 
       expect(expectedClass).toContain('bg-blue-50');
     });
 
     it('should apply correct styles for assistant message', () => {
-      const role = 'assistant';
       const expectedClass = 'bg-gray-50 mr-8';
 
       expect(expectedClass).toContain('bg-gray-50');

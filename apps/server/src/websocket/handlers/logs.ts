@@ -144,7 +144,11 @@ export class LogsHandler {
     try {
       const { levels, contexts, search } = request.payload;
 
-      subscriptionManager.subscribe(connectionId, { levels, contexts, search });
+      const filter: { levels?: LogLevel[]; contexts?: string[]; search?: string } = {};
+      if (levels) filter.levels = levels;
+      if (contexts) filter.contexts = contexts;
+      if (search) filter.search = search;
+      subscriptionManager.subscribe(connectionId, filter);
 
       this.logger.info(
         { connectionId, levels, contexts, hasSearch: !!search },
@@ -154,7 +158,7 @@ export class LogsHandler {
       return createWSMessage('log.subscribe', {
         success: true,
         message: 'Subscribed to log stream',
-      }) as WSResponse;
+      }) as unknown as WSResponse;
     } catch (error) {
       this.logger.error({ error, connectionId }, 'Failed to subscribe to logs');
       return this.createErrorResponse(
@@ -179,7 +183,7 @@ export class LogsHandler {
       return createWSMessage('log.unsubscribe', {
         success: true,
         message: 'Unsubscribed from log stream',
-      }) as WSResponse;
+      }) as unknown as WSResponse;
     } catch (error) {
       this.logger.error(
         { error, connectionId },
@@ -320,10 +324,12 @@ export function registerLogsHandlers(
     handler.handleUnsubscribe(connId, msg as LogUnsubscribeRequest, ctx),
   );
   router.registerHandler('log.query', (connId, msg, ctx) =>
-    handler.handleQuery(connId, msg as LogQueryRequest, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleQuery(connId, msg as LogQueryRequest, ctx) as any,
   );
   router.registerHandler('log.stats', (connId, msg, ctx) =>
-    handler.handleStats(connId, msg, ctx),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler.handleStats(connId, msg, ctx) as any,
   );
 }
 

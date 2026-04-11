@@ -5,7 +5,7 @@
  * priority selection, planning toggle, and agent assignment.
  */
 
-import { createSignal, Show, createEffect, on } from 'solid-js';
+import { createSignal, Show, For, createEffect, on } from 'solid-js';
 import { X } from 'lucide-solid';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
@@ -16,10 +16,12 @@ import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
 export type TaskModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (input: CreateTaskInput) => Promise<void>;
+  onSubmit?: (input: CreateTaskInput) => Promise<void>;
   task?: Task; // For editing existing task
   agents: Agent[];
   isLoading?: boolean;
+  onTaskCreated?: (task: Task) => void;
+  onTaskUpdated?: (task: Task) => void;
 };
 
 /**
@@ -102,6 +104,10 @@ export function TaskModal(props: TaskModalProps) {
     setErrors({});
 
     try {
+      if (!props.onSubmit) {
+        setSubmitting(false);
+        return;
+      }
       await props.onSubmit({
         title: title().trim(),
         description: description().trim(),
@@ -126,15 +132,6 @@ export function TaskModal(props: TaskModalProps) {
     }
   }
 
-  /**
-   * Handle key down (Escape to close)
-   */
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && props.isOpen) {
-      e.preventDefault();
-      props.onClose();
-    }
-  }
   // Add event listener when modal is open
   createEffect(
     on(

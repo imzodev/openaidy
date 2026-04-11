@@ -41,7 +41,8 @@ import { NodeHandler, registerNodeHandlers } from './handlers/node';
 import { PairingHandler, registerPairingHandlers } from './handlers/pairing';
 import { ConfigHandler, registerConfigHandlers } from './handlers/config';
 import { PresenceHandler, registerPresenceHandlers } from './handlers/presence';
-import { LogsHandler, registerLogsHandlers } from './handlers/logs';
+import { LogsHandler, registerLogsHandlers, getLogSubscriptionManager } from './handlers/logs';
+import { getLogBuffer } from '../lib/logger';
 import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
 import { PresenceManager } from './presence-manager';
@@ -267,16 +268,16 @@ function createGateway(
   registerLogsHandlers(messageRouter, logsHandler);
 
   // Wire up log buffer to broadcast to subscribers
-  const { getLogBuffer, getLogSubscriptionManager } = await import('./handlers/logs');
+  // getLogBuffer from lib/logger, getLogSubscriptionManager from handlers/logs
   const logBuffer = getLogBuffer();
-  const subscriptionManager = getLogSubscriptionManager();
+  const logSubscriptionManager = getLogSubscriptionManager();
   
   // Set up broadcaster to push new log entries to subscribed WebSocket clients
   logBuffer.setOnEntryAdded((entry) => {
-    const subscribedConnections = subscriptionManager.getAllSubscribed();
+    const subscribedConnections = logSubscriptionManager.getAllSubscribed();
     
     for (const connId of subscribedConnections) {
-      if (subscriptionManager.shouldReceive(connId, entry)) {
+      if (logSubscriptionManager.shouldReceive(connId, entry)) {
         const message = createWSMessage('log.entry', entry);
         connectionManager.send(connId, message);
       }

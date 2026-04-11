@@ -4,7 +4,7 @@
  * Displays task/subtask execution progress with live updates.
  */
 
-import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { createSignal, Show } from 'solid-js';
 
 /**
  * Task progress data
@@ -65,34 +65,7 @@ export function ProgressBar(props: ProgressBarProps) {
     ...props.initialProgress,
   };
 
-  const [progress, setProgress] = createSignal<TaskProgress>(defaultProgress);
-
-  /**
-   * Update progress (for external updates via WebSocket)
-   */
-  const updateProgress = (newProgress: Partial<TaskProgress>) => {
-    setProgress((prev) => {
-      const updated = { ...prev, ...newProgress };
-      
-      // Notify parent of progress update
-      props.onProgress?.(updated);
-      
-      // Check for completion
-      if (updated.percentage === 100 && prev.percentage !== 100) {
-        props.onComplete?.();
-      }
-      
-      return updated;
-    });
-  };
-
-  /**
-   * Calculate percentage from subtask counts
-   */
-  const calculatePercentage = (p: TaskProgress): number => {
-    if (p.total === 0) return 0;
-    return Math.round((p.completed / p.total) * 100);
-  };
+  const [progress] = createSignal<TaskProgress>(defaultProgress);
 
   return (
     <div class="progress-bar-container space-y-2">

@@ -199,7 +199,7 @@ export class WSErrorHandler {
    * Check if error code is a client error (4xx equivalent)
    */
   private isClientError(code: string): boolean {
-    const clientErrorCodes = [
+    const clientErrorCodes: WSErrorCode[] = [
       WS_ERROR_CODES.AUTH_FAILED,
       WS_ERROR_CODES.AUTH_REQUIRED,
       WS_ERROR_CODES.TOKEN_EXPIRED,

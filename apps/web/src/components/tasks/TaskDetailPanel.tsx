@@ -5,7 +5,7 @@
  * progress, and allows editing.
  */
 
-import { createSignal, createEffect, Show, For } from 'solid-js';
+import { createSignal, createEffect, Show } from 'solid-js';
 import { X, Edit2, Trash2 } from 'lucide-solid';
 import { getTask, updateTask, deleteTask, listSubtasks, getTaskProgress, assignAgents } from '../../lib/api-tasks';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';

@@ -98,10 +98,10 @@ describe('AgentSchema with mcpServers', () => {
       ],
     });
     expect(agent.mcpServers).toHaveLength(2);
-    expect(agent.mcpServers?.[0].id).toBe('filesystem');
-    expect(agent.mcpServers?.[0].tools).toEqual(['read_file', 'write_file']);
-    expect(agent.mcpServers?.[1].id).toBe('github');
-    expect(agent.mcpServers?.[1].tools).toBeUndefined();
+    expect(agent.mcpServers?.[0]?.id).toBe('filesystem');
+    expect(agent.mcpServers?.[0]?.tools).toEqual(['read_file', 'write_file']);
+    expect(agent.mcpServers?.[1]?.id).toBe('github');
+    expect(agent.mcpServers?.[1]?.tools).toBeUndefined();
   });
 
   it('should parse agent with empty mcpServers array', () => {
@@ -202,7 +202,7 @@ describe('parseAgent', () => {
     );
 
     expect('mcpServers' in result && result.mcpServers).toBeDefined();
-    expect('mcpServers' in result && result.mcpServers?.[0].id).toBe(
+    expect('mcpServers' in result && result.mcpServers?.[0]?.id).toBe(
       'filesystem',
     );
   });
@@ -256,10 +256,10 @@ describe('toAgentSummary', () => {
     const summary = toAgentSummary(agent);
     expect(summary.mcpServers).toBeDefined();
     expect(summary.mcpServers).toHaveLength(2);
-    expect(summary.mcpServers?.[0].id).toBe('filesystem');
-    expect(summary.mcpServers?.[0].tools).toEqual(['read_file', 'write_file']);
-    expect(summary.mcpServers?.[1].id).toBe('github');
-    expect(summary.mcpServers?.[1].tools).toBeUndefined();
+    expect(summary.mcpServers?.[0]?.id).toBe('filesystem');
+    expect(summary.mcpServers?.[0]?.tools).toEqual(['read_file', 'write_file']);
+    expect(summary.mcpServers?.[1]?.id).toBe('github');
+    expect(summary.mcpServers?.[1]?.tools).toBeUndefined();
   });
 
   it('should include legacy tools in summary', () => {

@@ -7,7 +7,6 @@ import {
   setCorrelationContext,
   clearCorrelationContext,
   type LogEntry,
-  type LogFilter,
 } from './logger';
 
 describe('LogBuffer', () => {
@@ -57,11 +56,41 @@ describe('LogBuffer', () => {
   describe('query', () => {
     beforeEach(() => {
       const entries: LogEntry[] = [
-        { id: '1', timestamp: '2024-01-01T10:00:00Z', level: 'debug', context: 'app', message: 'Debug msg' },
-        { id: '2', timestamp: '2024-01-01T11:00:00Z', level: 'info', context: 'app', message: 'Info msg' },
-        { id: '3', timestamp: '2024-01-01T12:00:00Z', level: 'warn', context: 'api', message: 'Warn msg' },
-        { id: '4', timestamp: '2024-01-01T13:00:00Z', level: 'error', context: 'api', message: 'Error msg' },
-        { id: '5', timestamp: '2024-01-01T14:00:00Z', level: 'info', context: 'db', message: 'DB info' },
+        {
+          id: '1',
+          timestamp: '2024-01-01T10:00:00Z',
+          level: 'debug',
+          context: 'app',
+          message: 'Debug msg',
+        },
+        {
+          id: '2',
+          timestamp: '2024-01-01T11:00:00Z',
+          level: 'info',
+          context: 'app',
+          message: 'Info msg',
+        },
+        {
+          id: '3',
+          timestamp: '2024-01-01T12:00:00Z',
+          level: 'warn',
+          context: 'api',
+          message: 'Warn msg',
+        },
+        {
+          id: '4',
+          timestamp: '2024-01-01T13:00:00Z',
+          level: 'error',
+          context: 'api',
+          message: 'Error msg',
+        },
+        {
+          id: '5',
+          timestamp: '2024-01-01T14:00:00Z',
+          level: 'info',
+          context: 'db',
+          message: 'DB info',
+        },
       ];
 
       entries.forEach((e) => buffer.add(e));
@@ -77,7 +106,9 @@ describe('LogBuffer', () => {
     it('should filter by levels', () => {
       const result = buffer.query({ levels: ['error', 'warn'] });
       expect(result.items).toHaveLength(2);
-      expect(result.items.every((e) => e.level === 'error' || e.level === 'warn')).toBe(true);
+      expect(
+        result.items.every((e) => e.level === 'error' || e.level === 'warn'),
+      ).toBe(true);
     });
 
     it('should filter by contexts', () => {
@@ -140,10 +171,34 @@ describe('LogBuffer', () => {
   describe('getStats', () => {
     beforeEach(() => {
       const entries: LogEntry[] = [
-        { id: '1', timestamp: '2024-01-01T10:00:00Z', level: 'debug', context: 'app', message: 'Debug' },
-        { id: '2', timestamp: '2024-01-01T11:00:00Z', level: 'info', context: 'app', message: 'Info 1' },
-        { id: '3', timestamp: '2024-01-01T12:00:00Z', level: 'info', context: 'api', message: 'Info 2' },
-        { id: '4', timestamp: '2024-01-01T13:00:00Z', level: 'error', context: 'api', message: 'Error' },
+        {
+          id: '1',
+          timestamp: '2024-01-01T10:00:00Z',
+          level: 'debug',
+          context: 'app',
+          message: 'Debug',
+        },
+        {
+          id: '2',
+          timestamp: '2024-01-01T11:00:00Z',
+          level: 'info',
+          context: 'app',
+          message: 'Info 1',
+        },
+        {
+          id: '3',
+          timestamp: '2024-01-01T12:00:00Z',
+          level: 'info',
+          context: 'api',
+          message: 'Info 2',
+        },
+        {
+          id: '4',
+          timestamp: '2024-01-01T13:00:00Z',
+          level: 'error',
+          context: 'api',
+          message: 'Error',
+        },
       ];
 
       entries.forEach((e) => buffer.add(e));
@@ -206,9 +261,9 @@ describe('createLogger', () => {
     const result = buffer.query();
 
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].context).toBe('test');
-    expect(result.items[0].message).toBe('Hello world');
-    expect(result.items[0].level).toBe('info');
+    expect(result.items[0]?.context).toBe('test');
+    expect(result.items[0]?.message).toBe('Hello world');
+    expect(result.items[0]?.level).toBe('info');
   });
 
   it('should include correlation context', () => {
@@ -220,8 +275,8 @@ describe('createLogger', () => {
     const buffer = getLogBuffer();
     const result = buffer.query();
 
-    expect(result.items[0].sessionId).toBe('session-123');
-    expect(result.items[0].runId).toBe('run-456');
+    expect(result.items[0]?.sessionId).toBe('session-123');
+    expect(result.items[0]?.runId).toBe('run-456');
 
     clearCorrelationContext();
   });
