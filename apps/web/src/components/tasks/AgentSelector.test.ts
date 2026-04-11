@@ -2,7 +2,7 @@
  * Agent Selector Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Simple unit tests for AgentSelector logic
 describe('AgentSelector', () => {
@@ -105,12 +105,12 @@ describe('AgentSelector', () => {
 
   describe('updateRole', () => {
     it('should update role for selected agent', () => {
-      let selectedAgents = [
-        { agentId: 'agent-1', role: 'primary' as const },
+      let selectedAgents: Array<{ agentId: string; role: string }> = [
+        { agentId: 'agent-1', role: 'primary' },
       ];
       
       const agentId = 'agent-1';
-      const newRole = 'reviewer' as const;
+      const newRole = 'reviewer';
       
       selectedAgents = selectedAgents.map((a) =>
         a.agentId === agentId ? { ...a, role: newRole } : a

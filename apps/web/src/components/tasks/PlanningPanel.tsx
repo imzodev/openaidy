@@ -193,7 +193,6 @@ export function PlanningPanel(props: PlanningPanelProps) {
                   <div class="subtask-item border rounded-md p-3">
                     <Show when={editingSubtaskId() === subtask.id}>
                       <SubtaskEditor
-                        subtask={subtask}
                         onSave={handleSubtaskSave}
                         onCancel={() => setEditingSubtaskId(null)}
                       />

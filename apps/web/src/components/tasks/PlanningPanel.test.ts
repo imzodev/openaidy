@@ -2,7 +2,7 @@
  * Planning Panel Component Tests
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Simple unit tests for PlanningPanel logic
 describe('PlanningPanel', () => {

@@ -41,13 +41,6 @@ describe('TaskModal', () => {
     const onClose = vi.fn();
     const container = document.createElement('div');
 
-    const props = {
-      isOpen: true,
-      onClose,
-      onSubmit: vi.fn(),
-      agents: mockAgents,
-    };
-
     // Simulate cancel click
     const cancelButton = document.createElement('button');
     cancelButton.textContent = 'Cancel';
