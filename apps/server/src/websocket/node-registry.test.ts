@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { NodeRegistry, type Node } from './node-registry';
+import { NodeRegistry, type Node, type NodeType } from './node-registry';
 
 /**
  * Create mock logger
@@ -14,6 +14,8 @@ function createMockLogger(): FastifyBaseLogger {
     debug: vi.fn(),
     trace: vi.fn(),
     fatal: vi.fn(),
+    level: 'info',
+    silent: vi.fn(),
   } as FastifyBaseLogger;
 }
 
@@ -203,7 +205,7 @@ describe('NodeRegistry', () => {
 
       const nodes = registry.getOnlineNodes();
       expect(nodes).toHaveLength(1);
-      expect(nodes[0].nodeId).toBe('node-1');
+      expect(nodes[0]!.nodeId).toBe('node-1');
     });
   });
 
@@ -246,7 +248,7 @@ describe('NodeRegistry', () => {
 
       const nodes = registry.findNodesByCapabilities(['camera', 'microphone']);
       expect(nodes).toHaveLength(1);
-      expect(nodes[0].nodeId).toBe('node-1');
+      expect(nodes[0]!.nodeId).toBe('node-1');
     });
 
     it('should return empty array when no nodes have all capabilities', () => {

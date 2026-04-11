@@ -173,7 +173,8 @@ describe('SessionHandler', () => {
           title: 'Session 2',
           status: 'active',
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
-          
+          updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+          archivedAt: null,
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -198,14 +199,16 @@ describe('SessionHandler', () => {
           title: 'Session 1',
           status: 'active',
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
-          
+          updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+          archivedAt: null,
         },
         {
           id: 'session-2',
           title: 'Session 2',
           status: 'archived',
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
-          
+          updatedAt: new Date('2024-01-02T00:00:00.000Z'),
+          archivedAt: new Date('2024-01-02T00:00:00.000Z'),
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -230,7 +233,8 @@ describe('SessionHandler', () => {
         title: `Session ${i}`,
         status: 'active',
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
-        
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        archivedAt: null,
       }));
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
 
@@ -302,6 +306,9 @@ describe('SessionHandler', () => {
         role: 'user',
         content: 'Hello',
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        toolCallId: null,
+        sequence: 1,
+        metadata: null,
       };
 
       const assistantMessage: SessionMessage = {
@@ -310,6 +317,9 @@ describe('SessionHandler', () => {
         role: 'assistant',
         content: 'Hi there!',
         createdAt: new Date('2024-01-01T00:00:01.000Z'),
+        toolCallId: null,
+        sequence: 2,
+        metadata: null,
       };
 
       const run: SessionRun = {
@@ -324,6 +334,11 @@ describe('SessionHandler', () => {
         completionTokens: 20,
         totalTokens: 30,
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        metadata: null,
+        startedAt: null,
+        finishedAt: new Date('2024-01-01T00:00:01.000Z'),
+        errorCode: null,
+        errorMessage: null,
       };
 
       mockSessionService.submitMessage.mockResolvedValue({
