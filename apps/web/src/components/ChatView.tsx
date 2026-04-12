@@ -1,4 +1,4 @@
-import { Show, For } from 'solid-js';
+import { Show, For, createEffect } from 'solid-js';
 import { User, Bot, AlertCircle } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 
@@ -10,6 +10,15 @@ type ChatViewProps = {
 };
 
 export function ChatView(props: ChatViewProps) {
+  let bottomRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    // Track both messages and streamingContent so we scroll on every update
+    void props.messages.length;
+    void props.streamingContent;
+    bottomRef?.scrollIntoView({ behavior: 'smooth' });
+  });
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'user':
@@ -138,6 +147,9 @@ export function ChatView(props: ChatViewProps) {
           </div>
         </div>
       </Show>
+
+      {/* Scroll anchor */}
+      <div ref={bottomRef} />
     </div>
   );
 }

@@ -10,7 +10,6 @@ import {
   listSessions,
   createSession,
   listMessages,
-  submitMessage,
   submitMessageStreaming,
   listAgents,
   listRuns,
@@ -73,6 +72,9 @@ function AppContent() {
   >(undefined);
   const [streamingContent, setStreamingContent] = createSignal('');
   const [isStreaming, setIsStreaming] = createSignal(false);
+  const [pendingUserMessage, setPendingUserMessage] = createSignal<
+    SessionMessage | undefined
+  >(undefined);
 
   // Subscribe to streaming events when a session is selected
   createEffect(() => {
@@ -94,6 +96,7 @@ function AppContent() {
     const handleStreamEnd = () => {
       setIsStreaming(false);
       setStreamingContent('');
+      setPendingUserMessage(undefined);
       // Refresh messages to show the completed response
       queryClient.invalidateQueries({
         queryKey: ['messages', sessionId],
@@ -109,6 +112,7 @@ function AppContent() {
       setSubmitError(event.payload.error.message);
       setIsStreaming(false);
       setStreamingContent('');
+      setPendingUserMessage(undefined);
     };
 
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
@@ -167,47 +171,6 @@ function AppContent() {
     },
   }));
 
-  // Submit message mutation
-  const submitMessageMutation = createMutation(() => ({
-    mutationFn: ({
-      content,
-      agentId,
-      providerId,
-      modelId,
-    }: {
-      content: string;
-      agentId?: string;
-      providerId?: string;
-      modelId?: string;
-    }) => {
-      const sessionId = selectedSessionId();
-      if (!sessionId) throw new Error('No session selected');
-      return submitMessage(sessionId, {
-        role: 'user',
-        content,
-        agentId,
-        providerId,
-        modelId,
-      });
-    },
-    onSuccess: (result) => {
-      if (result.ok) {
-        queryClient.invalidateQueries({
-          queryKey: ['messages', selectedSessionId()],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ['runs', selectedSessionId()],
-        });
-        setSubmitError(undefined);
-      } else {
-        setSubmitError(result.error.message);
-      }
-    },
-    onError: (error: Error) => {
-      setSubmitError(error.message);
-    },
-  }));
-
   // Handlers
   const handleCreateSession = async () => {
     const title = `Session ${new Date().toLocaleString()}`;
@@ -224,6 +187,14 @@ function AppContent() {
     setSubmitError(undefined);
     setIsStreaming(true);
     setStreamingContent('');
+    setPendingUserMessage({
+      id: `pending-${Date.now()}`,
+      sessionId,
+      role: 'user',
+      content,
+      sequence: -1,
+      createdAt: new Date().toISOString(),
+    });
 
     // Find agent and extract provider/model from model field
     let providerId: string | undefined;
@@ -252,20 +223,28 @@ function AppContent() {
       if (!result.ok) {
         setSubmitError(result.error.message);
         setIsStreaming(false);
+        setPendingUserMessage(undefined);
       }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to submit message';
       setSubmitError(errorMessage);
       setIsStreaming(false);
+      setPendingUserMessage(undefined);
     }
   };
 
   // Data accessors
   const messages = (): SessionMessage[] => {
     const data = messagesQuery.data;
-    if (!data || 'error' in data) return [];
-    return data.items || [];
+    const fetched = !data || 'error' in data ? [] : data.items || [];
+    const pending = pendingUserMessage();
+    if (!pending) return fetched;
+    // Show pending message only if it's not already in the fetched list
+    const alreadySaved = fetched.some(
+      (m) => m.role === 'user' && m.content === pending.content,
+    );
+    return alreadySaved ? fetched : [...fetched, pending];
   };
 
   const runs = (): SessionRun[] => {
@@ -465,7 +444,7 @@ function AppContent() {
             />
             <ChatComposer
               onSend={handleSubmit}
-              disabled={submitMessageMutation.isPending}
+              disabled={isStreaming()}
               placeholder="Type your message..."
               agents={agents()}
               selectedAgentId={selectedAgentId()}
