@@ -208,6 +208,11 @@ const appAgentWorkspaceConfigSchema = z.object({
   workspaces: z.array(appAgentWorkspaceSchema).default([]),
 });
 
+const appAgentMcpServerRefSchema = z.object({
+  id: z.string().min(1),
+  tools: z.array(z.string()).optional(),
+});
+
 export const appAgentConfigSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -216,6 +221,7 @@ export const appAgentConfigSchema = z.object({
   systemPrompt: z.string().min(1),
   model: z.string().min(1), // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
   tools: z.array(z.string()).optional(),
+  mcpServers: z.array(appAgentMcpServerRefSchema).optional(),
   tags: z.array(z.string()).optional(),
   workspace: appAgentWorkspaceConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),

@@ -291,6 +291,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const responseId = `stream_${Date.now()}`;
     let started = false;
 
+    // Accumulate tool call chunks — OpenAI streams them as partial deltas
+    const pendingToolCalls: Map<
+      number,
+      { id: string; name: string; arguments: string }
+    > = new Map();
+
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
@@ -313,6 +319,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       }
 
       const stream = await this.client.chat.completions.create(requestParams);
+
+      let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' =
+        'stop';
 
       for await (const chunk of stream) {
         const choice = chunk.choices[0];
@@ -340,51 +349,52 @@ export class OpenAICompatibleProvider implements ModelProvider {
           });
         }
 
-        // Handle tool calls
+        // Accumulate tool call deltas by index (do NOT emit yet)
         if (choice.delta?.tool_calls) {
           for (const tc of choice.delta.tool_calls) {
-            if (tc.function) {
-              yield ok({
-                type: 'stream.tool_call',
-                timestamp: new Date().toISOString(),
-                id: tc.id ?? '',
-                toolCall: {
-                  id: tc.id ?? '',
-                  type: 'function',
-                  name: tc.function.name ?? '',
-                  arguments: tc.function.arguments ?? '',
-                },
-              });
+            const idx = tc.index;
+            if (!pendingToolCalls.has(idx)) {
+              pendingToolCalls.set(idx, { id: '', name: '', arguments: '' });
             }
+            const pending = pendingToolCalls.get(idx)!;
+            if (tc.id) pending.id += tc.id;
+            if (tc.function?.name) pending.name += tc.function.name;
+            if (tc.function?.arguments)
+              pending.arguments += tc.function.arguments;
           }
         }
 
-        // Check for finish reason
+        // Track finish reason
         if (choice.finish_reason) {
-          const finishReason =
+          finishReason =
             choice.finish_reason === 'function_call'
               ? 'tool_calls'
-              : (choice.finish_reason as
-                  | 'stop'
-                  | 'length'
-                  | 'tool_calls'
-                  | 'content_filter');
-          yield ok({
-            type: 'stream.finished',
-            timestamp: new Date().toISOString(),
-            id: responseId,
-            finishReason,
-          });
+              : (choice.finish_reason as typeof finishReason);
         }
       }
 
-      // Ensure we emit finished if not already done
+      // Emit completed tool calls before stream.finished
+      for (const tc of pendingToolCalls.values()) {
+        yield ok({
+          type: 'stream.tool_call',
+          timestamp: new Date().toISOString(),
+          id: tc.id,
+          toolCall: {
+            id: tc.id,
+            type: 'function',
+            name: tc.name,
+            arguments: tc.arguments,
+          },
+        });
+      }
+
+      // Emit finished
       if (started) {
         yield ok({
           type: 'stream.finished',
           timestamp: new Date().toISOString(),
           id: responseId,
-          finishReason: 'stop' as const,
+          finishReason,
         });
       }
     } catch (error) {
