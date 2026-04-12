@@ -128,9 +128,13 @@ export async function buildApp() {
   });
   await configService.load();
 
+  // Create MCP client service (before sessionService so it can be injected)
+  const mcpService = createMcpClientService({ logger: app.log });
+
   const sessionService = new SessionMessageService({
     providers: providerServices,
     agents: agentRegistry,
+    mcp: mcpService,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {
@@ -158,9 +162,6 @@ export async function buildApp() {
   const workspaceService = createWorkspaceService({
     baseDir: env.WORKSPACE_BASE_DIR,
   });
-
-  // Create MCP client service
-  const mcpService = createMcpClientService({ logger: app.log });
 
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo) {

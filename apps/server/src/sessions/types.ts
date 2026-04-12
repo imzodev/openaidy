@@ -54,6 +54,7 @@ export type SubmitMessageResult =
 // Import types needed for SessionMessageServiceOptions
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
+import type { McpClientService } from '../mcp/client';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -66,6 +67,7 @@ import type {
 export type SessionMessageServiceOptions = {
   providers: ProviderServices;
   agents?: AgentRegistry;
+  mcp?: McpClientService;
   getDefaultAgentId?: () => string | undefined;
   repositories?:
     | {

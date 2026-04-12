@@ -1,6 +1,12 @@
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
-import type { Message, ModelRequest, ModelResponse } from '@openaidy/runtime';
+import type { McpClientService } from '../mcp/client';
+import type {
+  ToolDefinition,
+  Message,
+  ModelRequest,
+  ModelResponse,
+} from '@openaidy/runtime';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -50,6 +56,7 @@ import type {
 export class SessionMessageService {
   private readonly providers: ProviderServices;
   private readonly agents: AgentRegistry | undefined;
+  private readonly mcp: McpClientService | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
   private readonly messagesRepo: SessionMessagesStore | undefined;
@@ -58,6 +65,7 @@ export class SessionMessageService {
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
     this.agents = options.agents;
+    this.mcp = options.mcp;
     this.getDefaultAgentId = options.getDefaultAgentId;
 
     if (options.repositories) {
@@ -383,110 +391,167 @@ export class SessionMessageService {
       } as Message;
     });
 
-    // 6. Invoke provider with streaming
-    const modelRequest: ModelRequest = {
-      model: modelId,
-      messages,
-    };
-
+    // 6. Invoke provider with streaming (agentic tool-call loop)
+    const mcpTools = this.buildMcpTools(agentId);
     const invokeOptions = {
       ...(input.providerId !== undefined && { providerId: input.providerId }),
       ...(input.modelId !== undefined && { modelId: input.modelId }),
     };
 
-    // Accumulate streaming content
     let accumulatedContent = '';
     let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let finalFinishReason: string | undefined;
-    const toolCalls: Array<{
-      id: string;
-      name: string;
-      arguments: Record<string, unknown>;
-    }> = [];
+    let finalProviderId = providerId;
+    let finalModelId = modelId;
+
+    // Running message history for the tool-call loop
+    const loopMessages: Message[] = [...messages];
 
     try {
-      const stream = this.providers.invocation.invokeStream(
-        modelRequest,
-        invokeOptions,
-      );
+      const MAX_TOOL_ROUNDS = 10;
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const modelRequest: ModelRequest = {
+          model: modelId,
+          messages: loopMessages,
+          ...(mcpTools.length > 0 && { tools: mcpTools, toolChoice: 'auto' }),
+        };
 
-      let finalProviderId = providerId;
-      let finalModelId = modelId;
-      let hasError = false;
-      let errorCode = '';
-      let errorMessage = '';
+        const toolCalls: Array<{
+          id: string;
+          name: string;
+          arguments: Record<string, unknown>;
+        }> = [];
+        let hasError = false;
+        let errorCode = '';
+        let errorMessage = '';
+        accumulatedContent = '';
 
-      // Iterate through stream events
-      for await (const event of stream) {
-        if (!event.ok) {
-          hasError = true;
-          errorCode = event.error.code;
-          errorMessage = event.error.message;
-          onStreamEvent({
-            type: 'error',
-            error: { code: event.error.code, message: event.error.message },
-          });
-          break;
-        }
+        const stream = this.providers.invocation.invokeStream(
+          modelRequest,
+          invokeOptions,
+        );
 
-        const value = event.value;
-
-        // Handle different stream event types
-        switch (value.type) {
-          case 'stream.content_delta': {
-            accumulatedContent += value.delta;
+        for await (const event of stream) {
+          if (!event.ok) {
+            hasError = true;
+            errorCode = event.error.code;
+            errorMessage = event.error.message;
             onStreamEvent({
-              type: 'delta',
-              content: value.delta,
+              type: 'error',
+              error: { code: event.error.code, message: event.error.message },
             });
             break;
           }
-          case 'stream.tool_call': {
-            const toolArgs =
-              typeof value.toolCall.arguments === 'string'
-                ? JSON.parse(value.toolCall.arguments)
-                : value.toolCall.arguments;
-            toolCalls.push({
-              id: value.toolCall.id,
-              name: value.toolCall.name,
-              arguments: toolArgs as Record<string, unknown>,
-            });
-            onStreamEvent({
-              type: 'tool_call',
-              toolCall: {
+
+          const value = event.value;
+          switch (value.type) {
+            case 'stream.content_delta': {
+              accumulatedContent += value.delta;
+              onStreamEvent({ type: 'delta', content: value.delta });
+              break;
+            }
+            case 'stream.tool_call': {
+              const toolArgs =
+                typeof value.toolCall.arguments === 'string'
+                  ? JSON.parse(value.toolCall.arguments)
+                  : value.toolCall.arguments;
+              toolCalls.push({
                 id: value.toolCall.id,
                 name: value.toolCall.name,
                 arguments: toolArgs as Record<string, unknown>,
-              },
-            });
-            break;
-          }
-          case 'stream.usage': {
-            finalUsage = {
-              promptTokens: value.usage.promptTokens,
-              completionTokens: value.usage.completionTokens,
-              totalTokens: value.usage.totalTokens,
-            };
-            onStreamEvent({
-              type: 'usage',
-              usage: finalUsage,
-            });
-            break;
-          }
-          case 'stream.started': {
-            if (value.providerId) finalProviderId = value.providerId;
-            if (value.model) finalModelId = value.model;
-            break;
-          }
-          case 'stream.finished': {
-            finalFinishReason = value.finishReason;
-            break;
+              });
+              onStreamEvent({
+                type: 'tool_call',
+                toolCall: {
+                  id: value.toolCall.id,
+                  name: value.toolCall.name,
+                  arguments: toolArgs as Record<string, unknown>,
+                },
+              });
+              break;
+            }
+            case 'stream.usage': {
+              finalUsage = {
+                promptTokens: value.usage.promptTokens,
+                completionTokens: value.usage.completionTokens,
+                totalTokens: value.usage.totalTokens,
+              };
+              onStreamEvent({ type: 'usage', usage: finalUsage });
+              break;
+            }
+            case 'stream.started': {
+              if (value.providerId) finalProviderId = value.providerId;
+              if (value.model) finalModelId = value.model;
+              break;
+            }
+            case 'stream.finished': {
+              finalFinishReason = value.finishReason;
+              break;
+            }
           }
         }
-      }
 
-      if (hasError) {
-        return this.handleFailure(run.id, userMessage, errorCode, errorMessage);
+        if (hasError) {
+          return this.handleFailure(
+            run.id,
+            userMessage,
+            errorCode,
+            errorMessage,
+          );
+        }
+
+        // If the model made tool calls, execute them and continue the loop
+        if (toolCalls.length > 0 && this.mcp) {
+          // Append the assistant's tool-call turn to loop history
+          loopMessages.push({
+            role: 'assistant',
+            content: accumulatedContent || '',
+          } as Message);
+
+          for (const tc of toolCalls) {
+            const result = await this.mcp
+              .callTool(
+                tc.name.split('::')[0]!,
+                tc.name.split('::')[1] ?? tc.name,
+                tc.arguments,
+              )
+              .catch((e: unknown) => ({
+                content: [
+                  {
+                    type: 'text',
+                    text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                  },
+                ],
+              }));
+
+            const toolContent = Array.isArray(
+              (result as { content?: unknown[] }).content,
+            )
+              ? (result as { content: Array<{ text?: string }> }).content
+                  .map((c) => c.text ?? '')
+                  .join('')
+              : JSON.stringify(result);
+
+            // Persist tool result message
+            await this.appendMessage({
+              sessionId: input.sessionId,
+              role: 'tool',
+              content: toolContent,
+              toolCallId: tc.id,
+            });
+
+            loopMessages.push({
+              role: 'tool',
+              content: toolContent,
+              toolCallId: tc.id,
+            } as Message);
+          }
+          // Continue loop for next model turn
+          continue;
+        }
+
+        // No tool calls — we're done
+        break;
       }
 
       // 7. Persist assistant message with accumulated content
@@ -498,7 +563,6 @@ export class SessionMessageService {
           providerId: finalProviderId,
           model: finalModelId,
           runId: run.id,
-          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
         },
       });
 
@@ -508,18 +572,10 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
-        metadata: {
-          providerId: finalProviderId,
-          model: finalModelId,
-        },
+        metadata: { providerId: finalProviderId, model: finalModelId },
       });
 
-      return {
-        ok: true,
-        userMessage,
-        assistantMessage,
-        run: updatedRun!,
-      };
+      return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message : 'Streaming failed';
@@ -530,6 +586,30 @@ export class SessionMessageService {
         errorMsg,
       );
     }
+  }
+
+  /**
+   * Build ToolDefinition[] from MCP servers configured for an agent.
+   * Tool names are prefixed with serverId:: to avoid collisions.
+   */
+  private buildMcpTools(agentId: string): ToolDefinition[] {
+    if (!this.mcp || !this.agents) return [];
+    const agent = this.agents.getAgent(agentId);
+    if (!agent?.mcpServers?.length) return [];
+
+    const tools: ToolDefinition[] = [];
+    for (const ref of agent.mcpServers) {
+      if (!this.mcp.isConnected(ref.id)) continue;
+      const serverTools = this.mcp.getFilteredTools(ref.id, ref.tools);
+      for (const t of serverTools) {
+        tools.push({
+          name: `${ref.id}::${t.name}`,
+          description: t.description ?? t.name,
+          parameters: t.inputSchema as ToolDefinition['parameters'],
+        });
+      }
+    }
+    return tools;
   }
 
   /**
