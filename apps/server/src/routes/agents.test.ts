@@ -102,6 +102,8 @@ describe('Agent Routes', () => {
       bootstrapAdmin: undefined,
       pairingRequestsRepo: undefined,
       devicesRepo: undefined,
+      workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });

@@ -155,10 +155,10 @@ describe('WorkspaceService', () => {
       const files = await service.listFiles(agentId);
 
       expect(files).toHaveLength(1);
-      expect(files[0].name).toBe('test.txt');
-      expect(files[0].isDirectory).toBe(false);
-      expect(files[0].size).toBe(12); // 'test content'.length
-      expect(files[0].modifiedAt).toBeInstanceOf(Date);
+      expect(files[0]!.name).toBe('test.txt');
+      expect(files[0]!.isDirectory).toBe(false);
+      expect(files[0]!.size).toBe(12); // 'test content'.length
+      expect(files[0]!.modifiedAt).toBeInstanceOf(Date);
     });
 
     it('should list files in subdirectory', async () => {
@@ -171,8 +171,8 @@ describe('WorkspaceService', () => {
 
       const files = await service.listFiles(agentId, 'subdir');
       expect(files).toHaveLength(1);
-      expect(files[0].name).toBe('nested.txt');
-      expect(files[0].path).toBe('subdir/nested.txt');
+      expect(files[0]!.name).toBe('nested.txt');
+      expect(files[0]!.path).toBe('subdir/nested.txt');
     });
   });
 
@@ -336,7 +336,7 @@ describe('WorkspaceService', () => {
         enabled: true,
         systemPrompt: 'test',
         model: 'openai/gpt-4o-mini',
-      } as Agent;
+      } as unknown as Agent;
 
       expect(service.hasWorkspaceAccess(agent)).toBe(false);
     });
@@ -352,7 +352,7 @@ describe('WorkspaceService', () => {
           enabled: false,
           workspaces: [{ path: '/project' }],
         },
-      } as Agent;
+      } as unknown as Agent;
 
       expect(service.hasWorkspaceAccess(agent)).toBe(false);
     });
@@ -368,7 +368,7 @@ describe('WorkspaceService', () => {
           enabled: true,
           workspaces: [],
         },
-      } as Agent;
+      } as unknown as Agent;
 
       expect(service.hasWorkspaceAccess(agent)).toBe(false);
     });

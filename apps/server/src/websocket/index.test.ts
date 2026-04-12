@@ -53,6 +53,8 @@ const mockServices = {
   sessionsRepo: undefined,
   pairingRequestsRepo: undefined,
   devicesRepo: undefined,
+  workspace: undefined,
+  mcpService: undefined,
 } as unknown as AppServices;
 
 const mockLogger = {
