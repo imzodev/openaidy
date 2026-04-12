@@ -1,12 +1,14 @@
 import { Show, For, createEffect } from 'solid-js';
 import { User, Bot, AlertCircle } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
+import { TypingIndicator } from './TypingIndicator';
 
 type ChatViewProps = {
   messages: SessionMessage[];
   isLoading: boolean;
   error?: string;
   streamingContent?: string;
+  isStreaming?: boolean;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -136,8 +138,8 @@ export function ChatView(props: ChatViewProps) {
         </For>
       </Show>
 
-      {/* Streaming content display */}
-      <Show when={props.streamingContent}>
+      {/* Streaming content display — shown while waiting or receiving */}
+      <Show when={props.isStreaming}>
         <div class="rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
           <div class="flex items-start gap-3">
             <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
@@ -150,13 +152,20 @@ export function ChatView(props: ChatViewProps) {
                 </span>
                 <span class="inline-flex items-center gap-1.5">
                   <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  <span class="text-xs text-text-tertiary">Streaming...</span>
+                  <span class="text-xs text-text-tertiary">
+                    {props.streamingContent ? 'Streaming...' : 'Thinking...'}
+                  </span>
                 </span>
               </div>
-              <p class="text-text-secondary whitespace-pre-wrap">
-                {props.streamingContent}
-                <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
-              </p>
+              <Show
+                when={props.streamingContent}
+                fallback={<TypingIndicator />}
+              >
+                <p class="text-text-secondary whitespace-pre-wrap">
+                  {props.streamingContent}
+                  <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+                </p>
+              </Show>
             </div>
           </div>
         </div>

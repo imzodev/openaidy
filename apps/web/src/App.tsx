@@ -435,6 +435,7 @@ function AppContent() {
               messages={messages()}
               isLoading={messagesQuery.isLoading}
               error={messagesQuery.error?.message}
+              isStreaming={isStreaming()}
               streamingContent={isStreaming() ? streamingContent() : undefined}
             />
             <RunList
