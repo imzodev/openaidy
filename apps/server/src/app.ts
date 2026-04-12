@@ -22,6 +22,8 @@ import { runStreamRoutes } from './routes/runs';
 import { schedulerRoutes } from './routes/scheduler';
 import { workspaceRoutes } from './routes/workspace';
 import { logRoutes } from './routes/logs';
+import { createMcpRoutesPlugin } from './routes/mcp';
+import { createMcpClientService, type McpClientService } from './mcp/client';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry, type AgentRegistry } from './agents';
@@ -34,10 +36,7 @@ import {
 import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
-import {
-  createWorkspaceService,
-  WorkspaceService,
-} from './workspace';
+import { createWorkspaceService, WorkspaceService } from './workspace';
 
 /**
  * Application services container
@@ -61,6 +60,7 @@ export type AppServices = {
   pairingRequestsRepo: PairingRequestsStore | undefined;
   devicesRepo: DevicesStore | undefined;
   workspace: WorkspaceService;
+  mcpService: McpClientService;
 };
 
 /**
@@ -159,6 +159,9 @@ export async function buildApp() {
     baseDir: env.WORKSPACE_BASE_DIR,
   });
 
+  // Create MCP client service
+  const mcpService = createMcpClientService({ logger: app.log });
+
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo) {
     scheduler = createSchedulerService(
@@ -185,6 +188,7 @@ export async function buildApp() {
     pairingRequestsRepo,
     devicesRepo,
     workspace: workspaceService,
+    mcpService,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -235,7 +239,7 @@ export async function buildApp() {
     });
   }
 
-// Register workspace routes
+  // Register workspace routes
   await app.register(workspaceRoutes, {
     agentRegistry: services.agents,
     workspaceService: services.workspace,
@@ -245,6 +249,9 @@ export async function buildApp() {
   // Register log routes
   await app.register(logRoutes);
 
+  // Register MCP routes
+  await app.register(createMcpRoutesPlugin({ mcpService }));
+
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {
     if (scheduler) {
@@ -252,6 +259,20 @@ export async function buildApp() {
       await scheduler.recoverStuckJobs();
       scheduler.start();
       app.log.info('Scheduler started');
+    }
+
+    // Auto-connect MCP servers from config
+    const mcpServers = configService.getMcpServers();
+    for (const serverConfig of mcpServers) {
+      try {
+        await mcpService.connect(serverConfig);
+        app.log.info({ serverId: serverConfig.id }, 'MCP server connected');
+      } catch (err) {
+        app.log.warn(
+          { serverId: serverConfig.id, err },
+          'Failed to connect MCP server on startup',
+        );
+      }
     }
   });
 
