@@ -11,12 +11,22 @@ type ChatViewProps = {
 
 export function ChatView(props: ChatViewProps) {
   let bottomRef: HTMLDivElement | undefined;
+  let scrollContainerRef: HTMLDivElement | undefined;
+  let isUserScrolledUp = false;
+
+  const handleScroll = () => {
+    if (!scrollContainerRef) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef;
+    // Consider "at bottom" if within 80px of the bottom
+    isUserScrolledUp = scrollHeight - scrollTop - clientHeight > 80;
+  };
 
   createEffect(() => {
-    // Track both messages and streamingContent so we scroll on every update
     void props.messages.length;
     void props.streamingContent;
-    bottomRef?.scrollIntoView({ behavior: 'smooth' });
+    if (!isUserScrolledUp) {
+      bottomRef?.scrollIntoView({ behavior: 'smooth' });
+    }
   });
 
   const getRoleIcon = (role: string) => {
@@ -55,7 +65,11 @@ export function ChatView(props: ChatViewProps) {
   };
 
   return (
-    <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div
+      ref={scrollContainerRef}
+      onScroll={handleScroll}
+      class="flex-1 overflow-y-auto p-4 space-y-4"
+    >
       {/* Loading state */}
       <Show when={props.isLoading}>
         <div class="flex items-center justify-center h-full">
