@@ -286,6 +286,26 @@ function AppContent() {
     }
   });
 
+  // Auto-select most recent session when on chat view with no session selected
+  createEffect(() => {
+    const sessionList = sessionsQuery.data?.items || [];
+    const currentView = view();
+    const currentSelectedId = selectedSessionId();
+
+    if (
+      currentView === 'chat' &&
+      !currentSelectedId &&
+      sessionList.length > 0
+    ) {
+      // Sort by createdAt descending and select the most recent
+      const sorted = [...sessionList].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      setSelectedSessionId(sorted[0].id);
+    }
+  });
+
   // Current view for conditional rendering
   const view = () => currentView();
 
