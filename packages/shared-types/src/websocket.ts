@@ -916,6 +916,7 @@ export type WSResponse =
   | AuthAuthenticatedResponse
   | SessionCreatedResponse
   | SessionMessageResponse
+  | SessionMessageStreamAck
   | SessionMessagesResponse
   | SessionRunsResponse
   | SessionGetResponse
@@ -982,6 +983,7 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'auth.authenticated',
   'session.created',
   'session.message',
+  'session.message.ack',
   'session.messages',
   'session.runs',
   'session.get',

@@ -219,7 +219,10 @@ export async function submitMessageStreaming(
         modelId: input.modelId,
       });
 
-      if (response.type !== 'session.message') {
+      if (
+        response.type !== 'session.message.ack' &&
+        response.type !== 'session.message'
+      ) {
         throw new Error('Unexpected response type for session.message');
       }
 
@@ -227,9 +230,10 @@ export async function submitMessageStreaming(
       const providerId = input.providerId ?? 'unknown-provider';
       const modelId = input.modelId ?? 'unknown-model';
 
-      // Generate a runId - the server may provide one via streaming events
-      // For the initial response, we generate one locally
-      const runId = `ws-stream-run-${Date.now()}`;
+      // For streaming ack, use runId from payload; otherwise generate locally
+      const runId =
+        (response.payload as { runId?: string }).runId ??
+        `ws-stream-run-${Date.now()}`;
 
       return {
         ok: true,
@@ -242,9 +246,11 @@ export async function submitMessageStreaming(
           createdAt: timestamp,
         },
         assistantMessage: {
-          id: response.payload.messageId,
+          id:
+            (response.payload as { messageId?: string }).messageId ??
+            `local-assistant-${Date.now()}`,
           sessionId,
-          role: response.payload.role,
+          role: 'assistant',
           content: '', // Empty initially - will be filled via streaming
           sequence: 1,
           createdAt: timestamp,
