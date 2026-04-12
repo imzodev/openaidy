@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { getLogBuffer } from '../lib/logger';
+import { getLogBuffer } from '../lib/log-buffer';
 import type {
   LogLevel,
   LogFilter,

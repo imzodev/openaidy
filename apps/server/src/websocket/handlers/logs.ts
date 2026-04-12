@@ -11,17 +11,14 @@ import {
   type WSResponse,
   type WSError,
   type ErrorResponse,
+  type LogFilter,
+  type LogEntry,
+  type LogStats,
+  type LogLevel,
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
-import {
-  getLogBuffer,
-  type LogFilter,
-  type LogEntry,
-  type LogQueryResult,
-  type LogStats,
-  type LogLevel,
-} from '../../lib/logger';
+import { getLogBuffer } from '../../lib/log-buffer';
 
 // ============================================================================
 // Log Message Types
@@ -144,7 +141,11 @@ export class LogsHandler {
     try {
       const { levels, contexts, search } = request.payload;
 
-      const filter: { levels?: LogLevel[]; contexts?: string[]; search?: string } = {};
+      const filter: {
+        levels?: LogLevel[];
+        contexts?: string[];
+        search?: string;
+      } = {};
       if (levels) filter.levels = levels;
       if (contexts) filter.contexts = contexts;
       if (search) filter.search = search;
@@ -323,13 +324,17 @@ export function registerLogsHandlers(
   router.registerHandler('log.unsubscribe', (connId, msg, ctx) =>
     handler.handleUnsubscribe(connId, msg as LogUnsubscribeRequest, ctx),
   );
-  router.registerHandler('log.query', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleQuery(connId, msg as LogQueryRequest, ctx) as any,
+  router.registerHandler(
+    'log.query',
+    (connId, msg, ctx) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handler.handleQuery(connId, msg as LogQueryRequest, ctx) as any,
   );
-  router.registerHandler('log.stats', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleStats(connId, msg, ctx) as any,
+  router.registerHandler(
+    'log.stats',
+    (connId, msg, ctx) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      handler.handleStats(connId, msg, ctx) as any,
   );
 }
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { LogEntry } from '@openaidy/shared-types';
 import {
   LogBuffer,
   getLogBuffer,
@@ -6,7 +7,6 @@ import {
   createLogger,
   setCorrelationContext,
   clearCorrelationContext,
-  type LogEntry,
 } from './logger';
 
 describe('LogBuffer', () => {
