@@ -8,7 +8,9 @@ import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
 
-export type DatabaseSchema = typeof sessionSchema & typeof jobSchema & typeof pairingSchema;
+export type DatabaseSchema = typeof sessionSchema &
+  typeof jobSchema &
+  typeof pairingSchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -156,10 +158,55 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS devices_pairing_request_id_idx ON devices(pairing_request_id);
     CREATE INDEX IF NOT EXISTS devices_status_idx ON devices(status);
     CREATE INDEX IF NOT EXISTS devices_token_idx ON devices(token);
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'backlog',
+      priority TEXT NOT NULL DEFAULT 'medium',
+      planning_enabled INTEGER NOT NULL DEFAULT 0,
+      planning_status TEXT,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS subtasks (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      parent_subtask_id TEXT REFERENCES subtasks(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      assigned_agent_id TEXT,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      result TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS task_agents (
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      agent_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'primary',
+      assigned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (task_id, agent_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status);
+    CREATE INDEX IF NOT EXISTS tasks_created_at_idx ON tasks(created_at);
+    CREATE INDEX IF NOT EXISTS subtasks_task_id_idx ON subtasks(task_id);
+    CREATE INDEX IF NOT EXISTS subtasks_status_idx ON subtasks(status);
+    CREATE INDEX IF NOT EXISTS task_agents_task_id_idx ON task_agents(task_id);
+    CREATE INDEX IF NOT EXISTS task_agents_agent_id_idx ON task_agents(agent_id);
   `);
 }
 
-export function createDatabaseClient(config: DatabaseClientConfig): DatabaseConnection {
+export function createDatabaseClient(
+  config: DatabaseClientConfig,
+): DatabaseConnection {
   if (config.kind === 'sqlite') {
     mkdirSync(dirname(config.sqlitePath), { recursive: true });
     const sqlite = new Database(config.sqlitePath);

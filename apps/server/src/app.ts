@@ -23,6 +23,8 @@ import { schedulerRoutes } from './routes/scheduler';
 import { workspaceRoutes } from './routes/workspace';
 import { logRoutes } from './routes/logs';
 import { createMcpRoutesPlugin } from './routes/mcp';
+import { taskRoutes } from './routes/tasks';
+import { createTaskService } from './tasks';
 import { createMcpClientService, type McpClientService } from './mcp/client';
 import { createProviderServices, type ProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
@@ -249,6 +251,18 @@ export async function buildApp() {
 
   // Register log routes
   await app.register(logRoutes);
+
+  // Register task routes (requires DB)
+  if (dbAdapter) {
+    const taskService = createTaskService({
+      tasksRepo: dbAdapter.repositories.tasks,
+      subtasksRepo: dbAdapter.repositories.subtasks,
+      taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      agents: services.agents,
+      sessionService: services.sessions,
+    });
+    await app.register(taskRoutes, { taskService });
+  }
 
   // Register MCP routes
   await app.register(createMcpRoutesPlugin({ mcpService }));
