@@ -18,8 +18,8 @@ export function SessionsPage(props: SessionsPageProps) {
 
   return (
     <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-      <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between mb-6">
+      <div class="w-full py-6 px-4 sm:px-6">
+        <div class="flex items-center justify-between mb-4">
           <h1 class="text-2xl font-bold text-text-primary">Sessions</h1>
           <button
             onClick={props.onCreateSession}
