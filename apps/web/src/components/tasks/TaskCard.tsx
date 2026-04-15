@@ -12,10 +12,10 @@ import type { Task, TaskPriority } from '../../lib/api-tasks';
  * Priority badge colors
  */
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  low: 'bg-gray-100 text-gray-600',
-  medium: 'bg-blue-100 text-blue-600',
-  high: 'bg-orange-100 text-orange-600',
-  urgent: 'bg-red-100 text-red-600',
+  low: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  medium: 'bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
+  high: 'bg-orange-100 text-orange-600 dark:bg-orange-900/50 dark:text-orange-300',
+  urgent: 'bg-red-100 text-red-600 dark:bg-red-900/50 dark:text-red-300',
 };
 
 /**
@@ -44,7 +44,8 @@ export function TaskCard(props: TaskCardProps) {
   }
 
   const cardClass = () => {
-    let base = 'task-card bg-white rounded-md shadow-sm p-3 cursor-pointer hover:shadow-md transition-shadow';
+    let base =
+      'task-card bg-white dark:bg-gray-800 dark:border dark:border-gray-700 rounded-md shadow-sm p-3 cursor-pointer hover:shadow-md transition-shadow';
     if (props.isDragging) {
       base += ' opacity-50';
     }
@@ -60,19 +61,24 @@ export function TaskCard(props: TaskCardProps) {
       onClick={props.onClick}
     >
       {/* Title */}
-      <h4 class="font-medium text-gray-900 text-sm mb-2 line-clamp-2">
+      <h4 class="font-medium text-gray-900 dark:text-gray-100 text-sm mb-2 line-clamp-2">
         {props.task.title}
       </h4>
 
       {/* Priority Badge */}
       <div class="flex items-center gap-2">
-        <span class={`text-xs px-2 py-0.5 rounded ${PRIORITY_COLORS[props.task.priority]}`}>
+        <span
+          class={`text-xs px-2 py-0.5 rounded ${PRIORITY_COLORS[props.task.priority]}`}
+        >
           {props.task.priority}
         </span>
 
         {/* Planning indicator */}
         <Show when={props.task.planningEnabled}>
-          <span class="text-xs text-purple-500" title="Planning enabled">
+          <span
+            class="text-xs text-purple-500 dark:text-purple-400"
+            title="Planning enabled"
+          >
             🧠
           </span>
         </Show>
@@ -80,7 +86,7 @@ export function TaskCard(props: TaskCardProps) {
 
       {/* Description preview */}
       <Show when={props.task.description}>
-        <p class="mt-2 text-xs text-gray-500 line-clamp-2">
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
           {props.task.description}
         </p>
       </Show>

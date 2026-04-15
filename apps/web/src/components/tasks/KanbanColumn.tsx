@@ -44,9 +44,10 @@ export function KanbanColumn(props: KanbanColumnProps) {
   }
 
   const columnClass = () => {
-    let base = 'kanban-column flex flex-col w-72 min-w-[288px] rounded-lg shadow-sm';
+    let base =
+      'kanban-column flex flex-col w-72 min-w-[288px] rounded-lg shadow-sm dark:bg-gray-800 dark:border dark:border-gray-700';
     if (props.isDropTarget && isOver()) {
-      base += ' ring-2 ring-blue-400 ring-inset';
+      base += ' ring-2 ring-blue-400 ring-inset dark:ring-blue-500';
     }
     return base;
   };
@@ -59,19 +60,21 @@ export function KanbanColumn(props: KanbanColumnProps) {
       onDrop={handleDrop}
     >
       {/* Column Header */}
-      <div class={`px-3 py-2 rounded-t-lg ${props.color}`}>
+      <div class={`px-3 py-2 rounded-t-lg ${props.color} dark:bg-gray-700/50`}>
         <div class="flex items-center justify-between">
-          <h3 class="font-medium text-gray-700">{props.title}</h3>
-          <span class="text-sm text-gray-500 bg-white px-2 py-0.5 rounded-full">
+          <h3 class="font-medium text-gray-700 dark:text-gray-200">
+            {props.title}
+          </h3>
+          <span class="text-sm text-gray-500 bg-white dark:bg-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
             {props.tasks.length}
           </span>
         </div>
       </div>
 
       {/* Cards Container */}
-      <div class="flex-1 overflow-y-auto p-2 space-y-2 bg-gray-50 rounded-b-lg min-h-[200px]">
+      <div class="flex-1 overflow-y-auto p-2 space-y-2 bg-gray-50 dark:bg-gray-900/50 rounded-b-lg min-h-[200px]">
         <Show when={props.tasks.length === 0}>
-          <div class="flex items-center justify-center h-32 text-gray-400 text-sm">
+          <div class="flex items-center justify-center h-32 text-gray-400 dark:text-gray-500 text-sm">
             No tasks
           </div>
         </Show>

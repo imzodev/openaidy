@@ -71,8 +71,8 @@ export function TaskModal(props: TaskModalProps) {
           setErrors({});
           setSubmitting(false);
         }
-      }
-    )
+      },
+    ),
   );
 
   /**
@@ -127,7 +127,8 @@ export function TaskModal(props: TaskModalProps) {
       setSelectedAgents([]);
       setSubmitting(false);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create task';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to create task';
       setErrors({ submit: errorMessage });
     }
   }
@@ -144,8 +145,8 @@ export function TaskModal(props: TaskModalProps) {
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-      }
-    )
+      },
+    ),
   );
 
   const isLoading = () => props.isLoading || submitting();
@@ -153,18 +154,18 @@ export function TaskModal(props: TaskModalProps) {
   return (
     <Show when={props.isOpen}>
       <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
         onClick={props.onClose}
       >
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg">
+        <div class="bg-white dark:bg-gray-800 dark:border dark:border-gray-700 rounded-lg shadow-xl w-full max-w-lg">
           {/* Header */}
-          <div class="flex items-center justify-between p-4 border-b">
-            <h2 class="text-lg font-semibold text-gray-900">
+          <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
               {props.task ? 'Edit Task' : 'Create Task'}
             </h2>
             <button
               type="button"
-              class="p-1 text-gray-400 hover:text-gray-600"
+              class="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
               onClick={props.onClose}
               disabled={isLoading()}
             >
@@ -176,13 +177,15 @@ export function TaskModal(props: TaskModalProps) {
           <form onSubmit={handleSubmit} class="p-4 space-y-4">
             {/* Title */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Title <span class="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                class={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors().title ? 'border-red-500' : 'border-gray-300'
+                class={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100 ${
+                  errors().title
+                    ? 'border-red-500'
+                    : 'border-gray-300 dark:border-gray-600'
                 }`}
                 value={title()}
                 onInput={(e) => setTitle(e.currentTarget.value)}
@@ -197,16 +200,18 @@ export function TaskModal(props: TaskModalProps) {
 
             {/* Description */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Description <span class="text-red-500">*</span>
               </label>
               <textarea
-                class={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  errors().description ? 'border-red-500' : 'border-gray-300'
+                class={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100 ${
+                  errors().description
+                    ? 'border-red-500'
+                    : 'border-gray-300 dark:border-gray-600'
                 } resize-none`}
                 rows={4}
                 value={description()}
-                onInput={(e) => setDescription(e.currentTarget.value)}
+                onInput={(e) => setDescription(e.target.value)}
                 placeholder="Enter task description (the prompt for the agent)"
                 disabled={isLoading()}
               />
@@ -217,19 +222,17 @@ export function TaskModal(props: TaskModalProps) {
 
             {/* Priority */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Priority
               </label>
               <select
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100"
                 value={priority()}
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
                 disabled={isLoading()}
               >
                 <For each={PRIORITY_OPTIONS}>
-                  {(opt) => (
-                    <option value={opt.value}>{opt.label}</option>
-                  )}
+                  {(opt) => <option value={opt.value}>{opt.label}</option>}
                 </For>
               </select>
             </div>
@@ -239,21 +242,23 @@ export function TaskModal(props: TaskModalProps) {
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  class="w-4 h-4 rounded border-gray-300 focus:ring-2 focus:ring-blue-500"
+                  class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900"
                   checked={planningEnabled()}
                   onChange={(e) => setPlanningEnabled(e.target.checked)}
                   disabled={isLoading()}
                 />
-                <span class="text-sm text-gray-700">Enable planning mode</span>
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  Enable planning mode
+                </span>
               </label>
-              <p class="text-sm text-gray-500">
+              <p class="text-sm text-gray-500 dark:text-gray-400">
                 Let the agent break down the task into subtasks automatically
               </p>
             </div>
 
             {/* Agent selector */}
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Assign Agents
               </label>
               <AgentSelector
@@ -265,10 +270,10 @@ export function TaskModal(props: TaskModalProps) {
             </div>
 
             {/* Actions */}
-            <div class="flex items-center justify-end gap-3 pt-4 border-t">
+            <div class="flex items-center justify-end gap-3 pt-4 border-t dark:border-gray-700">
               <button
                 type="button"
-                class="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md"
+                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md dark:hover:border-gray-500"
                 onClick={props.onClose}
                 disabled={isLoading()}
               >
@@ -278,10 +283,13 @@ export function TaskModal(props: TaskModalProps) {
                 type="submit"
                 class={`px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed ${
                   isLoading() ? '' : ''
-              }`}
+                }`}
                 disabled={isLoading()}
               >
-                <Show when={isLoading()} fallback={props.task ? 'Saving...' : 'Create'}>
+                <Show
+                  when={isLoading()}
+                  fallback={props.task ? 'Saving...' : 'Create'}
+                >
                   {isLoading() ? 'Saving...' : 'Create'}
                 </Show>
               </button>

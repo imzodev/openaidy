@@ -46,9 +46,10 @@ const AGENT_ROLES: AgentRole[] = ['primary', 'secondary', 'reviewer'];
  * Role badge colors
  */
 const ROLE_COLORS: Record<AgentRole, string> = {
-  primary: 'bg-blue-100 text-blue-700',
-  secondary: 'bg-gray-100 text-gray-700',
-  reviewer: 'bg-purple-100 text-purple-700',
+  primary: 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  secondary: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  reviewer:
+    'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300',
 };
 
 /**
@@ -67,7 +68,7 @@ export function AgentSelector(props: AgentSelectorProps) {
     return props.agents.filter(
       (a) =>
         a.name.toLowerCase().includes(query) ||
-        (a.description?.toLowerCase().includes(query) ?? false)
+        (a.description?.toLowerCase().includes(query) ?? false),
     );
   }
 
@@ -75,7 +76,10 @@ export function AgentSelector(props: AgentSelectorProps) {
    * Check if max agents limit is reached
    */
   function isMaxReached(): boolean {
-    return props.maxAgents !== undefined && props.selectedAgents.length >= props.maxAgents;
+    return (
+      props.maxAgents !== undefined &&
+      props.selectedAgents.length >= props.maxAgents
+    );
   }
 
   /**
@@ -95,7 +99,9 @@ export function AgentSelector(props: AgentSelectorProps) {
    */
   function updateRole(agentId: string, role: AgentRole) {
     props.onChange(
-      props.selectedAgents.map((a) => (a.agentId === agentId ? { ...a, role } : a))
+      props.selectedAgents.map((a) =>
+        a.agentId === agentId ? { ...a, role } : a,
+      ),
     );
   }
 
@@ -131,13 +137,20 @@ export function AgentSelector(props: AgentSelectorProps) {
               const agent = () => getAgent(selected.agentId);
               return (
                 <Show when={agent()}>
-                  <div class="flex items-center gap-1 bg-gray-100 rounded-full pl-2 pr-1 py-1">
-                    <User class="w-3 h-3 text-gray-500" />
-                    <span class="text-sm">{agent()!.name}</span>
+                  <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-full pl-2 pr-1 py-1">
+                    <User class="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                    <span class="text-sm dark:text-gray-200">
+                      {agent()!.name}
+                    </span>
                     <select
                       class={`text-xs px-1.5 py-0.5 rounded ${ROLE_COLORS[selected.role || 'primary']}`}
                       value={selected.role || 'primary'}
-                      onChange={(e) => updateRole(selected.agentId, e.target.value as AgentRole)}
+                      onChange={(e) =>
+                        updateRole(
+                          selected.agentId,
+                          e.target.value as AgentRole,
+                        )
+                      }
                       disabled={props.disabled}
                     >
                       <For each={AGENT_ROLES}>
@@ -146,11 +159,11 @@ export function AgentSelector(props: AgentSelectorProps) {
                     </select>
                     <button
                       type="button"
-                      class="p-0.5 hover:bg-gray-200 rounded-full"
+                      class="p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full"
                       onClick={() => removeAgent(selected.agentId)}
                       disabled={props.disabled}
                     >
-                      <X class="w-3 h-3 text-gray-500" />
+                      <X class="w-3 h-3 text-gray-500 dark:text-gray-400" />
                     </button>
                   </div>
                 </Show>
@@ -164,22 +177,24 @@ export function AgentSelector(props: AgentSelectorProps) {
       <div class="relative">
         <button
           type="button"
-          class="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-md bg-white hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          class="w-full flex items-center justify-between px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
           onClick={() => setIsOpen(!isOpen())}
           disabled={props.disabled}
         >
-          <span class="text-sm text-gray-700">Select agents...</span>
-          <ChevronDown class="w-4 h-4 text-gray-500" />
+          <span class="text-sm text-gray-700 dark:text-gray-300">
+            Select agents...
+          </span>
+          <ChevronDown class="w-4 h-4 text-gray-500 dark:text-gray-400" />
         </button>
 
         {/* Dropdown menu */}
         <Show when={isOpen()}>
-          <div class="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+          <div class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
             {/* Search input */}
-            <div class="p-2 border-b border-gray-100">
+            <div class="p-2 border-b border-gray-100 dark:border-gray-700">
               <input
                 type="text"
-                class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100"
                 placeholder="Search agents..."
                 value={searchQuery()}
                 onInput={(e) => setSearchQuery(e.target.value)}
@@ -188,8 +203,9 @@ export function AgentSelector(props: AgentSelectorProps) {
 
             {/* Max agents indicator */}
             <Show when={props.maxAgents !== undefined}>
-              <div class="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-100">
-                {props.selectedAgents.length} / {props.maxAgents} agents selected
+              <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">
+                {props.selectedAgents.length} / {props.maxAgents} agents
+                selected
               </div>
             </Show>
 
@@ -197,18 +213,20 @@ export function AgentSelector(props: AgentSelectorProps) {
             <Show when={props.selectedAgents.length > 0}>
               <button
                 type="button"
-                class="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                class="w-full px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                 onClick={clearAll}
               >
                 Clear all
               </button>
-              <div class="border-t border-gray-100" />
+              <div class="border-t border-gray-100 dark:border-gray-700" />
             </Show>
 
             {/* Agent list */}
             <Show when={filteredAgents().length === 0}>
-              <div class="px-3 py-2 text-sm text-gray-500">
-                {searchQuery() ? 'No agents match your search' : 'No agents available'}
+              <div class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                {searchQuery()
+                  ? 'No agents match your search'
+                  : 'No agents available'}
               </div>
             </Show>
 
@@ -220,8 +238,8 @@ export function AgentSelector(props: AgentSelectorProps) {
                 return (
                   <button
                     type="button"
-                    class={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                      isSelected() ? 'bg-blue-50' : ''
+                    class={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                      isSelected() ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                     } ${!canSelect() ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={() => canSelect() && toggleAgent(agent.id)}
                     disabled={!canSelect()}
@@ -230,7 +248,7 @@ export function AgentSelector(props: AgentSelectorProps) {
                       class={`w-4 h-4 border rounded flex items-center justify-center ${
                         isSelected()
                           ? 'bg-blue-500 border-blue-500'
-                          : 'border-gray-300'
+                          : 'border-gray-300 dark:border-gray-600'
                       }`}
                     >
                       <Show when={isSelected()}>
@@ -250,9 +268,11 @@ export function AgentSelector(props: AgentSelectorProps) {
                       </Show>
                     </div>
                     <User class="w-4 h-4 text-gray-400" />
-                    <span class="text-gray-900">{agent.name}</span>
+                    <span class="text-gray-900 dark:text-gray-200">
+                      {agent.name}
+                    </span>
                     <Show when={agent.description}>
-                      <span class="text-gray-500 text-xs truncate">
+                      <span class="text-gray-500 dark:text-gray-400 text-xs truncate">
                         {agent.description}
                       </span>
                     </Show>
