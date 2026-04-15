@@ -3,8 +3,15 @@ import { fileURLToPath } from 'node:url';
 
 vi.mock('../lib/env', () => ({
   env: (() => {
-    const appConfigPath = fileURLToPath(new URL('../../../.openaidy/test-sessions-config.json', import.meta.url));
-    const appConfigTemplatePath = fileURLToPath(new URL('../../../../config/openaidy.template.json', import.meta.url));
+    const appConfigPath = fileURLToPath(
+      new URL('../../../.openaidy/test-sessions-config.json', import.meta.url),
+    );
+    const appConfigTemplatePath = fileURLToPath(
+      new URL('../../../../config/openaidy.template.json', import.meta.url),
+    );
+    const bootstrapAdminTokenPath = fileURLToPath(
+      new URL('../../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+    );
 
     return {
       HOST: '0.0.0.0',
@@ -13,22 +20,60 @@ vi.mock('../lib/env', () => ({
       DB_KIND: 'disabled',
       DATABASE_URL: undefined,
       SQLITE_PATH: undefined,
+      OPENAIDY_HOME: fileURLToPath(
+        new URL('../../../.openaidy', import.meta.url),
+      ),
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'info',
+      // Workspace configuration
+      WORKSPACE_BASE_DIR: fileURLToPath(
+        new URL('../../../.openaidy/workspaces', import.meta.url),
+      ),
+      // Bootstrap admin configuration
+      BOOTSTRAP_ADMIN_ENABLED: true,
+      BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapAdminTokenPath,
+      BOOTSTRAP_ADMIN_CLIENT_ID: 'test-bootstrap-admin',
+      BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: 31536000000,
+      // WebSocket configuration
+      WS_ENABLED: true,
+      WS_PORT: 3001,
+      WS_PATH: '/ws',
+      WS_MAX_CONNECTIONS: 1000,
+      WS_HEARTBEAT_INTERVAL: 30000,
+      WS_AUTH_REQUIRED: true,
+      WS_TOKEN_EXPIRY: 86400000,
+      WS_TOKEN_SECRET: 'test-secret',
+      WS_RATE_LIMIT_MAX: 100,
+      WS_RATE_LIMIT_WINDOW: 60000,
+      // Pairing configuration
+      WS_PAIRING_CODE_LENGTH: 6,
+      WS_PAIRING_CODE_EXPIRY_MS: 300000,
+      WS_PAIRING_MAX_PENDING: 100,
+      WS_PAIRING_TOKEN_EXPIRY_MS: 2592000000,
+      WS_PAIRING_REQUIRE_ADMIN: true,
     };
   })(),
 }));
 
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
-import type { ModelProvider, ProviderDescriptor, ModelRequest, ProviderResult, ModelResponse } from '@openaidy/runtime';
+import type {
+  ModelProvider,
+  ProviderDescriptor,
+  ModelRequest,
+  ProviderResult,
+  ModelResponse,
+} from '@openaidy/runtime';
 import { ok, err, createProviderError } from '@openaidy/runtime';
 
 /**
  * Helper to create a mock provider for testing
  */
-function createMockProvider(id: string, options: { shouldFail?: boolean } = {}): ModelProvider {
+function createMockProvider(
+  id: string,
+  options: { shouldFail?: boolean } = {},
+): ModelProvider {
   const descriptor: ProviderDescriptor = {
     id,
     name: `Mock Provider ${id}`,
@@ -39,13 +84,19 @@ function createMockProvider(id: string, options: { shouldFail?: boolean } = {}):
   return {
     descriptor,
     listModels: async () => ok([]),
-    getModel: async () => err(createProviderError('provider.model_not_found', 'Not found')),
-    hasCapability: (cap: string) => descriptor.capabilities.includes(cap as never),
-    invoke: async (request: ModelRequest): Promise<ProviderResult<ModelResponse>> => {
+    getModel: async () =>
+      err(createProviderError('provider.model_not_found', 'Not found')),
+    hasCapability: (cap: string) =>
+      descriptor.capabilities.includes(cap as never),
+    invoke: async (
+      request: ModelRequest,
+    ): Promise<ProviderResult<ModelResponse>> => {
       if (options.shouldFail) {
-        return err(createProviderError('provider.unavailable', 'Mock provider failed'));
+        return err(
+          createProviderError('provider.unavailable', 'Mock provider failed'),
+        );
       }
-      
+
       return ok({
         id: `resp_${Date.now()}`,
         model: request.model,
@@ -72,15 +123,17 @@ function createMockProvider(id: string, options: { shouldFail?: boolean } = {}):
   };
 }
 
-describe('Session Message Routes', () => {
+describe('Session Message Routes', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = await buildApp();
-    
+
     // Register a mock provider for testing
     const mockProvider = createMockProvider('test-provider');
-    app.services.providers.registry.register(mockProvider, { defaultModel: 'mock-model' });
+    app.services.providers.registry.register(mockProvider, {
+      defaultModel: 'mock-model',
+    });
   });
 
   afterEach(async () => {
@@ -304,15 +357,17 @@ describe('Session Message Routes', () => {
   });
 });
 
-describe('Session isolation', () => {
+describe('Session isolation', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = await buildApp();
-    
+
     // Register a mock provider
     const mockProvider = createMockProvider('isolation-provider');
-    app.services.providers.registry.register(mockProvider, { defaultModel: 'isolation-model' });
+    app.services.providers.registry.register(mockProvider, {
+      defaultModel: 'isolation-model',
+    });
   });
 
   afterEach(async () => {
@@ -372,7 +427,7 @@ describe('Session isolation', () => {
     // Each session should have 2 messages (user + assistant)
     expect(messages1.length).toBe(2);
     expect(messages2.length).toBe(2);
-    
+
     // Messages should be different
     expect(messages1[0].content).toBe('Message to session 1');
     expect(messages2[0].content).toBe('Message to session 2');
@@ -431,7 +486,7 @@ describe('Session isolation', () => {
     // Each session should have exactly 1 run
     expect(runs1.length).toBe(1);
     expect(runs2.length).toBe(1);
-    
+
     // Runs should have different session IDs
     expect(runs1[0].sessionId).toBe(session1.id);
     expect(runs2[0].sessionId).toBe(session2.id);

@@ -3,11 +3,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AgentHandler, registerAgentHandlers, createAgentHandler } from './agent';
+import {
+  AgentHandler,
+  registerAgentHandlers,
+  createAgentHandler,
+} from './agent';
 import { MessageRouter, type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
-import { createWSMessage, WS_ERROR_CODES,
-} from '@openaidy/shared-types';
+import { createWSMessage } from '@openaidy/shared-types';
 import type { AgentRegistry } from '../../agents/registry';
 import type { Agent } from '../../agents/schema';
 
@@ -115,7 +118,10 @@ describe('AgentHandler', () => {
   beforeEach(() => {
     mockRegistry = createMockAgentRegistry();
     mockLogger = createMockLogger();
-    handler = new AgentHandler(mockRegistry, mockLogger as unknown as HandlerContext['logger']);
+    handler = new AgentHandler(
+      mockRegistry,
+      mockLogger as unknown as HandlerContext['logger'],
+    );
     connectionManager = new ConnectionManager();
     handlerContext = {
       connectionManager,
@@ -131,35 +137,48 @@ describe('AgentHandler', () => {
   describe('handleList', () => {
     it('should list enabled agents', async () => {
       const request = createWSMessage('agent.list', {});
-      const response = await handler.handleList('conn-1', request as never, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       expect(response.type).toBe('agent.list');
       // Add type guard to access payload properties
       if (response.type !== 'agent.list') return;
       expect(response.payload.agents).toHaveLength(2);
       expect(response.payload.agents[0]?.id).toBe('agent-1');
-      expect(response.payload.agents[1]?.name).toBe('Test Agent 1');
+      expect(response.payload.agents[0]?.name).toBe('Test Agent 1');
+      expect(response.payload.agents[1]?.name).toBe('Test Agent 2');
     });
 
     it('should only include enabled agents', async () => {
       const request = createWSMessage('agent.list', {});
-      const response = await handler.handleList('conn-1', request as never, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       // Add type guard to access payload properties
       if (response.type !== 'agent.list') return;
       expect(response.payload.agents).toHaveLength(2);
-      expect(response.payload.agents.find((a: { id: string }) => a.id === 'agent-disabled')).toBeUndefined();
+      expect(
+        response.payload.agents.find(
+          (a: { id: string }) => a.id === 'agent-disabled',
+        ),
+      ).toBeUndefined();
     });
 
-  it('should log agent list operation', async () => {
-    const request = createWSMessage('agent.list', {});
-    await handler.handleList('conn-1', request as never, handlerContext);
+    it('should log agent list operation', async () => {
+      const request = createWSMessage('agent.list', {});
+      await handler.handleList('conn-1', request as never, handlerContext);
 
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ connectionId: 'conn-1' }),
-      'Listing agents via WebSocket',
-    );
-  });
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ connectionId: 'conn-1' }),
+        'Listing agents via WebSocket',
+      );
+    });
   });
 
   // ============================================================================
@@ -168,54 +187,72 @@ describe('AgentHandler', () => {
 
   describe('handleGet', () => {
     it('should get an existing agent', async () => {
-    const request = createWSMessage('agent.get', { agentId: 'agent-1' });
-    const response = await handler.handleGet('conn-1', request as never, handlerContext);
+      const request = createWSMessage('agent.get', { agentId: 'agent-1' });
+      const response = await handler.handleGet(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-    expect(response.type).toBe('agent.get');
-    if (response.type === 'agent.get') {
-      expect(response.payload.agent.id).toBe('agent-1');
-      expect(response.payload.agent.name).toBe('Test Agent 1');
-      expect(response.payload.agent.description).toBe('A test agent');
-    }
-  });
+      expect(response.type).toBe('agent.get');
+      if (response.type === 'agent.get') {
+        expect(response.payload.agent.id).toBe('agent-1');
+        expect(response.payload.agent.name).toBe('Test Agent 1');
+        expect(response.payload.agent.description).toBe('A test agent');
+      }
+    });
 
-  it('should include system prompt in get response', async () => {
-    const request = createWSMessage('agent.get', { agentId: 'agent-1' });
-    const response = await handler.handleGet('conn-1', request as never, handlerContext);
+    it('should include system prompt in get response', async () => {
+      const request = createWSMessage('agent.get', { agentId: 'agent-1' });
+      const response = await handler.handleGet(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-    if (response.type === 'agent.get') {
-      expect(response.payload.agent.systemPrompt).toBe('You are a helpful assistant');
-    }
-  });
+      if (response.type === 'agent.get') {
+        expect(response.payload.agent.systemPrompt).toBe(
+          'You are a helpful assistant',
+        );
+      }
+    });
 
-  it('should include enabled status in get response', async () => {
-    const request = createWSMessage('agent.get', { agentId: 'agent-1' });
-    const response = await handler.handleGet('conn-1', request as never, handlerContext);
+    it('should include enabled status in get response', async () => {
+      const request = createWSMessage('agent.get', { agentId: 'agent-1' });
+      const response = await handler.handleGet(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-    if (response.type === 'agent.get') {
-      expect(response.payload.agent.enabled).toBe(true);
-    }
-  });
+      if (response.type === 'agent.get') {
+        expect(response.payload.agent.enabled).toBe(true);
+      }
+    });
 
-  // Note: 'model' is not included in the handler response
-  // it('should include model in get response', ...)
+    // Note: 'model' is not included in the handler response
+    // it('should include model in get response', ...)
 
-  it('should return error for non-existent agent', async () => {
-    const request = createWSMessage('agent.get', { agentId: 'non-existent' });
-    const response = await handler.handleGet('conn-1', request as never, handlerContext);
+    it('should return error for non-existent agent', async () => {
+      const request = createWSMessage('agent.get', { agentId: 'non-existent' });
+      const response = await handler.handleGet(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-    expect(response.type).toBe('error');
-  });
+      expect(response.type).toBe('error');
+    });
 
-  it('should log agent get', async () => {
-    const request = createWSMessage('agent.get', { agentId: 'agent-1' });
-    await handler.handleGet('conn-1', request as never, handlerContext);
+    it('should log agent get', async () => {
+      const request = createWSMessage('agent.get', { agentId: 'agent-1' });
+      await handler.handleGet('conn-1', request as never, handlerContext);
 
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: 'agent-1', connectionId: 'conn-1' }),
-      'Getting agent via WebSocket',
-    );
-  });
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ agentId: 'agent-1', connectionId: 'conn-1' }),
+        'Getting agent via WebSocket',
+      );
+    });
   });
 
   // ============================================================================
@@ -224,28 +261,40 @@ describe('AgentHandler', () => {
 
   describe('Error Handling', () => {
     it('should handle registry errors in list', async () => {
-    (mockRegistry.listAgents as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
-      throw new Error('Registry error');
+      (
+        mockRegistry.listAgents as ReturnType<typeof vi.fn>
+      ).mockImplementationOnce(() => {
+        throw new Error('Registry error');
+      });
+
+      const request = createWSMessage('agent.list', {});
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
+
+      expect(response.type).toBe('error');
+      expect(mockLogger.error).toHaveBeenCalled();
     });
 
-    const request = createWSMessage('agent.list', {});
-    const response = await handler.handleList('conn-1', request as never, handlerContext);
+    it('should handle registry errors in get', async () => {
+      (
+        mockRegistry.getAgent as ReturnType<typeof vi.fn>
+      ).mockImplementationOnce(() => {
+        throw new Error('Registry error');
+      });
 
-    expect(response.type).toBe('error');
-    expect(mockLogger.error).toHaveBeenCalled();
-  });
+      const request = createWSMessage('agent.get', { agentId: 'agent-1' });
+      const response = await handler.handleGet(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-  it('should handle registry errors in get', async () => {
-    (mockRegistry.getAgent as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
-      throw new Error('Registry error');
+      expect(response.type).toBe('error');
+      expect(mockLogger.error).toHaveBeenCalled();
     });
-
-    const request = createWSMessage('agent.get', { agentId: 'agent-1' });
-    const response = await handler.handleGet('conn-1', request as never, handlerContext);
-
-    expect(response.type).toBe('error');
-    expect(mockLogger.error).toHaveBeenCalled();
-  });
   });
 });
 
@@ -260,7 +309,9 @@ describe('registerAgentHandlers', () => {
 
   beforeEach(() => {
     mockLogger = createMockLogger();
-    messageRouter = new MessageRouter(mockLogger as unknown as HandlerContext['logger']);
+    messageRouter = new MessageRouter(
+      mockLogger as unknown as HandlerContext['logger'],
+    );
     handler = new AgentHandler(
       createMockAgentRegistry(),
       mockLogger as unknown as HandlerContext['logger'],

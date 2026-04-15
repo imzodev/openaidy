@@ -138,6 +138,21 @@ const createMockProviderServices = (): ProviderServices => {
               },
             ],
           },
+          listModels: vi.fn().mockResolvedValue({
+            ok: true,
+            value: [
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                capabilities: ['chat', 'streaming'],
+              },
+              {
+                id: 'gpt-4o-mini',
+                name: 'GPT-4o Mini',
+                capabilities: ['chat', 'streaming'],
+              },
+            ],
+          }),
         },
         enabled: true,
       },
@@ -159,6 +174,16 @@ const createMockProviderServices = (): ProviderServices => {
               },
             ],
           },
+          listModels: vi.fn().mockResolvedValue({
+            ok: true,
+            value: [
+              {
+                id: 'claude-3-opus',
+                name: 'Claude 3 Opus',
+                capabilities: ['chat', 'streaming'],
+              },
+            ],
+          }),
         },
         enabled: true,
       },
@@ -174,6 +199,7 @@ const createMockProviderServices = (): ProviderServices => {
             capabilities: [],
             models: [],
           },
+          listModels: vi.fn().mockResolvedValue({ ok: true, value: [] }),
         },
         enabled: false,
       },

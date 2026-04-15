@@ -3,13 +3,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ProviderHandler, registerProviderHandlers, createProviderHandler } from './provider';
-import { MessageRouter, type HandlerContext } from '../message-router';
+import {
+  ProviderHandler,
+  registerProviderHandlers,
+  createProviderHandler,
+} from './provider';
+import { type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
 import { createWSMessage, WS_ERROR_CODES } from '@openaidy/shared-types';
 import type { ProviderServices } from '../../providers';
 import type { ProviderRegistryService } from '../../providers/registry';
-import type { ModelProvider, ProviderDescriptor } from '@openaidy/runtime';
+import type { ModelProvider } from '@openaidy/runtime';
 
 // ============================================================================
 // Mock Factories
@@ -40,10 +44,33 @@ const createMockProviderServices = (): ProviderServices => {
             vendorFamily: 'openai',
             capabilities: ['chat', 'streaming'],
             models: [
-              { id: 'gpt-4', name: 'GPT-4', capabilities: ['chat', 'streaming'] },
-              { id: 'gpt-4o-mini', name: 'GPT-4o Mini', capabilities: ['chat', 'streaming'] },
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                capabilities: ['chat', 'streaming'],
+              },
+              {
+                id: 'gpt-4o-mini',
+                name: 'GPT-4o Mini',
+                capabilities: ['chat', 'streaming'],
+              },
             ],
           },
+          listModels: vi.fn().mockResolvedValue({
+            ok: true,
+            value: [
+              {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                capabilities: ['chat', 'streaming'],
+              },
+              {
+                id: 'gpt-4o-mini',
+                name: 'GPT-4o Mini',
+                capabilities: ['chat', 'streaming'],
+              },
+            ],
+          }),
         } as unknown as ModelProvider,
         enabled: true,
       },
@@ -58,9 +85,23 @@ const createMockProviderServices = (): ProviderServices => {
             vendorFamily: 'anthropic',
             capabilities: ['chat', 'streaming'],
             models: [
-              { id: 'claude-3-opus', name: 'Claude 3 Opus', capabilities: ['chat', 'streaming'] },
+              {
+                id: 'claude-3-opus',
+                name: 'Claude 3 Opus',
+                capabilities: ['chat', 'streaming'],
+              },
             ],
           },
+          listModels: vi.fn().mockResolvedValue({
+            ok: true,
+            value: [
+              {
+                id: 'claude-3-opus',
+                name: 'Claude 3 Opus',
+                capabilities: ['chat', 'streaming'],
+              },
+            ],
+          }),
         } as unknown as ModelProvider,
         enabled: true,
       },
@@ -76,6 +117,7 @@ const createMockProviderServices = (): ProviderServices => {
             capabilities: [],
             models: [],
           },
+          listModels: vi.fn().mockResolvedValue({ ok: true, value: [] }),
         } as unknown as ModelProvider,
         enabled: false,
       },
@@ -103,7 +145,8 @@ const createMockProviderServices = (): ProviderServices => {
     disable: vi.fn(),
     isEnabled: vi.fn(),
     size: providers.size,
-    enabledCount: Array.from(providers.values()).filter((p) => p.enabled).length,
+    enabledCount: Array.from(providers.values()).filter((p) => p.enabled)
+      .length,
   } as unknown as ProviderRegistryService;
 
   return {
@@ -127,7 +170,10 @@ describe('ProviderHandler', () => {
   beforeEach(() => {
     mockServices = createMockProviderServices();
     mockLogger = createMockLogger();
-    handler = new ProviderHandler(mockServices, mockLogger as unknown as HandlerContext['logger']);
+    handler = new ProviderHandler(
+      mockServices,
+      mockLogger as unknown as HandlerContext['logger'],
+    );
     connectionManager = new ConnectionManager();
     handlerContext = {
       connectionManager,
@@ -143,10 +189,16 @@ describe('ProviderHandler', () => {
   describe('handleList', () => {
     it('should list enabled providers', async () => {
       const request = createWSMessage('provider.list', {});
-      const response = await handler.handleList('conn-1', request as never, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       expect(response.type).toBe('provider.list');
-      const payload = response.payload as { providers: Array<{ id: string; name: string; capabilities: string[] }> };
+      const payload = response.payload as {
+        providers: Array<{ id: string; name: string; capabilities: string[] }>;
+      };
       expect(payload.providers).toHaveLength(2);
       expect(payload.providers[0]!.id).toBe('openai');
       expect(payload.providers[1]!.name).toBe('Anthropic');
@@ -154,17 +206,29 @@ describe('ProviderHandler', () => {
 
     it('should only include enabled providers', async () => {
       const request = createWSMessage('provider.list', {});
-      const response = await handler.handleList('conn-1', request as never, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       const payload = response.payload as { providers: Array<{ id: string }> };
-      expect(payload.providers.find((p) => p.id === 'disabled-provider')).toBeUndefined();
+      expect(
+        payload.providers.find((p) => p.id === 'disabled-provider'),
+      ).toBeUndefined();
     });
 
     it('should include provider capabilities', async () => {
       const request = createWSMessage('provider.list', {});
-      const response = await handler.handleList('conn-1', request as never, handlerContext);
+      const response = await handler.handleList(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-      const payload = response.payload as { providers: Array<{ capabilities: string[] }> };
+      const payload = response.payload as {
+        providers: Array<{ capabilities: string[] }>;
+      };
       expect(payload.providers[0]!.capabilities).toContain('chat');
       expect(payload.providers[0]!.capabilities).toContain('streaming');
     });
@@ -186,11 +250,20 @@ describe('ProviderHandler', () => {
 
   describe('handleModels', () => {
     it('should get models for an existing provider', async () => {
-      const request = createWSMessage('provider.models', { providerId: 'openai' });
-      const response = await handler.handleModels('conn-1', request as never, handlerContext);
+      const request = createWSMessage('provider.models', {
+        providerId: 'openai',
+      });
+      const response = await handler.handleModels(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       expect(response.type).toBe('provider.models');
-      const payload = response.payload as { providerId: string; models: Array<{ id: string; name: string; capabilities?: string[] }> };
+      const payload = response.payload as {
+        providerId: string;
+        models: Array<{ id: string; name: string; capabilities?: string[] }>;
+      };
       expect(payload.providerId).toBe('openai');
       expect(payload.models).toHaveLength(2);
       expect(payload.models[0]!.id).toBe('gpt-4');
@@ -198,18 +271,32 @@ describe('ProviderHandler', () => {
     });
 
     it('should return error for non-existent provider', async () => {
-      const request = createWSMessage('provider.models', { providerId: 'non-existent' });
-      const response = await handler.handleModels('conn-1', request as never, handlerContext);
+      const request = createWSMessage('provider.models', {
+        providerId: 'non-existent',
+      });
+      const response = await handler.handleModels(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
-      const errorPayload = response.payload as { error: { code: string; message: string } };
+      const errorPayload = response.payload as {
+        error: { code: string; message: string };
+      };
       expect(errorPayload.error.code).toBe(WS_ERROR_CODES.NOT_FOUND);
       expect(errorPayload.error.message).toContain('non-existent');
     });
 
     it('should return error for disabled provider', async () => {
-      const request = createWSMessage('provider.models', { providerId: 'disabled-provider' });
-      const response = await handler.handleModels('conn-1', request as never, handlerContext);
+      const request = createWSMessage('provider.models', {
+        providerId: 'disabled-provider',
+      });
+      const response = await handler.handleModels(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
       const errorPayload = response.payload as { error: { code: string } };
@@ -217,20 +304,33 @@ describe('ProviderHandler', () => {
     });
 
     it('should include model capabilities when available', async () => {
-      const request = createWSMessage('provider.models', { providerId: 'openai' });
-      const response = await handler.handleModels('conn-1', request as never, handlerContext);
+      const request = createWSMessage('provider.models', {
+        providerId: 'openai',
+      });
+      const response = await handler.handleModels(
+        'conn-1',
+        request as never,
+        handlerContext,
+      );
 
-      const payload = response.payload as { models: Array<{ capabilities: string[] }> };
+      const payload = response.payload as {
+        models: Array<{ capabilities: string[] }>;
+      };
       expect(payload.models[0]!.capabilities).toContain('chat');
       expect(payload.models[0]!.capabilities).toContain('streaming');
     });
 
     it('should log provider models operation', async () => {
-      const request = createWSMessage('provider.models', { providerId: 'openai' });
+      const request = createWSMessage('provider.models', {
+        providerId: 'openai',
+      });
       await handler.handleModels('conn-1', request as never, handlerContext);
 
       expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ connectionId: 'conn-1', providerId: 'openai' }),
+        expect.objectContaining({
+          connectionId: 'conn-1',
+          providerId: 'openai',
+        }),
         'Getting provider models via WebSocket',
       );
     });
@@ -256,14 +356,20 @@ describe('ProviderHandler', () => {
       const router = { registerHandler: vi.fn() };
       registerProviderHandlers(router, handler);
 
-      expect(router.registerHandler).toHaveBeenCalledWith('provider.list', expect.any(Function));
+      expect(router.registerHandler).toHaveBeenCalledWith(
+        'provider.list',
+        expect.any(Function),
+      );
     });
 
     it('should register provider.models handler', () => {
       const router = { registerHandler: vi.fn() };
       registerProviderHandlers(router, handler);
 
-      expect(router.registerHandler).toHaveBeenCalledWith('provider.models', expect.any(Function));
+      expect(router.registerHandler).toHaveBeenCalledWith(
+        'provider.models',
+        expect.any(Function),
+      );
     });
 
     it('should register exactly 2 handlers', () => {

@@ -202,6 +202,8 @@ describe('WebSocketClient', () => {
       });
 
       const connectPromise = tokenClient.connect();
+      // Wait a tick for WebSocket constructor to execute
+      await new Promise((resolve) => setTimeout(resolve, 0));
       const mockWs = MockWebSocket.lastInstance!;
 
       expect(mockWs.url).toContain('token=test-token-123');

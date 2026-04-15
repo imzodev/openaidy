@@ -191,7 +191,7 @@ describe('websocket types', () => {
 
     it('should return false for request types', () => {
       expect(isResponseType('session.create')).toBe(false);
-      expect(isResponseType('session.get')).toBe(false);
+      expect(isResponseType('session.subscribe')).toBe(false);
     });
 
     it('should return false for unknown types', () => {

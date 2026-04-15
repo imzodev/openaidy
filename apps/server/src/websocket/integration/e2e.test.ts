@@ -196,8 +196,14 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
             name: `Provider ${id}`,
             vendorFamily: id,
             capabilities: ['chat'],
-            models: [{ id: 'model-1', name: 'Model 1' }],
+            models: [
+              { id: 'model-1', name: 'Model 1', capabilities: ['chat'] },
+            ],
           },
+          listModels: vi.fn().mockResolvedValue({
+            ok: true,
+            value: [{ id: 'model-1', name: 'Model 1', capabilities: ['chat'] }],
+          }),
         };
       }),
     },

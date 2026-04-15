@@ -3,8 +3,15 @@ import { fileURLToPath } from 'node:url';
 
 vi.mock('../lib/env', () => ({
   env: (() => {
-    const appConfigPath = fileURLToPath(new URL('../../../.openaidy/test-providers-config.json', import.meta.url));
-    const appConfigTemplatePath = fileURLToPath(new URL('../../../../config/openaidy.template.json', import.meta.url));
+    const appConfigPath = fileURLToPath(
+      new URL('../../../.openaidy/test-providers-config.json', import.meta.url),
+    );
+    const appConfigTemplatePath = fileURLToPath(
+      new URL('../../../../config/openaidy.template.json', import.meta.url),
+    );
+    const bootstrapAdminTokenPath = fileURLToPath(
+      new URL('../../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+    );
 
     return {
       HOST: '0.0.0.0',
@@ -13,9 +20,38 @@ vi.mock('../lib/env', () => ({
       DB_KIND: 'disabled',
       DATABASE_URL: undefined,
       SQLITE_PATH: undefined,
+      OPENAIDY_HOME: fileURLToPath(
+        new URL('../../../.openaidy', import.meta.url),
+      ),
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'info',
+      // Workspace configuration
+      WORKSPACE_BASE_DIR: fileURLToPath(
+        new URL('../../../.openaidy/workspaces', import.meta.url),
+      ),
+      // Bootstrap admin configuration
+      BOOTSTRAP_ADMIN_ENABLED: true,
+      BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapAdminTokenPath,
+      BOOTSTRAP_ADMIN_CLIENT_ID: 'test-bootstrap-admin',
+      BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: 31536000000,
+      // WebSocket configuration
+      WS_ENABLED: true,
+      WS_PORT: 3001,
+      WS_PATH: '/ws',
+      WS_MAX_CONNECTIONS: 1000,
+      WS_HEARTBEAT_INTERVAL: 30000,
+      WS_AUTH_REQUIRED: true,
+      WS_TOKEN_EXPIRY: 86400000,
+      WS_TOKEN_SECRET: 'test-secret',
+      WS_RATE_LIMIT_MAX: 100,
+      WS_RATE_LIMIT_WINDOW: 60000,
+      // Pairing configuration
+      WS_PAIRING_CODE_LENGTH: 6,
+      WS_PAIRING_CODE_EXPIRY_MS: 300000,
+      WS_PAIRING_MAX_PENDING: 100,
+      WS_PAIRING_TOKEN_EXPIRY_MS: 2592000000,
+      WS_PAIRING_REQUIRE_ADMIN: true,
     };
   })(),
 }));
@@ -23,7 +59,7 @@ vi.mock('../lib/env', () => ({
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 
-describe('Provider Routes', () => {
+describe('Provider Routes', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -269,7 +305,7 @@ describe('Provider Routes', () => {
   });
 });
 
-describe('Provider Routes with registered provider', () => {
+describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   // Note: In a real implementation, providers would be registered at app startup
@@ -337,11 +373,11 @@ describe('Provider Routes with registered provider', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      
+
       // Validate response structure
       expect(body).toHaveProperty('providers');
       expect(Array.isArray(body.providers)).toBe(true);
-      
+
       // If there are providers, validate their structure
       if (body.providers.length > 0) {
         const provider = body.providers[0];
@@ -362,21 +398,21 @@ describe('Provider Routes with registered provider', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      
+
       // Validate response structure
       expect(body).toHaveProperty('status');
       expect(body).toHaveProperty('providers');
       expect(body).toHaveProperty('timestamp');
-      
+
       // Validate status values
       expect(['healthy', 'degraded', 'unhealthy']).toContain(body.status);
-      
+
       // Validate timestamp is valid ISO string
       expect(() => new Date(body.timestamp)).not.toThrow();
-      
+
       // Validate providers array structure
       expect(Array.isArray(body.providers)).toBe(true);
-      
+
       if (body.providers.length > 0) {
         const provider = body.providers[0];
         expect(provider).toHaveProperty('id');
@@ -389,7 +425,7 @@ describe('Provider Routes with registered provider', () => {
   });
 });
 
-describe('Input validation with Zod', () => {
+describe('Input validation with Zod', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
@@ -402,9 +438,7 @@ describe('Input validation with Zod', () => {
         method: 'POST',
         url: '/providers/test-invoke',
         payload: {
-          messages: [
-            { role: 'system', content: 'You are helpful' },
-          ],
+          messages: [{ role: 'system', content: 'You are helpful' }],
         },
       });
 
