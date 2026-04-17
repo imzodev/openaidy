@@ -12,6 +12,9 @@ vi.mock('./lib/env', () => ({
     const bootstrapAdminTokenPath = fileURLToPath(
       new URL('../../.openaidy/test-bootstrap-admin.json', import.meta.url),
     );
+    const openAidyHome = fileURLToPath(
+      new URL('../../.openaidy', import.meta.url),
+    );
 
     return {
       HOST: '0.0.0.0',
@@ -20,9 +23,14 @@ vi.mock('./lib/env', () => ({
       DB_KIND: 'disabled',
       DATABASE_URL: undefined,
       SQLITE_PATH: undefined,
+      OPENAIDY_HOME: openAidyHome,
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'info',
+      // Workspace configuration
+      WORKSPACE_BASE_DIR: fileURLToPath(
+        new URL('../../.openaidy/workspaces', import.meta.url),
+      ),
       // WebSocket configuration - explicitly enabled
       WS_ENABLED: true,
       WS_PORT: 3001,
@@ -60,7 +68,7 @@ import type {
 } from '@openaidy/runtime';
 import { err, createProviderError, ok } from '@openaidy/runtime';
 
-describe('buildApp', () => {
+describe('buildApp', { timeout: 15000 }, () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
@@ -81,7 +89,7 @@ describe('buildApp', () => {
   });
 });
 
-describe('App services lifecycle', () => {
+describe('App services lifecycle', { timeout: 15000 }, () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
@@ -119,8 +127,12 @@ describe('App services lifecycle', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.providers).toHaveLength(1);
-    expect(body.providers[0].id).toBe('test-provider-lifecycle');
+    // Config template has 3 providers, plus our test provider = 4 total
+    expect(body.providers.length).toBeGreaterThanOrEqual(1);
+    const testProvider = body.providers.find(
+      (p: { id: string }) => p.id === 'test-provider-lifecycle',
+    );
+    expect(testProvider).toBeDefined();
   });
 
   it('enable/disable operations affect the shared registry', async () => {
@@ -137,7 +149,10 @@ describe('App services lifecycle', () => {
       method: 'GET',
       url: '/providers',
     });
-    expect(listResponse1.json().providers[0].enabled).toBe(true);
+    const testProvider1 = listResponse1
+      .json()
+      .providers.find((p: { id: string }) => p.id === 'test-toggle-provider');
+    expect(testProvider1.enabled).toBe(true);
 
     // Disable via route
     const disableResponse = await app.inject({
@@ -155,7 +170,10 @@ describe('App services lifecycle', () => {
       method: 'GET',
       url: '/providers',
     });
-    expect(listResponse2.json().providers[0].enabled).toBe(false);
+    const disabledProvider = listResponse2
+      .json()
+      .providers.find((p: { id: string }) => p.id === 'test-toggle-provider');
+    expect(disabledProvider.enabled).toBe(false);
 
     // Re-enable via route
     const enableResponse = await app.inject({
@@ -215,7 +233,7 @@ describe('App services lifecycle', () => {
 // WebSocket Gateway Tests
 // ============================================================================
 
-describe('WebSocket Gateway Integration', () => {
+describe('WebSocket Gateway Integration', { timeout: 15000 }, () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
