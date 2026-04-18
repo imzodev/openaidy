@@ -10,6 +10,17 @@ import {
 } from './adapter';
 import type { ModelRequest } from '@openaidy/runtime';
 
+// Mock the app logger so we can assert log calls without hitting the real buffer
+const mockLoggerInstance = {
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+};
+vi.mock('../../../lib/logger', () => ({
+  createLogger: vi.fn(() => mockLoggerInstance),
+}));
+
 // Mock the OpenAI SDK - the factory function is hoisted, so everything must be self-contained
 vi.mock('openai', () => {
   // Create shared mock functions that will be reused across all instances
@@ -310,6 +321,143 @@ describe('OpenAICompatibleProvider', () => {
         // (Only OpenAI.APIError instances get special handling)
         expect(result.error.code).toBe('provider.unknown');
       }
+    });
+  });
+
+  describe('logging', () => {
+    const request: ModelRequest = {
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+    };
+
+    it('logs info on invoke with model and baseURL', async () => {
+      mockCreateCompletion.mockResolvedValueOnce({
+        id: 'chatcmpl_log',
+        object: 'chat.completion',
+        created: 1700000000,
+        model: 'gpt-4',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'Hi' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+      });
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      await provider.invoke(request);
+
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+        expect.stringContaining('invoke: model=gpt-4'),
+      );
+    });
+
+    it('logs info on invokeStream with model and baseURL', async () => {
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_stream',
+          choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }],
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      for await (const _ of provider.invokeStream(request)) {
+        // consume
+      }
+
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+        expect.stringContaining('invokeStream: model=gpt-4'),
+      );
+    });
+
+    it('logs error when invoke receives an OpenAI APIError', async () => {
+      const OpenAI = (await import('openai')).default as unknown as {
+        APIError: new (
+          msg: string,
+          code: string,
+          type: string,
+        ) => Error & {
+          status: number;
+          error: unknown;
+        };
+      };
+      const apiError = new OpenAI.APIError(
+        'Unknown Model',
+        '1211',
+        'invalid_request_error',
+      );
+      apiError.status = 400;
+      apiError.error = { code: '1211', message: 'Unknown Model' };
+      mockCreateCompletion.mockRejectedValueOnce(apiError);
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        providerId: 'minimax',
+      });
+      const result = await provider.invoke(request);
+
+      expect(result.ok).toBe(false);
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('Provider API error: HTTP'),
+        expect.objectContaining({ code: '1211' }),
+      );
+    });
+
+    it('logs error when invokeStream receives an OpenAI APIError', async () => {
+      const OpenAI = (await import('openai')).default as unknown as {
+        APIError: new (
+          msg: string,
+          code: string,
+          type: string,
+        ) => Error & {
+          status: number;
+          error: unknown;
+        };
+      };
+      const apiError = new OpenAI.APIError(
+        'Not Found',
+        undefined as unknown as string,
+        undefined as unknown as string,
+      );
+      apiError.status = 404;
+      apiError.error = undefined;
+      mockCreateCompletion.mockRejectedValueOnce(apiError);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const events = [];
+      for await (const event of provider.invokeStream(request)) {
+        events.push(event);
+      }
+
+      expect(events.some((e) => !e.ok)).toBe(true);
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('Provider API error: HTTP'),
+        expect.any(Object),
+      );
+    });
+
+    it('logs error for generic Error in invoke', async () => {
+      mockCreateCompletion.mockRejectedValueOnce(new Error('Network failure'));
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const result = await provider.invoke(request);
+
+      expect(result.ok).toBe(false);
+      expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+        expect.stringContaining('Network failure'),
+      );
+    });
+
+    it('uses providerId as logger context', async () => {
+      const { createLogger } = await import('../../../lib/logger');
+      createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        providerId: 'my-provider',
+      });
+      expect(createLogger).toHaveBeenCalledWith('my-provider');
     });
   });
 
