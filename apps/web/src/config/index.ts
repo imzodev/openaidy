@@ -53,6 +53,7 @@ export type { DynamicConfigFormProps } from './DynamicConfigForm';
 export {
   getDefaultsSectionSchema,
   getProvidersSectionSchema,
+  getProvidersSectionSchemaWithModels,
   getVendorSpecificFields,
   getAgentsSectionSchema,
   buildAppConfigSchema,

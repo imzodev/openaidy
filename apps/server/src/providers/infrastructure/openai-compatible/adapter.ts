@@ -20,6 +20,7 @@ import {
   type ProviderResult,
 } from '@openaidy/runtime';
 import type { OpenAICompatibleAdapterConfig } from './types';
+import { createLogger } from '../../../lib/logger';
 
 // =====================
 // Default Configuration
@@ -92,6 +93,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     Pick<OpenAICompatibleAdapterConfig, 'apiKey' | 'baseUrl'>
   > &
     OpenAICompatibleAdapterConfig;
+  private readonly logger: ReturnType<typeof createLogger>;
 
   readonly descriptor: ProviderDescriptor;
 
@@ -106,6 +108,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
       providerName: PROVIDER_NAME,
       ...config,
     };
+
+    this.logger = createLogger(this.config.providerId ?? PROVIDER_ID);
 
     // Initialize OpenAI SDK client
     this.client = new OpenAI({
@@ -243,6 +247,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+      this.logger.info(
+        `invoke: model=${modelId} baseURL=${this.config.baseUrl}`,
+      );
       const messages = this.mapMessages(request.messages);
       const tools =
         request.tools && request.tools.length > 0
@@ -300,6 +307,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+      this.logger.info(
+        `invokeStream: model=${modelId} baseURL=${this.config.baseUrl}`,
+      );
       const messages = this.mapMessages(request.messages);
       const tools =
         request.tools && request.tools.length > 0
@@ -502,6 +512,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
     error: unknown,
   ): ReturnType<typeof createProviderError> {
     if (error instanceof OpenAI.APIError) {
+      this.logger.error(
+        `Provider API error: HTTP ${error.status} ${error.message} (code=${error.code})`,
+        { code: error.code, type: error.type, body: error.error },
+      );
       const errorCode =
         error.code === 'rate_limit_exceeded'
           ? 'provider.rate_limit'
@@ -514,12 +528,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
 
     if (error instanceof Error) {
+      this.logger.error(`Provider error: ${error.message}`);
       return createProviderError(
         'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
         error.message,
       );
     }
 
+    this.logger.error(`Unknown provider error: ${String(error)}`);
     return createProviderError(
       'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
       'Unknown error occurred',

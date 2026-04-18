@@ -56,11 +56,12 @@ const commonProviderFields: Record<string, FieldSchema> = {
     visibleWhen: { field: 'enabled', equals: true },
   },
   defaultModel: {
-    type: 'string',
+    type: 'select',
     key: 'defaultModel',
     label: 'Default Model',
-    description: 'Default model ID for this provider',
-    placeholder: 'e.g., gpt-4o-mini',
+    description:
+      'Default model for this provider (must be one of the models listed below)',
+    options: [],
   },
 };
 
@@ -377,6 +378,47 @@ export function getProvidersSectionSchema(): SectionSchema {
         label: 'Provider',
         minItems: 1,
         itemSchema: providerSchema,
+      },
+    ],
+  };
+}
+
+/**
+ * Build a providers section schema with defaultModel options derived from the
+ * provider's own models array.  Pass the current provider object so the select
+ * is pre-populated with the model IDs that are actually defined.
+ */
+export function getProvidersSectionSchemaWithModels(provider: {
+  models?: { id: string; name?: string }[];
+}): SectionSchema {
+  const modelOptions = (provider.models ?? []).map((m) => ({
+    value: m.id,
+    label: m.name ?? m.id,
+  }));
+
+  const providerSchemaWithModels: FieldSchema = {
+    ...providerSchema,
+    properties: {
+      ...providerSchema.properties,
+      defaultModel: {
+        ...(providerSchema.properties?.['defaultModel'] ?? {}),
+        type: 'select',
+        key: 'defaultModel',
+        label: 'Default Model',
+        options: modelOptions,
+      },
+    },
+  };
+
+  return {
+    id: 'providers',
+    fields: [
+      {
+        type: 'array',
+        key: 'providers',
+        label: 'Provider',
+        minItems: 1,
+        itemSchema: providerSchemaWithModels,
       },
     ],
   };

@@ -268,10 +268,10 @@ export class SessionMessageService {
       messages,
     };
 
-    // Build invocation options, only including properties that have values
+    // Build invocation options: client overrides take priority, then agent-resolved values
     const invokeOptions = {
-      ...(input.providerId !== undefined && { providerId: input.providerId }),
-      ...(input.modelId !== undefined && { modelId: input.modelId }),
+      providerId: input.providerId ?? providerId,
+      modelId: input.modelId ?? modelId,
     };
 
     const result = await this.providers.invocation.invoke(
@@ -393,9 +393,10 @@ export class SessionMessageService {
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
     const mcpTools = this.buildMcpTools(agentId);
+    // Build invocation options: client overrides take priority, then agent-resolved values
     const invokeOptions = {
-      ...(input.providerId !== undefined && { providerId: input.providerId }),
-      ...(input.modelId !== undefined && { modelId: input.modelId }),
+      providerId: input.providerId ?? providerId,
+      modelId: input.modelId ?? modelId,
     };
 
     let accumulatedContent = '';

@@ -7,6 +7,7 @@
 export { getDefaultsSectionSchema } from './defaults-schema';
 export {
   getProvidersSectionSchema,
+  getProvidersSectionSchemaWithModels,
   getVendorSpecificFields,
 } from './providers-schema';
 export { getAgentsSectionSchema } from './agents-schema';

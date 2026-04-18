@@ -1,9 +1,8 @@
-import { Show, For, createMemo } from 'solid-js';
+import { Show, For } from 'solid-js';
 import { Plus } from 'lucide-solid';
 import {
   DynamicConfigForm,
-  getProvidersSectionSchema,
-  type FormSchema,
+  getProvidersSectionSchemaWithModels,
 } from '../../../config';
 import { CollapsibleCard } from '../../ui';
 import type { AppConfig, ProviderConfig } from '../../../lib/api';
@@ -17,12 +16,6 @@ interface ProvidersTabProps {
 }
 
 export function ProvidersTab(props: ProvidersTabProps) {
-  const providersSchema = createMemo((): FormSchema => {
-    return {
-      sections: [getProvidersSectionSchema()],
-    };
-  });
-
   const handleProviderChange = (
     providerId: string,
     newConfig: Record<string, unknown>,
@@ -71,7 +64,9 @@ export function ProvidersTab(props: ProvidersTabProps) {
             >
               <DynamicConfigForm
                 config={{ providers: [provider] } as Record<string, unknown>}
-                schema={providersSchema()}
+                schema={{
+                  sections: [getProvidersSectionSchemaWithModels(provider)],
+                }}
                 onChange={(newConfig) =>
                   handleProviderChange(provider.id, newConfig)
                 }
