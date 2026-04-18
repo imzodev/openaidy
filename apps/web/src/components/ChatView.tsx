@@ -2,6 +2,7 @@ import { Show, For, createEffect } from 'solid-js';
 import { User, Bot, AlertCircle } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import { TypingIndicator } from './TypingIndicator';
+import { MessageContent } from './MessageContent';
 
 type ChatViewProps = {
   messages: SessionMessage[];
@@ -128,9 +129,7 @@ export function ChatView(props: ChatViewProps) {
                       {new Date(message.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p class="text-text-secondary whitespace-pre-wrap">
-                    {message.content}
-                  </p>
+                  <MessageContent content={message.content} />
                 </div>
               </div>
             </div>
@@ -161,10 +160,10 @@ export function ChatView(props: ChatViewProps) {
                 when={props.streamingContent}
                 fallback={<TypingIndicator />}
               >
-                <p class="text-text-secondary whitespace-pre-wrap">
-                  {props.streamingContent}
+                <div class="text-text-secondary">
+                  <MessageContent content={props.streamingContent!} />
                   <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
-                </p>
+                </div>
               </Show>
             </div>
           </div>

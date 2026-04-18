@@ -6,6 +6,7 @@
 
 import { Show, For, createMemo } from 'solid-js';
 import { Bot } from 'lucide-solid';
+import { MessageContent } from './MessageContent';
 import type {
   StreamingDelta,
   StreamingToolCall,
@@ -53,7 +54,7 @@ export function StreamingMessage(props: StreamingMessageProps) {
 
           {/* Content */}
           <Show when={content()}>
-            <p class="text-text-secondary whitespace-pre-wrap">{content()}</p>
+            <MessageContent content={content()} />
           </Show>
 
           {/* Tool calls */}
