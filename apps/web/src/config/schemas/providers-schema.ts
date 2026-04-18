@@ -270,6 +270,57 @@ const geminiFields: Record<string, FieldSchema> = {
 };
 
 /**
+ * Model item schema - fields for a single model entry within a provider
+ */
+const modelItemSchema: FieldSchema = {
+  type: 'object',
+  key: 'model',
+  label: 'Model',
+  properties: {
+    id: {
+      type: 'string',
+      key: 'id',
+      label: 'Model ID',
+      required: true,
+      description: 'Unique model identifier (used in agent config)',
+      placeholder: 'e.g., gpt-4o-mini',
+      helpText: 'Must match the model ID used by the provider API.',
+    },
+    name: {
+      type: 'string',
+      key: 'name',
+      label: 'Display Name',
+      required: true,
+      description: 'Human-readable name for this model',
+      placeholder: 'e.g., GPT-4o Mini',
+    },
+    enabled: {
+      type: 'boolean',
+      key: 'enabled',
+      label: 'Enabled',
+      defaultValue: true,
+      description: 'Enable or disable this model',
+    },
+    contextWindow: {
+      type: 'number',
+      key: 'contextWindow',
+      label: 'Context Window',
+      description: 'Maximum context length in tokens',
+      placeholder: 'e.g., 128000',
+      min: 1,
+    },
+    maxOutputTokens: {
+      type: 'number',
+      key: 'maxOutputTokens',
+      label: 'Max Output Tokens',
+      description: 'Maximum tokens the model can generate per response',
+      placeholder: 'e.g., 4096',
+      min: 1,
+    },
+  },
+};
+
+/**
  * Provider schema with discriminated union based on vendorFamily
  */
 const providerSchema: FieldSchema = {
@@ -301,6 +352,14 @@ const providerSchema: FieldSchema = {
           description: 'Google Gemini and Vertex AI',
         },
       ],
+    },
+    models: {
+      type: 'array',
+      key: 'models',
+      label: 'Model',
+      description: 'Models available from this provider',
+      minItems: 1,
+      itemSchema: modelItemSchema,
     },
   },
 };
