@@ -19,6 +19,7 @@ import {
   type SessionDeleteRequest,
   type SessionMessageRequest,
 } from '@openaidy/shared-types';
+import type { HandlerContext } from '../message-router';
 
 // Mock logger
 const mockLogger = {
@@ -41,7 +42,7 @@ const mockContext = {
   },
   services: {},
   logger: mockLogger,
-};
+} as unknown as HandlerContext;
 
 describe('SessionHandler', () => {
   let handler: SessionHandler;
@@ -195,12 +196,18 @@ describe('SessionHandler', () => {
 
       expect(response.type).toBe('session.list');
       expect(
-        (response as { payload: { sessions: Session[]; total: number } })
-          .payload.sessions,
+        (
+          response as unknown as {
+            payload: { sessions: Session[]; total: number };
+          }
+        ).payload.sessions,
       ).toHaveLength(2);
       expect(
-        (response as { payload: { sessions: Session[]; total: number } })
-          .payload.total,
+        (
+          response as unknown as {
+            payload: { sessions: Session[]; total: number };
+          }
+        ).payload.total,
       ).toBe(2);
     });
 
@@ -232,11 +239,12 @@ describe('SessionHandler', () => {
       const response = await handler.handleList('conn-1', request, mockContext);
 
       expect(
-        (response as { payload: { sessions: Session[] } }).payload.sessions,
+        (response as unknown as { payload: { sessions: Session[] } }).payload
+          .sessions,
       ).toHaveLength(1);
       expect(
-        (response as { payload: { sessions: Session[] } }).payload.sessions[0]
-          .status,
+        (response as unknown as { payload: { sessions: Session[] } }).payload
+          .sessions[0]!.status,
       ).toBe('active');
     });
 
@@ -259,12 +267,18 @@ describe('SessionHandler', () => {
       const response = await handler.handleList('conn-1', request, mockContext);
 
       expect(
-        (response as { payload: { sessions: Session[]; total: number } })
-          .payload.sessions,
+        (
+          response as unknown as {
+            payload: { sessions: Session[]; total: number };
+          }
+        ).payload.sessions,
       ).toHaveLength(10);
       expect(
-        (response as { payload: { sessions: Session[]; total: number } })
-          .payload.total,
+        (
+          response as unknown as {
+            payload: { sessions: Session[]; total: number };
+          }
+        ).payload.total,
       ).toBe(100);
     });
   });
