@@ -71,7 +71,7 @@ function truncateId(id: string): string {
 }
 
 export function RunList(props: RunListProps) {
-  const [isCollapsed, setIsCollapsed] = createSignal(false);
+  const [isCollapsed, setIsCollapsed] = createSignal(true);
 
   return (
     <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
