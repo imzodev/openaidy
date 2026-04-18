@@ -121,8 +121,9 @@ function AppContent() {
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
 
     // Subscribe to the session
-    wsClient.subscribeToSession(sessionId).catch((err) => {
+    wsClient.subscribeToSession(sessionId).catch((err: Error) => {
       console.error('Failed to subscribe to session:', err);
+      setSubmitError(err.message);
     });
 
     onCleanup(() => {
