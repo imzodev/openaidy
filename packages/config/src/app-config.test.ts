@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  mcpServerConfigSchema,
-  appConfigSchema,
-  type McpServerConfig,
-} from './app-config';
+import { mcpServerConfigSchema, appConfigSchema } from './app-config';
 
 describe('mcpServerConfigSchema', () => {
   describe('stdio transport', () => {
@@ -54,9 +50,11 @@ describe('mcpServerConfigSchema', () => {
       const result = mcpServerConfigSchema.safeParse(config);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues.some((i) =>
-          i.message.includes('stdio transport requires command'),
-        )).toBe(true);
+        expect(
+          result.error.issues.some((i) =>
+            i.message.includes('stdio transport requires command'),
+          ),
+        ).toBe(true);
       }
     });
   });
@@ -75,7 +73,9 @@ describe('mcpServerConfigSchema', () => {
       if (result.success) {
         expect(result.data.transport).toBe('http');
         expect(result.data.url).toBe('http://localhost:3000/mcp');
-        expect(result.data.headers).toEqual({ Authorization: 'Bearer test-key' });
+        expect(result.data.headers).toEqual({
+          Authorization: 'Bearer test-key',
+        });
       }
     });
 
@@ -88,9 +88,11 @@ describe('mcpServerConfigSchema', () => {
       const result = mcpServerConfigSchema.safeParse(config);
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues.some((i) =>
-          i.message.includes('http transport requires url'),
-        )).toBe(true);
+        expect(
+          result.error.issues.some((i) =>
+            i.message.includes('http transport requires url'),
+          ),
+        ).toBe(true);
       }
     });
 
@@ -257,5 +259,161 @@ describe('appConfigSchema with mcpServers', () => {
     };
     const result = appConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('appConfigSchema agent model validation', () => {
+  const base = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('should accept a valid agent model reference', () => {
+    const result = appConfigSchema.safeParse(base);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject agent model referencing an unknown model id', () => {
+    const config = {
+      ...base,
+      agents: [{ ...base.agents[0], model: 'openai/does-not-exist' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('model') &&
+            i.message.includes('Unknown model "does-not-exist"'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject agent model referencing an unknown provider', () => {
+    const config = {
+      ...base,
+      agents: [{ ...base.agents[0], model: 'anthropic/claude-3' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('model') &&
+            i.message.includes('Unknown provider "anthropic"'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject agent model with invalid format (missing slash)', () => {
+    const config = {
+      ...base,
+      agents: [{ ...base.agents[0], model: 'gpt-4o-mini' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) =>
+          i.message.includes('Expected "providerId/modelId"'),
+        ),
+      ).toBe(true);
+    }
+  });
+});
+
+describe('appConfigSchema defaults model validation', () => {
+  const base = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('should accept a valid defaults.modelId', () => {
+    const result = appConfigSchema.safeParse(base);
+    expect(result.success).toBe(true);
+  });
+
+  it('should reject defaults.modelId not listed in the default provider models', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-5' },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('modelId') &&
+            i.message.includes('Unknown default model "gpt-5"'),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject defaults.providerId not in providers list', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, providerId: 'anthropic' },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('providerId') &&
+            i.message.includes('Unknown default provider "anthropic"'),
+        ),
+      ).toBe(true);
+    }
   });
 });

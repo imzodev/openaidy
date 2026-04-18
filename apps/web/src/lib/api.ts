@@ -1,7 +1,9 @@
-import type {
-  LogFilter,
-  LogQueryResult,
-  LogStats,
+import {
+  type LogFilter,
+  type LogQueryResult,
+  type LogStats,
+  type ApiError,
+  ApiRequestError,
 } from '@openaidy/shared-types';
 
 /**
@@ -133,14 +135,7 @@ export type SessionRun = {
   createdAt: string;
 };
 
-/**
- * API error response
- */
-export type ApiError = {
-  error: string;
-  message?: string;
-  sessionId?: string;
-};
+export type { ApiError, ApiRequestError } from '@openaidy/shared-types';
 
 /**
  * List sessions
@@ -478,6 +473,12 @@ export async function updateConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
   return response.json();
 }
 
