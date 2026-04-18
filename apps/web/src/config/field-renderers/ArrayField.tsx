@@ -112,7 +112,7 @@ export const ArrayField: FieldRenderer = (props: FieldRendererProps) => {
           </button>
         </Show>
 
-        <Show when={maxItems() < Infinity}>
+        <Show when={maxItems() < Infinity && maxItems() > 1}>
           <p class="text-xs text-gray-500 dark:text-gray-400">
             Maximum: {maxItems()} items
           </p>

@@ -75,6 +75,14 @@ export function ProvidersTab(props: ProvidersTabProps) {
             </CollapsibleCard>
           )}
         </For>
+        <button
+          onClick={() => props.onAddProvider()}
+          disabled={props.isPending}
+          class="flex items-center gap-1.5 mt-3 text-sm text-primary hover:text-primary-hover disabled:opacity-50 transition-colors py-1"
+        >
+          <Plus class="w-4 h-4" />
+          Add Provider
+        </button>
       </Show>
     </div>
   );

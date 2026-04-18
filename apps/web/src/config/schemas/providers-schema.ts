@@ -418,6 +418,7 @@ export function getProvidersSectionSchemaWithModels(provider: {
         key: 'providers',
         label: 'Provider',
         minItems: 1,
+        maxItems: 1,
         itemSchema: providerSchemaWithModels,
       },
     ],
