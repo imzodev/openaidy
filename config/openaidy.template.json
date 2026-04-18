@@ -11,7 +11,7 @@
       "name": "Filesystem Tools",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
       "env": {}
     },
     {

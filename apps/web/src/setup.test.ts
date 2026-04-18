@@ -15,3 +15,6 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Mock scrollIntoView for jsdom
+Element.prototype.scrollIntoView = vi.fn();

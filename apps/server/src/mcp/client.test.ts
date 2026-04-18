@@ -31,7 +31,9 @@ describe('McpClientService', () => {
         level: 'info',
         silent: false,
       };
-      const service = createMcpClientService({ logger: mockLogger as any });
+      const service = createMcpClientService({
+        logger: mockLogger as unknown as McpClientService['logger'],
+      });
       expect(service).toBeInstanceOf(McpClientService);
     });
   });
@@ -64,7 +66,9 @@ describe('McpClientService', () => {
     });
 
     it('should return empty array when no tools discovered', () => {
-      expect(mcpService.getFilteredTools('unknown', ['tool1', 'tool2'])).toEqual([]);
+      expect(
+        mcpService.getFilteredTools('unknown', ['tool1', 'tool2']),
+      ).toEqual([]);
     });
   });
 
@@ -72,7 +76,7 @@ describe('McpClientService', () => {
     it('should reject invalid transport type', async () => {
       const config = {
         id: 'test',
-        transport: 'invalid' as any,
+        transport: 'invalid' as 'stdio' | 'http',
       };
       await expect(mcpService.connect(config)).rejects.toThrow(
         'Unsupported transport type',
@@ -94,19 +98,17 @@ describe('McpClientService', () => {
         id: 'test',
         transport: 'http',
       };
-      await expect(mcpService.connect(config)).rejects.toThrow(
-        'requires url',
-      );
+      await expect(mcpService.connect(config)).rejects.toThrow('requires url');
     });
 
-    it('should reject http transport as not implemented', async () => {
+    it('should reject http transport with connection error', async () => {
       const config: McpServerConfig = {
         id: 'test',
         transport: 'http',
         url: 'http://localhost:3000/mcp',
       };
       await expect(mcpService.connect(config)).rejects.toThrow(
-        'not yet implemented',
+        'Failed to connect to MCP server',
       );
     });
 
