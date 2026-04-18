@@ -173,7 +173,7 @@ function AppContent() {
 
   // Handlers
   const handleCreateSession = async () => {
-    const title = `Session ${new Date().toLocaleString()}`;
+    const title = `Session ${new Date().toISOString()}`;
     await createSessionMutation.mutateAsync(title);
   };
 

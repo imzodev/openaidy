@@ -106,7 +106,7 @@ export function Sidebar(props: SidebarProps) {
     setIsCreating(true);
     try {
       await props.onCreateSession();
-      props.onNavigate('sessions');
+      props.onNavigate('chat');
       if (isMobileViewport()) {
         props.onCollapse();
       }
