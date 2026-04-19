@@ -1,6 +1,7 @@
 export * from './client';
 export * from './adapter';
 export * from './types';
+export * from './schema/api-keys';
 export * from './schema/sessions';
 export * from './schema/jobs';
 export * from './schema/pairing';

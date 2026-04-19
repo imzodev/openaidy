@@ -4,6 +4,7 @@ import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import {
   type DatabaseAdapter,
+  type ApiKeysStore,
   type DevicesStore,
   type JobsStore,
   type JobRunsStore,
@@ -15,6 +16,8 @@ import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
+import { apiKeyRoutes } from './routes/api-keys';
+import { createApiKeyService } from './api-keys/service';
 import { sessionRoutes } from './routes/sessions';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
@@ -62,6 +65,7 @@ export type AppServices = {
   sessionsRepo: SessionsStore | undefined;
   pairingRequestsRepo: PairingRequestsStore | undefined;
   devicesRepo: DevicesStore | undefined;
+  apiKeysRepo: ApiKeysStore | undefined;
   workspace: WorkspaceService;
   mcpService: McpClientService;
 };
@@ -102,6 +106,7 @@ export async function buildApp() {
   let sessionsRepo: SessionsStore | undefined;
   let pairingRequestsRepo: PairingRequestsStore | undefined;
   let devicesRepo: DevicesStore | undefined;
+  let apiKeysRepo: ApiKeysStore | undefined;
   let scheduler: SchedulerService | undefined;
 
   const dbConfig =
@@ -118,6 +123,7 @@ export async function buildApp() {
     sessionsRepo = dbAdapter.repositories.sessions;
     pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
     devicesRepo = dbAdapter.repositories.devices;
+    apiKeysRepo = dbAdapter.repositories.apiKeys;
   }
 
   // Create shared services once per app instance
@@ -191,6 +197,7 @@ export async function buildApp() {
     sessionsRepo,
     pairingRequestsRepo,
     devicesRepo,
+    apiKeysRepo,
     workspace: workspaceService,
     mcpService,
   };
@@ -266,6 +273,13 @@ export async function buildApp() {
       sessionService: services.sessions,
     });
     await app.register(taskRoutes, { taskService });
+  }
+
+  // Register API key routes (requires DB)
+  if (services.apiKeysRepo) {
+    await app.register(apiKeyRoutes, {
+      apiKeyService: createApiKeyService(services.apiKeysRepo),
+    });
   }
 
   // Register MCP routes

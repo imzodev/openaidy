@@ -13,6 +13,38 @@ export type AuthVerifyResponse =
   | { valid: false; error: string };
 
 /**
+ * API key record (safe to return to clients — no hash, no raw key)
+ */
+export type ApiKeyRecord = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  createdBy: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revoked: boolean;
+  createdAt: string;
+};
+
+/**
+ * Response when creating a new API key (raw key shown once)
+ */
+export type CreateApiKeyResponse = {
+  key: ApiKeyRecord;
+  rawKey: string;
+};
+
+/**
+ * Request body for creating an API key
+ */
+export type CreateApiKeyRequest = {
+  name: string;
+  scopes: string[];
+  expiresAt?: string;
+};
+
+/**
  * API error response shape returned by the server on non-OK responses.
  */
 export type ApiError = {

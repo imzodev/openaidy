@@ -4,13 +4,15 @@ import Database from 'better-sqlite3';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import * as apiKeySchema from './schema/api-keys';
 import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
 
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
-  typeof pairingSchema;
+  typeof pairingSchema &
+  typeof apiKeySchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -27,6 +29,7 @@ const schema: DatabaseSchema = {
   ...sessionSchema,
   ...jobSchema,
   ...pairingSchema,
+  ...apiKeySchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -201,6 +204,22 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS subtasks_status_idx ON subtasks(status);
     CREATE INDEX IF NOT EXISTS task_agents_task_id_idx ON task_agents(task_id);
     CREATE INDEX IF NOT EXISTS task_agents_agent_id_idx ON task_agents(agent_id);
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL,
+      scopes TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      expires_at TEXT,
+      last_used_at TEXT,
+      revoked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS api_keys_key_hash_idx ON api_keys(key_hash);
+    CREATE INDEX IF NOT EXISTS api_keys_revoked_idx ON api_keys(revoked);
   `);
 }
 
