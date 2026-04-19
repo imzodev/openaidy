@@ -14,6 +14,8 @@ import { resolve } from 'node:path';
 export type CLIConfig = {
   /** WebSocket server URL */
   wsUrl: string;
+  /** HTTP REST API base URL */
+  httpUrl: string;
   /** Path to the bootstrap-admin token file */
   tokenPath: string;
   /** JWT secret (must match server's WS_TOKEN_SECRET) */
@@ -38,6 +40,10 @@ export function resolveCLIConfig(
     env.OPENAIDY_WS_URL ??
     `ws://localhost:${env.WS_PORT ?? '3001'}${env.WS_PATH ?? '/ws'}`;
 
+  // HTTP REST API URL resolution
+  const httpUrl =
+    env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.PORT ?? '3001'}`;
+
   // Token path resolution
   const tokenPath =
     env.BOOTSTRAP_ADMIN_TOKEN_PATH ??
@@ -49,5 +55,5 @@ export function resolveCLIConfig(
   // Bootstrap admin enabled
   const bootstrapAdminEnabled = env.BOOTSTRAP_ADMIN_ENABLED !== 'false';
 
-  return { wsUrl, tokenPath, jwtSecret, bootstrapAdminEnabled };
+  return { wsUrl, httpUrl, tokenPath, jwtSecret, bootstrapAdminEnabled };
 }

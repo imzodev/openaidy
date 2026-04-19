@@ -1,11 +1,16 @@
 /**
  * Command Registry
- * 
+ *
  * Central registration point for all CLI commands.
  * Supports hierarchical command groups with help output.
  */
 
-import type { CommandHandler, CommandRegistry, CommandMeta, CommandGroup } from '../types.js';
+import type {
+  CommandHandler,
+  CommandRegistry,
+  CommandMeta,
+  CommandGroup,
+} from '../types.js';
 
 /**
  * All registered command handlers
@@ -98,7 +103,8 @@ export function getGroupCommands(groupName: string): string[] {
 
 registerGroup({
   name: 'admin',
-  description: 'Administrative commands for bootstrap-admin and system management',
+  description:
+    'Administrative commands for bootstrap-admin and system management',
   commands: {
     'admin token show': {
       description: 'Show the current bootstrap-admin token information',
@@ -114,6 +120,31 @@ registerGroup({
       description: 'Show the path to the bootstrap-admin token file',
       usage: 'openaidy admin token path',
       examples: ['pnpm openaidy admin token path'],
+    },
+  },
+});
+
+registerGroup({
+  name: 'tokens',
+  description: 'Manage access tokens for UI login and API access',
+  commands: {
+    'tokens list': {
+      description: 'List all access tokens',
+      usage: 'openaidy tokens list',
+      examples: ['pnpm openaidy tokens list'],
+    },
+    'tokens create': {
+      description: 'Create a new access token',
+      usage: 'openaidy tokens create --name <name> --scopes <scopes>',
+      examples: [
+        'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"',
+        'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
+      ],
+    },
+    'tokens revoke': {
+      description: 'Revoke an access token by ID',
+      usage: 'openaidy tokens revoke <id>',
+      examples: ['pnpm openaidy tokens revoke abc123'],
     },
   },
 });
@@ -246,6 +277,50 @@ Examples:
   {
     description: 'Show the path to the bootstrap-admin token file',
     usage: 'openaidy admin token path',
+  },
+);
+
+// Tokens commands
+registerCommand(
+  'tokens list',
+  async (args: string[]) => {
+    const { tokensListHandler } = await import('./tokens/list.js');
+    return tokensListHandler(args);
+  },
+  {
+    description: 'List all access tokens',
+    usage: 'openaidy tokens list',
+    examples: ['pnpm openaidy tokens list'],
+  },
+);
+
+registerCommand(
+  'tokens create',
+  async (args: string[]) => {
+    const { tokensCreateHandler } = await import('./tokens/create.js');
+    return tokensCreateHandler(args);
+  },
+  {
+    description: 'Create a new access token',
+    usage:
+      'openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]',
+    examples: [
+      'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"',
+      'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
+    ],
+  },
+);
+
+registerCommand(
+  'tokens revoke',
+  async (args: string[]) => {
+    const { tokensRevokeHandler } = await import('./tokens/revoke.js');
+    return tokensRevokeHandler(args);
+  },
+  {
+    description: 'Revoke an access token by ID',
+    usage: 'openaidy tokens revoke <id>',
+    examples: ['pnpm openaidy tokens revoke abc123'],
   },
 );
 
