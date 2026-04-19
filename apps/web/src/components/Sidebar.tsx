@@ -16,6 +16,7 @@ import {
   Save,
   Puzzle,
   Layers,
+  KeyRound,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
 import type { Session } from '../lib/api';
@@ -33,6 +34,7 @@ export type ViewType =
   | 'logs'
   | 'backups'
   | 'addons'
+  | 'api-keys'
   | 'settings';
 
 type SidebarProps = {
@@ -88,6 +90,7 @@ const navSections: NavSection[] = [
     items: [
       { id: 'logs', label: 'Logs', icon: FileText },
       { id: 'backups', label: 'Backups', icon: Save },
+      { id: 'api-keys', label: 'API Keys', icon: KeyRound },
     ],
   },
   {

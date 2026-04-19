@@ -3,9 +3,13 @@ import {
   type LogQueryResult,
   type LogStats,
   type ApiError,
+  type ApiKeyRecord,
+  type CreateApiKeyRequest,
+  type CreateApiKeyResponse,
   type AuthVerifyResponse,
   ApiRequestError,
 } from '@openaidy/shared-types';
+export type { ApiKeyRecord, CreateApiKeyResponse };
 
 /**
  * API client for session endpoints
@@ -721,6 +725,64 @@ export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
   }
   return response.json();
+}
+
+function authHeaders(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+
+/**
+ * List all API keys (requires admin token)
+ */
+export async function listApiKeys(
+  token: string,
+): Promise<{ keys: ApiKeyRecord[] }> {
+  const response = await fetch(`${API_BASE}/api/keys`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ keys: ApiKeyRecord[] }>;
+}
+
+/**
+ * Create a new API key (requires admin token)
+ */
+export async function createApiKey(
+  token: string,
+  input: CreateApiKeyRequest,
+): Promise<CreateApiKeyResponse> {
+  const response = await fetch(`${API_BASE}/api/keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<CreateApiKeyResponse>;
+}
+
+/**
+ * Revoke an API key by ID (requires admin token)
+ */
+export async function revokeApiKey(
+  token: string,
+  id: string,
+): Promise<ApiKeyRecord> {
+  const response = await fetch(`${API_BASE}/api/keys/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  const result = (await response.json()) as { key: ApiKeyRecord };
+  return result.key;
 }
 
 /**
