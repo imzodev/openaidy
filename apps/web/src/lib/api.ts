@@ -3,13 +3,13 @@ import {
   type LogQueryResult,
   type LogStats,
   type ApiError,
-  type ApiKeyRecord,
-  type CreateApiKeyRequest,
-  type CreateApiKeyResponse,
+  type AccessTokenRecord,
+  type CreateAccessTokenRequest,
+  type CreateAccessTokenResponse,
   type AuthVerifyResponse,
   ApiRequestError,
 } from '@openaidy/shared-types';
-export type { ApiKeyRecord, CreateApiKeyResponse };
+export type { AccessTokenRecord, CreateAccessTokenResponse };
 
 /**
  * API client for session endpoints
@@ -732,29 +732,29 @@ function authHeaders(token: string): Record<string, string> {
 }
 
 /**
- * List all API keys (requires admin token)
+ * List all access tokens (requires admin token)
  */
-export async function listApiKeys(
+export async function listAccessTokens(
   token: string,
-): Promise<{ keys: ApiKeyRecord[] }> {
-  const response = await fetch(`${API_BASE}/api/keys`, {
+): Promise<{ keys: AccessTokenRecord[] }> {
+  const response = await fetch(`${API_BASE}/api/access-tokens`, {
     headers: authHeaders(token),
   });
   if (!response.ok) {
     const body = (await response.json()) as ApiError;
     throw new ApiRequestError(response.status, body);
   }
-  return response.json() as Promise<{ keys: ApiKeyRecord[] }>;
+  return response.json() as Promise<{ keys: AccessTokenRecord[] }>;
 }
 
 /**
- * Create a new API key (requires admin token)
+ * Create a new access token (requires admin token)
  */
-export async function createApiKey(
+export async function createAccessToken(
   token: string,
-  input: CreateApiKeyRequest,
-): Promise<CreateApiKeyResponse> {
-  const response = await fetch(`${API_BASE}/api/keys`, {
+  input: CreateAccessTokenRequest,
+): Promise<CreateAccessTokenResponse> {
+  const response = await fetch(`${API_BASE}/api/access-tokens`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
     body: JSON.stringify(input),
@@ -763,17 +763,17 @@ export async function createApiKey(
     const body = (await response.json()) as ApiError;
     throw new ApiRequestError(response.status, body);
   }
-  return response.json() as Promise<CreateApiKeyResponse>;
+  return response.json() as Promise<CreateAccessTokenResponse>;
 }
 
 /**
- * Revoke an API key by ID (requires admin token)
+ * Revoke an access token by ID (requires admin token)
  */
-export async function revokeApiKey(
+export async function revokeAccessToken(
   token: string,
   id: string,
-): Promise<ApiKeyRecord> {
-  const response = await fetch(`${API_BASE}/api/keys/${id}`, {
+): Promise<AccessTokenRecord> {
+  const response = await fetch(`${API_BASE}/api/access-tokens/${id}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -781,7 +781,7 @@ export async function revokeApiKey(
     const body = (await response.json()) as ApiError;
     throw new ApiRequestError(response.status, body);
   }
-  const result = (await response.json()) as { key: ApiKeyRecord };
+  const result = (await response.json()) as { key: AccessTokenRecord };
   return result.key;
 }
 

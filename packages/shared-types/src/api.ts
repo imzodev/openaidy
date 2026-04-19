@@ -19,9 +19,9 @@ export type AuthVerifyResponse =
   | { valid: false; error: string };
 
 /**
- * API key record (safe to return to clients — no hash, no raw key)
+ * Access token record (safe to return to clients — no hash, no raw token)
  */
-export type ApiKeyRecord = {
+export type AccessTokenRecord = {
   id: string;
   name: string;
   keyPrefix: string;
@@ -34,17 +34,17 @@ export type ApiKeyRecord = {
 };
 
 /**
- * Response when creating a new API key (raw key shown once)
+ * Response when creating a new access token (raw token shown once)
  */
-export type CreateApiKeyResponse = {
-  key: ApiKeyRecord;
+export type CreateAccessTokenResponse = {
+  key: AccessTokenRecord;
   rawKey: string;
 };
 
 /**
- * Request body for creating an API key
+ * Request body for creating an access token
  */
-export type CreateApiKeyRequest = {
+export type CreateAccessTokenRequest = {
   name: string;
   scopes: string[];
   expiresAt?: string;

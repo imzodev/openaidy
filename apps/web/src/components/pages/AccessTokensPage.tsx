@@ -9,10 +9,10 @@ import {
 } from 'lucide-solid';
 import { Layout } from './Layout';
 import {
-  listApiKeys,
-  createApiKey,
-  revokeApiKey,
-  type ApiKeyRecord,
+  listAccessTokens,
+  createAccessToken,
+  revokeAccessToken,
+  type AccessTokenRecord,
 } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
@@ -46,56 +46,58 @@ function ScopeTag(props: { scope: string }) {
   );
 }
 
-export function ApiKeysPage() {
-  const [keys, setKeys] = createSignal<ApiKeyRecord[]>([]);
+export function AccessTokensPage() {
+  const [tokens, setTokens] = createSignal<AccessTokenRecord[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
 
   const [showCreateForm, setShowCreateForm] = createSignal(false);
-  const [newKeyName, setNewKeyName] = createSignal('');
-  const [newKeyScopes, setNewKeyScopes] = createSignal<string[]>([
+  const [newTokenName, setNewTokenName] = createSignal('');
+  const [newTokenScopes, setNewTokenScopes] = createSignal<string[]>([
     'sessions.read',
   ]);
   const [isCreating, setIsCreating] = createSignal(false);
   const [createError, setCreateError] = createSignal<string | null>(null);
 
-  const [revealedKey, setRevealedKey] = createSignal<string | null>(null);
-  const [copiedKey, setCopiedKey] = createSignal(false);
+  const [revealedToken, setRevealedToken] = createSignal<string | null>(null);
+  const [copied, setCopied] = createSignal(false);
 
   const [revokingId, setRevokingId] = createSignal<string | null>(null);
 
-  const token = () => resolveToken() ?? '';
+  const adminToken = () => resolveToken() ?? '';
 
-  const loadKeys = async () => {
+  const loadTokens = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await listApiKeys(token());
-      setKeys(data.keys);
+      const data = await listAccessTokens(adminToken());
+      setTokens(data.keys);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load API keys');
+      setError(
+        err instanceof Error ? err.message : 'Failed to load access tokens',
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   onMount(() => {
-    void loadKeys();
+    void loadTokens();
   });
 
   const toggleScope = (scope: string) => {
-    setNewKeyScopes((prev) =>
+    setNewTokenScopes((prev) =>
       prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope],
     );
   };
 
   const handleCreate = async () => {
-    const name = newKeyName().trim();
+    const name = newTokenName().trim();
     if (!name) {
       setCreateError('Name is required');
       return;
     }
-    if (newKeyScopes().length === 0) {
+    if (newTokenScopes().length === 0) {
       setCreateError('Select at least one scope');
       return;
     }
@@ -103,18 +105,18 @@ export function ApiKeysPage() {
     setIsCreating(true);
     setCreateError(null);
     try {
-      const result = await createApiKey(token(), {
+      const result = await createAccessToken(adminToken(), {
         name,
-        scopes: newKeyScopes(),
+        scopes: newTokenScopes(),
       });
-      setRevealedKey(result.rawKey);
-      setKeys((prev) => [result.key, ...prev]);
-      setNewKeyName('');
-      setNewKeyScopes(['sessions.read']);
+      setRevealedToken(result.rawKey);
+      setTokens((prev) => [result.key, ...prev]);
+      setNewTokenName('');
+      setNewTokenScopes(['sessions.read']);
       setShowCreateForm(false);
     } catch (err) {
       setCreateError(
-        err instanceof Error ? err.message : 'Failed to create key',
+        err instanceof Error ? err.message : 'Failed to create access token',
       );
     } finally {
       setIsCreating(false);
@@ -124,30 +126,32 @@ export function ApiKeysPage() {
   const handleRevoke = async (id: string) => {
     setRevokingId(id);
     try {
-      const revoked = await revokeApiKey(token(), id);
-      setKeys((prev) => prev.map((k) => (k.id === id ? revoked : k)));
+      const revoked = await revokeAccessToken(adminToken(), id);
+      setTokens((prev) => prev.map((t) => (t.id === id ? revoked : t)));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to revoke key');
+      setError(
+        err instanceof Error ? err.message : 'Failed to revoke access token',
+      );
     } finally {
       setRevokingId(null);
     }
   };
 
-  const copyRevealedKey = async () => {
-    const key = revealedKey();
-    if (!key) return;
-    await navigator.clipboard.writeText(key);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
+  const copyRevealedToken = async () => {
+    const t = revealedToken();
+    if (!t) return;
+    await navigator.clipboard.writeText(t);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const activeKeys = () => keys().filter((k) => !k.revoked);
-  const revokedKeys = () => keys().filter((k) => k.revoked);
+  const activeTokens = () => tokens().filter((t) => !t.revoked);
+  const revokedTokens = () => tokens().filter((t) => t.revoked);
 
   return (
     <Layout
-      title="API Keys"
-      description="Manage access tokens for users and external tools"
+      title="Access Tokens"
+      description="Manage tokens for UI login and API access"
       actions={
         <button
           onClick={() => {
@@ -157,34 +161,34 @@ export function ApiKeysPage() {
           class="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-colors"
         >
           <Plus class="w-4 h-4" />
-          New Key
+          New Token
         </button>
       }
     >
-      {/* One-time key reveal banner */}
-      <Show when={revealedKey()}>
+      {/* One-time token reveal banner */}
+      <Show when={revealedToken()}>
         <div class="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-300 dark:border-green-700 rounded-lg p-4">
           <div class="flex items-start gap-3">
             <CheckCircle class="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-green-800 dark:text-green-300 mb-2">
-                API key created — copy it now, it won't be shown again
+                Access token created — copy it now, it won't be shown again
               </p>
               <div class="flex items-center gap-2">
                 <code class="flex-1 text-xs font-mono bg-white dark:bg-gray-900 border border-green-200 dark:border-green-700 rounded px-3 py-2 text-green-900 dark:text-green-100 break-all">
-                  {revealedKey()}
+                  {revealedToken()}
                 </code>
                 <button
-                  onClick={() => void copyRevealedKey()}
+                  onClick={() => void copyRevealedToken()}
                   class="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors"
                 >
                   <Copy class="w-3.5 h-3.5" />
-                  {copiedKey() ? 'Copied!' : 'Copy'}
+                  {copied() ? 'Copied!' : 'Copy'}
                 </button>
               </div>
             </div>
             <button
-              onClick={() => setRevealedKey(null)}
+              onClick={() => setRevealedToken(null)}
               class="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 flex-shrink-0 text-lg leading-none"
               aria-label="Dismiss"
             >
@@ -198,7 +202,7 @@ export function ApiKeysPage() {
       <Show when={showCreateForm()}>
         <div class="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-5">
           <h2 class="text-base font-semibold text-text-primary mb-4">
-            Create New API Key
+            Create New Access Token
           </h2>
 
           <div class="space-y-4">
@@ -208,8 +212,8 @@ export function ApiKeysPage() {
               </label>
               <input
                 type="text"
-                value={newKeyName()}
-                onInput={(e) => setNewKeyName(e.currentTarget.value)}
+                value={newTokenName()}
+                onInput={(e) => setNewTokenName(e.currentTarget.value)}
                 placeholder="e.g. CI Pipeline, Alice's CLI"
                 class="w-full px-3 py-2 rounded-lg border border-border bg-gray-50 dark:bg-gray-900 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
               />
@@ -226,7 +230,7 @@ export function ApiKeysPage() {
                       type="button"
                       onClick={() => toggleScope(scope.value)}
                       class={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                        newKeyScopes().includes(scope.value)
+                        newTokenScopes().includes(scope.value)
                           ? 'bg-primary text-white border-primary'
                           : 'bg-white dark:bg-gray-900 text-text-secondary border-border hover:border-primary hover:text-primary'
                       }`}
@@ -250,7 +254,7 @@ export function ApiKeysPage() {
                 disabled={isCreating()}
                 class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg text-sm font-medium transition-colors"
               >
-                {isCreating() ? 'Creating…' : 'Create Key'}
+                {isCreating() ? 'Creating…' : 'Create Token'}
               </button>
               <button
                 onClick={() => setShowCreateForm(false)}
@@ -281,58 +285,60 @@ export function ApiKeysPage() {
       </Show>
 
       {/* Empty state */}
-      <Show when={!isLoading() && !error() && keys().length === 0}>
+      <Show when={!isLoading() && !error() && tokens().length === 0}>
         <div class="flex flex-col items-center justify-center h-48 text-center">
           <Key class="w-10 h-10 text-text-tertiary mb-3" />
-          <p class="text-text-secondary font-medium">No API keys yet</p>
+          <p class="text-text-secondary font-medium">No access tokens yet</p>
           <p class="text-sm text-text-tertiary mt-1">
-            Create a key to allow users or tools to connect
+            Create a token to allow users or tools to connect
           </p>
         </div>
       </Show>
 
-      {/* Active keys */}
-      <Show when={!isLoading() && activeKeys().length > 0}>
+      {/* Active tokens */}
+      <Show when={!isLoading() && activeTokens().length > 0}>
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden mb-6">
           <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-sm font-semibold text-text-primary">Active Keys</h2>
+            <h2 class="text-sm font-semibold text-text-primary">
+              Active Tokens
+            </h2>
           </div>
           <div class="divide-y divide-gray-100 dark:divide-gray-700">
-            <For each={activeKeys()}>
-              {(key) => (
+            <For each={activeTokens()}>
+              {(t) => (
                 <div class="px-4 py-3 flex items-start justify-between gap-4">
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2 mb-1">
                       <span class="font-medium text-sm text-text-primary">
-                        {key.name}
+                        {t.name}
                       </span>
                       <code class="text-xs text-text-tertiary font-mono">
-                        {key.keyPrefix}…
+                        {t.keyPrefix}…
                       </code>
                     </div>
                     <div class="flex flex-wrap gap-1 mb-1.5">
-                      <For each={key.scopes}>
+                      <For each={t.scopes}>
                         {(scope) => <ScopeTag scope={scope} />}
                       </For>
                     </div>
                     <div class="flex items-center gap-3 text-xs text-text-tertiary">
-                      <span>Created {formatDate(key.createdAt)}</span>
-                      <Show when={key.lastUsedAt}>
-                        <span>Last used {formatDate(key.lastUsedAt)}</span>
+                      <span>Created {formatDate(t.createdAt)}</span>
+                      <Show when={t.lastUsedAt}>
+                        <span>Last used {formatDate(t.lastUsedAt)}</span>
                       </Show>
-                      <Show when={key.expiresAt}>
-                        <span>Expires {formatDate(key.expiresAt)}</span>
+                      <Show when={t.expiresAt}>
+                        <span>Expires {formatDate(t.expiresAt)}</span>
                       </Show>
                     </div>
                   </div>
                   <button
-                    onClick={() => void handleRevoke(key.id)}
-                    disabled={revokingId() === key.id}
-                    title="Revoke key"
+                    onClick={() => void handleRevoke(t.id)}
+                    disabled={revokingId() === t.id}
+                    title="Revoke token"
                     class="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"
                   >
                     <Trash2 class="w-3.5 h-3.5" />
-                    {revokingId() === key.id ? 'Revoking…' : 'Revoke'}
+                    {revokingId() === t.id ? 'Revoking…' : 'Revoke'}
                   </button>
                 </div>
               )}
@@ -341,32 +347,32 @@ export function ApiKeysPage() {
         </div>
       </Show>
 
-      {/* Revoked keys */}
-      <Show when={!isLoading() && revokedKeys().length > 0}>
+      {/* Revoked tokens */}
+      <Show when={!isLoading() && revokedTokens().length > 0}>
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden opacity-60">
           <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <h2 class="text-sm font-semibold text-text-tertiary">
-              Revoked Keys
+              Revoked Tokens
             </h2>
           </div>
           <div class="divide-y divide-gray-100 dark:divide-gray-700">
-            <For each={revokedKeys()}>
-              {(key) => (
+            <For each={revokedTokens()}>
+              {(t) => (
                 <div class="px-4 py-3 flex items-start gap-4">
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2 mb-1">
                       <span class="font-medium text-sm text-text-tertiary line-through">
-                        {key.name}
+                        {t.name}
                       </span>
                       <code class="text-xs text-text-tertiary font-mono">
-                        {key.keyPrefix}…
+                        {t.keyPrefix}…
                       </code>
                       <span class="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
                         revoked
                       </span>
                     </div>
                     <div class="text-xs text-text-tertiary">
-                      Created {formatDate(key.createdAt)}
+                      Created {formatDate(t.createdAt)}
                     </div>
                   </div>
                 </div>

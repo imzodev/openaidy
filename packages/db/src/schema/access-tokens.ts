@@ -1,12 +1,12 @@
 import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core';
 
 /**
- * API keys table
+ * Access tokens table
  *
- * Stores hashed API keys for user/tool authentication.
- * The raw key is shown once at creation and never stored.
+ * Stores hashed access tokens for user/tool authentication.
+ * The raw token is shown once at creation and never stored.
  */
-export const apiKeys = pgTable('api_keys', {
+export const accessTokens = pgTable('access_tokens', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   keyHash: text('key_hash').notNull().unique(),
@@ -21,5 +21,5 @@ export const apiKeys = pgTable('api_keys', {
     .defaultNow(),
 });
 
-export type ApiKey = typeof apiKeys.$inferSelect;
-export type NewApiKey = typeof apiKeys.$inferInsert;
+export type AccessToken = typeof accessTokens.$inferSelect;
+export type NewAccessToken = typeof accessTokens.$inferInsert;

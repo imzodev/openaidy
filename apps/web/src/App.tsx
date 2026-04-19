@@ -38,7 +38,7 @@ import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
 import { BackupsPage } from './components/pages/BackupsPage';
 import { AddonsPage } from './components/pages/AddonsPage';
-import { ApiKeysPage } from './components/pages/ApiKeysPage';
+import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
@@ -424,7 +424,7 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'api-keys'}>
-          <ApiKeysPage />
+          <AccessTokensPage />
         </Show>
 
         <Show when={view() === 'chat'}>

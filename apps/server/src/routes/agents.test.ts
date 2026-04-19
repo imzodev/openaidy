@@ -102,7 +102,7 @@ describe('Agent Routes', () => {
       bootstrapAdmin: undefined,
       pairingRequestsRepo: undefined,
       devicesRepo: undefined,
-      apiKeysRepo: undefined,
+      accessTokensRepo: undefined,
       workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });

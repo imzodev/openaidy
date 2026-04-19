@@ -1,17 +1,17 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { ApiKeysStore } from '@openaidy/db';
-import type { ApiKeyRecord } from '@openaidy/shared-types';
+import type { AccessTokensStore } from '@openaidy/db';
+import type { AccessTokenRecord } from '@openaidy/shared-types';
 
 const KEY_PREFIX_LENGTH = 8;
-const KEY_BYTES = 32;
-const KEY_VERSION = 'oak'; // openaidy key
+const TOKEN_BYTES = 32;
+const TOKEN_VERSION = 'oat'; // openaidy access token
 
-function generateRawKey(): string {
-  return `${KEY_VERSION}_${randomBytes(KEY_BYTES).toString('hex')}`;
+function generateRawToken(): string {
+  return `${TOKEN_VERSION}_${randomBytes(TOKEN_BYTES).toString('hex')}`;
 }
 
-function hashKey(rawKey: string): string {
-  return createHash('sha256').update(rawKey).digest('hex');
+function hashToken(rawToken: string): string {
+  return createHash('sha256').update(rawToken).digest('hex');
 }
 
 function toIso(value: Date | string | null | undefined): string | null {
@@ -31,7 +31,7 @@ function toRecord(row: {
   lastUsedAt: Date | string | null;
   revoked: boolean | number;
   createdAt: Date | string;
-}): ApiKeyRecord {
+}): AccessTokenRecord {
   return {
     id: row.id,
     name: row.name,
@@ -45,20 +45,20 @@ function toRecord(row: {
   };
 }
 
-export class ApiKeyService {
-  constructor(private readonly repo: ApiKeysStore) {}
+export class AccessTokenService {
+  constructor(private readonly repo: AccessTokensStore) {}
 
   async create(input: {
     name: string;
     scopes: string[];
     createdBy: string;
     expiresAt?: Date;
-  }): Promise<{ record: ApiKeyRecord; rawKey: string }> {
-    const rawKey = generateRawKey();
-    const keyHash = hashKey(rawKey);
-    const keyPrefix = rawKey.slice(
+  }): Promise<{ record: AccessTokenRecord; rawToken: string }> {
+    const rawToken = generateRawToken();
+    const keyHash = hashToken(rawToken);
+    const keyPrefix = rawToken.slice(
       0,
-      KEY_PREFIX_LENGTH + KEY_VERSION.length + 1,
+      KEY_PREFIX_LENGTH + TOKEN_VERSION.length + 1,
     );
 
     const row = await this.repo.create({
@@ -70,21 +70,21 @@ export class ApiKeyService {
       ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
     });
 
-    return { record: toRecord(row), rawKey };
+    return { record: toRecord(row), rawToken };
   }
 
-  async list(): Promise<ApiKeyRecord[]> {
+  async list(): Promise<AccessTokenRecord[]> {
     const rows = await this.repo.list();
     return rows.map(toRecord);
   }
 
-  async revoke(id: string): Promise<ApiKeyRecord | null> {
+  async revoke(id: string): Promise<AccessTokenRecord | null> {
     const row = await this.repo.revoke(id);
     return row ? toRecord(row) : null;
   }
 
-  async verifyKey(rawKey: string): Promise<ApiKeyRecord | null> {
-    const keyHash = hashKey(rawKey);
+  async verifyToken(rawToken: string): Promise<AccessTokenRecord | null> {
+    const keyHash = hashToken(rawToken);
     const row = await this.repo.findByHash(keyHash);
 
     if (!row) return null;
@@ -96,6 +96,8 @@ export class ApiKeyService {
   }
 }
 
-export function createApiKeyService(repo: ApiKeysStore): ApiKeyService {
-  return new ApiKeyService(repo);
+export function createAccessTokenService(
+  repo: AccessTokensStore,
+): AccessTokenService {
+  return new AccessTokenService(repo);
 }

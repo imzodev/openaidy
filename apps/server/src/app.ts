@@ -4,7 +4,7 @@ import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import {
   type DatabaseAdapter,
-  type ApiKeysStore,
+  type AccessTokensStore,
   type DevicesStore,
   type JobsStore,
   type JobRunsStore,
@@ -16,8 +16,8 @@ import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
-import { apiKeyRoutes } from './routes/api-keys';
-import { createApiKeyService } from './api-keys/service';
+import { accessTokenRoutes } from './routes/access-tokens';
+import { createAccessTokenService } from './access-tokens/service';
 import { sessionRoutes } from './routes/sessions';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
@@ -65,7 +65,7 @@ export type AppServices = {
   sessionsRepo: SessionsStore | undefined;
   pairingRequestsRepo: PairingRequestsStore | undefined;
   devicesRepo: DevicesStore | undefined;
-  apiKeysRepo: ApiKeysStore | undefined;
+  accessTokensRepo: AccessTokensStore | undefined;
   workspace: WorkspaceService;
   mcpService: McpClientService;
 };
@@ -106,7 +106,7 @@ export async function buildApp() {
   let sessionsRepo: SessionsStore | undefined;
   let pairingRequestsRepo: PairingRequestsStore | undefined;
   let devicesRepo: DevicesStore | undefined;
-  let apiKeysRepo: ApiKeysStore | undefined;
+  let accessTokensRepo: AccessTokensStore | undefined;
   let scheduler: SchedulerService | undefined;
 
   const dbConfig =
@@ -123,7 +123,7 @@ export async function buildApp() {
     sessionsRepo = dbAdapter.repositories.sessions;
     pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
     devicesRepo = dbAdapter.repositories.devices;
-    apiKeysRepo = dbAdapter.repositories.apiKeys;
+    accessTokensRepo = dbAdapter.repositories.accessTokens;
   }
 
   // Create shared services once per app instance
@@ -197,7 +197,7 @@ export async function buildApp() {
     sessionsRepo,
     pairingRequestsRepo,
     devicesRepo,
-    apiKeysRepo,
+    accessTokensRepo,
     workspace: workspaceService,
     mcpService,
   };
@@ -222,8 +222,12 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(authRoutes, {
     authMiddleware: new AuthMiddleware(wsConfig),
-    ...(services.apiKeysRepo
-      ? { apiKeyService: createApiKeyService(services.apiKeysRepo) }
+    ...(services.accessTokensRepo
+      ? {
+          accessTokenService: createAccessTokenService(
+            services.accessTokensRepo,
+          ),
+        }
       : {}),
   });
 
@@ -278,10 +282,10 @@ export async function buildApp() {
     await app.register(taskRoutes, { taskService });
   }
 
-  // Register API key routes (requires DB, admin auth enforced)
-  if (services.apiKeysRepo) {
-    await app.register(apiKeyRoutes, {
-      apiKeyService: createApiKeyService(services.apiKeysRepo),
+  // Register access token routes (requires DB, admin auth enforced)
+  if (services.accessTokensRepo) {
+    await app.register(accessTokenRoutes, {
+      accessTokenService: createAccessTokenService(services.accessTokensRepo),
       authMiddleware: new AuthMiddleware(wsConfig),
     });
   }

@@ -1,31 +1,33 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { ApiKeyService } from '../api-keys/service';
+import type { AccessTokenService } from '../access-tokens/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import type {
-  CreateApiKeyRequest,
-  CreateApiKeyResponse,
-  ApiKeyRecord,
+  CreateAccessTokenRequest,
+  CreateAccessTokenResponse,
+  AccessTokenRecord,
 } from '@openaidy/shared-types';
 
 const ADMIN_SCOPE = '*';
 
-export type ApiKeyRoutesOptions = {
-  apiKeyService: ApiKeyService;
+export type AccessTokenRoutesOptions = {
+  accessTokenService: AccessTokenService;
   authMiddleware: AuthMiddleware;
 };
 
-export const apiKeyRoutes: FastifyPluginAsync<ApiKeyRoutesOptions> = async (
-  app,
-  opts,
-) => {
+export const accessTokenRoutes: FastifyPluginAsync<
+  AccessTokenRoutesOptions
+> = async (app, opts) => {
   const adminAuth = requireAuth({
     authMiddleware: opts.authMiddleware,
     requiredScope: ADMIN_SCOPE,
   });
 
-  app.post<{ Body: CreateApiKeyRequest; Reply: CreateApiKeyResponse }>(
-    '/api/keys',
+  app.post<{
+    Body: CreateAccessTokenRequest;
+    Reply: CreateAccessTokenResponse;
+  }>(
+    '/api/access-tokens',
     { preHandler: adminAuth },
     async (request, reply) => {
       const { name, scopes, expiresAt } = request.body;
@@ -39,34 +41,38 @@ export const apiKeyRoutes: FastifyPluginAsync<ApiKeyRoutesOptions> = async (
           .send({ error: 'scopes must be a non-empty array' } as never);
       }
 
-      const { record, rawKey } = await opts.apiKeyService.create({
+      const { record, rawToken } = await opts.accessTokenService.create({
         name: name.trim(),
         scopes,
         createdBy: 'admin',
         ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
       });
 
-      return reply.code(201).send({ key: record, rawKey });
+      return reply.code(201).send({ key: record, rawKey: rawToken });
     },
   );
 
-  app.get<{ Reply: { keys: ApiKeyRecord[] } }>(
-    '/api/keys',
+  app.get<{ Reply: { keys: AccessTokenRecord[] } }>(
+    '/api/access-tokens',
     { preHandler: adminAuth },
     async (_, reply) => {
-      const keys = await opts.apiKeyService.list();
+      const keys = await opts.accessTokenService.list();
       return reply.send({ keys });
     },
   );
 
   app.delete<{
     Params: { id: string };
-    Reply: { key: ApiKeyRecord } | { error: string };
-  }>('/api/keys/:id', { preHandler: adminAuth }, async (request, reply) => {
-    const revoked = await opts.apiKeyService.revoke(request.params.id);
-    if (!revoked) {
-      return reply.code(404).send({ error: 'API key not found' });
-    }
-    return reply.send({ key: revoked });
-  });
+    Reply: { key: AccessTokenRecord } | { error: string };
+  }>(
+    '/api/access-tokens/:id',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      const revoked = await opts.accessTokenService.revoke(request.params.id);
+      if (!revoked) {
+        return reply.code(404).send({ error: 'Access token not found' });
+      }
+      return reply.send({ key: revoked });
+    },
+  );
 };

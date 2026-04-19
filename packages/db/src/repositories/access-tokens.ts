@@ -1,11 +1,11 @@
 import { eq, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
-import * as schema from '../schema/api-keys';
+import * as schema from '../schema/access-tokens';
 
 type Database = DatabaseClient;
 
-export class ApiKeysRepository {
+export class AccessTokensRepository {
   constructor(private readonly db: Database) {}
 
   async create(input: {
@@ -15,9 +15,9 @@ export class ApiKeysRepository {
     scopes: string[];
     createdBy: string;
     expiresAt?: Date;
-  }): Promise<schema.ApiKey> {
+  }): Promise<schema.AccessToken> {
     const [row] = await this.db
-      .insert(schema.apiKeys)
+      .insert(schema.accessTokens)
       .values({
         id: nanoid(),
         name: input.name,
@@ -33,48 +33,50 @@ export class ApiKeysRepository {
     return row!;
   }
 
-  async findByHash(keyHash: string): Promise<schema.ApiKey | null> {
+  async findByHash(keyHash: string): Promise<schema.AccessToken | null> {
     const results = await this.db
       .select()
-      .from(schema.apiKeys)
-      .where(eq(schema.apiKeys.keyHash, keyHash))
+      .from(schema.accessTokens)
+      .where(eq(schema.accessTokens.keyHash, keyHash))
       .limit(1);
     return results[0] ?? null;
   }
 
-  async findById(id: string): Promise<schema.ApiKey | null> {
+  async findById(id: string): Promise<schema.AccessToken | null> {
     const results = await this.db
       .select()
-      .from(schema.apiKeys)
-      .where(eq(schema.apiKeys.id, id))
+      .from(schema.accessTokens)
+      .where(eq(schema.accessTokens.id, id))
       .limit(1);
     return results[0] ?? null;
   }
 
-  async list(): Promise<schema.ApiKey[]> {
+  async list(): Promise<schema.AccessToken[]> {
     return this.db
       .select()
-      .from(schema.apiKeys)
-      .orderBy(desc(schema.apiKeys.createdAt));
+      .from(schema.accessTokens)
+      .orderBy(desc(schema.accessTokens.createdAt));
   }
 
-  async revoke(id: string): Promise<schema.ApiKey | null> {
+  async revoke(id: string): Promise<schema.AccessToken | null> {
     const results = await this.db
-      .update(schema.apiKeys)
+      .update(schema.accessTokens)
       .set({ revoked: 1 as unknown as boolean })
-      .where(eq(schema.apiKeys.id, id))
+      .where(eq(schema.accessTokens.id, id))
       .returning();
     return results[0] ?? null;
   }
 
   async touchLastUsed(id: string): Promise<void> {
     await this.db
-      .update(schema.apiKeys)
+      .update(schema.accessTokens)
       .set({ lastUsedAt: new Date() })
-      .where(eq(schema.apiKeys.id, id));
+      .where(eq(schema.accessTokens.id, id));
   }
 }
 
-export function createApiKeysRepository(db: Database): ApiKeysRepository {
-  return new ApiKeysRepository(db);
+export function createAccessTokensRepository(
+  db: Database,
+): AccessTokensRepository {
+  return new AccessTokensRepository(db);
 }

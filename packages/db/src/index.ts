@@ -1,7 +1,7 @@
 export * from './client';
 export * from './adapter';
 export * from './types';
-export * from './schema/api-keys';
+export * from './schema/access-tokens';
 export * from './schema/sessions';
 export * from './schema/jobs';
 export * from './schema/pairing';
@@ -15,3 +15,4 @@ export * from './repositories/pairing';
 export * from './repositories/tasks';
 export * from './repositories/subtasks';
 export * from './repositories/task-agents';
+export * from './repositories/access-tokens';

@@ -1,17 +1,17 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { ApiKeyService } from '../api-keys/service';
+import type { AccessTokenService } from '../access-tokens/service';
 import type {
   AuthVerifyRequest,
   AuthVerifyResponse,
 } from '@openaidy/shared-types';
 
-const API_KEY_PREFIX = 'oak_';
-const API_KEY_SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
+const ACCESS_TOKEN_PREFIX = 'oat_';
+const ACCESS_TOKEN_SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
 
 export type AuthRoutesOptions = {
   authMiddleware: AuthMiddleware;
-  apiKeyService?: ApiKeyService;
+  accessTokenService?: AccessTokenService;
 };
 
 export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
@@ -29,36 +29,39 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
           .send({ valid: false, error: 'Token is required' });
       }
 
-      if (token.startsWith(API_KEY_PREFIX)) {
-        if (!opts.apiKeyService) {
+      if (token.startsWith(ACCESS_TOKEN_PREFIX)) {
+        if (!opts.accessTokenService) {
           return reply
             .code(503)
-            .send({ valid: false, error: 'API key auth not available' });
+            .send({ valid: false, error: 'Access token auth not available' });
         }
 
-        const keyRecord = await opts.apiKeyService.verifyKey(token);
+        const tokenRecord = await opts.accessTokenService.verifyToken(token);
 
-        if (!keyRecord) {
+        if (!tokenRecord) {
           return reply
             .code(401)
-            .send({ valid: false, error: 'Invalid or revoked API key' });
+            .send({
+              valid: false,
+              error: 'Invalid, revoked, or expired access token',
+            });
         }
 
         const jwt = await opts.authMiddleware.generateToken({
-          clientId: keyRecord.id,
+          clientId: tokenRecord.id,
           type: 'access',
-          scopes: keyRecord.scopes,
-          expiresIn: API_KEY_SESSION_EXPIRY_MS,
+          scopes: tokenRecord.scopes,
+          expiresIn: ACCESS_TOKEN_SESSION_EXPIRY_MS,
         });
 
         const expiresAt = new Date(
-          Date.now() + API_KEY_SESSION_EXPIRY_MS,
+          Date.now() + ACCESS_TOKEN_SESSION_EXPIRY_MS,
         ).toISOString();
 
         return reply.send({
           valid: true,
-          clientId: keyRecord.id,
-          scopes: keyRecord.scopes,
+          clientId: tokenRecord.id,
+          scopes: tokenRecord.scopes,
           expiresAt,
           token: jwt,
         });

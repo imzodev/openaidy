@@ -9,7 +9,7 @@ import {
 import { createSessionsRepository } from './repositories/sessions';
 import { createSessionMessagesRepository } from './repositories/session-messages';
 import { createSessionRunsRepository } from './repositories/session-runs';
-import { createApiKeysRepository } from './repositories/api-keys';
+import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
 import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
@@ -30,7 +30,7 @@ export function createDatabaseAdapter(
     jobRuns: createJobRunsRepository(client),
     pairingRequests: createPairingRequestsRepository(client),
     devices: createDevicesRepository(client),
-    apiKeys: createApiKeysRepository(client),
+    accessTokens: createAccessTokensRepository(client),
     tasks: createTasksRepository(client),
     subtasks: createSubtasksRepository(client),
     taskAgents: createTaskAgentsRepository(client),

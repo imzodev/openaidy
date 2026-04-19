@@ -19,7 +19,7 @@ vi.mock('../lib/env', () => ({
       DB_KIND: 'sqlite',
       DATABASE_URL: undefined,
       SQLITE_PATH: fileURLToPath(
-        new URL('../../../.openaidy/test-api-keys.db', import.meta.url),
+        new URL('../../../.openaidy/test-access-tokens.db', import.meta.url),
       ),
       OPENAIDY_HOME: fileURLToPath(
         new URL('../../../.openaidy', import.meta.url),
@@ -55,7 +55,7 @@ vi.mock('../lib/env', () => ({
 
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
-import type { CreateApiKeyResponse } from '@openaidy/shared-types';
+import type { CreateAccessTokenResponse } from '@openaidy/shared-types';
 import { rm } from 'node:fs/promises';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 
@@ -78,12 +78,12 @@ async function generateAdminToken(): Promise<string> {
 }
 
 const DB_PATH = fileURLToPath(
-  new URL('../../../.openaidy/test-api-keys.db', import.meta.url),
+  new URL('../../../.openaidy/test-access-tokens.db', import.meta.url),
 );
 
 let app: FastifyInstance;
 
-describe('API Key Routes', () => {
+describe('Access Token Routes', () => {
   let adminToken: string;
 
   beforeEach(async () => {
@@ -98,24 +98,27 @@ describe('API Key Routes', () => {
   });
 
   describe('Auth guard', () => {
-    it('returns 401 on POST /api/keys without a token', async () => {
+    it('returns 401 on POST /api/access-tokens without a token', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         payload: { name: 'K', scopes: ['admin'] },
       });
       expect(res.statusCode).toBe(401);
     });
 
-    it('returns 401 on GET /api/keys without a token', async () => {
-      const res = await app.inject({ method: 'GET', url: '/api/keys' });
+    it('returns 401 on GET /api/access-tokens without a token', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/access-tokens',
+      });
       expect(res.statusCode).toBe(401);
     });
 
-    it('returns 401 on DELETE /api/keys/:id without a token', async () => {
+    it('returns 401 on DELETE /api/access-tokens/:id without a token', async () => {
       const res = await app.inject({
         method: 'DELETE',
-        url: '/api/keys/any-id',
+        url: '/api/access-tokens/any-id',
       });
       expect(res.statusCode).toBe(401);
     });
@@ -138,35 +141,35 @@ describe('API Key Routes', () => {
       });
       const res = await app.inject({
         method: 'GET',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${limitedToken}` },
       });
       expect(res.statusCode).toBe(403);
     });
   });
 
-  describe('POST /api/keys', () => {
-    it('creates a key and returns the raw key once', async () => {
+  describe('POST /api/access-tokens', () => {
+    it('creates a token and returns the raw token once', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'My Key', scopes: ['sessions.read'] },
+        payload: { name: 'My Token', scopes: ['sessions.read'] },
       });
 
       expect(response.statusCode).toBe(201);
-      const body = response.json<CreateApiKeyResponse>();
-      expect(body.rawKey).toMatch(/^oak_/);
-      expect(body.key.name).toBe('My Key');
+      const body = response.json<CreateAccessTokenResponse>();
+      expect(body.rawKey).toMatch(/^oat_/);
+      expect(body.key.name).toBe('My Token');
       expect(body.key.scopes).toEqual(['sessions.read']);
       expect(body.key.revoked).toBe(false);
-      expect(body.key.keyPrefix).toMatch(/^oak_/);
+      expect(body.key.keyPrefix).toMatch(/^oat_/);
     });
 
     it('returns 400 when name is missing', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
         payload: { scopes: ['sessions.read'] },
       });
@@ -176,32 +179,32 @@ describe('API Key Routes', () => {
     it('returns 400 when scopes array is empty', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Key', scopes: [] },
+        payload: { name: 'Token', scopes: [] },
       });
       expect(response.statusCode).toBe(400);
     });
   });
 
-  describe('GET /api/keys', () => {
-    it('lists all keys without exposing the raw key or hash', async () => {
+  describe('GET /api/access-tokens', () => {
+    it('lists all tokens without exposing the raw token or hash', async () => {
       await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Key A', scopes: ['admin'] },
+        payload: { name: 'Token A', scopes: ['admin'] },
       });
       await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Key B', scopes: ['sessions.read'] },
+        payload: { name: 'Token B', scopes: ['sessions.read'] },
       });
 
       const response = await app.inject({
         method: 'GET',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(response.statusCode).toBe(200);
@@ -217,15 +220,15 @@ describe('API Key Routes', () => {
     });
   });
 
-  describe('POST /api/auth/verify (API key exchange)', () => {
-    it('returns a JWT when a valid API key is submitted', async () => {
+  describe('POST /api/auth/verify (access token exchange)', () => {
+    it('returns a JWT when a valid access token is submitted', async () => {
       const createRes = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Auth Key', scopes: ['sessions.read'] },
+        payload: { name: 'Auth Token', scopes: ['sessions.read'] },
       });
-      const { rawKey } = createRes.json<CreateApiKeyResponse>();
+      const { rawKey } = createRes.json<CreateAccessTokenResponse>();
 
       const verifyRes = await app.inject({
         method: 'POST',
@@ -246,18 +249,18 @@ describe('API Key Routes', () => {
       expect(body.scopes).toEqual(['sessions.read']);
     });
 
-    it('returns 401 for a revoked API key', async () => {
+    it('returns 401 for a revoked access token', async () => {
       const createRes = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Revoked Key', scopes: ['sessions.read'] },
+        payload: { name: 'Revoked Token', scopes: ['sessions.read'] },
       });
-      const { key, rawKey } = createRes.json<CreateApiKeyResponse>();
+      const { key, rawKey } = createRes.json<CreateAccessTokenResponse>();
 
       await app.inject({
         method: 'DELETE',
-        url: `/api/keys/${key.id}`,
+        url: `/api/access-tokens/${key.id}`,
         headers: { authorization: `Bearer ${adminToken}` },
       });
 
@@ -271,31 +274,31 @@ describe('API Key Routes', () => {
       expect(verifyRes.json<{ valid: boolean }>().valid).toBe(false);
     });
 
-    it('returns 401 for an unknown API key', async () => {
+    it('returns 401 for an unknown access token', async () => {
       const verifyRes = await app.inject({
         method: 'POST',
         url: '/api/auth/verify',
         payload: {
           token:
-            'oak_0000000000000000000000000000000000000000000000000000000000000000',
+            'oat_0000000000000000000000000000000000000000000000000000000000000000',
         },
       });
 
       expect(verifyRes.statusCode).toBe(401);
     });
 
-    it('returns 401 for an expired API key', async () => {
+    it('returns 401 for an expired access token', async () => {
       const createRes = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
         payload: {
-          name: 'Expired Key',
+          name: 'Expired Token',
           scopes: ['sessions.read'],
           expiresAt: new Date(Date.now() - 1000).toISOString(),
         },
       });
-      const { rawKey } = createRes.json<CreateApiKeyResponse>();
+      const { rawKey } = createRes.json<CreateAccessTokenResponse>();
 
       const verifyRes = await app.inject({
         method: 'POST',
@@ -308,19 +311,19 @@ describe('API Key Routes', () => {
     });
   });
 
-  describe('DELETE /api/keys/:id', () => {
-    it('revokes an existing key', async () => {
+  describe('DELETE /api/access-tokens/:id', () => {
+    it('revokes an existing token', async () => {
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/api/keys',
+        url: '/api/access-tokens',
         headers: { authorization: `Bearer ${adminToken}` },
-        payload: { name: 'Revokable Key', scopes: ['sessions.read'] },
+        payload: { name: 'Revokable Token', scopes: ['sessions.read'] },
       });
-      const { key } = createResponse.json<CreateApiKeyResponse>();
+      const { key } = createResponse.json<CreateAccessTokenResponse>();
 
       const revokeResponse = await app.inject({
         method: 'DELETE',
-        url: `/api/keys/${key.id}`,
+        url: `/api/access-tokens/${key.id}`,
         headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(revokeResponse.statusCode).toBe(200);
@@ -328,10 +331,10 @@ describe('API Key Routes', () => {
       expect(body.key.revoked).toBe(true);
     });
 
-    it('returns 404 for a non-existent key', async () => {
+    it('returns 404 for a non-existent token', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/api/keys/nonexistent-id',
+        url: '/api/access-tokens/nonexistent-id',
         headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(response.statusCode).toBe(404);

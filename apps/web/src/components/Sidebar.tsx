@@ -90,7 +90,7 @@ const navSections: NavSection[] = [
     items: [
       { id: 'logs', label: 'Logs', icon: FileText },
       { id: 'backups', label: 'Backups', icon: Save },
-      { id: 'api-keys', label: 'API Keys', icon: KeyRound },
+      { id: 'api-keys', label: 'Access Tokens', icon: KeyRound },
     ],
   },
   {

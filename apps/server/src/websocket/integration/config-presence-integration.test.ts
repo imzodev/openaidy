@@ -35,7 +35,7 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   sessionsRepo: undefined,
   pairingRequestsRepo: undefined,
   devicesRepo: undefined,
-  apiKeysRepo: undefined,
+  accessTokensRepo: undefined,
   sessions: {
     createSession: vi.fn(),
     getSession: vi.fn(),
