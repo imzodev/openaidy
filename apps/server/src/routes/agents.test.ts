@@ -7,11 +7,24 @@ import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import { agentRoutes } from './agents';
+import { AuthMiddleware } from '../websocket/middleware/auth';
 import { createAgentRegistry } from '../agents';
 import type { AppConfigService } from '../config/service';
 import { createProviderServices } from '../providers';
 import { SessionMessageService } from '../sessions/service';
 import { RunEventEmitter } from '../dispatch/events';
+
+const mockAuthMiddleware = {
+  validateToken: async () => ({
+    sub: 'test',
+    scopes: ['*'],
+    type: 'access' as const,
+    iat: 0,
+    exp: 9999999999,
+  }),
+  extractFromHeader: (_h: string) => 'test-token',
+  hasCapability: () => true,
+} as unknown as AuthMiddleware;
 
 describe('Agent Routes', () => {
   let app: FastifyInstance;
@@ -102,6 +115,7 @@ describe('Agent Routes', () => {
       bootstrapAdmin: undefined,
       pairingRequestsRepo: undefined,
       devicesRepo: undefined,
+      accessTokensRepo: undefined,
       workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
@@ -109,7 +123,10 @@ describe('Agent Routes', () => {
     await app.register(cors, { origin: '*' });
     await app.register(sensible);
     await app.register(websocket);
-    await app.register(agentRoutes, { agentRegistry: testRegistry });
+    await app.register(agentRoutes, {
+      agentRegistry: testRegistry,
+      authMiddleware: mockAuthMiddleware,
+    });
   });
 
   afterEach(async () => {

@@ -7,6 +7,19 @@ import type {
   KanbanBoard,
 } from '../tasks/service';
 import type { Task } from '@openaidy/db';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+
+const mockAuthMiddleware = {
+  validateToken: async () => ({
+    sub: 'test',
+    scopes: ['*'],
+    type: 'access' as const,
+    iat: 0,
+    exp: 9999999999,
+  }),
+  extractFromHeader: (_h: string) => 'test-token',
+  hasCapability: () => true,
+} as unknown as AuthMiddleware;
 
 // Mock TaskService
 const createMockTaskService = () => ({
@@ -64,6 +77,7 @@ const buildApp = () => {
     delete: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'DELETE', url, handler });
     }),
+    addHook: vi.fn(),
     _routes: routes,
   };
 
@@ -101,6 +115,7 @@ describe('taskRoutes', () => {
     const app = buildApp();
     await taskRoutes(app, {
       taskService: mockService as unknown as TaskService,
+      authMiddleware: mockAuthMiddleware,
     });
 
     const registeredRoutes = app._routes.map((r) => `${r.method} ${r.url}`);
@@ -122,6 +137,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.listTasks.mockResolvedValue([mockTask]);
@@ -142,6 +158,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.listTasks.mockResolvedValue([mockTask]);
@@ -163,6 +180,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       const kanbanBoard: KanbanBoard = {
@@ -192,6 +210,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.createTask.mockResolvedValue({ ok: true, data: mockTask });
@@ -218,6 +237,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       const route = app._routes.find(
@@ -244,6 +264,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.getTaskWithDetails.mockResolvedValue(mockTaskWithDetails);
@@ -266,6 +287,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.getTaskWithDetails.mockResolvedValue(null);
@@ -289,6 +311,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.updateTaskStatus.mockResolvedValue({
@@ -318,6 +341,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.deleteTask.mockResolvedValue({ ok: true, data: true });
@@ -339,6 +363,7 @@ describe('taskRoutes', () => {
       const app = buildApp();
       await taskRoutes(app, {
         taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
       });
 
       mockService.assignAgents.mockResolvedValue({

@@ -9,16 +9,17 @@ import {
 import { createSessionsRepository } from './repositories/sessions';
 import { createSessionMessagesRepository } from './repositories/session-messages';
 import { createSessionRunsRepository } from './repositories/session-runs';
+import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
 import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
 
 export type { DatabaseAdapter, DatabaseRepositories } from './types';
 
-export function createDatabaseAdapter(
+export async function createDatabaseAdapter(
   config: DatabaseClientConfig,
-): DatabaseAdapter {
-  const connection = createDatabaseClient(config);
+): Promise<DatabaseAdapter> {
+  const connection = await createDatabaseClient(config);
   const client = connection.db;
 
   const repositories: DatabaseRepositories = {
@@ -29,6 +30,7 @@ export function createDatabaseAdapter(
     jobRuns: createJobRunsRepository(client),
     pairingRequests: createPairingRequestsRepository(client),
     devices: createDevicesRepository(client),
+    accessTokens: createAccessTokensRepository(client),
     tasks: createTasksRepository(client),
     subtasks: createSubtasksRepository(client),
     taskAgents: createTaskAgentsRepository(client),

@@ -4,6 +4,7 @@ import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import {
   type DatabaseAdapter,
+  type AccessTokensStore,
   type DevicesStore,
   type JobsStore,
   type JobRunsStore,
@@ -14,6 +15,9 @@ import {
 import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
+import { authRoutes } from './routes/auth';
+import { accessTokenRoutes } from './routes/access-tokens';
+import { createAccessTokenService } from './access-tokens/service';
 import { sessionRoutes } from './routes/sessions';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
@@ -61,6 +65,7 @@ export type AppServices = {
   sessionsRepo: SessionsStore | undefined;
   pairingRequestsRepo: PairingRequestsStore | undefined;
   devicesRepo: DevicesStore | undefined;
+  accessTokensRepo: AccessTokensStore | undefined;
   workspace: WorkspaceService;
   mcpService: McpClientService;
 };
@@ -101,6 +106,7 @@ export async function buildApp() {
   let sessionsRepo: SessionsStore | undefined;
   let pairingRequestsRepo: PairingRequestsStore | undefined;
   let devicesRepo: DevicesStore | undefined;
+  let accessTokensRepo: AccessTokensStore | undefined;
   let scheduler: SchedulerService | undefined;
 
   const dbConfig =
@@ -111,12 +117,13 @@ export async function buildApp() {
         : undefined;
 
   if (dbConfig) {
-    dbAdapter = createDatabaseAdapter(dbConfig);
+    dbAdapter = await createDatabaseAdapter(dbConfig);
     jobsRepo = dbAdapter.repositories.jobs;
     jobRunsRepo = dbAdapter.repositories.jobRuns;
     sessionsRepo = dbAdapter.repositories.sessions;
     pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
     devicesRepo = dbAdapter.repositories.devices;
+    accessTokensRepo = dbAdapter.repositories.accessTokens;
   }
 
   // Create shared services once per app instance
@@ -190,6 +197,7 @@ export async function buildApp() {
     sessionsRepo,
     pairingRequestsRepo,
     devicesRepo,
+    accessTokensRepo,
     workspace: workspaceService,
     mcpService,
   };
@@ -211,21 +219,48 @@ export async function buildApp() {
     pairingConfig,
   });
 
-  await app.register(healthRoutes);
+  const authMiddleware = new AuthMiddleware(wsConfig);
 
-  await app.register(configRoutes, { configService: services.config });
+  await app.register(healthRoutes);
+  await app.register(authRoutes, {
+    authMiddleware,
+    ...(services.accessTokensRepo
+      ? {
+          accessTokenService: createAccessTokenService(
+            services.accessTokensRepo,
+          ),
+        }
+      : {}),
+  });
+
+  await app.register(configRoutes, {
+    configService: services.config,
+    authMiddleware,
+  });
 
   // Pass shared services to session routes
-  await app.register(sessionRoutes, { sessionService: services.sessions });
+  await app.register(sessionRoutes, {
+    sessionService: services.sessions,
+    authMiddleware,
+  });
 
   // Pass shared services to provider routes
-  await app.register(providerRoutes, { services: services.providers });
+  await app.register(providerRoutes, {
+    services: services.providers,
+    authMiddleware,
+  });
 
   // Register agent routes
-  await app.register(agentRoutes, { agentRegistry: services.agents });
+  await app.register(agentRoutes, {
+    agentRegistry: services.agents,
+    authMiddleware,
+  });
 
   // Register run stream routes (SSE)
-  await app.register(runStreamRoutes, { runEvents: services.runEvents });
+  await app.register(runStreamRoutes, {
+    runEvents: services.runEvents,
+    authMiddleware,
+  });
 
   // Register scheduler routes (if database is available)
   if (
@@ -239,6 +274,7 @@ export async function buildApp() {
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
+      authMiddleware,
     });
   }
 
@@ -247,6 +283,7 @@ export async function buildApp() {
     agentRegistry: services.agents,
     workspaceService: services.workspace,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+    authMiddleware,
   });
 
   // Register log routes
@@ -261,7 +298,15 @@ export async function buildApp() {
       agents: services.agents,
       sessionService: services.sessions,
     });
-    await app.register(taskRoutes, { taskService });
+    await app.register(taskRoutes, { taskService, authMiddleware });
+  }
+
+  // Register access token routes (requires DB, admin auth enforced)
+  if (services.accessTokensRepo) {
+    await app.register(accessTokenRoutes, {
+      accessTokenService: createAccessTokenService(services.accessTokensRepo),
+      authMiddleware,
+    });
   }
 
   // Register MCP routes

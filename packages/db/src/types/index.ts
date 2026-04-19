@@ -12,6 +12,7 @@ import type {
   PairingRequestsRepository,
   DevicesRepository,
 } from '../repositories/pairing';
+import type { AccessTokensRepository } from '../repositories/access-tokens';
 import type { TasksRepository } from '../repositories/tasks';
 import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
@@ -85,6 +86,11 @@ export type DevicesStore = Pick<
   'upsert' | 'findByNodeId' | 'findByToken' | 'listAll' | 'update'
 >;
 
+export type AccessTokensStore = Pick<
+  AccessTokensRepository,
+  'create' | 'findByHash' | 'findById' | 'list' | 'revoke' | 'touchLastUsed'
+>;
+
 export type TasksStore = TasksRepository;
 export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
@@ -97,6 +103,7 @@ export type DatabaseRepositories = {
   jobRuns: JobRunsStore;
   pairingRequests: PairingRequestsStore;
   devices: DevicesStore;
+  accessTokens: AccessTokensStore;
   tasks: TasksStore;
   subtasks: SubtasksStore;
   taskAgents: TaskAgentsStore;

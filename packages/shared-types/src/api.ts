@@ -1,4 +1,56 @@
 /**
+ * Auth token verify request body
+ */
+export type AuthVerifyRequest = {
+  token: string;
+};
+
+/**
+ * Auth token verify response on success
+ */
+export type AuthVerifyResponse =
+  | {
+      valid: true;
+      clientId: string;
+      scopes: string[];
+      expiresAt: string;
+      token?: string;
+    }
+  | { valid: false; error: string };
+
+/**
+ * Access token record (safe to return to clients — no hash, no raw token)
+ */
+export type AccessTokenRecord = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  createdBy: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  revoked: boolean;
+  createdAt: string;
+};
+
+/**
+ * Response when creating a new access token (raw token shown once)
+ */
+export type CreateAccessTokenResponse = {
+  key: AccessTokenRecord;
+  rawKey: string;
+};
+
+/**
+ * Request body for creating an access token
+ */
+export type CreateAccessTokenRequest = {
+  name: string;
+  scopes: string[];
+  expiresAt?: string;
+};
+
+/**
  * API error response shape returned by the server on non-OK responses.
  */
 export type ApiError = {

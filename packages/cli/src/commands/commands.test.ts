@@ -48,6 +48,7 @@ vi.mock('node:fs/promises', () => ({
 vi.mock('../lib/config.js', () => ({
   resolveCLIConfig: () => ({
     wsUrl: 'ws://localhost:3001/ws',
+    httpUrl: 'http://localhost:3001',
     tokenPath: '/tmp/test-openaidy/bootstrap-admin.json',
     jwtSecret: 'test-secret',
     bootstrapAdminEnabled: true,
@@ -547,6 +548,71 @@ describe('Command Handlers', () => {
       expect(result.exitCode).toBe(1);
       expect(result.error).toContain('Request not found');
       expect(mockDestroy).toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // tokens list
+  // =========================================================================
+  describe('tokens list', () => {
+    it('shows help with --help flag', async () => {
+      const result = await runCommand('tokens list', ['--help']);
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain('Usage:');
+      expect(result.output).toContain('tokens list');
+    });
+
+    it('returns exit 1 when admin token file is missing', async () => {
+      mockReadFile.mockRejectedValue(new Error('ENOENT'));
+      const result = await runCommand('tokens list', []);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('Bootstrap admin token not found');
+    });
+  });
+
+  // =========================================================================
+  // tokens create
+  // =========================================================================
+  describe('tokens create', () => {
+    it('shows help with --help flag', async () => {
+      const result = await runCommand('tokens create', ['--help']);
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain('Usage:');
+      expect(result.output).toContain('--name');
+      expect(result.output).toContain('--scopes');
+    });
+
+    it('returns exit 2 when --name is missing', async () => {
+      const result = await runCommand('tokens create', [
+        '--scopes',
+        'sessions.read',
+      ]);
+      expect(result.exitCode).toBe(2);
+      expect(result.error).toContain('--name');
+    });
+
+    it('returns exit 2 when --scopes is missing', async () => {
+      const result = await runCommand('tokens create', ['--name', 'Test']);
+      expect(result.exitCode).toBe(2);
+      expect(result.error).toContain('--scopes');
+    });
+  });
+
+  // =========================================================================
+  // tokens revoke
+  // =========================================================================
+  describe('tokens revoke', () => {
+    it('shows help with --help flag', async () => {
+      const result = await runCommand('tokens revoke', ['--help']);
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain('Usage:');
+      expect(result.output).toContain('<id>');
+    });
+
+    it('returns exit 2 when id is missing', async () => {
+      const result = await runCommand('tokens revoke', []);
+      expect(result.exitCode).toBe(2);
+      expect(result.error).toContain('Missing argument');
     });
   });
 });

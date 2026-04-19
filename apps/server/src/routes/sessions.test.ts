@@ -58,6 +58,8 @@ vi.mock('../lib/env', () => ({
 
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
+import { AuthMiddleware } from '../websocket/middleware/auth';
+import { defaultWebSocketConfig } from '../websocket/types';
 import type {
   ModelProvider,
   ProviderDescriptor,
@@ -126,8 +128,28 @@ function createMockProvider(
 describe('Session Message Routes', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
+  let authToken: string;
+
   beforeEach(async () => {
     app = await buildApp();
+
+    // Generate a wildcard admin token using the same secret as the test env
+    const auth = new AuthMiddleware({
+      ...defaultWebSocketConfig,
+      auth: { ...defaultWebSocketConfig.auth, secret: 'test-secret' },
+    });
+    authToken = await auth.generateToken({
+      clientId: 'test-admin',
+      type: 'access',
+      scopes: ['*'],
+    });
+
+    // Inject the Authorization header automatically for all test requests
+    app.addHook('onRequest', async (request) => {
+      if (!request.headers.authorization) {
+        request.headers.authorization = `Bearer ${authToken}`;
+      }
+    });
 
     // Register a mock provider for testing
     const mockProvider = createMockProvider('test-provider');
@@ -360,8 +382,25 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
 describe('Session isolation', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
+  let isolationToken: string;
+
   beforeEach(async () => {
     app = await buildApp();
+
+    const auth = new AuthMiddleware({
+      ...defaultWebSocketConfig,
+      auth: { ...defaultWebSocketConfig.auth, secret: 'test-secret' },
+    });
+    isolationToken = await auth.generateToken({
+      clientId: 'test-admin',
+      type: 'access',
+      scopes: ['*'],
+    });
+    app.addHook('onRequest', async (request) => {
+      if (!request.headers.authorization) {
+        request.headers.authorization = `Bearer ${isolationToken}`;
+      }
+    });
 
     // Register a mock provider
     const mockProvider = createMockProvider('isolation-provider');

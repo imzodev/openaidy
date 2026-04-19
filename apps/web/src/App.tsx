@@ -5,7 +5,7 @@ import {
   createQuery,
   createMutation,
 } from '@tanstack/solid-query';
-import { Menu, Settings, MessageSquare } from 'lucide-solid';
+import { Menu, Settings, MessageSquare, LogOut } from 'lucide-solid';
 import {
   listSessions,
   createSession,
@@ -38,7 +38,10 @@ import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
 import { BackupsPage } from './components/pages/BackupsPage';
 import { AddonsPage } from './components/pages/AddonsPage';
+import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
+import { LoginScreen } from './components/LoginScreen';
+import { resolveToken, clearToken } from './lib/auth-token';
 import './index.css';
 
 // Create a client
@@ -51,7 +54,11 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppContent() {
+type AppContentProps = {
+  onLogout: () => void;
+};
+
+function AppContent(props: AppContentProps) {
   // Use the router hook
   const { currentView, navigate } = createRouter();
 
@@ -348,6 +355,14 @@ function AppContent() {
 
             <ConnectionStatus />
             <PresenceIndicator class="hidden md:flex" />
+            <button
+              type="button"
+              onClick={props.onLogout}
+              title="Log out"
+              class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <LogOut class="w-4 h-4" />
+            </button>
           </div>
         </header>
 
@@ -408,6 +423,10 @@ function AppContent() {
           <AddonsPage />
         </Show>
 
+        <Show when={view() === 'api-keys'}>
+          <AccessTokensPage />
+        </Show>
+
         <Show when={view() === 'chat'}>
           <Show when={!selectedSessionId()}>
             <div class="flex-1 flex items-center justify-center">
@@ -464,14 +483,34 @@ function AppContent() {
   );
 }
 
+function AuthGate() {
+  const [authenticated, setAuthenticated] = createSignal(
+    Boolean(resolveToken()),
+  );
+
+  return (
+    <Show
+      when={authenticated()}
+      fallback={<LoginScreen onAuthenticated={() => setAuthenticated(true)} />}
+    >
+      <WebSocketProvider>
+        <QueryClientProvider client={queryClient}>
+          <AppContent
+            onLogout={() => {
+              clearToken();
+              setAuthenticated(false);
+            }}
+          />
+        </QueryClientProvider>
+      </WebSocketProvider>
+    </Show>
+  );
+}
+
 function App() {
   return (
     <ThemeProvider>
-      <WebSocketProvider>
-        <QueryClientProvider client={queryClient}>
-          <AppContent />
-        </QueryClientProvider>
-      </WebSocketProvider>
+      <AuthGate />
     </ThemeProvider>
   );
 }

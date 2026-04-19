@@ -3,8 +3,14 @@ import {
   type LogQueryResult,
   type LogStats,
   type ApiError,
+  type AccessTokenRecord,
+  type CreateAccessTokenRequest,
+  type CreateAccessTokenResponse,
+  type AuthVerifyResponse,
   ApiRequestError,
 } from '@openaidy/shared-types';
+import { getStoredToken } from './auth-token';
+export type { AccessTokenRecord, CreateAccessTokenResponse };
 
 /**
  * API client for session endpoints
@@ -41,6 +47,23 @@ function getApiBase(): string {
  * API base URL (computed once at module load)
  */
 export const API_BASE = typeof window !== 'undefined' ? getApiBase() : '';
+
+/**
+ * Fetch wrapper that automatically injects the stored auth token
+ */
+function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const token = getStoredToken();
+  const authHeader: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
+  return fetch(input, {
+    ...init,
+    headers: {
+      ...authHeader,
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+  });
+}
 
 /**
  * Session record
@@ -141,7 +164,7 @@ export type { ApiError, ApiRequestError } from '@openaidy/shared-types';
  * List sessions
  */
 export async function listSessions(): Promise<{ items: Session[] }> {
-  const response = await fetch(`${API_BASE}/sessions`);
+  const response = await apiFetch(`${API_BASE}/sessions`);
   if (!response.ok) {
     throw new Error(`Failed to list sessions: ${response.statusText}`);
   }
@@ -152,7 +175,7 @@ export async function listSessions(): Promise<{ items: Session[] }> {
  * Create a new session
  */
 export async function createSession(title: string): Promise<Session> {
-  const response = await fetch(`${API_BASE}/sessions`, {
+  const response = await apiFetch(`${API_BASE}/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -167,7 +190,7 @@ export async function createSession(title: string): Promise<Session> {
  * Get a session by ID
  */
 export async function getSession(id: string): Promise<Session | ApiError> {
-  const response = await fetch(`${API_BASE}/sessions/${id}`);
+  const response = await apiFetch(`${API_BASE}/sessions/${id}`);
   return response.json();
 }
 
@@ -177,7 +200,7 @@ export async function getSession(id: string): Promise<Session | ApiError> {
 export async function listMessages(
   sessionId: string,
 ): Promise<{ items: SessionMessage[] } | ApiError> {
-  const response = await fetch(`${API_BASE}/sessions/${sessionId}/messages`);
+  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/messages`);
   return response.json();
 }
 
@@ -187,7 +210,7 @@ export async function listMessages(
 export async function listRuns(
   sessionId: string,
 ): Promise<{ items: SessionRun[] } | ApiError> {
-  const response = await fetch(`${API_BASE}/sessions/${sessionId}/runs`);
+  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/runs`);
   return response.json();
 }
 
@@ -195,7 +218,7 @@ export async function listRuns(
  * List all agents
  */
 export async function listAgents(): Promise<{ items: Agent[] }> {
-  const response = await fetch(`${API_BASE}/agents`);
+  const response = await apiFetch(`${API_BASE}/agents`);
   if (!response.ok) {
     throw new Error(`Failed to list agents: ${response.statusText}`);
   }
@@ -206,7 +229,7 @@ export async function listAgents(): Promise<{ items: Agent[] }> {
  * Get an agent by ID
  */
 export async function getAgent(id: string): Promise<Agent | ApiError> {
-  const response = await fetch(`${API_BASE}/agents/${id}`);
+  const response = await apiFetch(`${API_BASE}/agents/${id}`);
   return response.json();
 }
 
@@ -243,11 +266,14 @@ export async function submitMessage(
   sessionId: string,
   input: SubmitMessageInput,
 ): Promise<SubmitMessageResult> {
-  const response = await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
+  const response = await apiFetch(
+    `${API_BASE}/sessions/${sessionId}/messages`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
   return response.json();
 }
 
@@ -458,7 +484,7 @@ export type ConfigStatus = {
 export async function getConfig(): Promise<
   { config: AppConfig; status: ConfigStatus } | ApiError
 > {
-  const response = await fetch(`${API_BASE}/config`);
+  const response = await apiFetch(`${API_BASE}/config`);
   return response.json();
 }
 
@@ -468,7 +494,7 @@ export async function getConfig(): Promise<
 export async function updateConfig(
   config: AppConfig,
 ): Promise<{ config: AppConfig; status: ConfigStatus } | ApiError> {
-  const response = await fetch(`${API_BASE}/config`, {
+  const response = await apiFetch(`${API_BASE}/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -546,7 +572,7 @@ export async function listWorkspaceFiles(
   const url = path
     ? `${API_BASE}/workspace/${agentId}/files/${path}`
     : `${API_BASE}/workspace/${agentId}/files`;
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     headers: { 'X-Agent-Id': requestingAgentId },
   });
   return response.json();
@@ -560,7 +586,7 @@ export async function readWorkspaceFile(
   filePath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE}/workspace/${agentId}/files/${filePath}`,
     {
       headers: { 'X-Agent-Id': requestingAgentId },
@@ -578,7 +604,7 @@ export async function writeWorkspaceFile(
   content: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE}/workspace/${agentId}/files/${filePath}`,
     {
       method: 'POST',
@@ -601,7 +627,7 @@ export async function renameWorkspaceFile(
   destinationPath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(`${API_BASE}/workspace/${agentId}/rename`, {
+  const response = await apiFetch(`${API_BASE}/workspace/${agentId}/rename`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -622,7 +648,7 @@ export async function updateWorkspaceFile(
   requestingAgentId: string,
   expectedModifiedAt?: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE}/workspace/${agentId}/files/${filePath}`,
     {
       method: 'PUT',
@@ -644,7 +670,7 @@ export async function deleteWorkspaceFile(
   filePath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE}/workspace/${agentId}/files/${filePath}`,
     {
       method: 'DELETE',
@@ -674,7 +700,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
   if (filter.limit !== undefined) params.set('limit', String(filter.limit));
   if (filter.offset !== undefined) params.set('offset', String(filter.offset));
 
-  const response = await fetch(`${API_BASE}/logs?${params.toString()}`);
+  const response = await apiFetch(`${API_BASE}/logs?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to query logs: ${response.statusText}`);
   }
@@ -685,7 +711,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
  * Get log statistics
  */
 export async function getLogStats(): Promise<LogStats> {
-  const response = await fetch(`${API_BASE}/logs/stats`);
+  const response = await apiFetch(`${API_BASE}/logs/stats`);
   if (!response.ok) {
     throw new Error(`Failed to get log stats: ${response.statusText}`);
   }
@@ -699,7 +725,7 @@ export async function clearLogs(): Promise<{
   success: boolean;
   cleared: boolean;
 }> {
-  const response = await fetch(`${API_BASE}/logs`, {
+  const response = await apiFetch(`${API_BASE}/logs`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -715,9 +741,79 @@ import type { McpServer } from '@openaidy/config';
  * List all configured MCP servers and their status
  */
 export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
-  const response = await fetch(`${API_BASE}/mcp/servers`);
+  const response = await apiFetch(`${API_BASE}/mcp/servers`);
   if (!response.ok) {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
   }
   return response.json();
+}
+
+function authHeaders(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` };
+}
+
+/**
+ * List all access tokens (requires admin token)
+ */
+export async function listAccessTokens(
+  token: string,
+): Promise<{ keys: AccessTokenRecord[] }> {
+  const response = await fetch(`${API_BASE}/api/access-tokens`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ keys: AccessTokenRecord[] }>;
+}
+
+/**
+ * Create a new access token (requires admin token)
+ */
+export async function createAccessToken(
+  token: string,
+  input: CreateAccessTokenRequest,
+): Promise<CreateAccessTokenResponse> {
+  const response = await fetch(`${API_BASE}/api/access-tokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<CreateAccessTokenResponse>;
+}
+
+/**
+ * Revoke an access token by ID (requires admin token)
+ */
+export async function revokeAccessToken(
+  token: string,
+  id: string,
+): Promise<AccessTokenRecord> {
+  const response = await fetch(`${API_BASE}/api/access-tokens/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  const result = (await response.json()) as { key: AccessTokenRecord };
+  return result.key;
+}
+
+/**
+ * Verify an auth token against the server
+ */
+export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
+  const response = await fetch(`${API_BASE}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  return response.json() as Promise<AuthVerifyResponse>;
 }

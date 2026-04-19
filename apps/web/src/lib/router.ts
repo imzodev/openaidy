@@ -15,6 +15,7 @@ export const RoutePaths = {
   LOGS: '/logs',
   BACKUPS: '/backups',
   ADDONS: '/addons',
+  API_KEYS: '/api-keys',
   SETTINGS: '/settings',
 } as const;
 
@@ -34,6 +35,7 @@ export const viewToRouteMap: Record<ViewType, RoutePath> = {
   logs: RoutePaths.LOGS,
   backups: RoutePaths.BACKUPS,
   addons: RoutePaths.ADDONS,
+  'api-keys': RoutePaths.API_KEYS,
   settings: RoutePaths.SETTINGS,
 };
 
@@ -52,6 +54,7 @@ export const routeToViewMap: Record<string, ViewType> = {
   [RoutePaths.LOGS]: 'logs',
   [RoutePaths.BACKUPS]: 'backups',
   [RoutePaths.ADDONS]: 'addons',
+  [RoutePaths.API_KEYS]: 'api-keys',
   [RoutePaths.SETTINGS]: 'settings',
 };
 

@@ -57,6 +57,9 @@ vi.mock('./lib/env', () => ({
 }));
 
 import { buildApp } from './app';
+import { AuthMiddleware } from './websocket/middleware/auth';
+import { defaultWebSocketConfig } from './websocket/types';
+import type { FastifyInstance } from 'fastify';
 import { createProviderServices } from './providers';
 import type {
   ModelProvider,
@@ -67,6 +70,23 @@ import type {
   ModelDescriptor,
 } from '@openaidy/runtime';
 import { err, createProviderError, ok } from '@openaidy/runtime';
+
+async function injectTestAuth(app: FastifyInstance): Promise<void> {
+  const auth = new AuthMiddleware({
+    ...defaultWebSocketConfig,
+    auth: { ...defaultWebSocketConfig.auth, secret: 'test-secret-key' },
+  });
+  const token = await auth.generateToken({
+    clientId: 'test-admin',
+    type: 'access',
+    scopes: ['*'],
+  });
+  app.addHook('onRequest', async (request) => {
+    if (!request.headers.authorization) {
+      request.headers.authorization = `Bearer ${token}`;
+    }
+  });
+}
 
 describe('buildApp', { timeout: 15000 }, () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -109,6 +129,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
 
   it('uses the same registry instance across all routes', async () => {
     app = await buildApp();
+    await injectTestAuth(app);
 
     // The registry in app.services should be the same instance used by routes
     const { registry } = app.services.providers;
@@ -137,6 +158,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
 
   it('enable/disable operations affect the shared registry', async () => {
     app = await buildApp();
+    await injectTestAuth(app);
 
     const { registry } = app.services.providers;
     const mockProvider = createMockProvider('test-toggle-provider');

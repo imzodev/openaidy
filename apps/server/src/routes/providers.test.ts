@@ -58,12 +58,32 @@ vi.mock('../lib/env', () => ({
 
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
+import { AuthMiddleware } from '../websocket/middleware/auth';
+import { defaultWebSocketConfig } from '../websocket/types';
+
+async function injectTestAuth(app: FastifyInstance): Promise<void> {
+  const auth = new AuthMiddleware({
+    ...defaultWebSocketConfig,
+    auth: { ...defaultWebSocketConfig.auth, secret: 'test-secret' },
+  });
+  const token = await auth.generateToken({
+    clientId: 'test-admin',
+    type: 'access',
+    scopes: ['*'],
+  });
+  app.addHook('onRequest', async (request) => {
+    if (!request.headers.authorization) {
+      request.headers.authorization = `Bearer ${token}`;
+    }
+  });
+}
 
 describe('Provider Routes', { timeout: 15000 }, () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
     app = await buildApp();
+    await injectTestAuth(app);
   });
 
   describe('GET /providers', () => {
@@ -313,6 +333,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
 
   beforeEach(async () => {
     app = await buildApp();
+    await injectTestAuth(app);
   });
 
   describe('Error normalization', () => {
@@ -430,6 +451,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
 
   beforeEach(async () => {
     app = await buildApp();
+    await injectTestAuth(app);
   });
 
   describe('test-invoke schema validation', () => {
