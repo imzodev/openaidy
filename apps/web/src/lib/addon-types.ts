@@ -60,10 +60,8 @@ export interface AddonComponent {
  * The module containing the addon component
  * Components are lazy-loaded for performance
  */
-export type AddonComponentModule = () => Promise<{
-  default: unknown;
-  [key: string]: unknown;
-}>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AddonComponentModule = () => Promise<any>;
 
 /**
  * Route configuration for addon pages
