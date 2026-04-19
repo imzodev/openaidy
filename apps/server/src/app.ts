@@ -278,10 +278,11 @@ export async function buildApp() {
     await app.register(taskRoutes, { taskService });
   }
 
-  // Register API key routes (requires DB)
+  // Register API key routes (requires DB, admin auth enforced)
   if (services.apiKeysRepo) {
     await app.register(apiKeyRoutes, {
       apiKeyService: createApiKeyService(services.apiKeysRepo),
+      authMiddleware: new AuthMiddleware(wsConfig),
     });
   }
 

@@ -57,6 +57,25 @@ import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 import type { CreateApiKeyResponse } from '@openaidy/shared-types';
 import { rm } from 'node:fs/promises';
+import { AuthMiddleware } from '../websocket/middleware/auth';
+
+async function generateAdminToken(): Promise<string> {
+  const auth = new AuthMiddleware({
+    enabled: false,
+    port: 3001,
+    path: '/ws',
+    maxConnections: 1000,
+    heartbeatInterval: 30000,
+    auth: { required: true, secret: 'test-secret', tokenExpiry: 86400000 },
+    rateLimit: { max: 100, window: 60000 },
+  });
+  return auth.generateToken({
+    clientId: 'test-admin',
+    type: 'access',
+    scopes: ['*'],
+    expiresIn: 86400000,
+  });
+}
 
 const DB_PATH = fileURLToPath(
   new URL('../../../.openaidy/test-api-keys.db', import.meta.url),
@@ -65,7 +84,10 @@ const DB_PATH = fileURLToPath(
 let app: FastifyInstance;
 
 describe('API Key Routes', () => {
+  let adminToken: string;
+
   beforeEach(async () => {
+    adminToken = await generateAdminToken();
     app = await buildApp();
     await app.ready();
   });
@@ -75,11 +97,60 @@ describe('API Key Routes', () => {
     await rm(DB_PATH, { force: true });
   });
 
+  describe('Auth guard', () => {
+    it('returns 401 on POST /api/keys without a token', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/keys',
+        payload: { name: 'K', scopes: ['admin'] },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 on GET /api/keys without a token', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/keys' });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 on DELETE /api/keys/:id without a token', async () => {
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/keys/any-id',
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 403 when token lacks admin scope', async () => {
+      const auth = new AuthMiddleware({
+        enabled: false,
+        port: 3001,
+        path: '/ws',
+        maxConnections: 1000,
+        heartbeatInterval: 30000,
+        auth: { required: true, secret: 'test-secret', tokenExpiry: 86400000 },
+        rateLimit: { max: 100, window: 60000 },
+      });
+      const limitedToken = await auth.generateToken({
+        clientId: 'limited-user',
+        type: 'access',
+        scopes: ['sessions.read'],
+        expiresIn: 86400000,
+      });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/keys',
+        headers: { authorization: `Bearer ${limitedToken}` },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
   describe('POST /api/keys', () => {
     it('creates a key and returns the raw key once', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'My Key', scopes: ['sessions.read'] },
       });
 
@@ -96,6 +167,7 @@ describe('API Key Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { scopes: ['sessions.read'] },
       });
       expect(response.statusCode).toBe(400);
@@ -105,6 +177,7 @@ describe('API Key Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Key', scopes: [] },
       });
       expect(response.statusCode).toBe(400);
@@ -116,17 +189,21 @@ describe('API Key Routes', () => {
       await app.inject({
         method: 'POST',
         url: '/api/keys',
-        headers: { 'content-type': 'application/json' },
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Key A', scopes: ['admin'] },
       });
       await app.inject({
         method: 'POST',
         url: '/api/keys',
-        headers: { 'content-type': 'application/json' },
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Key B', scopes: ['sessions.read'] },
       });
 
-      const response = await app.inject({ method: 'GET', url: '/api/keys' });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
       expect(response.statusCode).toBe(200);
       const { keys } = response.json<{ keys: unknown[] }>();
       expect(keys).toHaveLength(2);
@@ -145,6 +222,7 @@ describe('API Key Routes', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Auth Key', scopes: ['sessions.read'] },
       });
       const { rawKey } = createRes.json<CreateApiKeyResponse>();
@@ -172,11 +250,16 @@ describe('API Key Routes', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Revoked Key', scopes: ['sessions.read'] },
       });
       const { key, rawKey } = createRes.json<CreateApiKeyResponse>();
 
-      await app.inject({ method: 'DELETE', url: `/api/keys/${key.id}` });
+      await app.inject({
+        method: 'DELETE',
+        url: `/api/keys/${key.id}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
 
       const verifyRes = await app.inject({
         method: 'POST',
@@ -207,6 +290,7 @@ describe('API Key Routes', () => {
       const createResponse = await app.inject({
         method: 'POST',
         url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
         payload: { name: 'Revokable Key', scopes: ['sessions.read'] },
       });
       const { key } = createResponse.json<CreateApiKeyResponse>();
@@ -214,6 +298,7 @@ describe('API Key Routes', () => {
       const revokeResponse = await app.inject({
         method: 'DELETE',
         url: `/api/keys/${key.id}`,
+        headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(revokeResponse.statusCode).toBe(200);
       const body = revokeResponse.json<{ key: { revoked: boolean } }>();
@@ -224,6 +309,7 @@ describe('API Key Routes', () => {
       const response = await app.inject({
         method: 'DELETE',
         url: '/api/keys/nonexistent-id',
+        headers: { authorization: `Bearer ${adminToken}` },
       });
       expect(response.statusCode).toBe(404);
     });

@@ -1,21 +1,32 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ApiKeyService } from '../api-keys/service';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 import type {
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   ApiKeyRecord,
 } from '@openaidy/shared-types';
 
+const ADMIN_SCOPE = '*';
+
 export type ApiKeyRoutesOptions = {
   apiKeyService: ApiKeyService;
+  authMiddleware: AuthMiddleware;
 };
 
 export const apiKeyRoutes: FastifyPluginAsync<ApiKeyRoutesOptions> = async (
   app,
   opts,
 ) => {
+  const adminAuth = requireAuth({
+    authMiddleware: opts.authMiddleware,
+    requiredScope: ADMIN_SCOPE,
+  });
+
   app.post<{ Body: CreateApiKeyRequest; Reply: CreateApiKeyResponse }>(
     '/api/keys',
+    { preHandler: adminAuth },
     async (request, reply) => {
       const { name, scopes, expiresAt } = request.body;
 
@@ -41,6 +52,7 @@ export const apiKeyRoutes: FastifyPluginAsync<ApiKeyRoutesOptions> = async (
 
   app.get<{ Reply: { keys: ApiKeyRecord[] } }>(
     '/api/keys',
+    { preHandler: adminAuth },
     async (_, reply) => {
       const keys = await opts.apiKeyService.list();
       return reply.send({ keys });
@@ -50,7 +62,7 @@ export const apiKeyRoutes: FastifyPluginAsync<ApiKeyRoutesOptions> = async (
   app.delete<{
     Params: { id: string };
     Reply: { key: ApiKeyRecord } | { error: string };
-  }>('/api/keys/:id', async (request, reply) => {
+  }>('/api/keys/:id', { preHandler: adminAuth }, async (request, reply) => {
     const revoked = await opts.apiKeyService.revoke(request.params.id);
     if (!revoked) {
       return reply.code(404).send({ error: 'API key not found' });
