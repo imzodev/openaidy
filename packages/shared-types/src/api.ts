@@ -1,4 +1,18 @@
 /**
+ * Auth token verify request body
+ */
+export type AuthVerifyRequest = {
+  token: string;
+};
+
+/**
+ * Auth token verify response on success
+ */
+export type AuthVerifyResponse =
+  | { valid: true; clientId: string; scopes: string[]; expiresAt: string }
+  | { valid: false; error: string };
+
+/**
  * API error response shape returned by the server on non-OK responses.
  */
 export type ApiError = {

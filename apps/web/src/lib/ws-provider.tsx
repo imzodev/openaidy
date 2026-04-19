@@ -15,6 +15,7 @@ import {
   type WebSocketClientState,
 } from '@openaidy/sdk';
 import { setWebSocketApiClient } from './ws-api';
+import { resolveToken } from './auth-token';
 
 export type PresenceEntry = {
   clientId: string;
@@ -55,20 +56,6 @@ function resolveBaseUrl(): string {
 
   // Fallback for development
   return 'http://localhost:3001';
-}
-
-// Try to get bootstrap token from the default location
-async function loadBootstrapToken(): Promise<string | undefined> {
-  try {
-    const response = await fetch('/.openaidy/credentials/bootstrap-admin.json');
-    if (response.ok) {
-      const data = await response.json();
-      return data.token;
-    }
-  } catch {
-    // Token file not found or not accessible
-  }
-  return undefined;
 }
 
 export const WebSocketProvider: ParentComponent = (props) => {
@@ -113,10 +100,9 @@ export const WebSocketProvider: ParentComponent = (props) => {
   };
 
   onMount(async () => {
-    // Try to get token from env, otherwise load bootstrap token
+    // Resolve token: URL param → localStorage → env fallback
     const envToken = import.meta.env.VITE_WS_TOKEN as string | undefined;
-    const bootstrapToken = await loadBootstrapToken();
-    const token = envToken || bootstrapToken;
+    const token = envToken || resolveToken();
 
     const adapter = createWebUIAdapter();
     const wsClient = adapter.createClient({

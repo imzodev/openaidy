@@ -14,6 +14,7 @@ import {
 import { env } from './lib/env';
 import { loggerOptions } from './lib/logger';
 import { healthRoutes } from './routes/health';
+import { authRoutes } from './routes/auth';
 import { sessionRoutes } from './routes/sessions';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
@@ -212,6 +213,9 @@ export async function buildApp() {
   });
 
   await app.register(healthRoutes);
+  await app.register(authRoutes, {
+    authMiddleware: new AuthMiddleware(wsConfig),
+  });
 
   await app.register(configRoutes, { configService: services.config });
 

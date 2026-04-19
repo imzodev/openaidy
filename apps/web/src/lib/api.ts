@@ -3,6 +3,7 @@ import {
   type LogQueryResult,
   type LogStats,
   type ApiError,
+  type AuthVerifyResponse,
   ApiRequestError,
 } from '@openaidy/shared-types';
 
@@ -720,4 +721,16 @@ export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
   }
   return response.json();
+}
+
+/**
+ * Verify an auth token against the server
+ */
+export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
+  const response = await fetch(`${API_BASE}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  return response.json() as Promise<AuthVerifyResponse>;
 }
