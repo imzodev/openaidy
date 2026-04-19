@@ -140,6 +140,68 @@ describe('API Key Routes', () => {
     });
   });
 
+  describe('POST /api/auth/verify (API key exchange)', () => {
+    it('returns a JWT when a valid API key is submitted', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/keys',
+        payload: { name: 'Auth Key', scopes: ['sessions.read'] },
+      });
+      const { rawKey } = createRes.json<CreateApiKeyResponse>();
+
+      const verifyRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify',
+        payload: { token: rawKey },
+      });
+
+      expect(verifyRes.statusCode).toBe(200);
+      const body = verifyRes.json<{
+        valid: boolean;
+        token: string;
+        scopes: string[];
+        clientId: string;
+      }>();
+      expect(body.valid).toBe(true);
+      expect(body.token).toBeDefined();
+      expect(body.token.split('.')).toHaveLength(3);
+      expect(body.scopes).toEqual(['sessions.read']);
+    });
+
+    it('returns 401 for a revoked API key', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/keys',
+        payload: { name: 'Revoked Key', scopes: ['sessions.read'] },
+      });
+      const { key, rawKey } = createRes.json<CreateApiKeyResponse>();
+
+      await app.inject({ method: 'DELETE', url: `/api/keys/${key.id}` });
+
+      const verifyRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify',
+        payload: { token: rawKey },
+      });
+
+      expect(verifyRes.statusCode).toBe(401);
+      expect(verifyRes.json<{ valid: boolean }>().valid).toBe(false);
+    });
+
+    it('returns 401 for an unknown API key', async () => {
+      const verifyRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify',
+        payload: {
+          token:
+            'oak_0000000000000000000000000000000000000000000000000000000000000000',
+        },
+      });
+
+      expect(verifyRes.statusCode).toBe(401);
+    });
+  });
+
   describe('DELETE /api/keys/:id', () => {
     it('revokes an existing key', async () => {
       const createResponse = await app.inject({

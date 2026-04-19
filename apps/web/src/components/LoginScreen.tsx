@@ -22,7 +22,7 @@ export function LoginScreen(props: LoginScreenProps) {
     try {
       const result = await verifyToken(value);
       if (result.valid) {
-        storeToken(value);
+        storeToken(result.token ?? value);
         props.onAuthenticated();
       } else {
         setError(result.error);

@@ -222,6 +222,9 @@ export async function buildApp() {
   await app.register(healthRoutes);
   await app.register(authRoutes, {
     authMiddleware: new AuthMiddleware(wsConfig),
+    ...(services.apiKeysRepo
+      ? { apiKeyService: createApiKeyService(services.apiKeysRepo) }
+      : {}),
   });
 
   await app.register(configRoutes, { configService: services.config });

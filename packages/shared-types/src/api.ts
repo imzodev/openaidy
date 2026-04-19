@@ -9,7 +9,13 @@ export type AuthVerifyRequest = {
  * Auth token verify response on success
  */
 export type AuthVerifyResponse =
-  | { valid: true; clientId: string; scopes: string[]; expiresAt: string }
+  | {
+      valid: true;
+      clientId: string;
+      scopes: string[];
+      expiresAt: string;
+      token?: string;
+    }
   | { valid: false; error: string };
 
 /**
