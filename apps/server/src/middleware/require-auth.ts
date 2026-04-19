@@ -14,10 +14,8 @@ export type RequireAuthOptions = {
  */
 export function requireAuth(opts: RequireAuthOptions) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
-    const authHeader = request.headers.authorization;
-    const token = authHeader
-      ? opts.authMiddleware.extractFromHeader(authHeader)
-      : null;
+    const authHeader = request.headers.authorization ?? '';
+    const token = opts.authMiddleware.extractFromHeader(authHeader);
 
     if (!token) {
       return reply

@@ -5,6 +5,8 @@ import {
   type PermissionMode,
 } from '../workspace/permissions';
 import type { AgentRegistry } from '../agents/registry';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 
 /**
  * Workspace routes options
@@ -14,6 +16,7 @@ export type WorkspaceRoutesOptions = {
   workspaceService: WorkspaceService;
   /** Base directory for agent workspaces */
   workspaceBaseDir: string;
+  authMiddleware: AuthMiddleware;
 };
 
 /**
@@ -65,7 +68,13 @@ export interface WorkspaceErrorResponse {
 export const workspaceRoutes: FastifyPluginAsync<
   WorkspaceRoutesOptions
 > = async (app, options) => {
-  const { agentRegistry, workspaceService } = options;
+  const { agentRegistry, workspaceService, authMiddleware } = options;
+
+  app.addHook(
+    'preHandler',
+    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+  );
+
   const MAX_EDITABLE_FILE_BYTES = 1_000_000;
 
   /**

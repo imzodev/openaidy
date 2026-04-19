@@ -2,6 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { runStreamRoutes } from './runs';
 import { RunEventEmitter, type RunEvent } from '../dispatch/events';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+
+const mockAuthMiddleware = {
+  validateToken: async () => ({
+    sub: 'test',
+    scopes: ['*'],
+    type: 'access' as const,
+    iat: 0,
+    exp: 9999999999,
+  }),
+  extractFromHeader: (_h: string) => 'test-token',
+  hasCapability: () => true,
+} as unknown as AuthMiddleware;
 
 describe('Run Stream Routes', () => {
   let app: FastifyInstance;
@@ -9,10 +22,13 @@ describe('Run Stream Routes', () => {
 
   beforeEach(async () => {
     runEvents = new RunEventEmitter();
-    
+
     app = Fastify({ logger: false });
-    
-    await app.register(runStreamRoutes, { runEvents });
+
+    await app.register(runStreamRoutes, {
+      runEvents,
+      authMiddleware: mockAuthMiddleware,
+    });
   });
 
   afterEach(async () => {
@@ -23,7 +39,7 @@ describe('Run Stream Routes', () => {
     it('should return SSE content type and headers', async () => {
       // Use abort controller to close the connection quickly
       const controller = new AbortController();
-      
+
       const responsePromise = app.inject({
         method: 'GET',
         url: '/sessions/test-session/runs/test-run/stream',
@@ -31,8 +47,8 @@ describe('Run Stream Routes', () => {
       });
 
       // Give it a moment to establish connection
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
       // Abort the request
       controller.abort();
 
@@ -68,7 +84,7 @@ describe('Run Stream Routes', () => {
       runEvents.emit(testEvent);
 
       // Wait a moment for event processing
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       expect(receivedEvent).toEqual(testEvent);
 
@@ -108,7 +124,7 @@ describe('Run Stream Routes', () => {
       });
 
       // Wait for processing
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Verify isolation
       expect(run1Events).toHaveLength(1);

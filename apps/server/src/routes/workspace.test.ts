@@ -7,6 +7,19 @@ import { workspaceRoutes } from './workspace';
 import { createAgentRegistry, type AgentRegistry } from '../agents/registry';
 import { createWorkspaceService, WorkspaceService } from '../workspace/service';
 import type { Agent } from '../agents/schema';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+
+const mockAuthMiddleware = {
+  validateToken: async () => ({
+    sub: 'test',
+    scopes: ['*'],
+    type: 'access' as const,
+    iat: 0,
+    exp: 9999999999,
+  }),
+  extractFromHeader: (_h: string) => 'test-token',
+  hasCapability: () => true,
+} as unknown as AuthMiddleware;
 
 describe('workspace routes', () => {
   let app: ReturnType<typeof Fastify>;
@@ -33,6 +46,7 @@ describe('workspace routes', () => {
       agentRegistry: registry,
       workspaceService,
       workspaceBaseDir: testBaseDir,
+      authMiddleware: mockAuthMiddleware,
     });
   });
 

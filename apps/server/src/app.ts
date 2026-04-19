@@ -219,9 +219,11 @@ export async function buildApp() {
     pairingConfig,
   });
 
+  const authMiddleware = new AuthMiddleware(wsConfig);
+
   await app.register(healthRoutes);
   await app.register(authRoutes, {
-    authMiddleware: new AuthMiddleware(wsConfig),
+    authMiddleware,
     ...(services.accessTokensRepo
       ? {
           accessTokenService: createAccessTokenService(
@@ -231,19 +233,34 @@ export async function buildApp() {
       : {}),
   });
 
-  await app.register(configRoutes, { configService: services.config });
+  await app.register(configRoutes, {
+    configService: services.config,
+    authMiddleware,
+  });
 
   // Pass shared services to session routes
-  await app.register(sessionRoutes, { sessionService: services.sessions });
+  await app.register(sessionRoutes, {
+    sessionService: services.sessions,
+    authMiddleware,
+  });
 
   // Pass shared services to provider routes
-  await app.register(providerRoutes, { services: services.providers });
+  await app.register(providerRoutes, {
+    services: services.providers,
+    authMiddleware,
+  });
 
   // Register agent routes
-  await app.register(agentRoutes, { agentRegistry: services.agents });
+  await app.register(agentRoutes, {
+    agentRegistry: services.agents,
+    authMiddleware,
+  });
 
   // Register run stream routes (SSE)
-  await app.register(runStreamRoutes, { runEvents: services.runEvents });
+  await app.register(runStreamRoutes, {
+    runEvents: services.runEvents,
+    authMiddleware,
+  });
 
   // Register scheduler routes (if database is available)
   if (
@@ -257,6 +274,7 @@ export async function buildApp() {
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
+      authMiddleware,
     });
   }
 
@@ -265,6 +283,7 @@ export async function buildApp() {
     agentRegistry: services.agents,
     workspaceService: services.workspace,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+    authMiddleware,
   });
 
   // Register log routes
@@ -279,14 +298,14 @@ export async function buildApp() {
       agents: services.agents,
       sessionService: services.sessions,
     });
-    await app.register(taskRoutes, { taskService });
+    await app.register(taskRoutes, { taskService, authMiddleware });
   }
 
   // Register access token routes (requires DB, admin auth enforced)
   if (services.accessTokensRepo) {
     await app.register(accessTokenRoutes, {
       accessTokenService: createAccessTokenService(services.accessTokensRepo),
-      authMiddleware: new AuthMiddleware(wsConfig),
+      authMiddleware,
     });
   }
 

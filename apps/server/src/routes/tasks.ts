@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
 import type { PlanningService } from '../planning/service';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 
 // Validation schemas
 const createTaskSchema = z.object({
@@ -52,13 +54,19 @@ const assignAgentsSchema = z.object({
 export type TaskRoutesOptions = {
   taskService: TaskService;
   planningService?: PlanningService;
+  authMiddleware: AuthMiddleware;
 };
 
 export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { taskService } = options;
+  const { taskService, authMiddleware } = options;
+
+  app.addHook(
+    'preHandler',
+    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+  );
 
   /**
    * GET /tasks

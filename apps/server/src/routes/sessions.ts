@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { SessionMessageService } from '../sessions/service';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
@@ -19,13 +21,19 @@ const submitMessageSchema = z.object({
  */
 export type SessionRoutesOptions = {
   sessionService: SessionMessageService;
+  authMiddleware: AuthMiddleware;
 };
 
 export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { sessionService } = options;
+  const { sessionService, authMiddleware } = options;
+
+  app.addHook(
+    'preHandler',
+    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+  );
 
   /**
    * GET /sessions

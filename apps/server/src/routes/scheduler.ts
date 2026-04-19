@@ -2,43 +2,55 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { SchedulerService } from '../scheduler/service';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
-import { validateCronExpression, calculateNextRun } from '../scheduler/cron-utils';
+import {
+  validateCronExpression,
+  calculateNextRun,
+} from '../scheduler/cron-utils';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 
 /**
  * Validation schemas
  */
-const createJobSchema = z.object({
-  type: z.enum(['one-shot', 'cron']),
-  schedule: z.string().datetime().optional(),
-  cronExpression: z.string().optional(),
-  targetType: z.enum(['session', 'isolated']),
-  targetSessionId: z.string().uuid().optional(),
-  payload: z.record(z.unknown()),
-  maxRetries: z.number().int().min(0).optional(),
-  backoffMs: z.number().int().positive().optional(),
-  metadata: z.record(z.unknown()).optional(),
-}).refine(
-  (data) => {
-    if (data.type === 'one-shot') return !!data.schedule;
-    if (data.type === 'cron') return !!data.cronExpression;
-    return false;
-  },
-  { message: 'one-shot jobs require schedule, cron jobs require cronExpression' }
-).refine(
-  (data) => {
-    if (data.targetType === 'session') return !!data.targetSessionId;
-    return true;
-  },
-  { message: 'session jobs require targetSessionId' }
-);
+const createJobSchema = z
+  .object({
+    type: z.enum(['one-shot', 'cron']),
+    schedule: z.string().datetime().optional(),
+    cronExpression: z.string().optional(),
+    targetType: z.enum(['session', 'isolated']),
+    targetSessionId: z.string().uuid().optional(),
+    payload: z.record(z.unknown()),
+    maxRetries: z.number().int().min(0).optional(),
+    backoffMs: z.number().int().positive().optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.type === 'one-shot') return !!data.schedule;
+      if (data.type === 'cron') return !!data.cronExpression;
+      return false;
+    },
+    {
+      message:
+        'one-shot jobs require schedule, cron jobs require cronExpression',
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.targetType === 'session') return !!data.targetSessionId;
+      return true;
+    },
+    { message: 'session jobs require targetSessionId' },
+  );
 
-const updateJobSchema = z.object({
-  status: z.enum(['active', 'paused']).optional(),
-  metadata: z.record(z.unknown()).optional(),
-}).refine(
-  (data) => data.status !== undefined || data.metadata !== undefined,
-  { message: 'At least one field must be provided' }
-);
+const updateJobSchema = z
+  .object({
+    status: z.enum(['active', 'paused']).optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .refine((data) => data.status !== undefined || data.metadata !== undefined, {
+    message: 'At least one field must be provided',
+  });
 
 const listJobsSchema = z.object({
   status: z.enum(['active', 'paused', 'completed', 'failed']).optional(),
@@ -62,15 +74,29 @@ export type SchedulerRoutesOptions = {
   jobsRepo: JobsStore;
   jobRunsRepo: JobRunsStore;
   sessionsRepo: SessionsStore;
+  authMiddleware: AuthMiddleware;
 };
 
 /**
  * Scheduler routes
- * 
+ *
  * Provides REST API for managing scheduled jobs and viewing execution history.
  */
-export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async (app, options) => {
-  const { schedulerService, jobsRepo, jobRunsRepo, sessionsRepo } = options;
+export const schedulerRoutes: FastifyPluginAsync<
+  SchedulerRoutesOptions
+> = async (app, options) => {
+  const {
+    schedulerService,
+    jobsRepo,
+    jobRunsRepo,
+    sessionsRepo,
+    authMiddleware,
+  } = options;
+
+  app.addHook(
+    'preHandler',
+    requireAuth({ authMiddleware, requiredScope: '*' }),
+  );
 
   /**
    * POST /api/jobs
@@ -84,7 +110,8 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       reply.code(400);
       return {
         error: 'validation.invalid_request',
-        message: error instanceof Error ? error.message : 'Invalid request body',
+        message:
+          error instanceof Error ? error.message : 'Invalid request body',
       };
     }
 
@@ -96,7 +123,8 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         reply.code(400);
         return {
           error: 'validation.invalid_cron',
-          message: error instanceof Error ? error.message : 'Invalid cron expression',
+          message:
+            error instanceof Error ? error.message : 'Invalid cron expression',
         };
       }
     }
@@ -116,9 +144,10 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
     // Calculate nextRunAt
     let nextRunAt: Date;
     try {
-      nextRunAt = parsed.type === 'one-shot'
-        ? new Date(parsed.schedule!)
-        : calculateNextRun(parsed.cronExpression!, new Date());
+      nextRunAt =
+        parsed.type === 'one-shot'
+          ? new Date(parsed.schedule!)
+          : calculateNextRun(parsed.cronExpression!, new Date());
     } catch (error) {
       reply.code(400);
       return {
@@ -189,7 +218,8 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       reply.code(400);
       return {
         error: 'validation.invalid_request',
-        message: error instanceof Error ? error.message : 'Invalid query parameters',
+        message:
+          error instanceof Error ? error.message : 'Invalid query parameters',
       };
     }
 
@@ -237,7 +267,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
    */
   app.get('/api/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    
+
     const job = await jobsRepo.findById(id);
     if (!job) {
       reply.code(404);
@@ -264,7 +294,8 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       reply.code(400);
       return {
         error: 'validation.invalid_request',
-        message: error instanceof Error ? error.message : 'Invalid request body',
+        message:
+          error instanceof Error ? error.message : 'Invalid request body',
       };
     }
 
@@ -326,10 +357,10 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
 
     try {
       const run = await schedulerService.triggerJob(id);
-      
+
       // Fetch the updated run to get final status
       const updatedRun = await jobRunsRepo.findById(run.id);
-      
+
       return { run: updatedRun || run };
     } catch (error) {
       if (error instanceof Error && error.message === 'Job not found') {
@@ -339,7 +370,7 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
           message: 'Job not found',
         };
       }
-      
+
       // Re-throw other errors to be handled by Fastify error handler
       throw error;
     }
@@ -359,7 +390,8 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
       reply.code(400);
       return {
         error: 'validation.invalid_request',
-        message: error instanceof Error ? error.message : 'Invalid query parameters',
+        message:
+          error instanceof Error ? error.message : 'Invalid query parameters',
       };
     }
 

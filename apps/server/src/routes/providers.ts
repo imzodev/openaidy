@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import { requireAuth } from '../middleware/require-auth';
 import {
   type ProviderServices,
   type ProviderRegistryService,
@@ -32,7 +34,7 @@ const testInvokeSchema = z.object({
         content: z.string(),
         toolCallId: z.string(),
       }),
-    ])
+    ]),
   ),
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
@@ -108,20 +110,29 @@ type TestInvokeResponse = {
  */
 type ProviderRoutesOptions = {
   services: ProviderServices;
+  authMiddleware: AuthMiddleware;
 };
 
 /**
  * Provider Routes Plugin
- * 
+ *
  * Provides internal API routes for provider invocation testing and diagnostics.
- * 
+ *
  * IMPORTANT: This plugin receives provider services via options rather than
  * creating its own instances. This ensures all routes operate on the same
  * service graph used by the rest of the application.
  */
-export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (app, options) => {
+export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
+  app,
+  options,
+) => {
   // Use injected services from app initialization
-  const { services } = options;
+  const { services, authMiddleware } = options;
+
+  app.addHook(
+    'preHandler',
+    requireAuth({ authMiddleware, requiredScope: 'providers.read' }),
+  );
   const { registry, invocation } = services;
   // Selection is available via services.selection if needed for future routes
 
@@ -137,9 +148,10 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
     const entries = getAllEntries(registry);
 
     // Filter by enabled status if specified
-    const filtered = enabled !== undefined
-      ? entries.filter((e) => e.enabled === enabled)
-      : entries;
+    const filtered =
+      enabled !== undefined
+        ? entries.filter((e) => e.enabled === enabled)
+        : entries;
 
     // Map to response format
     const providers: ProviderInfo[] = filtered.map((entry) => {
@@ -147,11 +159,15 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       return {
         id: descriptor.id,
         name: descriptor.name,
-        ...(descriptor.description !== undefined && { description: descriptor.description }),
+        ...(descriptor.description !== undefined && {
+          description: descriptor.description,
+        }),
         capabilities: descriptor.capabilities,
         vendorFamily: descriptor.vendorFamily,
         enabled: entry.enabled,
-        ...(entry.defaultModel !== undefined && { defaultModel: entry.defaultModel }),
+        ...(entry.defaultModel !== undefined && {
+          defaultModel: entry.defaultModel,
+        }),
         priority: entry.priority,
       };
     });
@@ -189,7 +205,7 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
         id: descriptor.id,
         name: descriptor.name,
         enabled: entry.enabled,
-        status: isAvailable ? 'available' as const : 'unavailable' as const,
+        status: isAvailable ? ('available' as const) : ('unavailable' as const),
       };
     });
 
@@ -216,84 +232,93 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
    * POST /providers/test-invoke
    * Test provider invocation through the application layer
    */
-  app.post('/providers/test-invoke', async (request, reply): Promise<TestInvokeResponse> => {
-    // Validate request body with Zod
-    let body;
-    try {
-      body = testInvokeSchema.parse(request.body);
-    } catch (error) {
-      reply.code(400);
-      return {
-        ok: false,
-        error: {
-          code: 'provider.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
-          retryable: false,
-        },
-      };
-    }
-    const { providerId, modelId, messages, maxTokens, temperature, stream } = body;
-
-    // Build the model request with proper Message type
-    const modelRequest: ModelRequest = {
-      model: modelId ?? 'default',
-      messages: messages.map((m): Message => {
-        if (m.role === 'tool') {
-          return {
-            role: 'tool',
-            toolCallId: m.toolCallId,
-            content: m.content,
-          };
-        }
+  app.post(
+    '/providers/test-invoke',
+    async (request, reply): Promise<TestInvokeResponse> => {
+      // Validate request body with Zod
+      let body;
+      try {
+        body = testInvokeSchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
         return {
-          role: m.role,
-          content: m.content,
-        } as Message;
-      }),
-      ...(maxTokens !== undefined && { maxTokens }),
-      ...(temperature !== undefined && { temperature }),
-      ...(stream !== undefined && { stream }),
-    };
-
-    // Invoke through the model invocation service
-    const result = await invocation.invoke(modelRequest, {
-      ...(providerId !== undefined && { providerId }),
-      ...(modelId !== undefined && { modelId }),
-    });
-
-    if (result.ok) {
-      reply.code(200);
-      return {
-        ok: true,
-        response: {
-          id: result.value.id,
-          model: result.value.model,
-          providerId: result.value.providerId,
-          content: result.value.content,
-          usage: {
-            promptTokens: result.value.usage.promptTokens,
-            completionTokens: result.value.usage.completionTokens,
-            totalTokens: result.value.usage.totalTokens,
+          ok: false,
+          error: {
+            code: 'provider.invalid_request',
+            message:
+              error instanceof Error ? error.message : 'Invalid request body',
+            retryable: false,
           },
-          finishReason: result.value.finishReason,
-          created: result.value.created,
-        },
+        };
+      }
+      const { providerId, modelId, messages, maxTokens, temperature, stream } =
+        body;
+
+      // Build the model request with proper Message type
+      const modelRequest: ModelRequest = {
+        model: modelId ?? 'default',
+        messages: messages.map((m): Message => {
+          if (m.role === 'tool') {
+            return {
+              role: 'tool',
+              toolCallId: m.toolCallId,
+              content: m.content,
+            };
+          }
+          return {
+            role: m.role,
+            content: m.content,
+          } as Message;
+        }),
+        ...(maxTokens !== undefined && { maxTokens }),
+        ...(temperature !== undefined && { temperature }),
+        ...(stream !== undefined && { stream }),
       };
-    } else {
-      // Return normalized error
-      reply.code(400);
-      return {
-        ok: false,
-        error: {
-          code: result.error.code,
-          message: result.error.message,
-          retryable: result.error.retryable,
-          ...(result.error.providerId !== undefined && { providerId: result.error.providerId }),
-          ...(result.error.modelId !== undefined && { modelId: result.error.modelId }),
-        },
-      };
-    }
-  });
+
+      // Invoke through the model invocation service
+      const result = await invocation.invoke(modelRequest, {
+        ...(providerId !== undefined && { providerId }),
+        ...(modelId !== undefined && { modelId }),
+      });
+
+      if (result.ok) {
+        reply.code(200);
+        return {
+          ok: true,
+          response: {
+            id: result.value.id,
+            model: result.value.model,
+            providerId: result.value.providerId,
+            content: result.value.content,
+            usage: {
+              promptTokens: result.value.usage.promptTokens,
+              completionTokens: result.value.usage.completionTokens,
+              totalTokens: result.value.usage.totalTokens,
+            },
+            finishReason: result.value.finishReason,
+            created: result.value.created,
+          },
+        };
+      } else {
+        // Return normalized error
+        reply.code(400);
+        return {
+          ok: false,
+          error: {
+            code: result.error.code,
+            message: result.error.message,
+            retryable: result.error.retryable,
+            ...(result.error.providerId !== undefined && {
+              providerId: result.error.providerId,
+            }),
+            ...(result.error.modelId !== undefined && {
+              modelId: result.error.modelId,
+            }),
+          },
+        };
+      }
+    },
+  );
 
   /**
    * POST /providers/register
@@ -305,7 +330,8 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
     reply.code(501);
     return {
       error: 'Not implemented',
-      message: 'Provider registration must be done programmatically at server startup',
+      message:
+        'Provider registration must be done programmatically at server startup',
     };
   });
 
@@ -377,12 +403,16 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
     return {
       id: descriptor.id,
       name: descriptor.name,
-      ...(descriptor.description !== undefined && { description: descriptor.description }),
+      ...(descriptor.description !== undefined && {
+        description: descriptor.description,
+      }),
       capabilities: descriptor.capabilities,
       vendorFamily: descriptor.vendorFamily,
       enabled: entry.enabled,
       priority: entry.priority,
-      ...(entry.defaultModel !== undefined && { defaultModel: entry.defaultModel }),
+      ...(entry.defaultModel !== undefined && {
+        defaultModel: entry.defaultModel,
+      }),
       ...(entry.config !== undefined && { config: entry.config }),
       registeredAt: entry.registeredAt.toISOString(),
     };
@@ -393,7 +423,7 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
  * Helper to get all registry entries
  */
 function getAllEntries(
-  registry: ProviderRegistryService
+  registry: ProviderRegistryService,
 ): RegisteredProvider[] {
   // Use listAllDescriptors to get all provider IDs, then get entries
   const descriptors = registry.listAllDescriptors();
