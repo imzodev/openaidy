@@ -283,6 +283,29 @@ describe('API Key Routes', () => {
 
       expect(verifyRes.statusCode).toBe(401);
     });
+
+    it('returns 401 for an expired API key', async () => {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/keys',
+        headers: { authorization: `Bearer ${adminToken}` },
+        payload: {
+          name: 'Expired Key',
+          scopes: ['sessions.read'],
+          expiresAt: new Date(Date.now() - 1000).toISOString(),
+        },
+      });
+      const { rawKey } = createRes.json<CreateApiKeyResponse>();
+
+      const verifyRes = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify',
+        payload: { token: rawKey },
+      });
+
+      expect(verifyRes.statusCode).toBe(401);
+      expect(verifyRes.json<{ valid: boolean }>().valid).toBe(false);
+    });
   });
 
   describe('DELETE /api/keys/:id', () => {
