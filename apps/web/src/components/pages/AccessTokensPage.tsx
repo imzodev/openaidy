@@ -323,9 +323,10 @@ export function AccessTokensPage() {
                     </div>
                     <div class="flex items-center gap-3 text-xs text-text-tertiary">
                       <span>Created {formatDate(t.createdAt)}</span>
-                      <Show when={t.lastUsedAt}>
-                        <span>Last used {formatDate(t.lastUsedAt)}</span>
-                      </Show>
+                      <span>
+                        Last used{' '}
+                        {t.lastUsedAt ? formatDate(t.lastUsedAt) : 'never'}
+                      </span>
                       <Show when={t.expiresAt}>
                         <span>Expires {formatDate(t.expiresAt)}</span>
                       </Show>
