@@ -58,6 +58,7 @@ export function formatTokenInspection(
     output += `Created:   ${record.createdAt}\n`;
     output += `Expires:   ${record.expiresAt}\n`;
     output += `Scopes:    ${record.scopes.join(', ')}\n`;
+    output += `\nToken:\n\n  ${record.token}\n`;
   }
 
   if (status === 'missing') {

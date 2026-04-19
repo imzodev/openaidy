@@ -202,12 +202,13 @@ Exit Codes:
 `,
       };
     }
-    // Placeholder - actual implementation in issue #132
-    return {
-      exitCode: 1,
-      output:
-        'Bootstrap Admin Token\n========================\n\nStatus:    missing\nPath:      .openaidy/credentials/bootstrap-admin.json\nEnabled:   true\n\nError: Token file not found',
-    };
+    const { createAdminWorkflow, formatTokenInspection } =
+      await import('../lib/admin-workflow.js');
+    const { workflow } = createAdminWorkflow();
+    const result = await workflow.inspectToken();
+    const output = formatTokenInspection(result);
+    const isValid = result.success && result.data?.status === 'valid';
+    return { exitCode: isValid ? 0 : 1, output };
   },
   {
     description: 'Show the current bootstrap-admin token information',
@@ -242,9 +243,20 @@ Exit Codes:
 `,
       };
     }
+    const { createAdminWorkflow } = await import('../lib/admin-workflow.js');
+    const { workflow } = createAdminWorkflow();
+    const result = await workflow.inspectToken();
+    if (!result.success) {
+      return {
+        exitCode: 1,
+        error: `Error: ${result.error?.message ?? 'Unknown error'}`,
+      };
+    }
+    const status = result.data?.status;
+    const isValid = status === 'valid';
     return {
-      exitCode: 1,
-      output: 'Token validation not yet implemented',
+      exitCode: isValid ? 0 : 1,
+      output: isValid ? `✓ Token is valid` : `✗ Token is ${status}`,
     };
   },
   {
@@ -269,10 +281,8 @@ Examples:
 `,
       };
     }
-    return {
-      exitCode: 0,
-      output: '.openaidy/credentials/bootstrap-admin.json',
-    };
+    const { resolveCLIConfig } = await import('../lib/config.js');
+    return { exitCode: 0, output: resolveCLIConfig().tokenPath };
   },
   {
     description: 'Show the path to the bootstrap-admin token file',
