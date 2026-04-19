@@ -1,5 +1,6 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
@@ -223,9 +224,9 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
   `);
 }
 
-export function createDatabaseClient(
+export async function createDatabaseClient(
   config: DatabaseClientConfig,
-): DatabaseConnection {
+): Promise<DatabaseConnection> {
   if (config.kind === 'sqlite') {
     mkdirSync(dirname(config.sqlitePath), { recursive: true });
     const sqlite = new Database(config.sqlitePath);
@@ -243,6 +244,20 @@ export function createDatabaseClient(
   }
 
   const pool = new Pool({ connectionString: config.connectionString });
+
+  const migrationSql = readFileSync(
+    resolve(
+      fileURLToPath(import.meta.url),
+      '../../drizzle/0001_initial_schema.sql',
+    ),
+    'utf-8',
+  );
+  const client = await pool.connect();
+  try {
+    await client.query(migrationSql);
+  } finally {
+    client.release();
+  }
 
   return {
     db: drizzlePostgres(pool, { schema }) as DatabaseClient,

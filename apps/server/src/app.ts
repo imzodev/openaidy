@@ -117,7 +117,7 @@ export async function buildApp() {
         : undefined;
 
   if (dbConfig) {
-    dbAdapter = createDatabaseAdapter(dbConfig);
+    dbAdapter = await createDatabaseAdapter(dbConfig);
     jobsRepo = dbAdapter.repositories.jobs;
     jobRunsRepo = dbAdapter.repositories.jobRuns;
     sessionsRepo = dbAdapter.repositories.sessions;

@@ -16,10 +16,10 @@ import { createTaskAgentsRepository } from './repositories/task-agents';
 
 export type { DatabaseAdapter, DatabaseRepositories } from './types';
 
-export function createDatabaseAdapter(
+export async function createDatabaseAdapter(
   config: DatabaseClientConfig,
-): DatabaseAdapter {
-  const connection = createDatabaseClient(config);
+): Promise<DatabaseAdapter> {
+  const connection = await createDatabaseClient(config);
   const client = connection.db;
 
   const repositories: DatabaseRepositories = {
