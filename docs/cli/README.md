@@ -4,7 +4,7 @@ This directory contains documentation for the OpenAidy Command Line Interface (C
 
 ## Overview
 
-The OpenAidy CLI is a local administration tool for managing bootstrap-admin tokens and device pairing requests. It provides a command-line interface to the OpenAidy control plane.
+The OpenAidy CLI is a local administration tool for managing access tokens, bootstrap-admin tokens, and device pairing requests. It provides a command-line interface to the OpenAidy control plane.
 
 ## Documentation Index
 
@@ -28,6 +28,12 @@ The OpenAidy CLI is a local administration tool for managing bootstrap-admin tok
 ```bash
 # From the repository root
 pnpm openaidy --help
+
+# Create an access token
+pnpm openaidy tokens create --name "My Token" --scopes "*"
+
+# List all access tokens
+pnpm openaidy tokens list
 
 # List pending device pairing requests
 pnpm openaidy devices list

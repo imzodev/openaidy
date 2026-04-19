@@ -25,6 +25,7 @@ Commands for bootstrap-admin and system management.
 Show the current bootstrap-admin token information.
 
 **Usage:**
+
 ```bash
 openaidy admin token show
 ```
@@ -36,18 +37,21 @@ openaidy admin token show
 **Description:**
 
 Displays information about the bootstrap-admin token:
+
 - Token status (valid, expired, missing, malformed, invalid, disabled)
 - Token file path
 - Token value (only for valid/expired tokens)
 - Metadata (client ID, created, expires, scopes)
 
 **Examples:**
+
 ```bash
 # Show token info
 pnpm openaidy admin token show
 ```
 
 **Sample Output (Valid Token):**
+
 ```
 Bootstrap Admin Token
 ========================
@@ -64,6 +68,7 @@ Token:     eyJhbGciOiJIUzI1NiIs...
 ```
 
 **Sample Output (Missing Token):**
+
 ```
 Bootstrap Admin Token
 ========================
@@ -88,6 +93,7 @@ Error: Token file not found
 Validate the bootstrap-admin token.
 
 **Usage:**
+
 ```bash
 openaidy admin token validate
 ```
@@ -99,12 +105,14 @@ openaidy admin token validate
 **Description:**
 
 Checks that the bootstrap-admin token:
+
 - File exists
 - Is valid JSON
 - Has valid signature
 - Is not expired
 
 **Examples:**
+
 ```bash
 pnpm openaidy admin token validate
 ```
@@ -122,6 +130,7 @@ pnpm openaidy admin token validate
 Show the path to the bootstrap-admin token file.
 
 **Usage:**
+
 ```bash
 openaidy admin token path
 ```
@@ -135,11 +144,13 @@ openaidy admin token path
 Outputs the file path where the bootstrap-admin token is stored.
 
 **Examples:**
+
 ```bash
 pnpm openaidy admin token path
 ```
 
 **Output:**
+
 ```
 .openaidy/credentials/bootstrap-admin.json
 ```
@@ -148,6 +159,194 @@ pnpm openaidy admin token path
 | Code | Condition |
 |------|-----------|
 | 0 | Always succeeds |
+
+---
+
+### `tokens` - Access Token Management
+
+Commands for creating and managing access tokens used for UI login and API access.
+
+> **Requires:** Server running with a database (`DB_KIND=sqlite` or `DB_KIND=postgres`). Uses the bootstrap-admin token from `.openaidy/credentials/bootstrap-admin.json`.
+
+---
+
+#### `tokens list`
+
+List all access tokens.
+
+**Usage:**
+
+```bash
+openaidy tokens list
+```
+
+**Arguments:** None
+
+**Options:** None
+
+**Description:**
+
+Displays all access tokens grouped into active and revoked. Does not expose raw token values or hashes — only the prefix, name, scopes, and usage metadata.
+
+**Examples:**
+
+```bash
+pnpm openaidy tokens list
+```
+
+**Sample Output:**
+
+```
+Access Tokens
+=============
+
+Active (2)
+
+  CI Pipeline
+    ID:       a1b2c3d4-...
+    Prefix:   oat_a1b2…
+    Scopes:   sessions.read, sessions.stream
+    Created:  Apr 1, 2026
+    Last use: Apr 19, 2026
+
+  Admin Key
+    ID:       e5f6g7h8-...
+    Prefix:   oat_e5f6…
+    Scopes:   *
+    Created:  Apr 15, 2026
+
+Revoked (1)
+
+  Old Token [revoked]
+    ID:      x9y0z1a2-...
+    Prefix:  oat_x9y0…
+```
+
+**Exit Codes:**
+| Code | Condition |
+|------|----------|
+| 0 | Success |
+| 1 | Server unreachable, or admin token missing |
+
+---
+
+#### `tokens create`
+
+Create a new access token.
+
+**Usage:**
+
+```bash
+openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
+```
+
+**Arguments:** None
+
+**Options:**
+| Option | Value | Required | Description |
+|--------|-------|----------|-------------|
+| `--name`, `-n` | `<string>` | Yes | Human-readable name for the token |
+| `--scopes` | `<scopes>` | Yes | Comma-separated list of permission scopes |
+| `--expires` | `<ISO 8601 date>` | No | Expiry date, e.g. `2026-12-31` |
+
+**Available scopes:**
+| Scope | Description |
+|-------|-------------|
+| `*` | Admin — full access |
+| `sessions.read` | Read sessions |
+| `sessions.write` | Write sessions |
+| `sessions.stream` | Stream session output |
+| `sessions.delete` | Delete sessions |
+| `agents.read` | Read agents |
+| `agents.invoke` | Invoke agents |
+| `providers.read` | Read provider config |
+| `config.read` | Read app config |
+| `config.write` | Write app config |
+
+**Description:**
+
+Creates a new access token and prints the raw `oat_…` value **once**. The raw token is never stored — if you lose it, you must revoke and recreate it.
+
+The token can be used to log in to the OpenAidy web UI or to authenticate REST/WebSocket API requests.
+
+**Examples:**
+
+```bash
+# Create a full-admin token
+pnpm openaidy tokens create --name "Admin Key" --scopes "*"
+
+# Create a read-only CI token
+pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
+
+# Create a temporary token that expires end of year
+pnpm openaidy tokens create --name "Temp Access" --scopes "sessions.read" --expires "2026-12-31"
+```
+
+**Sample Output:**
+
+```
+Access token created
+====================
+
+  Name:    CI Pipeline
+  ID:      a1b2c3d4-e5f6-...
+  Scopes:  sessions.read, sessions.stream
+
+Token (shown once — save it now):
+
+  oat_a1b2c3d4e5f6...
+
+Use this token to log into the UI or authenticate API requests.
+```
+
+**Exit Codes:**
+| Code | Condition |
+|------|----------|
+| 0 | Token created successfully |
+| 1 | Server error, server unreachable, or admin token missing |
+| 2 | Missing or invalid arguments |
+
+---
+
+#### `tokens revoke`
+
+Revoke an access token by ID.
+
+**Usage:**
+
+```bash
+openaidy tokens revoke <id>
+```
+
+**Arguments:**
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | Token ID (from `tokens list`) |
+
+**Options:** None
+
+**Description:**
+
+Permanently revokes the token. Any sessions or API calls using the revoked token will immediately stop working. This operation is irreversible.
+
+**Examples:**
+
+```bash
+pnpm openaidy tokens revoke a1b2c3d4-e5f6-...
+```
+
+**Sample Output:**
+
+```
+Revoked: CI Pipeline (a1b2c3d4-e5f6-...)
+```
+
+**Exit Codes:**
+| Code | Condition |
+|------|----------|
+| 0 | Token revoked |
+| 1 | Token not found, server unreachable, or admin token missing |
+| 2 | Missing `<id>` argument |
 
 ---
 
@@ -162,6 +361,7 @@ Commands for device pairing and management.
 List device pairing requests.
 
 **Usage:**
+
 ```bash
 openaidy devices list [options]
 ```
@@ -179,6 +379,7 @@ openaidy devices list [options]
 Lists pairing requests from devices attempting to connect to the OpenAidy server.
 
 **Examples:**
+
 ```bash
 # List pending requests (default)
 pnpm openaidy devices list
@@ -197,6 +398,7 @@ pnpm openaidy devices list --status expired --limit 20
 ```
 
 **Sample Output (Pending):**
+
 ```
 Pending Pairing Requests
 ========================
@@ -215,6 +417,7 @@ Showing 2 pending requests
 ```
 
 **Sample Output (Empty):**
+
 ```
 No pending pairing requests
 ```
@@ -232,6 +435,7 @@ No pending pairing requests
 Approve a pending device pairing request.
 
 **Usage:**
+
 ```bash
 openaidy devices approve <request-id> [options]
 ```
@@ -251,6 +455,7 @@ openaidy devices approve <request-id> [options]
 Approves a pending pairing request, allowing the device to connect. Optionally specify custom scopes to grant.
 
 **Examples:**
+
 ```bash
 # Approve with default scopes
 pnpm openaidy devices approve req_abc123
@@ -263,6 +468,7 @@ pnpm openaidy devices approve req_abc123 --scopes chat
 ```
 
 **Sample Output (Success):**
+
 ```
 ✓ Request approved
 
@@ -274,6 +480,7 @@ Approved:  2026-04-01 14:35:00
 ```
 
 **Sample Output (Error - Already Processed):**
+
 ```
 ✗ Cannot approve request
 
@@ -297,6 +504,7 @@ Error: Request has already been approved
 Deny a pending device pairing request.
 
 **Usage:**
+
 ```bash
 openaidy devices deny <request-id>
 ```
@@ -313,12 +521,14 @@ openaidy devices deny <request-id>
 Denies a pending pairing request, preventing the device from connecting.
 
 **Examples:**
+
 ```bash
 # Deny a request
 pnpm openaidy devices deny req_def456
 ```
 
 **Sample Output (Success):**
+
 ```
 ✓ Request denied
 
@@ -339,36 +549,56 @@ Denied:    2026-04-01 14:36:00
 
 ## Exit Codes Reference
 
-| Code | Name | Description |
-|------|------|-------------|
-| 0 | SUCCESS | Command completed successfully |
-| 1 | ERROR | General error |
-| 2 | INVALID_ARGS | Invalid or missing arguments |
-| 3 | NOT_FOUND | Resource not found |
-| 4 | PERMISSION_DENIED | Insufficient permissions |
-| 5 | CONFIG_ERROR | Configuration error |
+| Code | Name              | Description                    |
+| ---- | ----------------- | ------------------------------ |
+| 0    | SUCCESS           | Command completed successfully |
+| 1    | ERROR             | General error                  |
+| 2    | INVALID_ARGS      | Invalid or missing arguments   |
+| 3    | NOT_FOUND         | Resource not found             |
+| 4    | PERMISSION_DENIED | Insufficient permissions       |
+| 5    | CONFIG_ERROR      | Configuration error            |
 
 ## Help System
 
 ### Global Help
+
 ```bash
 openaidy --help
 openaidy help
 ```
 
 ### Group Help
+
 ```bash
 openaidy admin --help
+openaidy tokens --help
 openaidy devices --help
 ```
 
 ### Command Help
+
 ```bash
 openaidy admin token show --help
+openaidy tokens list --help
+openaidy tokens create --help
+openaidy tokens revoke --help
 openaidy devices list --help
 openaidy devices approve --help
 openaidy devices deny --help
 ```
+
+## Environment Variables
+
+The CLI reads configuration from environment variables (compatible with the server's `.env` file):
+
+| Variable                     | Default                                      | Description                                                  |
+| ---------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
+| `OPENAIDY_SERVER_URL`        | `http://localhost:3001`                      | HTTP base URL for REST API calls (used by `tokens` commands) |
+| `OPENAIDY_WS_URL`            | `ws://localhost:3001/ws`                     | WebSocket URL (used by `devices` commands)                   |
+| `BOOTSTRAP_ADMIN_TOKEN_PATH` | `.openaidy/credentials/bootstrap-admin.json` | Path to the admin token file                                 |
+| `PORT`                       | `3001`                                       | Fallback for deriving `OPENAIDY_SERVER_URL`                  |
+| `WS_PORT`                    | `3001`                                       | Fallback for deriving `OPENAIDY_WS_URL`                      |
+| `WS_PATH`                    | `/ws`                                        | WebSocket path suffix                                        |
 
 ## Future Commands
 

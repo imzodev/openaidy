@@ -4,7 +4,7 @@ This guide helps you get started with the OpenAidy CLI for local administration.
 
 ## Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - pnpm (or npm/yarn)
 - OpenAidy repository cloned
 
@@ -41,17 +41,20 @@ openaidy --help
 The CLI requires a bootstrap-admin token for administrative operations.
 
 **Token Location:**
+
 ```
 .openaidy/credentials/bootstrap-admin.json
 ```
 
 **Generate a token:**
+
 ```bash
 # Start the OpenAidy server (generates token on first run)
 pnpm --filter @openaidy/server start
 ```
 
 **Verify token:**
+
 ```bash
 pnpm openaidy admin token show
 ```
@@ -70,6 +73,45 @@ pnpm openaidy help
 ```
 
 ## Common Operations
+
+### Managing Access Tokens
+
+Access tokens are used to log in to the OpenAidy web UI and to authenticate API requests. They require the server to be running with a database.
+
+```bash
+# Create a full-admin token
+pnpm openaidy tokens create --name "My Token" --scopes "*"
+
+# Create a scoped token for CI
+pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
+
+# List all tokens
+pnpm openaidy tokens list
+
+# Revoke a token by ID
+pnpm openaidy tokens revoke <id>
+```
+
+**Expected Output (create):**
+
+```
+Access token created
+====================
+
+  Name:    My Token
+  ID:      a1b2c3d4-e5f6-...
+  Scopes:  *
+
+Token (shown once — save it now):
+
+  oat_a1b2c3d4e5f6...
+
+Use this token to log into the UI or authenticate API requests.
+```
+
+> **Important:** The raw `oat_…` token is displayed exactly once. Store it securely — if you lose it, revoke and recreate it.
+
+---
 
 ### Listing Device Pairing Requests
 
@@ -90,6 +132,7 @@ pnpm openaidy devices list --limit 10
 ```
 
 **Expected Output:**
+
 ```
 Pending Pairing Requests
 ========================
@@ -118,6 +161,7 @@ pnpm openaidy devices approve req_abc123 --scopes chat,files,calendar
 ```
 
 **Expected Output:**
+
 ```
 ✓ Request approved
 
@@ -135,6 +179,7 @@ pnpm openaidy devices deny req_def456
 ```
 
 **Expected Output:**
+
 ```
 ✓ Request denied
 
@@ -159,11 +204,36 @@ pnpm openaidy admin token validate
 
 ## Troubleshooting
 
+### "Cannot reach server"
+
+**Cause:** The `tokens` commands require the server to be running.
+
+**Solution:** Start the server first:
+
+```bash
+pnpm --filter @openaidy/server dev
+```
+
+If the server runs on a non-default port, set:
+
+```bash
+OPENAIDY_SERVER_URL=http://localhost:4000 pnpm openaidy tokens list
+```
+
+### "Server returned 401"
+
+**Cause:** The bootstrap-admin token has expired.
+
+**Solution:** Restart the server to regenerate it.
+
+---
+
 ### "Token file not found"
 
 **Cause:** Bootstrap-admin token hasn't been generated.
 
 **Solution:** Start the OpenAidy server to generate the token:
+
 ```bash
 pnpm --filter @openaidy/server start
 ```
@@ -173,6 +243,7 @@ pnpm --filter @openaidy/server start
 **Cause:** The bootstrap-admin token has passed its expiration time.
 
 **Solution:** Restart the server to generate a new token, or delete the old token file first:
+
 ```bash
 rm .openaidy/credentials/bootstrap-admin.json
 pnpm --filter @openaidy/server start
@@ -183,6 +254,7 @@ pnpm --filter @openaidy/server start
 **Cause:** No devices have requested pairing, or all requests have been processed.
 
 **Solution:** Check all request statuses:
+
 ```bash
 pnpm openaidy devices list --status all
 ```
@@ -192,6 +264,7 @@ pnpm openaidy devices list --status all
 **Cause:** The specified request ID doesn't exist or has already been processed.
 
 **Solution:** List current requests to find valid IDs:
+
 ```bash
 pnpm openaidy devices list
 ```
@@ -204,14 +277,14 @@ pnpm openaidy devices list
 
 ## Exit Codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Invalid arguments |
-| 3 | Not found |
-| 4 | Permission denied |
-| 5 | Configuration error |
+| Code | Meaning             |
+| ---- | ------------------- |
+| 0    | Success             |
+| 1    | General error       |
+| 2    | Invalid arguments   |
+| 3    | Not found           |
+| 4    | Permission denied   |
+| 5    | Configuration error |
 
 ## Next Steps
 
