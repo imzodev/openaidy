@@ -173,7 +173,7 @@ export class RateLimiter {
  */
 export function createAddonRateLimiter(addon: Addon): RateLimiter {
   const tier = getAddonTier(addon);
-  const config = DEFAULT_RATE_LIMITS[tier] ?? DEFAULT_RATE_LIMITS.default;
+  const config = DEFAULT_RATE_LIMITS[tier] ?? DEFAULT_RATE_LIMITS['default']!;
   return new RateLimiter(config);
 }
 
@@ -243,7 +243,7 @@ class RateLimiterRegistry {
   private defaultLimiter: RateLimiter;
 
   constructor() {
-    this.defaultLimiter = new RateLimiter(DEFAULT_RATE_LIMITS.default);
+    this.defaultLimiter = new RateLimiter(DEFAULT_RATE_LIMITS['default']!);
   }
 
   /**
@@ -252,7 +252,10 @@ class RateLimiterRegistry {
   getLimiter(addonId: string): RateLimiter {
     if (!this.limiters.has(addonId)) {
       // Create with default config
-      this.limiters.set(addonId, new RateLimiter(DEFAULT_RATE_LIMITS.default));
+      this.limiters.set(
+        addonId,
+        new RateLimiter(DEFAULT_RATE_LIMITS['default']!),
+      );
     }
     return this.limiters.get(addonId)!;
   }

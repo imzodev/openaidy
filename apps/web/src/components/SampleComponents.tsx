@@ -580,15 +580,3 @@ export const SampleComponents = {
   Badge,
   Toast,
 };
-
-export type {
-  ButtonProps,
-  CardProps,
-  InputProps,
-  SelectProps,
-  SpinnerProps,
-  EmptyStateProps,
-  TableProps,
-  BadgeProps,
-  ToastProps,
-};

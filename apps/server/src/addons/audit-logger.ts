@@ -173,10 +173,9 @@ export class InMemoryAuditLogger implements AuditLogger {
   }
 
   async getSummary(filter?: AuditLogFilter): Promise<AuditSummary> {
+    const { limit: _limit, offset: _offset, ...rest } = filter ?? {};
     const logs = await this.getLogs({
-      ...filter,
-      limit: undefined,
-      offset: undefined,
+      ...rest,
     });
 
     const eventsByType: Record<string, number> = {};
@@ -245,14 +244,17 @@ export function logAddonInstalled(
   userId: string,
   details?: Record<string, unknown>,
 ): void {
-  logger.log({
+  const entry: Omit<AuditLogEntry, 'id' | 'timestamp'> = {
     event: AUDIT_EVENTS.ADDON_INSTALLED,
     addonId: addon.addonId,
     addonName: addon.name,
     userId,
     outcome: 'success',
-    details,
-  });
+  };
+  if (details !== undefined) {
+    entry.details = details;
+  }
+  logger.log(entry);
 }
 
 /**

@@ -113,7 +113,7 @@ export class PermissionChecker {
    * Check if a permission is allowed for an addon
    */
   check(addon: Addon, permission: string): PermissionCheckResult {
-    const granted: string[] = addon.permissions ?? [];
+    const granted: string[] = (addon.permissions as string[]) ?? [];
 
     // Direct match
     if (granted.includes(permission)) {
