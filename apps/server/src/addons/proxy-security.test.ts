@@ -387,13 +387,11 @@ describe('DataProtection', () => {
 
       const result = dataProtection.redactSensitiveData(
         input,
-      ) as RedactedUsersResult;
+      ) as unknown as RedactedUsersResult;
 
       expect(result.users).toBeDefined();
-      const firstUser = result.users[0];
-      const secondUser = result.users[1];
-      expect(firstUser?.email).toBe('[EMAIL_REDACTED]');
-      expect(secondUser?.email).toBe('[EMAIL_REDACTED]');
+      expect(result.users[0]?.email).toBe('[EMAIL_REDACTED]');
+      expect(result.users[1]?.email).toBe('[EMAIL_REDACTED]');
     });
 
     it('should preserve non-sensitive data', () => {

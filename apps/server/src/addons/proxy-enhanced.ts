@@ -22,9 +22,6 @@ import { ProxyCache, defaultProxyCache } from './proxy-cache';
 // Types
 // ============================================================================
 
-/**
- * Request validation configuration
- */
 export interface RequestValidationConfig {
   maxRequestSize: number;
   allowedContentTypes: string[];
