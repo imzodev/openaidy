@@ -6,12 +6,16 @@
 
 import type { AddonManifest } from '@openaidy/shared-types';
 
+// Forward declaration to avoid circular dependency
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AddonsRepository = any;
+
 /**
  * Options for creating an AddonService
  */
 export interface AddonServiceOptions {
   /** Database repository for addon addon persistence */
-  repository: import('@openaidy/db').AddonsRepository;
+  repository: AddonsRepository;
   /** Manifest validator */
   validator: import('./manifest-validator').ManifestValidator;
   /** JWT secret for token generation */
