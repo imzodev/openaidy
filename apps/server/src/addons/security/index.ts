@@ -1,19 +1,17 @@
 /**
  * Security Module
  *
- * Unified security module that exports all security components
- * and provides initialization functions for the addon security system.
+ * Unified security exports from security components.
  */
 
 import { ProxySecurity } from '../proxy-security.js';
 import { ProxyMonitor } from '../proxy-monitoring.js';
 import { ProxyCache } from '../proxy-cache.js';
 
-// Re-export all components
+// Re-export all components from their original locations
 export {
   ProxySecurity,
   DataProtection,
-  SECURITY_HEADERS,
   getSecurityHeaders,
   createSecureErrorResponse,
 } from '../proxy-security.js';
@@ -24,7 +22,6 @@ export {
   CacheKeyGenerator,
   CacheStore,
 } from '../proxy-cache.js';
-export type { CacheConfig, CacheEntry, CacheStats } from '../proxy-cache.js';
 export {
   EnhancedAddonProxyService,
   createEnhancedAddonProxyService,
@@ -38,10 +35,6 @@ export {
   getSecurityFeatureFlags,
   getComplianceConfig,
   DEFAULT_SECURITY_POLICY,
-} from '../security-config.js';
-export type {
-  SecurityConfiguration,
-  SecurityPolicy,
 } from '../security-config.js';
 
 // ============================================================================

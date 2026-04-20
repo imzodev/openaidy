@@ -8,7 +8,7 @@
 import type {
   RequestValidationConfig,
   ResponseFilteringConfig,
-} from './security';
+} from './proxy-enhanced.js';
 
 // ============================================================================
 // Environment Configuration
