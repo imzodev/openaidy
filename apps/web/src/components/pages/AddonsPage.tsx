@@ -169,10 +169,11 @@ export function AddonsPage() {
           <Puzzle class="w-12 h-12 text-text-tertiary mb-4" />
           <p class="text-text-secondary font-medium">No addons installed</p>
           <p class="text-sm text-text-tertiary mt-1 max-w-sm">
-            Install addons using the CLI:{' '}
+            Build and publish an addon, then install it via the API or use{' '}
             <code class="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-              openaidy addon install
-            </code>
+              openaidy addon create
+            </code>{' '}
+            to scaffold one.
           </p>
         </div>
       </Show>
