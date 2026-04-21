@@ -334,6 +334,270 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Addon Command Group
+// ============================================================================
+
+registerGroup({
+  name: 'addon',
+  description: 'Addon development tools (create, build, test, publish)',
+  commands: {
+    'addon create': {
+      description: 'Create a new addon project from a template',
+      usage: 'openaidy addon create <name> [--template <template>]',
+      examples: [
+        'pnpm openaidy addon create my-addon',
+        'pnpm openaidy addon create my-addon --template agent',
+      ],
+    },
+    'addon init': {
+      description: 'Initialize an existing project as an addon',
+      usage: 'openaidy addon init [--force]',
+      examples: ['pnpm openaidy addon init'],
+    },
+    'addon build': {
+      description: 'Build addon for production',
+      usage: 'openaidy addon build [--watch] [--minify] [--sourcemap]',
+      examples: [
+        'pnpm openaidy addon build',
+        'pnpm openaidy addon build --minify',
+      ],
+    },
+    'addon test': {
+      description: 'Run addon tests',
+      usage: 'openaidy addon test [--watch] [--coverage]',
+      examples: [
+        'pnpm openaidy addon test',
+        'pnpm openaidy addon test --coverage',
+      ],
+    },
+    'addon validate': {
+      description: 'Validate addon package and manifest',
+      usage: 'openaidy addon validate [--verbose] [--strict]',
+      examples: [
+        'pnpm openaidy addon validate',
+        'pnpm openaidy addon validate --verbose',
+      ],
+    },
+    'addon dev': {
+      description: 'Start development server with hot-reloading',
+      usage: 'openaidy addon dev [--port <port>] [--openaidy-url <url>]',
+      examples: [
+        'pnpm openaidy addon dev',
+        'pnpm openaidy addon dev --port 3001',
+      ],
+    },
+    'addon publish': {
+      description: 'Publish addon to the registry',
+      usage: 'openaidy addon publish [--tag <tag>] [--registry <url>]',
+      examples: [
+        'pnpm openaidy addon publish',
+        'pnpm openaidy addon publish --tag beta',
+      ],
+    },
+    'addon templates': {
+      description: 'List available addon templates',
+      usage: 'openaidy addon templates',
+      examples: ['pnpm openaidy addon templates'],
+    },
+  },
+});
+
+registerCommand(
+  'addon create',
+  async (args: string[]) => {
+    const { createAddon } = await import('./create.js');
+    const name = args[0];
+    if (!name || name.startsWith('-')) {
+      return {
+        exitCode: 1,
+        error:
+          'Error: Addon name is required\nUsage: openaidy addon create <name>',
+      };
+    }
+    const options: Record<string, string | boolean> = {};
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '-d' || args[i] === '--directory')
+        options.directory = args[++i];
+      else if (args[i] === '-t' || args[i] === '--template')
+        options.template = args[++i];
+      else if (args[i] === '--no-git') options.noGit = true;
+      else if (args[i] === '--no-install') options.noInstall = true;
+    }
+    const result = await createAddon(name, options);
+    return result.success
+      ? {
+          exitCode: 0,
+          output: `✓ ${result.message}${result.projectPath ? `\n  Project created at: ${result.projectPath}` : ''}`,
+        }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Create a new addon project from a template',
+    usage: 'openaidy addon create <name> [--template <template>]',
+  },
+);
+
+registerCommand(
+  'addon init',
+  async (args: string[]) => {
+    const { initAddon } = await import('./init.js');
+    const options: Record<string, boolean> = {};
+    if (args.includes('--force')) options.force = true;
+    const result = await initAddon(process.cwd(), options);
+    return result.success
+      ? { exitCode: 0, output: `✓ ${result.message}` }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Initialize an existing project as an addon',
+    usage: 'openaidy addon init [--force]',
+  },
+);
+
+registerCommand(
+  'addon build',
+  async (args: string[]) => {
+    const { buildAddon } = await import('./build.js');
+    const options: Record<string, boolean> = {};
+    for (const arg of args) {
+      if (arg === '-w' || arg === '--watch') options.watch = true;
+      else if (arg === '-m' || arg === '--minify') options.minify = true;
+      else if (arg === '-s' || arg === '--sourcemap') options.sourcemap = true;
+    }
+    const result = await buildAddon(process.cwd(), options);
+    return result.success
+      ? {
+          exitCode: 0,
+          output: `✓ ${result.message}${result.outputPath ? `\n  Output: ${result.outputPath}` : ''}`,
+        }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Build addon for production',
+    usage: 'openaidy addon build [--watch] [--minify] [--sourcemap]',
+  },
+);
+
+registerCommand(
+  'addon test',
+  async (args: string[]) => {
+    const { runTests } = await import('./test.js');
+    const options: Record<string, string | boolean> = {};
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--watch') options.watch = true;
+      else if (args[i] === '--coverage') options.coverage = true;
+      else if (args[i] === '--ui') options.ui = true;
+      else if (args[i] === '--filter') options.filter = args[++i];
+    }
+    const result = await runTests(process.cwd(), options);
+    return result.success
+      ? {
+          exitCode: 0,
+          output: `✓ ${result.message}${result.testFiles !== undefined ? `\n  Test files: ${result.testFiles}` : ''}`,
+        }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Run addon tests',
+    usage: 'openaidy addon test [--watch] [--coverage]',
+  },
+);
+
+registerCommand(
+  'addon validate',
+  async (args: string[]) => {
+    const { validateAddon } = await import('./validate.js');
+    const options: Record<string, boolean> = {};
+    for (const arg of args) {
+      if (arg === '-p' || arg === '--package') options.package = true;
+      else if (arg === '-v' || arg === '--verbose') options.verbose = true;
+      else if (arg === '--strict') options.strict = true;
+    }
+    const result = await validateAddon(process.cwd(), options);
+    if (result.valid) {
+      return { exitCode: 0, output: `✓ ${result.message}` };
+    }
+    const errors = result.errors.map((e: string) => `  - ${e}`).join('\n');
+    const warnings = result.warnings.map((w: string) => `  - ${w}`).join('\n');
+    return {
+      exitCode: 1,
+      error: `✗ ${result.message}${errors ? `\nErrors:\n${errors}` : ''}${warnings ? `\nWarnings:\n${warnings}` : ''}`,
+    };
+  },
+  {
+    description: 'Validate addon package and manifest',
+    usage: 'openaidy addon validate [--verbose] [--strict]',
+  },
+);
+
+registerCommand(
+  'addon dev',
+  async (args: string[]) => {
+    const { startDevServer } = await import('./dev.js');
+    const options: Record<string, string | number> = {};
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--port') options.port = parseInt(args[++i], 10);
+      else if (args[i] === '--host') options.host = args[++i];
+      else if (args[i] === '--openaidy-url') options.openaidyUrl = args[++i];
+    }
+    const result = await startDevServer(process.cwd(), options);
+    return result.success
+      ? {
+          exitCode: 0,
+          output: `✓ ${result.message}\n  Server running at http://${result.host}:${result.port}\nPress Ctrl+C to stop`,
+        }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Start development server with hot-reloading',
+    usage: 'openaidy addon dev [--port <port>]',
+  },
+);
+
+registerCommand(
+  'addon publish',
+  async (args: string[]) => {
+    const { publishAddon } = await import('./publish.js');
+    const options: Record<string, string> = {};
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--registry') options.registry = args[++i];
+      else if (args[i] === '--access') options.access = args[++i];
+      else if (args[i] === '--tag') options.tag = args[++i];
+    }
+    const result = await publishAddon(process.cwd(), options);
+    return result.success
+      ? {
+          exitCode: 0,
+          output: `✓ ${result.message}${result.registryUrl ? `\n  Registry: ${result.registryUrl}` : ''}`,
+        }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Publish addon to the registry',
+    usage: 'openaidy addon publish [--tag <tag>] [--registry <url>]',
+  },
+);
+
+registerCommand(
+  'addon templates',
+  async (_args: string[]) => {
+    const { listTemplates } = await import('../utils/template-generator.js');
+    const templates = listTemplates();
+    const output = templates
+      .map(
+        (t: { name: string; description: string }) =>
+          `  ${t.name.padEnd(12)} ${t.description}`,
+      )
+      .join('\n');
+    return { exitCode: 0, output: `\nAvailable Templates:\n\n${output}\n` };
+  },
+  {
+    description: 'List available addon templates',
+    usage: 'openaidy addon templates',
+  },
+);
+
 // Devices commands
 registerCommand(
   'devices list',
