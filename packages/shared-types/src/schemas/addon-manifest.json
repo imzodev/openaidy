@@ -1,0 +1,261 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openaidy.dev/schemas/addon-v1.json",
+  "title": "OpenAidy Addon Manifest",
+  "description": "JSON Schema for validating OpenAidy addon manifests",
+  "type": "object",
+  "required": ["id", "name", "version", "openaidy", "entry"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://openaidy\\.dev/schemas/",
+      "default": "https://openaidy.dev/schemas/addon-v1.json"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique identifier for the addon (kebab-case)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "Human-readable name of the addon"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the addon"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Description of what the addon does"
+    },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": ["name"]
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to the addon's homepage"
+    },
+    "repository": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to the addon's source repository"
+    },
+    "license": {
+      "type": "string",
+      "maxLength": 100,
+      "default": "MIT"
+    },
+    "openaidy": {
+      "type": "object",
+      "required": ["minVersion"],
+      "properties": {
+        "minVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Minimum OpenAidy version required"
+        },
+        "maxVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Maximum OpenAidy version supported"
+        }
+      }
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Path to the addon's entry JavaScript file"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*\\.(read|write|delete|invoke|manage|read:\\S+|write:\\S+|invoke:\\S+)$"
+      },
+      "maxItems": 100,
+      "uniqueItems": true,
+      "description": "List of permissions required by the addon"
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "sidebar": {
+          "type": "object",
+          "properties": {
+            "icon": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "order": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "default": 100
+            }
+          },
+          "required": ["icon", "label"]
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "component"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "pattern": "^/"
+              },
+              "component": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "props": {
+                "type": "object"
+              }
+            }
+          },
+          "maxItems": 50
+        },
+        "styles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "scripts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "required": {
+            "type": "boolean",
+            "default": false
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["object", "array", "string", "number", "boolean"]
+            },
+            "properties": {
+              "type": "object"
+            },
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "default": {},
+            "description": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "defaults": {
+          "type": "object",
+          "description": "Default configuration values"
+        }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "NPM dependencies required by the addon"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Keywords for discoverability"
+    },
+    "icons": {
+      "type": "object",
+      "properties": {
+        "16": {
+          "type": "string",
+          "format": "uri"
+        },
+        "32": {
+          "type": "string",
+          "format": "uri"
+        },
+        "48": {
+          "type": "string",
+          "format": "uri"
+        },
+        "128": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
