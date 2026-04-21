@@ -11,6 +11,29 @@ import {
 } from '../utils/validation.js';
 import { slugify } from '../utils/project.js';
 
+/**
+ * Resolve the default directory for addon projects.
+ * Uses OPENAIDY_HOME env var if set, otherwise looks for a .openaidy directory
+ * walking up from cwd, falling back to <cwd>/.openaidy.
+ */
+function resolveAddonsDir(): string {
+  if (process.env.OPENAIDY_HOME) {
+    return path.join(process.env.OPENAIDY_HOME, 'addons');
+  }
+  // Walk up from cwd looking for an existing .openaidy directory
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, '.openaidy');
+    if (fs.existsSync(candidate)) {
+      return path.join(candidate, 'addons');
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), '.openaidy', 'addons');
+}
+
 export interface CreateOptions {
   directory?: string;
   template?: string;
@@ -32,7 +55,7 @@ export async function createAddon(
   options: CreateOptions = {},
 ): Promise<CreateResult> {
   const {
-    directory = process.cwd(),
+    directory = resolveAddonsDir(),
     template = 'basic',
     noGit = false,
     noInstall: _noInstall = false,

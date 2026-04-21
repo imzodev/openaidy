@@ -4,7 +4,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { readAddonManifest } from '../utils/project.js';
+import { resolveCLIConfig } from '../lib/config.js';
 
 export interface InstallOptions {
   serverUrl?: string;
@@ -17,21 +19,33 @@ export interface InstallResult {
   addonId?: string;
 }
 
+type BootstrapAdminRecord = { token: string };
+
+async function readAdminToken(tokenPath: string): Promise<string | null> {
+  try {
+    const raw = await readFile(tokenPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<BootstrapAdminRecord>;
+    return parsed.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Install (register) a built addon with the local OpenAidy server.
  *
  * Reads addon.json from the project directory and POSTs the manifest to
- * POST /api/addons. The server stores the addon record so it appears in
- * the Addons UI and can be enabled/disabled.
+ * POST /api/addons. Authenticates using the bootstrap-admin token from
+ * .openaidy/credentials/bootstrap-admin.json (same as other CLI commands).
  */
 export async function installAddon(
   projectPath: string = process.cwd(),
   options: InstallOptions = {},
 ): Promise<InstallResult> {
-  const {
-    serverUrl = process.env.OPENAIDY_SERVER_URL ?? 'http://localhost:3001',
-    token = process.env.OPENAIDY_TOKEN ?? '',
-  } = options;
+  const cliConfig = resolveCLIConfig();
+  const serverUrl = options.serverUrl ?? cliConfig.httpUrl;
+  const token =
+    options.token ?? (await readAdminToken(cliConfig.tokenPath)) ?? '';
 
   // Read manifest
   const manifest = readAddonManifest(projectPath);
