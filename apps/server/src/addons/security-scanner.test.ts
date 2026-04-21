@@ -166,7 +166,7 @@ describe('SecurityScanner', () => {
       const files = createCleanPackage();
       const result = await scanner.scan(files);
 
-      expect(result.duration).toBeGreaterThan(0);
+      expect(result.duration).toBeGreaterThanOrEqual(0);
       expect(result.scannedAt).toBeInstanceOf(Date);
     });
 

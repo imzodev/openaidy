@@ -600,6 +600,162 @@ The CLI reads configuration from environment variables (compatible with the serv
 | `WS_PORT`                    | `3001`                                       | Fallback for deriving `OPENAIDY_WS_URL`                      |
 | `WS_PATH`                    | `/ws`                                        | WebSocket path suffix                                        |
 
+### `addon` - Addon Development Tools
+
+Commands for creating, building, testing, and publishing OpenAidy addons.
+
+---
+
+#### `addon create`
+
+Create a new addon project from a template.
+
+**Usage:**
+
+```bash
+openaidy addon create <name> [--template <template>] [--directory <dir>] [--no-git] [--no-install]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon create my-addon
+pnpm openaidy addon create my-addon --template agent
+```
+
+---
+
+#### `addon init`
+
+Initialize an existing project as an addon.
+
+**Usage:**
+
+```bash
+openaidy addon init [--force]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon init
+```
+
+---
+
+#### `addon build`
+
+Build addon for production.
+
+**Usage:**
+
+```bash
+openaidy addon build [--watch] [--minify] [--sourcemap]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon build
+pnpm openaidy addon build --minify
+```
+
+---
+
+#### `addon test`
+
+Run addon tests.
+
+**Usage:**
+
+```bash
+openaidy addon test [--watch] [--coverage] [--ui] [--filter <pattern>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon test
+pnpm openaidy addon test --coverage
+```
+
+---
+
+#### `addon validate`
+
+Validate addon package and manifest.
+
+**Usage:**
+
+```bash
+openaidy addon validate [--package] [--verbose] [--strict]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon validate
+pnpm openaidy addon validate --verbose
+```
+
+---
+
+#### `addon dev`
+
+Start development server with hot-reloading.
+
+**Usage:**
+
+```bash
+openaidy addon dev [--port <port>] [--host <host>] [--openaidy-url <url>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon dev
+pnpm openaidy addon dev --port 3001
+```
+
+---
+
+#### `addon publish`
+
+Publish addon to the registry.
+
+**Usage:**
+
+```bash
+openaidy addon publish [--tag <tag>] [--registry <url>] [--access <access>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon publish
+pnpm openaidy addon publish --tag beta
+```
+
+---
+
+#### `addon templates`
+
+List available addon project templates.
+
+**Usage:**
+
+```bash
+openaidy addon templates
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon templates
+```
+
+---
+
 ## Future Commands
 
 The following commands are planned but not yet implemented:
