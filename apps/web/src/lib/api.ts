@@ -806,6 +806,75 @@ export async function revokeAccessToken(
   return result.key;
 }
 
+export interface AddonRecord {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  status: 'installed' | 'enabled' | 'disabled' | 'error';
+  installedAt: string;
+  installedBy: string;
+  manifest: Record<string, unknown>;
+  permissions?: string[];
+  approvedPermissions?: string[];
+}
+
+export async function listAddons(
+  token: string,
+): Promise<{ addons: AddonRecord[]; total: number }> {
+  const response = await fetch(`${API_BASE}/api/addons`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ addons: AddonRecord[]; total: number }>;
+}
+
+export async function enableAddon(
+  token: string,
+  id: string,
+  approvedPermissions: string[],
+): Promise<{ addon: AddonRecord }> {
+  const response = await fetch(`${API_BASE}/api/addons/${id}/enable`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ approvedPermissions }),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ addon: AddonRecord }>;
+}
+
+export async function disableAddon(
+  token: string,
+  id: string,
+): Promise<{ addon: AddonRecord }> {
+  const response = await fetch(`${API_BASE}/api/addons/${id}/disable`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ addon: AddonRecord }>;
+}
+
+export async function uninstallAddon(token: string, id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/addons/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!response.ok && response.status !== 204) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+}
+
 /**
  * Verify an auth token against the server
  */
