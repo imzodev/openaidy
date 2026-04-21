@@ -1,7 +1,8 @@
 /**
- * OpenAidy Addon CLI - Main Entry Point
+ * OpenAidy CLI - Main Entry Point
  *
- * Comprehensive CLI tool for addon development, testing, and publishing.
+ * The OpenAidy command-line interface for managing the platform,
+ * including addon development tools.
  */
 
 import { createAddon } from './commands/create.js';
@@ -21,34 +22,51 @@ const BANNER = `
  |  __/| | |_    | | (_) | (_) |   <| |_| \\__ \\
  |_|   |_|\\__|   |_|\\___/ \\___/|_|\\_\\__,_|___/
                                                   
-Addon Development CLI v1.0.0
+OpenAidy CLI v1.0.0
 `;
 
-// Help text
+// Top-level help
 const HELP = `
-OpenAidy Addon Development CLI
+OpenAidy CLI
 
-Usage: openaidy <command> [options]
+Usage: openaidy <command> [subcommand] [options]
 
 Commands:
+  addon            Addon development tools
+
+Options:
+  -h, --help       Show this help message
+  -v, --version    Show version
+
+Run "openaidy <command> --help" for more information on a specific command.
+`;
+
+// Addon subcommand help
+const ADDON_HELP = `
+OpenAidy Addon Development Tools
+
+Usage: openaidy addon <subcommand> [options]
+
+Subcommands:
   create <name>    Create a new addon project
-  init             Initialize an existing addon project
+  init             Initialize an existing project as an addon
   build            Build addon for production
   test             Run addon tests
   validate         Validate addon package
   dev              Start development server
   publish          Publish addon to registry
+  templates        List available addon templates
 
 Options:
   -h, --help       Show this help message
-  -v, --version    Show version
-  --list-templates List available templates
 
 Examples:
-  openaidy create my-addon
-  openaidy build
-  openaidy validate --verbose
-  openaidy dev --port 3000
+  openaidy addon create my-addon
+  openaidy addon create my-addon --template agent
+  openaidy addon build --minify
+  openaidy addon validate --verbose
+  openaidy addon dev --port 3000
+  openaidy addon publish --tag beta
 
 For more information, visit: https://docs.openaidy.dev/addons
 `;
@@ -56,17 +74,16 @@ For more information, visit: https://docs.openaidy.dev/addons
 // Parse command line arguments
 const args = process.argv.slice(2);
 const command = args[0];
-const subArgs = args.slice(1);
+const subcommand = args[1];
+const subArgs = args.slice(2);
 
-async function main() {
-  console.log(BANNER);
-
-  switch (command) {
+async function handleAddonCommand() {
+  switch (subcommand) {
     case 'create': {
       const name = subArgs[0];
       if (!name) {
         console.error('Error: Addon name is required');
-        console.error('Usage: openaidy create <name>');
+        console.error('Usage: openaidy addon create <name>');
         process.exit(1);
       }
 
@@ -260,13 +277,37 @@ async function main() {
       break;
     }
 
-    case '--list-templates': {
+    case 'templates': {
       const templates = listTemplates();
       console.log('\nAvailable Templates:\n');
       for (const template of templates) {
         console.log(`  ${template.name.padEnd(12)} ${template.description}`);
       }
       console.log('');
+      break;
+    }
+
+    case '-h':
+    case '--help':
+    case undefined: {
+      console.log(ADDON_HELP);
+      break;
+    }
+
+    default: {
+      console.error(`Unknown addon subcommand: ${subcommand}`);
+      console.error('Run "openaidy addon --help" for usage information');
+      process.exit(1);
+    }
+  }
+}
+
+async function main() {
+  console.log(BANNER);
+
+  switch (command) {
+    case 'addon': {
+      await handleAddonCommand();
       break;
     }
 
@@ -278,7 +319,7 @@ async function main() {
 
     case '-v':
     case '--version': {
-      console.log('OpenAidy Addon CLI v1.0.0');
+      console.log('OpenAidy CLI v1.0.0');
       break;
     }
 
