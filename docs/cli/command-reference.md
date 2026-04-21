@@ -606,6 +606,25 @@ Commands for creating, building, testing, and publishing OpenAidy addons.
 
 ---
 
+#### `addon install`
+
+Register a built addon with the local OpenAidy server. Run from inside your addon directory after building.
+
+**Usage:**
+
+```bash
+openaidy addon install [--server-url <url>] [--token <token>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy addon install
+pnpm openaidy addon install --server-url http://localhost:3001
+```
+
+---
+
 #### `addon create`
 
 Create a new addon project from a template.

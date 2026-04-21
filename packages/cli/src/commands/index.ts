@@ -342,6 +342,14 @@ registerGroup({
   name: 'addon',
   description: 'Addon development tools (create, build, test, publish)',
   commands: {
+    'addon install': {
+      description: 'Register a built addon with the local OpenAidy server',
+      usage: 'openaidy addon install [--server-url <url>] [--token <token>]',
+      examples: [
+        'pnpm openaidy addon install',
+        'pnpm openaidy addon install --server-url http://localhost:3001',
+      ],
+    },
     'addon create': {
       description: 'Create a new addon project from a template',
       usage: 'openaidy addon create <name> [--template <template>]',
@@ -402,6 +410,26 @@ registerGroup({
     },
   },
 });
+
+registerCommand(
+  'addon install',
+  async (args: string[]) => {
+    const { installAddon } = await import('./install.js');
+    const options: Record<string, string> = {};
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '--server-url') options.serverUrl = args[++i];
+      else if (args[i] === '--token') options.token = args[++i];
+    }
+    const result = await installAddon(process.cwd(), options);
+    return result.success
+      ? { exitCode: 0, output: `✓ ${result.message}` }
+      : { exitCode: 1, error: `✗ ${result.message}` };
+  },
+  {
+    description: 'Register a built addon with the local OpenAidy server',
+    usage: 'openaidy addon install [--server-url <url>] [--token <token>]',
+  },
+);
 
 registerCommand(
   'addon create',

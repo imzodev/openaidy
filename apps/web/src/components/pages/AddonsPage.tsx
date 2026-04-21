@@ -168,13 +168,14 @@ export function AddonsPage() {
         <div class="flex flex-col items-center justify-center h-64 text-center">
           <Puzzle class="w-12 h-12 text-text-tertiary mb-4" />
           <p class="text-text-secondary font-medium">No addons installed</p>
-          <p class="text-sm text-text-tertiary mt-1 max-w-sm">
-            Build and publish an addon, then install it via the API or use{' '}
-            <code class="font-mono text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-              openaidy addon create
-            </code>{' '}
-            to scaffold one.
-          </p>
+          <div class="mt-3 text-left bg-gray-50 dark:bg-gray-800 border border-border rounded-lg p-4 text-xs font-mono text-text-secondary space-y-1 max-w-sm">
+            <p># 1. scaffold</p>
+            <p>pnpm openaidy addon create my-addon</p>
+            <p class="pt-1"># 2. build</p>
+            <p>cd my-addon &amp;&amp; pnpm openaidy addon build</p>
+            <p class="pt-1"># 3. register with server</p>
+            <p>pnpm openaidy addon install</p>
+          </div>
         </div>
       </Show>
 
