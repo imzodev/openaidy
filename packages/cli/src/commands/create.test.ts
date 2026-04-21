@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createAddon } from './create.js';
+import { createAddon } from './addons/create.js';
 
 const testDir = path.join('/tmp', 'openaidy-cli-test-' + Date.now());
 

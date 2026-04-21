@@ -5,8 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { readAddonManifest } from '../utils/project.js';
-import { resolveCLIConfig } from '../lib/config.js';
+import { readAddonManifest } from '../../utils/project.js';
+import { resolveCLIConfig } from '../../lib/config.js';
 
 export interface InstallOptions {
   serverUrl?: string;

@@ -8,7 +8,7 @@ import {
   detectAddonProject,
   readAddonManifest,
   validateProjectStructure,
-} from '../utils/project.js';
+} from '../../utils/project.js';
 
 export interface InitOptions {
   force?: boolean;

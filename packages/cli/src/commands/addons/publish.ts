@@ -4,7 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { readAddonManifest } from '../utils/project.js';
+import { readAddonManifest } from '../../utils/project.js';
 import { validateAddon } from './validate.js';
 
 export interface PublishOptions {

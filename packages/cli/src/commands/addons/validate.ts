@@ -7,12 +7,12 @@ import path from 'node:path';
 import {
   readAddonManifest,
   validateProjectStructure,
-} from '../utils/project.js';
+} from '../../utils/project.js';
 import {
   validateAddonId,
   validateAddonName,
   validateVersion,
-} from '../utils/validation.js';
+} from '../../utils/validation.js';
 
 export interface ValidateOptions {
   package?: boolean;

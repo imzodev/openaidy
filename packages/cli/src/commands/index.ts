@@ -414,7 +414,7 @@ registerGroup({
 registerCommand(
   'addon install',
   async (args: string[]) => {
-    const { installAddon } = await import('./install.js');
+    const { installAddon } = await import('./addons/install.js');
     const options: Record<string, string> = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--server-url') options.serverUrl = args[++i];
@@ -434,7 +434,7 @@ registerCommand(
 registerCommand(
   'addon create',
   async (args: string[]) => {
-    const { createAddon } = await import('./create.js');
+    const { createAddon } = await import('./addons/create.js');
     const name = args[0];
     if (!name || name.startsWith('-')) {
       return {
@@ -469,7 +469,7 @@ registerCommand(
 registerCommand(
   'addon init',
   async (args: string[]) => {
-    const { initAddon } = await import('./init.js');
+    const { initAddon } = await import('./addons/init.js');
     const options: Record<string, boolean> = {};
     if (args.includes('--force')) options.force = true;
     const result = await initAddon(process.cwd(), options);
@@ -486,7 +486,7 @@ registerCommand(
 registerCommand(
   'addon build',
   async (args: string[]) => {
-    const { buildAddon } = await import('./build.js');
+    const { buildAddon } = await import('./addons/build.js');
     const options: Record<string, boolean> = {};
     for (const arg of args) {
       if (arg === '-w' || arg === '--watch') options.watch = true;
@@ -510,7 +510,7 @@ registerCommand(
 registerCommand(
   'addon test',
   async (args: string[]) => {
-    const { runTests } = await import('./test.js');
+    const { runTests } = await import('./addons/test.js');
     const options: Record<string, string | boolean> = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--watch') options.watch = true;
@@ -535,7 +535,7 @@ registerCommand(
 registerCommand(
   'addon validate',
   async (args: string[]) => {
-    const { validateAddon } = await import('./validate.js');
+    const { validateAddon } = await import('./addons/validate.js');
     const options: Record<string, boolean> = {};
     for (const arg of args) {
       if (arg === '-p' || arg === '--package') options.package = true;
@@ -562,7 +562,7 @@ registerCommand(
 registerCommand(
   'addon dev',
   async (args: string[]) => {
-    const { startDevServer } = await import('./dev.js');
+    const { startDevServer } = await import('./addons/dev.js');
     const options: Record<string, string | number> = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--port') options.port = parseInt(args[++i], 10);
@@ -586,7 +586,7 @@ registerCommand(
 registerCommand(
   'addon publish',
   async (args: string[]) => {
-    const { publishAddon } = await import('./publish.js');
+    const { publishAddon } = await import('./addons/publish.js');
     const options: Record<string, string> = {};
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--registry') options.registry = args[++i];

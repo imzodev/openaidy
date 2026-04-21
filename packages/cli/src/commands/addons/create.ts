@@ -8,8 +8,8 @@ import {
   validateAddonName,
   validateAddonId,
   validateTemplateName,
-} from '../utils/validation.js';
-import { slugify } from '../utils/project.js';
+} from '../../utils/validation.js';
+import { slugify } from '../../utils/project.js';
 
 /**
  * Resolve the default directory for addon projects.
