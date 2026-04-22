@@ -415,19 +415,37 @@ registerCommand(
   'addon install',
   async (args: string[]) => {
     const { installAddon } = await import('./addons/install.js');
+    const { resolveAddonProject, listAddonProjects } =
+      await import('../utils/project.js');
     const options: Record<string, string> = {};
+    let addonName: string | undefined;
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--server-url') options.serverUrl = args[++i];
       else if (args[i] === '--token') options.token = args[++i];
+      else if (!args[i].startsWith('-')) addonName = args[i];
     }
-    const result = await installAddon(process.cwd(), options);
+    const addon = resolveAddonProject(addonName);
+    if (!addon) {
+      const all = listAddonProjects();
+      if (all.length === 0)
+        return { exitCode: 1, error: '✗ No addons found in .openaidy/addons/' };
+      const names = all
+        .map((a) => `  pnpm openaidy addon install ${a.name}`)
+        .join('\n');
+      return {
+        exitCode: 1,
+        error: `✗ Multiple addons found. Specify one:\n${names}`,
+      };
+    }
+    const result = await installAddon(addon.path, options);
     return result.success
       ? { exitCode: 0, output: `✓ ${result.message}` }
       : { exitCode: 1, error: `✗ ${result.message}` };
   },
   {
     description: 'Register a built addon with the local OpenAidy server',
-    usage: 'openaidy addon install [--server-url <url>] [--token <token>]',
+    usage:
+      'openaidy addon install [<addon-name>] [--server-url <url>] [--token <token>]',
   },
 );
 
@@ -456,7 +474,12 @@ registerCommand(
     return result.success
       ? {
           exitCode: 0,
-          output: `✓ ${result.message}${result.projectPath ? `\n  Project created at: ${result.projectPath}` : ''}`,
+          output: [
+            `✓ ${result.message}`,
+            `  Built and registered — open the app and click "${name}" in the sidebar to see it.`,
+            `  Edit your UI at: ${result.projectPath}/src/index.html`,
+            `  Run "pnpm openaidy addon build" after making changes.`,
+          ].join('\n'),
         }
       : { exitCode: 1, error: `✗ ${result.message}` };
   },
@@ -487,13 +510,30 @@ registerCommand(
   'addon build',
   async (args: string[]) => {
     const { buildAddon } = await import('./addons/build.js');
+    const { resolveAddonProject, listAddonProjects } =
+      await import('../utils/project.js');
     const options: Record<string, boolean> = {};
+    let addonName: string | undefined;
     for (const arg of args) {
       if (arg === '-w' || arg === '--watch') options.watch = true;
       else if (arg === '-m' || arg === '--minify') options.minify = true;
       else if (arg === '-s' || arg === '--sourcemap') options.sourcemap = true;
+      else if (!arg.startsWith('-')) addonName = arg;
     }
-    const result = await buildAddon(process.cwd(), options);
+    const addon = resolveAddonProject(addonName);
+    if (!addon) {
+      const all = listAddonProjects();
+      if (all.length === 0)
+        return { exitCode: 1, error: '✗ No addons found in .openaidy/addons/' };
+      const names = all
+        .map((a) => `  pnpm openaidy addon build ${a.name}`)
+        .join('\n');
+      return {
+        exitCode: 1,
+        error: `✗ Multiple addons found. Specify one:\n${names}`,
+      };
+    }
+    const result = await buildAddon(addon.path, options);
     return result.success
       ? {
           exitCode: 0,
@@ -503,7 +543,8 @@ registerCommand(
   },
   {
     description: 'Build addon for production',
-    usage: 'openaidy addon build [--watch] [--minify] [--sourcemap]',
+    usage:
+      'openaidy addon build [<addon-name>] [--watch] [--minify] [--sourcemap]',
   },
 );
 

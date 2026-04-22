@@ -38,10 +38,12 @@ import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
 import { BackupsPage } from './components/pages/BackupsPage';
 import { AddonsPage } from './components/pages/AddonsPage';
+import { AddonViewPage } from './components/pages/AddonViewPage';
 import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
+import { listAddons, type AddonRecord } from './lib/api';
 import './index.css';
 
 // Create a client
@@ -60,7 +62,8 @@ type AppContentProps = {
 
 function AppContent(props: AppContentProps) {
   // Use the router hook
-  const { currentView, navigate } = createRouter();
+  const { currentView, currentAddonId, navigate, navigateToAddon } =
+    createRouter();
 
   // Get WebSocket client for streaming events
   const { client, isConnected } = useWebSocketContext();
@@ -68,6 +71,21 @@ function AppContent(props: AppContentProps) {
   const [selectedSessionId, setSelectedSessionId] = createSignal<
     string | undefined
   >(undefined);
+  const [enabledAddons, setEnabledAddons] = createSignal<AddonRecord[]>([]);
+  const activeAddon = () =>
+    enabledAddons().find((a) => a.addonId === currentAddonId());
+
+  const loadEnabledAddons = async () => {
+    const token = resolveToken() ?? '';
+    try {
+      const data = await listAddons(token);
+      setEnabledAddons(data.addons.filter((a) => a.status === 'enabled'));
+    } catch {
+      // non-fatal
+    }
+  };
+
+  void loadEnabledAddons();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = createSignal(
     typeof window !== 'undefined' ? window.innerWidth < 768 : false,
   );
@@ -310,6 +328,9 @@ function AppContent(props: AppContentProps) {
         isCollapsed={isSidebarCollapsed()}
         onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
         onCollapse={() => setIsSidebarCollapsed(true)}
+        enabledAddons={enabledAddons()}
+        activeAddonId={currentAddonId() ?? undefined}
+        onAddonSelect={(addon) => navigateToAddon(addon.addonId)}
       />
 
       {/* Main Content */}
@@ -420,7 +441,16 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'addons'}>
-          <AddonsPage />
+          <AddonsPage onAddonChange={() => void loadEnabledAddons()} />
+        </Show>
+
+        <Show when={view() === 'addon-view' && activeAddon() !== undefined}>
+          <AddonViewPage addon={activeAddon()!} />
+        </Show>
+        <Show when={view() === 'addon-view' && activeAddon() === undefined}>
+          <div class="flex-1 flex items-center justify-center text-text-tertiary text-sm">
+            Addon not found or not enabled.
+          </div>
         </Show>
 
         <Show when={view() === 'api-keys'}>

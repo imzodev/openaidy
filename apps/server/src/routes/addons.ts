@@ -1,9 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { env } from '../lib/env';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { createAddonService } from '../addons/service';
 import type { AddonsRepository } from '@openaidy/db';
 import type { ManifestValidator } from '../addons/manifest-validator';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ADMIN_SCOPE = '*';
 
@@ -252,6 +258,59 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         }
         throw error;
       }
+    },
+  );
+
+  // GET /sdk/openaidy-sdk.js - Serve the addon SDK
+  app.get('/sdk/openaidy-sdk.js', async (_request, reply) => {
+    const sdkPath = path.join(__dirname, '../sdk/openaidy-sdk.js');
+    if (!fs.existsSync(sdkPath)) {
+      return reply.code(404).send({ error: 'SDK not found' });
+    }
+    return reply
+      .header('Content-Type', 'application/javascript')
+      .header('Access-Control-Allow-Origin', '*')
+      .header('Cache-Control', 'public, max-age=3600')
+      .send(fs.readFileSync(sdkPath));
+  });
+
+  // GET /addons/:addonId/* - Serve addon static files from dist/
+  app.get<{ Params: { addonId: string; '*': string } }>(
+    '/addons/:addonId/*',
+    async (request, reply) => {
+      const { addonId } = request.params;
+      const filePath = request.params['*'] || 'index.html';
+      const addonsDir = path.join(env.OPENAIDY_HOME, 'addons');
+      const fullPath = path.join(addonsDir, addonId, 'dist', filePath);
+
+      // Prevent path traversal
+      const resolved = path.resolve(fullPath);
+      const base = path.resolve(addonsDir);
+      if (!resolved.startsWith(base)) {
+        return reply.code(403).send({ error: 'FORBIDDEN' });
+      }
+
+      if (!fs.existsSync(resolved)) {
+        return reply
+          .code(404)
+          .send({ error: 'NOT_FOUND', message: `File not found: ${filePath}` });
+      }
+
+      const ext = path.extname(resolved).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        '.html': 'text/html',
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.json': 'application/json',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.ico': 'image/x-icon',
+      };
+      const contentType = mimeTypes[ext] ?? 'application/octet-stream';
+      return reply
+        .header('Content-Type', contentType)
+        .header('Access-Control-Allow-Origin', '*')
+        .send(fs.readFileSync(resolved));
     },
   );
 

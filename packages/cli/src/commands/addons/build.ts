@@ -96,6 +96,12 @@ export async function buildAddon(
       path.join(distPath, 'addon.json'),
     );
 
+    // Copy index.html to dist if it exists
+    const htmlSrc = path.join(projectPath, 'src', 'index.html');
+    if (fs.existsSync(htmlSrc)) {
+      fs.copyFileSync(htmlSrc, path.join(distPath, 'index.html'));
+    }
+
     // Copy config schema if exists
     const configSchemaPath = path.join(projectPath, 'config-schema.json');
     if (fs.existsSync(configSchemaPath)) {
