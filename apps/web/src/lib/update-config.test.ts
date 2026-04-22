@@ -3,6 +3,12 @@ import { ApiRequestError } from '@openaidy/shared-types';
 
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn());
+  vi.stubGlobal('localStorage', {
+    getItem: vi.fn().mockReturnValue(null),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  });
 });
 
 afterEach(() => {

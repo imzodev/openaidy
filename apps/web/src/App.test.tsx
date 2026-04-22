@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@solidjs/testing-library';
 import App from './App';
 import { createSignal } from 'solid-js';
@@ -120,21 +120,41 @@ vi.mock('lucide-solid', () => ({
   Moon: () => <span>Moon</span>,
   Monitor: () => <span>Monitor</span>,
   Menu: () => <span>Menu</span>,
+  KeyRound: () => <span>KR</span>,
+  LogOut: () => <span>LO</span>,
 }));
 
 describe('App', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockListSessions.mockResolvedValue({ items: [] });
+    mockCreateSession.mockResolvedValue({
+      id: '1',
+      title: 'Test Session',
+      createdAt: '2024-01-01T00:00:00Z',
+    });
+    mockListMessages.mockResolvedValue({ items: [] });
+    mockListAgents.mockResolvedValue({ items: [] });
+    mockListRuns.mockResolvedValue({ items: [] });
     eventHandlers.clear();
     mockSubscribeToSession.mockClear();
     mockContext = createMockWebSocketContext();
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn().mockReturnValue('mock-auth-token'),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should render the app with sidebar', async () => {
     render(() => <App />);
 
-    // Should show the sidebar with navigation (use getAllByText since 'Sessions' appears multiple times)
-    expect(screen.getAllByText('Sessions').length).toBeGreaterThan(0);
+    // Sidebar nav items render a title attribute regardless of collapsed state
+    expect(screen.getAllByTitle('Sessions').length).toBeGreaterThan(0);
   });
 
   describe('streaming', () => {

@@ -6,6 +6,7 @@ import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as accessTokenSchema from './schema/access-tokens';
+import * as addonSchema from './schema/addons';
 import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
@@ -13,7 +14,8 @@ import * as sessionSchema from './schema/sessions';
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
   typeof pairingSchema &
-  typeof accessTokenSchema;
+  typeof accessTokenSchema &
+  typeof addonSchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -31,6 +33,7 @@ const schema: DatabaseSchema = {
   ...jobSchema,
   ...pairingSchema,
   ...accessTokenSchema,
+  ...addonSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -221,6 +224,47 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
 
     CREATE INDEX IF NOT EXISTS access_tokens_key_hash_idx ON access_tokens(key_hash);
     CREATE INDEX IF NOT EXISTS access_tokens_revoked_idx ON access_tokens(revoked);
+
+    CREATE TABLE IF NOT EXISTS addons (
+      id           TEXT PRIMARY KEY NOT NULL,
+      addon_id     TEXT NOT NULL UNIQUE,
+      name         TEXT NOT NULL,
+      version      TEXT NOT NULL,
+      manifest     TEXT NOT NULL DEFAULT '{}',
+      status       TEXT NOT NULL DEFAULT 'installed',
+      permissions  TEXT NOT NULL DEFAULT '[]',
+      config       TEXT NOT NULL DEFAULT '{}',
+      installed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      installed_by TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS addons_status_idx ON addons(status);
+    CREATE INDEX IF NOT EXISTS addons_addon_id_idx ON addons(addon_id);
+
+    CREATE TABLE IF NOT EXISTS addon_permission_changes (
+      id                TEXT PRIMARY KEY NOT NULL,
+      addon_id          TEXT NOT NULL REFERENCES addons(id) ON DELETE CASCADE,
+      changed_by        TEXT NOT NULL,
+      old_permissions   TEXT,
+      new_permissions   TEXT,
+      reason            TEXT,
+      created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS addon_permission_changes_addon_id_idx ON addon_permission_changes(addon_id);
+
+    CREATE TABLE IF NOT EXISTS addon_usage (
+      id            TEXT PRIMARY KEY NOT NULL,
+      addon_id      TEXT NOT NULL REFERENCES addons(id) ON DELETE CASCADE,
+      endpoint      TEXT NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0,
+      last_used     TEXT,
+      date          TEXT NOT NULL
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS addon_usage_addon_endpoint_date_idx ON addon_usage(addon_id, endpoint, date);
+    CREATE INDEX IF NOT EXISTS addon_usage_addon_id_idx ON addon_usage(addon_id);
   `);
 }
 

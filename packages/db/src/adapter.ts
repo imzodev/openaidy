@@ -13,6 +13,7 @@ import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
 import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
+import { createAddonsRepository } from './repositories/addons';
 
 export type { DatabaseAdapter, DatabaseRepositories } from './types';
 
@@ -34,6 +35,7 @@ export async function createDatabaseAdapter(
     tasks: createTasksRepository(client),
     subtasks: createSubtasksRepository(client),
     taskAgents: createTaskAgentsRepository(client),
+    addons: createAddonsRepository(client),
   };
 
   return {

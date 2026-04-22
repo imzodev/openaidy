@@ -1,0 +1,311 @@
+/**
+ * Create Command - Initialize a new addon project
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import {
+  validateAddonName,
+  validateAddonId,
+  validateTemplateName,
+} from '../../utils/validation.js';
+import { slugify } from '../../utils/project.js';
+import { installAddon } from './install.js';
+
+/**
+ * Resolve the default directory for addon projects.
+ * Uses OPENAIDY_HOME env var if set, otherwise looks for a .openaidy directory
+ * walking up from cwd, falling back to <cwd>/.openaidy.
+ */
+function resolveAddonsDir(): string {
+  if (process.env.OPENAIDY_HOME) {
+    return path.join(process.env.OPENAIDY_HOME, 'addons');
+  }
+  // Walk up from cwd looking for an existing .openaidy directory
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(dir, '.openaidy');
+    if (fs.existsSync(candidate)) {
+      return path.join(candidate, 'addons');
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), '.openaidy', 'addons');
+}
+
+export interface CreateOptions {
+  directory?: string;
+  template?: string;
+  noGit?: boolean;
+  noInstall?: boolean;
+  serverUrl?: string;
+  token?: string;
+}
+
+export interface CreateResult {
+  success: boolean;
+  message: string;
+  projectPath?: string;
+}
+
+/**
+ * Create a new addon project
+ */
+export async function createAddon(
+  name: string,
+  options: CreateOptions = {},
+): Promise<CreateResult> {
+  const {
+    directory = resolveAddonsDir(),
+    template = 'basic',
+    noGit = false,
+    noInstall: _noInstall = false,
+  } = options;
+
+  // Validate addon name
+  if (!validateAddonName(name)) {
+    return {
+      success: false,
+      message:
+        'Invalid addon name. Use letters, numbers, spaces, and hyphens only.',
+    };
+  }
+
+  const addonId = slugify(name);
+
+  // Validate addon ID
+  if (!validateAddonId(addonId)) {
+    return {
+      success: false,
+      message: 'Generated addon ID is invalid. Please choose a different name.',
+    };
+  }
+
+  // Validate template
+  if (!validateTemplateName(template)) {
+    return {
+      success: false,
+      message: `Invalid template: ${template}. Valid templates are: basic, agent, multi-page, config`,
+    };
+  }
+
+  const projectPath = path.join(directory, addonId);
+
+  // Check if directory already exists
+  if (fs.existsSync(projectPath)) {
+    return {
+      success: false,
+      message: `Directory already exists: ${projectPath}`,
+    };
+  }
+
+  try {
+    // Create project directory
+    fs.mkdirSync(projectPath, { recursive: true });
+
+    // Create basic addon structure
+    await createBasicStructure(projectPath, addonId, name, template);
+
+    // Initialize git if requested
+    if (!noGit) {
+      await initGit(projectPath);
+    }
+
+    // Auto-register with the running server so it appears in the UI immediately.
+    // Failure here is non-fatal — the files are already created.
+    await installAddon(projectPath, {
+      serverUrl: options.serverUrl,
+      token: options.token,
+      requireBuild: false,
+    });
+
+    return {
+      success: true,
+      message: `Successfully created addon: ${name}`,
+      projectPath,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: `Failed to create addon: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * Create basic addon file structure
+ */
+async function createBasicStructure(
+  projectPath: string,
+  addonId: string,
+  name: string,
+  _template: string,
+): Promise<void> {
+  // Create addon.json manifest
+  const manifest = {
+    id: addonId,
+    name,
+    version: '1.0.0',
+    description: `${name} addon for OpenAidy`,
+    openaidy: {
+      minVersion: '0.0.0',
+    },
+    entry: 'dist/index.js',
+    permissions: [],
+    ui: {
+      sidebar: {
+        icon: 'box',
+        label: name,
+        order: 100,
+      },
+      routes: [
+        {
+          path: `/${addonId}`,
+          component: 'MainPage',
+        },
+      ],
+    },
+    agents: [],
+    config: {
+      schema: {
+        type: 'object',
+        properties: {},
+      },
+      defaults: {},
+    },
+    dependencies: {},
+  };
+
+  fs.writeFileSync(
+    path.join(projectPath, 'addon.json'),
+    JSON.stringify(manifest, null, 2),
+  );
+
+  // Create package.json
+  const packageJson = {
+    name: `@openaidy/addon-${addonId}`,
+    version: '1.0.0',
+    description: `${name} addon for OpenAidy`,
+    main: 'dist/index.js',
+    scripts: {
+      build: 'openaidy build',
+      dev: 'openaidy dev',
+      test: 'openaidy test',
+      validate: 'openaidy validate',
+    },
+    dependencies: {
+      '@openaidy/sdk': 'workspace:*',
+    },
+    devDependencies: {
+      typescript: '^5.0.0',
+    },
+  };
+
+  fs.writeFileSync(
+    path.join(projectPath, 'package.json'),
+    JSON.stringify(packageJson, null, 2),
+  );
+
+  // Create src directory with main entry
+  fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
+
+  const mainContent = `/**
+ * ${name} Addon
+ * Generated by OpenAidy CLI
+ */
+
+export default {
+  id: '${addonId}',
+  name: '${name}',
+  version: '1.0.0',
+
+  async render() {
+    return {
+      component: {
+        name: 'MainPage',
+        props: {},
+      },
+    };
+  },
+};
+`;
+
+  fs.writeFileSync(path.join(projectPath, 'src', 'index.ts'), mainContent);
+
+  // Create config-schema.json
+  const configSchema = {
+    type: 'object',
+    properties: {},
+  };
+
+  fs.writeFileSync(
+    path.join(projectPath, 'config-schema.json'),
+    JSON.stringify(configSchema, null, 2),
+  );
+
+  // Create tsconfig.json
+  const tsconfig = {
+    compilerOptions: {
+      target: 'ES2020',
+      module: 'ESNext',
+      moduleResolution: 'bundler',
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      outDir: 'dist',
+      rootDir: 'src',
+    },
+    include: ['src/**/*'],
+  };
+
+  fs.writeFileSync(
+    path.join(projectPath, 'tsconfig.json'),
+    JSON.stringify(tsconfig, null, 2),
+  );
+
+  // Create README.md
+  const readme = `# ${name}
+
+${manifest.description}
+
+## Installation
+
+\`\`\`bash
+npm install
+\`\`\`
+
+## Development
+
+\`\`\`bash
+npm run dev
+\`\`\`
+
+## Build
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+## Validate
+
+\`\`\`bash
+npm run validate
+\`\`\`
+`;
+
+  fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
+}
+
+/**
+ * Initialize git repository
+ */
+async function initGit(projectPath: string): Promise<void> {
+  try {
+    const { execSync } = await import('node:child_process');
+    execSync('git init', { cwd: projectPath, stdio: 'ignore' });
+  } catch {
+    // Git initialization failed, ignore
+  }
+}

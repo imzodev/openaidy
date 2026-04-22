@@ -27,6 +27,10 @@ import { schedulerRoutes } from './routes/scheduler';
 import { workspaceRoutes } from './routes/workspace';
 import { logRoutes } from './routes/logs';
 import { createMcpRoutesPlugin } from './routes/mcp';
+import { addonRoutes } from './routes/addons';
+import { addonProxyRoutes } from './addons/proxy-routes';
+import { ManifestValidator } from './addons/manifest-validator';
+import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
 import { createTaskService } from './tasks';
 import { createMcpClientService, type McpClientService } from './mcp/client';
@@ -306,6 +310,30 @@ export async function buildApp() {
     await app.register(accessTokenRoutes, {
       accessTokenService: createAccessTokenService(services.accessTokensRepo),
       authMiddleware,
+    });
+  }
+
+  // Register addon routes (requires DB)
+  if (dbAdapter) {
+    const manifestValidator = new ManifestValidator();
+    const openAidyVersion = process.env.npm_package_version ?? '0.0.0';
+    const addonService = createAddonService({
+      repository: dbAdapter.repositories.addons,
+      validator: manifestValidator,
+      jwtSecret: env.WS_TOKEN_SECRET,
+      openAidyVersion,
+    });
+    await app.register(addonRoutes, {
+      addonsRepository: dbAdapter.repositories.addons,
+      authMiddleware,
+      jwtSecret: env.WS_TOKEN_SECRET,
+      openAidyVersion,
+      manifestValidator,
+    });
+    await app.register(addonProxyRoutes, {
+      addonService,
+      authMiddleware,
+      internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
     });
   }
 

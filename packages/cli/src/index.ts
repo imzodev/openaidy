@@ -16,6 +16,19 @@ import type { CommandResult, CommandMeta } from './types.js';
 import { defaultCLIConfig, ExitCodes } from './types.js';
 
 // ============================================================================
+// Banner
+// ============================================================================
+
+const BANNER = `
+  ___                          _     _     _       
+ / _ \\ _ __   ___ _ __   / \\ (_) __| |_   _
+| | | | '_ \\ / _ \\ '_ \\ / _ \\| |/ _\` | | | |
+| |_| | |_) |  __/ | | / ___ \\ | (_| | |_| |
+ \\___/| .__/ \\___|_| |_/_/   \\_\\_|\\__,_|\\__, |
+      |_|                                |___/ 
+`;
+
+// ============================================================================
 // Help Output Functions
 // ============================================================================
 
@@ -23,6 +36,7 @@ import { defaultCLIConfig, ExitCodes } from './types.js';
  * Print root help message with all command groups
  */
 function printRootHelp(): void {
+  console.log(BANNER);
   console.log(`
 ${defaultCLIConfig.name} - ${defaultCLIConfig.description}
 
@@ -141,6 +155,7 @@ ${meta.examples ? `\nExamples:\n${meta.examples.map((e: string) => `  ${e}`).joi
  * Print version
  */
 function printVersion(): void {
+  console.log(BANNER);
   console.log(`${defaultCLIConfig.name} v${defaultCLIConfig.version}`);
 }
 
