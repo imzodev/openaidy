@@ -10,6 +10,7 @@ import {
   validateTemplateName,
 } from '../../utils/validation.js';
 import { slugify } from '../../utils/project.js';
+import { installAddon } from './install.js';
 
 /**
  * Resolve the default directory for addon projects.
@@ -39,6 +40,8 @@ export interface CreateOptions {
   template?: string;
   noGit?: boolean;
   noInstall?: boolean;
+  serverUrl?: string;
+  token?: string;
 }
 
 export interface CreateResult {
@@ -110,6 +113,14 @@ export async function createAddon(
       await initGit(projectPath);
     }
 
+    // Auto-register with the running server so it appears in the UI immediately.
+    // Failure here is non-fatal — the files are already created.
+    await installAddon(projectPath, {
+      serverUrl: options.serverUrl,
+      token: options.token,
+      requireBuild: false,
+    });
+
     return {
       success: true,
       message: `Successfully created addon: ${name}`,
@@ -138,13 +149,8 @@ async function createBasicStructure(
     name,
     version: '1.0.0',
     description: `${name} addon for OpenAidy`,
-    author: {
-      name: '',
-      email: '',
-    },
     openaidy: {
-      minVersion: '1.0.0',
-      maxVersion: '2.0.0',
+      minVersion: '0.0.0',
     },
     entry: 'dist/index.js',
     permissions: [],
@@ -163,7 +169,10 @@ async function createBasicStructure(
     },
     agents: [],
     config: {
-      schema: './config-schema.json',
+      schema: {
+        type: 'object',
+        properties: {},
+      },
       defaults: {},
     },
     dependencies: {},

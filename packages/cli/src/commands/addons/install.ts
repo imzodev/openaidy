@@ -11,6 +11,7 @@ import { resolveCLIConfig } from '../../lib/config.js';
 export interface InstallOptions {
   serverUrl?: string;
   token?: string;
+  requireBuild?: boolean;
 }
 
 export interface InstallResult {
@@ -56,9 +57,10 @@ export async function installAddon(
     };
   }
 
-  // Require a built dist directory
+  // When called standalone (not from create), require a built dist/
+  const requireBuild = options.requireBuild ?? true;
   const distPath = path.join(projectPath, 'dist');
-  if (!fs.existsSync(distPath)) {
+  if (requireBuild && !fs.existsSync(distPath)) {
     return {
       success: false,
       message:
