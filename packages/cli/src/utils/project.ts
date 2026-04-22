@@ -156,6 +156,92 @@ export async function hasPackageManager(): Promise<{
 }
 
 /**
+ * Resolve the .openaidy/addons directory by walking up from cwd.
+ */
+export function resolveAddonsDir(): string {
+  if (process.env.OPENAIDY_HOME) {
+    return path.join(process.env.OPENAIDY_HOME, 'addons');
+  }
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, '.openaidy');
+    if (fs.existsSync(candidate)) {
+      return path.join(candidate, 'addons');
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), '.openaidy', 'addons');
+}
+
+/**
+ * Resolve which addon project to operate on.
+ *
+ * Resolution order:
+ * 1. If addonName is given, use .openaidy/addons/<addonName>
+ * 2. If cwd itself contains addon.json, use cwd
+ * 3. If .openaidy/addons/ has exactly one addon, use it
+ * 4. Otherwise return null (caller should list options to user)
+ */
+export function resolveAddonProject(addonName?: string): {
+  path: string;
+  name: string;
+} | null {
+  // Explicit name supplied
+  if (addonName) {
+    const addonsDir = resolveAddonsDir();
+    const addonPath = path.join(addonsDir, addonName);
+    if (fs.existsSync(path.join(addonPath, 'addon.json'))) {
+      return { path: addonPath, name: addonName };
+    }
+    return null;
+  }
+
+  // Running from inside an addon directory
+  const localManifest = path.join(process.cwd(), 'addon.json');
+  if (fs.existsSync(localManifest)) {
+    return { path: process.cwd(), name: path.basename(process.cwd()) };
+  }
+
+  // Auto-detect from .openaidy/addons/
+  const addonsDir = resolveAddonsDir();
+  if (!fs.existsSync(addonsDir)) return null;
+  const entries = fs
+    .readdirSync(addonsDir, { withFileTypes: true })
+    .filter(
+      (e) =>
+        e.isDirectory() &&
+        fs.existsSync(path.join(addonsDir, e.name, 'addon.json')),
+    );
+  if (entries.length === 1) {
+    const addonPath = path.join(addonsDir, entries[0].name);
+    return { path: addonPath, name: entries[0].name };
+  }
+  if (entries.length > 1) {
+    // Return all as a special multi-result using null — caller handles listing
+    return null;
+  }
+  return null;
+}
+
+/**
+ * List all addon projects in .openaidy/addons/
+ */
+export function listAddonProjects(): Array<{ path: string; name: string }> {
+  const addonsDir = resolveAddonsDir();
+  if (!fs.existsSync(addonsDir)) return [];
+  return fs
+    .readdirSync(addonsDir, { withFileTypes: true })
+    .filter(
+      (e) =>
+        e.isDirectory() &&
+        fs.existsSync(path.join(addonsDir, e.name, 'addon.json')),
+    )
+    .map((e) => ({ path: path.join(addonsDir, e.name), name: e.name }));
+}
+
+/**
  * Get addon ID from name (slugify)
  */
 export function slugify(name: string): string {

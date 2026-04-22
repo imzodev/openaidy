@@ -808,6 +808,7 @@ export async function revokeAccessToken(
 
 export interface AddonRecord {
   id: string;
+  addonId: string;
   name: string;
   version: string;
   description?: string;

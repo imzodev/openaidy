@@ -43,7 +43,11 @@ function formatDate(iso: string): string {
   });
 }
 
-export function AddonsPage() {
+type AddonsPageProps = {
+  onAddonChange?: () => void;
+};
+
+export function AddonsPage(props: AddonsPageProps) {
   const [addons, setAddons] = createSignal<AddonRecord[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
@@ -69,12 +73,19 @@ export function AddonsPage() {
     void load();
   });
 
-  const handleEnable = async (id: string, permissions: string[]) => {
-    setActionId(id);
+  const handleEnable = async (addon: AddonRecord) => {
+    setActionId(addon.id);
     setActionError(null);
     try {
-      const result = await enableAddon(token(), id, permissions);
-      setAddons((prev) => prev.map((a) => (a.id === id ? result.addon : a)));
+      const result = await enableAddon(
+        token(),
+        addon.addonId,
+        addon.permissions ?? [],
+      );
+      setAddons((prev) =>
+        prev.map((a) => (a.id === addon.id ? result.addon : a)),
+      );
+      props.onAddonChange?.();
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Failed to enable addon',
@@ -84,12 +95,15 @@ export function AddonsPage() {
     }
   };
 
-  const handleDisable = async (id: string) => {
-    setActionId(id);
+  const handleDisable = async (addon: AddonRecord) => {
+    setActionId(addon.id);
     setActionError(null);
     try {
-      const result = await disableAddon(token(), id);
-      setAddons((prev) => prev.map((a) => (a.id === id ? result.addon : a)));
+      const result = await disableAddon(token(), addon.addonId);
+      setAddons((prev) =>
+        prev.map((a) => (a.id === addon.id ? result.addon : a)),
+      );
+      props.onAddonChange?.();
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Failed to disable addon',
@@ -99,13 +113,14 @@ export function AddonsPage() {
     }
   };
 
-  const handleUninstall = async (id: string) => {
+  const handleUninstall = async (addon: AddonRecord) => {
     if (!confirm('Uninstall this addon? This cannot be undone.')) return;
-    setActionId(id);
+    setActionId(addon.id);
     setActionError(null);
     try {
-      await uninstallAddon(token(), id);
-      setAddons((prev) => prev.filter((a) => a.id !== id));
+      await uninstallAddon(token(), addon.addonId);
+      setAddons((prev) => prev.filter((a) => a.id !== addon.id));
+      props.onAddonChange?.();
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : 'Failed to uninstall addon',
@@ -205,7 +220,7 @@ export function AddonsPage() {
                     </Show>
                     <div class="flex items-center gap-3 text-xs text-text-tertiary">
                       <span>
-                        ID: <code class="font-mono">{addon.id}</code>
+                        ID: <code class="font-mono">{addon.addonId}</code>
                       </span>
                       <span>Installed {formatDate(addon.installedAt)}</span>
                     </div>
@@ -219,9 +234,7 @@ export function AddonsPage() {
                       }
                     >
                       <button
-                        onClick={() =>
-                          void handleEnable(addon.id, addon.permissions ?? [])
-                        }
+                        onClick={() => void handleEnable(addon)}
                         disabled={actionId() === addon.id}
                         title="Enable addon"
                         class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 disabled:opacity-50 transition-colors"
@@ -232,7 +245,7 @@ export function AddonsPage() {
                     </Show>
                     <Show when={addon.status === 'enabled'}>
                       <button
-                        onClick={() => void handleDisable(addon.id)}
+                        onClick={() => void handleDisable(addon)}
                         disabled={actionId() === addon.id}
                         title="Disable addon"
                         class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800 rounded-lg hover:bg-yellow-50 dark:hover:bg-yellow-900/20 disabled:opacity-50 transition-colors"
@@ -242,7 +255,7 @@ export function AddonsPage() {
                       </button>
                     </Show>
                     <button
-                      onClick={() => void handleUninstall(addon.id)}
+                      onClick={() => void handleUninstall(addon)}
                       disabled={actionId() === addon.id}
                       title="Uninstall addon"
                       class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 transition-colors"

@@ -19,7 +19,7 @@ import {
   KeyRound,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
-import type { Session } from '../lib/api';
+import type { Session, AddonRecord } from '../lib/api';
 
 export type ViewType =
   | 'chat'
@@ -34,6 +34,7 @@ export type ViewType =
   | 'logs'
   | 'backups'
   | 'addons'
+  | 'addon-view'
   | 'api-keys'
   | 'settings';
 
@@ -48,6 +49,9 @@ type SidebarProps = {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onCollapse: () => void;
+  enabledAddons?: AddonRecord[];
+  activeAddonId?: string;
+  onAddonSelect?: (addon: AddonRecord) => void;
 };
 
 type NavItem = {
@@ -259,6 +263,42 @@ export function Sidebar(props: SidebarProps) {
                     );
                   }}
                 </For>
+                {/* Render enabled addon items under the Addons section */}
+                <Show
+                  when={
+                    section.title === 'Addons' &&
+                    (props.enabledAddons?.length ?? 0) > 0
+                  }
+                >
+                  <For each={props.enabledAddons ?? []}>
+                    {(addon) => (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          props.onAddonSelect?.(addon);
+                          if (isMobileViewport()) {
+                            props.onCollapse();
+                          }
+                        }}
+                        class={`w-full flex items-center gap-2 py-2 rounded-lg transition-colors ${
+                          props.activeAddonId === addon.addonId
+                            ? 'bg-blue-50 dark:bg-blue-900/20 text-text-primary'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
+                        } ${
+                          props.isCollapsed
+                            ? 'justify-center px-0'
+                            : 'px-4 justify-start'
+                        }`}
+                        title={addon.name}
+                      >
+                        <Puzzle class="w-5 h-5 flex-shrink-0" />
+                        <Show when={!props.isCollapsed}>
+                          <span class="text-sm truncate">{addon.name}</span>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </Show>
               </div>
             )}
           </For>

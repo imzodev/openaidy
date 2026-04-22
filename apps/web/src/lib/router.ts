@@ -35,6 +35,7 @@ export const viewToRouteMap: Record<ViewType, RoutePath> = {
   logs: RoutePaths.LOGS,
   backups: RoutePaths.BACKUPS,
   addons: RoutePaths.ADDONS,
+  'addon-view': RoutePaths.ADDONS,
   'api-keys': RoutePaths.API_KEYS,
   settings: RoutePaths.SETTINGS,
 };
@@ -82,16 +83,33 @@ export function createRouter() {
 
   const [currentPath, setCurrentPath] = createSignal(getInitialPath());
 
+  // Parse /addons/:addonId — returns addonId or null
+  const currentAddonId = (): string | null => {
+    const p = currentPath();
+    const m = p.match(/^\/addons\/([^/]+)$/);
+    return m ? m[1] : null;
+  };
+
   // Get current view from path
   const currentView = (): ViewType => {
-    const path = currentPath();
-    return routeToViewMap[path] || 'sessions';
+    const p = currentPath();
+    if (currentAddonId()) return 'addon-view';
+    return routeToViewMap[p] || 'sessions';
   };
 
   // Navigate to a view by updating the URL
   const navigate = (view: ViewType) => {
     const newPath = viewToRouteMap[view];
     if (newPath && typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+      setCurrentPath(newPath);
+    }
+  };
+
+  // Navigate directly to an addon by its addonId
+  const navigateToAddon = (addonId: string) => {
+    const newPath = `/addons/${addonId}`;
+    if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
       setCurrentPath(newPath);
     }
@@ -119,7 +137,9 @@ export function createRouter() {
   return {
     currentPath,
     currentView,
+    currentAddonId,
     navigate,
+    navigateToAddon,
   };
 }
 
