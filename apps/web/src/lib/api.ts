@@ -876,6 +876,178 @@ export async function uninstallAddon(token: string, id: string): Promise<void> {
   }
 }
 
+// ============================================================================
+// Pulse API types
+// ============================================================================
+
+export type Pulse = {
+  id: string;
+  name: string;
+  prompt: string;
+  scheduleHuman: string;
+  status: 'active' | 'paused' | 'completed' | 'failed';
+  agentId: string | null;
+  sessionId: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+};
+
+export type PulseRun = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  attemptNumber: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
+export type ScheduleInput =
+  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
+  | { daily: { hour: number; minute: number } }
+  | { cron: string; tz?: string }
+  | { at: string };
+
+export type CreatePulseBody = {
+  name: string;
+  prompt: string;
+  schedule: ScheduleInput;
+  agentId?: string;
+  sessionId?: string;
+};
+
+export type UpdatePulseBody = {
+  name?: string;
+  prompt?: string;
+  schedule?: ScheduleInput;
+  status?: 'active' | 'paused' | 'completed' | 'failed';
+  agentId?: string;
+  sessionId?: string;
+};
+
+// ============================================================================
+// Pulse API functions
+// ============================================================================
+
+/**
+ * List all pulses
+ */
+export async function listPulses(
+  token: string,
+): Promise<{ pulses: Pulse[]; total: number }> {
+  const response = await apiFetch(`${API_BASE}/api/pulses`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to list pulses: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Create a new pulse
+ */
+export async function createPulse(
+  token: string,
+  body: CreatePulseBody,
+): Promise<{ pulse: Pulse }> {
+  const response = await apiFetch(`${API_BASE}/api/pulses`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create pulse: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get a pulse by ID
+ */
+export async function getPulse(
+  token: string,
+  id: string,
+): Promise<{ pulse: Pulse }> {
+  const response = await apiFetch(`${API_BASE}/api/pulses/${id}`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get pulse: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Update a pulse
+ */
+export async function updatePulse(
+  token: string,
+  id: string,
+  body: UpdatePulseBody,
+): Promise<{ pulse: Pulse }> {
+  const response = await apiFetch(`${API_BASE}/api/pulses/${id}`, {
+    method: 'PATCH',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update pulse: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Delete a pulse
+ */
+export async function deletePulse(token: string, id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/api/pulses/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete pulse: ${response.statusText}`);
+  }
+}
+
+/**
+ * Trigger a pulse manually
+ */
+export async function triggerPulse(
+  token: string,
+  id: string,
+): Promise<{ run: PulseRun }> {
+  const response = await apiFetch(`${API_BASE}/api/pulses/${id}/trigger`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to trigger pulse: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Get pulse execution history
+ */
+export async function getPulseHistory(
+  token: string,
+  id: string,
+  limit?: number,
+): Promise<{ runs: PulseRun[]; total: number }> {
+  const url = limit
+    ? `${API_BASE}/api/pulses/${id}/history?limit=${limit}`
+    : `${API_BASE}/api/pulses/${id}/history`;
+  const response = await apiFetch(url, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get pulse history: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 /**
  * Verify an auth token against the server
  */
