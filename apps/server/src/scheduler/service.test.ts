@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { JobsRepository, JobRunsRepository } from '@openaidy/db';
 import type { ScheduledJob, JobRun } from '@openaidy/db';
-import { SchedulerService, createSchedulerService, type GenericLogger } from './service';
+import {
+  SchedulerService,
+  createSchedulerService,
+  type GenericLogger,
+} from './service';
 import type { SessionMessageService } from '../sessions/service';
 
 // Create mock functions
@@ -50,6 +54,17 @@ function createMockSessionService() {
   };
 }
 
+function createMockSessionsStore() {
+  return {
+    create: vi.fn(),
+    findById: vi.fn(),
+    list: vi.fn(),
+    updateTitle: vi.fn(),
+    updateStatus: vi.fn(),
+    delete: vi.fn(),
+  };
+}
+
 // Helper to create a mock job
 function createMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
   return {
@@ -95,6 +110,7 @@ describe('SchedulerService', () => {
   let mockJobsRepo: ReturnType<typeof createMockJobsRepo>;
   let mockJobRunsRepo: ReturnType<typeof createMockJobRunsRepo>;
   let mockSessionService: ReturnType<typeof createMockSessionService>;
+  let mockSessionsStore: ReturnType<typeof createMockSessionsStore>;
   let mockLogger: GenericLogger;
 
   beforeEach(() => {
@@ -102,6 +118,7 @@ describe('SchedulerService', () => {
     mockJobsRepo = createMockJobsRepo();
     mockJobRunsRepo = createMockJobRunsRepo();
     mockSessionService = createMockSessionService();
+    mockSessionsStore = createMockSessionsStore();
     mockLogger = createMockLogger();
 
     // Cast to any to avoid complex type issues with mocks
@@ -109,8 +126,9 @@ describe('SchedulerService', () => {
       mockJobsRepo as unknown as JobsRepository,
       mockJobRunsRepo as unknown as JobRunsRepository,
       mockSessionService as unknown as SessionMessageService,
+      mockSessionsStore as unknown as SessionsStore,
       mockLogger,
-      { pollIntervalMs: 5000 }
+      { pollIntervalMs: 5000 },
     );
   });
 
@@ -136,7 +154,7 @@ describe('SchedulerService', () => {
       scheduler.start();
       expect(mockLogger.info).toHaveBeenCalledWith(
         { pollIntervalMs: 5000 },
-        'Scheduler started'
+        'Scheduler started',
       );
     });
   });
@@ -195,14 +213,20 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
         run: {},
       });
-      mockJobsRepo.update.mockResolvedValue({ ...mockJob, status: 'completed' });
+      mockJobsRepo.update.mockResolvedValue({
+        ...mockJob,
+        status: 'completed',
+      });
 
       scheduler.start();
       const result = await scheduler.tick();
@@ -221,14 +245,20 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
         run: {},
       });
-      mockJobsRepo.update.mockResolvedValue({ ...mockJob, status: 'completed' });
+      mockJobsRepo.update.mockResolvedValue({
+        ...mockJob,
+        status: 'completed',
+      });
 
       scheduler.start();
       await scheduler.tick();
@@ -245,14 +275,20 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
         run: {},
       });
-      mockJobsRepo.update.mockResolvedValue({ ...mockJob, status: 'completed' });
+      mockJobsRepo.update.mockResolvedValue({
+        ...mockJob,
+        status: 'completed',
+      });
 
       scheduler.start();
       await scheduler.tick();
@@ -272,7 +308,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
@@ -290,7 +329,7 @@ describe('SchedulerService', () => {
           retryCount: 0,
           lastRunAt: expect.any(Date),
           nextRunAt: expect.any(Date),
-        })
+        }),
       );
     });
 
@@ -300,7 +339,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
@@ -316,7 +358,7 @@ describe('SchedulerService', () => {
           status: 'failed',
           errorCode: expect.any(String),
           errorMessage: expect.any(String),
-        })
+        }),
       );
 
       expect(mockJobsRepo.update).toHaveBeenCalledWith(
@@ -324,7 +366,7 @@ describe('SchedulerService', () => {
         expect.objectContaining({
           retryCount: 1,
           nextRunAt: expect.any(Date),
-        })
+        }),
       );
     });
 
@@ -334,7 +376,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
@@ -356,7 +401,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockJobsRepo.update.mockResolvedValue(mockJob);
 
       scheduler.start();
@@ -367,17 +415,80 @@ describe('SchedulerService', () => {
         expect.objectContaining({
           status: 'failed',
           errorMessage: 'Session job missing targetSessionId',
-        })
+        }),
       );
     });
 
-    it('throws error for isolated jobs (not implemented)', async () => {
-      const mockJob = createMockJob({ targetType: 'isolated', targetSessionId: null });
+    it('executes isolated jobs by creating a new session', async () => {
+      const mockJob = createMockJob({
+        targetType: 'isolated',
+        targetSessionId: null,
+        metadata: { name: 'Test Pulse' },
+      });
+      const mockRun = createMockRun();
+      const mockNewSession = {
+        id: 'new-session-id',
+        title: 'Pulse: Test Pulse',
+      };
+
+      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
+      mockJobRunsRepo.create.mockResolvedValue(mockRun);
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
+      mockSessionsStore.create.mockResolvedValue(
+        mockNewSession as SessionsStore['create'] extends (
+          input: infer I,
+        ) => Promise<infer R>
+          ? R
+          : never,
+      );
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: true,
+        userMessage: {},
+        assistantMessage: {},
+        run: {},
+      });
+      mockJobsRepo.update.mockResolvedValue(mockJob);
+
+      scheduler.start();
+      await scheduler.tick();
+
+      expect(mockSessionsStore.create).toHaveBeenCalledWith({
+        title: 'Pulse: Test Pulse',
+      });
+      expect(mockSessionService.submitMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'new-session-id',
+          role: 'user',
+          content: 'Test message',
+        }),
+      );
+      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
+        'run-1',
+        expect.objectContaining({
+          status: 'succeeded',
+        }),
+      );
+    });
+
+    it('isolated job fails if session creation fails', async () => {
+      const mockJob = createMockJob({
+        targetType: 'isolated',
+        targetSessionId: null,
+      });
       const mockRun = createMockRun();
 
       mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
+      mockSessionsStore.create.mockRejectedValue(
+        new Error('Session creation failed'),
+      );
       mockJobsRepo.update.mockResolvedValue(mockJob);
 
       scheduler.start();
@@ -387,8 +498,48 @@ describe('SchedulerService', () => {
         'run-1',
         expect.objectContaining({
           status: 'failed',
-          errorMessage: 'Isolated job execution not yet implemented',
-        })
+          errorMessage: 'Session creation failed',
+        }),
+      );
+    });
+
+    it('isolated job fails if message submission fails', async () => {
+      const mockJob = createMockJob({
+        targetType: 'isolated',
+        targetSessionId: null,
+      });
+      const mockRun = createMockRun();
+      const mockNewSession = { id: 'new-session-id', title: 'Pulse: unnamed' };
+
+      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
+      mockJobRunsRepo.create.mockResolvedValue(mockRun);
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
+      mockSessionsStore.create.mockResolvedValue(
+        mockNewSession as SessionsStore['create'] extends (
+          input: infer I,
+        ) => Promise<infer R>
+          ? R
+          : never,
+      );
+      mockSessionService.submitMessage.mockResolvedValue({
+        ok: false,
+        error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
+      });
+      mockJobsRepo.update.mockResolvedValue(mockJob);
+
+      scheduler.start();
+      await scheduler.tick();
+
+      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
+        'run-1',
+        expect.objectContaining({
+          status: 'failed',
+          errorMessage:
+            'Isolated job execution failed: PROVIDER_ERROR - Provider failed',
+        }),
       );
     });
   });
@@ -396,7 +547,9 @@ describe('SchedulerService', () => {
   describe('triggerJob()', () => {
     it('throws error if job not found', async () => {
       mockJobsRepo.findById.mockResolvedValue(null);
-      await expect(scheduler.triggerJob('non-existent')).rejects.toThrow('Job not found');
+      await expect(scheduler.triggerJob('non-existent')).rejects.toThrow(
+        'Job not found',
+      );
     });
 
     it('executes job immediately', async () => {
@@ -405,7 +558,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.findById.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'succeeded' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'succeeded',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
@@ -429,7 +585,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.findById.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'succeeded' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'succeeded',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: true,
         userMessage: {},
@@ -442,7 +601,7 @@ describe('SchedulerService', () => {
       expect(mockJobRunsRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           attemptNumber: 0,
-        })
+        }),
       );
     });
 
@@ -452,7 +611,10 @@ describe('SchedulerService', () => {
 
       mockJobsRepo.findById.mockResolvedValue(mockJob);
       mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'running' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'running',
+      });
       mockSessionService.submitMessage.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
@@ -464,19 +626,25 @@ describe('SchedulerService', () => {
         'run-1',
         expect.objectContaining({
           status: 'failed',
-        })
+        }),
       );
     });
   });
 
   describe('recoverStuckJobs()', () => {
     it('recovers stuck runs on startup', async () => {
-      const mockRun = createMockRun({ status: 'running', startedAt: new Date() });
+      const mockRun = createMockRun({
+        status: 'running',
+        startedAt: new Date(),
+      });
       const mockJob = createMockJob();
 
       mockJobRunsRepo.listByStatus.mockResolvedValue([mockRun]);
       mockJobsRepo.findById.mockResolvedValue(mockJob);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({ ...mockRun, status: 'failed' });
+      mockJobRunsRepo.updateStatus.mockResolvedValue({
+        ...mockRun,
+        status: 'failed',
+      });
       mockJobsRepo.update.mockResolvedValue(mockJob);
 
       await scheduler.recoverStuckJobs();
@@ -504,13 +672,15 @@ describe('createSchedulerService', () => {
     const mockJobsRepo = createMockJobsRepo();
     const mockJobRunsRepo = createMockJobRunsRepo();
     const mockSessionService = createMockSessionService();
+    const mockSessionsStore = createMockSessionsStore();
     const mockLogger = createMockLogger();
 
     const scheduler = createSchedulerService(
       mockJobsRepo as unknown as JobsRepository,
       mockJobRunsRepo as unknown as JobRunsRepository,
       mockSessionService as unknown as SessionMessageService,
-      mockLogger
+      mockSessionsStore as unknown as SessionsStore,
+      mockLogger,
     );
 
     expect(scheduler).toBeInstanceOf(SchedulerService);
