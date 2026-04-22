@@ -1,4 +1,4 @@
-import type { JobsStore, JobRunsStore } from '@openaidy/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import type { ScheduledJob, JobRun } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import { calculateNextRun } from './cron-utils';
@@ -46,6 +46,7 @@ export class SchedulerService {
     private readonly jobsRepo: JobsStore,
     private readonly jobRunsRepo: JobRunsStore,
     private readonly sessionMessageService: SessionMessageService,
+    private readonly sessionsStore: SessionsStore,
     private readonly logger: GenericLogger,
     options?: SchedulerServiceOptions,
   ) {
@@ -284,8 +285,33 @@ export class SchedulerService {
         );
       }
     } else {
-      // Isolated execution - not yet implemented
-      throw new Error('Isolated job execution not yet implemented');
+      // Isolated execution - create a fresh session for the pulse
+      const metadata = job.metadata as Record<string, unknown> | null;
+      const pulseName = (metadata?.name as string | undefined) ?? 'unnamed';
+
+      // Create a new session for this isolated execution
+      const newSession = await this.sessionsStore.create({
+        title: `Pulse: ${pulseName}`,
+      });
+
+      // Submit the message to the new session
+      const submitInput: Parameters<
+        typeof this.sessionMessageService.submitMessage
+      >[0] = {
+        sessionId: newSession.id,
+        role: 'user',
+        content: (job.payload.message as string) || 'Scheduled job execution',
+      };
+      const agentId = job.payload.agentId as string | undefined;
+      if (agentId !== undefined) submitInput.agentId = agentId;
+      const result =
+        await this.sessionMessageService.submitMessage(submitInput);
+
+      if (!result.ok) {
+        throw new Error(
+          `Isolated job execution failed: ${result.error.code} - ${result.error.message}`,
+        );
+      }
     }
   }
 
@@ -390,6 +416,7 @@ export function createSchedulerService(
   jobsRepo: JobsStore,
   jobRunsRepo: JobRunsStore,
   sessionMessageService: SessionMessageService,
+  sessionsStore: SessionsStore,
   logger: GenericLogger,
   options?: SchedulerServiceOptions,
 ): SchedulerService {
@@ -397,6 +424,7 @@ export function createSchedulerService(
     jobsRepo,
     jobRunsRepo,
     sessionMessageService,
+    sessionsStore,
     logger,
     options,
   );
