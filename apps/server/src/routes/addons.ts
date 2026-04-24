@@ -310,6 +310,21 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       return reply
         .header('Content-Type', contentType)
         .header('Access-Control-Allow-Origin', '*')
+        .header(
+          'Content-Security-Policy',
+          [
+            "default-src 'none'",
+            "script-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self'",
+            "connect-src 'self'",
+            "frame-src 'none'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
+          ].join('; '),
+        )
         .send(fs.readFileSync(resolved));
     },
   );
