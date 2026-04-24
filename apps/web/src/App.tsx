@@ -311,6 +311,13 @@ function AppContent(props: AppContentProps) {
     }
   });
 
+  // Refetch sessions when navigating to the sessions view
+  createEffect(() => {
+    if (currentView() === 'sessions') {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    }
+  });
+
   // Current view for conditional rendering
   const view = () => currentView();
 
