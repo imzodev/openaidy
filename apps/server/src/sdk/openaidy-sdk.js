@@ -15,12 +15,12 @@
 (function (global) {
   'use strict';
 
-  var SDK_VERSION = '0.2.0';
+  var SDK_VERSION = '0.3.0';
   console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
 
   let _token = null;
   let _apiBase = null;
-  let _parentOrigin = null;
+  let _nonce = null;
   let _ready = false;
   const _pendingRequests = new Map();
   const _readyCallbacks = [];
@@ -33,7 +33,7 @@
     if (msg.type === 'OPENAIDY_INIT') {
       _token = msg.token ?? null;
       _apiBase = msg.apiBase ?? null;
-      _parentOrigin = msg.parentOrigin ?? null;
+      _nonce = msg.nonce ?? null;
       _ready = true;
       _readyCallbacks.forEach(function (cb) {
         try {
@@ -71,8 +71,15 @@
       const requestId = Math.random().toString(36).slice(2);
       _pendingRequests.set(requestId, { resolve, reject });
       window.parent.postMessage(
-        { type: 'OPENAIDY_REQUEST', requestId, method, path, body },
-        _parentOrigin ?? '*',
+        {
+          type: 'OPENAIDY_REQUEST',
+          requestId,
+          method,
+          path,
+          body,
+          nonce: _nonce,
+        },
+        '*',
       );
       // Timeout after 15s
       setTimeout(function () {

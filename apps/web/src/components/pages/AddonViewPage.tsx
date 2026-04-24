@@ -23,6 +23,9 @@ export function AddonViewPage(props: Props) {
   const [reloading, setReloading] = createSignal(false);
   let iframeRef: HTMLIFrameElement | undefined;
 
+  // Crypto nonce for secure iframe communication (replaces origin check)
+  const nonce = crypto.randomUUID();
+
   const handleReload = () => {
     setLoadError(false);
     setReloading(true);
@@ -37,17 +40,18 @@ export function AddonViewPage(props: Props) {
         type: 'OPENAIDY_INIT',
         token,
         apiBase: SERVER_BASE,
-        parentOrigin: window.location.origin,
+        nonce,
       },
-      SERVER_BASE,
+      '*',
     );
   };
 
   // Bridge: proxy API requests from the iframe to the real backend
   const handleMessage = async (event: MessageEvent) => {
-    if (event.origin !== SERVER_BASE) return;
     const msg = event.data as Record<string, unknown>;
     if (typeof msg !== 'object' || msg.type !== 'OPENAIDY_REQUEST') return;
+    // Validate nonce instead of origin (sandbox strips origin to 'null')
+    if (msg.nonce !== nonce) return;
 
     const {
       requestId,
@@ -82,7 +86,7 @@ export function AddonViewPage(props: Props) {
           status: res.status,
           data,
         },
-        SERVER_BASE,
+        '*',
       );
     } catch (err) {
       iframeRef?.contentWindow?.postMessage(
@@ -93,7 +97,7 @@ export function AddonViewPage(props: Props) {
           status: 0,
           error: String(err),
         },
-        SERVER_BASE,
+        '*',
       );
     }
   };
@@ -146,7 +150,7 @@ export function AddonViewPage(props: Props) {
           title={label()}
           onLoad={handleLoad}
           onError={() => setLoadError(true)}
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          sandbox="allow-scripts allow-forms"
         />
       </Show>
     </div>
