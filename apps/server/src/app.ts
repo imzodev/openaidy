@@ -24,6 +24,7 @@ import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
 import { runStreamRoutes } from './routes/runs';
 import { schedulerRoutes } from './routes/scheduler';
+import { pulseRoutes } from './routes/pulses';
 import { workspaceRoutes } from './routes/workspace';
 import { logRoutes } from './routes/logs';
 import { createMcpRoutesPlugin } from './routes/mcp';
@@ -177,11 +178,12 @@ export async function buildApp() {
   });
 
   // Create scheduler service if database is available
-  if (dbAdapter && jobsRepo && jobRunsRepo) {
+  if (dbAdapter && jobsRepo && jobRunsRepo && sessionsRepo) {
     scheduler = createSchedulerService(
       jobsRepo,
       jobRunsRepo,
       sessionService,
+      sessionsRepo,
       app.log,
       { pollIntervalMs: 5000 },
     );
@@ -274,6 +276,22 @@ export async function buildApp() {
     services.sessionsRepo
   ) {
     await app.register(schedulerRoutes, {
+      schedulerService: services.scheduler,
+      jobsRepo: services.jobsRepo,
+      jobRunsRepo: services.jobRunsRepo,
+      sessionsRepo: services.sessionsRepo,
+      authMiddleware,
+    });
+  }
+
+  // Register pulse routes (if database is available)
+  if (
+    services.scheduler &&
+    services.jobsRepo &&
+    services.jobRunsRepo &&
+    services.sessionsRepo
+  ) {
+    await app.register(pulseRoutes, {
       schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
