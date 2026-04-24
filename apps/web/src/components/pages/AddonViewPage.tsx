@@ -1,5 +1,13 @@
-import { createSignal, Show, onCleanup } from 'solid-js';
-import { Puzzle, RefreshCw } from 'lucide-solid';
+import { createSignal, Show, For, onCleanup } from 'solid-js';
+import {
+  Puzzle,
+  RefreshCw,
+  Info,
+  X,
+  Shield,
+  Calendar,
+  Tag,
+} from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
@@ -21,6 +29,7 @@ export function AddonViewPage(props: Props) {
 
   const [loadError, setLoadError] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
+  const [showInfo, setShowInfo] = createSignal(false);
   let iframeRef: HTMLIFrameElement | undefined;
 
   // Crypto nonce for secure iframe communication (replaces origin check)
@@ -144,14 +153,131 @@ export function AddonViewPage(props: Props) {
             Addon · v{props.addon.version}
           </p>
         </div>
-        <button
-          onClick={handleReload}
-          class="p-1.5 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          title="Reload"
-        >
-          <RefreshCw class="w-4 h-4" />
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            onClick={() => setShowInfo(true)}
+            class="p-1.5 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Addon info"
+          >
+            <Info class="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleReload}
+            class="p-1.5 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Reload"
+          >
+            <RefreshCw class="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      {/* Info modal */}
+      <Show when={showInfo()}>
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowInfo(false)}
+        >
+          <div
+            class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 class="text-lg font-semibold text-text-primary">
+                Addon Details
+              </h2>
+              <button
+                onClick={() => setShowInfo(false)}
+                class="p-1 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            <div class="px-5 py-4 space-y-4">
+              <div>
+                <h3 class="text-xl font-bold text-text-primary">
+                  {props.addon.name}
+                </h3>
+                <Show when={props.addon.description}>
+                  <p class="text-sm text-text-secondary mt-1">
+                    {props.addon.description}
+                  </p>
+                </Show>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div class="flex items-center gap-2 text-text-secondary">
+                  <Tag class="w-3.5 h-3.5" />
+                  <span>Version</span>
+                </div>
+                <span class="text-text-primary font-medium">
+                  v{props.addon.version}
+                </span>
+
+                <div class="flex items-center gap-2 text-text-secondary">
+                  <span class="w-3.5 h-3.5 text-center text-xs">ID</span>
+                  <span>Addon ID</span>
+                </div>
+                <span class="text-text-primary font-mono text-xs">
+                  {props.addon.addonId}
+                </span>
+
+                <div class="flex items-center gap-2 text-text-secondary">
+                  <Calendar class="w-3.5 h-3.5" />
+                  <span>Installed</span>
+                </div>
+                <span class="text-text-primary">
+                  {new Date(props.addon.installedAt).toLocaleDateString()}
+                </span>
+
+                <div class="flex items-center gap-2 text-text-secondary">
+                  <Shield class="w-3.5 h-3.5" />
+                  <span>Status</span>
+                </div>
+                <span
+                  class={`font-medium ${
+                    props.addon.status === 'enabled'
+                      ? 'text-green-600 dark:text-green-400'
+                      : props.addon.status === 'error'
+                        ? 'text-red-600 dark:text-red-400'
+                        : 'text-text-tertiary'
+                  }`}
+                >
+                  {props.addon.status.charAt(0).toUpperCase() +
+                    props.addon.status.slice(1)}
+                </span>
+              </div>
+
+              <Show when={(props.addon.permissions ?? []).length > 0}>
+                <div>
+                  <p class="text-sm font-medium text-text-secondary mb-2">
+                    Permissions
+                  </p>
+                  <div class="flex flex-wrap gap-1.5">
+                    <For each={props.addon.permissions}>
+                      {(perm) => (
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-xs font-mono text-text-secondary">
+                          {perm}
+                        </span>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+
+              <Show when={(props.addon.permissions ?? []).length === 0}>
+                <div>
+                  <p class="text-sm font-medium text-text-secondary mb-1">
+                    Permissions
+                  </p>
+                  <p class="text-xs text-text-tertiary">
+                    No permissions declared
+                  </p>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       {/* Error state */}
       <Show when={loadError()}>
