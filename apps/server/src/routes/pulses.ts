@@ -201,7 +201,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
     const job = await jobsRepo.create(createJobInput);
 
     reply.code(201);
-    return jobToPulse(job);
+    return { pulse: jobToPulse(job) };
   });
 
   /**
@@ -274,7 +274,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
       };
     }
 
-    return jobToPulse(job);
+    return { pulse: jobToPulse(job) };
   });
 
   /**
@@ -355,7 +355,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
 
     const updatedJob = await jobsRepo.update(id, updates);
 
-    return jobToPulse(updatedJob);
+    return { pulse: jobToPulse(updatedJob) };
   });
 
   /**

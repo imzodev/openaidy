@@ -4,7 +4,7 @@
  * Right-side drawer showing execution history for a pulse.
  */
 
-import { createSignal, Show, For, onMount } from 'solid-js';
+import { createSignal, createEffect, Show, For } from 'solid-js';
 import { X, CheckCircle, XCircle, Clock, Loader } from 'lucide-solid';
 import { getPulseHistory, type PulseRun } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
@@ -69,14 +69,11 @@ export function PulseHistoryDrawer(props: PulseHistoryDrawerProps) {
     }
   };
 
-  onMount(() => {
-    void load();
+  createEffect(() => {
+    if (props.pulseId) {
+      void load();
+    }
   });
-
-  // Reload when pulseId changes
-  if (props.pulseId) {
-    void load();
-  }
 
   return (
     <Show when={props.pulseId}>
@@ -132,7 +129,9 @@ export function PulseHistoryDrawer(props: PulseHistoryDrawerProps) {
                             </span>
                           </div>
                           <span class="text-xs text-text-tertiary">
-                            #{run.attemptNumber}
+                            {run.attemptNumber === 0
+                              ? 'Manual'
+                              : `#${run.attemptNumber}`}
                           </span>
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-xs text-text-secondary">
