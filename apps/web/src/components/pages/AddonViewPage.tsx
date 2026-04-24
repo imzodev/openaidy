@@ -46,6 +46,20 @@ export function AddonViewPage(props: Props) {
     );
   };
 
+  // Allowlist of paths the addon proxy may forward (method + path regex)
+  const ALLOWED_ROUTES: { methods: string[]; pattern: RegExp }[] = [
+    { methods: ['GET'], pattern: /^\/sessions$/ },
+    { methods: ['GET', 'POST'], pattern: /^\/sessions\/[^/]+$/ },
+    { methods: ['GET'], pattern: /^\/agents$/ },
+    { methods: ['GET'], pattern: /^\/config$/ },
+    { methods: ['GET', 'POST', 'DELETE'], pattern: /^\/api\/addon-proxy\// },
+  ];
+
+  const isAllowed = (method: string, path: string) =>
+    ALLOWED_ROUTES.some(
+      (r) => r.methods.includes(method.toUpperCase()) && r.pattern.test(path),
+    );
+
   // Bridge: proxy API requests from the iframe to the real backend
   const handleMessage = async (event: MessageEvent) => {
     const msg = event.data as Record<string, unknown>;
@@ -64,6 +78,21 @@ export function AddonViewPage(props: Props) {
       path: string;
       body?: unknown;
     };
+
+    // Reject requests to paths not in the allowlist
+    if (!isAllowed(method ?? 'GET', reqPath)) {
+      iframeRef?.contentWindow?.postMessage(
+        {
+          type: 'OPENAIDY_RESPONSE',
+          requestId,
+          ok: false,
+          status: 403,
+          error: `Addon proxy: ${method} ${reqPath} is not allowed`,
+        },
+        '*',
+      );
+      return;
+    }
 
     const token = resolveToken();
     try {
