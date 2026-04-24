@@ -223,12 +223,6 @@ export const version = '1.0.0';
       display: flex;
       flex-direction: column;
     }
-    header {
-      padding: 20px 24px 12px;
-      border-bottom: 1px solid #1e293b;
-    }
-    header h1 { font-size: 1.25rem; font-weight: 600; color: #f1f5f9; }
-    header p { font-size: 0.813rem; color: #64748b; margin-top: 2px; }
     main { flex: 1; padding: 24px; }
     .card {
       background: #1e293b;
@@ -252,10 +246,6 @@ export const version = '1.0.0';
   </style>
 </head>
 <body>
-  <header>
-    <h1>${name}</h1>
-    <p>OpenAidy Addon &middot; v1.0.0</p>
-  </header>
   <main>
     <div class="card">
       <h2>Welcome to ${name}</h2>
