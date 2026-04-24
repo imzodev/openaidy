@@ -15,8 +15,12 @@
 (function (global) {
   'use strict';
 
+  var SDK_VERSION = '0.2.0';
+  console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
+
   let _token = null;
   let _apiBase = null;
+  let _parentOrigin = null;
   let _ready = false;
   const _pendingRequests = new Map();
   const _readyCallbacks = [];
@@ -29,6 +33,7 @@
     if (msg.type === 'OPENAIDY_INIT') {
       _token = msg.token ?? null;
       _apiBase = msg.apiBase ?? null;
+      _parentOrigin = msg.parentOrigin ?? null;
       _ready = true;
       _readyCallbacks.forEach(function (cb) {
         try {
@@ -67,7 +72,7 @@
       _pendingRequests.set(requestId, { resolve, reject });
       window.parent.postMessage(
         { type: 'OPENAIDY_REQUEST', requestId, method, path, body },
-        _apiBase ?? '*',
+        _parentOrigin ?? '*',
       );
       // Timeout after 15s
       setTimeout(function () {
@@ -95,20 +100,20 @@
 
     // ── Sessions ──────────────────────────────────────────────────────────
     listSessions: function () {
-      return request('GET', '/api/sessions');
+      return request('GET', '/sessions');
     },
     createSession: function (title) {
-      return request('POST', '/api/sessions', {
+      return request('POST', '/sessions', {
         title: title ?? 'New Session',
       });
     },
     getSession: function (sessionId) {
-      return request('GET', '/api/sessions/' + sessionId);
+      return request('GET', '/sessions/' + sessionId);
     },
 
     // ── Agents ────────────────────────────────────────────────────────────
     listAgents: function () {
-      return request('GET', '/api/agents');
+      return request('GET', '/agents');
     },
     invokeAgent: function (agentId, input, context) {
       return request('POST', '/api/addon-proxy/agents/' + agentId + '/invoke', {
@@ -119,7 +124,7 @@
 
     // ── Config ────────────────────────────────────────────────────────────
     getConfig: function () {
-      return request('GET', '/api/config');
+      return request('GET', '/config');
     },
 
     // ── Raw request (escape hatch) ────────────────────────────────────────

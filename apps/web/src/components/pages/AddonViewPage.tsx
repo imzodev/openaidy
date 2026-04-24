@@ -33,7 +33,12 @@ export function AddonViewPage(props: Props) {
   const handleLoad = () => {
     const token = resolveToken();
     iframeRef?.contentWindow?.postMessage(
-      { type: 'OPENAIDY_INIT', token, apiBase: SERVER_BASE },
+      {
+        type: 'OPENAIDY_INIT',
+        token,
+        apiBase: SERVER_BASE,
+        parentOrigin: window.location.origin,
+      },
       SERVER_BASE,
     );
   };

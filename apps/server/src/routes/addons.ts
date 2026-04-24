@@ -270,7 +270,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     return reply
       .header('Content-Type', 'application/javascript')
       .header('Access-Control-Allow-Origin', '*')
-      .header('Cache-Control', 'public, max-age=3600')
+      .header('Cache-Control', 'no-cache, no-store, must-revalidate')
       .send(fs.readFileSync(sdkPath));
   });
 
