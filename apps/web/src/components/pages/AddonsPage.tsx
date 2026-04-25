@@ -11,6 +11,7 @@ import { Layout } from './Layout';
 import {
   listAddons,
   enableAddon,
+  refreshAddonToken,
   disableAddon,
   uninstallAddon,
   type AddonRecord,
@@ -62,6 +63,27 @@ export function AddonsPage(props: AddonsPageProps) {
     try {
       const data = await listAddons(token());
       setAddons(data.addons);
+
+      // Refresh tokens for enabled addons that have no stored token.
+      // This covers server restarts and localStorage being cleared.
+      const enabledWithoutToken = data.addons.filter(
+        (a) =>
+          a.status === 'enabled' &&
+          !localStorage.getItem(`openaidy_addon_token:${a.addonId}`),
+      );
+      await Promise.all(
+        enabledWithoutToken.map(async (addon) => {
+          try {
+            const result = await refreshAddonToken(token(), addon.addonId);
+            localStorage.setItem(
+              `openaidy_addon_token:${addon.addonId}`,
+              result.accessToken,
+            );
+          } catch {
+            // Non-fatal: will be retried on the next load
+          }
+        }),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load addons');
     } finally {
@@ -82,6 +104,10 @@ export function AddonsPage(props: AddonsPageProps) {
         addon.addonId,
         addon.permissions ?? [],
       );
+      localStorage.setItem(
+        `openaidy_addon_token:${addon.addonId}`,
+        result.accessToken,
+      );
       setAddons((prev) =>
         prev.map((a) => (a.id === addon.id ? result.addon : a)),
       );
@@ -100,6 +126,7 @@ export function AddonsPage(props: AddonsPageProps) {
     setActionError(null);
     try {
       const result = await disableAddon(token(), addon.addonId);
+      localStorage.removeItem(`openaidy_addon_token:${addon.addonId}`);
       setAddons((prev) =>
         prev.map((a) => (a.id === addon.id ? result.addon : a)),
       );
@@ -119,6 +146,7 @@ export function AddonsPage(props: AddonsPageProps) {
     setActionError(null);
     try {
       await uninstallAddon(token(), addon.addonId);
+      localStorage.removeItem(`openaidy_addon_token:${addon.addonId}`);
       setAddons((prev) => prev.filter((a) => a.id !== addon.id));
       props.onAddonChange?.();
     } catch (err) {

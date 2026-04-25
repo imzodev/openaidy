@@ -1,18 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
-import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { AddonService } from '../addons/service';
+import type { AddonProxyRoutesOptions, InvokeAgentBody } from './types';
 import { createAddonProxyService } from '../addons/proxy';
-
-export type AddonProxyRoutesOptions = {
-  addonService: AddonService;
-  authMiddleware: AuthMiddleware;
-  internalApiBaseUrl: string;
-};
-
-interface InvokeAgentBody {
-  input: string;
-  context?: Record<string, unknown>;
-}
+import { AddonProxyAgentService } from './proxy-agent-service';
 
 // Extend FastifyRequest to include addon context
 declare module 'fastify' {
@@ -32,6 +21,10 @@ export const addonProxyRoutes: FastifyPluginAsync<
     opts.addonService,
     opts.internalApiBaseUrl,
   );
+
+  const addonAgentService = opts.sessionService
+    ? new AddonProxyAgentService(opts.sessionService)
+    : undefined;
 
   // Middleware to validate addon token
   const validateAddonToken = async (
@@ -70,7 +63,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const { agentId } = request.params;
-      const { input, context } = request.body;
+      const { input, context: _context } = request.body;
 
       const addon = await opts.addonService.getAddon(request.addonId!);
 
@@ -88,12 +81,10 @@ export const addonProxyRoutes: FastifyPluginAsync<
       }
 
       if (!proxyService.hasAgentAccess(addon, agentId)) {
-        return reply
-          .code(403)
-          .send({
-            error: 'AGENT_NOT_ALLOWED',
-            message: `Access to agent ${agentId} not allowed`,
-          });
+        return reply.code(403).send({
+          error: 'AGENT_NOT_ALLOWED',
+          message: `Access to agent ${agentId} not allowed`,
+        });
       }
 
       await proxyService.recordUsage(
@@ -101,13 +92,43 @@ export const addonProxyRoutes: FastifyPluginAsync<
         `/agents/${agentId}/invoke`,
       );
 
-      return reply.send({
-        success: true,
-        agentId,
-        input,
-        context,
-        message: 'Agent invocation placeholder',
-      });
+      if (!addonAgentService) {
+        return reply.send({
+          success: true,
+          agentId,
+          input,
+          message: 'Agent invocation not available (no session service)',
+        });
+      }
+
+      try {
+        const result = await addonAgentService.invoke(
+          request.addonId!,
+          agentId,
+          input,
+        );
+
+        if (!result.ok) {
+          return reply.code(502).send({
+            error: 'AGENT_ERROR',
+            message: result.error.message,
+            code: result.error.code,
+          });
+        }
+
+        return reply.send({
+          success: true,
+          agentId,
+          sessionId: result.sessionId,
+          message: result.message,
+        });
+      } catch (err) {
+        return reply.code(502).send({
+          error: 'AGENT_INVOCATION_FAILED',
+          message:
+            err instanceof Error ? err.message : 'Agent invocation failed',
+        });
+      }
     },
   );
 
@@ -162,13 +183,11 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
       await proxyService.recordUsage(request.addonId!, '/sessions');
 
-      return reply
-        .code(201)
-        .send({
-          id: 'placeholder',
-          title: request.body.title ?? 'New Session',
-          message: 'Session creation placeholder',
-        });
+      return reply.code(201).send({
+        id: 'placeholder',
+        title: request.body.title ?? 'New Session',
+        message: 'Session creation placeholder',
+      });
     },
   );
 

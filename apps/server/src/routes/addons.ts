@@ -141,82 +141,94 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     return reply.send(result);
   });
 
-  // GET /api/addons/:id - Get addon details
+  // GET /api/addons/:addonId - Get addon details
   app.get<{
-    Params: { id: string };
+    Params: { addonId: string };
     Reply: unknown;
-  }>('/api/addons/:id', { preHandler: adminAuth }, async (request, reply) => {
-    const addon = await addonService.getAddon(request.params.id);
+  }>(
+    '/api/addons/:addonId',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      const addon = await addonService.getAddon(request.params.addonId);
 
-    if (!addon) {
-      return reply.code(404).send({
-        error: 'NOT_FOUND',
-        message: 'Addon not found',
-      });
-    }
-
-    return reply.send({ addon });
-  });
-
-  // PUT /api/addons/:id - Update addon configuration
-  app.put<{
-    Params: { id: string };
-    Body: UpdateConfigBody;
-    Reply: unknown;
-  }>('/api/addons/:id', { preHandler: adminAuth }, async (request, reply) => {
-    try {
-      const addon = await addonService.updateAddonConfig({
-        addonId: request.params.id,
-        config: request.body.config || {},
-        updatedBy: 'admin',
-      });
+      if (!addon) {
+        return reply.code(404).send({
+          error: 'NOT_FOUND',
+          message: 'Addon not found',
+        });
+      }
 
       return reply.send({ addon });
-    } catch (error: unknown) {
-      const err = error as { code?: string; message?: string };
-      if (err.code === 'ADDON_NOT_FOUND') {
-        return reply.code(404).send({
-          error: 'NOT_FOUND',
-          message: err.message ?? 'Addon not found',
-        });
-      }
-      if (err.code === 'INVALID_CONFIG') {
-        return reply.code(400).send({
-          error: 'INVALID_CONFIG',
-          message: err.message ?? 'Invalid configuration',
-        });
-      }
-      throw error;
-    }
-  });
+    },
+  );
 
-  // DELETE /api/addons/:id - Uninstall addon
+  // PUT /api/addons/:addonId - Update addon configuration
+  app.put<{
+    Params: { addonId: string };
+    Body: UpdateConfigBody;
+    Reply: unknown;
+  }>(
+    '/api/addons/:addonId',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      try {
+        const addon = await addonService.updateAddonConfig({
+          addonId: request.params.addonId,
+          config: request.body.config || {},
+          updatedBy: 'admin',
+        });
+
+        return reply.send({ addon });
+      } catch (error: unknown) {
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'ADDON_NOT_FOUND') {
+          return reply.code(404).send({
+            error: 'NOT_FOUND',
+            message: err.message ?? 'Addon not found',
+          });
+        }
+        if (err.code === 'INVALID_CONFIG') {
+          return reply.code(400).send({
+            error: 'INVALID_CONFIG',
+            message: err.message ?? 'Invalid configuration',
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // DELETE /api/addons/:addonId - Uninstall addon
   app.delete<{
-    Params: { id: string };
+    Params: { addonId: string };
     Reply: void | ErrorResponse;
-  }>('/api/addons/:id', { preHandler: adminAuth }, async (request, reply) => {
-    try {
-      await addonService.uninstallAddon(request.params.id, 'admin');
-      return reply.code(204).send();
-    } catch (error: unknown) {
-      const err = error as { code?: string; message?: string };
-      if (err.code === 'ADDON_NOT_FOUND') {
-        return reply.code(404).send({
-          error: 'NOT_FOUND',
-          message: err.message ?? 'Addon not found',
-        });
+  }>(
+    '/api/addons/:addonId',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      try {
+        await addonService.uninstallAddon(request.params.addonId, 'admin');
+        return reply.code(204).send();
+      } catch (error: unknown) {
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'ADDON_NOT_FOUND') {
+          return reply.code(404).send({
+            error: 'NOT_FOUND',
+            message: err.message ?? 'Addon not found',
+          });
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+  );
 
-  // POST /api/addons/:id/enable - Enable addon with permissions
+  // POST /api/addons/:addonId/enable - Enable addon with permissions
   app.post<{
-    Params: { id: string };
+    Params: { addonId: string };
     Body: EnableAddonBody;
     Reply: unknown;
   }>(
-    '/api/addons/:id/enable',
+    '/api/addons/:addonId/enable',
     { preHandler: adminAuth },
     async (request, reply) => {
       try {
@@ -230,7 +242,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         }
 
         const result = await addonService.enableAddon({
-          addonId: request.params.id,
+          addonId: request.params.addonId,
           approvedPermissions,
           approvedBy: 'admin',
         });
@@ -254,6 +266,35 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
           return reply.code(409).send({
             error: 'ALREADY_ENABLED',
             message: err.message ?? 'Addon is already enabled',
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  // POST /api/addons/:addonId/refresh-token - Re-issue an access token for an enabled addon
+  app.post<{ Params: { addonId: string }; Reply: unknown }>(
+    '/api/addons/:addonId/refresh-token',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      try {
+        const result = await addonService.refreshAddonToken(
+          request.params.addonId,
+        );
+        return reply.send(result);
+      } catch (error: unknown) {
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'ADDON_NOT_FOUND') {
+          return reply.code(404).send({
+            error: 'NOT_FOUND',
+            message: err.message ?? 'Addon not found',
+          });
+        }
+        if (err.code === 'ADDON_NOT_ENABLED') {
+          return reply.code(409).send({
+            error: 'NOT_ENABLED',
+            message: err.message ?? 'Addon is not enabled',
           });
         }
         throw error;
@@ -329,17 +370,17 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     },
   );
 
-  // POST /api/addons/:id/disable - Disable addon
+  // POST /api/addons/:addonId/disable - Disable addon
   app.post<{
-    Params: { id: string };
+    Params: { addonId: string };
     Reply: unknown;
   }>(
-    '/api/addons/:id/disable',
+    '/api/addons/:addonId/disable',
     { preHandler: adminAuth },
     async (request, reply) => {
       try {
         const addon = await addonService.disableAddon({
-          addonId: request.params.id,
+          addonId: request.params.addonId,
           disabledBy: 'admin',
         });
 

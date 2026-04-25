@@ -5,10 +5,74 @@
  */
 
 import type { AddonManifest } from '@openaidy/shared-types';
+import type { AuthMiddleware } from '../websocket/middleware/auth';
+import type { SessionMessageService } from '../sessions/service';
 
 // Forward declaration to avoid circular dependency
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AddonsRepository = any;
+
+/**
+ * Options for addon proxy routes
+ */
+export interface AddonProxyRoutesOptions {
+  addonService: import('./service').AddonService;
+  authMiddleware: AuthMiddleware;
+  internalApiBaseUrl: string;
+  sessionService?: SessionMessageService;
+}
+
+/**
+ * Body for invoking an agent through the addon proxy
+ */
+export interface InvokeAgentBody {
+  input: string;
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Proxy request descriptor
+ */
+export interface ProxyRequest {
+  addonId: string;
+  permissions: string[];
+  method: string;
+  path: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Proxy response descriptor
+ */
+export interface ProxyResponse {
+  status: number;
+  body: unknown;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Proxy error descriptor
+ */
+export interface ProxyError {
+  error: string;
+  message: string;
+  code: string;
+}
+
+/**
+ * Proxy result (success or failure)
+ */
+export type ProxyResult =
+  | { success: true; response: ProxyResponse }
+  | { success: false; error: ProxyError };
+
+/**
+ * Result of an addon agent invocation
+ */
+export type AddonAgentInvokeResult =
+  | { ok: true; agentId: string; sessionId: string; message: string }
+  | { ok: false; error: { code: string; message: string } };
 
 /**
  * Options for creating an AddonService

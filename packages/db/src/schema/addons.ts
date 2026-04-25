@@ -27,7 +27,9 @@ export type AddonStatus = (typeof addonStatusEnum)[number];
 export const addons = pgTable(
   'addons',
   {
+    /** Opaque DB primary key (nanoid). Never exposed in URLs or tokens. Use for repository.update() / delete() / recordPermissionChange(). */
     id: text('id').primaryKey(),
+    /** Human-readable manifest identifier (e.g. "my-addon"). Used in all API routes, JWT tokens, localStorage keys, and filesystem paths. */
     addonId: text('addon_id').notNull().unique(),
     name: text('name').notNull(),
     version: text('version').notNull(),

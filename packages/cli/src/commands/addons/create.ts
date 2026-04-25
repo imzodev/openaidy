@@ -134,7 +134,7 @@ async function createBasicStructure(
       minVersion: '0.0.0',
     },
     entry: 'dist/index.js',
-    permissions: [],
+    permissions: ['agents.read', 'agents.invoke'],
     ui: {
       sidebar: {
         icon: 'box',
@@ -205,75 +205,206 @@ export const version = '1.0.0';
 
   fs.writeFileSync(path.join(projectPath, 'src', 'index.ts'), mainContent);
 
-  // Create the main UI page
-  const indexHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${name}</title>
-  <script src="http://localhost:3001/sdk/openaidy-sdk.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    main { flex: 1; padding: 24px; }
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 16px;
-    }
-    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; color: #f1f5f9; }
-    .card p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }
-    .badge {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 500;
-      background: #0ea5e9;
-      color: #fff;
-      margin-top: 10px;
-    }
-  </style>
-</head>
-<body>
-  <main>
-    <div class="card">
-      <h2>Welcome to ${name}</h2>
-      <p>This is your addon's main page. Edit <code>src/index.html</code> to build your UI, then run <code>pnpm openaidy addon build</code> to apply changes.</p>
-      <span class="badge" id="status">Connecting...</span>
-    </div>
-    <div class="card" id="data-card" style="display:none">
-      <h2>Sessions</h2>
-      <p id="sessions-output">Loading...</p>
-    </div>
-  </main>
-  <script>
-    OpenAidy.ready(async function(sdk) {
-      document.getElementById('status').textContent = 'Connected';
-      try {
-        const result = await sdk.listSessions();
-        const count = result.sessions ? result.sessions.length : 0;
-        document.getElementById('sessions-output').textContent = count + ' active session(s)';
-        document.getElementById('data-card').style.display = 'block';
-      } catch (e) {
-        document.getElementById('sessions-output').textContent = 'Error: ' + e.message;
-        document.getElementById('data-card').style.display = 'block';
-      }
-    });
-  </script>
-</body>
-</html>
-`;
+  // Build the HTML template in parts to avoid any escaped closing-tag fragility.
+  // The SDK URL is not hardcoded — it is loaded dynamically from the apiBase
+  // delivered by the parent frame in the OPENAIDY_INIT message.
+  const indexHtmlHead = [
+    '<!DOCTYPE html>',
+    '<html lang="en">',
+    '<head>',
+    '  <meta charset="UTF-8" />',
+    '  <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+    `  <title>${name}</title>`,
+    '  <style>',
+    '    * { box-sizing: border-box; margin: 0; padding: 0; }',
+    '    body {',
+    "      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
+    '      background: #0f172a;',
+    '      color: #e2e8f0;',
+    '      min-height: 100vh;',
+    '    }',
+    '    main { padding: 24px; display: flex; flex-direction: column; gap: 16px; }',
+    '    .card {',
+    '      background: #1e293b;',
+    '      border: 1px solid #334155;',
+    '      border-radius: 12px;',
+    '      padding: 20px;',
+    '    }',
+    '    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #f1f5f9; }',
+    '    .card p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }',
+    '    label {',
+    '      display: block;',
+    '      font-size: 0.813rem;',
+    '      font-weight: 500;',
+    '      color: #94a3b8;',
+    '      margin-bottom: 6px;',
+    '    }',
+    '    select, textarea {',
+    '      width: 100%;',
+    '      background: #0f172a;',
+    '      border: 1px solid #334155;',
+    '      border-radius: 8px;',
+    '      color: #e2e8f0;',
+    '      font-family: inherit;',
+    '      font-size: 0.875rem;',
+    '      padding: 10px 12px;',
+    '      outline: none;',
+    '      transition: border-color 0.15s;',
+    '    }',
+    '    select:focus, textarea:focus { border-color: #0ea5e9; }',
+    '    textarea { resize: vertical; min-height: 80px; }',
+    '    .field { margin-bottom: 14px; }',
+    '    .btn {',
+    '      display: inline-flex;',
+    '      align-items: center;',
+    '      gap: 6px;',
+    '      padding: 9px 18px;',
+    '      border: none;',
+    '      border-radius: 8px;',
+    '      font-size: 0.875rem;',
+    '      font-weight: 500;',
+    '      cursor: pointer;',
+    '      transition: opacity 0.15s;',
+    '      color: #fff;',
+    '      background: #0ea5e9;',
+    '    }',
+    '    .btn:disabled { opacity: 0.5; cursor: not-allowed; }',
+    '    .btn:hover:not(:disabled) { opacity: 0.9; }',
+    '    .response-box {',
+    '      margin-top: 14px;',
+    '      background: #0f172a;',
+    '      border: 1px solid #334155;',
+    '      border-radius: 8px;',
+    '      padding: 14px;',
+    '      font-size: 0.875rem;',
+    '      line-height: 1.6;',
+    '      color: #e2e8f0;',
+    '      white-space: pre-wrap;',
+    '      display: none;',
+    '    }',
+    '    .badge {',
+    '      display: inline-block;',
+    '      padding: 2px 10px;',
+    '      border-radius: 20px;',
+    '      font-size: 0.75rem;',
+    '      font-weight: 500;',
+    '      color: #fff;',
+    '      margin-top: 4px;',
+    '    }',
+    '    .badge-ok { background: #22c55e; }',
+    '    .badge-err { background: #ef4444; }',
+    '    .badge-wait { background: #0ea5e9; }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <main>',
+    '    <div class="card">',
+    '      <h2>Agent Runner</h2>',
+    "      <p>Select an agent, type a prompt, and send it. This demonstrates how addons communicate with OpenAidy's agent system.</p>",
+    '    </div>',
+    '',
+    '    <div class="card">',
+    '      <div class="field">',
+    '        <label for="agent-select">Agent</label>',
+    '        <select id="agent-select" disabled>',
+    '          <option value="">Loading agents...</option>',
+    '        </select>',
+    '      </div>',
+    '      <div class="field">',
+    '        <label for="prompt-input">Prompt</label>',
+    '        <textarea id="prompt-input" placeholder="Ask the agent something..." disabled></textarea>',
+    '      </div>',
+    '      <button class="btn" id="send-btn" disabled>Send</button>',
+    '      <div class="response-box" id="response-box"></div>',
+    '    </div>',
+    '  </main>',
+  ].join('\n');
+
+  // Inline script written as a plain string — no template literal escaping needed.
+  // The SDK is loaded dynamically from the apiBase sent by the parent in OPENAIDY_INIT,
+  // so the URL is never hardcoded in the file.
+  const inlineScript = [
+    "var agentSelect = document.getElementById('agent-select');",
+    "var promptInput = document.getElementById('prompt-input');",
+    "var sendBtn     = document.getElementById('send-btn');",
+    "var responseBox = document.getElementById('response-box');",
+    'var _sdk;',
+    '',
+    'function setResponse(text, type) {',
+    "  responseBox.style.display = 'block';",
+    "  responseBox.innerHTML = '';",
+    "  var badge = document.createElement('span');",
+    "  badge.className = 'badge ' + (type === 'error' ? 'badge-err' : type === 'wait' ? 'badge-wait' : 'badge-ok');",
+    "  badge.textContent = type === 'error' ? 'Error' : type === 'wait' ? 'Sending...' : 'Response';",
+    '  responseBox.appendChild(badge);',
+    "  var content = document.createElement('p');",
+    "  content.style.marginTop = '10px';",
+    '  content.textContent = text;',
+    '  responseBox.appendChild(content);',
+    '}',
+    '',
+    '// Load the SDK dynamically once the parent sends OPENAIDY_INIT with apiBase.',
+    '// This avoids hardcoding the server host/port in the addon HTML.',
+    "window.addEventListener('message', function onInit(event) {",
+    '  var msg = event.data;',
+    "  if (!msg || msg.type !== 'OPENAIDY_INIT') return;",
+    "  window.removeEventListener('message', onInit);",
+    "  var script = document.createElement('script');",
+    "  script.src = msg.apiBase + '/sdk/openaidy-sdk.js';",
+    '  script.onload = function() {',
+    "    window.dispatchEvent(new MessageEvent('message', { data: msg }));",
+    '    OpenAidy.ready(function(sdk) {',
+    '      _sdk = sdk;',
+    '      sdk.listAgents().then(function(result) {',
+    '        var agents = result.items || result.agents || result || [];',
+    "        agentSelect.innerHTML = '';",
+    '        if (agents.length === 0) {',
+    '          agentSelect.innerHTML = \'<option value="">No agents available</option>\';',
+    '        } else {',
+    '          agents.forEach(function(agent) {',
+    "            var opt = document.createElement('option');",
+    "            opt.value = agent.id || agent.agentId || '';",
+    "            opt.textContent = agent.name || agent.id || 'Unnamed';",
+    '            agentSelect.appendChild(opt);',
+    '          });',
+    '          agentSelect.disabled = false;',
+    '          promptInput.disabled = false;',
+    '          sendBtn.disabled = false;',
+    '        }',
+    '      }).catch(function(e) {',
+    '        agentSelect.innerHTML = \'<option value="">Failed to load agents</option>\';',
+    "        setResponse(e.message, 'error');",
+    '      });',
+    '    });',
+    '  };',
+    '  document.head.appendChild(script);',
+    '});',
+    '',
+    "sendBtn.addEventListener('click', function() {",
+    '  var agentId = agentSelect.value;',
+    '  var prompt  = promptInput.value.trim();',
+    '  if (!agentId || !prompt) return;',
+    '  sendBtn.disabled = true;',
+    "  setResponse('Waiting for agent response...', 'wait');",
+    '  _sdk.invokeAgent(agentId, prompt).then(function(result) {',
+    "    setResponse(result.message || JSON.stringify(result, null, 2), 'ok');",
+    '  }).catch(function(e) {',
+    "    setResponse(e.message, 'error');",
+    '  }).finally(function() {',
+    '    sendBtn.disabled = false;',
+    '  });',
+    '});',
+  ].join('\n');
+
+  const indexHtml = [
+    indexHtmlHead,
+    '  <script>',
+    inlineScript,
+    '  </script>',
+    '</body>',
+    '</html>',
+    '',
+  ].join('\n');
 
   fs.writeFileSync(path.join(projectPath, 'src', 'index.html'), indexHtml);
 

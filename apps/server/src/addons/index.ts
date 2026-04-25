@@ -14,6 +14,13 @@ export type {
   DisableAddonRequest,
   UpdateAddonConfigRequest,
   ListAddonsFilters,
+  AddonProxyRoutesOptions,
+  InvokeAgentBody,
+  ProxyRequest,
+  ProxyResponse,
+  ProxyError,
+  ProxyResult,
+  AddonAgentInvokeResult,
 } from './types.js';
 
 export { AddonServiceError, AddonErrorCodes } from './types.js';
@@ -36,15 +43,11 @@ export {
   validateAddonManifest,
 } from './manifest-validator.js';
 
+// Agent invocation via addon proxy
+export { AddonProxyAgentService } from './proxy-agent-service.js';
+
 // Proxy
-export {
-  AddonProxyService,
-  createAddonProxyService,
-  type ProxyRequest,
-  type ProxyResponse,
-  type ProxyError,
-  type ProxyResult,
-} from './proxy.js';
+export { AddonProxyService, createAddonProxyService } from './proxy.js';
 
 // Security - Proxy Security
 export {
@@ -99,4 +102,5 @@ export type {
 // Routes
 // Note: Routes are exported from the routes directory directly
 // import { addonRoutes, type AddonRoutesOptions } from '../routes/addons';
-// import { addonProxyRoutes, type AddonProxyRoutesOptions } from '../routes/proxy-routes';
+// import { addonProxyRoutes } from './proxy-routes';
+// import type { AddonProxyRoutesOptions } from './types';

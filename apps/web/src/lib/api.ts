@@ -835,10 +835,10 @@ export async function listAddons(
 
 export async function enableAddon(
   token: string,
-  id: string,
+  addonId: string,
   approvedPermissions: string[],
-): Promise<{ addon: AddonRecord }> {
-  const response = await fetch(`${API_BASE}/api/addons/${id}/enable`, {
+): Promise<{ addon: AddonRecord; accessToken: string }> {
+  const response = await fetch(`${API_BASE}/api/addons/${addonId}/enable`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
     body: JSON.stringify({ approvedPermissions }),
@@ -847,14 +847,35 @@ export async function enableAddon(
     const body = (await response.json()) as ApiError;
     throw new ApiRequestError(response.status, body);
   }
-  return response.json() as Promise<{ addon: AddonRecord }>;
+  return response.json() as Promise<{
+    addon: AddonRecord;
+    accessToken: string;
+  }>;
+}
+
+export async function refreshAddonToken(
+  token: string,
+  addonId: string,
+): Promise<{ accessToken: string }> {
+  const response = await fetch(
+    `${API_BASE}/api/addons/${addonId}/refresh-token`,
+    {
+      method: 'POST',
+      headers: authHeaders(token),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json()) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ accessToken: string }>;
 }
 
 export async function disableAddon(
   token: string,
-  id: string,
+  addonId: string,
 ): Promise<{ addon: AddonRecord }> {
-  const response = await fetch(`${API_BASE}/api/addons/${id}/disable`, {
+  const response = await fetch(`${API_BASE}/api/addons/${addonId}/disable`, {
     method: 'POST',
     headers: authHeaders(token),
   });
@@ -865,8 +886,11 @@ export async function disableAddon(
   return response.json() as Promise<{ addon: AddonRecord }>;
 }
 
-export async function uninstallAddon(token: string, id: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/addons/${id}`, {
+export async function uninstallAddon(
+  token: string,
+  addonId: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/addons/${addonId}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   });

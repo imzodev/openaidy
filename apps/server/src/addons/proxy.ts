@@ -7,31 +7,7 @@
 
 import type { AddonService } from './service';
 import type { Addon } from '@openaidy/db';
-
-export interface ProxyRequest {
-  addonId: string;
-  permissions: string[];
-  method: string;
-  path: string;
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-export interface ProxyResponse {
-  status: number;
-  body: unknown;
-  headers?: Record<string, string>;
-}
-
-export interface ProxyError {
-  error: string;
-  message: string;
-  code: string;
-}
-
-export type ProxyResult =
-  | { success: true; response: ProxyResponse }
-  | { success: false; error: ProxyError };
+import type { ProxyResult } from './types';
 
 /**
  * AddonProxyService
@@ -53,14 +29,30 @@ export class AddonProxyService {
   }
 
   /**
-   * Check if an addon has access to a specific agent
+   * Check if an addon has access to a specific agent.
+   *
+   * Two tiers, checked in order:
+   *   1. Unscoped: `agents.invoke`, `agents.*`, or `*` — access to all agents.
+   *   2. Scoped:   `agents.invoke:<agentId>`           — access to that agent only.
+   *
+   * Access is determined solely by the permissions the user approved at enable
+   * time. The manifest `agents` array declares agents the addon *provides*, not
+   * agents it may invoke, so it plays no role here.
    */
   hasAgentAccess(addon: Addon, agentId: string): boolean {
-    const manifest = addon.manifest as {
-      agents?: Array<{ id: string; required?: boolean }>;
-    };
-    if (!manifest.agents) return false;
-    return manifest.agents.some((a) => a.id === agentId);
+    const permissions = (addon.permissions as string[]) ?? [];
+
+    // Tier 1: unscoped — grants access to all agents
+    if (
+      permissions.includes('agents.invoke') ||
+      permissions.includes('agents.*') ||
+      permissions.includes('*')
+    ) {
+      return true;
+    }
+
+    // Tier 2: scoped — grants access to one specific agent
+    return permissions.includes(`agents.invoke:${agentId}`);
   }
 
   /**

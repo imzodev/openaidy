@@ -4,8 +4,7 @@
  * Core business logic for addon lifecycle management.
  */
 
-import * as jwt from 'jsonwebtoken';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import type { Addon } from '@openaidy/db';
 import {
   type AddonServiceOptions,
@@ -147,8 +146,11 @@ export class AddonService {
       );
     }
 
-    // Generate access token
-    const accessToken = this.generateAccessToken(addon.id, approvedPermissions);
+    // Generate access token (use addonId, not DB row id, for lookups)
+    const accessToken = this.generateAccessToken(
+      addon.addonId,
+      approvedPermissions,
+    );
 
     return {
       addon: updatedAddon,
@@ -289,44 +291,97 @@ export class AddonService {
   }
 
   /**
-   * Generate a JWT access token for an addon
+   * Re-issue an access token for an already-enabled addon.
+   *
+   * Useful when the client loses the token (e.g. localStorage cleared,
+   * different browser, or server restart re-keying).
+   */
+  async refreshAddonToken(addonId: string): Promise<{ accessToken: string }> {
+    const addon = await this.repository.findByAddonId(addonId);
+    if (!addon) {
+      throw createAddonNotFoundError(addonId);
+    }
+
+    if (addon.status !== 'enabled') {
+      throw new AddonServiceError(
+        'Addon is not enabled',
+        AddonErrorCodes.ADDON_NOT_ENABLED,
+      );
+    }
+
+    const accessToken = this.generateAccessToken(
+      addon.addonId,
+      (addon.permissions as string[]) ?? [],
+    );
+
+    return { accessToken };
+  }
+
+  /**
+   * Generate a JWT access token for an addon (HS256, matches AuthMiddleware).
    */
   private generateAccessToken(addonId: string, permissions: string[]): string {
-    const tokenId = randomBytes(16).toString('hex');
+    const now = Math.floor(Date.now() / 1000);
+    const exp = now + 30 * 24 * 60 * 60; // 30 days
     const payload = {
       type: 'addon',
       addonId,
       permissions,
-      jti: tokenId,
+      iat: now,
+      exp,
+      jti: randomBytes(16).toString('hex'),
     };
 
-    return jwt.sign(payload, this.jwtSecret, {
-      expiresIn: '30d',
-    });
+    const header = Buffer.from(
+      JSON.stringify({ alg: 'HS256', typ: 'JWT' }),
+    ).toString('base64url');
+    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = createHmac('sha256', this.jwtSecret)
+      .update(`${header}.${body}`)
+      .digest('base64url');
+
+    return `${header}.${body}.${signature}`;
   }
 
   /**
-   * Validate an access token and return its payload
+   * Validate an addon access token and return its payload.
    */
   validateAccessToken(token: string): {
     addonId: string;
     permissions: string[];
   } | null {
     try {
-      const payload = jwt.verify(token, this.jwtSecret) as {
-        type: string;
-        addonId: string;
-        permissions: string[];
-      };
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
 
-      if (payload.type !== 'addon') {
+      const [header, body, signature] = parts as [string, string, string];
+
+      const expectedSig = createHmac('sha256', this.jwtSecret)
+        .update(`${header}.${body}`)
+        .digest('base64url');
+
+      const provided = Buffer.from(signature, 'utf-8');
+      const expected = Buffer.from(expectedSig, 'utf-8');
+      if (
+        provided.length !== expected.length ||
+        !timingSafeEqual(provided, expected)
+      ) {
         return null;
       }
 
-      return {
-        addonId: payload.addonId,
-        permissions: payload.permissions,
+      const payload = JSON.parse(
+        Buffer.from(body, 'base64url').toString('utf-8'),
+      ) as {
+        type: string;
+        addonId: string;
+        permissions: string[];
+        exp: number;
       };
+
+      if (payload.type !== 'addon') return null;
+      if (payload.exp * 1000 < Date.now()) return null;
+
+      return { addonId: payload.addonId, permissions: payload.permissions };
     } catch {
       return null;
     }

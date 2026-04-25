@@ -103,7 +103,28 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    const token = resolveToken();
+    // Use addon-scoped token for addon-proxy routes, user token for everything else
+    const isAddonProxy = reqPath.startsWith('/api/addon-proxy/');
+    const addonToken = localStorage.getItem(
+      `openaidy_addon_token:${props.addon.addonId}`,
+    );
+
+    if (isAddonProxy && !addonToken) {
+      iframeRef?.contentWindow?.postMessage(
+        {
+          type: 'OPENAIDY_RESPONSE',
+          requestId,
+          ok: false,
+          status: 401,
+          error:
+            'Addon token not found. Disable and re-enable the addon to refresh it.',
+        },
+        '*',
+      );
+      return;
+    }
+
+    const token = isAddonProxy ? addonToken : resolveToken();
     try {
       const res = await fetch(`${SERVER_BASE}${reqPath}`, {
         method: method ?? 'GET',
