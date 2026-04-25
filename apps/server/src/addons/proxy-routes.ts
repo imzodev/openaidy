@@ -154,10 +154,12 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
       await proxyService.recordUsage(request.addonId!, '/sessions');
 
-      return reply.send({
-        sessions: [],
-        message: 'Session listing placeholder',
-      });
+      if (!opts.sessionService) {
+        return reply.send({ sessions: [] });
+      }
+
+      const sessions = await opts.sessionService.listSessions();
+      return reply.send({ sessions });
     },
   );
 
@@ -183,11 +185,17 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
       await proxyService.recordUsage(request.addonId!, '/sessions');
 
-      return reply.code(201).send({
-        id: 'placeholder',
-        title: request.body.title ?? 'New Session',
-        message: 'Session creation placeholder',
-      });
+      if (!opts.sessionService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Session service not available',
+        });
+      }
+
+      const session = await opts.sessionService.createSession(
+        request.body.title ?? 'New Session',
+      );
+      return reply.code(201).send(session);
     },
   );
 
