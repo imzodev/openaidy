@@ -157,7 +157,10 @@ export function TaskModal(props: TaskModalProps) {
         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
         onClick={props.onClose}
       >
-        <div class="bg-white dark:bg-gray-800 dark:border dark:border-gray-700 rounded-lg shadow-xl w-full max-w-lg">
+        <div
+          class="bg-white dark:bg-gray-800 dark:border dark:border-gray-700 rounded-lg shadow-xl w-full max-w-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
