@@ -80,13 +80,14 @@ export type AuthResult = {
  */
 export const CAPABILITIES = {
   // Session capabilities
+  SESSIONS_LIST: 'sessions.list',
   SESSIONS_READ: 'sessions.read',
   SESSIONS_WRITE: 'sessions.write',
   SESSIONS_STREAM: 'sessions.stream',
   SESSIONS_DELETE: 'sessions.delete',
 
   // Agent capabilities
-  AGENTS_READ: 'agents.read',
+  AGENTS_LIST: 'agents.list',
   AGENTS_INVOKE: 'agents.invoke',
 
   // Provider capabilities

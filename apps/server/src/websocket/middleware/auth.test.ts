@@ -535,6 +535,7 @@ describe('AuthMiddleware', () => {
 
 describe('CAPABILITIES', () => {
   it('should have session capabilities', () => {
+    expect(CAPABILITIES.SESSIONS_LIST).toBe('sessions.list');
     expect(CAPABILITIES.SESSIONS_READ).toBe('sessions.read');
     expect(CAPABILITIES.SESSIONS_WRITE).toBe('sessions.write');
     expect(CAPABILITIES.SESSIONS_STREAM).toBe('sessions.stream');
@@ -542,7 +543,7 @@ describe('CAPABILITIES', () => {
   });
 
   it('should have agent capabilities', () => {
-    expect(CAPABILITIES.AGENTS_READ).toBe('agents.read');
+    expect(CAPABILITIES.AGENTS_LIST).toBe('agents.list');
     expect(CAPABILITIES.AGENTS_INVOKE).toBe('agents.invoke');
   });
 

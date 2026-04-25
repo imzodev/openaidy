@@ -19,17 +19,18 @@ These permissions are fully functional today. Each one maps to a real SDK method
 
 ### Sessions
 
-| Permission       | SDK Method             | What It Does                 |
-| ---------------- | ---------------------- | ---------------------------- |
-| `sessions.read`  | `listSessions()`       | List all chat sessions       |
-| `sessions.read`  | `getSession(id)`       | Get a specific session by ID |
-| `sessions.write` | `createSession(title)` | Create a new chat session    |
+| Permission        | SDK Method             | What It Does                 |
+| ----------------- | ---------------------- | ---------------------------- |
+| `sessions.list`   | `listSessions()`       | List all chat sessions       |
+| `sessions.read`   | `getSession(id)`       | Get a specific session by ID |
+| `sessions.write`  | `createSession(title)` | Create a new chat session    |
+| `sessions.delete` | —                      | Delete a session             |
 
 ### Agents
 
 | Permission                | SDK Method                             | What It Does                           |
 | ------------------------- | -------------------------------------- | -------------------------------------- |
-| `agents.read`             | `listAgents()`                         | List all available agents              |
+| `agents.list`             | `listAgents()`                         | List all available agents              |
 | `agents.invoke`           | `invokeAgent(agentId, input, context)` | Send a prompt to any agent             |
 | `agents.invoke:<agentId>` | `invokeAgent(agentId, input, context)` | Send a prompt to a specific agent only |
 
@@ -60,13 +61,14 @@ These will be implemented in future releases as addon capabilities expand.
 
 Not every action applies to every resource. The table below shows which actions are valid for the currently implemented resources.
 
-| Action   | sessions                 | agents           | config         |
-| -------- | ------------------------ | ---------------- | -------------- |
-| `read`   | ✅ List and get sessions | ✅ List agents   | ✅ Read config |
-| `write`  | ✅ Create sessions       | —                | —              |
-| `delete` | —                        | —                | —              |
-| `invoke` | —                        | ✅ Invoke agents | —              |
-| `manage` | —                        | —                | —              |
+| Action   | sessions             | agents           | config         |
+| -------- | -------------------- | ---------------- | -------------- |
+| `list`   | ✅ List sessions     | ✅ List agents   | —              |
+| `read`   | ✅ Get session by ID | ✅ Get agent     | ✅ Read config |
+| `write`  | ✅ Create sessions   | —                | —              |
+| `delete` | ✅ Delete sessions   | —                | —              |
+| `invoke` | —                    | ✅ Invoke agents | —              |
+| `manage` | —                    | —                | —              |
 
 Actions marked with **—** are not implemented for that resource.
 
@@ -76,7 +78,7 @@ Actions marked with **—** are not implemented for that resource.
 
 ```json
 {
-  "permissions": ["sessions.read", "agents.read"]
+  "permissions": ["sessions.list", "agents.list"]
 }
 ```
 
@@ -87,9 +89,9 @@ Can list sessions and agents. Cannot create, modify, or invoke anything.
 ```json
 {
   "permissions": [
-    "sessions.read",
+    "sessions.list",
     "sessions.write",
-    "agents.read",
+    "agents.list",
     "agents.invoke"
   ]
 }
@@ -101,7 +103,7 @@ Can list sessions, create new sessions, list agents, and invoke any agent.
 
 ```json
 {
-  "permissions": ["sessions.read", "agents.invoke:price-analyzer"]
+  "permissions": ["sessions.list", "agents.invoke:price-analyzer"]
 }
 ```
 
@@ -152,7 +154,7 @@ Addon API access is restricted at four levels:
     "minVersion": "0.1.0"
   },
   "entry": "dist/index.js",
-  "permissions": ["sessions.read", "sessions.write", "agents.invoke:analyzer"],
+  "permissions": ["sessions.list", "sessions.write", "agents.invoke:analyzer"],
   "ui": {
     "sidebar": {
       "icon": "box",

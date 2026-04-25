@@ -32,7 +32,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
 
   app.addHook(
     'preHandler',
-    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+    requireAuth({ authMiddleware, requiredScope: 'sessions.list' }),
   );
 
   /**

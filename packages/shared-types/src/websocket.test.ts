@@ -438,10 +438,11 @@ describe('websocket types', () => {
 
   describe('WS_CAPABILITIES', () => {
     it('should have all expected capabilities', () => {
+      expect(WS_CAPABILITIES.SESSIONS_LIST).toBe('sessions.list');
       expect(WS_CAPABILITIES.SESSIONS_READ).toBe('sessions.read');
       expect(WS_CAPABILITIES.SESSIONS_WRITE).toBe('sessions.write');
       expect(WS_CAPABILITIES.SESSIONS_STREAM).toBe('sessions.stream');
-      expect(WS_CAPABILITIES.AGENTS_READ).toBe('agents.read');
+      expect(WS_CAPABILITIES.AGENTS_LIST).toBe('agents.list');
       expect(WS_CAPABILITIES.PROVIDERS_READ).toBe('providers.read');
       expect(WS_CAPABILITIES.NODE_INVOKE).toBe('node.invoke');
       expect(WS_CAPABILITIES.CONFIG_READ).toBe('config.read');

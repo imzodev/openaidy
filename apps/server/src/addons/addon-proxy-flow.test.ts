@@ -79,12 +79,12 @@ describe('AddonService token round-trip', () => {
       svc as unknown as {
         generateAccessToken: (id: string, perms: string[]) => string;
       }
-    ).generateAccessToken('my-addon', ['agents.read', 'agents.invoke']);
+    ).generateAccessToken('my-addon', ['agents.list', 'agents.invoke']);
 
     const result = svc.validateAccessToken(token);
     expect(result).not.toBeNull();
     expect(result!.addonId).toBe('my-addon');
-    expect(result!.permissions).toEqual(['agents.read', 'agents.invoke']);
+    expect(result!.permissions).toEqual(['agents.list', 'agents.invoke']);
   });
 
   it('rejects a token signed with the wrong secret', () => {
@@ -119,8 +119,8 @@ describe('AddonProxyService permission checks', () => {
   });
 
   it('hasPermission: exact match only', () => {
-    const addon = makeEnabledAddon('a', ['agents.read']);
-    expect(proxyService.hasPermission(addon, 'agents.read')).toBe(true);
+    const addon = makeEnabledAddon('a', ['agents.list']);
+    expect(proxyService.hasPermission(addon, 'agents.list')).toBe(true);
     expect(proxyService.hasPermission(addon, 'agents.invoke')).toBe(false);
   });
 
@@ -218,12 +218,10 @@ describe('AddonProxyAgentService', () => {
     assistantContent = 'Hello from agent',
   ): SessionMessageService {
     return {
-      createSession: vi
-        .fn()
-        .mockResolvedValue({
-          id: 'session-123',
-          title: 'addon:test-addon:agent-1',
-        }),
+      createSession: vi.fn().mockResolvedValue({
+        id: 'session-123',
+        title: 'addon:test-addon:agent-1',
+      }),
       submitMessage: vi.fn().mockResolvedValue({
         ok: true,
         assistantMessage: { content: assistantContent },
@@ -312,9 +310,9 @@ describe('Full addon → proxy → agent flow', () => {
       addonSvc as unknown as {
         generateAccessToken: (id: string, perms: string[]) => string;
       }
-    ).generateAccessToken('read-only-addon', ['agents.read']); // missing agents.invoke
+    ).generateAccessToken('read-only-addon', ['agents.list']); // missing agents.invoke
 
-    const addon = makeEnabledAddon('read-only-addon', ['agents.read']);
+    const addon = makeEnabledAddon('read-only-addon', ['agents.list']);
     vi.spyOn(addonSvc as never, 'getAddon' as never).mockResolvedValue(
       addon as never,
     );
@@ -334,10 +332,10 @@ describe('Full addon → proxy → agent flow', () => {
       addonSvc as unknown as {
         generateAccessToken: (id: string, perms: string[]) => string;
       }
-    ).generateAccessToken('my-addon', ['agents.read', 'agents.invoke']);
+    ).generateAccessToken('my-addon', ['agents.list', 'agents.invoke']);
 
     const addon = makeEnabledAddon('my-addon', [
-      'agents.read',
+      'agents.list',
       'agents.invoke',
     ]);
     vi.spyOn(addonSvc as never, 'getAddon' as never).mockResolvedValue(

@@ -291,7 +291,7 @@ describe('CodeValidator', () => {
   describe('validateManifest', () => {
     it('should pass valid manifest', () => {
       const manifest = createTestManifest({
-        permissions: ['agents.read'],
+        permissions: ['agents.list'],
       }) as unknown as Parameters<typeof validator.validateManifest>[0];
       const result = validator.validateManifest(manifest);
 

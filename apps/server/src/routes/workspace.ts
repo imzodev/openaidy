@@ -72,7 +72,7 @@ export const workspaceRoutes: FastifyPluginAsync<
 
   app.addHook(
     'preHandler',
-    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+    requireAuth({ authMiddleware, requiredScope: 'sessions.list' }),
   );
 
   const MAX_EDITABLE_FILE_BYTES = 1_000_000;

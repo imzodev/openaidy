@@ -145,7 +145,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
           .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
       }
 
-      const authResult = proxyService.authorize(addon, 'sessions.read');
+      const authResult = proxyService.authorize(addon, 'sessions.list');
       if (!authResult.authorized) {
         return reply
           .code(403)

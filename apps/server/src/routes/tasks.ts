@@ -65,7 +65,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
   app.addHook(
     'preHandler',
-    requireAuth({ authMiddleware, requiredScope: 'sessions.read' }),
+    requireAuth({ authMiddleware, requiredScope: 'sessions.list' }),
   );
 
   /**

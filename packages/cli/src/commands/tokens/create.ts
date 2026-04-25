@@ -79,20 +79,21 @@ Options:
 
 Available scopes:
   *                    Admin (all scopes)
-  sessions.read        Read sessions
-  sessions.write       Write sessions
-  sessions.stream      Stream sessions
+  sessions.list        List all sessions
+  sessions.read        Read a specific session
+  sessions.write       Create sessions / submit messages
+  sessions.stream      Stream session events
   sessions.delete      Delete sessions
-  agents.read          Read agents
+  agents.list          List available agents
   agents.invoke        Invoke agents
   providers.read       Read providers
   config.read          Read config
   config.write         Write config
 
 Examples:
-  pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"
+  pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"
   pnpm openaidy tokens create --name "Admin Key" --scopes "*"
-  pnpm openaidy tokens create --name "Temp" --scopes "sessions.read" --expires "2026-12-31"
+  pnpm openaidy tokens create --name "Temp" --scopes "sessions.list" --expires "2026-12-31"
 
 Exit Codes:
   0  Token created successfully

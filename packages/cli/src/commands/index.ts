@@ -137,7 +137,7 @@ registerGroup({
       description: 'Create a new access token',
       usage: 'openaidy tokens create --name <name> --scopes <scopes>',
       examples: [
-        'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"',
+        'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
         'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
       ],
     },
@@ -315,7 +315,7 @@ registerCommand(
     usage:
       'openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]',
     examples: [
-      'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.read,sessions.stream"',
+      'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
       'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
     ],
   },

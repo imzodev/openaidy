@@ -67,7 +67,7 @@ async function buildProxyApp(opts: {
 
   // Generate a token for the addon (private method accessed via cast)
   const permissions = (opts.addon?.permissions as string[]) ?? [
-    'sessions.read',
+    'sessions.list',
     'sessions.write',
   ];
   const addonId = opts.addon?.addonId ?? 'test-addon';
@@ -105,7 +105,7 @@ describe('GET /api/addon-proxy/sessions', () => {
 
   beforeEach(async () => {
     const setup = await buildProxyApp({
-      addon: makeEnabledAddon('test-addon', ['sessions.read']),
+      addon: makeEnabledAddon('test-addon', ['sessions.list']),
       sessionService: makeSessionService([
         { id: 's1', title: 'Session One' },
         { id: 's2', title: 'Session Two' },
@@ -132,9 +132,9 @@ describe('GET /api/addon-proxy/sessions', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('returns 403 when addon lacks sessions.read permission', async () => {
+  it('returns 403 when addon lacks sessions.list permission', async () => {
     const { app: restrictedApp, token: restrictedToken } = await buildProxyApp({
-      addon: makeEnabledAddon('test-addon', ['agents.invoke']), // no sessions.read
+      addon: makeEnabledAddon('test-addon', ['agents.invoke']), // no sessions.list
       sessionService: makeSessionService(),
     });
     const res = await restrictedApp.inject({
@@ -163,7 +163,7 @@ describe('GET /api/addon-proxy/sessions', () => {
 
   it('returns empty sessions array when no sessionService is wired', async () => {
     const { app: noSvcApp, token: noSvcToken } = await buildProxyApp({
-      addon: makeEnabledAddon('test-addon', ['sessions.read']),
+      addon: makeEnabledAddon('test-addon', ['sessions.list']),
       // no sessionService
     });
     const res = await noSvcApp.inject({
@@ -219,7 +219,7 @@ describe('POST /api/addon-proxy/sessions', () => {
 
   it('returns 403 when addon lacks sessions.write permission', async () => {
     const { app: restrictedApp, token: restrictedToken } = await buildProxyApp({
-      addon: makeEnabledAddon('test-addon', ['sessions.read']), // no sessions.write
+      addon: makeEnabledAddon('test-addon', ['sessions.list']), // no sessions.write
       sessionService: makeSessionService(),
     });
     const res = await restrictedApp.inject({

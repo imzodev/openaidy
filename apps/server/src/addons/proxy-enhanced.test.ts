@@ -13,7 +13,7 @@ vi.mock('./proxy', () => ({
     validateToken: vi.fn().mockResolvedValue({
       valid: true,
       addonId: 'mock-addon',
-      permissions: ['agents.invoke', 'sessions.read'],
+      permissions: ['agents.invoke', 'sessions.list'],
     }),
     hasAgentAccess: vi.fn().mockReturnValue(true),
     recordUsage: vi.fn(),

@@ -134,7 +134,7 @@ async function createBasicStructure(
       minVersion: '0.0.0',
     },
     entry: 'dist/index.js',
-    permissions: ['agents.read', 'agents.invoke'],
+    permissions: ['agents.list', 'agents.invoke'],
     ui: {
       sidebar: {
         icon: 'box',

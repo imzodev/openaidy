@@ -110,12 +110,12 @@ export type AddonConfigBlock = z.infer<typeof AddonConfigBlockSchema>;
 
 /**
  * Permission string format: resource.action or resource.action:scope
- * Examples: "sessions.read", "agents.invoke:price-analyzer", "config.write:pricing"
+ * Examples: "sessions.list", "agents.invoke:price-analyzer", "config.write:pricing"
  */
 export const AddonPermissionSchema = z
   .string()
   .regex(
-    /^([a-z][a-z0-9]*)\.(read|write|delete|invoke|manage|read:\S+|write:\S+|invoke:\S+)$/,
+    /^([a-z][a-z0-9]*)\.(list|read|write|delete|invoke|manage|list:\S+|read:\S+|write:\S+|invoke:\S+)$/,
     'Invalid permission format. Expected: resource.action or resource.action:scope',
   );
 
@@ -357,6 +357,7 @@ export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
  * Available permission actions
  */
 export const PERMISSION_ACTIONS = [
+  'list',
   'read',
   'write',
   'delete',

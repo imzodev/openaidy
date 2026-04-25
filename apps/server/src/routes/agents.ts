@@ -19,7 +19,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
 
   app.addHook(
     'preHandler',
-    requireAuth({ authMiddleware, requiredScope: 'agents.read' }),
+    requireAuth({ authMiddleware, requiredScope: 'agents.list' }),
   );
 
   /**
