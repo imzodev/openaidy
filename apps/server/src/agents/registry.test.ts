@@ -259,6 +259,153 @@ describe('AgentRegistry', () => {
       expect(registry.size).toBe(2);
     });
   });
+
+  describe('updateAgentTools', () => {
+    let configPath: string;
+
+    function writeConfig(agents: object[]): void {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          defaults: {
+            providerId: 'openai',
+            modelId: 'gpt-4',
+            agentId: 'agent1',
+          },
+          providers: [
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              enabled: true,
+              vendorFamily: 'openai-compatible',
+              models: [{ id: 'gpt-4' }],
+            },
+          ],
+          agents,
+        }),
+        'utf-8',
+      );
+    }
+
+    beforeEach(() => {
+      configPath = path.join(tempDir, 'openaidy.json');
+      writeConfig([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          tools: ['workspace_read'],
+        },
+      ]);
+    });
+
+    it('updates tools in memory and returns updated summary', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          tools: ['workspace_read'],
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentTools('agent1', [
+        'workspace_read',
+        'workspace_list',
+      ]);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.tools).toEqual([
+        'workspace_read',
+        'workspace_list',
+      ]);
+    });
+
+    it('persists tools to the config file on disk', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          tools: ['workspace_read'],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentTools('agent1', [
+        'workspace_read',
+        'workspace_write',
+      ]);
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; tools?: string[] }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent?.tools).toEqual(['workspace_read', 'workspace_write']);
+    });
+
+    it('removes the tools key from the config file when clearing all tools', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          tools: ['workspace_read'],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentTools('agent1', []);
+
+      expect(registry.getAgent('agent1')?.tools).toBeUndefined();
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; tools?: string[] }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent).not.toHaveProperty('tools');
+    });
+
+    it('returns undefined for an unknown agent id', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([]);
+
+      const result = registry.updateAgentTools('ghost', ['workspace_read']);
+      expect(result).toBeUndefined();
+    });
+
+    it('updates memory but skips disk when configPath is not set', () => {
+      const registry = new AgentRegistry(); // no configPath
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentTools('agent1', ['workspace_list']);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.tools).toEqual(['workspace_list']);
+      // Config file in tempDir remains unchanged (only written in beforeEach for other tests)
+    });
+  });
 });
 
 describe('createAgentRegistry', () => {

@@ -97,6 +97,41 @@ describe('BuiltinToolRegistry', () => {
     });
   });
 
+  describe('getAllDefinitions', () => {
+    it('returns definitions for all registered tools', () => {
+      const registry = new BuiltinToolRegistry();
+      registry.register(makeTool('tool_a'));
+      registry.register(makeTool('tool_b'));
+
+      const defs = registry.getAllDefinitions();
+      expect(defs).toHaveLength(2);
+      expect(defs.map((d) => d.name)).toContain('tool_a');
+      expect(defs.map((d) => d.name)).toContain('tool_b');
+    });
+
+    it('returns empty array when no tools are registered', () => {
+      const registry = new BuiltinToolRegistry();
+      expect(registry.getAllDefinitions()).toEqual([]);
+    });
+
+    it('strips the executor — returned objects have no execute property', () => {
+      const registry = new BuiltinToolRegistry();
+      registry.register(makeTool('schema_only'));
+
+      const defs = registry.getAllDefinitions();
+      expect('execute' in defs[0]!).toBe(false);
+    });
+
+    it('includes name and description for each tool', () => {
+      const registry = new BuiltinToolRegistry();
+      registry.register(makeTool('my_tool'));
+
+      const def = registry.getAllDefinitions()[0]!;
+      expect(def.name).toBe('my_tool');
+      expect(def.description).toBe('Tool my_tool');
+    });
+  });
+
   describe('tool execution via get()', () => {
     it('executes a registered tool and returns its result', async () => {
       const registry = new BuiltinToolRegistry();

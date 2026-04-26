@@ -218,4 +218,62 @@ describe('Agent Routes', () => {
       expect(body.agentId).toBe('non-existent');
     });
   });
+
+  describe('PATCH /agents/:agentId/tools', () => {
+    it('should update tools for an agent and return updated summary', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/tools',
+        payload: { tools: ['workspace_read', 'workspace_list'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.id).toBe('default');
+    });
+
+    it('should accept an empty tools array to clear tools', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/tools',
+        payload: { tools: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('should return 400 when tools is missing from the body', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/tools',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error).toMatch(/tools must be an array/);
+    });
+
+    it('should return 400 when tools contains non-string values', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/tools',
+        payload: { tools: [1, 2, 3] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 404 for a non-existent agent', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/ghost/tools',
+        payload: { tools: ['workspace_read'] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error).toBe('Agent not found');
+    });
+  });
 });
