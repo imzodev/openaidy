@@ -1,5 +1,6 @@
 import type { AgentRegistry } from '../agents';
 import type { SessionMessageService } from '../sessions/service';
+import { createLogger } from '../lib/logger';
 import {
   type TasksRepository,
   type SubtasksRepository,
@@ -102,6 +103,7 @@ export class TaskService {
   private readonly taskAgentsRepo: TaskAgentsRepository;
   private readonly agents: AgentRegistry | undefined;
   private readonly sessionService: SessionMessageService | undefined;
+  private readonly logger = createLogger('TaskService');
 
   constructor(options: TaskServiceOptions) {
     this.tasksRepo = options.tasksRepo;
@@ -604,6 +606,12 @@ export class TaskService {
     taskId: string,
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
+      this.logger.warn(
+        'Task execution failed: session service is not configured',
+        {
+          taskId,
+        },
+      );
       return {
         ok: false,
         error: {
@@ -615,6 +623,7 @@ export class TaskService {
 
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
+      this.logger.warn('Task execution failed: task not found', { taskId });
       return {
         ok: false,
         error: {
@@ -632,12 +641,42 @@ export class TaskService {
     // Link session to task
     await this.tasksRepo.update(taskId, { sessionId: session.id });
 
+    // Update status to in_progress
+    await this.tasksRepo.updateStatus(taskId, 'in_progress');
+    this.logger.info('Task moved to in_progress', {
+      taskId,
+      status: 'in_progress',
+    });
+
     // Submit initial message with task description
-    await this.sessionService.submitMessage({
+    const executionResult = await this.sessionService.submitMessage({
       sessionId: session.id,
       content: task.description,
       role: 'user',
     });
+
+    if (!executionResult.ok) {
+      this.logger.warn(
+        'Task execution failed while submitting initial message',
+        {
+          taskId,
+          sessionId: session.id,
+          errorCode: executionResult.error.code,
+        },
+      );
+      return { ok: false, error: executionResult.error };
+    }
+
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+
+    if (subtasks.length === 0) {
+      await this.tasksRepo.updateStatus(taskId, 'review');
+      this.logger.info('Task moved to review', {
+        taskId,
+        status: 'review',
+        reason: 'no_subtasks',
+      });
+    }
 
     return { ok: true, data: { sessionId: session.id } };
   }
@@ -866,7 +905,12 @@ export class TaskService {
       subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
 
     if (allComplete) {
-      await this.tasksRepo.updateStatus(taskId, 'done');
+      await this.tasksRepo.updateStatus(taskId, 'review');
+      this.logger.info('Task moved to review', {
+        taskId,
+        status: 'review',
+        reason: 'all_subtasks_completed',
+      });
     }
   }
 }
