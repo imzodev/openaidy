@@ -484,6 +484,58 @@ describe('OpenAICompatibleProvider', () => {
       }
     });
 
+    it('should include tool_calls in the API request when the history contains an assistant message with toolCalls', async () => {
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_tc',
+          choices: [{ delta: { role: 'assistant' }, finish_reason: null }],
+        };
+        yield {
+          id: 'chatcmpl_tc',
+          choices: [{ delta: {}, finish_reason: 'stop' }],
+        };
+      })();
+
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+
+      const request: ModelRequest = {
+        model: 'gpt-4',
+        messages: [
+          { role: 'user', content: 'List files' },
+          {
+            role: 'assistant',
+            content: '',
+            toolCalls: [
+              { id: 'call_abc', name: 'workspace_list', arguments: '{}' },
+            ],
+          },
+          {
+            role: 'tool',
+            toolCallId: 'call_abc',
+            content: '[{"name":"file.txt"}]',
+          },
+        ],
+      };
+
+      for await (const _ of provider.invokeStream(request)) {
+        // consume stream
+      }
+
+      expect(mockCreateCompletion).toHaveBeenCalledOnce();
+      const call = mockCreateCompletion.mock.calls[0];
+      expect(call).toBeDefined();
+      const sentMessages = (
+        call![0] as {
+          messages: Array<{ role: string; tool_calls?: Array<{ id: string }> }>;
+        }
+      ).messages;
+      const assistantMsg = sentMessages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.tool_calls).toBeDefined();
+      expect(assistantMsg?.tool_calls?.[0]?.id).toBe('call_abc');
+    });
+
     it('should stream model output', async () => {
       // Mock async iterable for streaming
       const mockStream = (async function* () {

@@ -398,9 +398,7 @@ describe('AgentSchema with workspace', () => {
       model: 'openai/gpt-4o-mini',
       workspace: {
         enabled: true,
-        workspaces: [
-          { path: '/home/user/project' },
-        ],
+        workspaces: [{ path: '/home/user/project' }],
       },
     });
     expect(agent.workspace?.enabled).toBe(true);
@@ -478,5 +476,67 @@ describe('getAgentWorkspace', () => {
     });
     const workspace = getAgentWorkspace(agent);
     expect(workspace).toBeUndefined();
+  });
+});
+
+describe('AgentSchema builtin tools (tools field)', () => {
+  it('parses an agent with builtin workspace tool names', () => {
+    const agent = AgentSchema.parse({
+      id: 'tool-agent',
+      name: 'Tool Agent',
+      enabled: true,
+      systemPrompt: 'You are a helpful assistant.',
+      model: 'openai/gpt-4o',
+      tools: [
+        'workspace_read',
+        'workspace_list',
+        'workspace_write',
+        'workspace_delete',
+      ],
+    });
+    expect(agent.tools).toEqual([
+      'workspace_read',
+      'workspace_list',
+      'workspace_write',
+      'workspace_delete',
+    ]);
+  });
+
+  it('tools and mcpServers are independent — both can coexist', () => {
+    const agent = AgentSchema.parse({
+      id: 'full-agent',
+      name: 'Full Agent',
+      enabled: true,
+      systemPrompt: 'You are a helpful assistant.',
+      model: 'openai/gpt-4o',
+      tools: ['workspace_read', 'workspace_list'],
+      mcpServers: [{ id: 'github' }],
+    });
+    expect(agent.tools).toHaveLength(2);
+    expect(agent.mcpServers).toHaveLength(1);
+  });
+
+  it('tools defaults to undefined when not provided', () => {
+    const agent = AgentSchema.parse({
+      id: 'no-tools-agent',
+      name: 'No Tools',
+      enabled: true,
+      systemPrompt: 'You are a helpful assistant.',
+      model: 'openai/gpt-4o',
+    });
+    expect(agent.tools).toBeUndefined();
+  });
+
+  it('toAgentSummary includes tools field', () => {
+    const agent = AgentSchema.parse({
+      id: 'summary-agent',
+      name: 'Summary Agent',
+      enabled: true,
+      systemPrompt: 'You are helpful.',
+      model: 'openai/gpt-4o',
+      tools: ['workspace_read', 'workspace_write'],
+    });
+    const summary = toAgentSummary(agent);
+    expect(summary.tools).toEqual(['workspace_read', 'workspace_write']);
   });
 });
