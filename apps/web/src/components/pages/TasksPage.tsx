@@ -9,7 +9,13 @@ import { createSignal, Show, onMount } from 'solid-js';
 import { Layout } from './Layout';
 import { KanbanBoard } from '../tasks/KanbanBoard';
 import { TaskModal } from '../tasks/TaskModal';
-import { type Task, type TaskStatus } from '../../lib/api-tasks';
+import {
+  type Task,
+  type TaskStatus,
+  createTask,
+  updateTask,
+  type CreateTaskInput,
+} from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
 
 export function TasksPage() {
@@ -51,6 +57,27 @@ export function TasksPage() {
     setIsModalOpen(false);
     setSelectedTask(null);
     setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleSubmit = async (input: CreateTaskInput) => {
+    const task = selectedTask();
+    if (task) {
+      // Update existing task
+      const result = await updateTask(task.id, input);
+      if (result.ok) {
+        handleTaskUpdated(result.data);
+      } else {
+        throw new Error(result.error.message);
+      }
+    } else {
+      // Create new task
+      const result = await createTask(input);
+      if (result.ok) {
+        handleTaskCreated(result.data);
+      } else {
+        throw new Error(result.error.message);
+      }
+    }
   };
 
   const handleCloseModal = () => {
@@ -115,8 +142,7 @@ export function TasksPage() {
         onClose={handleCloseModal}
         task={selectedTask() || undefined}
         agents={agents()}
-        onTaskCreated={handleTaskCreated}
-        onTaskUpdated={handleTaskUpdated}
+        onSubmit={handleSubmit}
       />
     </Layout>
   );
