@@ -59,6 +59,18 @@ export class BuiltinToolRegistry {
   }
 
   /**
+   * Return all registered ToolDefinitions (schema only, no executor).
+   * Used by the /tools API endpoint to expose available tools to clients.
+   */
+  getAllDefinitions(): ToolDefinition[] {
+    return [...this.tools.values()].map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    }));
+  }
+
+  /**
    * All registered tool names (useful for validation / logging).
    */
   get registeredNames(): string[] {

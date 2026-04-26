@@ -8,7 +8,12 @@ import {
   onMount,
 } from 'solid-js';
 import { Bot, Folder, FileText, Wrench, Power, PowerOff } from 'lucide-solid';
-import { listAgents, type Agent } from '../../lib/api';
+import {
+  listAgents,
+  listBuiltinTools,
+  type Agent,
+  type BuiltinToolInfo,
+} from '../../lib/api';
 import {
   FileExplorer,
   WorkspaceEditor,
@@ -29,6 +34,9 @@ export function AgentsPage() {
     createSignal<WorkspaceFileInfo | null>(null);
   const [hasUnsavedWorkspaceChanges, setHasUnsavedWorkspaceChanges] =
     createSignal(false);
+  const [allBuiltinTools, setAllBuiltinTools] = createSignal<BuiltinToolInfo[]>(
+    [],
+  );
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
 
@@ -138,10 +146,14 @@ export function AgentsPage() {
 
   onMount(async () => {
     try {
-      const response = await listAgents();
-      setAgents(response.items);
-      if (response.items.length > 0) {
-        setSelectedAgentId(response.items[0].id);
+      const [agentsResponse, toolsResponse] = await Promise.all([
+        listAgents(),
+        listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
+      ]);
+      setAgents(agentsResponse.items);
+      setAllBuiltinTools(toolsResponse.items);
+      if (agentsResponse.items.length > 0) {
+        setSelectedAgentId(agentsResponse.items[0].id);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agents');
@@ -534,26 +546,60 @@ export function AgentsPage() {
 
                 {/* Tools Tab */}
                 <Show when={activeTab() === 'tools'}>
-                  <Show
-                    when={(selectedAgent()!.tools?.length ?? 0) > 0}
-                    fallback={
+                  <div class="space-y-4">
+                    <Show when={allBuiltinTools().length === 0}>
                       <div class="flex items-center justify-center h-32">
-                        <p class="text-text-tertiary">No tools configured</p>
+                        <p class="text-text-tertiary">
+                          No builtin tools available
+                        </p>
                       </div>
-                    }
-                  >
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <For each={selectedAgent()!.tools}>
-                        {(tool) => (
-                          <div class="p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                            <div class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {tool}
-                            </div>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                  </Show>
+                    </Show>
+                    <Show when={allBuiltinTools().length > 0}>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <For each={allBuiltinTools()}>
+                          {(tool) => {
+                            const isEnabled = () =>
+                              selectedAgent()!.tools?.includes(tool.name) ??
+                              false;
+                            return (
+                              <div
+                                class={`p-3 border rounded-lg flex items-start gap-3 transition-colors ${
+                                  isEnabled()
+                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10'
+                                    : 'border-gray-200 dark:border-gray-700 opacity-50'
+                                }`}
+                              >
+                                <div class="mt-0.5 flex-shrink-0">
+                                  <Wrench
+                                    class={`w-4 h-4 ${
+                                      isEnabled()
+                                        ? 'text-primary'
+                                        : 'text-gray-400 dark:text-gray-500'
+                                    }`}
+                                  />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                  <div class="flex items-center gap-2">
+                                    <span class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
+                                      {tool.name}
+                                    </span>
+                                    <Show when={isEnabled()}>
+                                      <span class="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
+                                        enabled
+                                      </span>
+                                    </Show>
+                                  </div>
+                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                    {tool.description}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
                 </Show>
               </div>
             </Show>

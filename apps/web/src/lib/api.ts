@@ -215,6 +215,27 @@ export async function listRuns(
 }
 
 /**
+ * Builtin (native) tool info returned by GET /tools
+ */
+export type BuiltinToolInfo = {
+  name: string;
+  description: string;
+};
+
+/**
+ * List all available builtin tools registered on the server
+ */
+export async function listBuiltinTools(): Promise<{
+  items: BuiltinToolInfo[];
+}> {
+  const response = await apiFetch(`${API_BASE}/tools`);
+  if (!response.ok) {
+    throw new Error(`Failed to list builtin tools: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
  * List all agents
  */
 export async function listAgents(): Promise<{ items: Agent[] }> {

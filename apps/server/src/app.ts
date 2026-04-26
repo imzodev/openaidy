@@ -49,6 +49,7 @@ import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService, WorkspaceService } from './workspace';
 import { createBuiltinToolRegistry } from './tools';
+import { toolRoutes } from './routes/tools';
 
 /**
  * Application services container
@@ -266,6 +267,12 @@ export async function buildApp() {
   // Register agent routes
   await app.register(agentRoutes, {
     agentRegistry: services.agents,
+    authMiddleware,
+  });
+
+  // Register builtin tool routes
+  await app.register(toolRoutes, {
+    builtinTools: builtinToolRegistry,
     authMiddleware,
   });
 
