@@ -15,7 +15,9 @@ import {
   createTask,
   updateTask,
   executeTask,
+  getTask,
   type CreateTaskInput,
+  type AgentRole,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
 
@@ -24,6 +26,9 @@ export function TasksPage() {
   const [error, setError] = createSignal<string | null>(null);
   const [isModalOpen, setIsModalOpen] = createSignal(false);
   const [selectedTask, setSelectedTask] = createSignal<Task | null>(null);
+  const [selectedTaskAgents, setSelectedTaskAgents] = createSignal<
+    Array<{ agentId: string; role?: AgentRole }>
+  >([]);
   const [agents, setAgents] = createSignal<Agent[]>([]);
   const [executingTasks, setExecutingTasks] = createSignal<Set<string>>(
     new Set(),
@@ -39,9 +44,24 @@ export function TasksPage() {
     }
   });
 
-  const handleTaskClick = (task: Task) => {
+  const handleTaskClick = async (task: Task) => {
     setSelectedTask(task);
+    setSelectedTaskAgents([]);
     setIsModalOpen(true);
+
+    try {
+      const result = await getTask(task.id);
+      if (result.ok) {
+        setSelectedTaskAgents(
+          result.data.agents.map((assignment) => ({
+            agentId: assignment.agentId,
+            role: assignment.role,
+          })),
+        );
+      }
+    } catch {
+      // Keep edit modal open even if agent assignments fail to load
+    }
   };
 
   const handleTaskStatusChange = async (
@@ -83,6 +103,7 @@ export function TasksPage() {
   const handleTaskUpdated = (_task: Task) => {
     setIsModalOpen(false);
     setSelectedTask(null);
+    setSelectedTaskAgents([]);
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -110,6 +131,7 @@ export function TasksPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedTask(null);
+    setSelectedTaskAgents([]);
   };
 
   return (
@@ -170,6 +192,7 @@ export function TasksPage() {
         isOpen={isModalOpen()}
         onClose={handleCloseModal}
         task={selectedTask() || undefined}
+        initialSelectedAgents={selectedTaskAgents()}
         agents={agents()}
         onSubmit={handleSubmit}
       />

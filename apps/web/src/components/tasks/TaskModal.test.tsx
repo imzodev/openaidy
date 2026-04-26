@@ -43,6 +43,32 @@ describe('TaskModal', () => {
       expect(submitButton).toBeTruthy();
     });
 
+    it('should preselect assigned agents in edit mode', async () => {
+      const existingTask = {
+        id: 'task-123',
+        title: 'Existing Task',
+        description: 'Task description',
+        status: 'backlog' as const,
+        priority: 'medium' as const,
+        planningEnabled: false,
+        planningStatus: null,
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01',
+      };
+
+      const { getByText } = render(() =>
+        TaskModal({
+          ...defaultProps,
+          task: existingTask,
+          initialSelectedAgents: [{ agentId: 'agent-1', role: 'primary' }],
+        }),
+      );
+
+      await waitFor(() => {
+        expect(getByText('Test Agent')).toBeTruthy();
+      });
+    });
+
     it('should show "Saving..." while submitting', async () => {
       // Create a delayed submit to keep it in loading state
       const delayedSubmit = vi.fn(

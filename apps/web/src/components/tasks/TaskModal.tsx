@@ -18,6 +18,7 @@ export type TaskModalProps = {
   onClose: () => void;
   onSubmit?: (input: CreateTaskInput) => Promise<void>;
   task?: Task; // For editing existing task
+  initialSelectedAgents?: SelectedAgent[];
   agents: Agent[];
   isLoading?: boolean;
   onTaskCreated?: (task: Task) => void;
@@ -49,7 +50,7 @@ export function TaskModal(props: TaskModalProps) {
   // Reset form when modal opens or task changes
   createEffect(
     on(
-      () => [props.isOpen, props.task],
+      () => [props.isOpen, props.task, props.initialSelectedAgents],
       () => {
         if (props.isOpen) {
           if (props.task) {
@@ -58,8 +59,7 @@ export function TaskModal(props: TaskModalProps) {
             setDescription(props.task.description);
             setPriority(props.task.priority);
             setPlanningEnabled(props.task.planningEnabled);
-            // Note: agents would need to be fetched separately for edit mode
-            setSelectedAgents([]);
+            setSelectedAgents(props.initialSelectedAgents ?? []);
           } else {
             // Create mode - reset form
             setTitle('');
