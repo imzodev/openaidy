@@ -23,17 +23,20 @@ export class TasksRepository {
     planningEnabled?: boolean;
   }): Promise<schema.Task> {
     const now = new Date();
-    const [task] = await this.db.insert(schema.tasks).values({
-      id: nanoid(),
-      title: input.title,
-      description: input.description,
-      status: 'backlog',
-      priority: input.priority ?? 'medium',
-      planningEnabled: input.planningEnabled ?? false,
-      planningStatus: input.planningEnabled ? 'pending' : null,
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const [task] = await this.db
+      .insert(schema.tasks)
+      .values({
+        id: nanoid(),
+        title: input.title,
+        description: input.description,
+        status: 'backlog',
+        priority: input.priority ?? 'medium',
+        planningEnabled: (input.planningEnabled ?? false) ? 1 : 0,
+        planningStatus: input.planningEnabled ? 'pending' : null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
     return task!;
   }
@@ -42,7 +45,8 @@ export class TasksRepository {
    * Find a task by ID
    */
   async findById(id: string): Promise<schema.Task | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.tasks)
       .where(eq(schema.tasks.id, id))
       .limit(1);
@@ -54,12 +58,14 @@ export class TasksRepository {
    */
   async list(status?: schema.TaskStatus): Promise<schema.Task[]> {
     if (status) {
-      return this.db.select()
+      return this.db
+        .select()
         .from(schema.tasks)
         .where(eq(schema.tasks.status, status))
         .orderBy(desc(schema.tasks.createdAt));
     }
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.tasks)
       .orderBy(desc(schema.tasks.createdAt));
   }
@@ -71,7 +77,8 @@ export class TasksRepository {
     if (statuses.length === 0) {
       return this.list();
     }
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.tasks)
       .where(inArray(schema.tasks.status, statuses))
       .orderBy(desc(schema.tasks.createdAt));
@@ -88,9 +95,10 @@ export class TasksRepository {
       priority?: schema.TaskPriority;
       planningEnabled?: boolean;
       sessionId?: string | null;
-    }
+    },
   ): Promise<schema.Task | null> {
-    const results = await this.db.update(schema.tasks)
+    const results = await this.db
+      .update(schema.tasks)
       .set({
         ...input,
         updatedAt: new Date(),
@@ -104,8 +112,12 @@ export class TasksRepository {
   /**
    * Update a task's status
    */
-  async updateStatus(id: string, status: schema.TaskStatus): Promise<schema.Task | null> {
-    const results = await this.db.update(schema.tasks)
+  async updateStatus(
+    id: string,
+    status: schema.TaskStatus,
+  ): Promise<schema.Task | null> {
+    const results = await this.db
+      .update(schema.tasks)
       .set({
         status,
         updatedAt: new Date(),
@@ -121,9 +133,10 @@ export class TasksRepository {
    */
   async updatePlanningStatus(
     id: string,
-    planningStatus: schema.PlanningStatus
+    planningStatus: schema.PlanningStatus,
   ): Promise<schema.Task | null> {
-    const results = await this.db.update(schema.tasks)
+    const results = await this.db
+      .update(schema.tasks)
       .set({
         planningStatus,
         updatedAt: new Date(),
@@ -138,7 +151,8 @@ export class TasksRepository {
    * Delete a task
    */
   async delete(id: string): Promise<schema.Task | null> {
-    const results = await this.db.delete(schema.tasks)
+    const results = await this.db
+      .delete(schema.tasks)
       .where(eq(schema.tasks.id, id))
       .returning();
 
