@@ -11,6 +11,7 @@ import { Bot, Folder, FileText, Wrench, Power, PowerOff } from 'lucide-solid';
 import {
   listAgents,
   listBuiltinTools,
+  updateAgentTools,
   type Agent,
   type BuiltinToolInfo,
 } from '../../lib/api';
@@ -36,6 +37,9 @@ export function AgentsPage() {
     createSignal(false);
   const [allBuiltinTools, setAllBuiltinTools] = createSignal<BuiltinToolInfo[]>(
     [],
+  );
+  const [toolsUpdating, setToolsUpdating] = createSignal<Set<string>>(
+    new Set(),
   );
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
@@ -161,6 +165,33 @@ export function AgentsPage() {
       setIsLoading(false);
     }
   });
+
+  const handleToggleTool = async (toolName: string) => {
+    const agent = selectedAgent();
+    if (!agent) return;
+
+    setToolsUpdating((prev) => new Set([...prev, toolName]));
+    try {
+      const currentTools = agent.tools ?? [];
+      const nextTools = currentTools.includes(toolName)
+        ? currentTools.filter((t) => t !== toolName)
+        : [...currentTools, toolName];
+
+      await updateAgentTools(agent.id, nextTools);
+
+      setAgents((prev) =>
+        prev.map((a) => (a.id === agent.id ? { ...a, tools: nextTools } : a)),
+      );
+    } catch {
+      // leave state unchanged on error
+    } finally {
+      setToolsUpdating((prev) => {
+        const next = new Set(prev);
+        next.delete(toolName);
+        return next;
+      });
+    }
+  };
 
   const getModelDisplay = (model: string) => {
     const parts = model.split('/');
@@ -561,13 +592,17 @@ export function AgentsPage() {
                             const isEnabled = () =>
                               selectedAgent()!.tools?.includes(tool.name) ??
                               false;
+                            const isUpdating = () =>
+                              toolsUpdating().has(tool.name);
                             return (
-                              <div
-                                class={`p-3 border rounded-lg flex items-start gap-3 transition-colors ${
+                              <button
+                                onClick={() => handleToggleTool(tool.name)}
+                                disabled={isUpdating()}
+                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
                                   isEnabled()
-                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10'
-                                    : 'border-gray-200 dark:border-gray-700 opacity-50'
-                                }`}
+                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                } ${isUpdating() ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
                               >
                                 <div class="mt-0.5 flex-shrink-0">
                                   <Wrench
@@ -579,21 +614,32 @@ export function AgentsPage() {
                                   />
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                  <div class="flex items-center gap-2">
+                                  <div class="flex items-center justify-between gap-2">
                                     <span class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
                                       {tool.name}
                                     </span>
-                                    <Show when={isEnabled()}>
-                                      <span class="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">
-                                        enabled
-                                      </span>
-                                    </Show>
+                                    {/* Toggle switch */}
+                                    <div
+                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                                        isEnabled()
+                                          ? 'bg-primary'
+                                          : 'bg-gray-200 dark:bg-gray-600'
+                                      }`}
+                                    >
+                                      <span
+                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                          isEnabled()
+                                            ? 'translate-x-4'
+                                            : 'translate-x-0'
+                                        }`}
+                                      />
+                                    </div>
                                   </div>
                                   <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                                     {tool.description}
                                   </p>
                                 </div>
-                              </div>
+                              </button>
                             );
                           }}
                         </For>

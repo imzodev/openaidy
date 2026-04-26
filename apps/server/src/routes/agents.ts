@@ -46,4 +46,33 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
 
     return agent;
   });
+
+  /**
+   * PATCH /agents/:agentId/tools
+   * Update the builtin tools list for an agent.
+   * Body: { tools: string[] }
+   */
+  app.patch('/agents/:agentId/tools', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const body = request.body as { tools?: unknown };
+
+    if (
+      !Array.isArray(body?.tools) ||
+      body.tools.some((t) => typeof t !== 'string')
+    ) {
+      reply.code(400);
+      return { error: 'Invalid request: tools must be an array of strings' };
+    }
+
+    const result = agentRegistry.updateAgentTools(
+      agentId,
+      body.tools as string[],
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+
+    return result;
+  });
 };

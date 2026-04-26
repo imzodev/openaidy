@@ -18,11 +18,13 @@ export type AgentRegistryOptions = {
   agentsDir?: string;
   /** Initial in-memory agents */
   initialAgents?: Agent[];
+  /** Path to the main openaidy.json config file used for persisting agent changes */
+  configPath?: string;
 };
 
 /**
  * Agent registry service
- * 
+ *
  * Loads, validates, caches, and exposes agents from JSON files.
  * Agents are stored in config/agents/*.json
  */
@@ -30,10 +32,13 @@ export class AgentRegistry {
   private readonly agentsDir: string;
   private readonly agents: Map<string, Agent> = new Map();
   private loaded = false;
+  private configPath: string | undefined;
 
   constructor(options: AgentRegistryOptions = {}) {
     // Default to config/agents relative to workspace root
-    this.agentsDir = options.agentsDir ?? path.join(process.cwd(), 'config', 'agents');
+    this.agentsDir =
+      options.agentsDir ?? path.join(process.cwd(), 'config', 'agents');
+    this.configPath = options.configPath;
 
     if (options.initialAgents) {
       this.replaceAll(options.initialAgents);
@@ -41,13 +46,21 @@ export class AgentRegistry {
   }
 
   /**
+   * Set (or update) the path to the main openaidy.json config file.
+   * Called by AppConfigService after it resolves the path.
+   */
+  setConfigPath(configPath: string): void {
+    this.configPath = configPath;
+  }
+
+  /**
    * Load all agents from the agents directory
-   * 
+   *
    * @throws Error if any agent file is invalid
    */
   load(): void {
     this.agents.clear();
-    
+
     // Check if directory exists
     if (!fs.existsSync(this.agentsDir)) {
       // No agents directory - that's okay, just no agents
@@ -55,27 +68,28 @@ export class AgentRegistry {
       return;
     }
 
-    const files = fs.readdirSync(this.agentsDir)
-      .filter(f => f.endsWith('.json'));
+    const files = fs
+      .readdirSync(this.agentsDir)
+      .filter((f) => f.endsWith('.json'));
 
     for (const file of files) {
       const filePath = path.join(this.agentsDir, file);
       const agent = this.loadAgentFile(filePath, file);
-      
+
       if ('errors' in agent) {
         // Validation error
         const errorMessages = agent.errors
-          .map(e => `  - ${e.path.join('.')}: ${e.message}`)
+          .map((e) => `  - ${e.path.join('.')}: ${e.message}`)
           .join('\n');
         throw new Error(
-          `Invalid agent file ${agent.filePath}:\n${errorMessages}`
+          `Invalid agent file ${agent.filePath}:\n${errorMessages}`,
         );
       }
 
       // Check for duplicate IDs
       if (this.agents.has(agent.id)) {
         throw new Error(
-          `Duplicate agent ID "${agent.id}" found in ${file} (already defined in another file)`
+          `Duplicate agent ID "${agent.id}" found in ${file} (already defined in another file)`,
         );
       }
 
@@ -88,20 +102,25 @@ export class AgentRegistry {
   /**
    * Load a single agent file
    */
-  private loadAgentFile(filePath: string, fileName: string): Agent | AgentValidationError {
+  private loadAgentFile(
+    filePath: string,
+    fileName: string,
+  ): Agent | AgentValidationError {
     const content = fs.readFileSync(filePath, 'utf-8');
-    
+
     let json: unknown;
     try {
       json = JSON.parse(content);
     } catch (e) {
       return {
         filePath,
-        errors: [{
-          code: 'invalid_json',
-          message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
-          path: [],
-        }],
+        errors: [
+          {
+            code: 'invalid_json',
+            message: `Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`,
+            path: [],
+          },
+        ],
       };
     }
 
@@ -110,7 +129,7 @@ export class AgentRegistry {
     if (!result.success) {
       return {
         filePath,
-        errors: result.error.errors.map(e => ({
+        errors: result.error.errors.map((e) => ({
           code: e.code,
           message: e.message,
           path: e.path,
@@ -124,11 +143,13 @@ export class AgentRegistry {
     if (!validateAgentIdMatch(agent.id, fileName)) {
       return {
         filePath,
-        errors: [{
-          code: 'custom',
-          message: `Agent ID "${agent.id}" does not match filename "${fileName}" (expected "${fileName.replace(/\.json$/, '')}")`,
-          path: ['id'],
-        }],
+        errors: [
+          {
+            code: 'custom',
+            message: `Agent ID "${agent.id}" does not match filename "${fileName}" (expected "${fileName.replace(/\.json$/, '')}")`,
+            path: ['id'],
+          },
+        ],
       };
     }
 
@@ -150,7 +171,7 @@ export class AgentRegistry {
   listAgents(): AgentSummary[] {
     this.ensureLoaded();
     return Array.from(this.agents.values())
-      .filter(a => a.enabled)
+      .filter((a) => a.enabled)
       .map(toAgentSummary);
   }
 
@@ -208,19 +229,69 @@ export class AgentRegistry {
       const result = AgentSchema.safeParse(agent);
       if (!result.success) {
         const errorMessages = result.error.errors
-          .map(e => `  - ${e.path.join('.')}: ${e.message}`)
+          .map((e) => `  - ${e.path.join('.')}: ${e.message}`)
           .join('\n');
-        throw new Error(`Invalid in-memory agent "${agent.id}":\n${errorMessages}`);
+        throw new Error(
+          `Invalid in-memory agent "${agent.id}":\n${errorMessages}`,
+        );
       }
 
       if (this.agents.has(result.data.id)) {
-        throw new Error(`Duplicate agent ID "${result.data.id}" found in in-memory config`);
+        throw new Error(
+          `Duplicate agent ID "${result.data.id}" found in in-memory config`,
+        );
       }
 
       this.agents.set(result.data.id, result.data);
     }
 
     this.loaded = true;
+  }
+
+  /**
+   * Update the builtin tools list for an agent.
+   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Returns the updated AgentSummary or undefined if the agent was not found.
+   */
+  updateAgentTools(agentId: string, tools: string[]): AgentSummary | undefined {
+    this.ensureLoaded();
+
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      return undefined;
+    }
+
+    const updated: Agent = {
+      ...agent,
+      tools: tools.length > 0 ? tools : undefined,
+    };
+    this.agents.set(agentId, updated);
+
+    if (this.configPath && fs.existsSync(this.configPath)) {
+      const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as {
+        agents?: Array<Record<string, unknown>>;
+      };
+
+      if (Array.isArray(raw.agents)) {
+        const idx = raw.agents.findIndex((a) => a['id'] === agentId);
+        if (idx !== -1) {
+          if (tools.length > 0) {
+            raw.agents[idx]!['tools'] = tools;
+          } else {
+            delete raw.agents[idx]!['tools'];
+          }
+          const tempPath = `${this.configPath}.tmp`;
+          fs.writeFileSync(
+            tempPath,
+            JSON.stringify(raw, null, 2) + '\n',
+            'utf-8',
+          );
+          fs.renameSync(tempPath, this.configPath);
+        }
+      }
+    }
+
+    return toAgentSummary(updated);
   }
 
   /**
@@ -235,7 +306,9 @@ export class AgentRegistry {
 /**
  * Create a default agent registry
  */
-export function createAgentRegistry(options?: AgentRegistryOptions): AgentRegistry {
+export function createAgentRegistry(
+  options?: AgentRegistryOptions,
+): AgentRegistry {
   const registry = new AgentRegistry(options);
   if (!options?.initialAgents) {
     registry.load();

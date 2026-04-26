@@ -135,7 +135,10 @@ export async function buildApp() {
 
   // Create shared services once per app instance
   const providerServices = createProviderServices();
-  const agentRegistry = createAgentRegistry({ initialAgents: [] });
+  const agentRegistry = createAgentRegistry({
+    initialAgents: [],
+    configPath: env.APP_CONFIG_PATH,
+  });
   const configService = createAppConfigService({
     configPath: env.APP_CONFIG_PATH,
     templatePath: env.APP_CONFIG_TEMPLATE_PATH,

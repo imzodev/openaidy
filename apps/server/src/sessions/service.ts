@@ -546,8 +546,12 @@ export class SessionMessageService {
           for (const tc of toolCalls) {
             let toolContent: string;
 
-            // Route to builtin (native) tool if it exists in the registry
-            const builtinTool = this.builtinTools?.get(tc.name);
+            // Route to builtin (native) tool only if it exists in the registry
+            // AND is still enabled for this agent (tools list may have changed mid-session).
+            const enabledTools = this.agents?.getAgent(agentId)?.tools ?? [];
+            const builtinTool = enabledTools.includes(tc.name)
+              ? this.builtinTools?.get(tc.name)
+              : undefined;
             if (builtinTool) {
               const builtinResult = await builtinTool
                 .execute(tc.arguments, { agentId })

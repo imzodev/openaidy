@@ -236,6 +236,24 @@ export async function listBuiltinTools(): Promise<{
 }
 
 /**
+ * Update the builtin tools list for an agent
+ */
+export async function updateAgentTools(
+  agentId: string,
+  tools: string[],
+): Promise<Agent> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}/tools`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tools }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update agent tools: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
  * List all agents
  */
 export async function listAgents(): Promise<{ items: Agent[] }> {
