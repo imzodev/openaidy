@@ -22,16 +22,19 @@
 
 import { BuiltinToolRegistry } from './registry';
 import { createWorkspaceTools } from './workspace';
+import { createExecTools } from './exec';
 import type { WorkspaceService } from '../workspace/service';
+import type { ExecService } from '../exec/service';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
+export { createExecTools } from './exec';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
+  exec?: ExecService;
   // Add more service dependencies here as new tool categories are introduced.
   // Example:
-  //   exec?: ExecService;
   //   webSearch?: WebSearchService;
 };
 
@@ -52,8 +55,13 @@ export function createBuiltinToolRegistry(
     registry.register(tool);
   }
 
+  if (deps.exec) {
+    for (const tool of createExecTools(deps.exec)) {
+      registry.register(tool);
+    }
+  }
+
   // To register future categories:
-  //   for (const tool of createExecTools(deps.exec)) registry.register(tool);
   //   for (const tool of createWebSearchTools(deps.webSearch)) registry.register(tool);
 
   return registry;

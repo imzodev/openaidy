@@ -48,6 +48,7 @@ import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService, WorkspaceService } from './workspace';
+import { createExecService } from './exec/service';
 import { createBuiltinToolRegistry } from './tools';
 import { toolRoutes } from './routes/tools';
 
@@ -155,9 +156,12 @@ export async function buildApp() {
     baseDir: env.WORKSPACE_BASE_DIR,
   });
 
+  const execService = createExecService();
+
   // Create builtin tool registry (native, in-process tools — separate from MCP)
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
+    exec: execService,
   });
 
   const sessionService = new SessionMessageService({
