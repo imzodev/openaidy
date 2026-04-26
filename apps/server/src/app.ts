@@ -48,6 +48,7 @@ import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService, WorkspaceService } from './workspace';
+import { createBuiltinToolRegistry } from './tools';
 
 /**
  * Application services container
@@ -145,10 +146,21 @@ export async function buildApp() {
   // Create MCP client service (before sessionService so it can be injected)
   const mcpService = createMcpClientService({ logger: app.log });
 
+  // Create workspace service before sessionService so it can be injected into builtin tools
+  const workspaceService = createWorkspaceService({
+    baseDir: env.WORKSPACE_BASE_DIR,
+  });
+
+  // Create builtin tool registry (native, in-process tools — separate from MCP)
+  const builtinToolRegistry = createBuiltinToolRegistry({
+    workspace: workspaceService,
+  });
+
   const sessionService = new SessionMessageService({
     providers: providerServices,
     agents: agentRegistry,
     mcp: mcpService,
+    builtinTools: builtinToolRegistry,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {
@@ -171,11 +183,6 @@ export async function buildApp() {
     : undefined;
 
   await bootstrapAdmin?.ensureToken();
-
-  // Create workspace service
-  const workspaceService = createWorkspaceService({
-    baseDir: env.WORKSPACE_BASE_DIR,
-  });
 
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo && sessionsRepo) {

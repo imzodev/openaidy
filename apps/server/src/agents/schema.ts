@@ -86,10 +86,13 @@ export const AgentSchema = z.object({
   // Optional fields
   description: z.string().optional(),
 
-  // MCP server references - tools from MCP servers
+  // MCP server references - tools from external MCP server processes
   mcpServers: z.array(McpServerRefSchema).optional(),
 
-  // Legacy/custom tools (non-MCP)
+  // Builtin (native, in-process) tool names to enable for this agent.
+  // These are separate from mcpServers — they run in-process, no external server needed.
+  // Available names are defined in apps/server/src/tools/.
+  // Example: ["workspace_read", "workspace_list", "workspace_write", "workspace_delete"]
   tools: z.array(z.string()).optional(),
 
   tags: z.array(z.string()).optional(),

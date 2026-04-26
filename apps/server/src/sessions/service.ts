@@ -1,6 +1,7 @@
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
+import type { BuiltinToolRegistry } from '../tools';
 import type {
   ToolDefinition,
   Message,
@@ -57,6 +58,7 @@ export class SessionMessageService {
   private readonly providers: ProviderServices;
   private readonly agents: AgentRegistry | undefined;
   private readonly mcp: McpClientService | undefined;
+  private readonly builtinTools: BuiltinToolRegistry | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
   private readonly messagesRepo: SessionMessagesStore | undefined;
@@ -66,6 +68,7 @@ export class SessionMessageService {
     this.providers = options.providers;
     this.agents = options.agents;
     this.mcp = options.mcp;
+    this.builtinTools = options.builtinTools;
     this.getDefaultAgentId = options.getDefaultAgentId;
 
     if (options.repositories) {
@@ -377,6 +380,8 @@ export class SessionMessageService {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
+      const msgMetadata = (m as { metadata?: Record<string, unknown> })
+        .metadata;
 
       if (msgRole === 'tool') {
         return {
@@ -385,14 +390,27 @@ export class SessionMessageService {
           toolCallId: msgToolCallId ?? '',
         };
       }
+      if (msgRole === 'assistant') {
+        const storedToolCalls = msgMetadata?.['toolCalls'] as
+          | Array<{ id: string; name: string; arguments: string }>
+          | undefined;
+        return {
+          role: 'assistant' as const,
+          content: msgContent,
+          ...(storedToolCalls?.length ? { toolCalls: storedToolCalls } : {}),
+        } as Message;
+      }
       return {
-        role: msgRole as 'system' | 'user' | 'assistant',
+        role: msgRole as 'system' | 'user',
         content: msgContent,
       } as Message;
     });
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
     const mcpTools = this.buildMcpTools(agentId);
+    const nativeToolDefs = this.buildNativeToolDefinitions(agentId);
+    // All tool definitions sent to the model (MCP + builtin, merged)
+    const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
     // Build invocation options: client overrides take priority, then agent-resolved values
     const invokeOptions = {
       providerId: input.providerId ?? providerId,
@@ -414,7 +432,7 @@ export class SessionMessageService {
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,
-          ...(mcpTools.length > 0 && { tools: mcpTools, toolChoice: 'auto' }),
+          ...(allTools.length > 0 && { tools: allTools, toolChoice: 'auto' }),
         };
 
         const toolCalls: Array<{
@@ -502,36 +520,68 @@ export class SessionMessageService {
         }
 
         // If the model made tool calls, execute them and continue the loop
-        if (toolCalls.length > 0 && this.mcp) {
-          // Append the assistant's tool-call turn to loop history
+        if (toolCalls.length > 0 && (this.mcp || this.builtinTools)) {
+          const mappedToolCalls = toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments),
+          }));
+
+          // Persist the assistant tool-call turn so history can be fully
+          // reconstructed on subsequent requests in this session.
+          await this.appendMessage({
+            sessionId: input.sessionId,
+            role: 'assistant',
+            content: accumulatedContent || '',
+            metadata: { toolCalls: mappedToolCalls },
+          });
+
+          // Append to in-process loop history with toolCalls for this round.
           loopMessages.push({
             role: 'assistant',
             content: accumulatedContent || '',
+            toolCalls: mappedToolCalls,
           } as Message);
 
           for (const tc of toolCalls) {
-            const result = await this.mcp
-              .callTool(
-                tc.name.split('::')[0]!,
-                tc.name.split('::')[1] ?? tc.name,
-                tc.arguments,
-              )
-              .catch((e: unknown) => ({
-                content: [
-                  {
-                    type: 'text',
-                    text: `Error: ${e instanceof Error ? e.message : String(e)}`,
-                  },
-                ],
-              }));
+            let toolContent: string;
 
-            const toolContent = Array.isArray(
-              (result as { content?: unknown[] }).content,
-            )
-              ? (result as { content: Array<{ text?: string }> }).content
-                  .map((c) => c.text ?? '')
-                  .join('')
-              : JSON.stringify(result);
+            // Route to builtin (native) tool if it exists in the registry
+            const builtinTool = this.builtinTools?.get(tc.name);
+            if (builtinTool) {
+              const builtinResult = await builtinTool
+                .execute(tc.arguments, { agentId })
+                .catch((e: unknown) => ({
+                  ok: false as const,
+                  error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,
+                }));
+              toolContent = builtinResult.ok
+                ? builtinResult.content
+                : `Error: ${builtinResult.error}`;
+            } else {
+              // Fall back to MCP tool
+              const mcpResult = await this.mcp
+                ?.callTool(
+                  tc.name.split('::')[0]!,
+                  tc.name.split('::')[1] ?? tc.name,
+                  tc.arguments,
+                )
+                .catch((e: unknown) => ({
+                  content: [
+                    {
+                      type: 'text',
+                      text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                    },
+                  ],
+                }));
+              toolContent = Array.isArray(
+                (mcpResult as { content?: unknown[] } | undefined)?.content,
+              )
+                ? (mcpResult as { content: Array<{ text?: string }> }).content
+                    .map((c) => c.text ?? '')
+                    .join('')
+                : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
+            }
 
             // Persist tool result message
             await this.appendMessage({
@@ -611,6 +661,18 @@ export class SessionMessageService {
       }
     }
     return tools;
+  }
+
+  /**
+   * Build ToolDefinition[] (schema only, no executor) from the agent's
+   * nativeTools list against the BuiltinToolRegistry.
+   * These are completely separate from MCP tools.
+   */
+  private buildNativeToolDefinitions(agentId: string): ToolDefinition[] {
+    if (!this.builtinTools || !this.agents) return [];
+    const agent = this.agents.getAgent(agentId);
+    if (!agent?.tools?.length) return [];
+    return this.builtinTools.getDefinitions(agent.tools);
   }
 
   /**

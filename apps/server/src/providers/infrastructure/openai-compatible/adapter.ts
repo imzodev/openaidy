@@ -431,6 +431,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
           role: 'assistant',
           content: msg.content,
         };
+        const aMsg = msg as import('@openaidy/runtime').AssistantMessage;
+        if (aMsg.toolCalls && aMsg.toolCalls.length > 0) {
+          assistantMsg.tool_calls = aMsg.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: { name: tc.name, arguments: tc.arguments },
+          }));
+        }
         return assistantMsg;
       }
       if (msg.role === 'tool') {

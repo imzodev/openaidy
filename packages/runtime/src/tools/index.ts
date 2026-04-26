@@ -14,12 +14,43 @@ export type ToolParameterSchema = {
 };
 
 /**
- * Tool definition shape
+ * Tool definition shape (sent to the model — no executor)
  */
 export type ToolDefinition = {
   readonly name: string;
   readonly description: string;
   readonly parameters: ToolParameterSchema;
+};
+
+/**
+ * Context passed to every builtin tool at execution time.
+ * Extend this interface when new capabilities need to be surfaced to tools.
+ */
+export type BuiltinToolContext = {
+  /** The agent that is invoking this tool */
+  readonly agentId: string;
+};
+
+/**
+ * A builtin (native, in-process) tool.
+ *
+ * Unlike MCP tools — which are executed by an external process — builtin tools
+ * run inside the server. Each tool is a plain object:
+ *
+ *   export const myTool: BuiltinTool = {
+ *     name: 'my_tool',
+ *     description: 'Does something useful',
+ *     parameters: { type: 'object', properties: { ... }, required: [...] },
+ *     execute: async (args, ctx) => ({ ok: true, content: '...' }),
+ *   };
+ *
+ * Register it in the BuiltinToolRegistry and it becomes available to agents.
+ */
+export type BuiltinTool = ToolDefinition & {
+  execute(
+    args: Record<string, unknown>,
+    ctx: BuiltinToolContext,
+  ): Promise<{ ok: true; content: string } | { ok: false; error: string }>;
 };
 
 /**
@@ -38,7 +69,7 @@ export type ToolCallResult = {
 export function createToolDefinition(
   name: string,
   description: string,
-  parameters: ToolParameterSchema
+  parameters: ToolParameterSchema,
 ): ToolDefinition {
   return { name, description, parameters };
 }
@@ -50,7 +81,7 @@ export function createToolCallResult(
   toolCallId: string,
   name: string,
   content: string,
-  isError?: boolean
+  isError?: boolean,
 ): ToolCallResult {
   return { toolCallId, name, content, isError: isError ?? false };
 }
@@ -60,7 +91,7 @@ export function createToolCallResult(
  */
 export function validateToolCall(
   request: ToolCallRequest,
-  definition: ToolDefinition
+  definition: ToolDefinition,
 ): boolean {
   return request.name === definition.name;
 }

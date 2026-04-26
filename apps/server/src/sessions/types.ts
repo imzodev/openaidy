@@ -55,6 +55,7 @@ export type SubmitMessageResult =
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
+import type { BuiltinToolRegistry } from '../tools';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -68,6 +69,8 @@ export type SessionMessageServiceOptions = {
   providers: ProviderServices;
   agents?: AgentRegistry;
   mcp?: McpClientService;
+  /** Registry of native (in-process) builtin tools — separate from MCP */
+  builtinTools?: BuiltinToolRegistry;
   getDefaultAgentId?: () => string | undefined;
   repositories?:
     | {
