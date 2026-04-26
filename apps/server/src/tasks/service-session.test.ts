@@ -165,6 +165,37 @@ describe('TaskService Session Integration', () => {
       );
     });
 
+    it('moves task to review after successful execution when no subtasks exist', async () => {
+      mockSubtasksRepo.listByTask.mockResolvedValueOnce([]);
+
+      await taskService.executeTask('task-1');
+
+      expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith(
+        'task-1',
+        'review',
+      );
+    });
+
+    it('keeps task in progress after execution when subtasks exist', async () => {
+      mockSubtasksRepo.listByTask.mockResolvedValueOnce([
+        {
+          id: 'subtask-1',
+          taskId: 'task-1',
+          title: 'Subtask',
+          description: 'Subtask description',
+          status: 'pending',
+          sessionId: null,
+        } as MockSubtask,
+      ]);
+
+      await taskService.executeTask('task-1');
+
+      expect(mockTasksRepo.updateStatus).not.toHaveBeenCalledWith(
+        'task-1',
+        'review',
+      );
+    });
+
     it('throws if task not found', async () => {
       mockTasksRepo.findById.mockResolvedValueOnce(null);
 

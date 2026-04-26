@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TaskService } from './service';
+import { TaskService, type TaskServiceOptions } from './service';
 
 // Mock types
 type MockTasksRepo = {
@@ -81,10 +81,14 @@ describe('Subtask Execution', () => {
     };
 
     taskService = new TaskService({
-      tasksRepo: mockTasksRepo as any,
-      subtasksRepo: mockSubtasksRepo as any,
-      taskAgentsRepo: mockTaskAgentsRepo as any,
-      sessionService: mockSessionService as any,
+      tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+      subtasksRepo:
+        mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+      taskAgentsRepo:
+        mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+      sessionService: mockSessionService as unknown as NonNullable<
+        TaskServiceOptions['sessionService']
+      >,
     });
   });
 
@@ -104,15 +108,20 @@ describe('Subtask Execution', () => {
       if (result.ok) {
         expect(result.data.sessionId).toBe('session-1');
       }
-      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith('subtask-1', 'in_progress');
+      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith(
+        'subtask-1',
+        'in_progress',
+      );
       expect(mockSessionService.createSession).toHaveBeenCalled();
     });
 
     it('returns error if session service not configured', async () => {
       const serviceWithoutSession = new TaskService({
-        tasksRepo: mockTasksRepo as any,
-        subtasksRepo: mockSubtasksRepo as any,
-        taskAgentsRepo: mockTaskAgentsRepo as any,
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
       });
 
       const result = await serviceWithoutSession.executeSubtask('subtask-1');
@@ -183,13 +192,37 @@ describe('Subtask Execution', () => {
     it('executes all subtasks without dependencies', async () => {
       mockTasksRepo.findById.mockResolvedValue({ id: 'task-1' });
       mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending', title: 'Subtask 1', description: 'Desc 1', taskId: 'task-1' },
-        { id: 'subtask-2', status: 'pending', title: 'Subtask 2', description: 'Desc 2', taskId: 'task-1' },
+        {
+          id: 'subtask-1',
+          status: 'pending',
+          title: 'Subtask 1',
+          description: 'Desc 1',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          status: 'pending',
+          title: 'Subtask 2',
+          description: 'Desc 2',
+          taskId: 'task-1',
+        },
       ]);
       // Mock findById for executeSubtask calls
       mockSubtasksRepo.findById
-        .mockResolvedValueOnce({ id: 'subtask-1', status: 'pending', title: 'Subtask 1', description: 'Desc 1', taskId: 'task-1' })
-        .mockResolvedValueOnce({ id: 'subtask-2', status: 'pending', title: 'Subtask 2', description: 'Desc 2', taskId: 'task-1' });
+        .mockResolvedValueOnce({
+          id: 'subtask-1',
+          status: 'pending',
+          title: 'Subtask 1',
+          description: 'Desc 1',
+          taskId: 'task-1',
+        })
+        .mockResolvedValueOnce({
+          id: 'subtask-2',
+          status: 'pending',
+          title: 'Subtask 2',
+          description: 'Desc 2',
+          taskId: 'task-1',
+        });
 
       const result = await taskService.executeSubtasks('task-1');
 
@@ -202,8 +235,21 @@ describe('Subtask Execution', () => {
     it('only executes subtasks with completed dependencies', async () => {
       mockTasksRepo.findById.mockResolvedValue({ id: 'task-1' });
       mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'pending', title: 'Subtask 1', description: 'Desc 1', taskId: 'task-1' },
-        { id: 'subtask-2', status: 'pending', parentSubtaskId: 'subtask-1', title: 'Subtask 2', description: 'Desc 2', taskId: 'task-1' },
+        {
+          id: 'subtask-1',
+          status: 'pending',
+          title: 'Subtask 1',
+          description: 'Desc 1',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          status: 'pending',
+          parentSubtaskId: 'subtask-1',
+          title: 'Subtask 2',
+          description: 'Desc 2',
+          taskId: 'task-1',
+        },
       ]);
       // Mock findById for executeSubtask call
       mockSubtasksRepo.findById.mockResolvedValue({
@@ -237,8 +283,20 @@ describe('Subtask Execution', () => {
     it('returns startedCount 0 if no pending subtasks', async () => {
       mockTasksRepo.findById.mockResolvedValue({ id: 'task-1' });
       mockSubtasksRepo.listByTask.mockResolvedValue([
-        { id: 'subtask-1', status: 'completed', title: 'Subtask 1', description: 'Desc 1', taskId: 'task-1' },
-        { id: 'subtask-2', status: 'in_progress', title: 'Subtask 2', description: 'Desc 2', taskId: 'task-1' },
+        {
+          id: 'subtask-1',
+          status: 'completed',
+          title: 'Subtask 1',
+          description: 'Desc 1',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          status: 'in_progress',
+          title: 'Subtask 2',
+          description: 'Desc 2',
+          taskId: 'task-1',
+        },
       ]);
 
       const result = await taskService.executeSubtasks('task-1');
@@ -265,7 +323,10 @@ describe('Subtask Execution', () => {
         { id: 'subtask-1', status: 'completed' },
       ]);
 
-      const result = await taskService.completeSubtask('subtask-1', 'Success result');
+      const result = await taskService.completeSubtask(
+        'subtask-1',
+        'Success result',
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -291,7 +352,10 @@ describe('Subtask Execution', () => {
 
       await taskService.completeSubtask('subtask-2', 'Done');
 
-      expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith('task-1', 'done');
+      expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith(
+        'task-1',
+        'review',
+      );
     });
 
     it('does not update task if subtasks remain incomplete', async () => {
@@ -338,7 +402,10 @@ describe('Subtask Execution', () => {
         result: 'Error: Something went wrong',
       });
 
-      const result = await taskService.failSubtask('subtask-1', 'Error: Something went wrong');
+      const result = await taskService.failSubtask(
+        'subtask-1',
+        'Error: Something went wrong',
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -377,8 +444,8 @@ describe('Subtask Execution', () => {
       // subtask-4 depends on subtask-2 (in_progress - not completed)
       // subtask-5 depends on subtask-6 (completed - so executable)
       expect(result).toHaveLength(2);
-      expect(result.map(s => s.id)).toContain('subtask-1');
-      expect(result.map(s => s.id)).toContain('subtask-5');
+      expect(result.map((s) => s.id)).toContain('subtask-1');
+      expect(result.map((s) => s.id)).toContain('subtask-5');
     });
 
     it('returns empty array if no executable subtasks', async () => {
