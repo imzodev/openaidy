@@ -130,6 +130,7 @@ export function TaskModal(props: TaskModalProps) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to create task';
       setErrors({ submit: errorMessage });
+      setSubmitting(false);
     }
   }
 
@@ -291,9 +292,9 @@ export function TaskModal(props: TaskModalProps) {
               >
                 <Show
                   when={isLoading()}
-                  fallback={props.task ? 'Saving...' : 'Create'}
+                  fallback={props.task ? 'Update' : 'Create'}
                 >
-                  {isLoading() ? 'Saving...' : 'Create'}
+                  Saving...
                 </Show>
               </button>
             </div>
