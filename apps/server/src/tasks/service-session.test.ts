@@ -117,10 +117,14 @@ describe('TaskService Session Integration', () => {
     };
 
     const options: TaskServiceOptions = {
-      tasksRepo: mockTasksRepo as any,
-      subtasksRepo: mockSubtasksRepo as any,
-      taskAgentsRepo: mockTaskAgentsRepo as any,
-      sessionService: mockSessionService as any,
+      tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+      subtasksRepo:
+        mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+      taskAgentsRepo:
+        mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+      sessionService: mockSessionService as unknown as NonNullable<
+        TaskServiceOptions['sessionService']
+      >,
     };
 
     taskService = new TaskService(options);
@@ -134,8 +138,12 @@ describe('TaskService Session Integration', () => {
       if (result.ok) {
         expect(result.data.sessionId).toBe('session-1');
       }
-      expect(mockSessionService.createSession).toHaveBeenCalledWith('Task: Test Task');
-      expect(mockTasksRepo.update).toHaveBeenCalledWith('task-1', { sessionId: 'session-1' });
+      expect(mockSessionService.createSession).toHaveBeenCalledWith(
+        'Task: Test Task',
+      );
+      expect(mockTasksRepo.update).toHaveBeenCalledWith('task-1', {
+        sessionId: 'session-1',
+      });
     });
 
     it('submits task description as initial message', async () => {
@@ -146,6 +154,15 @@ describe('TaskService Session Integration', () => {
         content: 'Test description',
         role: 'user',
       });
+    });
+
+    it('updates task status to in_progress', async () => {
+      await taskService.executeTask('task-1');
+
+      expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith(
+        'task-1',
+        'in_progress',
+      );
     });
 
     it('throws if task not found', async () => {
@@ -162,9 +179,11 @@ describe('TaskService Session Integration', () => {
 
     it('returns error if session service not configured', async () => {
       const noSessionService = new TaskService({
-        tasksRepo: mockTasksRepo as any,
-        subtasksRepo: mockSubtasksRepo as any,
-        taskAgentsRepo: mockTaskAgentsRepo as any,
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
       });
 
       const result = await noSessionService.executeTask('task-1');
@@ -184,14 +203,21 @@ describe('TaskService Session Integration', () => {
       if (result.ok) {
         expect(result.data.sessionId).toBe('session-1');
       }
-      expect(mockSessionService.createSession).toHaveBeenCalledWith('Subtask: Subtask');
-      expect(mockSubtasksRepo.update).toHaveBeenCalledWith('subtask-1', { sessionId: 'session-1' });
+      expect(mockSessionService.createSession).toHaveBeenCalledWith(
+        'Subtask: Subtask',
+      );
+      expect(mockSubtasksRepo.update).toHaveBeenCalledWith('subtask-1', {
+        sessionId: 'session-1',
+      });
     });
 
     it('updates subtask status to in_progress', async () => {
       await taskService.executeSubtask('subtask-1');
 
-      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith('subtask-1', 'in_progress');
+      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith(
+        'subtask-1',
+        'in_progress',
+      );
     });
 
     it('submits subtask description as initial message', async () => {
