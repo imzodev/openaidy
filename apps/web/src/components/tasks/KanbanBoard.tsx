@@ -38,6 +38,8 @@ const COLUMN_CONFIG: Array<{
 export type KanbanBoardProps = {
   onTaskClick?: (task: Task) => void;
   onTaskStatusChange?: (taskId: string, newStatus: TaskStatus) => void;
+  onExecuteTask?: (taskId: string) => void;
+  executingTasks?: Set<string>;
   refreshTrigger?: number;
 };
 
@@ -48,7 +50,10 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const [board, setBoard] = createSignal<KanbanBoard | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
-  const [draggedTask, setDraggedTask] = createSignal<{ task: Task; sourceStatus: TaskStatus } | null>(null);
+  const [draggedTask, setDraggedTask] = createSignal<{
+    task: Task;
+    sourceStatus: TaskStatus;
+  } | null>(null);
 
   /**
    * Load kanban board data
@@ -104,12 +109,17 @@ export function KanbanBoard(props: KanbanBoardProps) {
           return {
             ...prev,
             [sourceStatus]: prev[sourceStatus].filter((t) => t.id !== task.id),
-            [targetStatus]: [...prev[targetStatus], { ...task, status: targetStatus }],
+            [targetStatus]: [
+              ...prev[targetStatus],
+              { ...task, status: targetStatus },
+            ],
           };
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update task status');
+      setError(
+        err instanceof Error ? err.message : 'Failed to update task status',
+      );
     } finally {
       setDraggedTask(null);
     }
@@ -146,7 +156,10 @@ export function KanbanBoard(props: KanbanBoardProps) {
                 color={column.color}
                 tasks={board()![column.status]}
                 onDrop={() => handleDrop(column.status)}
-                isDropTarget={draggedTask()?.sourceStatus !== column.status && draggedTask() !== null}
+                isDropTarget={
+                  draggedTask()?.sourceStatus !== column.status &&
+                  draggedTask() !== null
+                }
               >
                 <For each={board()![column.status]}>
                   {(task) => (
@@ -156,6 +169,8 @@ export function KanbanBoard(props: KanbanBoardProps) {
                       onDragStart={() => handleDragStart(task, column.status)}
                       onDragEnd={handleDragEnd}
                       isDragging={draggedTask()?.task.id === task.id}
+                      onExecute={() => props.onExecuteTask?.(task.id)}
+                      isExecuting={props.executingTasks?.has(task.id)}
                     />
                   )}
                 </For>

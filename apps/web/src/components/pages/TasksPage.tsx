@@ -14,6 +14,7 @@ import {
   type TaskStatus,
   createTask,
   updateTask,
+  executeTask,
   type CreateTaskInput,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
@@ -24,6 +25,9 @@ export function TasksPage() {
   const [isModalOpen, setIsModalOpen] = createSignal(false);
   const [selectedTask, setSelectedTask] = createSignal<Task | null>(null);
   const [agents, setAgents] = createSignal<Agent[]>([]);
+  const [executingTasks, setExecutingTasks] = createSignal<Set<string>>(
+    new Set(),
+  );
 
   // Load agents on mount
   onMount(async () => {
@@ -41,11 +45,34 @@ export function TasksPage() {
   };
 
   const handleTaskStatusChange = async (
-    _taskId: string,
-    _newStatus: TaskStatus,
+    taskId: string,
+    newStatus: TaskStatus,
   ) => {
-    // The KanbanBoard already optimistically updates, but we can refresh if needed
-    // For now, we trust the optimistic update
+    // Auto-execute when moved to 'todo'
+    if (newStatus === 'todo') {
+      await handleExecuteTask(taskId);
+    }
+  };
+
+  const handleExecuteTask = async (taskId: string) => {
+    setExecutingTasks((prev) => new Set(prev).add(taskId));
+    try {
+      const result = await executeTask(taskId);
+      if (result.ok) {
+        // Task started successfully - refresh to show updated state
+        setRefreshTrigger((prev) => prev + 1);
+      } else {
+        setError(`Failed to execute task: ${result.error.message}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to execute task');
+    } finally {
+      setExecutingTasks((prev) => {
+        const next = new Set(prev);
+        next.delete(taskId);
+        return next;
+      });
+    }
   };
 
   const handleTaskCreated = (_task: Task) => {
@@ -132,6 +159,8 @@ export function TasksPage() {
         <KanbanBoard
           onTaskClick={handleTaskClick}
           onTaskStatusChange={handleTaskStatusChange}
+          onExecuteTask={handleExecuteTask}
+          executingTasks={executingTasks()}
           refreshTrigger={refreshTrigger()}
         />
       </div>

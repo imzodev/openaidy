@@ -6,6 +6,7 @@
  */
 
 import { Show } from 'solid-js';
+import { Play } from 'lucide-solid';
 import type { Task, TaskPriority } from '../../lib/api-tasks';
 
 /**
@@ -27,6 +28,8 @@ export type TaskCardProps = {
   onDragStart?: () => void;
   onDragEnd?: () => void;
   isDragging?: boolean;
+  onExecute?: () => void;
+  isExecuting?: boolean;
 };
 
 /**
@@ -89,6 +92,34 @@ export function TaskCard(props: TaskCardProps) {
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
           {props.task.description}
         </p>
+      </Show>
+
+      {/* Execute button - show for backlog/todo tasks */}
+      <Show
+        when={
+          props.onExecute &&
+          (props.task.status === 'backlog' || props.task.status === 'todo')
+        }
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onExecute?.();
+          }}
+          disabled={props.isExecuting}
+          class="mt-3 w-full flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+        >
+          <Show
+            when={props.isExecuting}
+            fallback={
+              <>
+                <Play class="w-3 h-3" /> Start Task
+              </>
+            }
+          >
+            Starting...
+          </Show>
+        </button>
       </Show>
     </div>
   );
