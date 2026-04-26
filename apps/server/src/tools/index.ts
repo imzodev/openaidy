@@ -56,7 +56,7 @@ export function createBuiltinToolRegistry(
   }
 
   if (deps.exec) {
-    for (const tool of createExecTools(deps.exec)) {
+    for (const tool of createExecTools(deps.exec, deps.workspace)) {
       registry.register(tool);
     }
   }

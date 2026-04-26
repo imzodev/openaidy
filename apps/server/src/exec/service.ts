@@ -21,6 +21,33 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1_024 * 1_024; // 1 MB
 
 /**
+ * Patterns that are unconditionally rejected before spawning.
+ * These are high-confidence destructive or privilege-escalating operations.
+ */
+const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  {
+    pattern: /\brm\s+(-[^\s]*f[^\s]*\s+|.*\s+-[^\s]*f[^\s]*\s+)?-[^\s]*r/i,
+    reason: 'recursive delete (rm -r / rm -rf)',
+  },
+  { pattern: /\brm\b.*\s+\/(?:\s|$)/, reason: 'delete from filesystem root' },
+  { pattern: /\bdd\b.*\bof=\/dev\//i, reason: 'raw device write via dd' },
+  { pattern: /:\(\){.*};:/, reason: 'fork bomb' },
+  { pattern: /\bsudo\b/i, reason: 'sudo — privilege escalation' },
+  { pattern: /\bsu\s/i, reason: 'su — user switch' },
+  {
+    pattern: /\bchmod\s+[0-9]*7[^\s]*\s+\//,
+    reason: 'chmod on filesystem root',
+  },
+  { pattern: /\bmkfs\b/i, reason: 'filesystem format' },
+  { pattern: /\bshred\b/i, reason: 'secure delete' },
+  { pattern: />\/dev\/sd[a-z]/, reason: 'write to raw block device' },
+  {
+    pattern: />\/dev\/(zero|null|urandom)\s*$/,
+    reason: 'redirect to dangerous device',
+  },
+];
+
+/**
  * ExecService
  *
  * Runs a shell command in a subprocess and returns captured output.
@@ -36,7 +63,30 @@ export class ExecService {
     this.maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   }
 
+  /**
+   * Check a command against the blocklist.
+   * Returns a reason string if blocked, undefined if allowed.
+   */
+  checkCommand(command: string): string | undefined {
+    for (const { pattern, reason } of DANGEROUS_PATTERNS) {
+      if (pattern.test(command)) {
+        return reason;
+      }
+    }
+    return undefined;
+  }
+
   run(command: string, cwd?: string): Promise<ExecResult> {
+    const blocked = this.checkCommand(command);
+    if (blocked) {
+      return Promise.resolve({
+        stdout: '',
+        stderr: `Command blocked: ${blocked}`,
+        exitCode: 1,
+        timedOut: false,
+      });
+    }
+
     return new Promise((resolve) => {
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];

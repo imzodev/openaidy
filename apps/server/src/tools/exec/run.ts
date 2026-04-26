@@ -1,5 +1,7 @@
+import { resolve, relative } from 'node:path';
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { ExecService } from '../../exec/service';
+import type { WorkspaceService } from '../../workspace/service';
 
 /**
  * exec_run
@@ -7,15 +9,24 @@ import type { ExecService } from '../../exec/service';
  * Runs a shell command and returns stdout, stderr, and exit code.
  * The command is executed via /bin/sh -c, so pipes and redirects work.
  *
+ * Safety measures:
+ *  - Commands matching a dangerous-pattern blocklist are rejected before spawn.
+ *  - The working directory is always inside the agent's workspace.
+ *    If `cwd` is supplied it must be a relative path within the workspace;
+ *    absolute paths that escape the workspace are rejected.
+ *
  * ⚠️  Only enable this tool for agents that you fully trust.
  */
-export function createExecRunTool(exec: ExecService): BuiltinTool {
+export function createExecRunTool(
+  exec: ExecService,
+  workspace: WorkspaceService,
+): BuiltinTool {
   return {
     name: 'exec_run',
     description:
-      'Run a shell command and return its stdout, stderr, and exit code. ' +
+      'Run a shell command inside the agent workspace and return its stdout, stderr, and exit code. ' +
       'Supports pipes and redirects (executed via /bin/sh -c). ' +
-      'Times out after 30 seconds by default.',
+      'Times out after 30 seconds. The working directory is always confined to the agent workspace.',
     parameters: {
       type: 'object',
       properties: {
@@ -26,14 +37,14 @@ export function createExecRunTool(exec: ExecService): BuiltinTool {
         cwd: {
           type: 'string',
           description:
-            'Optional working directory for the command (absolute path)',
+            'Optional subdirectory within the agent workspace to run the command in (relative path, e.g. "src")',
         },
       },
       required: ['command'],
     },
-    async execute(args) {
+    async execute(args, ctx) {
       const command = args['command'];
-      const cwd = args['cwd'];
+      const cwdArg = args['cwd'];
 
       if (typeof command !== 'string' || !command.trim()) {
         return {
@@ -42,11 +53,35 @@ export function createExecRunTool(exec: ExecService): BuiltinTool {
         };
       }
 
-      if (cwd !== undefined && typeof cwd !== 'string') {
+      if (cwdArg !== undefined && typeof cwdArg !== 'string') {
         return { ok: false, error: 'cwd must be a string' };
       }
 
-      const result = await exec.run(command, cwd as string | undefined);
+      // Blocklist check — surface as a proper error rather than letting it through
+      const blocked = exec.checkCommand(command);
+      if (blocked) {
+        return { ok: false, error: `Command blocked: ${blocked}` };
+      }
+
+      // Resolve and sandbox the working directory
+      const workspaceRoot = workspace.getWorkspacePath(ctx.agentId);
+      await workspace.ensureWorkspace(ctx.agentId);
+
+      let resolvedCwd: string;
+      if (cwdArg) {
+        resolvedCwd = resolve(workspaceRoot, cwdArg);
+        const rel = relative(workspaceRoot, resolvedCwd);
+        if (rel.startsWith('..') || rel.startsWith('/')) {
+          return {
+            ok: false,
+            error: `cwd must be within the agent workspace (got: ${cwdArg})`,
+          };
+        }
+      } else {
+        resolvedCwd = workspaceRoot;
+      }
+
+      const result = await exec.run(command, resolvedCwd);
 
       const lines: string[] = [];
       if (result.timedOut) {
