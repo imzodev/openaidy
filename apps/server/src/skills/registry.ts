@@ -23,7 +23,7 @@ export type SkillRegistryOptions = {
    * Initial skills to seed the registry with (for testing — bypasses filesystem).
    * When provided, load() is a no-op and these skills are used directly.
    */
-  initialSkills?: SkillDefinition[] | undefined;
+  initialSkills?: SkillDefinition[];
 };
 
 export class SkillRegistry {
@@ -34,7 +34,9 @@ export class SkillRegistry {
 
   constructor(options: SkillRegistryOptions) {
     this.skillsDir = options.skillsDir;
-    this.initialSkills = options.initialSkills;
+    if (options.initialSkills) {
+      this.initialSkills = options.initialSkills;
+    }
   }
 
   /**

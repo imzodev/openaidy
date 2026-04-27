@@ -133,7 +133,6 @@ describe('parseSkillMd', () => {
       '---',
       'name: One Delimiter',
       'description: Only one dash',
-      '---',
       'Some body content without closing delimiter',
     ].join('\n');
 

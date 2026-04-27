@@ -133,6 +133,7 @@ export type Agent = {
   model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
   tags?: string[];
   tools?: string[];
+  skills?: string[];
   defaults: {
     providerId?: string;
     modelId?: string;
@@ -249,6 +250,44 @@ export async function updateAgentTools(
   });
   if (!response.ok) {
     throw new Error(`Failed to update agent tools: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Skill info returned by GET /skills
+ */
+export type SkillInfo = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+/**
+ * List all available skills registered on the server
+ */
+export async function listSkills(): Promise<{ items: SkillInfo[] }> {
+  const response = await apiFetch(`${API_BASE}/skills`);
+  if (!response.ok) {
+    throw new Error(`Failed to list skills: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Update the skills list for an agent
+ */
+export async function updateAgentSkills(
+  agentId: string,
+  skills: string[],
+): Promise<Agent> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skills }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update agent skills: ${response.statusText}`);
   }
   return response.json();
 }

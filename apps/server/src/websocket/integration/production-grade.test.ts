@@ -211,6 +211,7 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   runEvents: createMockRunEvents() as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  skills: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
 });
 
 // ============================================================================
