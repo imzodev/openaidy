@@ -95,6 +95,10 @@ export const AgentSchema = z.object({
   // Example: ["workspace_read", "workspace_list", "workspace_write", "workspace_delete"]
   tools: z.array(z.string()).optional(),
 
+  // Skill IDs assigned to this agent.
+  // These are loaded from .openaidy/skills/ and appended to the system prompt at dispatch time.
+  skills: z.array(z.string()).optional(),
+
   tags: z.array(z.string()).optional(),
   metadata: z.record(z.unknown()).optional(),
   version: z.number().int().positive().default(1),
@@ -123,6 +127,7 @@ export type AgentSummary = {
   enabled: boolean;
   tags: string[] | undefined;
   tools: string[] | undefined;
+  skills: string[] | undefined;
   mcpServers: McpServerRef[] | undefined;
   model: string; // Format: "providerId/modelId"
   workspace?: WorkspaceConfig | undefined;
@@ -190,6 +195,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     enabled: agent.enabled,
     tags: agent.tags,
     tools: agent.tools,
+    skills: agent.skills,
     mcpServers: agent.mcpServers,
     model: agent.model,
     workspace: agent.workspace,

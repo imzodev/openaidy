@@ -69,6 +69,8 @@ const envSchema = z
       .default(31536000000),
     // Workspace configuration
     WORKSPACE_BASE_DIR: z.string().optional(),
+    // Skills configuration
+    SKILLS_DIR: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {
@@ -92,6 +94,8 @@ const envSchema = z
       WORKSPACE_BASE_DIR:
         value.WORKSPACE_BASE_DIR ??
         resolveOpenAidyPath(openAidyHome, 'workspaces'),
+      SKILLS_DIR:
+        value.SKILLS_DIR ?? resolveOpenAidyPath(openAidyHome, 'skills'),
     };
   });
 

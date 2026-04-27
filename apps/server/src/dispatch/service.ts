@@ -9,6 +9,7 @@ import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
 import type { McpClientService } from '../mcp';
 import type { McpToolDefinition } from '../mcp/client';
+import type { SkillRegistry } from '../skills';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -113,6 +114,8 @@ export type DispatchServiceOptions = {
   systemDefaults?: SystemDefaults;
   /** Optional event emitter for streaming run events */
   runEvents?: RunEventEmitter;
+  /** Optional skill registry for injecting skill bodies into system prompts */
+  skills?: SkillRegistry;
 };
 
 /**
@@ -141,12 +144,14 @@ export class DispatchService {
   private readonly runsRepo: SessionRunsStore | undefined;
   private readonly systemDefaults: SystemDefaults;
   private readonly runEvents: RunEventEmitter | undefined;
+  private readonly skills: SkillRegistry | undefined;
 
   constructor(options: DispatchServiceOptions) {
     this.agents = options.agents;
     this.providers = options.providers;
     this.mcp = options.mcp;
     this.runEvents = options.runEvents;
+    this.skills = options.skills;
 
     // Default system defaults
     this.systemDefaults = options.systemDefaults ?? {
@@ -309,11 +314,13 @@ export class DispatchService {
     // 5. Mark run as running
     await this.markRunRunning(run.id);
 
-    // 6. Build messages with agent system prompt
+    // 6. Build messages with agent system prompt + skills
     const history = await this.listMessages(input.sessionId);
+    const agent = this.agents.getAgent(config.agentId);
     const messages: Message[] = this.buildMessages(
       history,
       config.systemPrompt,
+      agent?.skills,
     );
 
     // 7. Invoke provider
@@ -462,11 +469,13 @@ export class DispatchService {
       yield startedEvent;
     }
 
-    // 6. Build messages with agent system prompt
+    // 6. Build messages with agent system prompt + skills
     const history = await this.listMessages(input.sessionId);
+    const agent = this.agents.getAgent(config.agentId);
     const messages: Message[] = this.buildMessages(
       history,
       config.systemPrompt,
+      agent?.skills,
     );
 
     // 7. Invoke provider with streaming
@@ -670,18 +679,33 @@ export class DispatchService {
   }
 
   /**
-   * Build messages array with system prompt
+   * Build messages array with system prompt and optional skill bodies.
+   * Skill bodies are appended to the system prompt with "---" separators.
    */
   private buildMessages(
     history: SessionMessageRecord[] | SessionMessage[],
     systemPrompt: string,
+    skillIds?: string[],
   ): Message[] {
     const messages: Message[] = [];
+
+    // Build full system prompt with skill bodies appended
+    let fullSystemPrompt = systemPrompt;
+    if (skillIds?.length && this.skills) {
+      const bodies = this.skills
+        .getSkillsForAgent(skillIds)
+        .map((s) => s.body)
+        .filter(Boolean)
+        .join('\n\n---\n\n');
+      if (bodies) {
+        fullSystemPrompt += '\n\n---\n\n' + bodies;
+      }
+    }
 
     // Add system prompt first
     messages.push({
       role: 'system',
-      content: systemPrompt,
+      content: fullSystemPrompt,
     });
 
     // Add conversation history
@@ -945,9 +969,7 @@ export class DispatchService {
     prefixedToolName: string,
     args: Record<string, unknown>,
     agentId: string,
-  ): Promise<
-    { ok: true; content: string } | { ok: false; error: string }
-  > {
+  ): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
     if (!this.mcp) {
       return { ok: false, error: 'MCP service not available' };
     }
@@ -1003,9 +1025,7 @@ export class DispatchService {
 
       // Extract content from result
       const content =
-        typeof result === 'string'
-          ? result
-          : JSON.stringify(result, null, 2);
+        typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 
       return { ok: true, content };
     } catch (error) {

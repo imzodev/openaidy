@@ -295,6 +295,55 @@ export class AgentRegistry {
   }
 
   /**
+   * Update the skills list for an agent.
+   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Returns the updated AgentSummary or undefined if the agent was not found.
+   */
+  updateAgentSkills(
+    agentId: string,
+    skills: string[],
+  ): AgentSummary | undefined {
+    this.ensureLoaded();
+
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      return undefined;
+    }
+
+    const updated: Agent = {
+      ...agent,
+      skills: skills.length > 0 ? skills : undefined,
+    };
+    this.agents.set(agentId, updated);
+
+    if (this.configPath && fs.existsSync(this.configPath)) {
+      const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as {
+        agents?: Array<Record<string, unknown>>;
+      };
+
+      if (Array.isArray(raw.agents)) {
+        const idx = raw.agents.findIndex((a) => a['id'] === agentId);
+        if (idx !== -1) {
+          if (skills.length > 0) {
+            raw.agents[idx]!['skills'] = skills;
+          } else {
+            delete raw.agents[idx]!['skills'];
+          }
+          const tempPath = `${this.configPath}.tmp`;
+          fs.writeFileSync(
+            tempPath,
+            JSON.stringify(raw, null, 2) + '\n',
+            'utf-8',
+          );
+          fs.renameSync(tempPath, this.configPath);
+        }
+      }
+    }
+
+    return toAgentSummary(updated);
+  }
+
+  /**
    * Get the number of loaded agents
    */
   get size(): number {
