@@ -6,6 +6,7 @@ import { DispatchService, createDispatchService } from './service';
 import { createAgentRegistry, type AgentRegistry } from '../agents';
 import { createProviderServices, type ProviderServices } from '../providers';
 import { RunEventEmitter, type RunEvent } from './events';
+import { createSkillRegistry, type SkillRegistry } from '../skills';
 import type { McpClientService } from '../mcp';
 import type {
   ModelProvider,
@@ -786,6 +787,256 @@ describe('DispatchService streaming', () => {
           expect(result.error).toContain('Tool failed');
         }
       });
+    });
+  });
+
+  describe('skill injection', () => {
+    let skillTempDir: string;
+    let skillRegistry: SkillRegistry;
+
+    beforeEach(() => {
+      // Create temp directory for skills
+      skillTempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'test-dispatch-skills-'),
+      );
+
+      // Create skill directories
+      fs.mkdirSync(path.join(skillTempDir, 'skill-a'));
+      fs.mkdirSync(path.join(skillTempDir, 'skill-b'));
+      fs.mkdirSync(path.join(skillTempDir, 'skill-c'));
+
+      // Create SKILL.md files
+      fs.writeFileSync(
+        path.join(skillTempDir, 'skill-a', 'SKILL.md'),
+        [
+          '---',
+          'name: Skill A',
+          'description: First skill',
+          '---',
+          'Skill A body content.',
+        ].join('\n'),
+      );
+
+      fs.writeFileSync(
+        path.join(skillTempDir, 'skill-b', 'SKILL.md'),
+        [
+          '---',
+          'name: Skill B',
+          'description: Second skill',
+          '---',
+          'Skill B body content.',
+        ].join('\n'),
+      );
+
+      fs.writeFileSync(
+        path.join(skillTempDir, 'skill-c', 'SKILL.md'),
+        [
+          '---',
+          'name: Skill C',
+          'description: Third skill',
+          '---',
+          'Skill C body content.',
+        ].join('\n'),
+      );
+
+      // Create skill registry
+      skillRegistry = createSkillRegistry({ skillsDir: skillTempDir });
+      skillRegistry.load();
+    });
+
+    afterEach(() => {
+      fs.rmSync(skillTempDir, { recursive: true, force: true });
+    });
+
+    it('appends skill body to system prompt when agent.skills is set', async () => {
+      // Create agent with skills
+      fs.writeFileSync(
+        path.join(tempDir, 'skill-agent.json'),
+        JSON.stringify({
+          id: 'skill-agent',
+          name: 'Skill Agent',
+          enabled: true,
+          systemPrompt: 'You are a helpful assistant.',
+          model: 'mock-provider/mock-model',
+          skills: ['skill-a'],
+          defaults: {
+            providerId: 'mock-provider',
+            modelId: 'mock-model',
+          },
+        }),
+      );
+      agentRegistry.reload();
+
+      // Create dispatch service with skill registry
+      const serviceWithSkills = createDispatchService({
+        agents: agentRegistry,
+        providers,
+        skills: skillRegistry,
+        systemDefaults: {
+          providerId: 'mock-provider',
+          modelId: 'mock-model',
+        },
+      });
+
+      // Use buildMessages directly via resolveConfig and dispatch
+      const agent = agentRegistry.getAgent('skill-agent');
+      const config = serviceWithSkills.resolveConfig('skill-agent');
+
+      expect('error' in config).toBe(false);
+      if ('error' in config) return;
+
+      // Verify the dispatch would include skill body in messages
+      // Since dispatch requires a session, we verify via the internal buildMessages method
+      const dispatchInstance = serviceWithSkills as DispatchService;
+      const messages = dispatchInstance.buildMessages(
+        [],
+        config.systemPrompt,
+        agent?.skills,
+      );
+
+      expect(messages[0]?.role).toBe('system');
+      expect(messages[0]?.content).toContain('Skill A body content.');
+      expect(messages[0]?.content).toContain('You are a helpful assistant.');
+    });
+
+    it('does not modify system prompt when agent.skills is empty', async () => {
+      // Create agent without skills
+      fs.writeFileSync(
+        path.join(tempDir, 'no-skill-agent.json'),
+        JSON.stringify({
+          id: 'no-skill-agent',
+          name: 'No Skill Agent',
+          enabled: true,
+          systemPrompt: 'You are a helpful assistant.',
+          model: 'mock-provider/mock-model',
+          defaults: {
+            providerId: 'mock-provider',
+            modelId: 'mock-model',
+          },
+        }),
+      );
+      agentRegistry.reload();
+
+      const serviceWithSkills = createDispatchService({
+        agents: agentRegistry,
+        providers,
+        skills: skillRegistry,
+        systemDefaults: {
+          providerId: 'mock-provider',
+          modelId: 'mock-model',
+        },
+      });
+
+      const config = serviceWithSkills.resolveConfig('no-skill-agent');
+      expect('error' in config).toBe(false);
+      if ('error' in config) return;
+
+      const dispatchInstance = serviceWithSkills as DispatchService;
+      const messages = dispatchInstance.buildMessages(
+        [],
+        config.systemPrompt,
+        undefined,
+      );
+
+      expect(messages[0]?.role).toBe('system');
+      expect(messages[0]?.content).toBe('You are a helpful assistant.');
+    });
+
+    it('silently skips unknown skill IDs', async () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'unknown-skill-agent.json'),
+        JSON.stringify({
+          id: 'unknown-skill-agent',
+          name: 'Unknown Skill Agent',
+          enabled: true,
+          systemPrompt: 'You are a helpful assistant.',
+          model: 'mock-provider/mock-model',
+          skills: ['skill-a', 'nonexistent', 'skill-b'],
+          defaults: {
+            providerId: 'mock-provider',
+            modelId: 'mock-model',
+          },
+        }),
+      );
+      agentRegistry.reload();
+
+      const serviceWithSkills = createDispatchService({
+        agents: agentRegistry,
+        providers,
+        skills: skillRegistry,
+        systemDefaults: {
+          providerId: 'mock-provider',
+          modelId: 'mock-model',
+        },
+      });
+
+      const agent = agentRegistry.getAgent('unknown-skill-agent');
+      const config = serviceWithSkills.resolveConfig('unknown-skill-agent');
+      expect('error' in config).toBe(false);
+      if ('error' in config) return;
+
+      const dispatchInstance = serviceWithSkills as DispatchService;
+      const messages = dispatchInstance.buildMessages(
+        [],
+        config.systemPrompt,
+        agent?.skills,
+      );
+
+      expect(messages[0]?.role).toBe('system');
+      expect(messages[0]?.content).toContain('Skill A body content.');
+      expect(messages[0]?.content).toContain('Skill B body content.');
+      expect(messages[0]?.content).not.toContain('nonexistent');
+      expect(messages[0]?.content).not.toContain('Skill C body content.');
+    });
+
+    it('appends multiple skills in order', async () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'multi-skill-agent.json'),
+        JSON.stringify({
+          id: 'multi-skill-agent',
+          name: 'Multi Skill Agent',
+          enabled: true,
+          systemPrompt: 'You are a helpful assistant.',
+          model: 'mock-provider/mock-model',
+          skills: ['skill-c', 'skill-a', 'skill-b'],
+          defaults: {
+            providerId: 'mock-provider',
+            modelId: 'mock-model',
+          },
+        }),
+      );
+      agentRegistry.reload();
+
+      const serviceWithSkills = createDispatchService({
+        agents: agentRegistry,
+        providers,
+        skills: skillRegistry,
+        systemDefaults: {
+          providerId: 'mock-provider',
+          modelId: 'mock-model',
+        },
+      });
+
+      const agent = agentRegistry.getAgent('multi-skill-agent');
+      const config = serviceWithSkills.resolveConfig('multi-skill-agent');
+      expect('error' in config).toBe(false);
+      if ('error' in config) return;
+
+      const dispatchInstance = serviceWithSkills as DispatchService;
+      const messages = dispatchInstance.buildMessages(
+        [],
+        config.systemPrompt,
+        agent?.skills,
+      );
+
+      expect(messages[0]?.role).toBe('system');
+      const content = messages[0]?.content as string;
+      // Skills should be in the same order as specified in agent.skills
+      const skillCIndex = content.indexOf('Skill C body content.');
+      const skillAIndex = content.indexOf('Skill A body content.');
+      const skillBIndex = content.indexOf('Skill B body content.');
+      expect(skillCIndex).toBeLessThan(skillAIndex);
+      expect(skillAIndex).toBeLessThan(skillBIndex);
     });
   });
 });
