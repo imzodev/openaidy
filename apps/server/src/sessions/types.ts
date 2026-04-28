@@ -56,6 +56,7 @@ import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
 import type { BuiltinToolRegistry } from '../tools';
+import type { SkillRegistry } from '../skills';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -71,6 +72,8 @@ export type SessionMessageServiceOptions = {
   mcp?: McpClientService;
   /** Registry of native (in-process) builtin tools — separate from MCP */
   builtinTools?: BuiltinToolRegistry;
+  /** Registry of skills for skill injection into system prompt */
+  skills?: SkillRegistry;
   getDefaultAgentId?: () => string | undefined;
   repositories?:
     | {

@@ -197,6 +197,7 @@ export async function buildApp() {
     agents: agentRegistry,
     mcp: mcpService,
     builtinTools: builtinToolRegistry,
+    skills: skillRegistry,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {

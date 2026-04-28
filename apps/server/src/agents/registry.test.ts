@@ -410,7 +410,16 @@ describe('AgentRegistry', () => {
   describe('updateAgentSkills', () => {
     let configPath: string;
 
-    function writeConfig(agents: Array<{ id: string; skills?: string[] }>) {
+    function writeConfig(
+      agents: Array<{
+        id: string;
+        name?: string;
+        enabled?: boolean;
+        systemPrompt?: string;
+        model?: string;
+        skills?: string[];
+      }>,
+    ) {
       const dir = path.join(tempDir, 'config');
       fs.mkdirSync(dir, { recursive: true });
       configPath = path.join(dir, 'openaidy.json');

@@ -887,7 +887,13 @@ describe('DispatchService streaming', () => {
 
       // Verify the dispatch would include skill body in messages
       // Since dispatch requires a session, we verify via the internal buildMessages method
-      const dispatchInstance = serviceWithSkills as DispatchService;
+      const dispatchInstance = serviceWithSkills as unknown as {
+        buildMessages: (
+          history: unknown[],
+          systemPrompt: string,
+          skillIds?: string[],
+        ) => ReturnType<DispatchService['buildMessages']>;
+      };
       const messages = dispatchInstance.buildMessages(
         [],
         config.systemPrompt,
@@ -931,7 +937,13 @@ describe('DispatchService streaming', () => {
       expect('error' in config).toBe(false);
       if ('error' in config) return;
 
-      const dispatchInstance = serviceWithSkills as DispatchService;
+      const dispatchInstance = serviceWithSkills as unknown as {
+        buildMessages: (
+          history: unknown[],
+          systemPrompt: string,
+          skillIds?: string[],
+        ) => ReturnType<DispatchService['buildMessages']>;
+      };
       const messages = dispatchInstance.buildMessages(
         [],
         config.systemPrompt,
@@ -975,7 +987,13 @@ describe('DispatchService streaming', () => {
       expect('error' in config).toBe(false);
       if ('error' in config) return;
 
-      const dispatchInstance = serviceWithSkills as DispatchService;
+      const dispatchInstance = serviceWithSkills as unknown as {
+        buildMessages: (
+          history: unknown[],
+          systemPrompt: string,
+          skillIds?: string[],
+        ) => ReturnType<DispatchService['buildMessages']>;
+      };
       const messages = dispatchInstance.buildMessages(
         [],
         config.systemPrompt,
@@ -1022,7 +1040,13 @@ describe('DispatchService streaming', () => {
       expect('error' in config).toBe(false);
       if ('error' in config) return;
 
-      const dispatchInstance = serviceWithSkills as DispatchService;
+      const dispatchInstance = serviceWithSkills as unknown as {
+        buildMessages: (
+          history: unknown[],
+          systemPrompt: string,
+          skillIds?: string[],
+        ) => ReturnType<DispatchService['buildMessages']>;
+      };
       const messages = dispatchInstance.buildMessages(
         [],
         config.systemPrompt,
