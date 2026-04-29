@@ -304,6 +304,45 @@ describe('Skill Routes', () => {
       const body = response.json();
       expect(body.error).toContain('Agent not found');
     });
+
+    it('returns 400 when skills contains unknown skill IDs', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/skills',
+        headers: { 'content-type': 'application/json' },
+        payload: { skills: ['skill-a', 'nonexistent', 'skill-b'] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error).toContain('Unknown skill(s)');
+      expect(body.invalidSkills).toContain('nonexistent');
+      expect(body.hint).toBeDefined();
+    });
+
+    it('returns 200 when all skills are valid', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/skills',
+        headers: { 'content-type': 'application/json' },
+        payload: { skills: ['skill-a', 'skill-b'] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.skills).toEqual(['skill-a', 'skill-b']);
+    });
+
+    it('allows empty array to clear skills (even with no skills assigned)', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/skills',
+        headers: { 'content-type': 'application/json' },
+        payload: { skills: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
   });
 });
 
