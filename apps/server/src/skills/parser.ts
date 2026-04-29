@@ -6,6 +6,8 @@
  * 'name' and 'description' keys are needed.
  */
 
+import { isBodySizeValid } from './sanitize.js';
+
 export type SkillDefinition = {
   /** Directory name — the canonical skill ID */
   id: string;
@@ -99,6 +101,16 @@ export function parseSkillMd(
   // Body is everything after the closing ---
   const bodyLines = lines.slice(secondDash + 1);
   const body = bodyLines.join('\n').trim();
+
+  if (!isBodySizeValid(body)) {
+    errors.push({
+      message: `Skill body exceeds maximum size of 50,000 characters`,
+    });
+  }
+
+  if (errors.length > 0) {
+    return { filePath, errors };
+  }
 
   return {
     id,
