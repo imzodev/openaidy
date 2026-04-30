@@ -14,13 +14,13 @@ export type McpServerTransport = 'stdio' | 'http';
  */
 export type McpServerTransportConfig = {
   id: string;
-  name?: string;
+  name?: string | undefined;
   transport: McpServerTransport;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
+  command?: string | undefined;
+  args?: string[] | undefined;
+  env?: Record<string, string> | undefined;
+  url?: string | undefined;
+  headers?: Record<string, string> | undefined;
 };
 
 /**
@@ -28,23 +28,14 @@ export type McpServerTransportConfig = {
  */
 export type McpToolSummary = {
   name: string;
-  description?: string;
+  description?: string | undefined;
 };
 
 /**
  * Full MCP server record combining persisted config + live runtime status.
  * Returned by GET /mcp/servers
  */
-export type McpServerRecord = {
-  /** Persisted config */
-  id: string;
-  name?: string;
-  transport: McpServerTransport;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
+export type McpServerRecord = McpServerTransportConfig & {
   /** Live runtime state */
   connected: boolean;
   toolCount: number;
@@ -54,35 +45,21 @@ export type McpServerRecord = {
 /**
  * Request body for creating a new MCP server config
  */
-export type CreateMcpServerRequest = {
-  id: string;
-  name?: string;
-  transport: McpServerTransport;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
-};
+export type CreateMcpServerRequest = McpServerTransportConfig;
 
 /**
  * Request body for updating an existing MCP server config
  */
-export type UpdateMcpServerRequest = {
-  name?: string;
-  transport?: McpServerTransport;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
-};
+export type UpdateMcpServerRequest = Omit<
+  Partial<McpServerTransportConfig>,
+  'id'
+>;
 
 /**
  * MCP tool with its input schema exposed (for UI exploration)
  */
 export type McpToolWithSchema = {
   name: string;
-  description?: string;
+  description?: string | undefined;
   inputSchema: Record<string, unknown>;
 };
