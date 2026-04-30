@@ -414,8 +414,8 @@ export async function buildApp() {
     });
   }
 
-  // Register MCP routes
-  await app.register(createMcpRoutesPlugin({ mcpService }));
+  // Register MCP routes (config CRUD + runtime connect/disconnect)
+  await app.register(createMcpRoutesPlugin({ mcpService, configService }));
 
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {

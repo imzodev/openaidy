@@ -91,6 +91,7 @@ export const WS_CAPABILITIES = {
 
   // Agent capabilities
   AGENTS_LIST: 'agents.list',
+  AGENTS_READ: 'agents.read',
   AGENTS_INVOKE: 'agents.invoke',
 
   // Provider capabilities

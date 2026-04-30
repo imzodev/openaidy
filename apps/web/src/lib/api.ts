@@ -813,15 +813,124 @@ export async function clearLogs(): Promise<{
   return response.json();
 }
 
-import type { McpServer } from '@openaidy/config';
+import type {
+  McpServerRecord,
+  McpToolWithSchema,
+  CreateMcpServerRequest,
+  UpdateMcpServerRequest,
+} from '@openaidy/shared-types';
+export type {
+  McpServerRecord,
+  McpToolWithSchema,
+  CreateMcpServerRequest,
+  UpdateMcpServerRequest,
+};
 
 /**
- * List all configured MCP servers and their status
+ * List all configured MCP servers and their live runtime status.
+ * Returns both persisted config fields and current connection state.
  */
-export async function listMcpServers(): Promise<{ servers: McpServer[] }> {
+export async function listMcpServers(): Promise<{
+  servers: McpServerRecord[];
+}> {
   const response = await apiFetch(`${API_BASE}/mcp/servers`);
   if (!response.ok) {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Create a new MCP server config and connect to it.
+ */
+export async function createMcpServer(
+  config: CreateMcpServerRequest,
+): Promise<{ server: McpServerRecord }> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ config }),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Update an existing MCP server config (requires restart to take effect).
+ */
+export async function updateMcpServer(
+  id: string,
+  patch: UpdateMcpServerRequest,
+): Promise<{ server: McpServerRecord }> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Delete an MCP server config and disconnect it if connected.
+ */
+export async function deleteMcpServer(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok && response.status !== 204) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+}
+
+/**
+ * Manually connect to an MCP server.
+ */
+export async function connectMcpServer(
+  id: string,
+): Promise<{ serverId: string; connected: boolean }> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/connect`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Manually disconnect from an MCP server.
+ */
+export async function disconnectMcpServer(
+  id: string,
+): Promise<{ serverId: string; disconnected: boolean }> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/disconnect`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Get the full tool schema for an MCP server (useful for tooling UIs).
+ */
+export async function getMcpServerTools(
+  id: string,
+): Promise<{ tools: McpToolWithSchema[] }> {
+  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/tools`);
+  if (!response.ok) {
+    throw new Error(`Failed to get MCP server tools: ${response.statusText}`);
   }
   return response.json();
 }
