@@ -52,10 +52,25 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
       };
     }
 
-    const result = agentRegistry.updateAgentSkills(
-      agentId,
-      body.skills as string[],
-    );
+    const skillIds = body.skills as string[];
+
+    // Validate that all skill IDs actually exist in the registry
+    if (skillIds.length > 0) {
+      const validSkillIds = new Set(
+        skillRegistry.listSkills().map((s) => s.id),
+      );
+      const invalidSkills = skillIds.filter((id) => !validSkillIds.has(id));
+      if (invalidSkills.length > 0) {
+        reply.code(400);
+        return {
+          error: 'Unknown skill(s)',
+          invalidSkills,
+          hint: 'Use GET /skills to list all available skills',
+        };
+      }
+    }
+
+    const result = agentRegistry.updateAgentSkills(agentId, skillIds);
     if (!result) {
       reply.code(404);
       return { error: 'Agent not found', agentId };

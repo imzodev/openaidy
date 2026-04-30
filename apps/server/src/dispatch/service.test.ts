@@ -901,6 +901,9 @@ describe('DispatchService streaming', () => {
       );
 
       expect(messages[0]?.role).toBe('system');
+      // Skills are wrapped in [SKILL_CONTEXTS] delimiters (Layer 1)
+      expect(messages[0]?.content).toContain('[SKILL_CONTEXTS]');
+      expect(messages[0]?.content).toContain('[/SKILL_CONTEXTS]');
       expect(messages[0]?.content).toContain('Skill A body content.');
       expect(messages[0]?.content).toContain('You are a helpful assistant.');
     });
@@ -1001,6 +1004,7 @@ describe('DispatchService streaming', () => {
       );
 
       expect(messages[0]?.role).toBe('system');
+      expect(messages[0]?.content).toContain('[SKILL_CONTEXTS]');
       expect(messages[0]?.content).toContain('Skill A body content.');
       expect(messages[0]?.content).toContain('Skill B body content.');
       expect(messages[0]?.content).not.toContain('nonexistent');

@@ -10,6 +10,7 @@ import type { RunEvent, RunEventEmitter } from './events';
 import type { McpClientService } from '../mcp';
 import type { McpToolDefinition } from '../mcp/client';
 import type { SkillRegistry } from '../skills';
+import { sanitizeSkillBody } from '../skills/sanitize.js';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -680,7 +681,12 @@ export class DispatchService {
 
   /**
    * Build messages array with system prompt and optional skill bodies.
-   * Skill bodies are appended to the system prompt with "---" separators.
+   * Skill bodies are wrapped in structural delimiters to prevent
+   * prompt injection — content inside is treated as data, not instructions.
+   *
+   * Delimiters:
+   * - [SKILL_CONTEXTS] ... [/SKILL_CONTEXTS] — wraps all skill bodies
+   * - --- — separates individual skill bodies
    */
   private buildMessages(
     history: SessionMessageRecord[] | SessionMessage[],
@@ -694,11 +700,11 @@ export class DispatchService {
     if (skillIds?.length && this.skills) {
       const bodies = this.skills
         .getSkillsForAgent(skillIds)
-        .map((s) => s.body)
+        .map((s) => sanitizeSkillBody(s.body))
         .filter(Boolean)
         .join('\n\n---\n\n');
       if (bodies) {
-        fullSystemPrompt += '\n\n---\n\n' + bodies;
+        fullSystemPrompt += '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
       }
     }
 

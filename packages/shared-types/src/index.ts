@@ -6,3 +6,4 @@ export * from './websocket.js';
 export * from './logs.js';
 export * from './api.js';
 export * from './addon.js';
+export * from './mcp.js';
