@@ -226,4 +226,44 @@ describe('parseSkillMd', () => {
     expect(result.id).toBe('my-custom-id');
     expect(result.name).toBe('Different Name');
   });
+
+  it('returns error when body exceeds 50,000 characters', () => {
+    const hugeBody = 'A'.repeat(50_001);
+    const content = [
+      '---',
+      'name: Huge Skill',
+      'description: A skill with an oversized body',
+      '---',
+      hugeBody,
+    ].join('\n');
+
+    const result = parseSkillMd(content, 'huge-skill', '/path/to/SKILL.md');
+
+    expect(result).toMatchObject({
+      errors: expect.arrayContaining([
+        { message: expect.stringContaining('50,000') },
+      ]),
+    });
+  });
+
+  it('parses successfully when body is exactly at the 50,000 character limit', () => {
+    const exactBody = 'B'.repeat(50_000);
+    const content = [
+      '---',
+      'name: Exact Limit',
+      'description: A skill with a body at exactly the limit',
+      '---',
+      exactBody,
+    ].join('\n');
+
+    const result = parseSkillMd(content, 'exact-limit', '/path/to/SKILL.md');
+
+    expect(result).toMatchObject({
+      id: 'exact-limit',
+      name: 'Exact Limit',
+    });
+    if (!('errors' in result)) {
+      expect(result.body.length).toBe(50_000);
+    }
+  });
 });
