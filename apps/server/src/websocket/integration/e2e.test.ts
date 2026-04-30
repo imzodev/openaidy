@@ -244,6 +244,12 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  skills: {
+    load: () => {},
+    listSkills: () => [],
+    getSkill: () => undefined,
+    getSkillsForAgent: () => [],
+  } as unknown as AppServices['skills'],
 });
 
 // ============================================================================

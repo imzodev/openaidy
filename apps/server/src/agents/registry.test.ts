@@ -406,6 +406,157 @@ describe('AgentRegistry', () => {
       // Config file in tempDir remains unchanged (only written in beforeEach for other tests)
     });
   });
+
+  describe('updateAgentSkills', () => {
+    let configPath: string;
+
+    function writeConfig(
+      agents: Array<{
+        id: string;
+        name?: string;
+        enabled?: boolean;
+        systemPrompt?: string;
+        model?: string;
+        skills?: string[];
+      }>,
+    ) {
+      const dir = path.join(tempDir, 'config');
+      fs.mkdirSync(dir, { recursive: true });
+      configPath = path.join(dir, 'openaidy.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          defaults: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+          providers: [
+            {
+              id: 'openai',
+              type: 'openai-compatible',
+              enabled: true,
+              vendorFamily: 'openai-compatible',
+              models: [{ id: 'gpt-4' }],
+            },
+          ],
+          agents,
+        }),
+        'utf-8',
+      );
+    }
+
+    beforeEach(() => {
+      configPath = path.join(tempDir, 'openaidy.json');
+      writeConfig([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          skills: ['skill-a'],
+        },
+      ]);
+    });
+
+    it('updates skills in memory and returns updated summary', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          skills: ['skill-a'],
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentSkills('agent1', [
+        'skill-a',
+        'skill-b',
+      ]);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.skills).toEqual([
+        'skill-a',
+        'skill-b',
+      ]);
+    });
+
+    it('persists skills to the config file on disk', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          skills: ['skill-a'],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentSkills('agent1', ['skill-b', 'skill-c']);
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; skills?: string[] }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent?.skills).toEqual(['skill-b', 'skill-c']);
+    });
+
+    it('removes the skills key from the config file when clearing all skills', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          skills: ['skill-a'],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentSkills('agent1', []);
+
+      expect(registry.getAgent('agent1')?.skills).toBeUndefined();
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; skills?: string[] }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent).not.toHaveProperty('skills');
+    });
+
+    it('returns undefined for an unknown agent id', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([]);
+
+      const result = registry.updateAgentSkills('ghost', ['skill-a']);
+      expect(result).toBeUndefined();
+    });
+
+    it('updates memory but skips disk when configPath is not set', () => {
+      const registry = new AgentRegistry(); // no configPath
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentSkills('agent1', ['skill-x']);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.skills).toEqual(['skill-x']);
+    });
+  });
 });
 
 describe('createAgentRegistry', () => {

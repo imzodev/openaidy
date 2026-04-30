@@ -63,6 +63,7 @@ export class SessionMessageService {
   private readonly sessionsRepo: SessionsStore | undefined;
   private readonly messagesRepo: SessionMessagesStore | undefined;
   private readonly runsRepo: SessionRunsStore | undefined;
+  private readonly skillRegistry: import('../skills').SkillRegistry | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -70,6 +71,7 @@ export class SessionMessageService {
     this.mcp = options.mcp;
     this.builtinTools = options.builtinTools;
     this.getDefaultAgentId = options.getDefaultAgentId;
+    this.skillRegistry = options.skills;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -246,7 +248,7 @@ export class SessionMessageService {
 
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
-    const messages: Message[] = history.map((m) => {
+    const historyMessages: Message[] = history.map((m) => {
       // Map to proper Message type - both types have these properties
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
@@ -264,6 +266,15 @@ export class SessionMessageService {
         content: msgContent,
       } as Message;
     });
+
+    // Build system prompt with skill bodies injected
+    const systemPrompt = this.buildAgentSystemPrompt(
+      agent?.systemPrompt ?? '',
+      agent?.skills,
+    );
+    const messages: Message[] = systemPrompt
+      ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
+      : historyMessages;
 
     // 6. Invoke provider
     const modelRequest: ModelRequest = {
@@ -376,7 +387,7 @@ export class SessionMessageService {
 
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
-    const messages: Message[] = history.map((m) => {
+    const historyMessages: Message[] = history.map((m) => {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
@@ -405,6 +416,15 @@ export class SessionMessageService {
         content: msgContent,
       } as Message;
     });
+
+    // Build system prompt with skill bodies injected
+    const systemPrompt = this.buildAgentSystemPrompt(
+      agent?.systemPrompt ?? '',
+      agent?.skills,
+    );
+    const messages: Message[] = systemPrompt
+      ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
+      : historyMessages;
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
     const mcpTools = this.buildMcpTools(agentId);
@@ -710,6 +730,28 @@ export class SessionMessageService {
       return this.messagesRepo.append(appendInput);
     }
     return appendMessageRecord(input);
+  }
+
+  /**
+   * Build the full system prompt for an agent, with skill bodies appended.
+   * Returns the system prompt string with skills injected if any are assigned.
+   */
+  private buildAgentSystemPrompt(
+    systemPrompt: string,
+    skillIds?: string[],
+  ): string {
+    if (!skillIds?.length || !this.skillRegistry) {
+      return systemPrompt;
+    }
+    const bodies = this.skillRegistry
+      .getSkillsForAgent(skillIds)
+      .map((s) => s.body)
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+    if (!bodies) {
+      return systemPrompt;
+    }
+    return systemPrompt + '\n\n---\n\n' + bodies;
   }
 
   /**

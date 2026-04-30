@@ -7,13 +7,24 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
-import { Bot, Folder, FileText, Wrench, Power, PowerOff } from 'lucide-solid';
+import {
+  Bot,
+  Folder,
+  FileText,
+  Wrench,
+  Power,
+  PowerOff,
+  Lightbulb,
+} from 'lucide-solid';
 import {
   listAgents,
   listBuiltinTools,
   updateAgentTools,
+  listSkills,
+  updateAgentSkills,
   type Agent,
   type BuiltinToolInfo,
+  type SkillInfo,
 } from '../../lib/api';
 import {
   FileExplorer,
@@ -28,7 +39,7 @@ export function AgentsPage() {
     null,
   );
   const [activeTab, setActiveTab] = createSignal<
-    'overview' | 'workspace' | 'tools'
+    'overview' | 'workspace' | 'tools' | 'skills'
   >('overview');
   const [error, setError] = createSignal<string | null>(null);
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] =
@@ -39,6 +50,10 @@ export function AgentsPage() {
     [],
   );
   const [toolsUpdating, setToolsUpdating] = createSignal<Set<string>>(
+    new Set(),
+  );
+  const [allSkills, setAllSkills] = createSignal<SkillInfo[]>([]);
+  const [skillsUpdating, setSkillsUpdating] = createSignal<Set<string>>(
     new Set(),
   );
 
@@ -84,7 +99,9 @@ export function AgentsPage() {
     setHasUnsavedWorkspaceChanges(false);
   };
 
-  const handleTabChange = (tab: 'overview' | 'workspace' | 'tools') => {
+  const handleTabChange = (
+    tab: 'overview' | 'workspace' | 'tools' | 'skills',
+  ) => {
     if (activeTab() === tab) {
       return;
     }
@@ -150,12 +167,16 @@ export function AgentsPage() {
 
   onMount(async () => {
     try {
-      const [agentsResponse, toolsResponse] = await Promise.all([
-        listAgents(),
-        listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
-      ]);
+      const [agentsResponse, toolsResponse, skillsResponse] = await Promise.all(
+        [
+          listAgents(),
+          listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
+          listSkills().catch(() => ({ items: [] as SkillInfo[] })),
+        ],
+      );
       setAgents(agentsResponse.items);
       setAllBuiltinTools(toolsResponse.items);
+      setAllSkills(skillsResponse.items);
       if (agentsResponse.items.length > 0) {
         setSelectedAgentId(agentsResponse.items[0].id);
       }
@@ -188,6 +209,33 @@ export function AgentsPage() {
       setToolsUpdating((prev) => {
         const next = new Set(prev);
         next.delete(toolName);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSkill = async (skillId: string) => {
+    const agent = selectedAgent();
+    if (!agent) return;
+
+    setSkillsUpdating((prev) => new Set([...prev, skillId]));
+    try {
+      const currentSkills = agent.skills ?? [];
+      const nextSkills = currentSkills.includes(skillId)
+        ? currentSkills.filter((s) => s !== skillId)
+        : [...currentSkills, skillId];
+
+      await updateAgentSkills(agent.id, nextSkills);
+
+      setAgents((prev) =>
+        prev.map((a) => (a.id === agent.id ? { ...a, skills: nextSkills } : a)),
+      );
+    } catch {
+      // leave state unchanged on error
+    } finally {
+      setSkillsUpdating((prev) => {
+        const next = new Set(prev);
+        next.delete(skillId);
         return next;
       });
     }
@@ -373,6 +421,20 @@ export function AgentsPage() {
                     <span class="flex items-center gap-2">
                       <Wrench class="w-4 h-4" />
                       Tools
+                    </span>
+                  </button>
+
+                  <button
+                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab() === 'skills'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                    onClick={() => handleTabChange('skills')}
+                  >
+                    <span class="flex items-center gap-2">
+                      <Lightbulb class="w-4 h-4" />
+                      Skills
                     </span>
                   </button>
                 </nav>
@@ -637,6 +699,77 @@ export function AgentsPage() {
                                   </div>
                                   <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                                     {tool.description}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+
+                {/* Skills Tab */}
+                <Show when={activeTab() === 'skills'}>
+                  <div class="space-y-4">
+                    <Show when={allSkills().length === 0}>
+                      <div class="flex items-center justify-center h-32">
+                        <p class="text-text-tertiary">No skills available</p>
+                      </div>
+                    </Show>
+                    <Show when={allSkills().length > 0}>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <For each={allSkills()}>
+                          {(skill) => {
+                            const isEnabled = () =>
+                              selectedAgent()!.skills?.includes(skill.id) ??
+                              false;
+                            const isUpdating = () =>
+                              skillsUpdating().has(skill.id);
+                            return (
+                              <button
+                                onClick={() => handleToggleSkill(skill.id)}
+                                disabled={isUpdating()}
+                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
+                                  isEnabled()
+                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                } ${isUpdating() ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
+                              >
+                                <div class="mt-0.5 flex-shrink-0">
+                                  <Lightbulb
+                                    class={`w-4 h-4 ${
+                                      isEnabled()
+                                        ? 'text-primary'
+                                        : 'text-gray-400 dark:text-gray-500'
+                                    }`}
+                                  />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                  <div class="flex items-center justify-between gap-2">
+                                    <span class="font-medium text-sm text-gray-900 dark:text-gray-100">
+                                      {skill.name}
+                                    </span>
+                                    {/* Toggle switch */}
+                                    <div
+                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                                        isEnabled()
+                                          ? 'bg-primary'
+                                          : 'bg-gray-200 dark:bg-gray-600'
+                                      }`}
+                                    >
+                                      <span
+                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                          isEnabled()
+                                            ? 'translate-x-4'
+                                            : 'translate-x-0'
+                                        }`}
+                                      />
+                                    </div>
+                                  </div>
+                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                    {skill.description}
                                   </p>
                                 </div>
                               </button>

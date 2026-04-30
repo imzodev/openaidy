@@ -118,6 +118,12 @@ describe('Agent Routes', () => {
       accessTokensRepo: undefined,
       workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      skills: {
+        load: () => {},
+        listSkills: () => [],
+        getSkill: () => undefined,
+        getSkillsForAgent: () => [],
+      } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });

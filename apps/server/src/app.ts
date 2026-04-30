@@ -51,6 +51,10 @@ import { createWorkspaceService, WorkspaceService } from './workspace';
 import { createExecService } from './exec/service';
 import { createBuiltinToolRegistry } from './tools';
 import { toolRoutes } from './routes/tools';
+import { createSkillRegistry, SkillRegistry } from './skills';
+import { skillRoutes } from './routes/skills';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * Application services container
@@ -76,6 +80,7 @@ export type AppServices = {
   accessTokensRepo: AccessTokensStore | undefined;
   workspace: WorkspaceService;
   mcpService: McpClientService;
+  skills: SkillRegistry;
 };
 
 /**
@@ -140,6 +145,29 @@ export async function buildApp() {
     initialAgents: [],
     configPath: env.APP_CONFIG_PATH,
   });
+  // Seed default skills from config/skills to .openaidy/skills (if not already present)
+  const skillsSourceDir = path.join(process.cwd(), 'config', 'skills');
+  const seedSkills = (sourceDir: string, targetDir: string): void => {
+    if (!fs.existsSync(sourceDir)) return;
+    fs.mkdirSync(targetDir, { recursive: true });
+    for (const id of fs.readdirSync(sourceDir)) {
+      const src = path.join(sourceDir, id);
+      if (!fs.statSync(src).isDirectory()) continue;
+      const dest = path.join(targetDir, id);
+      fs.mkdirSync(dest, { recursive: true });
+      for (const file of fs.readdirSync(src)) {
+        const destFile = path.join(dest, file);
+        if (!fs.existsSync(destFile)) {
+          fs.copyFileSync(path.join(src, file), destFile);
+        }
+      }
+    }
+  };
+  seedSkills(skillsSourceDir, env.SKILLS_DIR);
+
+  const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
+  skillRegistry.load();
+
   const configService = createAppConfigService({
     configPath: env.APP_CONFIG_PATH,
     templatePath: env.APP_CONFIG_TEMPLATE_PATH,
@@ -169,6 +197,7 @@ export async function buildApp() {
     agents: agentRegistry,
     mcp: mcpService,
     builtinTools: builtinToolRegistry,
+    skills: skillRegistry,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {
@@ -221,6 +250,7 @@ export async function buildApp() {
     accessTokensRepo,
     workspace: workspaceService,
     mcpService,
+    skills: skillRegistry,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -273,6 +303,13 @@ export async function buildApp() {
 
   // Register agent routes
   await app.register(agentRoutes, {
+    agentRegistry: services.agents,
+    authMiddleware,
+  });
+
+  // Register skill routes
+  await app.register(skillRoutes, {
+    skillRegistry: services.skills,
     agentRegistry: services.agents,
     authMiddleware,
   });
