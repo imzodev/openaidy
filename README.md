@@ -2,7 +2,7 @@
   <img src="./docs/assets/banner.png" alt="OpenAidy" width="892" />
 </p>
 
-# OpenAidy
+# OpenAidy — OpenAI Do-it Yourself
 
 A plugin-first AI operations platform for running agents, orchestrating automated work, connecting messaging channels, and extending both the backend and UI through stable public APIs.
 
