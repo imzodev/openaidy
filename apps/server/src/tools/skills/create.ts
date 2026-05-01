@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { parseSkillMd } from '../../skills/parser.js';
 import type { SkillRegistry } from '../../skills/index.js';
@@ -11,6 +11,10 @@ import type { SkillRegistry } from '../../skills/index.js';
  * The skill is written as a properly formatted SKILL.md file and
  * immediately registered in the SkillRegistry so it is available
  * without a server restart.
+ *
+ * Companion files (scripts, configs, .env.example, reference docs, etc.)
+ * can be written alongside SKILL.md by passing them in the `files` map.
+ * The skill body can then reference these files by name.
  */
 export function createSkillCreateTool(
   skillRegistry: SkillRegistry,
@@ -21,6 +25,8 @@ export function createSkillCreateTool(
     description:
       'Create a new skill and save it to the skills directory. ' +
       'A skill is a reusable set of instructions that can be assigned to agents. ' +
+      'Companion files (scripts, configs, .env.example, etc.) can be included ' +
+      'in the same skill folder via the `files` parameter and referenced from the skill body. ' +
       'The skill is immediately available after creation.',
     parameters: {
       type: 'object',
@@ -49,7 +55,15 @@ export function createSkillCreateTool(
           type: 'string',
           description:
             'The skill instructions — written as plain text or Markdown. ' +
-            'This text will be appended to the agent system prompt when the skill is active.',
+            'This text will be appended to the agent system prompt when the skill is active. ' +
+            'Reference companion files by their filename (e.g. "see script.py for the implementation").',
+        },
+        files: {
+          type: 'object',
+          description:
+            'Optional companion files to write into the skill folder alongside SKILL.md. ' +
+            'Keys are filenames (e.g. "script.py", "config.json", ".env.example"), ' +
+            'values are the file contents as strings. Filenames must not contain path separators.',
         },
       },
       required: ['id', 'name', 'description', 'body'],
@@ -64,6 +78,14 @@ export function createSkillCreateTool(
           ? args['version']
           : '1.0.0';
       const body = args['body'];
+      const filesArg = args['files'];
+      const companionFiles: Record<string, string> =
+        filesArg !== null &&
+        filesArg !== undefined &&
+        typeof filesArg === 'object' &&
+        !Array.isArray(filesArg)
+          ? (filesArg as Record<string, string>)
+          : {};
 
       if (typeof id !== 'string' || !id) {
         return {
@@ -101,6 +123,33 @@ export function createSkillCreateTool(
         return { ok: false, error: `Skill "${id}" already exists` };
       }
 
+      // Validate companion filenames — no path traversal, no overwriting SKILL.md
+      for (const filename of Object.keys(companionFiles)) {
+        if (
+          basename(filename) !== filename ||
+          filename.includes('/') ||
+          filename.includes('\\')
+        ) {
+          return {
+            ok: false,
+            error: `Companion file name "${filename}" must be a plain filename with no path separators`,
+          };
+        }
+        if (filename.toUpperCase() === 'SKILL.MD') {
+          return {
+            ok: false,
+            error:
+              'Use the body parameter to set SKILL.md content — do not pass it as a companion file',
+          };
+        }
+        if (typeof companionFiles[filename] !== 'string') {
+          return {
+            ok: false,
+            error: `Companion file "${filename}" must have string content`,
+          };
+        }
+      }
+
       const content = `---\nname: ${name}\ndescription: ${description}\nversion: ${version}\ncreated_by: ${ctx.agentId}\n---\n\n${body}\n`;
 
       const skillFilePath = join(skillsDir, id, 'SKILL.md');
@@ -117,6 +166,10 @@ export function createSkillCreateTool(
       try {
         await mkdir(skillDirPath, { recursive: true });
         await writeFile(skillFilePath, content, 'utf-8');
+
+        for (const [filename, fileContent] of Object.entries(companionFiles)) {
+          await writeFile(join(skillDirPath, filename), fileContent, 'utf-8');
+        }
       } catch (err) {
         return {
           ok: false,
@@ -126,9 +179,15 @@ export function createSkillCreateTool(
 
       skillRegistry.register(parsed);
 
+      const companionList = Object.keys(companionFiles);
+      const companionNote =
+        companionList.length > 0
+          ? ` Companion files written: ${companionList.join(', ')}.`
+          : '';
+
       return {
         ok: true,
-        content: `Skill "${id}" created successfully. It is now available to assign to agents.`,
+        content: `Skill "${id}" created successfully.${companionNote} It is now available to assign to agents.`,
       };
     },
   };

@@ -205,5 +205,92 @@ describe('skill tools', () => {
       );
       expect(result.ok).toBe(false);
     });
+
+    // ─── companion files ─────────────────────────────────────────────────────
+
+    it('writes companion files alongside SKILL.md', async () => {
+      const tool = createSkillCreateTool(registry, skillsDir);
+      const result = await tool.execute(
+        {
+          id: 'api-skill',
+          name: 'API Skill',
+          description: 'Connects to an API',
+          body: 'Use script.py to connect. See .env.example for required vars.',
+          files: {
+            'script.py': 'import requests\nprint("hello")',
+            '.env.example': 'API_KEY=your-key-here',
+          },
+        },
+        CTX,
+      );
+
+      expect(result.ok).toBe(true);
+      expect((result as { ok: true; content: string }).content).toContain(
+        'script.py',
+      );
+
+      const script = await readFile(
+        join(skillsDir, 'api-skill', 'script.py'),
+        'utf-8',
+      );
+      expect(script).toContain('import requests');
+
+      const envExample = await readFile(
+        join(skillsDir, 'api-skill', '.env.example'),
+        'utf-8',
+      );
+      expect(envExample).toContain('API_KEY');
+    });
+
+    it('succeeds with no companion files', async () => {
+      const tool = createSkillCreateTool(registry, skillsDir);
+      const result = await tool.execute(
+        {
+          id: 'plain-skill',
+          name: 'Plain Skill',
+          description: 'No extras',
+          body: 'Just instructions.',
+          files: {},
+        },
+        CTX,
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it('returns error for companion filename with path separator', async () => {
+      const tool = createSkillCreateTool(registry, skillsDir);
+      const result = await tool.execute(
+        {
+          id: 'traversal-skill',
+          name: 'Traversal',
+          description: 'Path traversal attempt',
+          body: 'Body.',
+          files: { '../evil.sh': 'rm -rf /' },
+        },
+        CTX,
+      );
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: string }).error).toMatch(
+        /path separator/,
+      );
+    });
+
+    it('returns error when trying to pass SKILL.md as companion file', async () => {
+      const tool = createSkillCreateTool(registry, skillsDir);
+      const result = await tool.execute(
+        {
+          id: 'override-skill',
+          name: 'Override',
+          description: 'Tries to override SKILL.md',
+          body: 'Body.',
+          files: { 'SKILL.md': '---\nname: Evil\n---\nbad' },
+        },
+        CTX,
+      );
+      expect(result.ok).toBe(false);
+      expect((result as { ok: false; error: string }).error).toMatch(
+        /body parameter/,
+      );
+    });
   });
 });
