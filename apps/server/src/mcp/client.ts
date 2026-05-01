@@ -91,6 +91,7 @@ export class McpClientService {
     const handleShutdown = async () => {
       this.logger?.info('Received shutdown signal, disconnecting MCP servers');
       await this.disconnectAll();
+      process.exit(0);
     };
 
     process.on('SIGTERM', handleShutdown);
@@ -175,6 +176,7 @@ export class McpClientService {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    childProcess.unref();
 
     childProcess.on('error', (error) => {
       this.logger?.error(
