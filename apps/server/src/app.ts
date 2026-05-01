@@ -53,7 +53,7 @@ import { createBuiltinToolRegistry } from './tools';
 import { toolRoutes } from './routes/tools';
 import { createSkillRegistry, SkillRegistry } from './skills';
 import { skillRoutes } from './routes/skills';
-import fs from 'node:fs';
+import { seedBundledSkills } from './skills/seed';
 import path from 'node:path';
 
 /**
@@ -145,25 +145,15 @@ export async function buildApp() {
     initialAgents: [],
     configPath: env.APP_CONFIG_PATH,
   });
-  // Seed default skills from config/skills to .openaidy/skills (if not already present)
-  const skillsSourceDir = path.join(process.cwd(), 'config', 'skills');
-  const seedSkills = (sourceDir: string, targetDir: string): void => {
-    if (!fs.existsSync(sourceDir)) return;
-    fs.mkdirSync(targetDir, { recursive: true });
-    for (const id of fs.readdirSync(sourceDir)) {
-      const src = path.join(sourceDir, id);
-      if (!fs.statSync(src).isDirectory()) continue;
-      const dest = path.join(targetDir, id);
-      fs.mkdirSync(dest, { recursive: true });
-      for (const file of fs.readdirSync(src)) {
-        const destFile = path.join(dest, file);
-        if (!fs.existsSync(destFile)) {
-          fs.copyFileSync(path.join(src, file), destFile);
-        }
-      }
-    }
-  };
-  seedSkills(skillsSourceDir, env.SKILLS_DIR);
+  // Seed default skills from config/skills to .openaidy/skills.
+  // Uses a manifest to track what was seeded so app updates propagate
+  // only when the user has not modified their local copy.
+  const skillsSourceDir = path.join(
+    path.dirname(env.OPENAIDY_HOME),
+    'config',
+    'skills',
+  );
+  seedBundledSkills(skillsSourceDir, env.SKILLS_DIR);
 
   const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
   skillRegistry.load();

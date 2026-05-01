@@ -15,6 +15,8 @@ export type SkillDefinition = {
   name: string;
   /** From frontmatter 'description' field */
   description: string;
+  /** From frontmatter 'version' field — used for seeding/update checks */
+  version?: string;
   /** Everything after the closing --- delimiter, trimmed */
   body: string;
 };
@@ -71,9 +73,10 @@ export function parseSkillMd(
   const frontmatterStart = firstDash + 1;
   const frontmatterEnd = secondDash - 1;
 
-  // Extract name and description from frontmatter lines
+  // Extract name, description, and version from frontmatter lines
   let name: string | undefined;
   let description: string | undefined;
+  let version: string | undefined;
 
   for (let i = frontmatterStart; i <= frontmatterEnd; i++) {
     const line = lines[i];
@@ -82,6 +85,8 @@ export function parseSkillMd(
       name = line.substring('name:'.length).trim();
     } else if (line.startsWith('description:')) {
       description = line.substring('description:'.length).trim();
+    } else if (line.startsWith('version:')) {
+      version = line.substring('version:'.length).trim();
     }
   }
 
@@ -116,6 +121,7 @@ export function parseSkillMd(
     id,
     name: name!,
     description: description!,
+    ...(version !== undefined ? { version } : {}),
     body,
   };
 }

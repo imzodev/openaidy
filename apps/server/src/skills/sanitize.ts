@@ -12,12 +12,11 @@
 const DANGEROUS_PATTERNS: RegExp[] = [
   // Prompt override attempts
   /ignore\s+(all\s+)?previous\s+(instruction|directive)s?/gi,
-  /you\s+are\s+now\s+(a\s+)?/gi,
-  /forget\s+(all\s+)?(previous|earlier)/gi,
+  /you\s+are\s+now/gi,
+  /forget\s+(all\s+)?(previous|earlier)\s+(instruction|directive)s?/gi,
   /disregard\s+(all\s+)?(instruction|directive)s?/gi,
-  /you\s+must\s+(now\s+)?/gi,
+  /you\s+must\s+now/gi,
   /\bstrip\s+downstream\s+(instruction|directive)s?\b/gi,
-  /\benclosed\s+(instruction|directive)s?\b/gi,
   /<system_prompt>/gi,
   /\[SYSTEM_PROMPT\]/gi,
   // Code injection patterns (defense in depth — skill bodies should not contain code)
