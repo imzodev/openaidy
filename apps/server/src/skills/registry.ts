@@ -130,6 +130,16 @@ export class SkillRegistry {
     return result;
   }
 
+  /**
+   * Register a skill definition directly into the in-memory cache.
+   * Used by tools that create skills at runtime so the new skill is
+   * immediately available without a server restart.
+   */
+  register(skill: SkillDefinition): void {
+    this.skills.set(skill.id, skill);
+    this.loaded = true;
+  }
+
   private ensureLoaded(): void {
     if (!this.loaded) {
       this.load();

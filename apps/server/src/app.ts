@@ -151,6 +151,7 @@ export async function buildApp() {
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
     exec: execService,
+    skills: { registry: skillRegistry, skillsDir: env.SKILLS_DIR },
   });
 
   const sessionService = new SessionMessageService({
