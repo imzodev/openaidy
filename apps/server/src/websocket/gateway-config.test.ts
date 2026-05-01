@@ -14,7 +14,7 @@ import {
   createWebSocketConfig,
   validateWebSocketConfig,
 } from './types';
-import type { AppServices } from '../app';
+import type { AppServices } from '../types';
 
 // Mock services for testing
 const mockServices = {

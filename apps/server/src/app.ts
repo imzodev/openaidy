@@ -34,54 +34,25 @@ import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
 import { createTaskService } from './tasks';
-import { createMcpClientService, type McpClientService } from './mcp/client';
-import { createProviderServices, type ProviderServices } from './providers';
+import { createMcpClientService } from './mcp/client';
+import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
-import { createAgentRegistry, type AgentRegistry } from './agents';
+import { createAgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
 import { SchedulerService, createSchedulerService } from './scheduler';
-import {
-  createAppConfigService,
-  type AppConfigService,
-} from './config/service';
+import { createAppConfigService } from './config/service';
 import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
-import { createWorkspaceService, WorkspaceService } from './workspace';
+import { createWorkspaceService } from './workspace';
 import { createExecService } from './exec/service';
 import { createBuiltinToolRegistry } from './tools';
 import { toolRoutes } from './routes/tools';
-import { createSkillRegistry, SkillRegistry } from './skills';
+import { createSkillRegistry } from './skills';
 import { skillRoutes } from './routes/skills';
 import { seedBundledSkills } from './skills/seed';
 import path from 'node:path';
-
-/**
- * Application services container
- *
- * These services are created once per app instance and shared across
- * all routes and plugins. This ensures that provider registration,
- * selection, and invocation all operate on the same service graph.
- */
-export type AppServices = {
-  config: AppConfigService;
-  providers: ProviderServices;
-  sessions: SessionMessageService;
-  agents: AgentRegistry;
-  runEvents: RunEventEmitter;
-  bootstrapAdmin: BootstrapAdminManager | undefined;
-  dbAdapter: DatabaseAdapter | undefined;
-  scheduler: SchedulerService | undefined;
-  jobsRepo: JobsStore | undefined;
-  jobRunsRepo: JobRunsStore | undefined;
-  sessionsRepo: SessionsStore | undefined;
-  pairingRequestsRepo: PairingRequestsStore | undefined;
-  devicesRepo: DevicesStore | undefined;
-  accessTokensRepo: AccessTokensStore | undefined;
-  workspace: WorkspaceService;
-  mcpService: McpClientService;
-  skills: SkillRegistry;
-};
+import type { AppServices } from './types';
 
 /**
  * Build the Fastify application with unified service lifecycle

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
 import { createGateway, type WebSocketGateway } from '../index';
 import type { WSMessage } from '@openaidy/shared-types';
-import type { AppServices } from '../../app';
+import type { AppServices } from '../../types';
 import { AuthMiddleware } from '../middleware/auth';
 
 // ============================================================================

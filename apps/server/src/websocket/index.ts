@@ -31,7 +31,7 @@ import {
   createErrorResponse,
   WS_CAPABILITIES,
 } from '@openaidy/shared-types';
-import type { AppServices } from '../app';
+import type { AppServices } from '../types';
 import { ConnectionManager } from './connection-manager';
 import { MessageRouter, type HandlerContext } from './message-router';
 import { SessionHandler, registerSessionHandlers } from './handlers/session';

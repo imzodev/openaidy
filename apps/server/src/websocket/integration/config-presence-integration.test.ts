@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import { createGateway, type WebSocketGateway } from '../index';
-import type { AppServices } from '../../app';
+import type { AppServices } from '../../types';
 import { AuthMiddleware } from '../middleware/auth';
 
 // ============================================================================

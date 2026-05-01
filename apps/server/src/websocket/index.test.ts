@@ -18,7 +18,7 @@ import {
 } from '@openaidy/shared-types';
 import { defaultWebSocketConfig } from './types';
 import { AuthMiddleware } from './middleware/auth';
-import type { AppServices } from '../app';
+import type { AppServices } from '../types';
 
 // Mock services for testing
 const mockServices = {
