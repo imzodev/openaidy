@@ -5,6 +5,7 @@
  * Reads agent config files directly from the agents config directory.
  */
 
+import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type {
@@ -27,42 +28,15 @@ async function readAgentConfigs(): Promise<AgentConfig[]> {
   }
 }
 
-function formatAgentList(agents: AgentConfig[]): string {
-  const lines: string[] = ['Agents', '======', ''];
-
-  if (agents.length === 0) {
-    lines.push('No agents found.');
-    lines.push('');
-    lines.push('Create one with: pnpm openaidy agents create <name>');
-    return lines.join('\n');
-  }
-
-  const enabled = agents.filter((a) => a.enabled !== false);
-  const disabled = agents.filter((a) => a.enabled === false);
-
-  if (enabled.length > 0) {
-    lines.push(`Enabled (${enabled.length})`);
-    lines.push('');
-    for (const a of enabled) {
-      lines.push(`  ${a.name}`);
-      lines.push(`    ID:       ${a.id}`);
-      if (a.description) lines.push(`    Desc:     ${a.description}`);
-      if (a.model) lines.push(`    Model:    ${a.model}`);
-      if (a.tags?.length) lines.push(`    Tags:     ${a.tags.join(', ')}`);
-      lines.push('');
-    }
-  }
-
-  if (disabled.length > 0) {
-    lines.push(`Disabled (${disabled.length})`);
-    lines.push('');
-    for (const a of disabled) {
-      lines.push(`  ${a.name} [disabled]`);
-      lines.push(`    ID:  ${a.id}`);
-      lines.push('');
-    }
-  }
-
+function formatAgent(a: AgentConfig): string {
+  const lines: string[] = [
+    `${a.name}${a.enabled === false ? ' [disabled]' : ''}`,
+  ];
+  lines.push(`ID:     ${a.id}`);
+  if (a.description) lines.push(`Desc:   ${a.description}`);
+  if (a.model) lines.push(`Model:  ${a.model}`);
+  if (a.tags?.length) lines.push(`Tags:   ${a.tags.join(', ')}`);
+  if (a.skills?.length) lines.push(`Skills: ${a.skills.join(', ')}`);
   return lines.join('\n');
 }
 
@@ -88,5 +62,38 @@ Exit Codes:
   }
 
   const agents = await readAgentConfigs();
-  return { exitCode: 0, output: formatAgentList(agents) };
+
+  if (agents.length === 0) {
+    p.note(
+      'No agents found.\n\nCreate one with: openaidy agents create',
+      'Agents',
+    );
+    return {
+      exitCode: 0,
+      output: 'No agents found.\n\nCreate one with: openaidy agents create',
+    };
+  }
+
+  const enabled = agents.filter((a) => a.enabled !== false);
+  const disabled = agents.filter((a) => a.enabled === false);
+
+  p.intro(`Agents (${agents.length})`);
+
+  if (enabled.length > 0) {
+    for (const a of enabled) {
+      p.note(formatAgent(a));
+    }
+  }
+
+  if (disabled.length > 0) {
+    for (const a of disabled) {
+      p.note(formatAgent(a), 'disabled');
+    }
+  }
+
+  // Also return structured output for tests / piping
+  const lines: string[] = [];
+  for (const a of enabled) lines.push(formatAgent(a), '');
+  for (const a of disabled) lines.push(formatAgent(a), '');
+  return { exitCode: 0, output: lines.join('\n') };
 }

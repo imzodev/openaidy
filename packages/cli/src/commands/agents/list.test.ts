@@ -113,14 +113,14 @@ describe('agents list', () => {
       expect(result.output).toContain('coding');
     });
 
-    it('shows enabled count in section header', async () => {
+    it('shows all enabled agents in output', async () => {
       const result = await agentsListHandler([]);
-      expect(result.output).toContain('Enabled (2)');
+      expect(result.output).toContain('Default Assistant');
+      expect(result.output).toContain('Code Assistant');
     });
 
-    it('groups disabled agents in their own section', async () => {
+    it('shows disabled agents with [disabled] marker', async () => {
       const result = await agentsListHandler([]);
-      expect(result.output).toContain('Disabled (1)');
       expect(result.output).toContain('Disabled Agent');
       expect(result.output).toContain('[disabled]');
     });
