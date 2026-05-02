@@ -275,6 +275,19 @@ export async function listSkills(): Promise<{ items: SkillInfo[] }> {
 }
 
 /**
+ * List skills available to a specific agent (global skills + agent workspace skills)
+ */
+export async function listAgentSkills(
+  agentId: string,
+): Promise<{ items: SkillInfo[] }> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`);
+  if (!response.ok) {
+    throw new Error(`Failed to list agent skills: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
  * Update the skills list for an agent
  */
 export async function updateAgentSkills(

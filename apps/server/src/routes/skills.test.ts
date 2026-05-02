@@ -14,6 +14,7 @@ import { createProviderServices } from '../providers';
 import { SessionMessageService } from '../sessions/service';
 import { RunEventEmitter } from '../dispatch/events';
 import { createSkillRegistry } from '../skills';
+import { WorkspaceService } from '../workspace/service';
 
 const mockAuthMiddleware = {
   validateToken: async () => ({
@@ -31,6 +32,8 @@ describe('Skill Routes', () => {
   let app: FastifyInstance;
   let tempAgentsDir: string;
   let tempSkillsDir: string;
+  let tempWorkspaceDir: string;
+  let workspace: WorkspaceService;
 
   beforeEach(async () => {
     // Create temp directories
@@ -40,6 +43,10 @@ describe('Skill Routes', () => {
     tempSkillsDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'test-skills-routes-'),
     );
+    tempWorkspaceDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'test-workspace-skills-'),
+    );
+    workspace = new WorkspaceService({ baseDir: tempWorkspaceDir });
 
     // Create test skill directories
     fs.mkdirSync(path.join(tempSkillsDir, 'skill-a'));
@@ -137,6 +144,7 @@ describe('Skill Routes', () => {
       skillRegistry,
       agentRegistry,
       authMiddleware: mockAuthMiddleware,
+      workspace,
     });
   });
 
@@ -144,6 +152,7 @@ describe('Skill Routes', () => {
     await app.close();
     fs.rmSync(tempAgentsDir, { recursive: true, force: true });
     fs.rmSync(tempSkillsDir, { recursive: true, force: true });
+    fs.rmSync(tempWorkspaceDir, { recursive: true, force: true });
   });
 
   describe('GET /skills', () => {
@@ -213,6 +222,7 @@ describe('Skill Routes', () => {
         skillRegistry: emptySkillRegistry,
         agentRegistry,
         authMiddleware: mockAuthMiddleware,
+        workspace,
       });
 
       const response = await tempApp.inject({

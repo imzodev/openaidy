@@ -20,7 +20,7 @@ import {
   listAgents,
   listBuiltinTools,
   updateAgentTools,
-  listSkills,
+  listAgentSkills,
   updateAgentSkills,
   type Agent,
   type BuiltinToolInfo,
@@ -167,16 +167,12 @@ export function AgentsPage() {
 
   onMount(async () => {
     try {
-      const [agentsResponse, toolsResponse, skillsResponse] = await Promise.all(
-        [
-          listAgents(),
-          listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
-          listSkills().catch(() => ({ items: [] as SkillInfo[] })),
-        ],
-      );
+      const [agentsResponse, toolsResponse] = await Promise.all([
+        listAgents(),
+        listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
+      ]);
       setAgents(agentsResponse.items);
       setAllBuiltinTools(toolsResponse.items);
-      setAllSkills(skillsResponse.items);
       if (agentsResponse.items.length > 0) {
         setSelectedAgentId(agentsResponse.items[0].id);
       }
@@ -185,6 +181,14 @@ export function AgentsPage() {
     } finally {
       setIsLoading(false);
     }
+  });
+
+  createEffect(() => {
+    const agentId = selectedAgentId();
+    if (!agentId) return;
+    listAgentSkills(agentId)
+      .then((res) => setAllSkills(res.items))
+      .catch(() => setAllSkills([]));
   });
 
   const handleToggleTool = async (toolName: string) => {
