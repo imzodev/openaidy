@@ -775,6 +775,50 @@ pnpm openaidy addon templates
 
 ---
 
+### `agents` - Agent Management
+
+Commands for creating and managing agents and their workspaces.
+
+---
+
+#### `agents list`
+
+List all configured agents.
+
+**Usage:**
+
+```bash
+openaidy agents list
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy agents list
+```
+
+---
+
+#### `agents create`
+
+Create a new agent with its own workspace directory.
+
+**Usage:**
+
+```bash
+openaidy agents create [<name>] [--id <id>] [--description <desc>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy agents create
+pnpm openaidy agents create "Research Assistant"
+pnpm openaidy agents create --name "Research Assistant" --description "Helps with research"
+```
+
+---
+
 ## Future Commands
 
 The following commands are planned but not yet implemented:
