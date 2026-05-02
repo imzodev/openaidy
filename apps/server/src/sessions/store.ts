@@ -8,12 +8,22 @@ export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 /**
  * Run status type
  */
-export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+export type RunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
 
 /**
  * Finish reason type
  */
-export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'error';
+export type FinishReason =
+  | 'stop'
+  | 'length'
+  | 'tool_calls'
+  | 'content_filter'
+  | 'error';
 
 /**
  * Session message record
@@ -84,6 +94,17 @@ export function createSessionRecord(title: string): SessionRecord {
   return record;
 }
 
+export function updateSessionTitleRecord(
+  id: string,
+  title: string,
+): SessionRecord | undefined {
+  const record = sessions.get(id);
+  if (!record) return undefined;
+  const updated = { ...record, title };
+  sessions.set(id, updated);
+  return updated;
+}
+
 // Message operations
 export function appendMessageRecord(input: {
   sessionId: string;
@@ -92,11 +113,13 @@ export function appendMessageRecord(input: {
   toolCallId?: string;
   metadata?: Record<string, unknown>;
 }): SessionMessageRecord {
-  const sessionMessages = Array.from(messages.values())
-    .filter(m => m.sessionId === input.sessionId);
-  const nextSequence = sessionMessages.length > 0
-    ? Math.max(...sessionMessages.map(m => m.sequence)) + 1
-    : 1;
+  const sessionMessages = Array.from(messages.values()).filter(
+    (m) => m.sessionId === input.sessionId,
+  );
+  const nextSequence =
+    sessionMessages.length > 0
+      ? Math.max(...sessionMessages.map((m) => m.sequence)) + 1
+      : 1;
 
   const record: SessionMessageRecord = {
     id: nanoid(),
@@ -112,9 +135,11 @@ export function appendMessageRecord(input: {
   return record;
 }
 
-export function listSessionMessageRecords(sessionId: string): SessionMessageRecord[] {
+export function listSessionMessageRecords(
+  sessionId: string,
+): SessionMessageRecord[] {
   return Array.from(messages.values())
-    .filter(m => m.sessionId === sessionId)
+    .filter((m) => m.sessionId === sessionId)
     .sort((a, b) => a.sequence - b.sequence);
 }
 
@@ -140,10 +165,13 @@ export function createRunRecord(input: {
   return record;
 }
 
-export function updateRunRecord(id: string, updates: Partial<Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>>): SessionRunRecord | undefined {
+export function updateRunRecord(
+  id: string,
+  updates: Partial<Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>>,
+): SessionRunRecord | undefined {
   const record = runs.get(id);
   if (!record) return undefined;
-  
+
   const updated = { ...record, ...updates };
   runs.set(id, updated);
   return updated;
@@ -164,19 +192,23 @@ export function markRunSucceeded(
     completionTokens?: number;
     totalTokens?: number;
     metadata?: Record<string, unknown>;
-  }
+  },
 ): SessionRunRecord | undefined {
-  const updates: Partial<Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>> = {
+  const updates: Partial<
+    Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>
+  > = {
     status: 'succeeded',
     finishReason: input.finishReason,
     finishedAt: new Date().toISOString(),
   };
-  
-  if (input.promptTokens !== undefined) updates.promptTokens = input.promptTokens;
-  if (input.completionTokens !== undefined) updates.completionTokens = input.completionTokens;
+
+  if (input.promptTokens !== undefined)
+    updates.promptTokens = input.promptTokens;
+  if (input.completionTokens !== undefined)
+    updates.completionTokens = input.completionTokens;
   if (input.totalTokens !== undefined) updates.totalTokens = input.totalTokens;
   if (input.metadata !== undefined) updates.metadata = input.metadata;
-  
+
   return updateRunRecord(id, updates);
 }
 
@@ -186,23 +218,25 @@ export function markRunFailed(
     errorCode: string;
     errorMessage: string;
     metadata?: Record<string, unknown>;
-  }
+  },
 ): SessionRunRecord | undefined {
-  const updates: Partial<Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>> = {
+  const updates: Partial<
+    Omit<SessionRunRecord, 'id' | 'sessionId' | 'createdAt'>
+  > = {
     status: 'failed',
     finishReason: 'error',
     errorCode: input.errorCode,
     errorMessage: input.errorMessage,
     finishedAt: new Date().toISOString(),
   };
-  
+
   if (input.metadata !== undefined) updates.metadata = input.metadata;
-  
+
   return updateRunRecord(id, updates);
 }
 
 export function listSessionRunRecords(sessionId: string): SessionRunRecord[] {
   return Array.from(runs.values())
-    .filter(r => r.sessionId === sessionId)
+    .filter((r) => r.sessionId === sessionId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

@@ -212,6 +212,7 @@ function createGateway(
     fastify.log,
     streamManager,
     fastify.services.runEvents,
+    subscriptionManager,
   );
   const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
   const providerHandler = new ProviderHandler(

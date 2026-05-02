@@ -7,6 +7,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
 import type { StreamManager } from '../streaming';
+import type { SubscriptionManager } from '../subscriptions';
 import type { RunEventEmitter } from '../../dispatch/events';
 import type { HandlerContext } from '../index';
 import {
@@ -48,6 +49,7 @@ export class SessionHandler {
     private logger: FastifyBaseLogger,
     private streamManager?: StreamManager,
     private runEvents?: RunEventEmitter,
+    private subscriptionManager?: SubscriptionManager,
   ) {}
 
   /**
@@ -633,6 +635,19 @@ export class SessionHandler {
           { sessionId, runId, messageId: assistantMessage.id },
           'Streaming run completed',
         );
+
+        // Auto-rename session on the first run
+        this.maybeRenameSession(
+          sessionId,
+          request.payload.content,
+          run.providerId,
+          run.modelId,
+        ).catch((err: unknown) => {
+          this.logger.warn(
+            { err, sessionId },
+            'Auto-rename session failed (non-fatal)',
+          );
+        });
       } else {
         // Emit failure
         this.runEvents?.emitFailed({
@@ -665,6 +680,42 @@ export class SessionHandler {
   // ============================================================================
   // Helper Methods
   // ============================================================================
+
+  /**
+   * Auto-rename the session after the first run completes.
+   *
+   * Checks that this is the first run (only 1 run for the session) before
+   * generating a title. Broadcasts `session.updated` to all subscribers.
+   */
+  private async maybeRenameSession(
+    sessionId: string,
+    userMessage: string,
+    providerId: string,
+    modelId: string,
+  ): Promise<void> {
+    const runs = await this.sessionService.listRuns(sessionId);
+    if (runs.length !== 1) return;
+
+    const title = await this.sessionService.generateTitle(
+      userMessage,
+      providerId,
+      modelId,
+    );
+    if (!title) return;
+
+    await this.sessionService.updateSessionTitle(sessionId, title);
+
+    this.logger.info({ sessionId, title }, 'Session auto-renamed');
+
+    if (this.subscriptionManager) {
+      const event = createWSMessage('session.updated', {
+        sessionId,
+        updates: { title },
+        updatedAt: new Date().toISOString(),
+      });
+      this.subscriptionManager.broadcastToSession(sessionId, event);
+    }
+  }
 
   /**
    * Create an error response
@@ -700,8 +751,15 @@ export function createSessionHandler(
   logger: FastifyBaseLogger,
   streamManager?: StreamManager,
   runEvents?: RunEventEmitter,
+  subscriptionManager?: SubscriptionManager,
 ): SessionHandler {
-  return new SessionHandler(sessionService, logger, streamManager, runEvents);
+  return new SessionHandler(
+    sessionService,
+    logger,
+    streamManager,
+    runEvents,
+    subscriptionManager,
+  );
 }
 
 // ============================================================================

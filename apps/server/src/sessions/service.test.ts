@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SessionMessageService } from './service';
 import { BuiltinToolRegistry } from '../tools/registry';
 import { AgentRegistry } from '../agents/registry';
 import type { BuiltinTool } from '@openaidy/runtime';
+import type {
+  ProviderRegistryService,
+  ProviderSelectionService,
+  ModelInvocationService,
+} from '../providers';
 
 /**
  * Unit tests for the builtin tool execution guard in SessionMessageService.
@@ -163,5 +169,171 @@ describe('SessionMessageService — builtin tool execution guard', () => {
     expect(
       resolveBuiltinTool('workspace_list', 'agent1', agents, builtinTools),
     ).toBeDefined();
+  });
+});
+
+// ============================================================================
+// generateTitle
+// ============================================================================
+
+function makeServiceWithInvokeResult(content: string | null) {
+  const invoke =
+    content === null
+      ? vi
+          .fn()
+          .mockResolvedValue({
+            ok: false,
+            error: { code: 'provider.error', message: 'fail' },
+          })
+      : vi.fn().mockResolvedValue({ ok: true, value: { content } });
+
+  return {
+    service: new SessionMessageService({
+      providers: {
+        registry: {
+          getDefault: vi.fn(),
+          getEntry: vi.fn(),
+        } as unknown as ProviderRegistryService,
+        selection: {} as unknown as ProviderSelectionService,
+        invocation: {
+          invoke,
+          invokeStream: vi.fn(),
+        } as unknown as ModelInvocationService,
+      },
+    }),
+    invoke,
+  };
+}
+
+describe('SessionMessageService.generateTitle', () => {
+  it('extracts title from a clean JSON response', async () => {
+    const { service } = makeServiceWithInvokeResult(
+      '{"title":"Fix login bug"}',
+    );
+    const title = await service.generateTitle(
+      'Fix the login bug',
+      'openai',
+      'gpt-4o',
+    );
+    expect(title).toBe('Fix login bug');
+  });
+
+  it('extracts title when reasoning text precedes the JSON (no think tags)', async () => {
+    const { service } = makeServiceWithInvokeResult(
+      'The user wants me to generate a short conversation title\n{"title":"Fix login bug"}',
+    );
+    const title = await service.generateTitle(
+      'Fix the login bug',
+      'deepseek',
+      'deepseek-reasoner',
+    );
+    expect(title).toBe('Fix login bug');
+  });
+
+  it('extracts title when <think> tags wrap the reasoning before the JSON', async () => {
+    const { service } = makeServiceWithInvokeResult(
+      '<think>The user wants a title (3-6 words)\nLet me think...</think>\n{"title":"Schedule team meeting"}',
+    );
+    const title = await service.generateTitle(
+      'Schedule a team meeting',
+      'deepseek',
+      'deepseek-reasoner',
+    );
+    expect(title).toBe('Schedule team meeting');
+  });
+
+  it('returns null when provider call fails', async () => {
+    const { service } = makeServiceWithInvokeResult(null);
+    const title = await service.generateTitle('hello', 'openai', 'gpt-4o');
+    expect(title).toBeNull();
+  });
+
+  it('returns null when response contains no JSON with a title field', async () => {
+    const { service } = makeServiceWithInvokeResult(
+      'The user wants me to generate a short title',
+    );
+    const title = await service.generateTitle(
+      'hello',
+      'deepseek',
+      'deepseek-reasoner',
+    );
+    expect(title).toBeNull();
+  });
+
+  it('returns null when provider throws', async () => {
+    const service = new SessionMessageService({
+      providers: {
+        registry: {
+          getDefault: vi.fn(),
+          getEntry: vi.fn(),
+        } as unknown as ProviderRegistryService,
+        selection: {} as unknown as ProviderSelectionService,
+        invocation: {
+          invoke: vi.fn().mockRejectedValue(new Error('network error')),
+          invokeStream: vi.fn(),
+        } as unknown as ModelInvocationService,
+      },
+    });
+    const title = await service.generateTitle('hello', 'openai', 'gpt-4o');
+    expect(title).toBeNull();
+  });
+
+  it('passes maxTokens: 300 to the provider', async () => {
+    const { service, invoke } = makeServiceWithInvokeResult(
+      '{"title":"Short title"}',
+    );
+    await service.generateTitle('hello', 'openai', 'gpt-4o');
+    expect(invoke).toHaveBeenCalledWith(
+      expect.objectContaining({ maxTokens: 300 }),
+      expect.anything(),
+    );
+  });
+});
+
+// ============================================================================
+// updateSessionTitle
+// ============================================================================
+
+const makeMinimalProviders = () => ({
+  registry: {
+    getDefault: vi.fn(),
+    getEntry: vi.fn(),
+  } as unknown as ProviderRegistryService,
+  selection: {} as unknown as ProviderSelectionService,
+  invocation: {
+    invoke: vi.fn(),
+    invokeStream: vi.fn(),
+  } as unknown as ModelInvocationService,
+});
+
+describe('SessionMessageService.updateSessionTitle', () => {
+  it('updates title in the in-memory store', async () => {
+    const service = new SessionMessageService({
+      providers: makeMinimalProviders(),
+    });
+
+    const session = await service.createSession('New Session');
+    const sessionId = (session as { id: string }).id;
+
+    const updated = await service.updateSessionTitle(
+      sessionId,
+      'Renamed Title',
+    );
+    expect((updated as { title: string } | null)?.title).toBe('Renamed Title');
+
+    const fetched = await service.getSession(sessionId);
+    expect((fetched as { title: string } | null)?.title).toBe('Renamed Title');
+  });
+
+  it('returns null for a non-existent session id', async () => {
+    const service = new SessionMessageService({
+      providers: makeMinimalProviders(),
+    });
+
+    const result = await service.updateSessionTitle(
+      'does-not-exist',
+      'Any title',
+    );
+    expect(result).toBeNull();
   });
 });

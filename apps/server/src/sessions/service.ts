@@ -22,6 +22,7 @@ import {
   findSessionRecord,
   createSessionRecord,
   listSessionRecords,
+  updateSessionTitleRecord,
   appendMessageRecord,
   listSessionMessageRecords,
   createRunRecord,
@@ -115,6 +116,76 @@ export class SessionMessageService {
       return this.sessionsRepo.create({ title });
     }
     return createSessionRecord(title);
+  }
+
+  /**
+   * Update a session's title
+   */
+  async updateSessionTitle(
+    id: string,
+    title: string,
+  ): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.updateTitle(id, title);
+    }
+    return updateSessionTitleRecord(id, title) ?? null;
+  }
+
+  /**
+   * Generate a short title for a session from the first user message.
+   *
+   * Makes a single non-streaming provider call with max 12 tokens.
+   * Returns null if generation fails — callers should degrade gracefully.
+   */
+  async generateTitle(
+    userMessage: string,
+    providerId: string,
+    modelId: string,
+  ): Promise<string | null> {
+    try {
+      const result = await this.providers.invocation.invoke(
+        {
+          model: modelId,
+          maxTokens: 300,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You generate ultra-short conversation titles. ' +
+                'Respond with ONLY valid JSON in this exact format: {"title":"3-6 word title here"} ' +
+                'Keep any reasoning very brief. No other text outside the JSON.',
+            },
+            {
+              role: 'user',
+              content: `Generate a title for: "${userMessage.slice(0, 300)}"`,
+            },
+          ],
+        },
+        { providerId },
+      );
+
+      if (!result.ok) {
+        console.error('[generateTitle] provider error:', result.error);
+        return null;
+      }
+
+      const raw = result.value.content;
+      console.log('[generateTitle] raw response:', JSON.stringify(raw));
+
+      // Extract JSON object from the response — handles reasoning text before/after
+      const jsonMatch = raw.match(
+        /\{[\s\S]*?"title"\s*:\s*"([^"]+)"[\s\S]*?\}/,
+      );
+      console.log('[generateTitle] jsonMatch:', jsonMatch);
+      if (!jsonMatch?.[1]) return null;
+
+      const title = jsonMatch[1].trim();
+      console.log('[generateTitle] extracted title:', title);
+      return title || null;
+    } catch (err) {
+      console.error('[generateTitle] threw:', err);
+      return null;
+    }
   }
 
   /**

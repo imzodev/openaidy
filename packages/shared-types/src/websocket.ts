@@ -926,6 +926,7 @@ export type WSResponse =
   | SessionDeleteResponse
   | SessionSubscribedResponse
   | SessionUnsubscribedResponse
+  | SessionUpdatedEvent
   | SessionStreamEvent
   | AgentListResponse
   | AgentGetResponse
@@ -999,6 +1000,7 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
+  'session.updated',
   'agent.list',
   'agent.get',
   'provider.list',

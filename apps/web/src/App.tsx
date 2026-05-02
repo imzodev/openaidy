@@ -140,10 +140,15 @@ function AppContent(props: AppContentProps) {
       setPendingUserMessage(undefined);
     };
 
+    const handleSessionUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    };
+
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
     const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
+    const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
 
     // Subscribe to the session
     wsClient.subscribeToSession(sessionId).catch((err: Error) => {
@@ -156,6 +161,7 @@ function AppContent(props: AppContentProps) {
       unsubDelta();
       unsubEnd();
       unsubError();
+      unsubUpdated();
     });
   });
 
