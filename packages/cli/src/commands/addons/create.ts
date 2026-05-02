@@ -2,6 +2,7 @@
  * Create Command - Initialize a new addon project
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -12,6 +13,7 @@ import {
 import { slugify, resolveAddonsDir } from '../../utils/project.js';
 import { installAddon } from './install.js';
 import { buildAddon } from './build.js';
+import type { CommandResult } from '../../types.js';
 
 export interface CreateOptions {
   directory?: string;
@@ -481,5 +483,46 @@ async function initGit(projectPath: string): Promise<void> {
     execSync('git init', { cwd: projectPath, stdio: 'ignore' });
   } catch {
     // Git initialization failed, ignore
+  }
+}
+
+export async function addonCreateHandler(
+  args: string[],
+): Promise<CommandResult> {
+  const name = args[0];
+  if (!name || name.startsWith('-')) {
+    p.log.error('Addon name is required\nUsage: openaidy addon create <name>');
+    return { exitCode: 1, error: 'Addon name is required' };
+  }
+
+  const options: Record<string, string | boolean> = {};
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '-d' || args[i] === '--directory')
+      options.directory = args[++i]!;
+    else if (args[i] === '-t' || args[i] === '--template')
+      options.template = args[++i]!;
+    else if (args[i] === '--no-git') options.noGit = true;
+    else if (args[i] === '--no-install') options.noInstall = true;
+  }
+
+  p.intro(`Create Addon: ${name}`);
+  const s = p.spinner();
+  s.start('Scaffolding, building, and registering addon\u2026');
+  const result = await createAddon(name, options);
+  if (result.success) {
+    s.stop('Addon created.');
+    p.outro(
+      [
+        `"${name}" is ready!`,
+        `  Open the app and click "${name}" in the sidebar.`,
+        `  Edit your UI at: ${result.projectPath}/src/index.html`,
+        `  Run "pnpm openaidy addon build" after making changes.`,
+      ].join('\n'),
+    );
+    return { exitCode: 0 };
+  } else {
+    s.stop('Creation failed.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
   }
 }

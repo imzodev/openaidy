@@ -2,7 +2,9 @@
  * Dev Command - Start development server with hot reloading
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
+import type { CommandResult } from '../../types.js';
 import path from 'node:path';
 import { readAddonManifest } from '../../utils/project.js';
 
@@ -119,4 +121,28 @@ export async function watchFiles(
   }, 5000);
 
   return () => clearInterval(interval);
+}
+
+export async function addonDevHandler(args: string[]): Promise<CommandResult> {
+  const options: Record<string, string | number> = {};
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--port') options.port = parseInt(args[++i]!, 10);
+    else if (args[i] === '--host') options.host = args[++i]!;
+    else if (args[i] === '--openaidy-url') options.openaidyUrl = args[++i]!;
+  }
+
+  const s = p.spinner();
+  s.start('Starting dev server\u2026');
+  const result = await startDevServer(process.cwd(), options);
+  if (result.success) {
+    s.stop('Dev server started.');
+    p.outro(
+      `${result.message}\n  Server running at http://${result.host}:${result.port}\n  Press Ctrl+C to stop`,
+    );
+    return { exitCode: 0 };
+  } else {
+    s.stop('Failed to start dev server.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
+  }
 }

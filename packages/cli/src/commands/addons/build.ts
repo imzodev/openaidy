@@ -2,7 +2,9 @@
  * Build Command - Compile addon for production
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
+import type { CommandResult } from '../../types.js';
 import path from 'node:path';
 import { readAddonManifest } from '../../utils/project.js';
 
@@ -160,4 +162,50 @@ export async function watchAddon(
 
   // Return cleanup function
   return () => clearInterval(checkInterval);
+}
+
+export async function addonBuildHandler(
+  args: string[],
+): Promise<CommandResult> {
+  const { resolveAddonProject, listAddonProjects } =
+    await import('../../utils/project.js');
+
+  const options: Record<string, boolean> = {};
+  let addonName: string | undefined;
+  for (const arg of args) {
+    if (arg === '-w' || arg === '--watch') options.watch = true;
+    else if (arg === '-m' || arg === '--minify') options.minify = true;
+    else if (arg === '-s' || arg === '--sourcemap') options.sourcemap = true;
+    else if (!arg.startsWith('-')) addonName = arg;
+  }
+
+  const addon = resolveAddonProject(addonName);
+  if (!addon) {
+    const all = listAddonProjects();
+    if (all.length === 0) {
+      p.log.error('No addons found in .openaidy/addons/');
+      return { exitCode: 1, error: 'No addons found in .openaidy/addons/' };
+    }
+    const names = all.map((a) => `  openaidy addon build ${a.name}`).join('\n');
+    p.log.error(`Multiple addons found. Specify one:\n${names}`);
+    return {
+      exitCode: 1,
+      error: `Multiple addons found. Specify one:\n${names}`,
+    };
+  }
+
+  const s = p.spinner();
+  s.start(`Building ${addon.name}\u2026`);
+  const result = await buildAddon(addon.path, options);
+  if (result.success) {
+    s.stop('Build complete.');
+    p.outro(
+      `${result.message}${result.outputPath ? `\n  Output: ${result.outputPath}` : ''}`,
+    );
+    return { exitCode: 0 };
+  } else {
+    s.stop('Build failed.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
+  }
 }

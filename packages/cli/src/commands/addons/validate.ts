@@ -2,8 +2,10 @@
  * Validate Command - Validate addon package and manifest
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { CommandResult } from '../../types.js';
 import {
   readAddonManifest,
   validateProjectStructure,
@@ -195,4 +197,36 @@ export async function checkAddonIdUniqueness(addonId: string): Promise<{
     available: true,
     message: `Addon ID "${addonId}" is available`,
   };
+}
+
+export async function addonValidateHandler(
+  args: string[],
+): Promise<CommandResult> {
+  const options: Record<string, boolean> = {};
+  for (const arg of args) {
+    if (arg === '-p' || arg === '--package') options.package = true;
+    else if (arg === '-v' || arg === '--verbose') options.verbose = true;
+    else if (arg === '--strict') options.strict = true;
+  }
+
+  const s = p.spinner();
+  s.start('Validating addon\u2026');
+  const result = await validateAddon(process.cwd(), options);
+  if (result.valid) {
+    s.stop('Validation passed.');
+    p.outro(result.message);
+    return { exitCode: 0 };
+  }
+  s.stop('Validation failed.');
+  if (result.errors.length > 0) {
+    p.log.error(
+      `Errors:\n${result.errors.map((e: string) => `  \u2022 ${e}`).join('\n')}`,
+    );
+  }
+  if (result.warnings.length > 0) {
+    p.log.warn(
+      `Warnings:\n${result.warnings.map((w: string) => `  \u2022 ${w}`).join('\n')}`,
+    );
+  }
+  return { exitCode: 1, error: result.message };
 }

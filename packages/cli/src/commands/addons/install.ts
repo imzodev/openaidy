@@ -2,11 +2,13 @@
  * Install Command - Register a built addon with a local OpenAidy server
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { readAddonManifest } from '../../utils/project.js';
 import { resolveCLIConfig } from '../../lib/config.js';
+import type { CommandResult } from '../../types.js';
 
 export interface InstallOptions {
   serverUrl?: string;
@@ -115,4 +117,49 @@ export async function installAddon(
     message: `Addon "${addonId}" installed. Enable it in the Addons UI or run "openaidy addon enable ${addonId}".`,
     addonId,
   };
+}
+
+export async function addonInstallHandler(
+  args: string[],
+): Promise<CommandResult> {
+  const { resolveAddonProject, listAddonProjects } =
+    await import('../../utils/project.js');
+
+  const options: Record<string, string> = {};
+  let addonName: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--server-url') options.serverUrl = args[++i]!;
+    else if (args[i] === '--token') options.token = args[++i]!;
+    else if (!args[i]!.startsWith('-')) addonName = args[i];
+  }
+
+  const addon = resolveAddonProject(addonName);
+  if (!addon) {
+    const all = listAddonProjects();
+    if (all.length === 0) {
+      p.log.error('No addons found in .openaidy/addons/');
+      return { exitCode: 1, error: 'No addons found in .openaidy/addons/' };
+    }
+    const names = all
+      .map((a) => `  openaidy addon install ${a.name}`)
+      .join('\n');
+    p.log.error(`Multiple addons found. Specify one:\n${names}`);
+    return {
+      exitCode: 1,
+      error: `Multiple addons found. Specify one:\n${names}`,
+    };
+  }
+
+  const s = p.spinner();
+  s.start(`Installing addon from ${addon.path}\u2026`);
+  const result = await installAddon(addon.path, options);
+  if (result.success) {
+    s.stop('Addon installed.');
+    p.outro(result.message);
+    return { exitCode: 0 };
+  } else {
+    s.stop('Installation failed.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
+  }
 }

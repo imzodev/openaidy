@@ -2,8 +2,10 @@
  * Publish Command - Publish addon to registry
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { CommandResult } from '../../types.js';
 import { readAddonManifest } from '../../utils/project.js';
 import { validateAddon } from './validate.js';
 
@@ -123,4 +125,30 @@ export async function unpublishAddon(
     addonId,
     version,
   };
+}
+
+export async function addonPublishHandler(
+  args: string[],
+): Promise<CommandResult> {
+  const options: Record<string, string> = {};
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--registry') options.registry = args[++i]!;
+    else if (args[i] === '--access') options.access = args[++i]!;
+    else if (args[i] === '--tag') options.tag = args[++i]!;
+  }
+
+  const s = p.spinner();
+  s.start('Publishing addon\u2026');
+  const result = await publishAddon(process.cwd(), options);
+  if (result.success) {
+    s.stop('Published.');
+    p.outro(
+      `${result.message}${result.registryUrl ? `\n  Registry: ${result.registryUrl}` : ''}`,
+    );
+    return { exitCode: 0 };
+  } else {
+    s.stop('Publish failed.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
+  }
 }

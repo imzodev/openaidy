@@ -2,6 +2,7 @@
  * Init Command - Initialize existing addon project
  */
 
+import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -9,6 +10,7 @@ import {
   readAddonManifest,
   validateProjectStructure,
 } from '../../utils/project.js';
+import type { CommandResult } from '../../types.js';
 
 export interface InitOptions {
   force?: boolean;
@@ -117,5 +119,23 @@ export async function updateConfig(
       success: false,
       message: `Failed to update config: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
+  }
+}
+
+export async function addonInitHandler(args: string[]): Promise<CommandResult> {
+  const options: Record<string, boolean> = {};
+  if (args.includes('--force')) options.force = true;
+
+  const s = p.spinner();
+  s.start('Initializing addon project\u2026');
+  const result = await initAddon(process.cwd(), options);
+  if (result.success) {
+    s.stop('Done.');
+    p.outro(result.message);
+    return { exitCode: 0 };
+  } else {
+    s.stop('Initialization failed.');
+    p.log.error(result.message);
+    return { exitCode: 1, error: result.message };
   }
 }
