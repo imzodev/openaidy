@@ -4,8 +4,6 @@
  * Shared type definitions for the OpenAidy CLI.
  */
 
-import type { Plugin as CLIPlugin } from './utils/plugin-system.js';
-
 /**
  * Output format mode
  */
@@ -272,10 +270,4 @@ export interface DocsResult {
   success: boolean;
   message: string;
   outputPath?: string;
-}
-
-export interface PluginResult {
-  success: boolean;
-  message: string;
-  plugins?: CLIPlugin[];
 }
