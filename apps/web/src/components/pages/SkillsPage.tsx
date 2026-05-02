@@ -2,39 +2,19 @@ import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
 import { Lightbulb, Bot } from 'lucide-solid';
 import { Layout } from './Layout';
 import { listSkills, type SkillInfo, type SkillSource } from '../../lib/api';
-
-type BadgeVariant = 'gray' | 'blue' | 'yellow' | 'purple';
-
-const SOURCE_LABEL: Record<SkillSource, string> = {
-  preinstalled: 'Pre-installed',
-  modified: 'Modified',
-  'user-global': 'Custom',
-  agent: 'Agent',
-};
-
-const SOURCE_BADGE: Record<SkillSource, BadgeVariant> = {
-  preinstalled: 'gray',
-  modified: 'yellow',
-  'user-global': 'blue',
-  agent: 'purple',
-};
-
-const BADGE_CLASSES: Record<BadgeVariant, string> = {
-  gray: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  yellow:
-    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-  purple:
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-};
+import {
+  SKILL_SOURCE_BADGE,
+  SKILL_SOURCE_BADGE_CLASSES,
+  SKILL_SOURCE_LABEL,
+} from '../../lib/skill-sources';
 
 function SourceBadge(props: { source: SkillSource }) {
-  const variant = () => SOURCE_BADGE[props.source];
+  const variant = () => SKILL_SOURCE_BADGE[props.source];
   return (
     <span
-      class={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${BADGE_CLASSES[variant()]}`}
+      class={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${SKILL_SOURCE_BADGE_CLASSES[variant()]}`}
     >
-      {SOURCE_LABEL[props.source]}
+      {SKILL_SOURCE_LABEL[props.source]}
     </span>
   );
 }
