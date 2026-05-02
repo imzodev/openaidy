@@ -135,3 +135,113 @@ export interface CommandOptions {
   /** Show help flag */
   help: boolean;
 }
+
+// ============================================================================
+// Addon command option / result types
+// ============================================================================
+
+export interface BuildOptions {
+  watch?: boolean;
+  minify?: boolean;
+  sourcemap?: boolean;
+}
+
+export interface BuildResult {
+  success: boolean;
+  message: string;
+  outputPath?: string;
+  warnings?: string[];
+}
+
+export interface CreateOptions {
+  directory?: string;
+  template?: string;
+  noGit?: boolean;
+  noInstall?: boolean;
+  serverUrl?: string;
+  token?: string;
+}
+
+export interface CreateResult {
+  success: boolean;
+  message: string;
+  projectPath?: string;
+}
+
+export interface DevOptions {
+  port?: number;
+  host?: string;
+  openaidyUrl?: string;
+  proxy?: boolean;
+}
+
+export interface DevResult {
+  success: boolean;
+  message: string;
+  port?: number;
+  host?: string;
+}
+
+export interface InitOptions {
+  force?: boolean;
+}
+
+export interface InitResult {
+  success: boolean;
+  message: string;
+  isNew?: boolean;
+}
+
+export interface InstallOptions {
+  serverUrl?: string;
+  token?: string;
+  requireBuild?: boolean;
+}
+
+export interface InstallResult {
+  success: boolean;
+  message: string;
+  addonId?: string;
+}
+
+export interface PublishOptions {
+  registry?: string;
+  access?: 'public' | 'private';
+  tag?: string;
+}
+
+export interface PublishResult {
+  success: boolean;
+  message: string;
+  addonId?: string;
+  version?: string;
+  registryUrl?: string;
+}
+
+export interface ValidateOptions {
+  package?: boolean;
+  verbose?: boolean;
+  strict?: boolean;
+}
+
+export interface ValidateResult {
+  valid: boolean;
+  message: string;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface TestOptions {
+  watch?: boolean;
+  coverage?: boolean;
+  ui?: boolean;
+  filter?: string;
+}
+
+export interface TestResult {
+  success: boolean;
+  message: string;
+  testFiles?: number;
+  passed?: number;
+  failed?: number;
+}

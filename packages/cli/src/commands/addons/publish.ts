@@ -5,23 +5,13 @@
 import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandResult } from '../../types.js';
+import type {
+  CommandResult,
+  PublishOptions,
+  PublishResult,
+} from '../../types.js';
 import { readAddonManifest } from '../../utils/project.js';
 import { validateAddon } from './validate.js';
-
-export interface PublishOptions {
-  registry?: string;
-  access?: 'public' | 'private';
-  tag?: string;
-}
-
-export interface PublishResult {
-  success: boolean;
-  message: string;
-  addonId?: string;
-  version?: string;
-  registryUrl?: string;
-}
 
 /**
  * Publish addon to registry

@@ -8,19 +8,11 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { readAddonManifest } from '../../utils/project.js';
 import { resolveCLIConfig } from '../../lib/config.js';
-import type { CommandResult } from '../../types.js';
-
-export interface InstallOptions {
-  serverUrl?: string;
-  token?: string;
-  requireBuild?: boolean;
-}
-
-export interface InstallResult {
-  success: boolean;
-  message: string;
-  addonId?: string;
-}
+import type {
+  CommandResult,
+  InstallOptions,
+  InstallResult,
+} from '../../types.js';
 
 type BootstrapAdminRecord = { token: string };
 

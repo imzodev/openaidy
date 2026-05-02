@@ -13,22 +13,11 @@ import {
 import { slugify, resolveAddonsDir } from '../../utils/project.js';
 import { installAddon } from './install.js';
 import { buildAddon } from './build.js';
-import type { CommandResult } from '../../types.js';
-
-export interface CreateOptions {
-  directory?: string;
-  template?: string;
-  noGit?: boolean;
-  noInstall?: boolean;
-  serverUrl?: string;
-  token?: string;
-}
-
-export interface CreateResult {
-  success: boolean;
-  message: string;
-  projectPath?: string;
-}
+import type {
+  CommandResult,
+  CreateOptions,
+  CreateResult,
+} from '../../types.js';
 
 /**
  * Create a new addon project

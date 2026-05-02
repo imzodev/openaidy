@@ -4,23 +4,9 @@
 
 import * as p from '@clack/prompts';
 import fs from 'node:fs';
-import type { CommandResult } from '../../types.js';
+import type { CommandResult, DevOptions, DevResult } from '../../types.js';
 import path from 'node:path';
 import { readAddonManifest } from '../../utils/project.js';
-
-export interface DevOptions {
-  port?: number;
-  host?: string;
-  openaidyUrl?: string;
-  proxy?: boolean;
-}
-
-export interface DevResult {
-  success: boolean;
-  message: string;
-  port?: number;
-  host?: string;
-}
 
 /**
  * Start development server

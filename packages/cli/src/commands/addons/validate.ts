@@ -5,7 +5,11 @@
 import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandResult } from '../../types.js';
+import type {
+  CommandResult,
+  ValidateOptions,
+  ValidateResult,
+} from '../../types.js';
 import {
   readAddonManifest,
   validateProjectStructure,
@@ -15,19 +19,6 @@ import {
   validateAddonName,
   validateVersion,
 } from '../../utils/validation.js';
-
-export interface ValidateOptions {
-  package?: boolean;
-  verbose?: boolean;
-  strict?: boolean;
-}
-
-export interface ValidateResult {
-  valid: boolean;
-  message: string;
-  errors: string[];
-  warnings: string[];
-}
 
 /**
  * Validate addon project

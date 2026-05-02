@@ -4,22 +4,9 @@
 
 import * as p from '@clack/prompts';
 import fs from 'node:fs';
-import type { CommandResult } from '../../types.js';
+import type { CommandResult, BuildOptions, BuildResult } from '../../types.js';
 import path from 'node:path';
 import { readAddonManifest } from '../../utils/project.js';
-
-export interface BuildOptions {
-  watch?: boolean;
-  minify?: boolean;
-  sourcemap?: boolean;
-}
-
-export interface BuildResult {
-  success: boolean;
-  message: string;
-  outputPath?: string;
-  warnings?: string[];
-}
 
 /**
  * Build addon for production
