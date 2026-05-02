@@ -7,6 +7,7 @@ import type {
   PairingRequestsStore,
   SessionsStore,
 } from '@openaidy/db';
+export type { CreateAgentInput } from '@openaidy/shared-types';
 import type { ProviderServices } from './providers';
 import type { SessionMessageService } from './sessions/service';
 import type { AgentRegistry } from './agents';

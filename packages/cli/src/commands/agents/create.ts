@@ -14,6 +14,7 @@ import type {
   AgentConfig,
   OpenAidyConfig,
   SkillSummary,
+  CreateAgentInput,
 } from '../../types.js';
 
 function resolveConfigPath(): string {
@@ -220,18 +221,25 @@ Exit Codes:
     if (modelResult) inheritedModel = modelResult.model;
   }
 
-  // Build new agent entry
-  const newAgent: AgentConfig = {
+  // Build the minimal user-provided input — all structural defaults applied by registry.createAgent()
+  const input: CreateAgentInput = {
     id,
     name,
-    description: description || `${name} agent`,
-    enabled: true,
     systemPrompt:
       systemPrompt ||
       'You are a helpful AI assistant. Be concise, accurate, and helpful.',
     model: inheritedModel ?? 'openai/gpt-4o-mini',
+    description: description || undefined,
     tags: [],
-    ...(assignedSkills.length > 0 ? { skills: assignedSkills } : {}),
+    skills: assignedSkills.length > 0 ? assignedSkills : undefined,
+  };
+
+  // Construct the full AgentConfig for openaidy.json (mirrors what registry.createAgent() produces)
+  const newAgent: AgentConfig = {
+    ...input,
+    enabled: true,
+    description: input.description || `${name} agent`,
+    version: 1,
     workspace: {
       enabled: true,
       defaultPermissions: {
@@ -247,7 +255,6 @@ Exit Codes:
         },
       ],
     },
-    version: 1,
   };
 
   // Write to openaidy.json

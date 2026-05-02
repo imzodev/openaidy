@@ -17,7 +17,8 @@
     "@openaidy/config": "workspace:*",
     "@openaidy/control-plane": "workspace:*",
     "@openaidy/sdk": "workspace:*",
-    "@openaidy/server": "workspace:*"
+    "@openaidy/server": "workspace:*",
+    "@openaidy/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",

@@ -113,6 +113,8 @@ export type OpenAidyConfig = {
   agents?: AgentConfig[];
 };
 
+export type { CreateAgentInput } from '@openaidy/shared-types';
+
 export type SkillSummary = {
   id: string;
   name: string;

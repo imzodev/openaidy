@@ -9,6 +9,7 @@ import {
   validateAgentIdMatch,
   toAgentSummary,
 } from './schema';
+import type { CreateAgentInput } from '../types';
 
 /**
  * Agent registry options
@@ -320,15 +321,47 @@ export class AgentRegistry {
   }
 
   /**
-   * Create a new agent, persist it to the openaidy.json config, and register it in memory.
-   * Returns the new AgentSummary, or throws if the ID already exists or validation fails.
+   * Create a new agent from user-provided input.
+   * All structural defaults (version, enabled, workspace scaffold, tags) are applied here
+   * so callers never duplicate this logic. Persists to openaidy.json and registers in memory.
+   * Throws if the ID already exists or validation fails.
    */
-  createAgent(agent: Agent): AgentSummary {
+  createAgent(input: CreateAgentInput): AgentSummary {
     this.ensureLoaded();
 
-    if (this.agents.has(agent.id)) {
-      throw new Error(`Agent with ID "${agent.id}" already exists`);
+    if (this.agents.has(input.id)) {
+      throw new Error(`Agent with ID "${input.id}" already exists`);
     }
+
+    const agent: Agent = {
+      id: input.id,
+      name: input.name,
+      enabled: true,
+      systemPrompt:
+        input.systemPrompt ||
+        'You are a helpful AI assistant. Be concise, accurate, and helpful.',
+      model: input.model,
+      description: input.description || `${input.name} agent`,
+      tags: input.tags ?? [],
+      skills:
+        input.skills && input.skills.length > 0 ? input.skills : undefined,
+      version: 1,
+      workspace: {
+        enabled: true,
+        defaultPermissions: {
+          read: true,
+          write: true,
+          delete: false,
+          list: true,
+        },
+        workspaces: [
+          {
+            path: input.id,
+            permissions: { read: true, write: true, delete: false, list: true },
+          },
+        ],
+      },
+    };
 
     const result = AgentSchema.safeParse(agent);
     if (!result.success) {

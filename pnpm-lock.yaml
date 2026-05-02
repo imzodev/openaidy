@@ -220,6 +220,9 @@ importers:
       '@openaidy/server':
         specifier: workspace:*
         version: link:../../apps/server
+      '@openaidy/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
     devDependencies:
       '@types/node':
         specifier: ^24.12.0

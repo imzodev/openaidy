@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
+import type { CreateAgentInput } from '../types';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -56,9 +57,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
     const body = request.body as Record<string, unknown>;
 
     try {
-      const agent = agentRegistry.createAgent(
-        body as import('../agents/schema').Agent,
-      );
+      const agent = agentRegistry.createAgent(body as CreateAgentInput);
       reply.code(201);
       return agent;
     } catch (err) {
