@@ -22,6 +22,57 @@ export type SkillRoutesOptions = {
   skillsDir: string;
 };
 
+/**
+ * Return skill IDs present in an agent's workspace skills directory.
+ */
+function readAgentWorkspaceSkillIds(agentSkillsDir: string): Set<string> {
+  const ids = new Set<string>();
+  if (!existsSync(agentSkillsDir)) return ids;
+  try {
+    for (const id of readdirSync(agentSkillsDir)) {
+      if (existsSync(join(agentSkillsDir, id, 'SKILL.md'))) {
+        ids.add(id);
+      }
+    }
+  } catch {
+    // ignore unreadable directory
+  }
+  return ids;
+}
+
+/**
+ * Parse all valid SKILL.md files in an agent's workspace skills directory.
+ */
+function parseAgentWorkspaceSkills(
+  agentSkillsDir: string,
+): Array<{ id: string; name: string; description: string }> {
+  const results: Array<{ id: string; name: string; description: string }> = [];
+  if (!existsSync(agentSkillsDir)) return results;
+  let subdirs: string[];
+  try {
+    subdirs = readdirSync(agentSkillsDir);
+  } catch {
+    return results;
+  }
+  for (const id of subdirs) {
+    const skillFile = join(agentSkillsDir, id, 'SKILL.md');
+    if (!existsSync(skillFile)) continue;
+    try {
+      const content = readFileSync(skillFile, 'utf-8');
+      const result = parseSkillMd(content, id, skillFile);
+      if ('errors' in result) continue;
+      results.push({
+        id: result.id,
+        name: result.name,
+        description: result.description,
+      });
+    } catch {
+      // skip unreadable files
+    }
+  }
+  return results;
+}
+
 export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
   app,
   options,
@@ -70,30 +121,8 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
         workspace.getWorkspacePath(agent.id),
         'skills',
       );
-      if (!existsSync(agentSkillsDir)) continue;
-      let subdirs: string[];
-      try {
-        subdirs = readdirSync(agentSkillsDir);
-      } catch {
-        continue;
-      }
-      for (const id of subdirs) {
-        const skillFile = join(agentSkillsDir, id, 'SKILL.md');
-        if (!existsSync(skillFile)) continue;
-        try {
-          const content = readFileSync(skillFile, 'utf-8');
-          const result = parseSkillMd(content, id, skillFile);
-          if ('errors' in result) continue;
-          items.push({
-            id: result.id,
-            name: result.name,
-            description: result.description,
-            source: 'agent',
-            agentId: agent.id,
-          });
-        } catch {
-          // skip unreadable files
-        }
+      for (const skill of parseAgentWorkspaceSkills(agentSkillsDir)) {
+        items.push({ ...skill, source: 'agent', agentId: agent.id });
       }
     }
 
@@ -120,29 +149,8 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
     >(globalSkills.map((s) => [s.id, s]));
 
     const agentSkillsDir = join(workspace.getWorkspacePath(agentId), 'skills');
-    if (existsSync(agentSkillsDir)) {
-      let subdirs: string[];
-      try {
-        subdirs = readdirSync(agentSkillsDir);
-      } catch {
-        subdirs = [];
-      }
-      for (const id of subdirs) {
-        const skillFile = join(agentSkillsDir, id, 'SKILL.md');
-        if (!existsSync(skillFile)) continue;
-        try {
-          const content = readFileSync(skillFile, 'utf-8');
-          const result = parseSkillMd(content, id, skillFile);
-          if ('errors' in result) continue;
-          merged.set(id, {
-            id: result.id,
-            name: result.name,
-            description: result.description,
-          });
-        } catch {
-          // skip unreadable files
-        }
-      }
+    for (const skill of parseAgentWorkspaceSkills(agentSkillsDir)) {
+      merged.set(skill.id, skill);
     }
 
     return { items: Array.from(merged.values()) };
@@ -183,18 +191,7 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
         workspace.getWorkspacePath(agentId),
         'skills',
       );
-      const workspaceSkillIds = new Set<string>();
-      if (existsSync(agentSkillsDir)) {
-        try {
-          for (const id of readdirSync(agentSkillsDir)) {
-            if (existsSync(join(agentSkillsDir, id, 'SKILL.md'))) {
-              workspaceSkillIds.add(id);
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
+      const workspaceSkillIds = readAgentWorkspaceSkillIds(agentSkillsDir);
       const invalidSkills = skillIds.filter(
         (id) => !globalSkillIds.has(id) && !workspaceSkillIds.has(id),
       );
