@@ -4,12 +4,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockReadFile, mockFetch } = vi.hoisted(() => ({
+const { mockReadFile, mockFetch, mockClack } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockFetch: vi.fn(),
+  mockClack: {
+    note: vi.fn(),
+    log: { error: vi.fn() },
+  },
 }));
 
 vi.mock('node:fs/promises', () => ({ readFile: mockReadFile }));
+vi.mock('@clack/prompts', () => mockClack);
 vi.mock('../../../lib/config.js', () => ({
   resolveCLIConfig: () => ({
     httpUrl: 'http://localhost:3001',
@@ -81,14 +86,23 @@ describe('tokens list', () => {
     it('shows help with --help', async () => {
       const result = await tokensListHandler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('tokens list');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('tokens list'),
+        expect.any(String),
+      );
     });
 
     it('shows help with -h', async () => {
       const result = await tokensListHandler(['-h']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
     });
   });
 
@@ -123,6 +137,10 @@ describe('tokens list', () => {
   });
 
   describe('successful list', () => {
+    function noteOutput(): string {
+      return mockClack.note.mock.calls.map((c: unknown[]) => c[0]).join('\n');
+    }
+
     it('shows active and revoked tokens', async () => {
       mockReadFile.mockResolvedValue(ADMIN_TOKEN_FILE);
       mockFetch.mockReturnValue(
@@ -130,11 +148,11 @@ describe('tokens list', () => {
       );
       const result = await tokensListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('CI Pipeline');
-      expect(result.output).toContain('oat_aabb');
-      expect(result.output).toContain('sessions.read');
-      expect(result.output).toContain('Old Key');
-      expect(result.output).toContain('[revoked]');
+      expect(noteOutput()).toContain('CI Pipeline');
+      expect(noteOutput()).toContain('oat_aabb');
+      expect(noteOutput()).toContain('sessions.read');
+      expect(noteOutput()).toContain('Old Key');
+      expect(noteOutput()).toContain('[revoked]');
     });
 
     it('uses Bearer token in Authorization header', async () => {
@@ -156,15 +174,15 @@ describe('tokens list', () => {
       mockFetch.mockReturnValue(mockOkResponse({ keys: [] }));
       const result = await tokensListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No access tokens found');
+      expect(noteOutput()).toContain('No access tokens found');
     });
 
     it('does not expose key hash or raw token', async () => {
       mockReadFile.mockResolvedValue(ADMIN_TOKEN_FILE);
       mockFetch.mockReturnValue(mockOkResponse({ keys: [ACTIVE_TOKEN] }));
-      const result = await tokensListHandler([]);
-      expect(result.output).not.toContain('keyHash');
-      expect(result.output).not.toMatch(/oat_[a-f0-9]{60,}/);
+      await tokensListHandler([]);
+      expect(noteOutput()).not.toContain('keyHash');
+      expect(noteOutput()).not.toMatch(/oat_[a-f0-9]{60,}/);
     });
   });
 });

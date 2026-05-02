@@ -10,19 +10,7 @@ import {
   validateTemplateName,
 } from '../utils/validation.js';
 import { slugify } from '../utils/project.js';
-
-export interface CreateOptions {
-  directory?: string;
-  template?: string;
-  noGit?: boolean;
-  noInstall?: boolean;
-}
-
-export interface CreateResult {
-  success: boolean;
-  message: string;
-  projectPath?: string;
-}
+import type { CreateOptions, CreateResult } from '../types.js';
 
 /**
  * Create a new addon project

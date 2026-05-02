@@ -73,10 +73,8 @@ export async function agentsCreateHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
-    return {
-      exitCode: 0,
-      output: `
-Usage: openaidy agents create [<name>]
+    p.note(
+      `Usage: openaidy agents create [<name>]
 
 Create a new agent with its own workspace directory.
 
@@ -92,9 +90,10 @@ Examples:
 
 Exit Codes:
   0  Agent created successfully
-  1  Error (invalid input, ID conflict)
-`,
-    };
+  1  Error (invalid input, ID conflict)`,
+      'Help',
+    );
+    return { exitCode: 0 };
   }
 
   const workspaceBaseDir = resolveWorkspaceBaseDir();

@@ -4,6 +4,7 @@
  * Implements `openaidy tokens list` command.
  */
 
+import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
@@ -90,10 +91,8 @@ export async function tokensListHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
-    return {
-      exitCode: 0,
-      output: `
-Usage: openaidy tokens list
+    p.note(
+      `Usage: openaidy tokens list
 
 List all access tokens.
 
@@ -102,19 +101,19 @@ Examples:
 
 Exit Codes:
   0  Success
-  1  Error (server unreachable, not authenticated)
-`,
-    };
+  1  Error (server unreachable, not authenticated)`,
+      'Help',
+    );
+    return { exitCode: 0 };
   }
 
   const config = resolveCLIConfig();
   const token = await readAdminToken(config.tokenPath);
 
   if (!token) {
-    return {
-      exitCode: 1,
-      error: `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`,
-    };
+    const msg = `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   let res: Response;
@@ -123,23 +122,21 @@ Exit Codes:
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      exitCode: 1,
-      error: `Cannot reach server at ${config.httpUrl}.\n${msg}\n\nMake sure the server is running.`,
-    };
+    const msg = `Cannot reach server at ${config.httpUrl}.\n${err instanceof Error ? err.message : String(err)}\n\nMake sure the server is running.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   if (!res.ok) {
     const body = (await res
       .json()
       .catch(() => ({ error: res.statusText }))) as { error?: string };
-    return {
-      exitCode: 1,
-      error: `Server returned ${res.status}: ${body.error ?? res.statusText}`,
-    };
+    const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   const { keys } = (await res.json()) as { keys: TokenRecord[] };
-  return { exitCode: 0, output: formatTokenList(keys) };
+  p.note(formatTokenList(keys), 'Access Tokens');
+  return { exitCode: 0 };
 }

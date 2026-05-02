@@ -4,19 +4,7 @@
 
 import { generateDocs, validateDocs } from '../utils/docs-generator.js';
 import { generateApiDocsFromSource } from '../utils/api-docs.js';
-
-export interface DocsOptions {
-  format?: 'markdown' | 'html' | 'json';
-  output?: string;
-  validate?: boolean;
-  api?: boolean;
-}
-
-export interface DocsResult {
-  success: boolean;
-  message: string;
-  outputPath?: string;
-}
+import type { DocsOptions, DocsResult } from '../types.js';
 
 /**
  * Generate documentation for an addon project

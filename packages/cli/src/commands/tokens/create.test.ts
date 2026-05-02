@@ -4,12 +4,18 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockReadFile, mockFetch } = vi.hoisted(() => ({
+const { mockReadFile, mockFetch, mockClack } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockFetch: vi.fn(),
+  mockClack: {
+    note: vi.fn(),
+    outro: vi.fn(),
+    log: { error: vi.fn() },
+  },
 }));
 
 vi.mock('node:fs/promises', () => ({ readFile: mockReadFile }));
+vi.mock('@clack/prompts', () => mockClack);
 vi.mock('../../../lib/config.js', () => ({
   resolveCLIConfig: () => ({
     httpUrl: 'http://localhost:3001',
@@ -71,15 +77,26 @@ describe('tokens create', () => {
     it('shows help with --help', async () => {
       const result = await tokensCreateHandler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('--name');
-      expect(result.output).toContain('--scopes');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('--name'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('--scopes'),
+        expect.any(String),
+      );
     });
 
     it('shows available scopes in help', async () => {
-      const result = await tokensCreateHandler(['--help']);
-      expect(result.output).toContain('sessions.read');
-      expect(result.output).toContain('*');
+      await tokensCreateHandler(['--help']);
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('sessions.read'),
+        expect.any(String),
+      );
     });
   });
 
@@ -147,6 +164,10 @@ describe('tokens create', () => {
   });
 
   describe('successful create', () => {
+    function noteOutput(): string {
+      return mockClack.note.mock.calls.map((c: unknown[]) => c[0]).join('\n');
+    }
+
     it('shows raw token in output', async () => {
       mockReadFile.mockResolvedValue(ADMIN_TOKEN_FILE);
       mockFetch.mockReturnValue(mockCreated(CREATE_RESPONSE));
@@ -157,22 +178,22 @@ describe('tokens create', () => {
         'sessions.read,sessions.stream',
       ]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain(CREATE_RESPONSE.rawKey);
-      expect(result.output).toContain('CI Pipeline');
-      expect(result.output).toContain('shown once');
+      expect(noteOutput()).toContain(CREATE_RESPONSE.rawKey);
+      expect(noteOutput()).toContain('CI Pipeline');
+      expect(noteOutput()).toContain('shown once');
     });
 
     it('shows token name, id and scopes', async () => {
       mockReadFile.mockResolvedValue(ADMIN_TOKEN_FILE);
       mockFetch.mockReturnValue(mockCreated(CREATE_RESPONSE));
-      const result = await tokensCreateHandler([
+      await tokensCreateHandler([
         '--name',
         'CI Pipeline',
         '--scopes',
         'sessions.read',
       ]);
-      expect(result.output).toContain('aaa-bbb-ccc');
-      expect(result.output).toContain('sessions.read');
+      expect(noteOutput()).toContain('aaa-bbb-ccc');
+      expect(noteOutput()).toContain('sessions.read');
     });
 
     it('sends correct JSON body to server', async () => {

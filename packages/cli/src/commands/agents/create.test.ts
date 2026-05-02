@@ -12,6 +12,7 @@ const { mockReadFile, mockReaddir, mockWriteFile, mockMkdir, mockClack } =
     mockMkdir: vi.fn(),
     mockClack: {
       intro: vi.fn(),
+      note: vi.fn(),
       outro: vi.fn(),
       cancel: vi.fn(),
       isCancel: vi.fn(() => false),
@@ -101,14 +102,23 @@ describe('agents create', () => {
     it('shows help with --help', async () => {
       const result = await agentsCreateHandler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('agents create');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('agents create'),
+        expect.any(String),
+      );
     });
 
     it('shows help with -h', async () => {
       const result = await agentsCreateHandler(['-h']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
     });
   });
 

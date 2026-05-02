@@ -9,16 +9,7 @@ import {
   readAddonManifest,
   validateProjectStructure,
 } from '../utils/project.js';
-
-export interface InitOptions {
-  force?: boolean;
-}
-
-export interface InitResult {
-  success: boolean;
-  message: string;
-  isNew?: boolean;
-}
+import type { InitOptions, InitResult } from '../types.js';
 
 /**
  * Initialize existing addon project

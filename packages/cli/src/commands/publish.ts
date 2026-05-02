@@ -6,20 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readAddonManifest } from '../utils/project.js';
 import { validateAddon } from './validate.js';
-
-export interface PublishOptions {
-  registry?: string;
-  access?: 'public' | 'private';
-  tag?: string;
-}
-
-export interface PublishResult {
-  success: boolean;
-  message: string;
-  addonId?: string;
-  version?: string;
-  registryUrl?: string;
-}
+import type { PublishOptions, PublishResult } from '../types.js';
 
 /**
  * Publish addon to registry

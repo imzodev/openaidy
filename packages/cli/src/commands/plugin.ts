@@ -2,22 +2,9 @@
  * Plugin Command - Plugin management commands for CLI
  */
 
-import { PluginSystem, createPlugin, Plugin } from '../utils/plugin-system.js';
-
-export interface PluginOptions {
-  install?: string;
-  uninstall?: string;
-  list?: boolean;
-  enable?: string;
-  disable?: string;
-  config?: string;
-}
-
-export interface PluginResult {
-  success: boolean;
-  message: string;
-  plugins?: Plugin[];
-}
+import { PluginSystem, createPlugin } from '../utils/plugin-system.js';
+import type { Plugin as CLIPlugin } from '../utils/plugin-system.js';
+import type { PluginResult } from '../types.js';
 
 /**
  * Plugin manager instance
@@ -155,7 +142,7 @@ export async function validatePlugin(pluginId: string): Promise<{
 /**
  * Get plugin info
  */
-export function getPluginInfo(pluginId: string): Plugin | undefined {
+export function getPluginInfo(pluginId: string): CLIPlugin | undefined {
   return pluginManager.getPlugin(pluginId);
 }
 

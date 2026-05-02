@@ -5,21 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readAddonManifest } from '../utils/project.js';
-
-export interface TestOptions {
-  watch?: boolean;
-  coverage?: boolean;
-  ui?: boolean;
-  filter?: string;
-}
-
-export interface TestResult {
-  success: boolean;
-  message: string;
-  testFiles?: number;
-  passed?: number;
-  failed?: number;
-}
+import type { TestOptions, TestResult } from '../types.js';
 
 /**
  * Run addon tests

@@ -44,10 +44,8 @@ export async function agentsListHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
-    return {
-      exitCode: 0,
-      output: `
-Usage: openaidy agents list
+    p.note(
+      `Usage: openaidy agents list
 
 List all configured agents.
 
@@ -56,9 +54,10 @@ Examples:
 
 Exit Codes:
   0  Success
-  1  Error reading agent configs
-`,
-    };
+  1  Error reading agent configs`,
+      'Help',
+    );
+    return { exitCode: 0 };
   }
 
   const agents = await readAgentConfigs();
@@ -68,32 +67,18 @@ Exit Codes:
       'No agents found.\n\nCreate one with: openaidy agents create',
       'Agents',
     );
-    return {
-      exitCode: 0,
-      output: 'No agents found.\n\nCreate one with: openaidy agents create',
-    };
+    return { exitCode: 0 };
   }
 
   const enabled = agents.filter((a) => a.enabled !== false);
   const disabled = agents.filter((a) => a.enabled === false);
 
-  p.intro(`Agents (${agents.length})`);
+  const sections: string[] = [
+    ...enabled.map((a) => formatAgent(a)),
+    ...disabled.map((a) => formatAgent(a)),
+  ];
 
-  if (enabled.length > 0) {
-    for (const a of enabled) {
-      p.note(formatAgent(a));
-    }
-  }
+  p.note(sections.join('\n\n'), `Agents (${agents.length})`);
 
-  if (disabled.length > 0) {
-    for (const a of disabled) {
-      p.note(formatAgent(a), 'disabled');
-    }
-  }
-
-  // Also return structured output for tests / piping
-  const lines: string[] = [];
-  for (const a of enabled) lines.push(formatAgent(a), '');
-  for (const a of disabled) lines.push(formatAgent(a), '');
-  return { exitCode: 0, output: lines.join('\n') };
+  return { exitCode: 0 };
 }

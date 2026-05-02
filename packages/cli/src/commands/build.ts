@@ -5,19 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readAddonManifest } from '../utils/project.js';
-
-export interface BuildOptions {
-  watch?: boolean;
-  minify?: boolean;
-  sourcemap?: boolean;
-}
-
-export interface BuildResult {
-  success: boolean;
-  message: string;
-  outputPath?: string;
-  warnings?: string[];
-}
+import type { BuildOptions, BuildResult } from '../types.js';
 
 /**
  * Build addon for production

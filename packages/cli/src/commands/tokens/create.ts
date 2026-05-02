@@ -4,6 +4,7 @@
  * Implements `openaidy tokens create` command.
  */
 
+import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
@@ -64,10 +65,8 @@ export async function tokensCreateHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
-    return {
-      exitCode: 0,
-      output: `
-Usage: openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
+    p.note(
+      `Usage: openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]
 
 Create a new access token. The raw token is shown once — save it immediately.
 
@@ -98,34 +97,32 @@ Examples:
 Exit Codes:
   0  Token created successfully
   1  Error
-  2  Invalid arguments
-`,
-    };
+  2  Invalid arguments`,
+      'Help',
+    );
+    return { exitCode: 0 };
   }
 
   const opts = parseArgs(args);
 
   if (!opts.name) {
-    return {
-      exitCode: 2,
-      error: 'Missing required option: --name\nRun with --help for usage.',
-    };
+    const msg = 'Missing required option: --name\nRun with --help for usage.';
+    p.log.error(msg);
+    return { exitCode: 2, error: msg };
   }
   if (opts.scopes.length === 0) {
-    return {
-      exitCode: 2,
-      error: 'Missing required option: --scopes\nRun with --help for usage.',
-    };
+    const msg = 'Missing required option: --scopes\nRun with --help for usage.';
+    p.log.error(msg);
+    return { exitCode: 2, error: msg };
   }
 
   const config = resolveCLIConfig();
   const token = await readAdminToken(config.tokenPath);
 
   if (!token) {
-    return {
-      exitCode: 1,
-      error: `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`,
-    };
+    const msg = `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   const body: Record<string, unknown> = {
@@ -145,41 +142,35 @@ Exit Codes:
       body: JSON.stringify(body),
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      exitCode: 1,
-      error: `Cannot reach server at ${config.httpUrl}.\n${msg}\n\nMake sure the server is running.`,
-    };
+    const msg = `Cannot reach server at ${config.httpUrl}.\n${err instanceof Error ? err.message : String(err)}\n\nMake sure the server is running.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   if (!res.ok) {
     const errBody = (await res
       .json()
       .catch(() => ({ error: res.statusText }))) as { error?: string };
-    return {
-      exitCode: 1,
-      error: `Server returned ${res.status}: ${errBody.error ?? res.statusText}`,
-    };
+    const msg = `Server returned ${res.status}: ${errBody.error ?? res.statusText}`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   const result = (await res.json()) as CreateResponse;
   const { key, rawKey } = result;
 
-  const lines = [
-    'Access token created',
-    '====================',
-    '',
-    `  Name:    ${key.name}`,
-    `  ID:      ${key.id}`,
-    `  Scopes:  ${key.scopes.join(', ')}`,
-    ...(key.expiresAt ? [`  Expires: ${key.expiresAt}`] : []),
-    '',
-    'Token (shown once — save it now):',
-    '',
-    `  ${rawKey}`,
-    '',
-    'Use this token to log into the UI or authenticate API requests.',
-  ];
+  const details = [
+    `Name:    ${key.name}`,
+    `ID:      ${key.id}`,
+    `Scopes:  ${key.scopes.join(', ')}`,
+    ...(key.expiresAt ? [`Expires: ${key.expiresAt}`] : []),
+  ].join('\n');
 
-  return { exitCode: 0, output: lines.join('\n') };
+  p.note(details, 'Token Created');
+  p.note(
+    `Token (shown once — save it now):\n\n  ${rawKey}\n\nUse this token to log into the UI or authenticate API requests.`,
+    'Raw Token',
+  );
+  p.outro('Access token created successfully.');
+  return { exitCode: 0 };
 }

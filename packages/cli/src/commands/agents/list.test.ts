@@ -4,11 +4,17 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockReadFile } = vi.hoisted(() => ({
+const { mockReadFile, mockClack } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
+  mockClack: {
+    intro: vi.fn(),
+    note: vi.fn(),
+    log: { error: vi.fn() },
+  },
 }));
 
 vi.mock('node:fs/promises', () => ({ readFile: mockReadFile }));
+vi.mock('@clack/prompts', () => mockClack);
 
 import { agentsListHandler } from './list.js';
 
@@ -46,18 +52,31 @@ describe('agents list', () => {
     vi.clearAllMocks();
   });
 
+  function noteOutput(): string {
+    return mockClack.note.mock.calls.map((c: unknown[]) => c[0]).join('\n');
+  }
+
   describe('--help', () => {
     it('shows help with --help', async () => {
       const result = await agentsListHandler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('agents list');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('agents list'),
+        expect.any(String),
+      );
     });
 
     it('shows help with -h', async () => {
       const result = await agentsListHandler(['-h']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
     });
   });
 
@@ -66,15 +85,15 @@ describe('agents list', () => {
       mockReadFile.mockRejectedValue(new Error('ENOENT'));
       const result = await agentsListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No agents found');
-      expect(result.output).toContain('agents create');
+      expect(noteOutput()).toContain('No agents found');
+      expect(noteOutput()).toContain('agents create');
     });
 
     it('shows empty state when config has no agents array', async () => {
       mockReadFile.mockResolvedValue(JSON.stringify({ version: 1 }));
       const result = await agentsListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No agents found');
+      expect(noteOutput()).toContain('No agents found');
     });
   });
 
@@ -86,43 +105,43 @@ describe('agents list', () => {
     it('shows enabled agents', async () => {
       const result = await agentsListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Default Assistant');
-      expect(result.output).toContain('Code Assistant');
+      expect(noteOutput()).toContain('Default Assistant');
+      expect(noteOutput()).toContain('Code Assistant');
     });
 
     it('shows agent IDs', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('default');
-      expect(result.output).toContain('code-assistant');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('default');
+      expect(noteOutput()).toContain('code-assistant');
     });
 
     it('shows model for each agent', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('openai/gpt-4o-mini');
-      expect(result.output).toContain('openai/gpt-4o');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('openai/gpt-4o-mini');
+      expect(noteOutput()).toContain('openai/gpt-4o');
     });
 
     it('shows description when present', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('A general-purpose assistant');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('A general-purpose assistant');
     });
 
     it('shows tags when present', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('general, default');
-      expect(result.output).toContain('coding');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('general, default');
+      expect(noteOutput()).toContain('coding');
     });
 
     it('shows all enabled agents in output', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('Default Assistant');
-      expect(result.output).toContain('Code Assistant');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('Default Assistant');
+      expect(noteOutput()).toContain('Code Assistant');
     });
 
     it('shows disabled agents with [disabled] marker', async () => {
-      const result = await agentsListHandler([]);
-      expect(result.output).toContain('Disabled Agent');
-      expect(result.output).toContain('[disabled]');
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('Disabled Agent');
+      expect(noteOutput()).toContain('[disabled]');
     });
   });
 
@@ -142,7 +161,7 @@ describe('agents list', () => {
       mockReadFile.mockResolvedValue(JSON.stringify(config));
       const result = await agentsListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Bare Agent');
+      expect(noteOutput()).toContain('Bare Agent');
     });
 
     it('handles agent with no model set', async () => {
@@ -153,7 +172,7 @@ describe('agents list', () => {
       mockReadFile.mockResolvedValue(JSON.stringify(config));
       const result = await agentsListHandler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No Model Agent');
+      expect(noteOutput()).toContain('No Model Agent');
     });
   });
 });

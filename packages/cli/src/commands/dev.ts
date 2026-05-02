@@ -5,20 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readAddonManifest } from '../utils/project.js';
-
-export interface DevOptions {
-  port?: number;
-  host?: string;
-  openaidyUrl?: string;
-  proxy?: boolean;
-}
-
-export interface DevResult {
-  success: boolean;
-  message: string;
-  port?: number;
-  host?: string;
-}
+import type { DevOptions, DevResult } from '../types.js';
 
 /**
  * Start development server

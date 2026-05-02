@@ -4,6 +4,7 @@
  * Implements `openaidy tokens revoke` command.
  */
 
+import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
@@ -26,10 +27,8 @@ export async function tokensRevokeHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
-    return {
-      exitCode: 0,
-      output: `
-Usage: openaidy tokens revoke <id>
+    p.note(
+      `Usage: openaidy tokens revoke <id>
 
 Revoke an access token by its ID. This is irreversible.
 
@@ -42,27 +41,26 @@ Examples:
 Exit Codes:
   0  Token revoked
   1  Error (not found, server unreachable)
-  2  Missing argument
-`,
-    };
+  2  Missing argument`,
+      'Help',
+    );
+    return { exitCode: 0 };
   }
 
   const id = args[0];
   if (!id || id.startsWith('--')) {
-    return {
-      exitCode: 2,
-      error: 'Missing argument: <id>\nRun with --help for usage.',
-    };
+    const msg = 'Missing argument: <id>\nRun with --help for usage.';
+    p.log.error(msg);
+    return { exitCode: 2, error: msg };
   }
 
   const config = resolveCLIConfig();
   const token = await readAdminToken(config.tokenPath);
 
   if (!token) {
-    return {
-      exitCode: 1,
-      error: `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`,
-    };
+    const msg = `Bootstrap admin token not found at ${config.tokenPath}.\nMake sure the server has been started at least once.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   let res: Response;
@@ -72,30 +70,27 @@ Exit Codes:
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      exitCode: 1,
-      error: `Cannot reach server at ${config.httpUrl}.\n${msg}\n\nMake sure the server is running.`,
-    };
+    const msg = `Cannot reach server at ${config.httpUrl}.\n${err instanceof Error ? err.message : String(err)}\n\nMake sure the server is running.`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   if (res.status === 404) {
-    return { exitCode: 1, error: `Token not found: ${id}` };
+    const msg = `Token not found: ${id}`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   if (!res.ok) {
     const body = (await res
       .json()
       .catch(() => ({ error: res.statusText }))) as { error?: string };
-    return {
-      exitCode: 1,
-      error: `Server returned ${res.status}: ${body.error ?? res.statusText}`,
-    };
+    const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
+    p.log.error(msg);
+    return { exitCode: 1, error: msg };
   }
 
   const result = (await res.json()) as { key: { name: string; id: string } };
-  return {
-    exitCode: 0,
-    output: `Revoked: ${result.key.name} (${result.key.id})`,
-  };
+  p.outro(`Revoked: ${result.key.name} (${result.key.id})`);
+  return { exitCode: 0 };
 }

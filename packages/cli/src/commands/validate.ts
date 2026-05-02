@@ -13,19 +13,7 @@ import {
   validateAddonName,
   validateVersion,
 } from '../utils/validation.js';
-
-export interface ValidateOptions {
-  package?: boolean;
-  verbose?: boolean;
-  strict?: boolean;
-}
-
-export interface ValidateResult {
-  valid: boolean;
-  message: string;
-  errors: string[];
-  warnings: string[];
-}
+import type { ValidateOptions, ValidateResult } from '../types.js';
 
 /**
  * Validate addon project

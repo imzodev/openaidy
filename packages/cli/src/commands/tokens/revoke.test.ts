@@ -4,12 +4,18 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { mockReadFile, mockFetch } = vi.hoisted(() => ({
+const { mockReadFile, mockFetch, mockClack } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
   mockFetch: vi.fn(),
+  mockClack: {
+    note: vi.fn(),
+    outro: vi.fn(),
+    log: { error: vi.fn() },
+  },
 }));
 
 vi.mock('node:fs/promises', () => ({ readFile: mockReadFile }));
+vi.mock('@clack/prompts', () => mockClack);
 vi.mock('../../../lib/config.js', () => ({
   resolveCLIConfig: () => ({
     httpUrl: 'http://localhost:3001',
@@ -60,15 +66,27 @@ describe('tokens revoke', () => {
     it('shows help with --help', async () => {
       const result = await tokensRevokeHandler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('tokens revoke');
-      expect(result.output).toContain('<id>');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('tokens revoke'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('<id>'),
+        expect.any(String),
+      );
     });
 
     it('shows help with -h', async () => {
       const result = await tokensRevokeHandler(['-h']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
     });
   });
 
@@ -133,8 +151,12 @@ describe('tokens revoke', () => {
       );
       const result = await tokensRevokeHandler([TOKEN_ID]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('CI Pipeline');
-      expect(result.output).toContain(TOKEN_ID);
+      expect(mockClack.outro).toHaveBeenCalledWith(
+        expect.stringContaining('CI Pipeline'),
+      );
+      expect(mockClack.outro).toHaveBeenCalledWith(
+        expect.stringContaining(TOKEN_ID),
+      );
     });
 
     it('sends DELETE to correct URL with auth header', async () => {

@@ -586,10 +586,17 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('tokens list', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('tokens list', ['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('tokens list');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('tokens list'),
+        expect.any(String),
+      );
     });
 
     it('returns exit 1 when admin token file is missing', async () => {
@@ -605,11 +612,21 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('tokens create', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('tokens create', ['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('--name');
-      expect(result.output).toContain('--scopes');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('--name'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('--scopes'),
+        expect.any(String),
+      );
     });
 
     it('returns exit 2 when --name is missing', async () => {
@@ -633,10 +650,17 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('tokens revoke', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('tokens revoke', ['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('<id>');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('<id>'),
+        expect.any(String),
+      );
     });
 
     it('returns exit 2 when id is missing', async () => {
