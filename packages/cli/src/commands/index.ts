@@ -667,6 +667,60 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Agents Commands
+// ============================================================================
+
+registerGroup({
+  name: 'agents',
+  description: 'Manage agents and their workspaces',
+  commands: {
+    'agents list': {
+      description: 'List all configured agents',
+      usage: 'openaidy agents list',
+      examples: ['pnpm openaidy agents list'],
+    },
+    'agents create': {
+      description: 'Create a new agent with its own workspace',
+      usage:
+        'openaidy agents create [<name>] [--id <id>] [--description <desc>]',
+      examples: [
+        'pnpm openaidy agents create',
+        'pnpm openaidy agents create "Research Assistant"',
+      ],
+    },
+  },
+});
+
+registerCommand(
+  'agents list',
+  async (args: string[]) => {
+    const { agentsListHandler } = await import('./agents/list.js');
+    return agentsListHandler(args);
+  },
+  {
+    description: 'List all configured agents',
+    usage: 'openaidy agents list',
+    examples: ['pnpm openaidy agents list'],
+  },
+);
+
+registerCommand(
+  'agents create',
+  async (args: string[]) => {
+    const { agentsCreateHandler } = await import('./agents/create.js');
+    return agentsCreateHandler(args);
+  },
+  {
+    description: 'Create a new agent with its own workspace',
+    usage: 'openaidy agents create [<name>] [--id <id>] [--description <desc>]',
+    examples: [
+      'pnpm openaidy agents create',
+      'pnpm openaidy agents create "Research Assistant"',
+    ],
+  },
+);
+
 // Devices commands
 registerCommand(
   'devices list',

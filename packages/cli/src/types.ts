@@ -1,6 +1,6 @@
 /**
  * CLI Types
- * 
+ *
  * Shared type definitions for the OpenAidy CLI.
  */
 
@@ -78,6 +78,44 @@ export const defaultCLIConfig: CLIConfig = {
   name: 'openaidy',
   version: '0.0.1',
   description: 'OpenAidy CLI - Local administration tool',
+};
+
+// ============================================================================
+// Agent / Config types
+// These mirror the openaidy.json file format read/written by the CLI.
+// ============================================================================
+
+export type WorkspacePermissions = {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  list: boolean;
+};
+
+export type AgentConfig = {
+  id: string;
+  name: string;
+  description?: string;
+  enabled?: boolean;
+  systemPrompt?: string;
+  model?: string;
+  tags?: string[];
+  skills?: string[];
+  workspace?: {
+    enabled: boolean;
+    defaultPermissions: WorkspacePermissions;
+    workspaces: Array<{ path: string; permissions: WorkspacePermissions }>;
+  };
+  version?: number;
+};
+
+export type OpenAidyConfig = {
+  agents?: AgentConfig[];
+};
+
+export type SkillSummary = {
+  id: string;
+  name: string;
 };
 
 /**
