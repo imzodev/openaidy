@@ -254,6 +254,8 @@ export async function updateAgentTools(
   return response.json();
 }
 
+export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
 /**
  * Skill info returned by GET /skills
  */
@@ -261,6 +263,8 @@ export type SkillInfo = {
   id: string;
   name: string;
   description: string;
+  source?: SkillSource;
+  agentId?: string;
 };
 
 /**

@@ -47,6 +47,12 @@ function extractVersion(filePath: string): string | null {
   return null;
 }
 
+export function readSeedManifest(skillsDir: string): SeedManifest {
+  return loadManifest(skillsDir);
+}
+
+export type { SeedManifest, ManifestEntry };
+
 function loadManifest(targetDir: string): SeedManifest {
   const manifestPath = path.join(targetDir, MANIFEST_FILE);
   if (!fs.existsSync(manifestPath)) return {};

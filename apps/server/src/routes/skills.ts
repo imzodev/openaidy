@@ -1,11 +1,14 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { SkillRegistry, SkillSummary } from '../skills';
+import type { SkillRegistry } from '../skills';
 import type { WorkspaceService } from '../workspace/service';
+import type { SkillSource, EnrichedSkillInfo } from '../types';
 import { parseSkillMd } from '../skills/parser';
+import { readSeedManifest } from '../skills/seed';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -16,21 +19,85 @@ export type SkillRoutesOptions = {
   agentRegistry: AgentRegistry;
   authMiddleware: AuthMiddleware;
   workspace: WorkspaceService;
+  skillsDir: string;
 };
 
 export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { skillRegistry, agentRegistry, authMiddleware, workspace } = options;
+  const { skillRegistry, agentRegistry, authMiddleware, workspace, skillsDir } =
+    options;
 
   /**
    * GET /skills
-   * List all installed skills.
+   * List all skills: global (with source tags) + all agent workspace skills.
    */
   app.get('/skills', async () => {
-    const skills = skillRegistry.listSkills();
-    return { items: skills };
+    const manifest = readSeedManifest(skillsDir);
+    const items: EnrichedSkillInfo[] = [];
+
+    // Global skills with source tags
+    for (const skill of skillRegistry.listSkills()) {
+      const skillFile = join(skillsDir, skill.id, 'SKILL.md');
+      const manifestKey = `${skill.id}/SKILL.md`;
+      const entry = manifest[manifestKey];
+      let source: SkillSource;
+      if (entry === undefined) {
+        source = 'user-global';
+      } else {
+        let currentHash: string;
+        try {
+          currentHash = createHash('sha256')
+            .update(readFileSync(skillFile))
+            .digest('hex');
+        } catch {
+          currentHash = '';
+        }
+        source = currentHash === entry.hash ? 'preinstalled' : 'modified';
+      }
+      items.push({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        source,
+      });
+    }
+
+    // Agent workspace skills
+    for (const agent of agentRegistry.listAllAgents()) {
+      const agentSkillsDir = join(
+        workspace.getWorkspacePath(agent.id),
+        'skills',
+      );
+      if (!existsSync(agentSkillsDir)) continue;
+      let subdirs: string[];
+      try {
+        subdirs = readdirSync(agentSkillsDir);
+      } catch {
+        continue;
+      }
+      for (const id of subdirs) {
+        const skillFile = join(agentSkillsDir, id, 'SKILL.md');
+        if (!existsSync(skillFile)) continue;
+        try {
+          const content = readFileSync(skillFile, 'utf-8');
+          const result = parseSkillMd(content, id, skillFile);
+          if ('errors' in result) continue;
+          items.push({
+            id: result.id,
+            name: result.name,
+            description: result.description,
+            source: 'agent',
+            agentId: agent.id,
+          });
+        } catch {
+          // skip unreadable files
+        }
+      }
+    }
+
+    return { items };
   });
 
   /**
@@ -47,9 +114,10 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
     }
 
     const globalSkills = skillRegistry.listSkills();
-    const merged = new Map<string, SkillSummary>(
-      globalSkills.map((s) => [s.id, s]),
-    );
+    const merged = new Map<
+      string,
+      { id: string; name: string; description: string }
+    >(globalSkills.map((s) => [s.id, s]));
 
     const agentSkillsDir = join(workspace.getWorkspacePath(agentId), 'skills');
     if (existsSync(agentSkillsDir)) {

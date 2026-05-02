@@ -1,11 +1,47 @@
-import { For, Show, createSignal, onMount } from 'solid-js';
-import { Lightbulb } from 'lucide-solid';
+import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import { Lightbulb, Bot } from 'lucide-solid';
 import { Layout } from './Layout';
-import { listSkills, type SkillInfo } from '../../lib/api';
+import { listSkills, type SkillInfo, type SkillSource } from '../../lib/api';
+
+type BadgeVariant = 'gray' | 'blue' | 'yellow' | 'purple';
+
+const SOURCE_LABEL: Record<SkillSource, string> = {
+  preinstalled: 'Pre-installed',
+  modified: 'Modified',
+  'user-global': 'Custom',
+  agent: 'Agent',
+};
+
+const SOURCE_BADGE: Record<SkillSource, BadgeVariant> = {
+  preinstalled: 'gray',
+  modified: 'yellow',
+  'user-global': 'blue',
+  agent: 'purple',
+};
+
+const BADGE_CLASSES: Record<BadgeVariant, string> = {
+  gray: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  yellow:
+    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+  purple:
+    'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+};
+
+function SourceBadge(props: { source: SkillSource }) {
+  const variant = () => SOURCE_BADGE[props.source];
+  return (
+    <span
+      class={`text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 ${BADGE_CLASSES[variant()]}`}
+    >
+      {SOURCE_LABEL[props.source]}
+    </span>
+  );
+}
 
 function SkillCard(props: { skill: SkillInfo }) {
   return (
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 flex flex-col gap-3">
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-border p-4 flex flex-col gap-2">
       <div class="flex items-start justify-between gap-2">
         <div class="flex items-center gap-2 min-w-0">
           <Lightbulb class="w-4 h-4 text-primary flex-shrink-0" />
@@ -13,14 +49,33 @@ function SkillCard(props: { skill: SkillInfo }) {
             {props.skill.name}
           </span>
         </div>
-        <code class="text-xs text-text-tertiary font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded flex-shrink-0">
-          {props.skill.id}
-        </code>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          <Show when={props.skill.source}>
+            <SourceBadge source={props.skill.source!} />
+          </Show>
+        </div>
       </div>
       <p class="text-sm text-text-secondary">{props.skill.description}</p>
+      <div class="flex items-center justify-between gap-2 mt-1">
+        <code class="text-xs text-text-tertiary font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+          {props.skill.id}
+        </code>
+        <Show when={props.skill.agentId}>
+          <span class="flex items-center gap-1 text-xs text-text-tertiary">
+            <Bot class="w-3 h-3" />
+            {props.skill.agentId}
+          </span>
+        </Show>
+      </div>
     </div>
   );
 }
+
+type SkillGroup = {
+  title: string;
+  description: string;
+  skills: SkillInfo[];
+};
 
 export function SkillsPage() {
   const [skills, setSkills] = createSignal<SkillInfo[]>([]);
@@ -42,6 +97,53 @@ export function SkillsPage() {
 
   onMount(() => {
     void load();
+  });
+
+  const groups = createMemo((): SkillGroup[] => {
+    const all = skills();
+    const preinstalled = all.filter((s) => s.source === 'preinstalled');
+    const modified = all.filter((s) => s.source === 'modified');
+    const userGlobal = all.filter((s) => s.source === 'user-global');
+    const agent = all.filter((s) => s.source === 'agent');
+    const unknown = all.filter((s) => !s.source);
+
+    const result: SkillGroup[] = [];
+    if (preinstalled.length > 0) {
+      result.push({
+        title: 'Pre-installed',
+        description: 'Bundled skills shipped with OpenAidy',
+        skills: preinstalled,
+      });
+    }
+    if (modified.length > 0) {
+      result.push({
+        title: 'Modified',
+        description: 'Pre-installed skills you have customized',
+        skills: modified,
+      });
+    }
+    if (userGlobal.length > 0) {
+      result.push({
+        title: 'Custom',
+        description: 'Skills you created globally',
+        skills: userGlobal,
+      });
+    }
+    if (agent.length > 0) {
+      result.push({
+        title: 'Agent Skills',
+        description: 'Skills created by agents in their own workspace',
+        skills: agent,
+      });
+    }
+    if (unknown.length > 0) {
+      result.push({
+        title: 'Other',
+        description: '',
+        skills: unknown,
+      });
+    }
+    return result;
   });
 
   return (
@@ -90,10 +192,30 @@ export function SkillsPage() {
         </div>
       </Show>
 
-      {/* Skills grid */}
-      <Show when={!isLoading() && skills().length > 0}>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <For each={skills()}>{(skill) => <SkillCard skill={skill} />}</For>
+      {/* Grouped skills */}
+      <Show when={!isLoading() && !error() && skills().length > 0}>
+        <div class="space-y-8">
+          <For each={groups()}>
+            {(group) => (
+              <section>
+                <div class="mb-3">
+                  <h2 class="text-sm font-semibold text-text-primary">
+                    {group.title}
+                  </h2>
+                  <Show when={group.description}>
+                    <p class="text-xs text-text-tertiary mt-0.5">
+                      {group.description}
+                    </p>
+                  </Show>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <For each={group.skills}>
+                    {(skill) => <SkillCard skill={skill} />}
+                  </For>
+                </div>
+              </section>
+            )}
+          </For>
         </div>
       </Show>
     </Layout>

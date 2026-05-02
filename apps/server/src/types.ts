@@ -18,6 +18,16 @@ import type { McpClientService } from './mcp/client';
 import type { SkillRegistry } from './skills';
 import type { SchedulerService } from './scheduler';
 
+export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
+export type EnrichedSkillInfo = {
+  id: string;
+  name: string;
+  description: string;
+  source: SkillSource;
+  agentId?: string;
+};
+
 export type AppServices = {
   config: AppConfigService;
   providers: ProviderServices;

@@ -276,6 +276,7 @@ export async function buildApp() {
     agentRegistry: services.agents,
     authMiddleware,
     workspace: services.workspace,
+    skillsDir: env.SKILLS_DIR,
   });
 
   // Register builtin tool routes

@@ -145,6 +145,7 @@ describe('Skill Routes', () => {
       agentRegistry,
       authMiddleware: mockAuthMiddleware,
       workspace,
+      skillsDir: tempSkillsDir,
     });
   });
 
@@ -223,6 +224,7 @@ describe('Skill Routes', () => {
         agentRegistry,
         authMiddleware: mockAuthMiddleware,
         workspace,
+        skillsDir: tempSkillsDir,
       });
 
       const response = await tempApp.inject({
