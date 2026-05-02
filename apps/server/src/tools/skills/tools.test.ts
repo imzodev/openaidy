@@ -3,30 +3,35 @@ import { mkdir, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createSkillRegistry } from '../../skills/index';
+import { WorkspaceService } from '../../workspace/service';
 import { createSkillCreateTool, createSkillTools } from './index';
 
 const CTX = { agentId: 'test-agent' };
 
 describe('skill tools', () => {
-  let skillsDir: string;
+  let baseDir: string;
+  let workspace: WorkspaceService;
+  let agentSkillsDir: string;
   let registry: ReturnType<typeof createSkillRegistry>;
 
   beforeEach(async () => {
-    skillsDir = join(tmpdir(), `skill-tools-test-${Date.now()}`);
-    await mkdir(skillsDir, { recursive: true });
-    registry = createSkillRegistry({ skillsDir });
+    baseDir = join(tmpdir(), `skill-tools-test-${Date.now()}`);
+    await mkdir(baseDir, { recursive: true });
+    workspace = new WorkspaceService({ baseDir });
+    agentSkillsDir = join(baseDir, CTX.agentId, 'skills');
+    registry = createSkillRegistry({ skillsDir: agentSkillsDir });
     registry.load();
   });
 
   afterEach(async () => {
-    await rm(skillsDir, { recursive: true, force: true });
+    await rm(baseDir, { recursive: true, force: true });
   });
 
   // ─── createSkillTools factory ──────────────────────────────────────────────
 
   describe('createSkillTools', () => {
     it('returns skill_create tool', () => {
-      const tools = createSkillTools(registry, skillsDir);
+      const tools = createSkillTools(registry, workspace);
       expect(tools.map((t) => t.name)).toContain('skill_create');
       expect(tools).toHaveLength(1);
     });
@@ -36,7 +41,7 @@ describe('skill tools', () => {
 
   describe('skill_create', () => {
     it('creates a valid skill and writes SKILL.md to disk', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'my-skill',
@@ -50,7 +55,7 @@ describe('skill tools', () => {
       expect(result.ok).toBe(true);
 
       const fileContent = await readFile(
-        join(skillsDir, 'my-skill', 'SKILL.md'),
+        join(agentSkillsDir, 'my-skill', 'SKILL.md'),
         'utf-8',
       );
       expect(fileContent).toContain('name: My Skill');
@@ -60,7 +65,7 @@ describe('skill tools', () => {
     });
 
     it('registers the skill in the registry immediately', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       await tool.execute(
         {
           id: 'instant-skill',
@@ -78,7 +83,7 @@ describe('skill tools', () => {
     });
 
     it('uses the provided version in the file', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       await tool.execute(
         {
           id: 'versioned-skill',
@@ -91,14 +96,14 @@ describe('skill tools', () => {
       );
 
       const fileContent = await readFile(
-        join(skillsDir, 'versioned-skill', 'SKILL.md'),
+        join(agentSkillsDir, 'versioned-skill', 'SKILL.md'),
         'utf-8',
       );
       expect(fileContent).toContain('version: 2.3.0');
     });
 
     it('defaults version to 1.0.0 when omitted', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       await tool.execute(
         {
           id: 'no-version-skill',
@@ -110,14 +115,14 @@ describe('skill tools', () => {
       );
 
       const fileContent = await readFile(
-        join(skillsDir, 'no-version-skill', 'SKILL.md'),
+        join(agentSkillsDir, 'no-version-skill', 'SKILL.md'),
         'utf-8',
       );
       expect(fileContent).toContain('version: 1.0.0');
     });
 
     it('records created_by with the agent id', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       await tool.execute(
         {
           id: 'attributed-skill',
@@ -129,14 +134,14 @@ describe('skill tools', () => {
       );
 
       const fileContent = await readFile(
-        join(skillsDir, 'attributed-skill', 'SKILL.md'),
+        join(agentSkillsDir, 'attributed-skill', 'SKILL.md'),
         'utf-8',
       );
       expect(fileContent).toContain(`created_by: ${CTX.agentId}`);
     });
 
     it('returns error when id already exists', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const args = {
         id: 'duplicate-skill',
         name: 'Duplicate',
@@ -153,7 +158,7 @@ describe('skill tools', () => {
     });
 
     it('returns error for invalid id format', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'Invalid ID!',
@@ -171,7 +176,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when id is missing', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         { name: 'No ID', description: 'Missing id', body: 'Body.' },
         CTX,
@@ -180,7 +185,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when name is missing', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         { id: 'no-name', description: 'No name', body: 'Body.' },
         CTX,
@@ -189,7 +194,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when description is missing', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         { id: 'no-desc', name: 'No Desc', body: 'Body.' },
         CTX,
@@ -198,7 +203,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when body is missing', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         { id: 'no-body', name: 'No Body', description: 'Missing body' },
         CTX,
@@ -209,7 +214,7 @@ describe('skill tools', () => {
     // ─── companion files ─────────────────────────────────────────────────────
 
     it('writes companion files alongside SKILL.md', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'api-skill',
@@ -230,20 +235,20 @@ describe('skill tools', () => {
       );
 
       const script = await readFile(
-        join(skillsDir, 'api-skill', 'script.py'),
+        join(agentSkillsDir, 'api-skill', 'script.py'),
         'utf-8',
       );
       expect(script).toContain('import requests');
 
       const envExample = await readFile(
-        join(skillsDir, 'api-skill', '.env.example'),
+        join(agentSkillsDir, 'api-skill', '.env.example'),
         'utf-8',
       );
       expect(envExample).toContain('API_KEY');
     });
 
     it('succeeds with no companion files', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'plain-skill',
@@ -258,7 +263,7 @@ describe('skill tools', () => {
     });
 
     it('returns error for companion filename with path separator', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'traversal-skill',
@@ -276,7 +281,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when trying to pass SKILL.md as companion file', async () => {
-      const tool = createSkillCreateTool(registry, skillsDir);
+      const tool = createSkillCreateTool(registry, workspace);
       const result = await tool.execute(
         {
           id: 'override-skill',

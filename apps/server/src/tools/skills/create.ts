@@ -3,11 +3,12 @@ import { join, basename } from 'node:path';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { parseSkillMd } from '../../skills/parser.js';
 import type { SkillRegistry } from '../../skills/index.js';
+import type { WorkspaceService } from '../../workspace/service.js';
 
 /**
  * skill_create
  *
- * Lets an agent create a new skill in the shared skills directory.
+ * Lets an agent create a new skill in its own workspace skills directory.
  * The skill is written as a properly formatted SKILL.md file and
  * immediately registered in the SkillRegistry so it is available
  * without a server restart.
@@ -18,7 +19,7 @@ import type { SkillRegistry } from '../../skills/index.js';
  */
 export function createSkillCreateTool(
   skillRegistry: SkillRegistry,
-  skillsDir: string,
+  workspace: WorkspaceService,
 ): BuiltinTool {
   return {
     name: 'skill_create',
@@ -152,8 +153,12 @@ export function createSkillCreateTool(
 
       const content = `---\nname: ${name}\ndescription: ${description}\nversion: ${version}\ncreated_by: ${ctx.agentId}\n---\n\n${body}\n`;
 
-      const skillFilePath = join(skillsDir, id, 'SKILL.md');
-      const skillDirPath = join(skillsDir, id);
+      const agentSkillsDir = join(
+        workspace.getWorkspacePath(ctx.agentId),
+        'skills',
+      );
+      const skillFilePath = join(agentSkillsDir, id, 'SKILL.md');
+      const skillDirPath = join(agentSkillsDir, id);
 
       const parsed = parseSkillMd(content, id, skillFilePath);
       if ('errors' in parsed) {

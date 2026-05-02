@@ -36,7 +36,7 @@ export { createSkillTools } from './skills';
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
   exec?: ExecService;
-  skills?: { registry: SkillRegistry; skillsDir: string };
+  skills?: { registry: SkillRegistry };
   // Add more service dependencies here as new tool categories are introduced.
   // Example:
   //   webSearch?: WebSearchService;
@@ -66,10 +66,7 @@ export function createBuiltinToolRegistry(
   }
 
   if (deps.skills) {
-    for (const tool of createSkillTools(
-      deps.skills.registry,
-      deps.skills.skillsDir,
-    )) {
+    for (const tool of createSkillTools(deps.skills.registry, deps.workspace)) {
       registry.register(tool);
     }
   }
