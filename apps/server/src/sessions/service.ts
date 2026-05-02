@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
@@ -57,6 +58,7 @@ import type {
  */
 export class SessionMessageService {
   private readonly providers: ProviderServices;
+  private readonly logger: FastifyBaseLogger | undefined;
   private readonly agents: AgentRegistry | undefined;
   private readonly mcp: McpClientService | undefined;
   private readonly builtinTools: BuiltinToolRegistry | undefined;
@@ -68,6 +70,7 @@ export class SessionMessageService {
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
+    this.logger = options.logger;
     this.agents = options.agents;
     this.mcp = options.mcp;
     this.builtinTools = options.builtinTools;
@@ -165,25 +168,31 @@ export class SessionMessageService {
       );
 
       if (!result.ok) {
-        console.error('[generateTitle] provider error:', result.error);
+        this.logger?.error(
+          { error: result.error },
+          '[generateTitle] provider error',
+        );
         return null;
       }
 
       const raw = result.value.content;
-      console.log('[generateTitle] raw response:', JSON.stringify(raw));
 
       // Extract JSON object from the response — handles reasoning text before/after
       const jsonMatch = raw.match(
         /\{[\s\S]*?"title"\s*:\s*"([^"]+)"[\s\S]*?\}/,
       );
-      console.log('[generateTitle] jsonMatch:', jsonMatch);
-      if (!jsonMatch?.[1]) return null;
+      if (!jsonMatch?.[1]) {
+        this.logger?.error(
+          { raw },
+          `[generateTitle] no JSON title found in response ${raw}`,
+        );
+        return null;
+      }
 
       const title = jsonMatch[1].trim();
-      console.log('[generateTitle] extracted title:', title);
       return title || null;
     } catch (err) {
-      console.error('[generateTitle] threw:', err);
+      this.logger?.error({ err }, '[generateTitle] threw');
       return null;
     }
   }

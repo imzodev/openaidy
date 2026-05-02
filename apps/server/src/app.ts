@@ -156,6 +156,7 @@ export async function buildApp() {
 
   const sessionService = new SessionMessageService({
     providers: providerServices,
+    logger: app.log,
     agents: agentRegistry,
     mcp: mcpService,
     builtinTools: builtinToolRegistry,

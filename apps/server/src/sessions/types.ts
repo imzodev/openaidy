@@ -52,6 +52,7 @@ export type SubmitMessageResult =
     };
 
 // Import types needed for SessionMessageServiceOptions
+import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
@@ -68,6 +69,7 @@ import type {
  */
 export type SessionMessageServiceOptions = {
   providers: ProviderServices;
+  logger?: FastifyBaseLogger;
   agents?: AgentRegistry;
   mcp?: McpClientService;
   /** Registry of native (in-process) builtin tools — separate from MCP */
