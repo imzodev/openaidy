@@ -21,32 +21,31 @@ function SourceBadge(props: { source: SkillSource }) {
 
 function SkillCard(props: { skill: SkillInfo }) {
   return (
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-border p-4 flex flex-col gap-2">
-      <div class="flex items-start justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0">
-          <Lightbulb class="w-4 h-4 text-primary flex-shrink-0" />
-          <span class="font-medium text-sm text-text-primary truncate">
-            {props.skill.name}
-          </span>
-        </div>
-        <div class="flex items-center gap-1.5 flex-shrink-0">
-          <Show when={props.skill.source}>
-            <SourceBadge source={props.skill.source!} />
-          </Show>
-        </div>
-      </div>
-      <p class="text-sm text-text-secondary">{props.skill.description}</p>
-      <div class="flex items-center justify-between gap-2 mt-1">
-        <code class="text-xs text-text-tertiary font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+    <div class="bg-white dark:bg-gray-800 rounded border border-border px-3 py-2 flex flex-col gap-0.5">
+      <div class="flex items-center gap-2">
+        <Lightbulb class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+        <span class="font-medium text-sm text-text-primary truncate flex-1">
+          {props.skill.name}
+        </span>
+        <code class="text-xs text-text-tertiary font-mono bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded flex-shrink-0">
           {props.skill.id}
         </code>
         <Show when={props.skill.agentId}>
-          <span class="flex items-center gap-1 text-xs text-text-tertiary">
+          <span class="flex items-center gap-0.5 text-xs text-text-tertiary flex-shrink-0">
             <Bot class="w-3 h-3" />
             {props.skill.agentId}
           </span>
         </Show>
+        <Show when={props.skill.source}>
+          <SourceBadge source={props.skill.source!} />
+        </Show>
       </div>
+      <p
+        class="text-xs text-text-tertiary truncate pl-5"
+        title={props.skill.description}
+      >
+        {props.skill.description}
+      </p>
     </div>
   );
 }
@@ -174,21 +173,19 @@ export function SkillsPage() {
 
       {/* Grouped skills */}
       <Show when={!isLoading() && !error() && skills().length > 0}>
-        <div class="space-y-8">
+        <div class="rounded-lg border border-border divide-y divide-border overflow-hidden">
           <For each={groups()}>
             {(group) => (
               <section>
-                <div class="mb-3">
-                  <h2 class="text-sm font-semibold text-text-primary">
+                <div class="px-4 py-2 bg-gray-50 dark:bg-gray-900/50 flex items-center gap-2">
+                  <h2 class="text-xs font-semibold uppercase tracking-wide text-text-tertiary">
                     {group.title}
                   </h2>
-                  <Show when={group.description}>
-                    <p class="text-xs text-text-tertiary mt-0.5">
-                      {group.description}
-                    </p>
-                  </Show>
+                  <span class="text-xs text-text-tertiary bg-gray-200 dark:bg-gray-700 rounded-full px-1.5 py-0.5 font-mono leading-none">
+                    {group.skills.length}
+                  </span>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div class="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-1.5">
                   <For each={group.skills}>
                     {(skill) => <SkillCard skill={skill} />}
                   </For>
