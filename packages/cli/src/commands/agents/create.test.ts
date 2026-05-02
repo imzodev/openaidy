@@ -4,21 +4,23 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const {
-  mockReadFile,
-  mockReaddir,
-  mockWriteFile,
-  mockMkdir,
-  mockQuestion,
-  mockClose,
-} = vi.hoisted(() => ({
-  mockReadFile: vi.fn(),
-  mockReaddir: vi.fn(),
-  mockWriteFile: vi.fn(),
-  mockMkdir: vi.fn(),
-  mockQuestion: vi.fn(),
-  mockClose: vi.fn(),
-}));
+const { mockReadFile, mockReaddir, mockWriteFile, mockMkdir, mockClack } =
+  vi.hoisted(() => ({
+    mockReadFile: vi.fn(),
+    mockReaddir: vi.fn(),
+    mockWriteFile: vi.fn(),
+    mockMkdir: vi.fn(),
+    mockClack: {
+      intro: vi.fn(),
+      outro: vi.fn(),
+      cancel: vi.fn(),
+      isCancel: vi.fn(() => false),
+      text: vi.fn(),
+      multiselect: vi.fn(),
+      select: vi.fn(),
+      spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    },
+  }));
 
 vi.mock('node:fs/promises', () => ({
   readFile: mockReadFile,
@@ -27,12 +29,7 @@ vi.mock('node:fs/promises', () => ({
   mkdir: mockMkdir,
 }));
 
-vi.mock('node:readline/promises', () => ({
-  createInterface: () => ({
-    question: mockQuestion,
-    close: mockClose,
-  }),
-}));
+vi.mock('@clack/prompts', () => mockClack);
 
 import { agentsCreateHandler } from './create.js';
 
@@ -68,6 +65,24 @@ version: 1.0.0
 Do something useful.
 `;
 
+type AgentStub = { id: string; name: string; enabled: boolean; model: string };
+
+/** Set up Clack mock responses for a standard successful run. */
+function setupClack({
+  description = '',
+  systemPrompt = '',
+  skills = [] as string[],
+  model = null as AgentStub | null,
+} = {}) {
+  mockClack.isCancel.mockReturnValue(false);
+  mockClack.text
+    .mockResolvedValueOnce(description) // description prompt
+    .mockResolvedValueOnce(systemPrompt); // system prompt
+  mockClack.multiselect.mockResolvedValueOnce(skills);
+  mockClack.select.mockResolvedValueOnce(model);
+  mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
+}
+
 describe('agents create', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -75,11 +90,11 @@ describe('agents create', () => {
     mockWriteFile.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue(SKILLS_DIR_ENTRIES);
     mockReadFile
-      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)) // readAgentConfigs (ID conflict check)
+      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)) // ID conflict check
       .mockResolvedValueOnce(SKILL_MD) // example-skill SKILL.md
       .mockResolvedValueOnce(SKILL_MD) // step-by-step SKILL.md
-      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)) // readAgentConfigs (model prompt)
-      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)); // readFile for writing back
+      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)) // model select
+      .mockResolvedValueOnce(JSON.stringify(EXISTING_CONFIG)); // write-back
   });
 
   describe('--help', () => {
@@ -98,55 +113,36 @@ describe('agents create', () => {
   });
 
   describe('argument validation', () => {
-    it('returns exit 1 when name prompt is left blank', async () => {
-      mockQuestion.mockResolvedValueOnce(''); // empty name
+    it('returns exit 1 when name prompt returns empty string', async () => {
+      mockClack.isCancel.mockReturnValue(false);
+      mockClack.text.mockResolvedValueOnce(''); // name prompt returns empty
       const result = await agentsCreateHandler([]);
       expect(result.exitCode).toBe(1);
       expect(result.error).toContain('name is required');
     });
 
+    it('returns exit 1 when user cancels the name prompt', async () => {
+      mockClack.text.mockResolvedValueOnce(Symbol('cancel'));
+      mockClack.isCancel.mockReturnValue(true);
+      const result = await agentsCreateHandler([]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('Cancelled');
+    });
+
     it('returns exit 1 when ID conflicts with an existing agent', async () => {
-      // Name that slugifies to 'default'
-      mockQuestion
-        .mockResolvedValueOnce('') // name prompt (not used — we pass via arg)
-        .mockResolvedValueOnce('') // description
-        .mockResolvedValueOnce('') // system prompt
-        .mockResolvedValueOnce('0')
-        .mockResolvedValueOnce('0');
-      const result = await agentsCreateHandler(['default']);
+      setupClack();
+      const result = await agentsCreateHandler(['default']); // slugifies to 'default'
       expect(result.exitCode).toBe(1);
       expect(result.error).toContain('already exists');
     });
   });
 
   describe('successful creation with --name flag', () => {
-    beforeEach(() => {
-      mockQuestion
-        .mockResolvedValueOnce('') // description
-        .mockResolvedValueOnce('') // system prompt
-        .mockResolvedValueOnce('0') // skills → none
-        .mockResolvedValueOnce('0'); // model → no copy
-    });
+    beforeEach(() => setupClack());
 
     it('creates agent and exits 0', async () => {
       const result = await agentsCreateHandler(['--name', 'My New Agent']);
       expect(result.exitCode).toBe(0);
-    });
-
-    it('shows created agent ID in output', async () => {
-      const result = await agentsCreateHandler(['--name', 'My New Agent']);
-      expect(result.output).toContain('my-new-agent');
-    });
-
-    it('shows config path in output', async () => {
-      const result = await agentsCreateHandler(['--name', 'My New Agent']);
-      expect(result.output).toContain('openaidy.json');
-    });
-
-    it('shows workspace path in output', async () => {
-      const result = await agentsCreateHandler(['--name', 'My New Agent']);
-      expect(result.output).toContain('workspaces');
-      expect(result.output).toContain('my-new-agent');
     });
 
     it('writes openaidy.json with the new agent appended', async () => {
@@ -164,10 +160,12 @@ describe('agents create', () => {
     it('creates workspace directory', async () => {
       await agentsCreateHandler(['--name', 'My New Agent']);
       const mkdirCalls = mockMkdir.mock.calls.map((c) => c[0] as string);
-      expect(mkdirCalls.some((p) => p.includes('my-new-agent'))).toBe(true);
+      expect(mkdirCalls.some((path) => path.includes('my-new-agent'))).toBe(
+        true,
+      );
     });
 
-    it('uses default model when no copy selected', async () => {
+    it('uses default model when none selected', async () => {
       await agentsCreateHandler(['--name', 'My New Agent']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string; model: string }>;
@@ -188,16 +186,18 @@ describe('agents create', () => {
       expect(agent.workspace).toBeDefined();
       expect(agent.workspace?.workspaces[0]?.path).toBe('my-new-agent');
     });
+
+    it('calls p.outro with agent ID', async () => {
+      await agentsCreateHandler(['--name', 'My New Agent']);
+      const outroArg = mockClack.outro.mock.calls[0]?.[0] as string;
+      expect(outroArg).toContain('my-new-agent');
+    });
   });
 
   describe('model copy', () => {
     it('copies model from selected agent', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('') // description
-        .mockResolvedValueOnce('') // system prompt
-        .mockResolvedValueOnce('0') // skills → none
-        .mockResolvedValueOnce('1'); // copy model from agent #1 (Default Assistant)
-
+      const defaultAgent = EXISTING_CONFIG.agents[0]!;
+      setupClack({ model: defaultAgent });
       await agentsCreateHandler(['--name', 'Cloned Agent']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string; model: string }>;
@@ -206,26 +206,21 @@ describe('agents create', () => {
       expect(agent.model).toBe('openai/gpt-4o-mini');
     });
 
-    it('shows copied model in output', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('0')
-        .mockResolvedValueOnce('2'); // Code Assistant → openai/gpt-4o
-
-      const result = await agentsCreateHandler(['--name', 'Cloned Two']);
-      expect(result.output).toContain('openai/gpt-4o');
+    it('copies model from Code Assistant', async () => {
+      const codeAgent = EXISTING_CONFIG.agents[1]!;
+      setupClack({ model: codeAgent });
+      await agentsCreateHandler(['--name', 'Cloned Two']);
+      const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
+        agents: Array<{ id: string; model: string }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'cloned-two')!;
+      expect(agent.model).toBe('openai/gpt-4o');
     });
   });
 
   describe('skills assignment', () => {
-    it('assigns all skills when option 1 selected', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('') // description
-        .mockResolvedValueOnce('') // system prompt
-        .mockResolvedValueOnce('1') // skills → All
-        .mockResolvedValueOnce('0'); // model → no copy
-
+    it('assigns selected skills', async () => {
+      setupClack({ skills: ['example-skill', 'step-by-step'] });
       await agentsCreateHandler(['--name', 'Skilled Agent']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string; skills?: string[] }>;
@@ -235,24 +230,15 @@ describe('agents create', () => {
       expect(agent.skills).toContain('step-by-step');
     });
 
-    it('shows skills in output when assigned', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('1')
-        .mockResolvedValueOnce('0');
-
-      const result = await agentsCreateHandler(['--name', 'Skilled Agent']);
-      expect(result.output).toContain('Skills:');
+    it('shows skills in p.outro when assigned', async () => {
+      setupClack({ skills: ['example-skill', 'step-by-step'] });
+      await agentsCreateHandler(['--name', 'Skilled Agent']);
+      const outroArg = mockClack.outro.mock.calls[0]?.[0] as string;
+      expect(outroArg).toContain('Skills:');
     });
 
-    it('assigns no skills when option 0 selected', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('0') // skills → none
-        .mockResolvedValueOnce('0'); // model → no copy
-
+    it('assigns no skills when empty array returned', async () => {
+      setupClack({ skills: [] });
       await agentsCreateHandler(['--name', 'No Skills Agent']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string; skills?: string[] }>;
@@ -261,47 +247,20 @@ describe('agents create', () => {
       expect(agent.skills).toBeUndefined();
     });
 
-    it('assigns selected skills when specific numbers entered', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('2') // skill #2 = example-skill (index 0 in array)
-        .mockResolvedValueOnce('0');
-
+    it('assigns only the skills the user selected', async () => {
+      setupClack({ skills: ['step-by-step'] });
       await agentsCreateHandler(['--name', 'Selective Agent']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string; skills?: string[] }>;
       };
       const agent = written.agents.find((a) => a.id === 'selective-agent')!;
-      expect(agent.skills).toEqual(['example-skill']);
-    });
-
-    it('defaults to All when blank input given', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('') // blank → defaults to '1' (All)
-        .mockResolvedValueOnce('0');
-
-      await agentsCreateHandler(['--name', 'Default Skills Agent']);
-      const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
-        agents: Array<{ id: string; skills?: string[] }>;
-      };
-      const agent = written.agents.find(
-        (a) => a.id === 'default-skills-agent',
-      )!;
-      expect(agent.skills?.length).toBeGreaterThan(0);
+      expect(agent.skills).toEqual(['step-by-step']);
     });
   });
 
   describe('--id and --description flags', () => {
     it('uses --id to override the derived slug', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('')
-        .mockResolvedValueOnce('0')
-        .mockResolvedValueOnce('0');
-
+      setupClack();
       await agentsCreateHandler(['--name', 'My Agent', '--id', 'custom-id']);
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {
         agents: Array<{ id: string }>;
@@ -309,11 +268,12 @@ describe('agents create', () => {
       expect(written.agents.map((a) => a.id)).toContain('custom-id');
     });
 
-    it('uses --description to skip description prompt', async () => {
-      mockQuestion
-        .mockResolvedValueOnce('') // system prompt
-        .mockResolvedValueOnce('0') // skills
-        .mockResolvedValueOnce('0'); // model
+    it('uses --description to skip the description prompt', async () => {
+      mockClack.isCancel.mockReturnValue(false);
+      mockClack.text.mockResolvedValueOnce(''); // only system prompt is asked
+      mockClack.multiselect.mockResolvedValueOnce([]);
+      mockClack.select.mockResolvedValueOnce(null);
+      mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
 
       await agentsCreateHandler([
         '--name',

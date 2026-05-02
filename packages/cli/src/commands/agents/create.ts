@@ -6,8 +6,7 @@
  * Optionally copies model/provider settings from an existing agent.
  */
 
-import { createInterface } from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
+import * as p from '@clack/prompts';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
@@ -80,8 +79,6 @@ export async function agentsCreateHandler(
 Usage: openaidy agents create [<name>]
 
 Create a new agent with its own workspace directory.
-You will be prompted for a name, description, system prompt,
-and whether to copy model/provider settings from an existing agent.
 
 Options:
   --name <name>          Agent display name (skips prompt)
@@ -100,175 +97,194 @@ Exit Codes:
     };
   }
 
-  const rl = createInterface({ input, output });
+  const workspaceBaseDir = resolveWorkspaceBaseDir();
+  const configPath = resolveConfigPath();
 
-  try {
-    const workspaceBaseDir = resolveWorkspaceBaseDir();
-    const configPath = resolveConfigPath();
-
-    // Parse --name / --description / --id from args
-    let nameArg: string | undefined;
-    let idArg: string | undefined;
-    let descArg: string | undefined;
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === '--name') nameArg = args[++i];
-      else if (args[i] === '--id') idArg = args[++i];
-      else if (args[i] === '--description' || args[i] === '--desc')
-        descArg = args[++i];
-      else if (!args[i].startsWith('-') && !nameArg) nameArg = args[i];
-    }
-
-    // Prompt: name
-    const name = nameArg ?? (await rl.question('Agent name: ')).trim();
-
-    if (!name) {
-      return { exitCode: 1, error: 'Agent name is required.' };
-    }
-
-    const id = idArg ?? slugify(name);
-    if (!id) {
-      return {
-        exitCode: 1,
-        error: `Cannot derive a valid ID from name "${name}". Use --id to specify one explicitly.`,
-      };
-    }
-
-    // Check for ID conflict
-    const existingAgentsCheck = await readAgentConfigs();
-    if (existingAgentsCheck.some((a) => a.id === id)) {
-      return {
-        exitCode: 1,
-        error: `An agent with ID "${id}" already exists.`,
-      };
-    }
-
-    // Prompt: description
-    const description =
-      descArg ?? (await rl.question('Description (optional): ')).trim();
-
-    // Prompt: system prompt
-    const systemPrompt = (
-      await rl.question('System prompt (leave blank for default): ')
-    ).trim();
-
-    // Prompt: which global skills to assign?
-    let assignedSkills: string[] = [];
-    const globalSkills = await readGlobalSkills();
-    if (globalSkills.length > 0) {
-      const skillList = globalSkills
-        .map((s, i) => `  ${i + 2}. ${s.name} (${s.id})`)
-        .join('\n');
-      const answer = (
-        await rl.question(
-          `\nWhich global skills should be assigned to this agent?\n  1. All (${globalSkills.length} skills)\n${skillList}\n  0. None\n\nEnter numbers separated by commas [1]: `,
-        )
-      ).trim();
-
-      const input = answer === '' ? '1' : answer;
-      const selections = input.split(',').map((s) => parseInt(s.trim(), 10));
-
-      if (selections.includes(0)) {
-        assignedSkills = [];
-      } else if (selections.includes(1)) {
-        assignedSkills = globalSkills.map((s) => s.id);
-      } else {
-        for (const sel of selections) {
-          const skill = globalSkills[sel - 2];
-          if (skill) assignedSkills.push(skill.id);
-        }
-      }
-
-      if (assignedSkills.length > 0) {
-        console.log(`  → Assigned skills: ${assignedSkills.join(', ')}`);
-      }
-    }
-
-    // Prompt: copy model/provider from existing agent?
-    let inheritedModel: string | undefined;
-    const existingAgents = await readAgentConfigs();
-    if (existingAgents.length > 0) {
-      const agentList = existingAgents
-        .map((a, i) => `  ${i + 1}. ${a.name} (${a.model ?? '—'})`)
-        .join('\n');
-      const answer = (
-        await rl.question(
-          `\nCopy model/provider from an existing agent?\n${agentList}\n  0. No, use defaults\n\nEnter number [0]: `,
-        )
-      ).trim();
-      const idx = parseInt(answer, 10);
-      if (idx > 0 && idx <= existingAgents.length) {
-        const source = existingAgents[idx - 1]!;
-        inheritedModel = source.model;
-        console.log(`  → Copied model settings from "${source.name}"`);
-      }
-    }
-
-    // Build new agent entry
-    const newAgent: AgentConfig = {
-      id,
-      name,
-      description: description || `${name} agent`,
-      enabled: true,
-      systemPrompt:
-        systemPrompt ||
-        'You are a helpful AI assistant. Be concise, accurate, and helpful.',
-      model: inheritedModel ?? 'openai/gpt-4o-mini',
-      tags: [],
-      ...(assignedSkills.length > 0 ? { skills: assignedSkills } : {}),
-      workspace: {
-        enabled: true,
-        defaultPermissions: {
-          read: true,
-          write: true,
-          delete: false,
-          list: true,
-        },
-        workspaces: [
-          {
-            path: id,
-            permissions: { read: true, write: true, delete: false, list: true },
-          },
-        ],
-      },
-      version: 1,
-    };
-
-    // Append agent to openaidy.json
-    let liveConfig: Record<string, unknown> & { agents?: AgentConfig[] };
-    try {
-      const raw = await readFile(configPath, 'utf-8');
-      liveConfig = JSON.parse(raw) as typeof liveConfig;
-    } catch {
-      liveConfig = { version: 1 };
-    }
-    liveConfig.agents = [...(liveConfig.agents ?? []), newAgent];
-    await writeFile(
-      configPath,
-      JSON.stringify(liveConfig, null, 2) + '\n',
-      'utf-8',
-    );
-
-    // Create agent workspace directory
-    const workspacePath = join(workspaceBaseDir, id);
-    await mkdir(workspacePath, { recursive: true });
-
-    return {
-      exitCode: 0,
-      output: [
-        ``,
-        `✓ Agent "${name}" created`,
-        `  ID:        ${id}`,
-        `  Config:    ${configPath}`,
-        `  Workspace: ${workspacePath}`,
-        `  Model:     ${newAgent.model}`,
-        ...(assignedSkills.length > 0
-          ? [`  Skills:    ${assignedSkills.join(', ')}`]
-          : []),
-        ``,
-        `Restart the server to load the new agent.`,
-      ].join('\n'),
-    };
-  } finally {
-    rl.close();
+  // Parse --name / --description / --id from args
+  let nameArg: string | undefined;
+  let idArg: string | undefined;
+  let descArg: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--name') nameArg = args[++i];
+    else if (args[i] === '--id') idArg = args[++i];
+    else if (args[i] === '--description' || args[i] === '--desc')
+      descArg = args[++i];
+    else if (!args[i]!.startsWith('-') && !nameArg) nameArg = args[i];
   }
+
+  p.intro('Create Agent');
+
+  // Prompt: name
+  const nameResult = nameArg
+    ? nameArg
+    : await p.text({
+        message: 'Agent name',
+        placeholder: 'My Agent',
+        validate: (v) =>
+          !(v ?? '').trim() ? 'Agent name is required.' : undefined,
+      });
+  if (p.isCancel(nameResult)) {
+    p.cancel('Cancelled.');
+    return { exitCode: 1, error: 'Cancelled.' };
+  }
+  const name = (nameResult as string).trim();
+
+  if (!name) {
+    p.cancel('Agent name is required.');
+    return { exitCode: 1, error: 'Agent name is required.' };
+  }
+
+  const id = idArg ?? slugify(name);
+  if (!id) {
+    p.cancel(
+      `Cannot derive a valid ID from name "${name}". Use --id to specify one explicitly.`,
+    );
+    return { exitCode: 1, error: `Cannot derive a valid ID from "${name}".` };
+  }
+
+  // Check for ID conflict
+  const existingAgentsCheck = await readAgentConfigs();
+  if (existingAgentsCheck.some((a) => a.id === id)) {
+    p.cancel(`An agent with ID "${id}" already exists.`);
+    return { exitCode: 1, error: `An agent with ID "${id}" already exists.` };
+  }
+
+  // Prompt: description
+  const descResult = descArg
+    ? descArg
+    : await p.text({
+        message: 'Description',
+        placeholder: 'Optional — leave blank to skip',
+      });
+  if (p.isCancel(descResult)) {
+    p.cancel('Cancelled.');
+    return { exitCode: 1, error: 'Cancelled.' };
+  }
+  const description = ((descResult as string | undefined) ?? '').trim();
+
+  // Prompt: system prompt
+  const systemPromptResult = await p.text({
+    message: 'System prompt',
+    placeholder: 'Leave blank for default',
+  });
+  if (p.isCancel(systemPromptResult)) {
+    p.cancel('Cancelled.');
+    return { exitCode: 1, error: 'Cancelled.' };
+  }
+  const systemPrompt = (
+    (systemPromptResult as string | undefined) ?? ''
+  ).trim();
+
+  // Prompt: global skills (multiselect)
+  let assignedSkills: string[] = [];
+  const globalSkills = await readGlobalSkills();
+  if (globalSkills.length > 0) {
+    const skillsResult = await p.multiselect<string>({
+      message: 'Assign global skills (space to toggle, enter to confirm)',
+      options: globalSkills.map((s) => ({
+        value: s.id,
+        label: s.name,
+        hint: s.id,
+      })),
+      initialValues: globalSkills.map((s) => s.id),
+      required: false,
+    });
+    if (p.isCancel(skillsResult)) {
+      p.cancel('Cancelled.');
+      return { exitCode: 1, error: 'Cancelled.' };
+    }
+    assignedSkills = skillsResult as string[];
+  }
+
+  // Prompt: copy model from existing agent
+  let inheritedModel: string | undefined;
+  const existingAgents = await readAgentConfigs();
+  if (existingAgents.length > 0) {
+    const modelResult = await p.select<AgentConfig | null>({
+      message: 'Copy model from an existing agent?',
+      options: [
+        ...existingAgents.map((a) => ({
+          value: a,
+          label: a.name,
+          hint: a.model ?? '—',
+        })),
+        {
+          value: null,
+          label: 'No — use default (openai/gpt-4o-mini)',
+        },
+      ],
+    });
+    if (p.isCancel(modelResult)) {
+      p.cancel('Cancelled.');
+      return { exitCode: 1, error: 'Cancelled.' };
+    }
+    if (modelResult) inheritedModel = modelResult.model;
+  }
+
+  // Build new agent entry
+  const newAgent: AgentConfig = {
+    id,
+    name,
+    description: description || `${name} agent`,
+    enabled: true,
+    systemPrompt:
+      systemPrompt ||
+      'You are a helpful AI assistant. Be concise, accurate, and helpful.',
+    model: inheritedModel ?? 'openai/gpt-4o-mini',
+    tags: [],
+    ...(assignedSkills.length > 0 ? { skills: assignedSkills } : {}),
+    workspace: {
+      enabled: true,
+      defaultPermissions: {
+        read: true,
+        write: true,
+        delete: false,
+        list: true,
+      },
+      workspaces: [
+        {
+          path: id,
+          permissions: { read: true, write: true, delete: false, list: true },
+        },
+      ],
+    },
+    version: 1,
+  };
+
+  // Write to openaidy.json
+  const s = p.spinner();
+  s.start('Saving agent config…');
+  let liveConfig: Record<string, unknown> & { agents?: AgentConfig[] };
+  try {
+    const raw = await readFile(configPath, 'utf-8');
+    liveConfig = JSON.parse(raw) as typeof liveConfig;
+  } catch {
+    liveConfig = { version: 1 };
+  }
+  liveConfig.agents = [...(liveConfig.agents ?? []), newAgent];
+  await writeFile(
+    configPath,
+    JSON.stringify(liveConfig, null, 2) + '\n',
+    'utf-8',
+  );
+
+  // Create workspace directory
+  const workspacePath = join(workspaceBaseDir, id);
+  await mkdir(workspacePath, { recursive: true });
+  s.stop('Agent config saved.');
+
+  p.outro(
+    [
+      `Agent "${name}" created!`,
+      `  ID:        ${id}`,
+      `  Model:     ${newAgent.model}`,
+      ...(assignedSkills.length > 0
+        ? [`  Skills:    ${assignedSkills.join(', ')}`]
+        : []),
+      ``,
+      `Restart the server to load the new agent.`,
+    ].join('\n'),
+  );
+
+  return { exitCode: 0 };
 }
