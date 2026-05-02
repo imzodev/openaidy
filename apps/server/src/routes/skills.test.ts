@@ -15,6 +15,7 @@ import { SessionMessageService } from '../sessions/service';
 import { RunEventEmitter } from '../dispatch/events';
 import { createSkillRegistry } from '../skills';
 import { WorkspaceService } from '../workspace/service';
+import type { AppServices } from '../types';
 
 const mockAuthMiddleware = {
   validateToken: async () => ({
@@ -357,24 +358,3 @@ describe('Skill Routes', () => {
     });
   });
 });
-
-// Type augmentation for AppServices
-type AppServices = {
-  config: AppConfigService;
-  providers: ReturnType<typeof createProviderServices>;
-  sessions: SessionMessageService;
-  agents: ReturnType<typeof createAgentRegistry>;
-  runEvents: RunEventEmitter;
-  dbAdapter: unknown;
-  scheduler: unknown;
-  jobsRepo: unknown;
-  jobRunsRepo: unknown;
-  sessionsRepo: unknown;
-  bootstrapAdmin: unknown;
-  pairingRequestsRepo: unknown;
-  devicesRepo: unknown;
-  accessTokensRepo: unknown;
-  workspace: unknown;
-  mcpService: unknown;
-  skills: ReturnType<typeof createSkillRegistry>;
-};
