@@ -48,6 +48,28 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
   });
 
   /**
+   * POST /agents
+   * Create a new agent.
+   * Body: Agent object (id, name, enabled, systemPrompt, model required)
+   */
+  app.post('/agents', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+
+    try {
+      const agent = agentRegistry.createAgent(
+        body as import('../agents/schema').Agent,
+      );
+      reply.code(201);
+      return agent;
+    } catch (err) {
+      reply.code(400);
+      return {
+        error: err instanceof Error ? err.message : 'Failed to create agent',
+      };
+    }
+  });
+
+  /**
    * PATCH /agents/:agentId/tools
    * Update the builtin tools list for an agent.
    * Body: { tools: string[] }

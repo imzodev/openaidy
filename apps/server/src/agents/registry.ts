@@ -249,48 +249,45 @@ export class AgentRegistry {
   }
 
   /**
+   * Read the config file, apply a mutation to the agents array, then atomically write it back.
+   * No-op if configPath is not set or the file does not exist.
+   */
+  private persistConfig(
+    mutate: (agents: Array<Record<string, unknown>>) => void,
+  ): void {
+    if (!this.configPath || !fs.existsSync(this.configPath)) return;
+    const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as {
+      agents?: Array<Record<string, unknown>>;
+    };
+    if (!Array.isArray(raw.agents)) raw.agents = [];
+    mutate(raw.agents);
+    const tempPath = `${this.configPath}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
+    fs.renameSync(tempPath, this.configPath);
+  }
+
+  /**
    * Update the builtin tools list for an agent.
    * Patches both the in-memory registry and the main openaidy.json config file on disk.
    * Returns the updated AgentSummary or undefined if the agent was not found.
    */
   updateAgentTools(agentId: string, tools: string[]): AgentSummary | undefined {
     this.ensureLoaded();
-
     const agent = this.agents.get(agentId);
-    if (!agent) {
-      return undefined;
-    }
+    if (!agent) return undefined;
 
     const updated: Agent = {
       ...agent,
       tools: tools.length > 0 ? tools : undefined,
     };
     this.agents.set(agentId, updated);
-
-    if (this.configPath && fs.existsSync(this.configPath)) {
-      const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as {
-        agents?: Array<Record<string, unknown>>;
-      };
-
-      if (Array.isArray(raw.agents)) {
-        const idx = raw.agents.findIndex((a) => a['id'] === agentId);
-        if (idx !== -1) {
-          if (tools.length > 0) {
-            raw.agents[idx]!['tools'] = tools;
-          } else {
-            delete raw.agents[idx]!['tools'];
-          }
-          const tempPath = `${this.configPath}.tmp`;
-          fs.writeFileSync(
-            tempPath,
-            JSON.stringify(raw, null, 2) + '\n',
-            'utf-8',
-          );
-          fs.renameSync(tempPath, this.configPath);
-        }
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) {
+        if (tools.length > 0) agents[idx]!['tools'] = tools;
+        else delete agents[idx]!['tools'];
       }
-    }
-
+    });
     return toAgentSummary(updated);
   }
 
@@ -304,43 +301,48 @@ export class AgentRegistry {
     skills: string[],
   ): AgentSummary | undefined {
     this.ensureLoaded();
-
     const agent = this.agents.get(agentId);
-    if (!agent) {
-      return undefined;
-    }
+    if (!agent) return undefined;
 
     const updated: Agent = {
       ...agent,
       skills: skills.length > 0 ? skills : undefined,
     };
     this.agents.set(agentId, updated);
-
-    if (this.configPath && fs.existsSync(this.configPath)) {
-      const raw = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as {
-        agents?: Array<Record<string, unknown>>;
-      };
-
-      if (Array.isArray(raw.agents)) {
-        const idx = raw.agents.findIndex((a) => a['id'] === agentId);
-        if (idx !== -1) {
-          if (skills.length > 0) {
-            raw.agents[idx]!['skills'] = skills;
-          } else {
-            delete raw.agents[idx]!['skills'];
-          }
-          const tempPath = `${this.configPath}.tmp`;
-          fs.writeFileSync(
-            tempPath,
-            JSON.stringify(raw, null, 2) + '\n',
-            'utf-8',
-          );
-          fs.renameSync(tempPath, this.configPath);
-        }
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) {
+        if (skills.length > 0) agents[idx]!['skills'] = skills;
+        else delete agents[idx]!['skills'];
       }
+    });
+    return toAgentSummary(updated);
+  }
+
+  /**
+   * Create a new agent, persist it to the openaidy.json config, and register it in memory.
+   * Returns the new AgentSummary, or throws if the ID already exists or validation fails.
+   */
+  createAgent(agent: Agent): AgentSummary {
+    this.ensureLoaded();
+
+    if (this.agents.has(agent.id)) {
+      throw new Error(`Agent with ID "${agent.id}" already exists`);
     }
 
-    return toAgentSummary(updated);
+    const result = AgentSchema.safeParse(agent);
+    if (!result.success) {
+      const msgs = result.error.errors
+        .map((e) => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      throw new Error(`Invalid agent: ${msgs}`);
+    }
+
+    this.agents.set(result.data.id, result.data);
+    this.persistConfig((agents) => {
+      agents.push(result.data as unknown as Record<string, unknown>);
+    });
+    return toAgentSummary(result.data);
   }
 
   /**

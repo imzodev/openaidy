@@ -1,3 +1,7 @@
+// TODO: This file mixes API functions with type declarations — a known architectural violation.
+// All exported types should be moved to a dedicated `apps/web/src/lib/types.ts` file
+// and imported here. Do NOT add new types to this file.
+
 import {
   type LogFilter,
   type LogQueryResult,
@@ -325,6 +329,38 @@ export async function listAgents(): Promise<{ items: Agent[] }> {
  */
 export async function getAgent(id: string): Promise<Agent | ApiError> {
   const response = await apiFetch(`${API_BASE}/agents/${id}`);
+  return response.json();
+}
+
+/**
+ * Input for creating a new agent
+ */
+export type CreateAgentInput = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  systemPrompt: string;
+  model: string;
+  description?: string;
+  tags?: string[];
+};
+
+/**
+ * Create a new agent
+ */
+export async function createAgent(input: CreateAgentInput): Promise<Agent> {
+  const response = await apiFetch(`${API_BASE}/agents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to create agent: ${response.statusText}`,
+    );
+  }
   return response.json();
 }
 

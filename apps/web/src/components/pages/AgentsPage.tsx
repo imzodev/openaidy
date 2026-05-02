@@ -15,6 +15,7 @@ import {
   Power,
   PowerOff,
   Lightbulb,
+  Plus,
 } from 'lucide-solid';
 import {
   listAgents,
@@ -22,10 +23,14 @@ import {
   updateAgentTools,
   listAgentSkills,
   updateAgentSkills,
+  getConfig,
   type Agent,
   type BuiltinToolInfo,
   type SkillInfo,
+  type ProviderConfig,
+  type CreateAgentInput,
 } from '../../lib/api';
+import { CreateAgentModal } from './CreateAgentModal';
 import {
   FileExplorer,
   WorkspaceEditor,
@@ -56,6 +61,8 @@ export function AgentsPage() {
   const [skillsUpdating, setSkillsUpdating] = createSignal<Set<string>>(
     new Set(),
   );
+  const [providers, setProviders] = createSignal<ProviderConfig[]>([]);
+  const [showCreateModal, setShowCreateModal] = createSignal(false);
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
 
@@ -167,14 +174,20 @@ export function AgentsPage() {
 
   onMount(async () => {
     try {
-      const [agentsResponse, toolsResponse] = await Promise.all([
-        listAgents(),
-        listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
-      ]);
+      const [agentsResponse, toolsResponse, configResponse] = await Promise.all(
+        [
+          listAgents(),
+          listBuiltinTools().catch(() => ({ items: [] as BuiltinToolInfo[] })),
+          getConfig().catch(() => null),
+        ],
+      );
       setAgents(agentsResponse.items);
       setAllBuiltinTools(toolsResponse.items);
       if (agentsResponse.items.length > 0) {
         setSelectedAgentId(agentsResponse.items[0].id);
+      }
+      if (configResponse && 'config' in configResponse) {
+        setProviders(configResponse.config.providers ?? []);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agents');
@@ -182,6 +195,17 @@ export function AgentsPage() {
       setIsLoading(false);
     }
   });
+
+  const handleAgentCreated = async (input: CreateAgentInput) => {
+    setShowCreateModal(false);
+    try {
+      const response = await listAgents();
+      setAgents(response.items);
+      setSelectedAgentId(input.id);
+    } catch {
+      // ignore refresh error
+    }
+  };
 
   createEffect(() => {
     const agentId = selectedAgentId();
@@ -272,9 +296,13 @@ export function AgentsPage() {
           <div class="text-center">
             <Bot class="w-12 h-12 mx-auto mb-4 text-text-tertiary" />
             <p class="text-text-tertiary mb-2">No agents configured</p>
-            <p class="text-sm text-text-secondary">
-              Add agents to your config to get started
-            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              class="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Plus class="w-4 h-4" />
+              Create your first agent
+            </button>
           </div>
         </div>
       </Show>
@@ -284,10 +312,18 @@ export function AgentsPage() {
         <div class="flex h-[calc(100vh-200px)] gap-4">
           {/* Agent List - Left Panel */}
           <div class="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex flex-col">
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Agents
               </h2>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+                title="New agent"
+              >
+                <Plus class="w-3.5 h-3.5" />
+                New
+              </button>
             </div>
 
             <div class="flex-1 overflow-y-auto">
@@ -797,6 +833,12 @@ export function AgentsPage() {
           </div>
         </div>
       </Show>
+      <CreateAgentModal
+        isOpen={showCreateModal()}
+        providers={providers()}
+        onClose={() => setShowCreateModal(false)}
+        onCreated={handleAgentCreated}
+      />
     </Layout>
   );
 }
