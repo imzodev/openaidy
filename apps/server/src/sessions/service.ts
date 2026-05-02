@@ -684,6 +684,7 @@ export class SessionMessageService {
               role: 'tool',
               content: toolContent,
               toolCallId: tc.id,
+              metadata: { toolName: tc.name },
             });
 
             loopMessages.push({

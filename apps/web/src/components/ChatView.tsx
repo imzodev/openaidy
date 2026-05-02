@@ -1,5 +1,5 @@
 import { Show, For, createEffect } from 'solid-js';
-import { User, Bot, AlertCircle } from 'lucide-solid';
+import { User, Bot, AlertCircle, Wrench } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
@@ -38,21 +38,27 @@ export function ChatView(props: ChatViewProps) {
         return <User class="w-4 h-4" />;
       case 'assistant':
         return <Bot class="w-4 h-4" />;
+      case 'tool':
+        return <Wrench class="w-4 h-4" />;
       default:
         return <AlertCircle class="w-4 h-4" />;
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
+  const getRoleLabel = (message: SessionMessage) => {
+    switch (message.role) {
       case 'user':
         return 'You';
       case 'assistant':
         return 'Assistant';
       case 'system':
         return 'System';
+      case 'tool': {
+        const toolName = message.metadata?.toolName;
+        return typeof toolName === 'string' ? toolName : 'tool';
+      }
       default:
-        return role;
+        return message.role;
     }
   };
 
@@ -123,7 +129,7 @@ export function ChatView(props: ChatViewProps) {
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-1">
                     <span class="font-medium text-sm text-text-primary">
-                      {getRoleLabel(message.role)}
+                      {getRoleLabel(message)}
                     </span>
                     <span class="text-xs text-text-tertiary">
                       {new Date(message.createdAt).toLocaleTimeString()}
