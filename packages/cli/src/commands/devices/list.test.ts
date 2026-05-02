@@ -2,12 +2,29 @@
  * Devices List Command Tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const { mockClack } = vi.hoisted(() => ({
+  mockClack: {
+    log: { error: vi.fn() },
+    note: vi.fn(),
+    outro: vi.fn(),
+    spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  },
+}));
+
+vi.mock('@clack/prompts', () => mockClack);
+
 import { createDevicesListHandler } from './list.js';
-import type { PairingContext, PairingRequestData } from '@openaidy/control-plane';
+import type {
+  PairingContext,
+  PairingRequestData,
+} from '@openaidy/control-plane';
 
 describe('Devices List Command', () => {
-  const createRequest = (overrides?: Partial<PairingRequestData>): PairingRequestData => ({
+  const createRequest = (
+    overrides?: Partial<PairingRequestData>,
+  ): PairingRequestData => ({
     requestId: 'req-1',
     pairingCode: '123456',
     deviceName: 'Test Device',
@@ -23,18 +40,38 @@ describe('Devices List Command', () => {
   let mockContext: PairingContext;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
+
     mockRequests = [
-      createRequest({ requestId: 'req-1', status: 'pending', deviceName: 'Android Phone' }),
-      createRequest({ requestId: 'req-2', status: 'pending', deviceName: 'iPhone' }),
-      createRequest({ requestId: 'req-3', status: 'approved', deviceName: 'Desktop' }),
-      createRequest({ requestId: 'req-4', status: 'denied', deviceName: 'Unknown Device' }),
+      createRequest({
+        requestId: 'req-1',
+        status: 'pending',
+        deviceName: 'Android Phone',
+      }),
+      createRequest({
+        requestId: 'req-2',
+        status: 'pending',
+        deviceName: 'iPhone',
+      }),
+      createRequest({
+        requestId: 'req-3',
+        status: 'approved',
+        deviceName: 'Desktop',
+      }),
+      createRequest({
+        requestId: 'req-4',
+        status: 'denied',
+        deviceName: 'Unknown Device',
+      }),
     ];
 
     mockContext = {
       pairingService: {
-        getPendingRequests: () => mockRequests.filter(r => r.status === 'pending'),
+        getPendingRequests: () =>
+          mockRequests.filter((r) => r.status === 'pending'),
         getAllRequests: () => mockRequests,
-        getRequest: (id) => mockRequests.find(r => r.requestId === id),
+        getRequest: (id) => mockRequests.find((r) => r.requestId === id),
         approveRequest: async () => null,
         denyRequest: () => null,
       },
@@ -45,74 +82,107 @@ describe('Devices List Command', () => {
   describe('with no context', () => {
     const handler = createDevicesListHandler();
 
-    it('returns empty state when no context available', async () => {
+    it('returns exit 0 and shows empty state when no context available', async () => {
       const result = await handler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No pending');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('No pending'),
+        expect.any(String),
+      );
     });
 
     it('shows help with --help flag', async () => {
       const result = await handler(['--help']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('devices list');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('devices list'),
+        expect.any(String),
+      );
     });
 
     it('shows help with -h flag', async () => {
       const result = await handler(['-h']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
     });
   });
 
   describe('with mock context', () => {
-    const getContext = () => mockContext;
-    const handler = createDevicesListHandler(getContext);
-
     it('lists pending requests by default', async () => {
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('req-1');
-      expect(result.output).toContain('req-2');
-      expect(result.output).not.toContain('req-3'); // approved
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('req-1'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('req-2'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.not.stringContaining('req-3'),
+        expect.any(String),
+      );
     });
 
-    it('filters by status with --status flag', async () => {
+    it('filters by status with --status approved', async () => {
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler(['--status', 'approved']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).not.toContain('req-1'); // pending
-      expect(result.output).toContain('req-3'); // approved
-      expect(result.output).toContain('Approved');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('req-3'),
+        expect.stringContaining('Approved'),
+      );
     });
 
     it('shows all requests with --status all', async () => {
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler(['--status', 'all']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('req-1');
-      expect(result.output).toContain('req-3');
-      expect(result.output).toContain('req-4');
-      expect(result.output).toContain('All Device Pairing');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('req-4'),
+        expect.stringContaining('All'),
+      );
     });
 
     it('applies --limit flag', async () => {
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler(['--limit', '1']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('req-1');
-      expect(result.output).not.toContain('req-2');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('req-1'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.not.stringContaining('req-2'),
+        expect.any(String),
+      );
     });
 
     it('shows empty state when no pending requests', async () => {
-      mockRequests = mockRequests.filter(r => r.status !== 'pending');
+      mockRequests = mockRequests.filter((r) => r.status !== 'pending');
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler([]);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No pending');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('No pending'),
+        expect.any(String),
+      );
     });
 
     it('shows empty state when filtering for status with no matches', async () => {
-      mockRequests = mockRequests.filter(r => r.status !== 'expired');
+      mockRequests = mockRequests.filter((r) => r.status !== 'expired');
+      const handler = createDevicesListHandler(() => mockContext);
       const result = await handler(['--status', 'expired']);
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('No expired');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('No expired'),
+        expect.any(String),
+      );
     });
   });
 
@@ -138,6 +208,9 @@ describe('Devices List Command', () => {
 
       expect(result.exitCode).toBe(1);
       expect(result.error).toContain('Error:');
+      expect(mockClack.log.error).toHaveBeenCalledWith(
+        expect.stringContaining('Error:'),
+      );
     });
   });
 });

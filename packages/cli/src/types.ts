@@ -137,6 +137,19 @@ export interface CommandOptions {
 }
 
 // ============================================================================
+// Devices command option / result types
+// ============================================================================
+
+export interface DevicesListOptions {
+  status?: 'pending' | 'approved' | 'denied' | 'expired' | 'all';
+  limit?: number;
+}
+
+export interface DevicesApproveOptions {
+  scopes?: string[];
+}
+
+// ============================================================================
 // Addon command option / result types
 // ============================================================================
 

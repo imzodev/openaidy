@@ -15,13 +15,22 @@ const {
   mockConnect,
   mockDestroy,
   mockReadFile,
+  mockClack,
 } = vi.hoisted(() => ({
   mockInspectToken: vi.fn(),
   mockSendRequest: vi.fn(),
   mockConnect: vi.fn(),
   mockDestroy: vi.fn(),
   mockReadFile: vi.fn(),
+  mockClack: {
+    log: { error: vi.fn() },
+    note: vi.fn(),
+    outro: vi.fn(),
+    spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  },
 }));
+
+vi.mock('@clack/prompts', () => mockClack);
 
 // Mock @openaidy/control-plane
 vi.mock('@openaidy/control-plane', () => ({
@@ -291,11 +300,18 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('devices list', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('devices list', ['--help']);
 
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('devices list');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('devices list'),
+        expect.any(String),
+      );
     });
 
     it.skip('returns error when token file is missing', async () => {
@@ -410,11 +426,18 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('devices approve', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('devices approve', ['--help']);
 
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('devices approve');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('devices approve'),
+        expect.any(String),
+      );
     });
 
     it.skip('returns error when request-id is missing', async () => {
@@ -484,11 +507,18 @@ describe('Command Handlers', () => {
   // =========================================================================
   describe('devices deny', () => {
     it('shows help with --help flag', async () => {
+      mockClack.note.mockClear();
       const result = await runCommand('devices deny', ['--help']);
 
       expect(result.exitCode).toBe(0);
-      expect(result.output).toContain('Usage:');
-      expect(result.output).toContain('devices deny');
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('Usage:'),
+        expect.any(String),
+      );
+      expect(mockClack.note).toHaveBeenCalledWith(
+        expect.stringContaining('devices deny'),
+        expect.any(String),
+      );
     });
 
     it.skip('returns error when request-id is missing', async () => {
