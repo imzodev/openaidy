@@ -209,6 +209,12 @@ function AppContent(props: AppContentProps) {
     await createSessionMutation.mutateAsync(title);
   };
 
+  const handleStartChatWithAgent = async (agentId: string) => {
+    setSelectedAgentId(agentId);
+    const title = `Session ${new Date().toISOString()}`;
+    await createSessionMutation.mutateAsync(title);
+  };
+
   const handleSubmit = async (content: string, agentId?: string) => {
     const sessionId = selectedSessionId();
     if (!sessionId) {
@@ -434,7 +440,7 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'agents'}>
-          <AgentsPage />
+          <AgentsPage onStartChat={handleStartChatWithAgent} />
         </Show>
 
         <Show when={view() === 'skills'}>

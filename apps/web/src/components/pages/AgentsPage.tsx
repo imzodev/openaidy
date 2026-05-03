@@ -16,6 +16,7 @@ import {
   PowerOff,
   Lightbulb,
   Plus,
+  MessageSquare,
 } from 'lucide-solid';
 import {
   listAgents,
@@ -37,7 +38,11 @@ import {
   type WorkspaceFileInfo,
 } from '../workspace';
 
-export function AgentsPage() {
+type AgentsPageProps = {
+  onStartChat?: (agentId: string) => void;
+};
+
+export function AgentsPage(props: AgentsPageProps) {
   const [agents, setAgents] = createSignal<Agent[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [selectedAgentId, setSelectedAgentId] = createSignal<string | null>(
@@ -385,26 +390,39 @@ export function AgentsPage() {
                     </Show>
                   </div>
 
-                  {/* Status Badge */}
-                  <div
-                    class={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
-                      selectedAgent()!.enabled
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
-                    }`}
-                  >
-                    <Show
-                      when={selectedAgent()!.enabled}
-                      fallback={
-                        <>
-                          <PowerOff class="w-4 h-4" />
-                          <span>Disabled</span>
-                        </>
-                      }
-                    >
-                      <Power class="w-4 h-4" />
-                      <span>Active</span>
+                  <div class="flex items-center gap-3 flex-shrink-0">
+                    {/* Start Chat button */}
+                    <Show when={props.onStartChat && selectedAgent()!.enabled}>
+                      <button
+                        onClick={() => props.onStartChat!(selectedAgent()!.id)}
+                        class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        <MessageSquare class="w-4 h-4" />
+                        Start Chat
+                      </button>
                     </Show>
+
+                    {/* Status Badge */}
+                    <div
+                      class={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                        selectedAgent()!.enabled
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      <Show
+                        when={selectedAgent()!.enabled}
+                        fallback={
+                          <>
+                            <PowerOff class="w-4 h-4" />
+                            <span>Disabled</span>
+                          </>
+                        }
+                      >
+                        <Power class="w-4 h-4" />
+                        <span>Active</span>
+                      </Show>
+                    </div>
                   </div>
                 </div>
 
