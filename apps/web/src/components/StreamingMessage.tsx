@@ -5,7 +5,7 @@
  */
 
 import { Show, For, createMemo } from 'solid-js';
-import { Bot } from 'lucide-solid';
+import { Bot, Wrench, Server } from 'lucide-solid';
 import { MessageContent } from './MessageContent';
 import type {
   StreamingDelta,
@@ -61,16 +61,42 @@ export function StreamingMessage(props: StreamingMessageProps) {
           <Show when={props.toolCalls.length > 0}>
             <div class="mt-3 space-y-2">
               <For each={props.toolCalls}>
-                {(toolCall) => (
-                  <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-2 text-sm">
-                    <span class="font-mono text-yellow-800 dark:text-yellow-200">
-                      🔧 {toolCall.name}
-                    </span>
-                    <pre class="mt-1 text-xs overflow-x-auto">
-                      {JSON.stringify(toolCall.input, null, 2)}
-                    </pre>
-                  </div>
-                )}
+                {(toolCall) => {
+                  const isMcp = toolCall.name.includes('::');
+                  const label = isMcp
+                    ? (() => {
+                        const [serverId, name] = toolCall.name.split('::');
+                        return `${serverId} / ${name}`;
+                      })()
+                    : toolCall.name;
+                  return (
+                    <div
+                      class={`border rounded p-2 text-sm ${
+                        isMcp
+                          ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                          : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      }`}
+                    >
+                      <span
+                        class={`flex items-center gap-1.5 font-mono ${
+                          isMcp
+                            ? 'text-purple-800 dark:text-purple-200'
+                            : 'text-yellow-800 dark:text-yellow-200'
+                        }`}
+                      >
+                        {isMcp ? (
+                          <Server class="w-3.5 h-3.5 flex-shrink-0" />
+                        ) : (
+                          <Wrench class="w-3.5 h-3.5 flex-shrink-0" />
+                        )}
+                        {label}
+                      </span>
+                      <pre class="mt-1 text-xs overflow-x-auto">
+                        {JSON.stringify(toolCall.input, null, 2)}
+                      </pre>
+                    </div>
+                  );
+                }}
               </For>
             </div>
           </Show>

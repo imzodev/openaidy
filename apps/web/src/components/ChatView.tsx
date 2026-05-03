@@ -1,5 +1,5 @@
 import { Show, For, createEffect } from 'solid-js';
-import { User, Bot, AlertCircle, Wrench } from 'lucide-solid';
+import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
@@ -32,14 +32,22 @@ export function ChatView(props: ChatViewProps) {
     }
   });
 
-  const getRoleIcon = (role: string) => {
-    switch (role) {
+  const isMcpTool = (message: SessionMessage) =>
+    typeof message.metadata?.toolName === 'string' &&
+    (message.metadata.toolName as string).includes('::');
+
+  const getRoleIcon = (message: SessionMessage) => {
+    switch (message.role) {
       case 'user':
         return <User class="w-4 h-4" />;
       case 'assistant':
         return <Bot class="w-4 h-4" />;
       case 'tool':
-        return <Wrench class="w-4 h-4" />;
+        return isMcpTool(message) ? (
+          <Server class="w-4 h-4" />
+        ) : (
+          <Wrench class="w-4 h-4" />
+        );
       default:
         return <AlertCircle class="w-4 h-4" />;
     }
@@ -55,19 +63,28 @@ export function ChatView(props: ChatViewProps) {
         return 'System';
       case 'tool': {
         const toolName = message.metadata?.toolName;
-        return typeof toolName === 'string' ? toolName : 'tool';
+        if (typeof toolName !== 'string') return 'tool';
+        if (toolName.includes('::')) {
+          const [serverId, name] = toolName.split('::');
+          return `${serverId} / ${name}`;
+        }
+        return toolName;
       }
       default:
         return message.role;
     }
   };
 
-  const getRoleClass = (role: string) => {
-    switch (role) {
+  const getRoleClass = (message: SessionMessage) => {
+    switch (message.role) {
       case 'user':
         return 'bg-blue-50 dark:bg-blue-900/20';
       case 'assistant':
         return 'bg-gray-50 dark:bg-gray-800';
+      case 'tool':
+        return isMcpTool(message)
+          ? 'bg-purple-50 dark:bg-purple-900/20'
+          : 'bg-yellow-50 dark:bg-yellow-900/20';
       default:
         return 'bg-yellow-50 dark:bg-yellow-900/20';
     }
@@ -121,10 +138,10 @@ export function ChatView(props: ChatViewProps) {
       <Show when={!props.isLoading && props.messages.length > 0}>
         <For each={props.messages}>
           {(message) => (
-            <div class={`rounded-lg p-4 ${getRoleClass(message.role)}`}>
+            <div class={`rounded-lg p-4 ${getRoleClass(message)}`}>
               <div class="flex items-start gap-3">
                 <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-                  {getRoleIcon(message.role)}
+                  {getRoleIcon(message)}
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 mb-1">
