@@ -69,6 +69,20 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
   });
 
   /**
+   * DELETE /agents/:agentId
+   * Delete an agent by ID.
+   */
+  app.delete('/agents/:agentId', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const deleted = agentRegistry.deleteAgent(agentId);
+    if (!deleted) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+    return { deleted };
+  });
+
+  /**
    * PATCH /agents/:agentId/tools
    * Update the builtin tools list for an agent.
    * Body: { tools: string[] }

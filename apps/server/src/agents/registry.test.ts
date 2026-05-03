@@ -557,6 +557,95 @@ describe('AgentRegistry', () => {
       expect(registry.getAgent('agent1')?.skills).toEqual(['skill-x']);
     });
   });
+
+  describe('deleteAgent', () => {
+    it('returns null for a non-existent agent', () => {
+      const registry = new AgentRegistry({ agentsDir: tempDir });
+      expect(registry.deleteAgent('no-such-agent')).toBeNull();
+    });
+
+    it('removes the agent from memory', () => {
+      createAgentFile('alpha', { name: 'Alpha' });
+      createAgentFile('beta', { name: 'Beta' });
+      const registry = new AgentRegistry({ agentsDir: tempDir });
+      registry.load();
+
+      expect(registry.size).toBe(2);
+      const summary = registry.deleteAgent('alpha');
+
+      expect(summary).not.toBeNull();
+      expect(summary!.id).toBe('alpha');
+      expect(registry.size).toBe(1);
+      expect(registry.hasAgent('alpha')).toBe(false);
+      expect(registry.hasAgent('beta')).toBe(true);
+    });
+
+    it('returns the deleted agent summary', () => {
+      createAgentFile('gamma', { name: 'Gamma', model: 'openai/gpt-4o' });
+      const registry = new AgentRegistry({ agentsDir: tempDir });
+      registry.load();
+
+      const summary = registry.deleteAgent('gamma');
+
+      expect(summary!.id).toBe('gamma');
+      expect(summary!.name).toBe('Gamma');
+    });
+
+    it('persists the deletion to openaidy.json', () => {
+      const configPath = path.join(tempDir, 'openaidy.json');
+      const config = {
+        version: 1,
+        agents: [
+          {
+            id: 'p1',
+            name: 'P1',
+            enabled: true,
+            systemPrompt: 's',
+            model: 'openai/gpt-4o-mini',
+            version: 1,
+          },
+          {
+            id: 'p2',
+            name: 'P2',
+            enabled: true,
+            systemPrompt: 's',
+            model: 'openai/gpt-4o-mini',
+            version: 1,
+          },
+        ],
+      };
+      fs.writeFileSync(configPath, JSON.stringify(config));
+
+      const registry = new AgentRegistry({
+        initialAgents: config.agents as Agent[],
+        configPath,
+      });
+      registry.deleteAgent('p1');
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(written.agents).toHaveLength(1);
+      expect(written.agents[0].id).toBe('p2');
+    });
+
+    it('skips disk write when configPath is not set', () => {
+      const registry = new AgentRegistry();
+      registry.replaceAll([
+        {
+          id: 'solo',
+          name: 'Solo',
+          enabled: true,
+          systemPrompt: 's',
+          model: 'openai/gpt-4o-mini',
+          version: 1,
+        },
+      ]);
+
+      const summary = registry.deleteAgent('solo');
+
+      expect(summary).not.toBeNull();
+      expect(registry.size).toBe(0);
+    });
+  });
 });
 
 describe('createAgentRegistry', () => {

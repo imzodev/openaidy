@@ -282,4 +282,37 @@ describe('Agent Routes', () => {
       expect(body.error).toBe('Agent not found');
     });
   });
+
+  describe('DELETE /agents/:agentId', () => {
+    it('returns 200 and the deleted agent summary', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/agents/coder',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.deleted).toBeDefined();
+      expect(body.deleted.id).toBe('coder');
+    });
+
+    it('removes the agent from the registry', async () => {
+      await app.inject({ method: 'DELETE', url: '/agents/coder' });
+
+      const listResponse = await app.inject({ method: 'GET', url: '/agents' });
+      const ids = listResponse.json().items.map((a: { id: string }) => a.id);
+      expect(ids).not.toContain('coder');
+    });
+
+    it('returns 404 for a non-existent agent', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/agents/ghost',
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error).toBe('Agent not found');
+    });
+  });
 });

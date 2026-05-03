@@ -819,6 +819,27 @@ pnpm openaidy agents create --name "Research Assistant" --description "Helps wit
 
 ---
 
+#### `agents delete`
+
+Delete an agent from the configuration. Requires typing the agent ID to confirm.
+
+**Usage:**
+
+```bash
+openaidy agents delete [<id>]
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy agents delete
+pnpm openaidy agents delete my-agent
+```
+
+**Exit Codes:** `0` success or cancelled, `1` error or confirmation mismatch
+
+---
+
 ## Future Commands
 
 The following commands are planned but not yet implemented:

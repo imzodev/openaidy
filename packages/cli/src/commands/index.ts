@@ -474,6 +474,14 @@ registerGroup({
         'pnpm openaidy agents create "Research Assistant"',
       ],
     },
+    'agents delete': {
+      description: 'Delete an agent (requires typing the agent ID to confirm)',
+      usage: 'openaidy agents delete [<id>]',
+      examples: [
+        'pnpm openaidy agents delete',
+        'pnpm openaidy agents delete my-agent',
+      ],
+    },
   },
 });
 
@@ -502,6 +510,22 @@ registerCommand(
     examples: [
       'pnpm openaidy agents create',
       'pnpm openaidy agents create "Research Assistant"',
+    ],
+  },
+);
+
+registerCommand(
+  'agents delete',
+  async (args: string[]) => {
+    const { agentsDeleteHandler } = await import('./agents/delete.js');
+    return agentsDeleteHandler(args);
+  },
+  {
+    description: 'Delete an agent (requires typing the agent ID to confirm)',
+    usage: 'openaidy agents delete [<id>]',
+    examples: [
+      'pnpm openaidy agents delete',
+      'pnpm openaidy agents delete my-agent',
     ],
   },
 );

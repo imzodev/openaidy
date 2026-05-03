@@ -14,7 +14,10 @@ const { mockClack, mockFs } = vi.hoisted(() => ({
     log: { error: vi.fn() },
     intro: vi.fn(),
     outro: vi.fn(),
+    cancel: vi.fn(),
     spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    select: vi.fn().mockResolvedValue('basic'),
+    isCancel: vi.fn().mockReturnValue(false),
   },
   mockFs: {
     existsSync: vi.fn(),
@@ -41,13 +44,11 @@ vi.mock('./install.js', () => ({
   installAddon: vi.fn().mockResolvedValue({ success: true, message: 'ok' }),
 }));
 vi.mock('./build.js', () => ({
-  buildAddon: vi
-    .fn()
-    .mockResolvedValue({
-      success: true,
-      message: 'ok',
-      outputPath: '/dist/index.js',
-    }),
+  buildAddon: vi.fn().mockResolvedValue({
+    success: true,
+    message: 'ok',
+    outputPath: '/dist/index.js',
+  }),
 }));
 
 import { addonCreateHandler } from './create.js';

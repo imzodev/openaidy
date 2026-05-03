@@ -379,6 +379,23 @@ export class AgentRegistry {
   }
 
   /**
+   * Delete an agent by ID.
+   * Removes from the in-memory map and persists to openaidy.json.
+   * Returns the deleted summary, or null if not found.
+   */
+  deleteAgent(agentId: string): AgentSummary | null {
+    this.ensureLoaded();
+    const agent = this.agents.get(agentId);
+    if (!agent) return null;
+    this.agents.delete(agentId);
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) agents.splice(idx, 1);
+    });
+    return toAgentSummary(agent);
+  }
+
+  /**
    * Get the number of loaded agents
    */
   get size(): number {
