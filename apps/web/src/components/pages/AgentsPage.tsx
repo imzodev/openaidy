@@ -17,6 +17,7 @@ import {
   Lightbulb,
   Plus,
   MessageSquare,
+  Server,
 } from 'lucide-solid';
 import {
   listAgents,
@@ -24,12 +25,16 @@ import {
   updateAgentTools,
   listAgentSkills,
   updateAgentSkills,
+  listMcpServers,
+  updateAgentMcpServers,
   getConfig,
   type Agent,
   type BuiltinToolInfo,
   type SkillInfo,
   type ProviderConfig,
   type CreateAgentInput,
+  type McpServerRef,
+  type McpServerRecord,
 } from '../../lib/api';
 import { CreateAgentModal } from './CreateAgentModal';
 import {
@@ -49,7 +54,7 @@ export function AgentsPage(props: AgentsPageProps) {
     null,
   );
   const [activeTab, setActiveTab] = createSignal<
-    'overview' | 'workspace' | 'tools' | 'skills'
+    'overview' | 'workspace' | 'tools' | 'skills' | 'mcp'
   >('overview');
   const [error, setError] = createSignal<string | null>(null);
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] =
@@ -66,6 +71,8 @@ export function AgentsPage(props: AgentsPageProps) {
   const [skillsUpdating, setSkillsUpdating] = createSignal<Set<string>>(
     new Set(),
   );
+  const [allMcpServers, setAllMcpServers] = createSignal<McpServerRecord[]>([]);
+  const [mcpUpdating, setMcpUpdating] = createSignal<Set<string>>(new Set());
   const [providers, setProviders] = createSignal<ProviderConfig[]>([]);
   const [showCreateModal, setShowCreateModal] = createSignal(false);
 
@@ -112,7 +119,7 @@ export function AgentsPage(props: AgentsPageProps) {
   };
 
   const handleTabChange = (
-    tab: 'overview' | 'workspace' | 'tools' | 'skills',
+    tab: 'overview' | 'workspace' | 'tools' | 'skills' | 'mcp',
   ) => {
     if (activeTab() === tab) {
       return;
@@ -220,6 +227,12 @@ export function AgentsPage(props: AgentsPageProps) {
       .catch(() => setAllSkills([]));
   });
 
+  onMount(() => {
+    listMcpServers()
+      .then((res) => setAllMcpServers(res.servers))
+      .catch(() => setAllMcpServers([]));
+  });
+
   const handleToggleTool = async (toolName: string) => {
     const agent = selectedAgent();
     if (!agent) return;
@@ -242,6 +255,36 @@ export function AgentsPage(props: AgentsPageProps) {
       setToolsUpdating((prev) => {
         const next = new Set(prev);
         next.delete(toolName);
+        return next;
+      });
+    }
+  };
+
+  const handleToggleMcpServer = async (serverId: string) => {
+    const agent = selectedAgent();
+    if (!agent) return;
+
+    setMcpUpdating((prev) => new Set([...prev, serverId]));
+    try {
+      const currentRefs = agent.mcpServers ?? [];
+      const isEnabled = currentRefs.some((r) => r.id === serverId);
+      const nextRefs: McpServerRef[] = isEnabled
+        ? currentRefs.filter((r) => r.id !== serverId)
+        : [...currentRefs, { id: serverId }];
+
+      await updateAgentMcpServers(agent.id, nextRefs);
+
+      setAgents((prev) =>
+        prev.map((a) =>
+          a.id === agent.id ? { ...a, mcpServers: nextRefs } : a,
+        ),
+      );
+    } catch {
+      // leave state unchanged on error
+    } finally {
+      setMcpUpdating((prev) => {
+        const next = new Set(prev);
+        next.delete(serverId);
         return next;
       });
     }
@@ -493,6 +536,20 @@ export function AgentsPage(props: AgentsPageProps) {
                     <span class="flex items-center gap-2">
                       <Lightbulb class="w-4 h-4" />
                       Skills
+                    </span>
+                  </button>
+
+                  <button
+                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab() === 'mcp'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                    onClick={() => handleTabChange('mcp')}
+                  >
+                    <span class="flex items-center gap-2">
+                      <Server class="w-4 h-4" />
+                      MCP Servers
                     </span>
                   </button>
                 </nav>
@@ -828,6 +885,105 @@ export function AgentsPage(props: AgentsPageProps) {
                                   </div>
                                   <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                                     {skill.description}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+                {/* MCP Servers Tab */}
+                <Show when={activeTab() === 'mcp'}>
+                  <div class="space-y-4">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      Enable MCP servers to give this agent access to their
+                      tools. Servers must be configured and connected globally
+                      first.
+                    </p>
+                    <Show when={allMcpServers().length === 0}>
+                      <div class="flex items-center justify-center h-32">
+                        <p class="text-text-tertiary">
+                          No MCP servers configured
+                        </p>
+                      </div>
+                    </Show>
+                    <Show when={allMcpServers().length > 0}>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <For each={allMcpServers()}>
+                          {(server) => {
+                            const isEnabled = () =>
+                              selectedAgent()!.mcpServers?.some(
+                                (r) => r.id === server.id,
+                              ) ?? false;
+                            const isUpdating = () =>
+                              mcpUpdating().has(server.id);
+                            return (
+                              <button
+                                onClick={() => handleToggleMcpServer(server.id)}
+                                disabled={isUpdating() || !server.connected}
+                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
+                                  isEnabled()
+                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                                } ${
+                                  isUpdating()
+                                    ? 'opacity-60 cursor-wait'
+                                    : !server.connected
+                                      ? 'opacity-50 cursor-not-allowed'
+                                      : 'cursor-pointer'
+                                }`}
+                              >
+                                <div class="mt-0.5 flex-shrink-0">
+                                  <Server
+                                    class={`w-4 h-4 ${
+                                      isEnabled()
+                                        ? 'text-primary'
+                                        : 'text-gray-400 dark:text-gray-500'
+                                    }`}
+                                  />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                  <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                      <span class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {server.name ?? server.id}
+                                      </span>
+                                      <span
+                                        class={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full ${
+                                          server.connected
+                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                        }`}
+                                      >
+                                        {server.connected
+                                          ? 'connected'
+                                          : 'disconnected'}
+                                      </span>
+                                    </div>
+                                    {/* Toggle switch */}
+                                    <div
+                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                                        isEnabled()
+                                          ? 'bg-primary'
+                                          : 'bg-gray-200 dark:bg-gray-600'
+                                      }`}
+                                    >
+                                      <span
+                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                          isEnabled()
+                                            ? 'translate-x-4'
+                                            : 'translate-x-0'
+                                        }`}
+                                      />
+                                    </div>
+                                  </div>
+                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                    {server.toolCount} tool
+                                    {server.toolCount === 1 ? '' : 's'} ·{' '}
+                                    {server.transport}
                                   </p>
                                 </div>
                               </button>

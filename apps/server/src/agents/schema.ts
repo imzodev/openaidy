@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { McpServerRef } from '@openaidy/shared-types';
 
 /**
  * Workspace permissions schema
@@ -65,9 +66,11 @@ export const McpServerRefSchema = z.object({
 });
 
 /**
- * TypeScript type for MCP server reference
+ * TypeScript type for MCP server reference — re-exported from shared-types.
+ * The Zod schema above is kept for runtime validation; the TS type comes from
+ * the shared package so all consumers (server, CLI, web) use one definition.
  */
-export type McpServerRef = z.infer<typeof McpServerRefSchema>;
+export type { McpServerRef };
 
 /**
  * Agent definition schema

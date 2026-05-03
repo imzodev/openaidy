@@ -558,6 +558,169 @@ describe('AgentRegistry', () => {
     });
   });
 
+  describe('updateAgentMcpServers', () => {
+    let configPath: string;
+
+    function writeConfig(
+      agents: Array<{
+        id: string;
+        name?: string;
+        enabled?: boolean;
+        systemPrompt?: string;
+        model?: string;
+        mcpServers?: Array<{ id: string; tools?: string[] }>;
+      }>,
+    ) {
+      const dir = path.join(tempDir, 'config-mcp');
+      fs.mkdirSync(dir, { recursive: true });
+      configPath = path.join(dir, 'openaidy.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          defaults: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+          providers: [
+            {
+              id: 'openai',
+              type: 'openai-compatible',
+              enabled: true,
+              vendorFamily: 'openai-compatible',
+              models: [{ id: 'gpt-4' }],
+            },
+          ],
+          agents,
+        }),
+        'utf-8',
+      );
+    }
+
+    beforeEach(() => {
+      writeConfig([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          mcpServers: [{ id: 'filesystem' }],
+        },
+      ]);
+    });
+
+    it('updates mcpServers in memory and returns updated summary', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          mcpServers: [{ id: 'filesystem' }],
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentMcpServers('agent1', [
+        { id: 'filesystem' },
+        { id: 'github', tools: ['search_code'] },
+      ]);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.mcpServers).toEqual([
+        { id: 'filesystem' },
+        { id: 'github', tools: ['search_code'] },
+      ]);
+    });
+
+    it('persists mcpServers to the config file on disk', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          mcpServers: [{ id: 'filesystem' }],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentMcpServers('agent1', [
+        { id: 'github', tools: ['list_issues'] },
+      ]);
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{
+          id: string;
+          mcpServers?: Array<{ id: string; tools?: string[] }>;
+        }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent?.mcpServers).toEqual([
+        { id: 'github', tools: ['list_issues'] },
+      ]);
+    });
+
+    it('removes the mcpServers key from the config file when clearing all servers', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          mcpServers: [{ id: 'filesystem' }],
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentMcpServers('agent1', []);
+
+      expect(registry.getAgent('agent1')?.mcpServers).toBeUndefined();
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; mcpServers?: unknown }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent).not.toHaveProperty('mcpServers');
+    });
+
+    it('returns undefined for an unknown agent id', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([]);
+
+      const result = registry.updateAgentMcpServers('ghost', [
+        { id: 'filesystem' },
+      ]);
+      expect(result).toBeUndefined();
+    });
+
+    it('updates memory but skips disk when configPath is not set', () => {
+      const registry = new AgentRegistry();
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+        },
+      ]);
+
+      const result = registry.updateAgentMcpServers('agent1', [
+        { id: 'filesystem' },
+      ]);
+
+      expect(result).toBeDefined();
+      expect(registry.getAgent('agent1')?.mcpServers).toEqual([
+        { id: 'filesystem' },
+      ]);
+    });
+  });
+
   describe('deleteAgent', () => {
     it('returns null for a non-existent agent', () => {
       const registry = new AgentRegistry({ agentsDir: tempDir });

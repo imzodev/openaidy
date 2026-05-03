@@ -11,9 +11,11 @@ import {
   type CreateAccessTokenRequest,
   type CreateAccessTokenResponse,
   type AuthVerifyResponse,
+  type McpServerRef,
   ApiRequestError,
 } from '@openaidy/shared-types';
 import { getStoredToken } from './auth-token';
+export type { McpServerRef };
 export type { AccessTokenRecord, CreateAccessTokenResponse };
 
 /**
@@ -138,6 +140,7 @@ export type Agent = {
   tags?: string[];
   tools?: string[];
   skills?: string[];
+  mcpServers?: McpServerRef[];
   defaults: {
     providerId?: string;
     modelId?: string;
@@ -254,6 +257,40 @@ export async function updateAgentTools(
   });
   if (!response.ok) {
     throw new Error(`Failed to update agent tools: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * List MCP server references configured for an agent
+ */
+export async function listAgentMcpServers(
+  agentId: string,
+): Promise<{ mcpServers: McpServerRef[] }> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to get agent: ${response.statusText}`);
+  }
+  const agent = (await response.json()) as { mcpServers?: McpServerRef[] };
+  return { mcpServers: agent.mcpServers ?? [] };
+}
+
+/**
+ * Update the MCP server references for an agent
+ */
+export async function updateAgentMcpServers(
+  agentId: string,
+  mcpServers: McpServerRef[],
+): Promise<Agent> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}/mcp-servers`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mcpServers }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to update agent MCP servers: ${response.statusText}`,
+    );
   }
   return response.json();
 }

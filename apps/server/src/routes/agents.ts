@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { CreateAgentInput } from '../types';
+import type { McpServerRef } from '@openaidy/shared-types';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -102,6 +103,56 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
     const result = agentRegistry.updateAgentTools(
       agentId,
       body.tools as string[],
+    );
+    if (!result) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+
+    return result;
+  });
+
+  /**
+   * PATCH /agents/:agentId/mcp-servers
+   * Update the MCP server references for an agent.
+   * Body: { mcpServers: Array<{ id: string; tools?: string[] }> }
+   */
+  app.patch('/agents/:agentId/mcp-servers', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const body = request.body as { mcpServers?: unknown };
+
+    if (!Array.isArray(body?.mcpServers)) {
+      reply.code(400);
+      return {
+        error: 'Invalid request: mcpServers must be an array',
+      };
+    }
+
+    const isValidRef = (ref: unknown): ref is McpServerRef => {
+      if (!ref || typeof ref !== 'object') return false;
+      const r = ref as Record<string, unknown>;
+      if (typeof r['id'] !== 'string' || r['id'].length === 0) return false;
+      if (r['tools'] !== undefined) {
+        if (
+          !Array.isArray(r['tools']) ||
+          r['tools'].some((t) => typeof t !== 'string')
+        )
+          return false;
+      }
+      return true;
+    };
+
+    if (!body.mcpServers.every(isValidRef)) {
+      reply.code(400);
+      return {
+        error:
+          'Invalid request: each mcpServer must have a string id and an optional tools string array',
+      };
+    }
+
+    const result = agentRegistry.updateAgentMcpServers(
+      agentId,
+      body.mcpServers as McpServerRef[],
     );
     if (!result) {
       reply.code(404);

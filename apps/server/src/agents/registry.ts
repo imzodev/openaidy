@@ -321,6 +321,34 @@ export class AgentRegistry {
   }
 
   /**
+   * Update the MCP server references for an agent.
+   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Returns the updated AgentSummary or undefined if the agent was not found.
+   */
+  updateAgentMcpServers(
+    agentId: string,
+    mcpServers: McpServerRef[],
+  ): AgentSummary | undefined {
+    this.ensureLoaded();
+    const agent = this.agents.get(agentId);
+    if (!agent) return undefined;
+
+    const updated: Agent = {
+      ...agent,
+      mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
+    };
+    this.agents.set(agentId, updated);
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) {
+        if (mcpServers.length > 0) agents[idx]!['mcpServers'] = mcpServers;
+        else delete agents[idx]!['mcpServers'];
+      }
+    });
+    return toAgentSummary(updated);
+  }
+
+  /**
    * Create a new agent from user-provided input.
    * All structural defaults (version, enabled, workspace scaffold, tags) are applied here
    * so callers never duplicate this logic. Persists to openaidy.json and registers in memory.

@@ -283,6 +283,83 @@ describe('Agent Routes', () => {
     });
   });
 
+  describe('PATCH /agents/:agentId/mcp-servers', () => {
+    it('should update mcpServers for an agent and return updated summary', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/mcp-servers',
+        payload: {
+          mcpServers: [
+            { id: 'filesystem' },
+            { id: 'github', tools: ['search_code'] },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.id).toBe('default');
+      expect(body.mcpServers).toEqual([
+        { id: 'filesystem' },
+        { id: 'github', tools: ['search_code'] },
+      ]);
+    });
+
+    it('should accept an empty mcpServers array to clear all servers', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/mcp-servers',
+        payload: { mcpServers: [] },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('should return 400 when mcpServers is missing from the body', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/mcp-servers',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = response.json();
+      expect(body.error).toMatch(/mcpServers must be an array/);
+    });
+
+    it('should return 400 when a ref is missing the id field', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/mcp-servers',
+        payload: { mcpServers: [{ tools: ['foo'] }] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 when tools is not an array of strings', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/default/mcp-servers',
+        payload: { mcpServers: [{ id: 'srv', tools: [42] }] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 404 for a non-existent agent', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/agents/ghost/mcp-servers',
+        payload: { mcpServers: [{ id: 'filesystem' }] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error).toBe('Agent not found');
+    });
+  });
+
   describe('DELETE /agents/:agentId', () => {
     it('returns 200 and the deleted agent summary', async () => {
       const response = await app.inject({
