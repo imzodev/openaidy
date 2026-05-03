@@ -147,11 +147,27 @@ export async function buildApp() {
 
   const execService = createExecService();
 
+  // Create AddonService early so it can be injected into the builtin tool registry
+  const addonManifestValidator = new ManifestValidator();
+  const openAidyVersion = process.env.npm_package_version ?? '0.0.0';
+  const addonService = dbAdapter
+    ? createAddonService({
+        repository: dbAdapter.repositories.addons,
+        validator: addonManifestValidator,
+        jwtSecret: env.WS_TOKEN_SECRET,
+        openAidyVersion,
+      })
+    : undefined;
+
   // Create builtin tool registry (native, in-process tools — separate from MCP)
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
     exec: execService,
     skills: { registry: skillRegistry },
+    addons: {
+      addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+      ...(addonService ? { addonService } : {}),
+    },
   });
 
   const sessionService = new SessionMessageService({
@@ -355,21 +371,13 @@ export async function buildApp() {
   }
 
   // Register addon routes (requires DB)
-  if (dbAdapter) {
-    const manifestValidator = new ManifestValidator();
-    const openAidyVersion = process.env.npm_package_version ?? '0.0.0';
-    const addonService = createAddonService({
-      repository: dbAdapter.repositories.addons,
-      validator: manifestValidator,
-      jwtSecret: env.WS_TOKEN_SECRET,
-      openAidyVersion,
-    });
+  if (dbAdapter && addonService) {
     await app.register(addonRoutes, {
       addonsRepository: dbAdapter.repositories.addons,
       authMiddleware,
       jwtSecret: env.WS_TOKEN_SECRET,
       openAidyVersion,
-      manifestValidator,
+      manifestValidator: addonManifestValidator,
     });
     await app.register(addonProxyRoutes, {
       addonService,

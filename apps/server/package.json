@@ -14,6 +14,7 @@
     "@fastify/sensible": "^6.0.4",
     "@fastify/websocket": "^11.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@openaidy/addon-scaffolding": "workspace:*",
     "@openaidy/config": "workspace:*",
     "@openaidy/db": "workspace:*",
     "@openaidy/runtime": "workspace:*",

@@ -24,19 +24,24 @@ import { BuiltinToolRegistry } from './registry';
 import { createWorkspaceTools } from './workspace';
 import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
+import { createAddonTools } from './addons';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
+import type { AddonToolDeps } from './addons';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
 export { createExecTools } from './exec';
 export { createSkillTools } from './skills';
+export { createAddonTools } from './addons';
+export type { AddonToolDeps } from './addons';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
   exec?: ExecService;
   skills?: { registry: SkillRegistry };
+  addons?: AddonToolDeps;
   // Add more service dependencies here as new tool categories are introduced.
   // Example:
   //   webSearch?: WebSearchService;
@@ -67,6 +72,12 @@ export function createBuiltinToolRegistry(
 
   if (deps.skills) {
     for (const tool of createSkillTools(deps.skills.registry, deps.workspace)) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.addons) {
+    for (const tool of createAddonTools(deps.addons)) {
       registry.register(tool);
     }
   }
