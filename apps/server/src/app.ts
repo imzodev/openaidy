@@ -168,6 +168,7 @@ export async function buildApp() {
       addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
       ...(addonService ? { addonService } : {}),
     },
+    agents: { registry: agentRegistry },
   });
 
   const sessionService = new SessionMessageService({
