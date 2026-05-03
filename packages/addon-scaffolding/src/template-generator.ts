@@ -11,6 +11,7 @@ export interface TemplateOptions {
   description?: string;
   permissions?: string[];
   externalDomains?: string[];
+  externalImageDomains?: string[];
 }
 
 export interface TemplateResult {
@@ -69,6 +70,9 @@ function writeManifest(
   };
   if (opts.externalDomains && opts.externalDomains.length > 0) {
     manifest['externalDomains'] = opts.externalDomains;
+  }
+  if (opts.externalImageDomains && opts.externalImageDomains.length > 0) {
+    manifest['externalImageDomains'] = opts.externalImageDomains;
   }
   fs.writeFileSync(
     path.join(projectPath, 'addon.json'),

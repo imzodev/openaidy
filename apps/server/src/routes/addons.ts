@@ -354,6 +354,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       // the addon is enabled — similar to the permissions approval flow.
       const manifestPath = path.join(addonsDir, addonId, 'addon.json');
       let externalDomains: string[] = [];
+      let externalImageDomains: string[] = [];
       try {
         const manifestRaw = JSON.parse(
           fs.readFileSync(manifestPath, 'utf-8'),
@@ -363,15 +364,28 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
             manifestRaw['externalDomains'] as unknown[]
           ).filter((d): d is string => typeof d === 'string');
         }
+        if (Array.isArray(manifestRaw['externalImageDomains'])) {
+          externalImageDomains = (
+            manifestRaw['externalImageDomains'] as unknown[]
+          ).filter((d): d is string => typeof d === 'string');
+        }
       } catch {
         // manifest unreadable — proceed with no external domains
       }
-      const connectSrc = [
-        "'self'",
-        ...externalDomains
+
+      const normalizeHosts = (hosts: string[]) =>
+        hosts
           .map((d) => d.replace(/^https?:\/\//i, '').split('/')[0] ?? '')
           .filter((d) => /^[a-zA-Z0-9.-]+(:\d+)?$/.test(d))
-          .map((d) => `https://${d}`),
+          .map((d) => `https://${d}`);
+
+      const connectSrc = ["'self'", ...normalizeHosts(externalDomains)].join(
+        ' ',
+      );
+      const imgSrc = [
+        "'self'",
+        'data:',
+        ...normalizeHosts(externalImageDomains),
       ].join(' ');
 
       return reply
@@ -383,7 +397,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
             "default-src 'none'",
             "script-src 'self' 'unsafe-inline'",
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data:",
+            `img-src ${imgSrc}`,
             "font-src 'self'",
             `connect-src ${connectSrc}`,
             "frame-src 'none'",

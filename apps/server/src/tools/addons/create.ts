@@ -173,10 +173,17 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Bare hostnames the addon is allowed to fetch from directly in the browser ' +
-            '(e.g. ["api.open-meteo.com"]). Enforced via CSP connect-src on the iframe. ' +
-            'Only list domains you actually call with fetch(). ' +
+            'Bare hostnames the addon is allowed to call with fetch() directly in the browser ' +
+            '(e.g. ["api.open-meteo.com"]). Enforced via CSP connect-src. ' +
             'The OpenAidy server and SDK proxy are always allowed — do not list them here.',
+        },
+        externalImageDomains: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Bare hostnames the addon is allowed to load images from ' +
+            '(e.g. ["raw.githubusercontent.com", "assets.pokemon.com"]). ' +
+            'Enforced via CSP img-src. Use this for <img src="https://..."> and CSS background images.',
         },
         files: {
           type: 'object',
@@ -198,6 +205,9 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       const permissions = args['permissions'];
       const externalDomains = Array.isArray(args['externalDomains'])
         ? (args['externalDomains'] as string[])
+        : undefined;
+      const externalImageDomains = Array.isArray(args['externalImageDomains'])
+        ? (args['externalImageDomains'] as string[])
         : undefined;
       const filesArg = args['files'];
 
@@ -317,6 +327,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
         description,
         permissions: permissions as string[],
         ...(externalDomains ? { externalDomains } : {}),
+        ...(externalImageDomains ? { externalImageDomains } : {}),
       });
 
       if (!generated.success) {

@@ -172,7 +172,7 @@ export const AddonManifestSchema = z.object({
   /**
    * External domains this addon is allowed to fetch from directly (browser-side).
    * Each entry must be a bare hostname or hostname:port (e.g. "api.open-meteo.com").
-   * These are enforced via the iframe's Content-Security-Policy connect-src directive.
+   * Enforced via CSP connect-src. Use this for API calls made with fetch().
    *
    * TODO: Before an addon with externalDomains is enabled, prompt the user to
    * review and approve the listed domains — similar to the permissions approval flow.
@@ -184,6 +184,25 @@ export const AddonManifestSchema = z.object({
         .regex(
           /^[a-zA-Z0-9.-]+(:\d+)?$/,
           'externalDomains entries must be bare hostnames (e.g. "api.open-meteo.com")',
+        ),
+    )
+    .max(20)
+    .optional(),
+  /**
+   * External domains this addon is allowed to load images from (browser-side).
+   * Each entry must be a bare hostname or hostname:port (e.g. "raw.githubusercontent.com").
+   * Enforced via CSP img-src. Use this for <img src="https://..."> and CSS background images.
+   *
+   * TODO: Before an addon with externalImageDomains is enabled, prompt the user to
+   * review and approve the listed domains — similar to the permissions approval flow.
+   */
+  externalImageDomains: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-zA-Z0-9.-]+(:\d+)?$/,
+          'externalImageDomains entries must be bare hostnames (e.g. "raw.githubusercontent.com")',
         ),
     )
     .max(20)
