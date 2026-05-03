@@ -7,6 +7,7 @@
 import type { AddonManifest } from '@openaidy/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { SessionMessageService } from '../sessions/service';
+import type { AgentRegistry } from '../agents/registry';
 
 // Forward declaration to avoid circular dependency
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,6 +21,7 @@ export interface AddonProxyRoutesOptions {
   authMiddleware: AuthMiddleware;
   internalApiBaseUrl: string;
   sessionService?: SessionMessageService;
+  agentRegistry?: AgentRegistry;
 }
 
 /**

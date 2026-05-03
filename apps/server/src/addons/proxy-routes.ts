@@ -132,6 +132,36 @@ export const addonProxyRoutes: FastifyPluginAsync<
     },
   );
 
+  // GET /api/addon-proxy/agents
+  app.get(
+    '/api/addon-proxy/agents',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await opts.addonService.getAddon(request.addonId!);
+
+      if (!addon) {
+        return reply
+          .code(404)
+          .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
+      }
+
+      const authResult = proxyService.authorize(addon, 'agents.list');
+      if (!authResult.authorized) {
+        return reply
+          .code(403)
+          .send({ error: 'PERMISSION_DENIED', message: authResult.error });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/agents');
+
+      if (!opts.agentRegistry) {
+        return reply.send({ items: [] });
+      }
+
+      return reply.send({ items: opts.agentRegistry.listAgents() });
+    },
+  );
+
   // GET /api/addon-proxy/sessions
   app.get(
     '/api/addon-proxy/sessions',

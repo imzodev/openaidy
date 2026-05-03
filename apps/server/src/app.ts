@@ -376,6 +376,7 @@ export async function buildApp() {
       authMiddleware,
       internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
       sessionService,
+      agentRegistry,
     });
   }
 

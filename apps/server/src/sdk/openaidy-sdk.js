@@ -107,20 +107,20 @@
 
     // ── Sessions ──────────────────────────────────────────────────────────
     listSessions: function () {
-      return request('GET', '/sessions');
+      return request('GET', '/api/addon-proxy/sessions');
     },
     createSession: function (title) {
-      return request('POST', '/sessions', {
+      return request('POST', '/api/addon-proxy/sessions', {
         title: title ?? 'New Session',
       });
     },
     getSession: function (sessionId) {
-      return request('GET', '/sessions/' + sessionId);
+      return request('GET', '/api/addon-proxy/sessions/' + sessionId);
     },
 
     // ── Agents ────────────────────────────────────────────────────────────
     listAgents: function () {
-      return request('GET', '/agents');
+      return request('GET', '/api/addon-proxy/agents');
     },
     invokeAgent: function (agentId, input, context) {
       return request('POST', '/api/addon-proxy/agents/' + agentId + '/invoke', {
@@ -130,8 +130,11 @@
     },
 
     // ── Config ────────────────────────────────────────────────────────────
-    getConfig: function () {
-      return request('GET', '/config');
+    getConfig: function (namespace) {
+      return request(
+        'GET',
+        '/api/addon-proxy/config/' + (namespace ?? 'default'),
+      );
     },
 
     // ── Raw request (escape hatch) ────────────────────────────────────────

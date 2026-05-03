@@ -74,11 +74,10 @@ export function AddonViewPage(props: Props) {
 
   // Allowlist of paths the addon proxy may forward (method + path regex)
   const ALLOWED_ROUTES: { methods: string[]; pattern: RegExp }[] = [
-    { methods: ['GET'], pattern: /^\/sessions$/ },
-    { methods: ['GET', 'POST'], pattern: /^\/sessions\/[^/]+$/ },
-    { methods: ['GET'], pattern: /^\/agents$/ },
-    { methods: ['GET'], pattern: /^\/config$/ },
-    { methods: ['GET', 'POST', 'DELETE'], pattern: /^\/api\/addon-proxy\// },
+    {
+      methods: ['GET', 'POST', 'DELETE', 'PATCH', 'PUT'],
+      pattern: /^\/api\/addon-proxy\//,
+    },
   ];
 
   const isAllowed = (method: string, path: string) =>
