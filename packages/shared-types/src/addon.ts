@@ -169,6 +169,25 @@ export const AddonManifestSchema = z.object({
   config: AddonConfigBlockSchema.optional(),
   dependencies: z.record(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
+  /**
+   * External domains this addon is allowed to fetch from directly (browser-side).
+   * Each entry must be a bare hostname or hostname:port (e.g. "api.open-meteo.com").
+   * These are enforced via the iframe's Content-Security-Policy connect-src directive.
+   *
+   * TODO: Before an addon with externalDomains is enabled, prompt the user to
+   * review and approve the listed domains — similar to the permissions approval flow.
+   */
+  externalDomains: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-zA-Z0-9.-]+(:\d+)?$/,
+          'externalDomains entries must be bare hostnames (e.g. "api.open-meteo.com")',
+        ),
+    )
+    .max(20)
+    .optional(),
   icons: z
     .object({
       16: z.string().url().optional(),

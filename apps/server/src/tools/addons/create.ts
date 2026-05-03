@@ -99,10 +99,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '  "basic"  — minimal hello-world with SDK connection status',
       '  "agent"  — agent runner UI: lists agents, takes a prompt, invokes an agent',
       '',
-      'For custom UIs, choose "basic" and provide your own files in the `files` parameter.',
+      'Always use "basic" and provide the full UI in the `files` parameter.',
       '',
-      'SDK BOOTSTRAP PATTERN (always required in index.js)',
-      '────────────────────────────────────────────────────',
+      'SDK BOOTSTRAP PATTERN (always required — top of app/index.js)',
+      '──────────────────────────────────────────────────────────────',
       'Copy this block verbatim at the top of app/index.js — do not modify it:',
       '',
       sdkBootstrapSnippet(),
@@ -122,12 +122,19 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '',
       sdkReference,
       '',
-      'FILES PARAMETER (optional — overrides template files)',
-      '──────────────────────────────────────────────────────',
-      'Provide a map of relative paths to string contents to override or add files.',
-      'Keys must be relative paths within the addon dir (e.g. "app/index.html").',
-      'No "../" path traversal allowed. Do NOT include "addon.json" — it is always',
-      'generated from the structured parameters.',
+      'FILES PARAMETER (required)',
+      '──────────────────────────',
+      'You MUST always provide at minimum:',
+      '  "app/index.html" — the full UI page',
+      '  "app/index.js"   — the bootstrap + addon logic',
+      '',
+      'app/index.html must end with:',
+      '  <script src="index.js"></script>',
+      '</body>',
+      '</html>',
+      '',
+      'Do NOT include "addon.json" — it is always generated from the structured parameters.',
+      'Paths must be relative with no ".." segments.',
     ].join('\n'),
 
     parameters: {
@@ -162,15 +169,24 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'Valid values: agents.list, agents.invoke, sessions.list, sessions.create, ' +
             'sessions.read, config.read. Only request what you actually use.',
         },
+        externalDomains: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Bare hostnames the addon is allowed to fetch from directly in the browser ' +
+            '(e.g. ["api.open-meteo.com"]). Enforced via CSP connect-src on the iframe. ' +
+            'Only list domains you actually call with fetch(). ' +
+            'The OpenAidy server and SDK proxy are always allowed — do not list them here.',
+        },
         files: {
           type: 'object',
           description:
-            'Optional map of relative file paths to their contents, used to override ' +
-            'or supplement the template files. Must include "app/index.html" and ' +
-            '"app/index.js" if you want a fully custom UI. Paths must not contain "..".',
+            'Required. Must contain at minimum "app/index.html" and "app/index.js". ' +
+            '"app/index.html" must end with <script src="index.js"></script> just before </body>. ' +
+            'Paths must be relative with no ".." segments. Do not include "addon.json".',
         },
       },
-      required: ['id', 'name', 'description', 'permissions'],
+      required: ['id', 'name', 'description', 'permissions', 'files'],
     },
 
     async execute(args, ctx) {
@@ -180,6 +196,9 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       const template =
         typeof args['template'] === 'string' ? args['template'] : 'basic';
       const permissions = args['permissions'];
+      const externalDomains = Array.isArray(args['externalDomains'])
+        ? (args['externalDomains'] as string[])
+        : undefined;
       const filesArg = args['files'];
 
       // ── Input validation ────────────────────────────────────────────────
@@ -224,45 +243,70 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
         };
       }
 
-      // ── Validate extra files (if provided) ──────────────────────────────
+      // ── Validate files (required) ────────────────────────────────────────
 
       const extraFiles: Record<string, string> = {};
-      if (filesArg !== null && filesArg !== undefined) {
-        if (typeof filesArg !== 'object' || Array.isArray(filesArg)) {
+      if (filesArg === null || filesArg === undefined) {
+        return {
+          ok: false,
+          error:
+            'files is required and must include "app/index.html" and "app/index.js"',
+        };
+      }
+      if (typeof filesArg !== 'object' || Array.isArray(filesArg)) {
+        return {
+          ok: false,
+          error:
+            'files must be an object mapping relative paths to string contents',
+        };
+      }
+      const fileKeys = Object.keys(filesArg as Record<string, unknown>);
+      if (!fileKeys.includes('app/index.html')) {
+        return { ok: false, error: 'files must include "app/index.html"' };
+      }
+      if (!fileKeys.includes('app/index.js')) {
+        return { ok: false, error: 'files must include "app/index.js"' };
+      }
+      {
+        const html = (filesArg as Record<string, unknown>)['app/index.html'];
+        if (
+          typeof html === 'string' &&
+          !html.includes('<script src="index.js">')
+        ) {
           return {
             ok: false,
             error:
-              'files must be an object mapping relative paths to string contents',
+              'app/index.html must contain <script src="index.js"></script> before </body>',
           };
         }
-        for (const [filePath, content] of Object.entries(
-          filesArg as Record<string, unknown>,
-        )) {
-          const parts = filePath.split('/');
-          if (
-            parts.some((p) => p === '..' || p === '.') ||
-            filePath.startsWith('/')
-          ) {
-            return {
-              ok: false,
-              error: `File path "${filePath}" must be relative with no ".." segments`,
-            };
-          }
-          if (filePath === 'addon.json') {
-            return {
-              ok: false,
-              error:
-                'Do not include "addon.json" in files — it is always generated from structured parameters',
-            };
-          }
-          if (typeof content !== 'string') {
-            return {
-              ok: false,
-              error: `File "${filePath}" must have string content`,
-            };
-          }
-          extraFiles[filePath] = content;
+      }
+      for (const [filePath, content] of Object.entries(
+        filesArg as Record<string, unknown>,
+      )) {
+        const parts = filePath.split('/');
+        if (
+          parts.some((p) => p === '..' || p === '.') ||
+          filePath.startsWith('/')
+        ) {
+          return {
+            ok: false,
+            error: `File path "${filePath}" must be relative with no ".." segments`,
+          };
         }
+        if (filePath === 'addon.json') {
+          return {
+            ok: false,
+            error:
+              'Do not include "addon.json" in files — it is always generated from structured parameters',
+          };
+        }
+        if (typeof content !== 'string') {
+          return {
+            ok: false,
+            error: `File "${filePath}" must have string content`,
+          };
+        }
+        extraFiles[filePath] = content;
       }
 
       // ── Step 1: scaffold files via shared template generator ─────────────
@@ -271,6 +315,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
         name,
         id,
         description,
+        permissions: permissions as string[],
+        ...(externalDomains ? { externalDomains } : {}),
       });
 
       if (!generated.success) {

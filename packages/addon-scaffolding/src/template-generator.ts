@@ -9,6 +9,8 @@ export interface TemplateOptions {
   name: string;
   id: string;
   description?: string;
+  permissions?: string[];
+  externalDomains?: string[];
 }
 
 export interface TemplateResult {
@@ -48,14 +50,14 @@ function writeManifest(
   opts: TemplateOptions,
   extra: Record<string, unknown> = {},
 ): void {
-  const manifest = {
+  const manifest: Record<string, unknown> = {
     id: opts.id,
     name: opts.name,
     version: '1.0.0',
     description: opts.description ?? `${opts.name} addon for OpenAidy`,
     openaidy: { minVersion: '0.0.0' },
     entry: 'app/index.html',
-    permissions: ['agents.list', 'agents.invoke'],
+    permissions: opts.permissions ?? ['agents.list', 'agents.invoke'],
     ui: {
       sidebar: { icon: 'box', label: opts.name, order: 100 },
       routes: [{ path: `/${opts.id}`, component: 'MainPage' }],
@@ -65,6 +67,9 @@ function writeManifest(
     dependencies: {},
     ...extra,
   };
+  if (opts.externalDomains && opts.externalDomains.length > 0) {
+    manifest['externalDomains'] = opts.externalDomains;
+  }
   fs.writeFileSync(
     path.join(projectPath, 'addon.json'),
     JSON.stringify(manifest, null, 2),

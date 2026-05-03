@@ -8,11 +8,20 @@ describe('addon_create tool', () => {
   let addonsDir: string;
   let tool: ReturnType<typeof createAddonCreateTool>;
 
+  const VALID_HTML = `<!DOCTYPE html><html><body><script src="index.js"></script></body></html>`;
+  const VALID_JS = `window.addEventListener('message', function onInit(e) {});
+window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+function onSdkReady(msg) {}`;
+
   const VALID_ARGS = {
     id: 'my-addon',
     name: 'My Addon',
     description: 'A test addon',
     permissions: ['agents.list'],
+    files: {
+      'app/index.html': VALID_HTML,
+      'app/index.js': VALID_JS,
+    },
   };
 
   beforeEach(() => {
@@ -48,13 +57,14 @@ describe('addon_create tool', () => {
     expect(tool.description).toContain('OpenAidy.ready(function(sdk)');
   });
 
-  it('requires id, name, description, permissions', () => {
+  it('requires id, name, description, permissions, files', () => {
     const required = (tool.parameters as unknown as { required: string[] })
       .required;
     expect(required).toContain('id');
     expect(required).toContain('name');
     expect(required).toContain('description');
     expect(required).toContain('permissions');
+    expect(required).toContain('files');
   });
 
   // ── Input validation ───────────────────────────────────────────────────────
@@ -111,8 +121,52 @@ describe('addon_create tool', () => {
     );
   });
 
+  it('rejects missing files', async () => {
+    const { files: _f, ...noFiles } = VALID_ARGS;
+    expectError(
+      await tool.execute(noFiles, { agentId: 'agent' }),
+      /files is required/,
+    );
+  });
+
+  it('rejects files missing app/index.html', async () => {
+    expectError(
+      await tool.execute(
+        { ...VALID_ARGS, files: { 'app/index.js': VALID_JS } },
+        { agentId: 'agent' },
+      ),
+      /app\/index\.html/,
+    );
+  });
+
+  it('rejects files missing app/index.js', async () => {
+    expectError(
+      await tool.execute(
+        { ...VALID_ARGS, files: { 'app/index.html': VALID_HTML } },
+        { agentId: 'agent' },
+      ),
+      /app\/index\.js/,
+    );
+  });
+
+  it('rejects app/index.html missing script tag', async () => {
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: {
+            'app/index.html': '<html></html>',
+            'app/index.js': VALID_JS,
+          },
+        },
+        { agentId: 'agent' },
+      ),
+      /script src/,
+    );
+  });
+
   it('rejects path traversal in extra files', async () => {
-    const files = { '../escape.js': 'bad' };
+    const files = { ...VALID_ARGS.files, '../escape.js': 'bad' };
     expectError(
       await tool.execute({ ...VALID_ARGS, files }, { agentId: 'agent' }),
       /relative/i,
@@ -122,7 +176,7 @@ describe('addon_create tool', () => {
   it('rejects addon.json in files param', async () => {
     expectError(
       await tool.execute(
-        { ...VALID_ARGS, files: { 'addon.json': '{}' } },
+        { ...VALID_ARGS, files: { ...VALID_ARGS.files, 'addon.json': '{}' } },
         { agentId: 'agent' },
       ),
       /addon\.json/,
@@ -160,55 +214,33 @@ describe('addon_create tool', () => {
     expect(manifest.version).toBe('1.0.0');
   });
 
-  it('scaffolds app/index.html from template', async () => {
+  it('writes app/index.html from files param', async () => {
     await tool.execute(VALID_ARGS, { agentId: 'agent' });
     const htmlPath = path.join(addonsDir, 'my-addon', 'app', 'index.html');
     expect(fs.existsSync(htmlPath)).toBe(true);
     const html = fs.readFileSync(htmlPath, 'utf-8');
-    expect(html).toContain('My Addon');
+    expect(html).toBe(VALID_HTML);
   });
 
-  it('scaffolds app/index.js from template', async () => {
+  it('writes app/index.js from files param', async () => {
     await tool.execute(VALID_ARGS, { agentId: 'agent' });
     const jsPath = path.join(addonsDir, 'my-addon', 'app', 'index.js');
     expect(fs.existsSync(jsPath)).toBe(true);
     const js = fs.readFileSync(jsPath, 'utf-8');
-    expect(js).toContain('ADDON_READY');
+    expect(js).toBe(VALID_JS);
   });
 
-  it('uses the agent template when specified', async () => {
-    await tool.execute(
-      { ...VALID_ARGS, template: 'agent' },
-      { agentId: 'agent' },
-    );
-    const js = fs.readFileSync(
-      path.join(addonsDir, 'my-addon', 'app', 'index.js'),
-      'utf-8',
-    );
-    expect(js).toContain('listAgents');
-  });
-
-  it('writes extra files on top of the template', async () => {
-    const files = { 'app/styles.css': 'body { color: red; }' };
+  it('writes additional files alongside required ones', async () => {
+    const files = {
+      ...VALID_ARGS.files,
+      'app/styles.css': 'body { color: red; }',
+    };
     await tool.execute({ ...VALID_ARGS, files }, { agentId: 'agent' });
     const css = fs.readFileSync(
       path.join(addonsDir, 'my-addon', 'app', 'styles.css'),
       'utf-8',
     );
     expect(css).toBe('body { color: red; }');
-  });
-
-  it('extra files override template files when same path is given', async () => {
-    const customHtml = '<!DOCTYPE html><html><body>Custom</body></html>';
-    await tool.execute(
-      { ...VALID_ARGS, files: { 'app/index.html': customHtml } },
-      { agentId: 'agent' },
-    );
-    const html = fs.readFileSync(
-      path.join(addonsDir, 'my-addon', 'app', 'index.html'),
-      'utf-8',
-    );
-    expect(html).toBe(customHtml);
   });
 
   it('success message lists template files', async () => {

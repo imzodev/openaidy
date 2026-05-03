@@ -348,6 +348,32 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         '.ico': 'image/x-icon',
       };
       const contentType = mimeTypes[ext] ?? 'application/octet-stream';
+
+      // Read externalDomains from the addon manifest to extend connect-src.
+      // TODO: In the future, prompt the user to approve these domains before
+      // the addon is enabled — similar to the permissions approval flow.
+      const manifestPath = path.join(addonsDir, addonId, 'addon.json');
+      let externalDomains: string[] = [];
+      try {
+        const manifestRaw = JSON.parse(
+          fs.readFileSync(manifestPath, 'utf-8'),
+        ) as Record<string, unknown>;
+        if (Array.isArray(manifestRaw['externalDomains'])) {
+          externalDomains = (
+            manifestRaw['externalDomains'] as unknown[]
+          ).filter((d): d is string => typeof d === 'string');
+        }
+      } catch {
+        // manifest unreadable — proceed with no external domains
+      }
+      const connectSrc = [
+        "'self'",
+        ...externalDomains
+          .map((d) => d.replace(/^https?:\/\//i, '').split('/')[0] ?? '')
+          .filter((d) => /^[a-zA-Z0-9.-]+(:\d+)?$/.test(d))
+          .map((d) => `https://${d}`),
+      ].join(' ');
+
       return reply
         .header('Content-Type', contentType)
         .header('Access-Control-Allow-Origin', '*')
@@ -359,7 +385,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data:",
             "font-src 'self'",
-            "connect-src 'self'",
+            `connect-src ${connectSrc}`,
             "frame-src 'none'",
             "object-src 'none'",
             "base-uri 'none'",
