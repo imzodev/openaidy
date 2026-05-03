@@ -1,10 +1,8 @@
 /**
- * Install Command - Register a built addon with a local OpenAidy server
+ * Install Command - Register an addon with a local OpenAidy server
  */
 
 import * as p from '@clack/prompts';
-import fs from 'node:fs';
-import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { readAddonManifest } from '../../utils/project.js';
 import { resolveCLIConfig } from '../../lib/config.js';
@@ -51,17 +49,6 @@ export async function installAddon(
     };
   }
 
-  // When called standalone (not from create), require a built dist/
-  const requireBuild = options.requireBuild ?? true;
-  const distPath = path.join(projectPath, 'dist');
-  if (requireBuild && !fs.existsSync(distPath)) {
-    return {
-      success: false,
-      message:
-        'dist/ not found. Run "pnpm openaidy addon build" first to compile the addon.',
-    };
-  }
-
   const addonId = String(manifest.id);
 
   // POST manifest to the server
@@ -104,9 +91,26 @@ export async function installAddon(
     };
   }
 
+  // Auto-enable the addon so it appears in the sidebar immediately.
+  try {
+    const permissions = Array.isArray(manifest.permissions)
+      ? (manifest.permissions as string[])
+      : [];
+    await fetch(`${serverUrl}/api/addons/${addonId}/enable`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ approvedPermissions: permissions }),
+    });
+  } catch {
+    // Non-fatal: addon is installed, user can enable manually from the UI
+  }
+
   return {
     success: true,
-    message: `Addon "${addonId}" installed. Enable it in the Addons UI or run "openaidy addon enable ${addonId}".`,
+    message: `Addon "${addonId}" installed and enabled.`,
     addonId,
   };
 }

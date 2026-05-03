@@ -24,8 +24,10 @@ export function AddonViewPage(props: Props) {
   const label = () =>
     (sidebar()?.label as string | undefined) ?? props.addon.name;
 
+  const entry = () =>
+    (manifest().entry as string | undefined) ?? 'app/index.html';
   const iframeSrc = () =>
-    `${SERVER_BASE}/addons/${props.addon.addonId}/index.html`;
+    `${SERVER_BASE}/addons/${props.addon.addonId}/${entry()}`;
 
   const [loadError, setLoadError] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
@@ -308,11 +310,10 @@ export function AddonViewPage(props: Props) {
             Could not load addon UI
           </p>
           <p class="text-sm text-text-tertiary max-w-sm">
-            Make sure you have run{' '}
+            Make sure the addon files exist at{' '}
             <code class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">
-              pnpm openaidy addon build
-            </code>{' '}
-            to compile the addon.
+              .openaidy/addons/{props.addon.addonId}/
+            </code>
           </p>
         </div>
       </Show>

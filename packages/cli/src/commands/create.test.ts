@@ -55,16 +55,24 @@ describe('Create Command', () => {
       expect(manifest.name).toBe('MyAddon');
     });
 
-    it('should create package.json', async () => {
+    it('should create index.html and index.js inside the app subfolder', async () => {
       await createAddon('MyAddon', { directory: testDir });
-      const packageJsonPath = path.join(testDir, 'myaddon', 'package.json');
-      expect(fs.existsSync(packageJsonPath)).toBe(true);
+      expect(
+        fs.existsSync(path.join(testDir, 'myaddon', 'app', 'index.html')),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(testDir, 'myaddon', 'app', 'index.js')),
+      ).toBe(true);
     });
 
-    it('should create src directory with index.ts', async () => {
+    it('should not create package.json or tsconfig.json', async () => {
       await createAddon('MyAddon', { directory: testDir });
-      const indexPath = path.join(testDir, 'myaddon', 'src', 'index.ts');
-      expect(fs.existsSync(indexPath)).toBe(true);
+      expect(fs.existsSync(path.join(testDir, 'myaddon', 'package.json'))).toBe(
+        false,
+      );
+      expect(
+        fs.existsSync(path.join(testDir, 'myaddon', 'tsconfig.json')),
+      ).toBe(false);
     });
 
     it('should skip git init when noGit option is true', async () => {

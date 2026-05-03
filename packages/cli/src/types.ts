@@ -210,7 +210,6 @@ export interface InitResult {
 export interface InstallOptions {
   serverUrl?: string;
   token?: string;
-  requireBuild?: boolean;
 }
 
 export interface InstallResult {

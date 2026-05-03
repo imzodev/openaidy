@@ -315,14 +315,14 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       .send(fs.readFileSync(sdkPath));
   });
 
-  // GET /addons/:addonId/* - Serve addon static files from dist/
+  // GET /addons/:addonId/* - Serve addon static files
   app.get<{ Params: { addonId: string; '*': string } }>(
     '/addons/:addonId/*',
     async (request, reply) => {
       const { addonId } = request.params;
       const filePath = request.params['*'] || 'index.html';
       const addonsDir = path.join(env.OPENAIDY_HOME, 'addons');
-      const fullPath = path.join(addonsDir, addonId, 'dist', filePath);
+      const fullPath = path.join(addonsDir, addonId, filePath);
 
       // Prevent path traversal
       const resolved = path.resolve(fullPath);
