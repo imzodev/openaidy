@@ -81,8 +81,6 @@ describe('Validation Utilities', () => {
     it('should accept valid template names', () => {
       expect(validateTemplateName('basic')).toBe(true);
       expect(validateTemplateName('agent')).toBe(true);
-      expect(validateTemplateName('multi-page')).toBe(true);
-      expect(validateTemplateName('config')).toBe(true);
     });
 
     it('should reject invalid template names', () => {

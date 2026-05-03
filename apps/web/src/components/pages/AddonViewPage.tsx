@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onCleanup } from 'solid-js';
+import { createSignal, Show, For, onCleanup, onMount } from 'solid-js';
 import {
   Puzzle,
   RefreshCw,
@@ -9,6 +9,7 @@ import {
   Tag,
 } from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
+import { refreshAddonToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
 const SERVER_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
@@ -37,25 +38,39 @@ export function AddonViewPage(props: Props) {
   // Crypto nonce for secure iframe communication (replaces origin check)
   const nonce = crypto.randomUUID();
 
+  // Auto-fetch addon token if missing (e.g. addon was enabled by CLI, not the UI)
+  onMount(async () => {
+    const key = `openaidy_addon_token:${props.addon.addonId}`;
+    if (!localStorage.getItem(key)) {
+      try {
+        const userToken = resolveToken();
+        if (!userToken) return;
+        const result = await refreshAddonToken(userToken, props.addon.addonId);
+        localStorage.setItem(key, result.accessToken);
+      } catch {
+        // Non-fatal — proxy routes will fail with a clear message if still missing
+      }
+    }
+  });
+
   const handleReload = () => {
     setLoadError(false);
     setReloading(true);
     setTimeout(() => setReloading(false), 50);
   };
 
-  // Inject token when iframe finishes loading
-  const handleLoad = () => {
+  const sendInit = () => {
     const token = resolveToken();
     iframeRef?.contentWindow?.postMessage(
-      {
-        type: 'OPENAIDY_INIT',
-        token,
-        apiBase: SERVER_BASE,
-        nonce,
-      },
+      { type: 'OPENAIDY_INIT', token, apiBase: SERVER_BASE, nonce },
       '*',
     );
   };
+
+  // Send on iframe load as a fallback for addons that predate ADDON_READY,
+  // and again when the addon sends ADDON_READY (see handleMessage) for reliability.
+  // Receiving OPENAIDY_INIT twice is safe — the SDK clears callbacks after the first.
+  const handleLoad = () => sendInit();
 
   // Allowlist of paths the addon proxy may forward (method + path regex)
   const ALLOWED_ROUTES: { methods: string[]; pattern: RegExp }[] = [
@@ -74,7 +89,13 @@ export function AddonViewPage(props: Props) {
   // Bridge: proxy API requests from the iframe to the real backend
   const handleMessage = async (event: MessageEvent) => {
     const msg = event.data as Record<string, unknown>;
-    if (typeof msg !== 'object' || msg.type !== 'OPENAIDY_REQUEST') return;
+    if (typeof msg !== 'object') return;
+    // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
+    if (msg.type === 'ADDON_READY') {
+      sendInit();
+      return;
+    }
+    if (msg.type !== 'OPENAIDY_REQUEST') return;
     // Validate nonce instead of origin (sandbox strips origin to 'null')
     if (msg.nonce !== nonce) return;
 

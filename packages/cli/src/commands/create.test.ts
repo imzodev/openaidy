@@ -45,7 +45,7 @@ describe('Create Command', () => {
       expect(result2.message).toContain('already exists');
     });
 
-    it('should create addon.json manifest', async () => {
+    it('should create addon.json manifest with correct fields', async () => {
       await createAddon('MyAddon', { directory: testDir });
       const addonJsonPath = path.join(testDir, 'myaddon', 'addon.json');
       expect(fs.existsSync(addonJsonPath)).toBe(true);
@@ -53,6 +53,7 @@ describe('Create Command', () => {
       const manifest = JSON.parse(fs.readFileSync(addonJsonPath, 'utf-8'));
       expect(manifest.id).toBe('myaddon');
       expect(manifest.name).toBe('MyAddon');
+      expect(manifest.entry).toBe('app/index.html');
     });
 
     it('should create index.html and index.js inside the app subfolder', async () => {
@@ -63,6 +64,45 @@ describe('Create Command', () => {
       expect(
         fs.existsSync(path.join(testDir, 'myaddon', 'app', 'index.js')),
       ).toBe(true);
+    });
+
+    it('index.html should load index.js as a script tag', async () => {
+      await createAddon('MyAddon', { directory: testDir });
+      const html = fs.readFileSync(
+        path.join(testDir, 'myaddon', 'app', 'index.html'),
+        'utf-8',
+      );
+      expect(html).toContain('<script src="index.js">');
+    });
+
+    it('index.js should send ADDON_READY to parent', async () => {
+      await createAddon('MyAddon', { directory: testDir });
+      const js = fs.readFileSync(
+        path.join(testDir, 'myaddon', 'app', 'index.js'),
+        'utf-8',
+      );
+      expect(js).toContain("postMessage({ type: 'ADDON_READY' }");
+    });
+
+    it('index.js should listen for OPENAIDY_INIT and call onSdkReady', async () => {
+      await createAddon('MyAddon', { directory: testDir });
+      const js = fs.readFileSync(
+        path.join(testDir, 'myaddon', 'app', 'index.js'),
+        'utf-8',
+      );
+      expect(js).toContain("msg.type !== 'OPENAIDY_INIT'");
+      expect(js).toContain('onSdkReady(msg)');
+      expect(js).toContain('function onSdkReady');
+    });
+
+    it('index.js should not use window.status (conflicts with browser built-in)', async () => {
+      await createAddon('MyAddon', { directory: testDir });
+      const js = fs.readFileSync(
+        path.join(testDir, 'myaddon', 'app', 'index.js'),
+        'utf-8',
+      );
+      expect(js).not.toContain("getElementById('status')");
+      expect(js).not.toContain('var status ');
     });
 
     it('should not create package.json or tsconfig.json', async () => {
@@ -79,6 +119,20 @@ describe('Create Command', () => {
       await createAddon('MyAddon', { directory: testDir, noGit: true });
       const gitDir = path.join(testDir, 'myaddon', '.git');
       expect(fs.existsSync(gitDir)).toBe(false);
+    });
+
+    it('agent template should include agent select and invoke logic', async () => {
+      await createAddon('MyAddon', {
+        directory: testDir,
+        template: 'agent',
+      });
+      const js = fs.readFileSync(
+        path.join(testDir, 'myaddon', 'app', 'index.js'),
+        'utf-8',
+      );
+      expect(js).toContain('agent-select');
+      expect(js).toContain('invokeAgent');
+      expect(js).toContain('listAgents');
     });
   });
 });

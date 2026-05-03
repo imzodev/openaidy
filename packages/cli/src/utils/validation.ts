@@ -107,7 +107,7 @@ export function validateProjectPath(path: string): ValidationResult {
  * Validate template name
  */
 export function validateTemplateName(template: string): boolean {
-  const validTemplates = ['basic', 'agent', 'multi-page', 'config'];
+  const validTemplates = ['basic', 'agent'];
   return validTemplates.includes(template);
 }
 

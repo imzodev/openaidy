@@ -7,30 +7,14 @@ import path from 'node:path';
 
 export interface TemplateOptions {
   name: string;
+  id: string;
   description?: string;
-  author?: string;
-  email?: string;
-  typescript?: boolean;
 }
 
 export interface TemplateResult {
   success: boolean;
   message: string;
   files: string[];
-}
-
-/**
- * Template variables for substitution
- */
-interface TemplateVariables {
-  name: string;
-  id: string;
-  description: string;
-  author: string;
-  email: string;
-  version: string;
-  typescript: boolean;
-  year: number;
 }
 
 /**
@@ -41,565 +25,370 @@ export async function generateFromTemplate(
   projectPath: string,
   options: TemplateOptions,
 ): Promise<TemplateResult> {
-  const {
-    name,
-    description = '',
-    author = '',
-    email = '',
-    typescript = true,
-  } = options;
-
-  // Create project ID from name
-  const id = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  const variables: TemplateVariables = {
-    name,
-    id,
-    description,
-    author,
-    email,
-    version: '1.0.0',
-    typescript,
-    year: new Date().getFullYear(),
-  };
-
-  // Generate based on template type
   switch (templateName) {
     case 'basic':
-      return generateBasicTemplate(projectPath, variables);
+      return generateBasicTemplate(projectPath, options);
     case 'agent':
-      return generateAgentTemplate(projectPath, variables);
-    case 'multi-page':
-      return generateMultiPageTemplate(projectPath, variables);
-    case 'config':
-      return generateConfigTemplate(projectPath, variables);
+      return generateAgentTemplate(projectPath, options);
     default:
       return {
         success: false,
-        message: `Unknown template: ${templateName}`,
+        message: `Unknown template: ${templateName}. Valid templates: basic, agent`,
         files: [],
       };
   }
 }
 
-/**
- * Generate basic template
- */
-async function generateBasicTemplate(
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+function writeManifest(
   projectPath: string,
-  vars: TemplateVariables,
-): Promise<TemplateResult> {
-  const files: string[] = [];
-
-  // Create directory structure
-  fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
-  fs.mkdirSync(path.join(projectPath, 'public'), { recursive: true });
-
-  // Generate addon.json
-  const manifest = generateManifest(vars);
-  fs.writeFileSync(path.join(projectPath, 'addon.json'), manifest);
-  files.push('addon.json');
-
-  // Generate src/index.ts
-  const mainContent = generateBasicMain(vars);
-  fs.writeFileSync(path.join(projectPath, 'src', 'index.ts'), mainContent);
-  files.push('src/index.ts');
-
-  // Generate package.json
-  const pkgJson = generatePackageJson(vars);
-  fs.writeFileSync(path.join(projectPath, 'package.json'), pkgJson);
-  files.push('package.json');
-
-  // Generate tsconfig.json
-  if (vars.typescript) {
-    const tsconfig = generateTsconfig();
-    fs.writeFileSync(path.join(projectPath, 'tsconfig.json'), tsconfig);
-    files.push('tsconfig.json');
-  }
-
-  return {
-    success: true,
-    message: `Generated basic template for "${vars.name}"`,
-    files,
+  opts: TemplateOptions,
+  extra: Record<string, unknown> = {},
+): void {
+  const manifest = {
+    id: opts.id,
+    name: opts.name,
+    version: '1.0.0',
+    description: opts.description ?? `${opts.name} addon for OpenAidy`,
+    openaidy: { minVersion: '0.0.0' },
+    entry: 'app/index.html',
+    permissions: ['agents.list', 'agents.invoke'],
+    ui: {
+      sidebar: { icon: 'box', label: opts.name, order: 100 },
+      routes: [{ path: `/${opts.id}`, component: 'MainPage' }],
+    },
+    agents: [],
+    config: { schema: { type: 'object', properties: {} }, defaults: {} },
+    dependencies: {},
+    ...extra,
   };
+  fs.writeFileSync(
+    path.join(projectPath, 'addon.json'),
+    JSON.stringify(manifest, null, 2),
+  );
 }
 
-/**
- * Generate agent integration template
- */
-async function generateAgentTemplate(
-  projectPath: string,
-  vars: TemplateVariables,
-): Promise<TemplateResult> {
-  const files: string[] = [];
-
-  // Create directory structure
-  fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
-  fs.mkdirSync(path.join(projectPath, 'src', 'agents'), { recursive: true });
-
-  // Generate addon.json with agent config
-  const manifest = generateAgentManifest(vars);
-  fs.writeFileSync(path.join(projectPath, 'addon.json'), manifest);
-  files.push('addon.json');
-
-  // Generate src/index.ts with agent integration
-  const mainContent = generateAgentMain(vars);
-  fs.writeFileSync(path.join(projectPath, 'src', 'index.ts'), mainContent);
-  files.push('src/index.ts');
-
-  // Generate agent implementation
-  const agentContent = generateAgentImpl(vars);
-  fs.writeFileSync(
-    path.join(projectPath, 'src', 'agents', 'main-agent.ts'),
-    agentContent,
-  );
-  files.push('src/agents/main-agent.ts');
-
-  // Generate package.json
-  fs.writeFileSync(
-    path.join(projectPath, 'package.json'),
-    generatePackageJson(vars),
-  );
-  files.push('package.json');
-
-  if (vars.typescript) {
-    fs.writeFileSync(
-      path.join(projectPath, 'tsconfig.json'),
-      generateTsconfig(),
-    );
-    files.push('tsconfig.json');
-  }
-
-  return {
-    success: true,
-    message: `Generated agent template for "${vars.name}"`,
-    files,
-  };
-}
-
-/**
- * Generate multi-page template
- */
-async function generateMultiPageTemplate(
-  projectPath: string,
-  vars: TemplateVariables,
-): Promise<TemplateResult> {
-  const files: string[] = [];
-
-  // Create directory structure
-  fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
-  fs.mkdirSync(path.join(projectPath, 'src', 'pages'), { recursive: true });
-  fs.mkdirSync(path.join(projectPath, 'src', 'components'), {
-    recursive: true,
-  });
-
-  // Generate addon.json with multiple routes
-  const manifest = generateMultiPageManifest(vars);
-  fs.writeFileSync(path.join(projectPath, 'addon.json'), manifest);
-  files.push('addon.json');
-
-  // Generate src/index.ts
-  fs.writeFileSync(
-    path.join(projectPath, 'src', 'index.ts'),
-    generateMultiPageMain(vars),
-  );
-  files.push('src/index.ts');
-
-  // Generate pages
-  fs.writeFileSync(
-    path.join(projectPath, 'src', 'pages', 'MainPage.tsx'),
-    generatePage('Main'),
-  );
-  files.push('src/pages/MainPage.tsx');
-
-  fs.writeFileSync(
-    path.join(projectPath, 'src', 'pages', 'SettingsPage.tsx'),
-    generatePage('Settings'),
-  );
-  files.push('src/pages/SettingsPage.tsx');
-
-  // Generate package.json
-  fs.writeFileSync(
-    path.join(projectPath, 'package.json'),
-    generatePackageJson(vars),
-  );
-  files.push('package.json');
-
-  if (vars.typescript) {
-    fs.writeFileSync(
-      path.join(projectPath, 'tsconfig.json'),
-      generateTsconfig(),
-    );
-    files.push('tsconfig.json');
-  }
-
-  return {
-    success: true,
-    message: `Generated multi-page template for "${vars.name}"`,
-    files,
-  };
-}
-
-/**
- * Generate configuration-focused template
- */
-async function generateConfigTemplate(
-  projectPath: string,
-  vars: TemplateVariables,
-): Promise<TemplateResult> {
-  const files: string[] = [];
-
-  // Create directory structure
-  fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
-
-  // Generate addon.json with config schema
-  const manifest = generateConfigManifest(vars);
-  fs.writeFileSync(path.join(projectPath, 'addon.json'), manifest);
-  files.push('addon.json');
-
-  // Generate config schema
-  const configSchema = generateConfigSchema();
+function writeConfigSchema(projectPath: string): void {
   fs.writeFileSync(
     path.join(projectPath, 'config-schema.json'),
-    JSON.stringify(configSchema, null, 2),
+    JSON.stringify({ type: 'object', properties: {} }, null, 2),
   );
+}
+
+function writeReadme(projectPath: string, opts: TemplateOptions): void {
+  fs.writeFileSync(
+    path.join(projectPath, 'README.md'),
+    `# ${opts.name}\n\n${opts.description ?? `${opts.name} addon for OpenAidy`}\n\n## Development\n\nEdit \`app/index.html\` and \`app/index.js\` directly — no build step needed.\n\n## Validate\n\n\`\`\`bash\nopenaidy addon validate\n\`\`\`\n`,
+  );
+}
+
+// Shared CSS for both templates
+const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    main { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #f1f5f9; }
+    .card p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }
+    label {
+      display: block;
+      font-size: 0.813rem;
+      font-weight: 500;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    select, textarea, input {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-family: inherit;
+      font-size: 0.875rem;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    select:focus, textarea:focus, input:focus { border-color: #0ea5e9; }
+    textarea { resize: vertical; min-height: 80px; }
+    .field { margin-bottom: 14px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      color: #fff;
+      background: #0ea5e9;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { opacity: 0.9; }
+    .response-box {
+      margin-top: 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      display: none;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #fff;
+      margin-top: 4px;
+    }
+    .badge-ok { background: #22c55e; }
+    .badge-err { background: #ef4444; }
+    .badge-wait { background: #0ea5e9; }`;
+
+// Shared JS for SDK loading and agent invocation (used by both templates)
+const SHARED_SDK_JS = `// Signal the parent that this addon is ready to receive OPENAIDY_INIT.
+// The parent may have already sent it before this script executed.
+window.addEventListener('message', function onInit(event) {
+  var msg = event.data;
+  if (!msg || msg.type !== 'OPENAIDY_INIT') return;
+  window.removeEventListener('message', onInit);
+  var script = document.createElement('script');
+  script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
+  script.onload = function() {
+    onSdkReady(msg);
+  };
+  document.head.appendChild(script);
+});
+window.parent.postMessage({ type: 'ADDON_READY' }, '*');`;
+
+// ---------------------------------------------------------------------------
+// Basic template — minimal hello-world addon
+// ---------------------------------------------------------------------------
+
+function generateBasicTemplate(
+  projectPath: string,
+  opts: TemplateOptions,
+): TemplateResult {
+  const files: string[] = [];
+  const uiDir = path.join(projectPath, 'app');
+  fs.mkdirSync(uiDir, { recursive: true });
+
+  writeManifest(projectPath, opts);
+  files.push('addon.json');
+
+  writeConfigSchema(projectPath);
   files.push('config-schema.json');
 
-  // Generate src/index.ts
-  fs.writeFileSync(
-    path.join(projectPath, 'src', 'index.ts'),
-    generateConfigMain(vars),
-  );
-  files.push('src/index.ts');
+  writeReadme(projectPath, opts);
+  files.push('README.md');
 
-  // Generate package.json
-  fs.writeFileSync(
-    path.join(projectPath, 'package.json'),
-    generatePackageJson(vars),
-  );
-  files.push('package.json');
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${opts.name}</title>
+  <style>
+${SHARED_CSS}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>${opts.name}</h2>
+      <p id="status-el">Connecting to OpenAidy...</p>
+    </div>
+  </main>
+  <script src="index.js"></script>
+</body>
+</html>
+`;
+  fs.writeFileSync(path.join(uiDir, 'index.html'), html);
+  files.push('app/index.html');
 
-  if (vars.typescript) {
-    fs.writeFileSync(
-      path.join(projectPath, 'tsconfig.json'),
-      generateTsconfig(),
-    );
-    files.push('tsconfig.json');
+  const js = `var statusEl = document.getElementById('status-el');
+var _initReceived = false;
+
+${SHARED_SDK_JS}
+
+// Show an error if the SDK init message never arrives (e.g. addon not enabled)
+setTimeout(function() {
+  if (!_initReceived) {
+    statusEl.textContent = 'Not connected \u2014 make sure the addon is enabled in OpenAidy.';
+    statusEl.style.color = '#f87171';
   }
+}, 5000);
+
+function onSdkReady(msg) {
+  _initReceived = true;
+  OpenAidy.ready(function(sdk) {
+    statusEl.textContent = 'Connected \u2713';
+    statusEl.style.color = '#4ade80';
+    // TODO: add your addon logic here using the sdk object.
+    // Example: sdk.listAgents().then(function(result) { ... });
+  });
+}
+`;
+  fs.writeFileSync(path.join(uiDir, 'index.js'), js);
+  files.push('app/index.js');
 
   return {
     success: true,
-    message: `Generated config template for "${vars.name}"`,
+    message: `Generated basic template for "${opts.name}"`,
     files,
   };
 }
 
-// Helper functions for generating content
+// ---------------------------------------------------------------------------
+// Agent template — agent runner with select + prompt UI
+// ---------------------------------------------------------------------------
 
-function generateManifest(vars: TemplateVariables): string {
-  return JSON.stringify(
-    {
-      id: vars.id,
-      name: vars.name,
-      version: vars.version,
-      description: vars.description || `${vars.name} addon for OpenAidy`,
-      author: {
-        name: vars.author,
-        email: vars.email,
-      },
-      openaidy: {
-        minVersion: '1.0.0',
-        maxVersion: '2.0.0',
-      },
-      entry: 'dist/index.js',
-      permissions: [],
-      ui: {
-        sidebar: {
-          icon: 'box',
-          label: vars.name,
-          order: 100,
-        },
-        routes: [
-          {
-            path: `/${vars.id}`,
-            component: 'MainPage',
-          },
-        ],
-      },
-      agents: [],
-      config: {
-        schema: './config-schema.json',
-        defaults: {},
-      },
-    },
-    null,
-    2,
-  );
-}
+function generateAgentTemplate(
+  projectPath: string,
+  opts: TemplateOptions,
+): TemplateResult {
+  const files: string[] = [];
+  const uiDir = path.join(projectPath, 'app');
+  fs.mkdirSync(uiDir, { recursive: true });
 
-function generateAgentManifest(vars: TemplateVariables): string {
-  const manifest = JSON.parse(generateManifest(vars));
-  manifest.agents = [
-    {
-      id: vars.id,
-      required: true,
-      description: `${vars.name} main agent`,
-    },
-  ];
-  manifest.ui.routes = [
-    { path: `/${vars.id}`, component: 'MainPage' },
-    { path: `/${vars.id}/settings`, component: 'SettingsPage' },
-  ];
-  return JSON.stringify(manifest, null, 2);
-}
+  writeManifest(projectPath, opts);
+  files.push('addon.json');
 
-function generateMultiPageManifest(vars: TemplateVariables): string {
-  const manifest = JSON.parse(generateManifest(vars));
-  manifest.ui.routes = [
-    { path: `/${vars.id}`, component: 'MainPage' },
-    { path: `/${vars.id}/settings`, component: 'SettingsPage' },
-    { path: `/${vars.id}/about`, component: 'AboutPage' },
-  ];
-  return JSON.stringify(manifest, null, 2);
-}
+  writeConfigSchema(projectPath);
+  files.push('config-schema.json');
 
-function generateConfigManifest(vars: TemplateVariables): string {
-  const manifest = JSON.parse(generateManifest(vars));
-  manifest.config = {
-    schema: './config-schema.json',
-    defaults: {
-      setting1: 'value1',
-      setting2: true,
-    },
-  };
-  return JSON.stringify(manifest, null, 2);
-}
+  writeReadme(projectPath, opts);
+  files.push('README.md');
 
-function generateBasicMain(vars: TemplateVariables): string {
-  return `/**
- * ${vars.name} Addon
- * Generated by OpenAidy CLI
- */
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${opts.name}</title>
+  <style>
+${SHARED_CSS}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>Agent Runner</h2>
+      <p>Select an agent, type a prompt, and send it.</p>
+    </div>
 
-export default {
-  id: '${vars.id}',
-  name: '${vars.name}',
-  version: '${vars.version}',
-
-  async render() {
-    return {
-      component: {
-        name: 'MainPage',
-        props: {},
-      },
-    };
-  },
-};
+    <div class="card">
+      <div class="field">
+        <label for="agent-select">Agent</label>
+        <select id="agent-select" disabled>
+          <option value="">Loading agents...</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="prompt-input">Prompt</label>
+        <textarea id="prompt-input" placeholder="Ask the agent something..." disabled></textarea>
+      </div>
+      <button class="btn" id="send-btn" disabled>Send</button>
+      <div class="response-box" id="response-box"></div>
+    </div>
+  </main>
+  <script src="index.js"></script>
+</body>
+</html>
 `;
+  fs.writeFileSync(path.join(uiDir, 'index.html'), html);
+  files.push('app/index.html');
+
+  const js = `var agentSelect = document.getElementById('agent-select');
+var promptInput = document.getElementById('prompt-input');
+var sendBtn     = document.getElementById('send-btn');
+var responseBox = document.getElementById('response-box');
+var _sdk;
+
+function setResponse(text, type) {
+  responseBox.style.display = 'block';
+  responseBox.innerHTML = '';
+  var badge = document.createElement('span');
+  badge.className = 'badge ' + (type === 'error' ? 'badge-err' : type === 'wait' ? 'badge-wait' : 'badge-ok');
+  badge.textContent = type === 'error' ? 'Error' : type === 'wait' ? 'Sending...' : 'Response';
+  responseBox.appendChild(badge);
+  var content = document.createElement('p');
+  content.style.marginTop = '10px';
+  content.textContent = text;
+  responseBox.appendChild(content);
 }
 
-function generateAgentMain(vars: TemplateVariables): string {
-  return `/**
- * ${vars.name} Addon - Agent Integration
- * Generated by OpenAidy CLI
- */
+${SHARED_SDK_JS}
 
-import { MainAgent } from './agents/main-agent.js';
+function onSdkReady(msg) {
+  OpenAidy.ready(function(sdk) {
+    _sdk = sdk;
+    sdk.listAgents().then(function(result) {
+      var agents = result.items || result.agents || result || [];
+      agentSelect.innerHTML = '';
+      if (agents.length === 0) {
+        agentSelect.innerHTML = '<option value="">No agents available</option>';
+      } else {
+        agents.forEach(function(agent) {
+          var opt = document.createElement('option');
+          opt.value = agent.id || agent.agentId || '';
+          opt.textContent = agent.name || agent.id || 'Unnamed';
+          agentSelect.appendChild(opt);
+        });
+        agentSelect.disabled = false;
+        promptInput.disabled = false;
+        sendBtn.disabled = false;
+      }
+    }).catch(function(e) {
+      agentSelect.innerHTML = '<option value="">Failed to load agents</option>';
+      setResponse(e.message, 'error');
+    });
+  });
+}
 
-export default {
-  id: '${vars.id}',
-  name: '${vars.name}',
-  version: '${vars.version}',
-  agent: MainAgent,
-
-  async render() {
-    return {
-      component: {
-        name: 'MainPage',
-        props: {},
-      },
-    };
-  },
-};
+sendBtn.addEventListener('click', function() {
+  var agentId = agentSelect.value;
+  var prompt  = promptInput.value.trim();
+  if (!agentId || !prompt) return;
+  sendBtn.disabled = true;
+  setResponse('Waiting for agent response...', 'wait');
+  _sdk.invokeAgent(agentId, prompt).then(function(result) {
+    setResponse(result.message || JSON.stringify(result, null, 2), 'ok');
+  }).catch(function(e) {
+    setResponse(e.message, 'error');
+  }).finally(function() {
+    sendBtn.disabled = false;
+  });
+});
 `;
-}
+  fs.writeFileSync(path.join(uiDir, 'index.js'), js);
+  files.push('app/index.js');
 
-function generateMultiPageMain(vars: TemplateVariables): string {
-  return `/**
- * ${vars.name} Addon - Multi-Page
- * Generated by OpenAidy CLI
- */
-
-export default {
-  id: '${vars.id}',
-  name: '${vars.name}',
-  version: '${vars.version}',
-  pages: ['MainPage', 'SettingsPage', 'AboutPage'],
-
-  async render(page?: string) {
-    const componentName = page || 'MainPage';
-    return {
-      component: {
-        name: componentName,
-        props: {},
-      },
-    };
-  },
-};
-`;
-}
-
-function generateConfigMain(vars: TemplateVariables): string {
-  return `/**
- * ${vars.name} Addon - Configuration
- * Generated by OpenAidy CLI
- */
-
-export default {
-  id: '${vars.id}',
-  name: '${vars.name}',
-  version: '${vars.version}',
-
-  async render(config) {
-    return {
-      component: {
-        name: 'ConfigPage',
-        props: { config },
-      },
-    };
-  },
-
-  async validateConfig(config) {
-    // Configuration validation logic
-    return { valid: true };
-  },
-};
-`;
-}
-
-function generateAgentImpl(vars: TemplateVariables): string {
-  return `/**
- * Main Agent Implementation
- * Agent for ${vars.name} addon
- */
-
-export class MainAgent {
-  id = '${vars.id}';
-  
-  async invoke(input: any): Promise<any> {
-    // Agent invocation logic
-    return { result: 'processed' };
-  }
-
-  async initialize(): Promise<void> {
-    // Agent initialization
-  }
-
-  async cleanup(): Promise<void> {
-    // Agent cleanup
-  }
-}
-
-export const MainAgentInstance = new MainAgent();
-`;
-}
-
-function generatePage(name: string): string {
-  return `/**
- * ${name} Page Component
- */
-
-export function ${name}Page(props: any) {
   return {
-    render() {
-      return (
-        <div class="${name.toLowerCase()}">
-          <h1>${name}</h1>
-          <p>Welcome to the ${name} page</p>
-        </div>
-      );
-    }
+    success: true,
+    message: `Generated agent template for "${opts.name}"`,
+    files,
   };
-}
-`;
-}
-
-function generateConfigSchema(): string {
-  return JSON.stringify(
-    {
-      type: 'object',
-      properties: {
-        setting1: {
-          type: 'string',
-          description: 'First setting',
-          default: 'value1',
-        },
-        setting2: {
-          type: 'boolean',
-          description: 'Second setting',
-          default: true,
-        },
-        setting3: {
-          type: 'number',
-          description: 'Third setting',
-          default: 42,
-        },
-      },
-      required: [],
-    },
-    null,
-    2,
-  );
-}
-
-function generatePackageJson(vars: TemplateVariables): string {
-  return JSON.stringify(
-    {
-      name: `@openaidy/addon-${vars.id}`,
-      version: vars.version,
-      description: vars.description || `${vars.name} addon for OpenAidy`,
-      main: 'dist/index.js',
-      scripts: {
-        build: 'openaidy build',
-        dev: 'openaidy dev',
-        test: 'openaidy test',
-        validate: 'openaidy validate',
-      },
-      dependencies: {
-        '@openaidy/sdk': 'workspace:*',
-      },
-      devDependencies: {
-        typescript: '^5.0.0',
-      },
-    },
-    null,
-    2,
-  );
-}
-
-function generateTsconfig(): string {
-  return JSON.stringify(
-    {
-      compilerOptions: {
-        target: 'ES2020',
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        outDir: 'dist',
-        rootDir: 'src',
-        jsx: 'preserve',
-        jsxImportSource: 'solid-js',
-      },
-      include: ['src/**/*'],
-    },
-    null,
-    2,
-  );
 }
 
 /**
@@ -609,19 +398,11 @@ export function listTemplates(): Array<{ name: string; description: string }> {
   return [
     {
       name: 'basic',
-      description: 'Simple single-page addon with basic functionality',
+      description: 'Minimal addon — hello world with SDK connection',
     },
     {
       name: 'agent',
-      description: 'Addon with AI agent integration and communication',
-    },
-    {
-      name: 'multi-page',
-      description: 'Multi-page addon with navigation and routing',
-    },
-    {
-      name: 'config',
-      description: 'Configuration-focused addon with settings management',
+      description: 'Agent runner — select an agent and invoke it with a prompt',
     },
   ];
 }

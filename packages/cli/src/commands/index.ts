@@ -429,31 +429,6 @@ registerCommand(
 );
 
 registerCommand(
-  'addon init',
-  async (args) => {
-    const { addonInitHandler } = await import('./addons/init.js');
-    return addonInitHandler(args);
-  },
-  {
-    description: 'Initialize an existing project as an addon',
-    usage: 'openaidy addon init [--force]',
-  },
-);
-
-registerCommand(
-  'addon build',
-  async (args) => {
-    const { addonBuildHandler } = await import('./addons/build.js');
-    return addonBuildHandler(args);
-  },
-  {
-    description: 'Build addon for production',
-    usage:
-      'openaidy addon build [<addon-name>] [--watch] [--minify] [--sourcemap]',
-  },
-);
-
-registerCommand(
   'addon validate',
   async (args) => {
     const { addonValidateHandler } = await import('./addons/validate.js');
@@ -462,30 +437,6 @@ registerCommand(
   {
     description: 'Validate addon package and manifest',
     usage: 'openaidy addon validate [--verbose] [--strict]',
-  },
-);
-
-registerCommand(
-  'addon dev',
-  async (args) => {
-    const { addonDevHandler } = await import('./addons/dev.js');
-    return addonDevHandler(args);
-  },
-  {
-    description: 'Start development server with hot-reloading',
-    usage: 'openaidy addon dev [--port <port>]',
-  },
-);
-
-registerCommand(
-  'addon publish',
-  async (args) => {
-    const { addonPublishHandler } = await import('./addons/publish.js');
-    return addonPublishHandler(args);
-  },
-  {
-    description: 'Publish addon to the registry',
-    usage: 'openaidy addon publish [--tag <tag>] [--registry <url>]',
   },
 );
 
