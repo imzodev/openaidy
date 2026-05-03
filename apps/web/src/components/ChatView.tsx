@@ -2,7 +2,7 @@ import { Show, For, createEffect } from 'solid-js';
 import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import { TypingIndicator } from './TypingIndicator';
-import { MessageContent } from './MessageContent';
+import { MessageContent, ToolResultBlock } from './MessageContent';
 
 type ChatViewProps = {
   messages: SessionMessage[];
@@ -152,7 +152,15 @@ export function ChatView(props: ChatViewProps) {
                       {new Date(message.createdAt).toLocaleTimeString()}
                     </span>
                   </div>
-                  <MessageContent content={message.content} />
+                  <Show
+                    when={message.role === 'tool'}
+                    fallback={<MessageContent content={message.content} />}
+                  >
+                    <ToolResultBlock
+                      content={message.content}
+                      isMcp={isMcpTool(message)}
+                    />
+                  </Show>
                 </div>
               </div>
             </div>
