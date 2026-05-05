@@ -10,8 +10,8 @@ import type { RunEvent, RunEventEmitter } from './events';
 import type { McpClientService } from '../mcp';
 import type { McpToolDefinition } from '../mcp/client';
 import type { SkillRegistry } from '../skills';
-import { sanitizeSkillBody } from '../skills/sanitize.js';
 import type { AgentPersonalityService } from '../agents/personality-service';
+import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -703,28 +703,13 @@ export class DispatchService {
   ): Promise<Message[]> {
     const messages: Message[] = [];
 
-    // Build full system prompt: base + personality files + skills
-    let fullSystemPrompt = systemPrompt;
-
-    // Inject personality markdown files (AGENT, USER, MISSION, RULES)
-    if (this.personality) {
-      const blocks = await this.personality.readAllForInjection(agentId);
-      for (const { meta, content } of blocks) {
-        fullSystemPrompt += `\n\n[${meta.systemPromptBlock}]\n${content}\n[/${meta.systemPromptBlock}]`;
-      }
-    }
-
-    if (skillIds?.length && this.skills) {
-      const bodies = this.skills
-        .getSkillsForAgent(skillIds)
-        .map((s) => sanitizeSkillBody(s.body))
-        .filter(Boolean)
-        .join('\n\n---\n\n');
-      if (bodies) {
-        fullSystemPrompt +=
-          '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
-      }
-    }
+    const fullSystemPrompt = await buildSystemPrompt({
+      agentId,
+      basePrompt: systemPrompt,
+      ...(skillIds ? { skillIds } : {}),
+      personalityService: this.personality,
+      skillRegistry: this.skills,
+    });
 
     // Add system prompt first
     messages.push({
