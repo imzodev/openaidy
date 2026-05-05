@@ -67,7 +67,20 @@ export async function buildSystemPrompt(
     if (isFirstMessage) {
       const blankLabels = await personalityService.getBlankFileLabels(agentId);
       if (blankLabels.length > 0) {
-        prompt += `\n\n[ONBOARDING]\nSome context about you and the user has not been configured yet: ${blankLabels.join(', ')}. Before answering the user's message, greet them warmly, then ask them specific onboarding questions to fill in what is missing — one thing at a time, starting with the most important. Be concrete and give 2-3 short examples per question so the user knows what kind of answer to give. For Agent Identity: ask what name and emoji they would like, and what tone (e.g. "direct and concise", "warm and encouraging", "formal and precise"). For User Profile: ask their name, role, and how technical they are (e.g. "senior engineer", "product designer", "non-technical founder"). For Mission: ask what project or goal they are working on and the main technology or tools involved. For Rules: ask if there are any hard constraints the agent must always follow (e.g. "always respond in Spanish", "never suggest paid tools").\n[/ONBOARDING]`;
+        prompt += `\n\n[ONBOARDING]
+The following personality context has not been configured yet: ${blankLabels.join(', ')}.
+
+Before answering the user's message, greet them warmly and run through the missing onboarding questions — one at a time, starting with the most important. For each question, use the present_choices tool to present clear, selectable options. The user can pick one or type their own answer.
+
+Use these questions and choices in order for whichever files are blank:
+
+- Agent Identity: call present_choices with question "What tone should I use?" and choices like ["Direct and concise 🎯", "Warm and encouraging 🌱", "Formal and precise 📋", "Playful and creative 🎨"]. Then ask for a name with choices like ["Keep it simple — just 'Assistant'", "Give me a name like Nova, Scout, or Sage", "Let me type my own"].
+- User Profile: call present_choices with question "How should I think of you?" and choices like ["Software engineer 💻", "Product designer 🎨", "Founder / non-technical 🚀", "Student or learner 📚"].
+- Mission: call present_choices with question "What are we mainly working on?" and choices like ["A software project", "Content or writing", "Research or learning", "Business or strategy"].
+- Rules: call present_choices with question "Any hard rules I should always follow?" and choices like ["Always be concise", "Never suggest paid tools", "Always respond in English", "No strict rules — use your judgment"].
+
+After each answer, acknowledge it briefly and move to the next question. Do not ask everything at once.
+[/ONBOARDING]`;
       }
     }
   }
