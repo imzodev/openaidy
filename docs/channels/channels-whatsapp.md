@@ -554,6 +554,48 @@ pnpm --filter @openaidy/server add --save-dev @types/qrcode
 
 ---
 
+## Access Control — Two Separate Concerns
+
+The openaidy auth system (JWT bearer tokens) and channel access control are **completely
+separate** and must not be confused.
+
+### Management plane — JWT auth
+
+Routes like `POST /channels/:id/connect`, `GET /channels/:id/status`, and the QR SSE stream
+are protected by `requireAuth()` middleware (same as all other openaidy API routes). These are
+called by **you** from the web UI to manage the channel. A valid JWT is required.
+
+### Channel user plane — allowlist
+
+When a WhatsApp contact sends a message, **no HTTP request is made**. The Baileys socket fires
+a `messages.upsert` event entirely within the server process. The JWT auth middleware is never
+invoked. Instead, access control is handled by the `allowlist` field in the channel config:
+
+```json
+{ "allowlist": [] }           // empty = everyone can message the bot
+{ "allowlist": ["15551234567"] } // only this number is allowed
+```
+
+The full inbound flow — from Baileys event to `SessionMessageService` call to WA reply — never
+touches HTTP auth:
+
+```
+WA contact sends message
+  → Baileys 'messages.upsert' event (in-process)
+  → message-handler checks allowlist (phone number filter)
+  → sessionService.submitMessageNonStreaming() called directly
+  → agent runs, reply sent via sock.sendMessage()
+```
+
+### Identity model for channel contacts
+
+Channel contacts are identified solely by their WhatsApp phone number (`waId`). There is no
+openaidy user account associated with them. Each contact gets their own persistent session
+(keyed on `whatsapp:{channelId}:{waId}`) which maintains their full conversation history with
+the agent.
+
+---
+
 ## Session Keying Strategy
 
 Each external contact maps to a persistent openaidy session. The key is:
