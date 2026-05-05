@@ -358,6 +358,9 @@ export class SessionMessageService {
       ...(agent?.skills ? { skillIds: agent.skills } : {}),
       personalityService: this.personalityService,
       skillRegistry: this.skillRegistry,
+      isFirstMessage: history.length === 0,
+      userMessage: input.content,
+      providers: this.providers,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -508,9 +511,12 @@ export class SessionMessageService {
     const systemPrompt = await buildSystemPrompt({
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
-      skillIds: agent?.skills,
+      ...(agent?.skills && { skillIds: agent.skills }),
       personalityService: this.personalityService,
       skillRegistry: this.skillRegistry,
+      isFirstMessage: history.length === 0,
+      userMessage: input.content,
+      providers: this.providers,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]

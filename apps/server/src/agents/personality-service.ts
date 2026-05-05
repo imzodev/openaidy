@@ -8,9 +8,17 @@ import type {
 } from '@openaidy/shared-types';
 
 /**
- * Canonical metadata for each personality file.
- * Order here determines injection order in the system prompt.
+ * Returns true if the file content is still the unedited default template
+ * (only contains HTML comment blocks and markdown headings, no real content).
  */
+export function isDefaultContent(content: string): boolean {
+  const stripped = content
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^#+\s.*$/gm, '')
+    .trim();
+  return stripped.length === 0;
+}
+
 export const PERSONALITY_FILES: PersonalityFileMeta[] = [
   {
     id: 'AGENT',
@@ -200,9 +208,25 @@ export class AgentPersonalityService {
   }
 
   /**
-   * Read all personality files and return them as a map of block → content.
-   * Used by the dispatch service for system-prompt injection.
-   * Files that don't exist return empty string (no block injected).
+   * Returns the labels of personality files that are still at default (unedited) content.
+   */
+  async getBlankFileLabels(agentId: string): Promise<string[]> {
+    const blank: string[] = [];
+    for (const meta of PERSONALITY_FILES) {
+      const path = join(this.agentDir(agentId), meta.filename);
+      if (!existsSync(path)) {
+        blank.push(meta.label);
+        continue;
+      }
+      const content = await readFile(path, 'utf-8');
+      if (isDefaultContent(content)) blank.push(meta.label);
+    }
+    return blank;
+  }
+
+  /**
+   * Read all personality files for system-prompt injection.
+   * Skips files that don't exist or still contain only the default template.
    */
   async readAllForInjection(
     agentId: string,
@@ -214,7 +238,7 @@ export class AgentPersonalityService {
       if (!existsSync(path)) continue;
       const content = await readFile(path, 'utf-8');
       const trimmed = content.trim();
-      if (trimmed) {
+      if (trimmed && !isDefaultContent(trimmed)) {
         results.push({ meta, content: trimmed });
       }
     }
