@@ -64,7 +64,7 @@ describe('present_choices tool', () => {
 
   it('should accept 2–6 choices in the parameters schema', () => {
     const tool = getPresentChoicesTool();
-    const params = tool.parameters as {
+    const params = tool.parameters as unknown as {
       properties: { choices: { minItems: number; maxItems: number } };
       required: string[];
     };
@@ -75,7 +75,7 @@ describe('present_choices tool', () => {
 
   it('should NOT require question field', () => {
     const tool = getPresentChoicesTool();
-    const params = tool.parameters as { required: string[] };
+    const params = tool.parameters as unknown as { required: string[] };
     expect(params.required).not.toContain('question');
   });
 });
@@ -177,7 +177,7 @@ describe('tool execute() — event emission', () => {
     );
 
     await new Promise((r) => setTimeout(r, 0));
-    expect(emittedEvents[0].question).toBe('');
+    expect(emittedEvents[0]?.question).toBeUndefined();
 
     resolvePendingChoice('sess-1', 'run-1', 'Yes', 0);
     await runPromise;
@@ -206,6 +206,7 @@ describe('tool execute() — pending choice resolution', () => {
 
     const result = await runPromise;
     expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok result');
     const parsed = JSON.parse(result.content);
     expect(parsed).toMatchObject({ selected: 'C', index: 2 });
   });
@@ -226,6 +227,7 @@ describe('tool execute() — pending choice resolution', () => {
     resolvePendingChoice('sess-idx', 'run-idx', 'First', 0);
 
     const result = await runPromise;
+    if (!result.ok) throw new Error('expected ok result');
     const parsed = JSON.parse(result.content);
     expect(parsed.index).toBe(0);
   });
@@ -263,6 +265,7 @@ describe('resolvePendingChoice', () => {
     expect(result).toBe(true);
 
     const resolved = await runPromise;
+    if (!resolved.ok) throw new Error('expected ok result');
     const parsed = JSON.parse(resolved.content);
     expect(parsed.selected).toBe('Y');
   });

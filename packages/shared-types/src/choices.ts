@@ -22,6 +22,6 @@ export type ChoicesEvent = {
   runId: string;
   sessionId: string;
   agentId: string;
-  question: string;
+  question?: string;
   choices: string[];
 };

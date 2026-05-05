@@ -166,7 +166,7 @@ export function createPresentChoicesTool(
         runId,
         sessionId,
         agentId: ctx.agentId,
-        question: question ?? '',
+        ...(question !== undefined && { question }),
         choices: choices as string[],
       };
 
