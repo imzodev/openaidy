@@ -2,7 +2,9 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { CreateAgentInput } from '../types';
-import type { McpServerRef } from '@openaidy/shared-types';
+import type { McpServerRef, PersonalityFileId } from '@openaidy/shared-types';
+import type { AgentPersonalityService } from '../agents/personality-service';
+import { PERSONALITY_FILES } from '../agents/personality-service';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -10,6 +12,7 @@ import { requireAuth } from '../middleware/require-auth';
  */
 export type AgentRoutesOptions = {
   agentRegistry: AgentRegistry;
+  personalityService: AgentPersonalityService;
   authMiddleware: AuthMiddleware;
 };
 
@@ -17,7 +20,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { agentRegistry, authMiddleware } = options;
+  const { agentRegistry, personalityService, authMiddleware } = options;
 
   app.addHook(
     'preHandler',
@@ -59,6 +62,8 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
 
     try {
       const agent = agentRegistry.createAgent(body as CreateAgentInput);
+      // Scaffold personality files for the new agent (fire and forget — non-fatal)
+      personalityService.scaffold(agent.id).catch(() => {});
       reply.code(201);
       return agent;
     } catch (err) {
@@ -81,6 +86,76 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
       return { error: 'Agent not found', agentId };
     }
     return { deleted };
+  });
+
+  /**
+   * GET /agents/:agentId/personality
+   * List all personality file metadata for an agent.
+   */
+  app.get('/agents/:agentId/personality', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    if (!agentRegistry.hasAgent(agentId)) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+    return { files: PERSONALITY_FILES };
+  });
+
+  /**
+   * GET /agents/:agentId/personality/:fileId
+   * Read a specific personality file (AGENT, USER, MISSION, RULES).
+   */
+  app.get('/agents/:agentId/personality/:fileId', async (request, reply) => {
+    const { agentId, fileId } = request.params as {
+      agentId: string;
+      fileId: string;
+    };
+    if (!agentRegistry.hasAgent(agentId)) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+    const valid = PERSONALITY_FILES.find((f) => f.id === fileId);
+    if (!valid) {
+      reply.code(400);
+      return { error: `Unknown personality file: ${fileId}` };
+    }
+    const file = await personalityService.readFile(
+      agentId,
+      fileId as PersonalityFileId,
+    );
+    return file;
+  });
+
+  /**
+   * PUT /agents/:agentId/personality/:fileId
+   * Write (create or overwrite) a personality file.
+   * Body: { content: string }
+   */
+  app.put('/agents/:agentId/personality/:fileId', async (request, reply) => {
+    const { agentId, fileId } = request.params as {
+      agentId: string;
+      fileId: string;
+    };
+    if (!agentRegistry.hasAgent(agentId)) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+    const valid = PERSONALITY_FILES.find((f) => f.id === fileId);
+    if (!valid) {
+      reply.code(400);
+      return { error: `Unknown personality file: ${fileId}` };
+    }
+    const body = request.body as { content?: unknown };
+    if (typeof body?.content !== 'string') {
+      reply.code(400);
+      return { error: 'Invalid request: content must be a string' };
+    }
+    await personalityService.writeFile(
+      agentId,
+      fileId as PersonalityFileId,
+      body.content,
+    );
+    return { ok: true };
   });
 
   /**

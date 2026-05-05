@@ -12,8 +12,12 @@ import {
   type CreateAccessTokenResponse,
   type AuthVerifyResponse,
   type McpServerRef,
+  type PersonalityFileId,
+  type PersonalityFileMeta,
+  type PersonalityFile,
   ApiRequestError,
 } from '@openaidy/shared-types';
+export type { PersonalityFileId, PersonalityFileMeta, PersonalityFile };
 import { getStoredToken } from './auth-token';
 export type { McpServerRef };
 export type { AccessTokenRecord, CreateAccessTokenResponse };
@@ -396,6 +400,59 @@ export async function createAgent(input: CreateAgentInput): Promise<Agent> {
     throw new Error(
       (err as { error?: string }).error ??
         `Failed to create agent: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+/**
+ * Get personality file metadata for an agent
+ */
+export async function listPersonalityFiles(
+  agentId: string,
+): Promise<{ files: PersonalityFileMeta[] }> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}/personality`);
+  if (!response.ok) {
+    throw new Error(`Failed to list personality files: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Read a single personality file for an agent
+ */
+export async function getPersonalityFile(
+  agentId: string,
+  fileId: PersonalityFileId,
+): Promise<PersonalityFile> {
+  const response = await apiFetch(
+    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to get personality file: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Write (create or overwrite) a personality file for an agent
+ */
+export async function updatePersonalityFile(
+  agentId: string,
+  fileId: PersonalityFileId,
+  content: string,
+): Promise<{ ok: boolean }> {
+  const response = await apiFetch(
+    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `Failed to update personality file: ${response.statusText}`,
     );
   }
   return response.json();

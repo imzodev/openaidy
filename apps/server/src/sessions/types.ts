@@ -58,6 +58,7 @@ import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
 import type { BuiltinToolRegistry } from '../tools';
 import type { SkillRegistry } from '../skills';
+import type { AgentPersonalityService } from '../agents/personality-service';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -76,6 +77,8 @@ export type SessionMessageServiceOptions = {
   builtinTools?: BuiltinToolRegistry;
   /** Registry of skills for skill injection into system prompt */
   skills?: SkillRegistry;
+  /** Service for reading personality markdown files per agent */
+  personality?: AgentPersonalityService;
   getDefaultAgentId?: () => string | undefined;
   repositories?:
     | {

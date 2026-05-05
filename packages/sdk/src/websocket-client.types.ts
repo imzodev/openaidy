@@ -179,6 +179,7 @@ export type SessionCreateOptions = {
  */
 export type MessageOptions = {
   stream?: boolean;
+  agentId?: string;
   providerId?: string;
   modelId?: string;
   metadata?: Record<string, unknown>;

@@ -51,6 +51,7 @@ import { toolRoutes } from './routes/tools';
 import { createSkillRegistry } from './skills';
 import { skillRoutes } from './routes/skills';
 import { seedBundledSkills } from './skills/seed';
+import { createAgentPersonalityService } from './agents/personality-service';
 import path from 'node:path';
 import type { AppServices } from './types';
 
@@ -145,6 +146,10 @@ export async function buildApp() {
     baseDir: env.WORKSPACE_BASE_DIR,
   });
 
+  const personalityService = createAgentPersonalityService({
+    workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+  });
+
   const execService = createExecService();
 
   // Create AddonService early so it can be injected into the builtin tool registry
@@ -178,6 +183,7 @@ export async function buildApp() {
     mcp: mcpService,
     builtinTools: builtinToolRegistry,
     skills: skillRegistry,
+    personality: personalityService,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     repositories: dbAdapter
       ? {
@@ -231,6 +237,7 @@ export async function buildApp() {
     workspace: workspaceService,
     mcpService,
     skills: skillRegistry,
+    personality: personalityService,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -284,6 +291,7 @@ export async function buildApp() {
   // Register agent routes
   await app.register(agentRoutes, {
     agentRegistry: services.agents,
+    personalityService: services.personality,
     authMiddleware,
   });
 

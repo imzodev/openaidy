@@ -8,3 +8,4 @@ export * from './api.js';
 export * from './addon.js';
 export * from './mcp.js';
 export * from './agents.js';
+export * from './personality.js';

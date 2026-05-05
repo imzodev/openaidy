@@ -145,6 +145,7 @@ export async function submitMessage(
     async (client) => {
       const response = await client.sendMessage(sessionId, input.content, {
         stream: false,
+        agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
       });
@@ -215,6 +216,7 @@ export async function submitMessageStreaming(
     async (client) => {
       const response = await client.sendMessage(sessionId, input.content, {
         stream: true,
+        agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
       });

@@ -11,6 +11,7 @@ import type { McpClientService } from '../mcp';
 import type { McpToolDefinition } from '../mcp/client';
 import type { SkillRegistry } from '../skills';
 import { sanitizeSkillBody } from '../skills/sanitize.js';
+import type { AgentPersonalityService } from '../agents/personality-service';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -117,6 +118,8 @@ export type DispatchServiceOptions = {
   runEvents?: RunEventEmitter;
   /** Optional skill registry for injecting skill bodies into system prompts */
   skills?: SkillRegistry;
+  /** Optional personality service for injecting per-agent markdown context files */
+  personality?: AgentPersonalityService;
 };
 
 /**
@@ -146,6 +149,7 @@ export class DispatchService {
   private readonly systemDefaults: SystemDefaults;
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly skills: SkillRegistry | undefined;
+  private readonly personality: AgentPersonalityService | undefined;
 
   constructor(options: DispatchServiceOptions) {
     this.agents = options.agents;
@@ -153,6 +157,7 @@ export class DispatchService {
     this.mcp = options.mcp;
     this.runEvents = options.runEvents;
     this.skills = options.skills;
+    this.personality = options.personality;
 
     // Default system defaults
     this.systemDefaults = options.systemDefaults ?? {
@@ -318,7 +323,8 @@ export class DispatchService {
     // 6. Build messages with agent system prompt + skills
     const history = await this.listMessages(input.sessionId);
     const agent = this.agents.getAgent(config.agentId);
-    const messages: Message[] = this.buildMessages(
+    const messages: Message[] = await this.buildMessages(
+      config.agentId,
       history,
       config.systemPrompt,
       agent?.skills,
@@ -473,7 +479,8 @@ export class DispatchService {
     // 6. Build messages with agent system prompt + skills
     const history = await this.listMessages(input.sessionId);
     const agent = this.agents.getAgent(config.agentId);
-    const messages: Message[] = this.buildMessages(
+    const messages: Message[] = await this.buildMessages(
+      config.agentId,
       history,
       config.systemPrompt,
       agent?.skills,
@@ -688,15 +695,25 @@ export class DispatchService {
    * - [SKILL_CONTEXTS] ... [/SKILL_CONTEXTS] — wraps all skill bodies
    * - --- — separates individual skill bodies
    */
-  private buildMessages(
+  private async buildMessages(
+    agentId: string,
     history: SessionMessageRecord[] | SessionMessage[],
     systemPrompt: string,
     skillIds?: string[],
-  ): Message[] {
+  ): Promise<Message[]> {
     const messages: Message[] = [];
 
-    // Build full system prompt with skill bodies appended
+    // Build full system prompt: base + personality files + skills
     let fullSystemPrompt = systemPrompt;
+
+    // Inject personality markdown files (AGENT, USER, MISSION, RULES)
+    if (this.personality) {
+      const blocks = await this.personality.readAllForInjection(agentId);
+      for (const { meta, content } of blocks) {
+        fullSystemPrompt += `\n\n[${meta.systemPromptBlock}]\n${content}\n[/${meta.systemPromptBlock}]`;
+      }
+    }
+
     if (skillIds?.length && this.skills) {
       const bodies = this.skills
         .getSkillsForAgent(skillIds)
@@ -704,7 +721,8 @@ export class DispatchService {
         .filter(Boolean)
         .join('\n\n---\n\n');
       if (bodies) {
-        fullSystemPrompt += '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
+        fullSystemPrompt +=
+          '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
       }
     }
 

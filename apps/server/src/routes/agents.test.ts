@@ -124,6 +124,7 @@ describe('Agent Routes', () => {
         getSkill: () => undefined,
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });
@@ -131,6 +132,7 @@ describe('Agent Routes', () => {
     await app.register(websocket);
     await app.register(agentRoutes, {
       agentRegistry: testRegistry,
+      personalityService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       authMiddleware: mockAuthMiddleware,
     });
   });

@@ -205,6 +205,9 @@ export type SessionMessageRequest = WSMessage<
     role: 'user' | 'system';
     content: string;
     stream?: boolean;
+    agentId?: string;
+    providerId?: string;
+    modelId?: string;
     metadata?: Record<string, unknown>;
   }
 >;

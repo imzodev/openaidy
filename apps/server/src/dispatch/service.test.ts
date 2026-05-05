@@ -889,12 +889,14 @@ describe('DispatchService streaming', () => {
       // Since dispatch requires a session, we verify via the internal buildMessages method
       const dispatchInstance = serviceWithSkills as unknown as {
         buildMessages: (
+          agentId: string,
           history: unknown[],
           systemPrompt: string,
           skillIds?: string[],
         ) => ReturnType<DispatchService['buildMessages']>;
       };
-      const messages = dispatchInstance.buildMessages(
+      const messages = await dispatchInstance.buildMessages(
+        'skill-agent',
         [],
         config.systemPrompt,
         agent?.skills,
@@ -942,12 +944,14 @@ describe('DispatchService streaming', () => {
 
       const dispatchInstance = serviceWithSkills as unknown as {
         buildMessages: (
+          agentId: string,
           history: unknown[],
           systemPrompt: string,
           skillIds?: string[],
         ) => ReturnType<DispatchService['buildMessages']>;
       };
-      const messages = dispatchInstance.buildMessages(
+      const messages = await dispatchInstance.buildMessages(
+        'no-skill-agent',
         [],
         config.systemPrompt,
         undefined,
@@ -992,12 +996,14 @@ describe('DispatchService streaming', () => {
 
       const dispatchInstance = serviceWithSkills as unknown as {
         buildMessages: (
+          agentId: string,
           history: unknown[],
           systemPrompt: string,
           skillIds?: string[],
         ) => ReturnType<DispatchService['buildMessages']>;
       };
-      const messages = dispatchInstance.buildMessages(
+      const messages = await dispatchInstance.buildMessages(
+        'unknown-skill-agent',
         [],
         config.systemPrompt,
         agent?.skills,
@@ -1046,12 +1052,14 @@ describe('DispatchService streaming', () => {
 
       const dispatchInstance = serviceWithSkills as unknown as {
         buildMessages: (
+          agentId: string,
           history: unknown[],
           systemPrompt: string,
           skillIds?: string[],
         ) => ReturnType<DispatchService['buildMessages']>;
       };
-      const messages = dispatchInstance.buildMessages(
+      const messages = await dispatchInstance.buildMessages(
+        'multi-skill-agent',
         [],
         config.systemPrompt,
         agent?.skills,

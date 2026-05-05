@@ -18,6 +18,10 @@ import {
   Plus,
   MessageSquare,
   Server,
+  UserCircle,
+  Save,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-solid';
 import {
   listAgents,
@@ -28,6 +32,8 @@ import {
   listMcpServers,
   updateAgentMcpServers,
   getConfig,
+  getPersonalityFile,
+  updatePersonalityFile,
   type Agent,
   type BuiltinToolInfo,
   type SkillInfo,
@@ -35,6 +41,8 @@ import {
   type CreateAgentInput,
   type McpServerRef,
   type McpServerRecord,
+  type PersonalityFileId,
+  type PersonalityFile,
 } from '../../lib/api';
 import { CreateAgentModal } from './CreateAgentModal';
 import {
@@ -54,7 +62,7 @@ export function AgentsPage(props: AgentsPageProps) {
     null,
   );
   const [activeTab, setActiveTab] = createSignal<
-    'overview' | 'workspace' | 'tools' | 'skills' | 'mcp'
+    'overview' | 'workspace' | 'tools' | 'skills' | 'mcp' | 'personality'
   >('overview');
   const [error, setError] = createSignal<string | null>(null);
   const [selectedWorkspaceFile, setSelectedWorkspaceFile] =
@@ -118,8 +126,109 @@ export function AgentsPage(props: AgentsPageProps) {
     setHasUnsavedWorkspaceChanges(false);
   };
 
+  // Personality tab state
+  const PERSONALITY_FILE_IDS: PersonalityFileId[] = [
+    'AGENT',
+    'USER',
+    'MISSION',
+    'RULES',
+  ];
+  const PERSONALITY_LABELS: Record<
+    PersonalityFileId,
+    { label: string; emoji: string; description: string }
+  > = {
+    AGENT: {
+      label: 'Agent Identity',
+      emoji: '🤖',
+      description: 'Who the agent is — its name, emoji, personality, and tone.',
+    },
+    USER: {
+      label: 'User Profile',
+      emoji: '👤',
+      description:
+        'Who the user is — name, language, expertise, and communication style.',
+    },
+    MISSION: {
+      label: 'Mission',
+      emoji: '🚀',
+      description:
+        "Why we're here — the project, goals, stack, and current focus.",
+    },
+    RULES: {
+      label: 'Rules',
+      emoji: '📋',
+      description: 'Hard constraints — always enforced, no exceptions.',
+    },
+  };
+
+  const [personalityFiles, setPersonalityFiles] = createSignal<
+    Record<PersonalityFileId, PersonalityFile>
+  >({} as Record<PersonalityFileId, PersonalityFile>);
+  const [personalityDraft, setPersonalityDraft] = createSignal<
+    Record<PersonalityFileId, string>
+  >({} as Record<PersonalityFileId, string>);
+  const [personalityLoading, setPersonalityLoading] = createSignal(false);
+  const [personalitySaving, setPersonalitySaving] =
+    createSignal<PersonalityFileId | null>(null);
+  const [personalityError, setPersonalityError] = createSignal<string | null>(
+    null,
+  );
+  const [expandedPersonalityFile, setExpandedPersonalityFile] =
+    createSignal<PersonalityFileId | null>('AGENT');
+
+  const loadPersonalityFiles = async (agentId: string) => {
+    setPersonalityLoading(true);
+    setPersonalityError(null);
+    try {
+      const results = await Promise.all(
+        PERSONALITY_FILE_IDS.map((id) => getPersonalityFile(agentId, id)),
+      );
+      const filesMap = {} as Record<PersonalityFileId, PersonalityFile>;
+      const draftMap = {} as Record<PersonalityFileId, string>;
+      results.forEach((f) => {
+        filesMap[f.id] = f;
+        draftMap[f.id] = f.content;
+      });
+      setPersonalityFiles(filesMap);
+      setPersonalityDraft(draftMap);
+    } catch (err) {
+      setPersonalityError(
+        err instanceof Error ? err.message : 'Failed to load personality files',
+      );
+    } finally {
+      setPersonalityLoading(false);
+    }
+  };
+
+  const handlePersonalitySave = async (fileId: PersonalityFileId) => {
+    const agentId = selectedAgentId();
+    if (!agentId) return;
+    setPersonalitySaving(fileId);
+    try {
+      await updatePersonalityFile(
+        agentId,
+        fileId,
+        personalityDraft()[fileId] ?? '',
+      );
+      setPersonalityFiles((prev) => ({
+        ...prev,
+        [fileId]: {
+          ...prev[fileId],
+          content: personalityDraft()[fileId] ?? '',
+          exists: true,
+        },
+      }));
+    } catch (err) {
+      setPersonalityError(
+        err instanceof Error ? err.message : 'Failed to save',
+      );
+    } finally {
+      setPersonalitySaving(null);
+    }
+  };
+
   const handleTabChange = (
-    tab: 'overview' | 'workspace' | 'tools' | 'skills' | 'mcp',
+    tab: 'overview' | 'workspace' | 'tools' | 'skills' | 'mcp' | 'personality',
   ) => {
     if (activeTab() === tab) {
       return;
@@ -225,6 +334,12 @@ export function AgentsPage(props: AgentsPageProps) {
     listAgentSkills(agentId)
       .then((res) => setAllSkills(res.items))
       .catch(() => setAllSkills([]));
+  });
+
+  createEffect(() => {
+    const agentId = selectedAgentId();
+    if (!agentId || activeTab() !== 'personality') return;
+    void loadPersonalityFiles(agentId);
   });
 
   onMount(() => {
@@ -550,6 +665,20 @@ export function AgentsPage(props: AgentsPageProps) {
                     <span class="flex items-center gap-2">
                       <Server class="w-4 h-4" />
                       MCP Servers
+                    </span>
+                  </button>
+
+                  <button
+                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab() === 'personality'
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                    onClick={() => handleTabChange('personality')}
+                  >
+                    <span class="flex items-center gap-2">
+                      <UserCircle class="w-4 h-4" />
+                      Personality
                     </span>
                   </button>
                 </nav>
@@ -895,6 +1024,102 @@ export function AgentsPage(props: AgentsPageProps) {
                     </Show>
                   </div>
                 </Show>
+                {/* Personality Tab */}
+                <Show when={activeTab() === 'personality'}>
+                  <div class="space-y-4">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      Define who this agent is, who it's talking to, its
+                      mission, and its rules. These are injected into the system
+                      prompt on every conversation.
+                    </p>
+
+                    <Show when={personalityError()}>
+                      <p class="text-sm text-red-500">{personalityError()}</p>
+                    </Show>
+
+                    <Show when={personalityLoading()}>
+                      <div class="flex items-center justify-center h-32">
+                        <p class="text-text-tertiary text-sm">Loading…</p>
+                      </div>
+                    </Show>
+
+                    <Show when={!personalityLoading()}>
+                      <For each={PERSONALITY_FILE_IDS}>
+                        {(fileId) => {
+                          const meta = PERSONALITY_LABELS[fileId];
+                          const isExpanded = () =>
+                            expandedPersonalityFile() === fileId;
+                          const isSaving = () => personalitySaving() === fileId;
+                          const isDirty = () =>
+                            personalityDraft()[fileId] !==
+                            personalityFiles()[fileId]?.content;
+                          return (
+                            <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                              <button
+                                class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                onClick={() =>
+                                  setExpandedPersonalityFile(
+                                    isExpanded() ? null : fileId,
+                                  )
+                                }
+                              >
+                                <span class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  <span class="text-base">{meta.emoji}</span>
+                                  {meta.label}
+                                  <Show when={isDirty()}>
+                                    <span class="text-xs px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                                      unsaved
+                                    </span>
+                                  </Show>
+                                </span>
+                                <Show
+                                  when={isExpanded()}
+                                  fallback={
+                                    <ChevronDown class="w-4 h-4 text-gray-400" />
+                                  }
+                                >
+                                  <ChevronUp class="w-4 h-4 text-gray-400" />
+                                </Show>
+                              </button>
+
+                              <Show when={isExpanded()}>
+                                <div class="p-4 space-y-3">
+                                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                                    {meta.description}
+                                  </p>
+                                  <textarea
+                                    class="w-full h-56 text-sm font-mono p-3 border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 resize-y focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                    value={personalityDraft()[fileId] ?? ''}
+                                    onInput={(e) =>
+                                      setPersonalityDraft((prev) => ({
+                                        ...prev,
+                                        [fileId]: e.currentTarget.value,
+                                      }))
+                                    }
+                                    disabled={isSaving()}
+                                  />
+                                  <div class="flex justify-end">
+                                    <button
+                                      class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                      onClick={() =>
+                                        void handlePersonalitySave(fileId)
+                                      }
+                                      disabled={isSaving() || !isDirty()}
+                                    >
+                                      <Save class="w-3.5 h-3.5" />
+                                      {isSaving() ? 'Saving…' : 'Save'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </Show>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </Show>
+                  </div>
+                </Show>
+
                 {/* MCP Servers Tab */}
                 <Show when={activeTab() === 'mcp'}>
                   <div class="space-y-4">

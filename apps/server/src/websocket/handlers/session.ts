@@ -379,19 +379,22 @@ export class SessionHandler {
       }
 
       // Submit message via service
+      const resolvedAgentId =
+        request.payload.agentId ??
+        (request.payload.metadata?.agentId as string | undefined);
+      const resolvedProviderId =
+        request.payload.providerId ??
+        (request.payload.metadata?.providerId as string | undefined);
+      const resolvedModelId =
+        request.payload.modelId ??
+        (request.payload.metadata?.modelId as string | undefined);
       const result = await this.sessionService.submitMessage({
         sessionId: request.payload.sessionId,
         role: request.payload.role,
         content: request.payload.content,
-        ...(request.payload.metadata?.agentId != null && {
-          agentId: request.payload.metadata.agentId as string,
-        }),
-        ...(request.payload.metadata?.providerId != null && {
-          providerId: request.payload.metadata.providerId as string,
-        }),
-        ...(request.payload.metadata?.modelId != null && {
-          modelId: request.payload.metadata.modelId as string,
-        }),
+        ...(resolvedAgentId != null && { agentId: resolvedAgentId }),
+        ...(resolvedProviderId != null && { providerId: resolvedProviderId }),
+        ...(resolvedModelId != null && { modelId: resolvedModelId }),
       });
 
       if (!result.ok) {
@@ -485,7 +488,9 @@ export class SessionHandler {
       // Generate a run ID for tracking
       const runId = crypto.randomUUID();
       const agentId =
-        (request.payload.metadata?.agentId as string) ?? 'default';
+        request.payload.agentId ??
+        (request.payload.metadata?.agentId as string | undefined) ??
+        'default';
 
       // Subscribe the connection to run events BEFORE starting
       this.streamManager.subscribeToRun(runId, connectionId);

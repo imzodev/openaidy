@@ -15,6 +15,7 @@ import type { RunEventEmitter } from './dispatch';
 import type { BootstrapAdminManager } from './bootstrap-admin';
 import type { AppConfigService } from './config/service';
 import type { WorkspaceService } from './workspace';
+import type { AgentPersonalityService } from './agents/personality-service';
 import type { McpClientService } from './mcp/client';
 import type { SkillRegistry } from './skills';
 import type { SchedulerService } from './scheduler';
@@ -47,4 +48,5 @@ export type AppServices = {
   workspace: WorkspaceService;
   mcpService: McpClientService;
   skills: SkillRegistry;
+  personality: AgentPersonalityService;
 };

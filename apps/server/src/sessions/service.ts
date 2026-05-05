@@ -42,6 +42,7 @@ import type {
   SubmitMessageResult,
   SessionMessageServiceOptions,
 } from './types';
+import type { AgentPersonalityService } from '../agents/personality-service';
 
 /**
  * Session message service
@@ -67,6 +68,7 @@ export class SessionMessageService {
   private readonly messagesRepo: SessionMessagesStore | undefined;
   private readonly runsRepo: SessionRunsStore | undefined;
   private readonly skillRegistry: import('../skills').SkillRegistry | undefined;
+  private readonly personalityService: AgentPersonalityService | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -76,6 +78,7 @@ export class SessionMessageService {
     this.builtinTools = options.builtinTools;
     this.getDefaultAgentId = options.getDefaultAgentId;
     this.skillRegistry = options.skills;
+    this.personalityService = options.personality;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -347,8 +350,9 @@ export class SessionMessageService {
       } as Message;
     });
 
-    // Build system prompt with skill bodies injected
-    const systemPrompt = this.buildAgentSystemPrompt(
+    // Build system prompt with personality files and skill bodies injected
+    const systemPrompt = await this.buildAgentSystemPrompt(
+      agentId,
       agent?.systemPrompt ?? '',
       agent?.skills,
     );
@@ -497,8 +501,9 @@ export class SessionMessageService {
       } as Message;
     });
 
-    // Build system prompt with skill bodies injected
-    const systemPrompt = this.buildAgentSystemPrompt(
+    // Build system prompt with personality files and skill bodies injected
+    const systemPrompt = await this.buildAgentSystemPrompt(
+      agentId,
       agent?.systemPrompt ?? '',
       agent?.skills,
     );
@@ -814,25 +819,38 @@ export class SessionMessageService {
   }
 
   /**
-   * Build the full system prompt for an agent, with skill bodies appended.
-   * Returns the system prompt string with skills injected if any are assigned.
+   * Build the full system prompt for an agent, with personality files and skill bodies appended.
+   * Returns the system prompt string with all context blocks injected.
    */
-  private buildAgentSystemPrompt(
+  private async buildAgentSystemPrompt(
+    agentId: string,
     systemPrompt: string,
     skillIds?: string[],
-  ): string {
-    if (!skillIds?.length || !this.skillRegistry) {
-      return systemPrompt;
+  ): Promise<string> {
+    let prompt = systemPrompt;
+
+    // Inject personality markdown files (AGENT, USER, MISSION, RULES)
+    if (this.personalityService) {
+      const personalityBlocks =
+        await this.personalityService.readAllForInjection(agentId);
+      for (const { meta, content } of personalityBlocks) {
+        prompt += `\n\n[${meta.systemPromptBlock}]\n${content}\n[/${meta.systemPromptBlock}]`;
+      }
     }
-    const bodies = this.skillRegistry
-      .getSkillsForAgent(skillIds)
-      .map((s) => s.body)
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-    if (!bodies) {
-      return systemPrompt;
+
+    // Inject skill bodies
+    if (skillIds?.length && this.skillRegistry) {
+      const bodies = this.skillRegistry
+        .getSkillsForAgent(skillIds)
+        .map((s) => s.body)
+        .filter(Boolean)
+        .join('\n\n---\n\n');
+      if (bodies) {
+        prompt += '\n\n---\n\n' + bodies;
+      }
     }
-    return systemPrompt + '\n\n---\n\n' + bodies;
+
+    return prompt;
   }
 
   /**
