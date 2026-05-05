@@ -87,44 +87,46 @@ describe('present_choices tool', () => {
 describe('tool execute() — validation', () => {
   it('should reject if choices has fewer than 2 items', async () => {
     const tool = getPresentChoicesTool();
-    const result = await tool.execute!(
+    const result = (await tool.execute!(
       { choices: ['only one'] } as unknown as PresentChoicesArgs,
       mockCtx(),
-    );
+    )) as { ok: true; content: string } | { ok: false; error: string };
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/2.*6/);
+    expect((result as { ok: false; error: string }).error).toMatch(/2.*6/);
   });
 
   it('should reject if choices has more than 6 items', async () => {
     const tool = getPresentChoicesTool();
-    const result = await tool.execute!(
+    const result = (await tool.execute!(
       {
         choices: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
       } as unknown as PresentChoicesArgs,
       mockCtx(),
-    );
+    )) as { ok: true; content: string } | { ok: false; error: string };
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/2.*6/);
+    expect((result as { ok: false; error: string }).error).toMatch(/2.*6/);
   });
 
   it('should reject if choices contains non-string values', async () => {
     const tool = getPresentChoicesTool();
-    const result = await tool.execute!(
+    const result = (await tool.execute!(
       { choices: ['valid', 123 as unknown as string, 'also valid'] },
       mockCtx(),
-    );
+    )) as { ok: true; content: string } | { ok: false; error: string };
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/non-empty strings/);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /non-empty strings/,
+    );
   });
 
   it('should reject empty string choices', async () => {
     const tool = getPresentChoicesTool();
-    const result = await tool.execute!(
+    const result = (await tool.execute!(
       { choices: ['valid', '', 'also valid'] } as unknown as PresentChoicesArgs,
       mockCtx(),
-    );
+    )) as { ok: true; content: string } | { ok: false; error: string };
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/non-empty/);
+    expect((result as { ok: false; error: string }).error).toMatch(/non-empty/);
   });
 });
 
