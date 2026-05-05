@@ -48,67 +48,72 @@ export const PERSONALITY_FILES: PersonalityFileMeta[] = [
 const DEFAULT_CONTENTS: Record<PersonalityFileId, string> = {
   AGENT: `# Agent Identity
 
-Give your agent a name, an emoji, and a personality.
+<!--
+  INSTRUCTIONS (remove this block when you start editing):
 
-## Example
+  Define who this agent is. Replace the example below with your own content.
+  Everything outside comment blocks will be injected into the system prompt.
 
-🤖 My name is **Alex**. I'm a sharp, direct assistant who gets things done.
+  Example:
+    My name is [Agent Name]. I have a [describe tone] personality.
 
-## Tone & Character
-
-- Direct and concise — no filler, no preamble
-- Honest about uncertainty
-- Proactively flags risks or edge cases
+    Tone & Character:
+    - [trait 1]
+    - [trait 2]
+-->
 `,
 
   USER: `# User Profile
 
-Tell the agent who you are so it can tailor every response.
+<!--
+  INSTRUCTIONS (remove this block when you start editing):
 
-## Example
+  Describe who you are so the agent can tailor its responses to you.
 
-My name is **Irving**. I'm a senior software engineer.
+  Example:
+    My name is [Your Name]. I work as a [your role].
 
-## What I Know Well
+    Background:
+    - [skill or area of expertise]
+    - [another area]
 
-I'm fluent in TypeScript, Node.js, and SolidJS. Don't explain basics.
-
-## Communication Style
-
-- Keep responses concise
-- Lead with the answer, put context after
-- Prefer code over prose
+    Communication style:
+    - [preference 1, e.g. "Be concise, skip the preamble"]
+    - [preference 2]
+-->
 `,
 
   MISSION: `# Mission
 
-🚀 Describe what you're working on so the agent always has context.
+<!--
+  INSTRUCTIONS (remove this block when you start editing):
 
-## Example
+  Describe the project or goal this agent is helping with.
 
-I'm building **openaidy** — an open-source AI agent platform built with
-TypeScript, SolidJS, Fastify, and SQLite.
+  Example:
+    I am working on [project name] — [one-sentence description].
 
-## Current Focus
+    Tech stack: [list the main technologies]
 
-Implementing the agent personality system.
+    Current focus: [what you are working on right now]
 
-## Out of Scope
-
-- Mobile apps
-- Infrastructure / DevOps
+    Out of scope: [what to ignore or deprioritize]
+-->
 `,
 
   RULES: `# Rules
 
-Hard constraints — the agent must always follow these, no exceptions.
+<!--
+  INSTRUCTIONS (remove this block when you start editing):
 
-## Example
+  Define hard constraints the agent must always follow, no exceptions.
 
-- Always respond in English, even if I write in another language
-- Never suggest technologies outside our approved stack
-- Always flag security implications proactively
-- If unsure, ask — don't guess
+  Example:
+    - Always respond in [language]
+    - Never [something to avoid]
+    - Always [something to enforce]
+    - If unsure, ask — do not guess
+-->
 `,
 };
 
