@@ -279,6 +279,8 @@ export class SessionMessageService {
     }
 
     // 2. Persist user message
+    const isFirstMessage =
+      (await this.listMessages(input.sessionId)).length === 0;
     const userMessage = await this.appendMessage({
       sessionId: input.sessionId,
       role: input.role,
@@ -358,7 +360,7 @@ export class SessionMessageService {
       ...(agent?.skills ? { skillIds: agent.skills } : {}),
       personalityService: this.personalityService,
       skillRegistry: this.skillRegistry,
-      isFirstMessage: history.length === 0,
+      isFirstMessage,
       userMessage: input.content,
       providers: this.providers,
     });
@@ -425,6 +427,8 @@ export class SessionMessageService {
     }
 
     // 2. Persist user message
+    const isFirstMessage =
+      (await this.listMessages(input.sessionId)).length === 0;
     const userMessage = await this.appendMessage({
       sessionId: input.sessionId,
       role: input.role,
@@ -514,7 +518,7 @@ export class SessionMessageService {
       ...(agent?.skills && { skillIds: agent.skills }),
       personalityService: this.personalityService,
       skillRegistry: this.skillRegistry,
-      isFirstMessage: history.length === 0,
+      isFirstMessage,
       userMessage: input.content,
       providers: this.providers,
     });
