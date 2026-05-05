@@ -23,6 +23,7 @@ import {
   type SessionMessageRequest,
   type SessionMessagesRequest,
   type SessionRunsRequest,
+  type SessionChoicesResponseRequest,
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessagesResponse,
@@ -34,6 +35,7 @@ import {
   WS_ERROR_CODES,
   createWSMessage,
 } from '@openaidy/shared-types';
+import { resolvePendingChoice } from '../../tools/builtin/present-choices';
 import type { Session, SessionMessage, SessionRun } from '@openaidy/db';
 
 // ============================================================================
@@ -687,6 +689,45 @@ export class SessionHandler {
   // ============================================================================
 
   /**
+   * Handle session.choices_response — user picks an option from present_choices.
+   * Resolves the pending choice promise so the model can continue.
+   */
+  async handleChoicesResponse(
+    connectionId: string,
+    request: SessionChoicesResponseRequest,
+    _context: HandlerContext,
+  ): Promise<
+    | {
+        id: string;
+        type: 'session.choices_response';
+        payload: Record<string, unknown>;
+      }
+    | ErrorResponse
+  > {
+    const { sessionId, runId, selected, index } = request.payload;
+
+    const resolved = resolvePendingChoice(sessionId, runId, selected, index);
+    if (!resolved) {
+      return this.createErrorResponse(
+        request.id,
+        WS_ERROR_CODES.NOT_FOUND,
+        `No pending choice found for session=${sessionId} run=${runId}`,
+      );
+    }
+
+    this.logger.info(
+      { sessionId, runId, selected, index, connectionId },
+      'User choice received and resolved',
+    );
+
+    return {
+      id: request.id,
+      type: 'session.choices_response' as const,
+      payload: { sessionId, runId, selected, index, ok: true },
+    };
+  }
+
+  /**
    * Auto-rename the session after the first run completes.
    *
    * Checks that this is the first run (only 1 run for the session) before
@@ -853,6 +894,16 @@ export function registerSessionHandlers(
       handler.handleRuns(
         connId,
         msg as SessionRunsRequest,
+        ctx,
+      ) as Promise<WSResponse>,
+  );
+
+  router.registerHandler(
+    'session.choices_response',
+    (connId, msg, ctx) =>
+      handler.handleChoicesResponse(
+        connId,
+        msg as SessionChoicesResponseRequest,
         ctx,
       ) as Promise<WSResponse>,
   );

@@ -26,11 +26,21 @@ import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
 import { createAddonTools } from './addons';
 import { createAgentTools } from './agents';
+import {
+  initPresentChoicesTool,
+  getPresentChoicesTool,
+  type ChoicesEventEmitter,
+} from './builtin/present-choices';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
 import type { AddonToolDeps } from './addons';
 import type { AgentRegistry } from '../agents/registry';
+
+export {
+  initPresentChoicesTool,
+  getPresentChoicesTool,
+} from './builtin/present-choices';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
@@ -46,6 +56,7 @@ export type BuiltinToolRegistryDeps = {
   skills?: { registry: SkillRegistry };
   addons?: AddonToolDeps;
   agents?: { registry: AgentRegistry };
+  choicesEmitter?: ChoicesEventEmitter;
   // Add more service dependencies here as new tool categories are introduced.
   // Example:
   //   webSearch?: WebSearchService;
@@ -90,6 +101,13 @@ export function createBuiltinToolRegistry(
     for (const tool of createAgentTools(deps.agents.registry)) {
       registry.register(tool);
     }
+  }
+
+  // present_choices — requires the choices emitter (injected from websocket setup)
+  if (deps.choicesEmitter) {
+    initPresentChoicesTool(deps.choicesEmitter);
+    const tool = getPresentChoicesTool();
+    registry.register(tool);
   }
 
   // To register future categories:

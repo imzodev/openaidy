@@ -419,6 +419,8 @@ export type SessionEvent =
   | SessionDeletedEvent
   | SessionUpdatedEvent;
 
+import type { ChoicesEvent } from './choices';
+
 // ============================================================================
 // Streaming Types
 // ============================================================================
@@ -432,6 +434,12 @@ export type SessionStreamStart = WSMessage<
     providerId: string;
     modelId: string;
   }
+>;
+
+/** Choices event — emitted when an agent calls the present_choices native tool */
+export type SessionRunChoicesEvent = WSMessage<
+  'session.run.choices',
+  ChoicesEvent
 >;
 
 export type SessionStreamDelta = WSMessage<
@@ -491,13 +499,29 @@ export type SessionStreamError = WSMessage<
   }
 >;
 
+/**
+ * Client → Server: User picks an option from present_choices
+ */
+export type SessionChoicesResponseRequest = WSMessage<
+  'session.choices_response',
+  {
+    sessionId: string;
+    runId: string;
+    /** The label the user selected */
+    selected: string;
+    /** 0-based index of the selected option */
+    index: number;
+  }
+>;
+
 export type SessionStreamEvent =
   | SessionStreamStart
   | SessionStreamDelta
   | SessionStreamToolCall
   | SessionStreamUsage
   | SessionStreamEnd
-  | SessionStreamError;
+  | SessionStreamError
+  | SessionRunChoicesEvent;
 
 /**
  * Acknowledgment response for streaming session.message request
@@ -1003,6 +1027,8 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
+  'session.run.choices',
+  'session.choices_response',
   'session.updated',
   'agent.list',
   'agent.get',
