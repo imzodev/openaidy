@@ -79,7 +79,8 @@ export class LogBuffer {
     const total = filtered.length;
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? 100;
-    const items = filtered.slice(offset, offset + limit);
+    const reversed = filtered.slice().reverse();
+    const items = reversed.slice(offset, offset + limit);
     const hasMore = offset + items.length < total;
 
     return { items, total, hasMore };

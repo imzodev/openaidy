@@ -48,8 +48,8 @@ describe('LogBuffer', () => {
 
       const result = smallBuffer.query();
       expect(result.items).toHaveLength(5);
-      expect(result.items[0]!.message).toBe('Message 5');
-      expect(result.items[4]!.message).toBe('Message 9');
+      expect(result.items[0]!.message).toBe('Message 9');
+      expect(result.items[4]!.message).toBe('Message 5');
     });
   });
 

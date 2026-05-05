@@ -52,6 +52,8 @@ export function LogsPage() {
   const [offset, setOffset] = createSignal(0);
   const limit = 100;
 
+  let logListRef: HTMLDivElement | undefined;
+
   // Auto-refresh
   const [autoRefresh, setAutoRefresh] = createSignal(false);
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -72,6 +74,8 @@ export function LogsPage() {
       if (resetOffset) {
         setLogs(result.items);
         setOffset(0);
+        // Scroll to top to show newest entries
+        logListRef?.scrollTo({ top: 0, behavior: 'instant' });
       } else {
         setLogs([...logs(), ...result.items]);
       }
@@ -317,7 +321,10 @@ export function LogsPage() {
         </Show>
 
         <Show when={logs().length > 0}>
-          <div class="divide-y divide-gray-100 dark:divide-gray-700">
+          <div
+            ref={logListRef}
+            class="divide-y divide-gray-100 dark:divide-gray-700"
+          >
             <For each={logs()}>
               {(log) => {
                 const LevelIcon = LEVEL_ICONS[log.level];
@@ -370,7 +377,7 @@ export function LogsPage() {
             </For>
           </div>
 
-          {/* Load More */}
+          {/* Load older logs */}
           <Show when={hasMore()}>
             <div class="p-4 border-t border-gray-100 dark:border-gray-700 text-center">
               <button
@@ -378,7 +385,7 @@ export function LogsPage() {
                 disabled={isLoading()}
                 class="px-4 py-2 text-sm text-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors disabled:opacity-50"
               >
-                {isLoading() ? 'Loading...' : 'Load More'}
+                {isLoading() ? 'Loading...' : 'Load older logs'}
               </button>
             </div>
           </Show>
