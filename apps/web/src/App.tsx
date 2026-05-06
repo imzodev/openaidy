@@ -44,6 +44,8 @@ import { createRouter } from './lib/router';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
 import { listAddons, type AddonRecord } from './lib/api';
+import type { ChoicesEvent } from '@openaidy/shared-types';
+import { ChoicesCard } from './components/ChoicesCard';
 import './index.css';
 
 // Create a client
@@ -100,6 +102,9 @@ function AppContent(props: AppContentProps) {
   const [pendingUserMessage, setPendingUserMessage] = createSignal<
     SessionMessage | undefined
   >(undefined);
+  const [currentChoices, setCurrentChoices] = createSignal<ChoicesEvent | null>(
+    null,
+  );
 
   // Subscribe to streaming events when a session is selected
   createEffect(() => {
@@ -144,11 +149,16 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     };
 
+    const handleChoicesEvent = (event: { payload: ChoicesEvent }) => {
+      setCurrentChoices(event.payload);
+    };
+
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
     const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
     const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
+    const unsubChoices = wsClient.on('session.run.choices', handleChoicesEvent);
 
     // Subscribe to the session
     wsClient.subscribeToSession(sessionId).catch((err: Error) => {
@@ -162,6 +172,7 @@ function AppContent(props: AppContentProps) {
       unsubEnd();
       unsubError();
       unsubUpdated();
+      unsubChoices();
     });
   });
 
@@ -223,6 +234,7 @@ function AppContent(props: AppContentProps) {
     }
 
     setSubmitError(undefined);
+    setCurrentChoices(null);
     setIsStreaming(true);
     setStreamingContent('');
     setPendingUserMessage({
@@ -327,6 +339,14 @@ function AppContent(props: AppContentProps) {
   createEffect(() => {
     if (currentView() === 'sessions') {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    }
+  });
+
+  // Clear choices card when switching sessions
+  createEffect(() => {
+    const sessionId = selectedSessionId();
+    if (sessionId) {
+      setCurrentChoices(null);
     }
   });
 
@@ -507,6 +527,19 @@ function AppContent(props: AppContentProps) {
               isStreaming={isStreaming()}
               streamingContent={isStreaming() ? streamingContent() : undefined}
             />
+            <Show when={currentChoices()}>
+              {(c) => (
+                <ChoicesCard
+                  question={c().question}
+                  choices={c().choices}
+                  onSelect={(choice) => {
+                    setCurrentChoices(null);
+                    handleSubmit(choice, selectedAgentId());
+                  }}
+                  onDismiss={() => setCurrentChoices(null)}
+                />
+              )}
+            </Show>
             <RunList
               runs={runs()}
               isLoading={runsQuery.isLoading}
