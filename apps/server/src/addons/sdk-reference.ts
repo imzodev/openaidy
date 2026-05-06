@@ -55,22 +55,35 @@ export const SDK_METHODS: readonly SdkMethod[] = [
       'sdk.listSessions().then(function(r) { console.log(r.items); });',
   },
   {
-    name: 'createSession',
+    name: 'sendMessage',
     category: 'Sessions',
-    proxyPath: '/api/addon-proxy/sessions',
+    proxyPath: '/api/addon-proxy/sessions/:sessionId/messages',
     httpMethod: 'POST',
-    requiredPermission: 'sessions.create',
+    requiredPermission: 'sessions.write',
     params: [
       {
-        name: 'title',
-        kind: 'optional_string',
-        description: 'Session title (defaults to "New Session")',
+        name: 'sessionId',
+        kind: 'string',
+        description: 'ID of the session to send the message to',
+      },
+      {
+        name: 'content',
+        kind: 'string',
+        description: 'The message text to send',
+      },
+      {
+        name: 'agentId',
+        kind: 'string',
+        description: 'ID of the agent that should respond',
       },
     ],
-    returns: 'Promise<Session>',
-    description: 'Create a new session.',
+    returns: 'Promise<{ message: string; sessionId: string }>',
+    description:
+      'Send a message to an existing session and get the agent response. ' +
+      'Sessions are created automatically by invokeAgent() — use sessions.list to pick one. ' +
+      'Does NOT create a new session.',
     exampleJs:
-      "sdk.createSession('My session').then(function(s) { console.log(s.id); });",
+      "sdk.sendMessage('sess-123', 'Summarize this', 'default').then(function(r) { console.log(r.message); });",
   },
   {
     name: 'getSession',

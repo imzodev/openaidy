@@ -136,10 +136,12 @@
     listSessions: function () {
       return request('GET', '/api/addon-proxy/sessions');
     },
-    createSession: function (title) {
-      return request('POST', '/api/addon-proxy/sessions', {
-        title: title ?? 'New Session',
-      });
+    sendMessage: function (sessionId, content, agentId) {
+      return request(
+        'POST',
+        '/api/addon-proxy/sessions/' + sessionId + '/messages',
+        { content: content, agentId: agentId },
+      );
     },
     getSession: function (sessionId) {
       return request('GET', '/api/addon-proxy/sessions/' + sessionId);

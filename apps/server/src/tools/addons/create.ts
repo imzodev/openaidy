@@ -187,8 +187,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           items: { type: 'string' },
           description:
             'SDK permissions this addon requires. ' +
-            'Valid values: agents.list, agents.invoke, sessions.list, sessions.create, ' +
-            'sessions.read, config.read. Only request what you actually use.',
+            'Valid values: agents.list, agents.invoke, sessions.list, ' +
+            'sessions.read, sessions.write, config.read. Only request what you actually use. ' +
+            'NOTE: sessions are created automatically by agents.invoke — there is no sessions.create permission. ' +
+            'sessions.write = send a message to an existing session via sdk.sendMessage().',
         },
         externalDomains: {
           type: 'array',
