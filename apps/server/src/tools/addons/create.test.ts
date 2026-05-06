@@ -42,7 +42,7 @@ OpenAidy.ready(function(sdk) {});`;
     expect(tool.description).toContain('listAgents');
     expect(tool.description).toContain('invokeAgent');
     expect(tool.description).toContain('listSessions');
-    expect(tool.description).toContain('createSession');
+    expect(tool.description).toContain('sendMessage');
     expect(tool.description).toContain('getConfig');
   });
 

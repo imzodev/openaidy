@@ -174,6 +174,7 @@ export async function buildApp() {
       ...(addonService ? { addonService } : {}),
     },
     agents: { registry: agentRegistry },
+    web: true,
   });
 
   const sessionService = new SessionMessageService({
