@@ -5,6 +5,8 @@
  * between the server and client SDKs.
  */
 
+import type { ChoicesEvent } from './choices.js';
+
 // ============================================================================
 // Message Envelope
 // ============================================================================
@@ -491,13 +493,19 @@ export type SessionStreamError = WSMessage<
   }
 >;
 
+export type SessionRunChoicesEvent = WSMessage<
+  'session.run.choices',
+  ChoicesEvent
+>;
+
 export type SessionStreamEvent =
   | SessionStreamStart
   | SessionStreamDelta
   | SessionStreamToolCall
   | SessionStreamUsage
   | SessionStreamEnd
-  | SessionStreamError;
+  | SessionStreamError
+  | SessionRunChoicesEvent;
 
 /**
  * Acknowledgment response for streaming session.message request
@@ -1032,6 +1040,7 @@ const STREAM_EVENT_TYPES: Set<string> = new Set([
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
+  'session.run.choices',
 ]);
 
 /**
@@ -1215,6 +1224,15 @@ export function isSessionStreamEnd(msg: unknown): msg is SessionStreamEnd {
  */
 export function isSessionStreamError(msg: unknown): msg is SessionStreamError {
   return isWSMessage(msg) && msg.type === 'session.stream.error';
+}
+
+/**
+ * Check if a message is a SessionRunChoicesEvent
+ */
+export function isSessionRunChoicesEvent(
+  msg: unknown,
+): msg is SessionRunChoicesEvent {
+  return isWSMessage(msg) && msg.type === 'session.run.choices';
 }
 
 // ============================================================================
