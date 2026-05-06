@@ -44,18 +44,12 @@ function isValidId(id: string): boolean {
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
 
 function sdkBootstrapSnippet(): string {
-  return `// Bootstrap: signal ready, then wait for OPENAIDY_INIT from the parent.
-// The parent sends the init message with apiBase and an addon token.
-window.addEventListener('message', function onInit(event) {
-  var msg = event.data;
-  if (!msg || msg.type !== 'OPENAIDY_INIT') return;
-  window.removeEventListener('message', onInit);
-  var script = document.createElement('script');
-  script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
-  script.onload = function() { onSdkReady(msg); };
-  document.head.appendChild(script);
-});
-window.parent.postMessage({ type: 'ADDON_READY' }, '*');`;
+  return `// Bootstrap: signal ready to the parent, then call your logic inside OpenAidy.ready().
+// The SDK is loaded statically via <script src="/sdk/openaidy-sdk.js"> in index.html.
+window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  // your addon logic here — sdk is fully initialized
+});`;
 }
 
 function buildSdkUsageComment(permissions: string[]): string {
@@ -83,7 +77,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'The addon appears in the sidebar immediately — no restart needed.',
       'An addon is a sandboxed HTML/JS UI loaded in an iframe inside the OpenAidy app.',
       'It communicates with the backend exclusively via the OpenAidy SDK (openaidy-sdk.js),',
-      'which is loaded dynamically — you never hardcode the server URL.',
+      'which is loaded as a static <script> tag — you never hardcode the server URL.',
       '',
       'ADDON STRUCTURE',
       '───────────────',
@@ -101,19 +95,19 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '',
       'Always use "basic" and provide the full UI in the `files` parameter.',
       '',
-      'SDK BOOTSTRAP PATTERN (always required — top of app/index.js)',
-      '──────────────────────────────────────────────────────────────',
-      'Copy this block verbatim at the top of app/index.js — do not modify it:',
+      'SDK BOOTSTRAP PATTERN (always required)',
+      '────────────────────────────────────────',
+      'app/index.html MUST load the SDK as a static script BEFORE index.js:',
+      '',
+      '  <script src="/sdk/openaidy-sdk.js"></script>',
+      '  <script src="index.js"></script>',
+      '</body>',
+      '</html>',
+      '',
+      'Then at the top of app/index.js:',
       '',
       sdkBootstrapSnippet(),
       '',
-      'Then define onSdkReady(msg) below it:',
-      '',
-      'function onSdkReady(msg) {',
-      '  OpenAidy.ready(function(sdk) {',
-      '    // your addon logic here',
-      '  });',
-      '}',
       '',
       'PERMISSIONS',
       '───────────',
@@ -136,7 +130,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '  "app/index.html" — the full UI page',
       '  "app/index.js"   — the bootstrap + addon logic',
       '',
-      'app/index.html must end with:',
+      'app/index.html must end with (SDK MUST come before index.js):',
+      '  <script src="/sdk/openaidy-sdk.js"></script>',
       '  <script src="index.js"></script>',
       '</body>',
       '</html>',
@@ -287,15 +282,30 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       }
       {
         const html = (filesArg as Record<string, unknown>)['app/index.html'];
-        if (
-          typeof html === 'string' &&
-          !html.includes('<script src="index.js">')
-        ) {
-          return {
-            ok: false,
-            error:
-              'app/index.html must contain <script src="index.js"></script> before </body>',
-          };
+        if (typeof html === 'string') {
+          if (!html.includes('<script src="index.js">')) {
+            return {
+              ok: false,
+              error:
+                'app/index.html must contain <script src="index.js"></script> before </body>',
+            };
+          }
+          if (!html.includes('<script src="/sdk/openaidy-sdk.js">')) {
+            return {
+              ok: false,
+              error:
+                'app/index.html must load the SDK statically: <script src="/sdk/openaidy-sdk.js"></script> must appear before <script src="index.js">',
+            };
+          }
+          const sdkPos = html.indexOf('<script src="/sdk/openaidy-sdk.js">');
+          const jsPos = html.indexOf('<script src="index.js">');
+          if (sdkPos > jsPos) {
+            return {
+              ok: false,
+              error:
+                '<script src="/sdk/openaidy-sdk.js"> must appear before <script src="index.js"> in app/index.html',
+            };
+          }
         }
       }
       for (const [filePath, content] of Object.entries(

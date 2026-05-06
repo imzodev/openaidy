@@ -8,10 +8,9 @@ describe('addon_create tool', () => {
   let addonsDir: string;
   let tool: ReturnType<typeof createAddonCreateTool>;
 
-  const VALID_HTML = `<!DOCTYPE html><html><body><script src="index.js"></script></body></html>`;
-  const VALID_JS = `window.addEventListener('message', function onInit(e) {});
-window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-function onSdkReady(msg) {}`;
+  const VALID_HTML = `<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>`;
+  const VALID_JS = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {});`;
 
   const VALID_ARGS = {
     id: 'my-addon',
@@ -51,9 +50,7 @@ function onSdkReady(msg) {}`;
     expect(tool.description).toContain(
       "window.parent.postMessage({ type: 'ADDON_READY' }, '*');",
     );
-    expect(tool.description).toContain("msg.type !== 'OPENAIDY_INIT'");
     expect(tool.description).toContain('/sdk/openaidy-sdk.js');
-    expect(tool.description).toContain('onSdkReady(msg)');
     expect(tool.description).toContain('OpenAidy.ready(function(sdk)');
   });
 
@@ -162,6 +159,40 @@ function onSdkReady(msg) {}`;
         { agentId: 'agent' },
       ),
       /script src/,
+    );
+  });
+
+  it('rejects app/index.html missing SDK script tag', async () => {
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: {
+            'app/index.html':
+              '<!DOCTYPE html><html><body><script src="index.js"></script></body></html>',
+            'app/index.js': VALID_JS,
+          },
+        },
+        { agentId: 'agent' },
+      ),
+      /sdk/i,
+    );
+  });
+
+  it('rejects app/index.html with SDK after index.js', async () => {
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: {
+            'app/index.html':
+              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/openaidy-sdk.js"></script></body></html>',
+            'app/index.js': VALID_JS,
+          },
+        },
+        { agentId: 'agent' },
+      ),
+      /before/,
     );
   });
 
