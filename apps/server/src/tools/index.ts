@@ -26,6 +26,7 @@ import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
 import { createAddonTools } from './addons';
 import { createAgentTools } from './agents';
+import { presentChoicesTool } from './present-choices';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
@@ -91,6 +92,9 @@ export function createBuiltinToolRegistry(
       registry.register(tool);
     }
   }
+
+  // present_choices — self-contained tool, no external dependencies
+  registry.register(presentChoicesTool);
 
   // To register future categories:
   //   for (const tool of createWebSearchTools(deps.webSearch)) registry.register(tool);
