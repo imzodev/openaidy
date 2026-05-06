@@ -1,4 +1,11 @@
-import { createSignal, Show, For, onCleanup, onMount } from 'solid-js';
+import {
+  createSignal,
+  Show,
+  For,
+  onCleanup,
+  onMount,
+  createMemo,
+} from 'solid-js';
 import {
   Puzzle,
   RefreshCw,
@@ -7,6 +14,8 @@ import {
   Shield,
   Calendar,
   Tag,
+  AlertTriangle,
+  Globe,
 } from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
 import { refreshAddonToken } from '../../lib/api';
@@ -33,7 +42,13 @@ export function AddonViewPage(props: Props) {
   const [loadError, setLoadError] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
   const [showInfo, setShowInfo] = createSignal(false);
+  const [cspWarnings, setCspWarnings] = createSignal<string[]>([]);
   let iframeRef: HTMLIFrameElement | undefined;
+
+  const externalDomains = createMemo(() => {
+    const d = manifest().externalDomains;
+    return Array.isArray(d) ? (d as string[]) : [];
+  });
 
   // Crypto nonce for secure iframe communication (replaces origin check)
   const nonce = crypto.randomUUID();
@@ -92,6 +107,22 @@ export function AddonViewPage(props: Props) {
     // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
     if (msg.type === 'ADDON_READY') {
       sendInit();
+      return;
+    }
+    if (msg.type === 'ADDON_CSP_VIOLATION') {
+      if (msg.nonce !== nonce) return;
+      const blocked = msg.blockedURI as string | undefined;
+      if (!blocked) return;
+      try {
+        const host = new URL(blocked).hostname;
+        setCspWarnings((prev) =>
+          prev.includes(host) ? prev : [...prev, host],
+        );
+      } catch {
+        setCspWarnings((prev) =>
+          prev.includes(blocked) ? prev : [...prev, blocked],
+        );
+      }
       return;
     }
     if (msg.type !== 'OPENAIDY_REQUEST') return;
@@ -184,7 +215,10 @@ export function AddonViewPage(props: Props) {
   };
 
   window.addEventListener('message', handleMessage);
-  onCleanup(() => window.removeEventListener('message', handleMessage));
+
+  onCleanup(() => {
+    window.removeEventListener('message', handleMessage);
+  });
 
   return (
     <div class="flex flex-col h-full">
@@ -213,6 +247,33 @@ export function AddonViewPage(props: Props) {
           </button>
         </div>
       </div>
+
+      {/* CSP warning banner */}
+      <Show when={cspWarnings().length > 0}>
+        <div class="flex items-start gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs">
+          <AlertTriangle class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <div class="flex-1 min-w-0">
+            <span class="font-medium">CSP bloqueó peticiones a: </span>
+            <For each={cspWarnings()}>
+              {(host) => (
+                <code class="ml-1 px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 font-mono">
+                  {host}
+                </code>
+              )}
+            </For>
+            <span class="ml-1">
+              — agrega <code class="font-mono">externalDomains</code> al{' '}
+              <code class="font-mono">addon.json</code> y recarga.
+            </span>
+          </div>
+          <button
+            onClick={() => setCspWarnings([])}
+            class="flex-shrink-0 text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200"
+          >
+            ×
+          </button>
+        </div>
+      </Show>
 
       {/* Info modal */}
       <Show when={showInfo()}>
@@ -317,6 +378,30 @@ export function AddonViewPage(props: Props) {
                   </p>
                 </div>
               </Show>
+
+              <div>
+                <p class="text-sm font-medium text-text-secondary mb-2 flex items-center gap-1.5">
+                  <Globe class="w-3.5 h-3.5" />
+                  External Domains
+                </p>
+                <Show when={externalDomains().length > 0}>
+                  <div class="flex flex-wrap gap-1.5">
+                    <For each={externalDomains()}>
+                      {(domain) => (
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-xs font-mono text-blue-700 dark:text-blue-300">
+                          {domain}
+                        </span>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+                <Show when={externalDomains().length === 0}>
+                  <p class="text-xs text-text-tertiary">
+                    None declared — fetch() to external URLs will be blocked by
+                    CSP.
+                  </p>
+                </Show>
+              </div>
             </div>
           </div>
         </div>

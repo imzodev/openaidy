@@ -8,10 +8,9 @@ describe('addon_create tool', () => {
   let addonsDir: string;
   let tool: ReturnType<typeof createAddonCreateTool>;
 
-  const VALID_HTML = `<!DOCTYPE html><html><body><script src="index.js"></script></body></html>`;
-  const VALID_JS = `window.addEventListener('message', function onInit(e) {});
-window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-function onSdkReady(msg) {}`;
+  const VALID_HTML = `<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>`;
+  const VALID_JS = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {});`;
 
   const VALID_ARGS = {
     id: 'my-addon',
@@ -43,7 +42,7 @@ function onSdkReady(msg) {}`;
     expect(tool.description).toContain('listAgents');
     expect(tool.description).toContain('invokeAgent');
     expect(tool.description).toContain('listSessions');
-    expect(tool.description).toContain('createSession');
+    expect(tool.description).toContain('sendMessage');
     expect(tool.description).toContain('getConfig');
   });
 
@@ -51,9 +50,7 @@ function onSdkReady(msg) {}`;
     expect(tool.description).toContain(
       "window.parent.postMessage({ type: 'ADDON_READY' }, '*');",
     );
-    expect(tool.description).toContain("msg.type !== 'OPENAIDY_INIT'");
     expect(tool.description).toContain('/sdk/openaidy-sdk.js');
-    expect(tool.description).toContain('onSdkReady(msg)');
     expect(tool.description).toContain('OpenAidy.ready(function(sdk)');
   });
 
@@ -163,6 +160,73 @@ function onSdkReady(msg) {}`;
       ),
       /script src/,
     );
+  });
+
+  it('rejects app/index.html missing SDK script tag', async () => {
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: {
+            'app/index.html':
+              '<!DOCTYPE html><html><body><script src="index.js"></script></body></html>',
+            'app/index.js': VALID_JS,
+          },
+        },
+        { agentId: 'agent' },
+      ),
+      /sdk/i,
+    );
+  });
+
+  it('rejects app/index.html with SDK after index.js', async () => {
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: {
+            'app/index.html':
+              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/openaidy-sdk.js"></script></body></html>',
+            'app/index.js': VALID_JS,
+          },
+        },
+        { agentId: 'agent' },
+      ),
+      /before/,
+    );
+  });
+
+  it('rejects undeclared external fetch() domains', async () => {
+    const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  fetch('https://api.example.com/data').then(r => r.json());
+});`;
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
+        },
+        { agentId: 'agent' },
+      ),
+      /externalDomains/,
+    );
+  });
+
+  it('accepts external fetch() when domain is declared in externalDomains', async () => {
+    const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  fetch('https://api.example.com/data').then(r => r.json());
+});`;
+    const result = await tool.execute(
+      {
+        ...VALID_ARGS,
+        externalDomains: ['api.example.com'],
+        files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
+      },
+      { agentId: 'agent' },
+    );
+    expect(result.ok).toBe(true);
   });
 
   it('rejects path traversal in extra files', async () => {

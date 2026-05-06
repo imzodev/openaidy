@@ -193,9 +193,12 @@ export const addonProxyRoutes: FastifyPluginAsync<
     },
   );
 
-  // POST /api/addon-proxy/sessions
-  app.post<{ Body: { title?: string } }>(
-    '/api/addon-proxy/sessions',
+  // POST /api/addon-proxy/sessions/:sessionId/messages
+  app.post<{
+    Params: { sessionId: string };
+    Body: { content: string; agentId: string };
+  }>(
+    '/api/addon-proxy/sessions/:sessionId/messages',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const addon = await opts.addonService.getAddon(request.addonId!);
@@ -213,7 +216,20 @@ export const addonProxyRoutes: FastifyPluginAsync<
           .send({ error: 'PERMISSION_DENIED', message: authResult.error });
       }
 
-      await proxyService.recordUsage(request.addonId!, '/sessions');
+      const { sessionId } = request.params;
+      const { content, agentId } = request.body;
+
+      if (!content || !agentId) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message: 'content and agentId are required',
+        });
+      }
+
+      await proxyService.recordUsage(
+        request.addonId!,
+        `/sessions/${sessionId}/messages`,
+      );
 
       if (!opts.sessionService) {
         return reply.code(503).send({
@@ -222,10 +238,25 @@ export const addonProxyRoutes: FastifyPluginAsync<
         });
       }
 
-      const session = await opts.sessionService.createSession(
-        request.body.title ?? 'New Session',
-      );
-      return reply.code(201).send(session);
+      const result = await opts.sessionService.submitMessageStreaming({
+        sessionId,
+        role: 'user',
+        content,
+        agentId,
+        onStreamEvent: () => {},
+      });
+
+      if (!result.ok) {
+        return reply.code(502).send({
+          error: 'INVOKE_FAILED',
+          message: result.error.message,
+        });
+      }
+
+      return reply.code(201).send({
+        message: result.assistantMessage.content,
+        sessionId,
+      });
     },
   );
 

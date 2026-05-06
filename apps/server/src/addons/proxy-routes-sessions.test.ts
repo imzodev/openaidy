@@ -52,9 +52,10 @@ function makeEnabledAddon(addonId: string, permissions: string[]): Addon {
 function makeSessionService(sessions: object[] = []): SessionMessageService {
   return {
     listSessions: vi.fn().mockResolvedValue(sessions),
-    createSession: vi
-      .fn()
-      .mockResolvedValue({ id: 'new-session-id', title: 'My Session' }),
+    submitMessageStreaming: vi.fn().mockResolvedValue({
+      ok: true,
+      assistantMessage: { content: 'Agent response' },
+    }),
   } as unknown as SessionMessageService;
 }
 
@@ -190,10 +191,10 @@ describe('GET /api/addon-proxy/sessions', () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/addon-proxy/sessions
+// POST /api/addon-proxy/sessions/:sessionId/messages
 // ---------------------------------------------------------------------------
 
-describe('POST /api/addon-proxy/sessions', () => {
+describe('POST /api/addon-proxy/sessions/:sessionId/messages', () => {
   let app: FastifyInstance;
   let token: string;
   let sessionSvc: SessionMessageService;
@@ -211,8 +212,8 @@ describe('POST /api/addon-proxy/sessions', () => {
   it('returns 401 when no Authorization header is provided', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/addon-proxy/sessions',
-      payload: {},
+      url: '/api/addon-proxy/sessions/sess-123/messages',
+      payload: { content: 'Hello', agentId: 'default' },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -224,12 +225,23 @@ describe('POST /api/addon-proxy/sessions', () => {
     });
     const res = await restrictedApp.inject({
       method: 'POST',
-      url: '/api/addon-proxy/sessions',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
       headers: { authorization: `Bearer ${restrictedToken}` },
-      payload: { title: 'New' },
+      payload: { content: 'Hello', agentId: 'default' },
     });
     expect(res.statusCode).toBe(403);
     expect(res.json().error).toBe('PERMISSION_DENIED');
+  });
+
+  it('returns 400 when content or agentId is missing', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { content: 'Hello' }, // missing agentId
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('INVALID_REQUEST');
   });
 
   it('returns 503 when no sessionService is wired', async () => {
@@ -239,36 +251,32 @@ describe('POST /api/addon-proxy/sessions', () => {
     });
     const res = await noSvcApp.inject({
       method: 'POST',
-      url: '/api/addon-proxy/sessions',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
       headers: { authorization: `Bearer ${noSvcToken}` },
-      payload: {},
+      payload: { content: 'Hello', agentId: 'default' },
     });
     expect(res.statusCode).toBe(503);
     expect(res.json().error).toBe('SERVICE_UNAVAILABLE');
   });
 
-  it('creates a session with the provided title', async () => {
+  it('sends message to existing session and returns agent response', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/addon-proxy/sessions',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
       headers: { authorization: `Bearer ${token}` },
-      payload: { title: 'My Session' },
+      payload: { content: 'Summarize this', agentId: 'default' },
     });
     expect(res.statusCode).toBe(201);
-    expect(sessionSvc.createSession).toHaveBeenCalledWith('My Session');
+    expect(sessionSvc.submitMessageStreaming).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'sess-123',
+        role: 'user',
+        content: 'Summarize this',
+        agentId: 'default',
+      }),
+    );
     const body = res.json();
-    expect(body.id).toBe('new-session-id');
-    expect(body.title).toBe('My Session');
-  });
-
-  it('defaults title to "New Session" when not provided', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/addon-proxy/sessions',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {},
-    });
-    expect(res.statusCode).toBe(201);
-    expect(sessionSvc.createSession).toHaveBeenCalledWith('New Session');
+    expect(body.message).toBe('Agent response');
+    expect(body.sessionId).toBe('sess-123');
   });
 });

@@ -649,10 +649,11 @@ export class TaskService {
     });
 
     // Submit initial message with task description
-    const executionResult = await this.sessionService.submitMessage({
+    const executionResult = await this.sessionService.submitMessageStreaming({
       sessionId: session.id,
       content: task.description,
       role: 'user',
+      onStreamEvent: () => {},
     });
 
     if (!executionResult.ok) {
@@ -734,10 +735,11 @@ export class TaskService {
     await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
 
     // Submit initial message with subtask description
-    await this.sessionService.submitMessage({
+    await this.sessionService.submitMessageStreaming({
       sessionId: session.id,
       content: subtask.description,
       role: 'user',
+      onStreamEvent: () => {},
     });
 
     return { ok: true, data: { sessionId: session.id } };

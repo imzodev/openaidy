@@ -253,7 +253,12 @@ export class SessionMessageService {
   }
 
   /**
-   * Submit a message to a session
+   * Submit a message to a session (non-streaming, legacy path)
+   *
+   * @deprecated Prefer submitMessageStreaming for all new callers. This method
+   * does not support the tool-call loop, so agents with native tools (e.g.
+   * web_fetch) will not be able to use them. Only use this as a fallback when
+   * the provider does not support streaming.
    *
    * This orchestrates the full flow:
    * 1. Validate session exists

@@ -40,11 +40,12 @@ export class AddonProxyAgentService {
       this.sessionCache.set(cacheKey, sessionId);
     }
 
-    const result = await this.sessionService.submitMessage({
+    const result = await this.sessionService.submitMessageStreaming({
       sessionId,
       role: 'user',
       content: input,
       agentId,
+      onStreamEvent: () => {},
     });
 
     if (!result.ok) {

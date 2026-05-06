@@ -113,7 +113,7 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
     getMessages: vi.fn().mockResolvedValue([]),
     updateMetadata: vi.fn(),
     archiveSession: vi.fn(),
-    submitMessage: vi.fn().mockResolvedValue({
+    submitMessageStreaming: vi.fn().mockResolvedValue({
       ok: true,
       userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },
       assistantMessage: {

@@ -222,7 +222,7 @@ describe('AddonProxyAgentService', () => {
         id: 'session-123',
         title: 'addon:test-addon:agent-1',
       }),
-      submitMessage: vi.fn().mockResolvedValue({
+      submitMessageStreaming: vi.fn().mockResolvedValue({
         ok: true,
         assistantMessage: { content: assistantContent },
       }),
@@ -255,7 +255,7 @@ describe('AddonProxyAgentService', () => {
 
     // createSession must only be called once — second call reuses the cache
     expect(sessionSvc.createSession).toHaveBeenCalledOnce();
-    expect(sessionSvc.submitMessage).toHaveBeenCalledTimes(2);
+    expect(sessionSvc.submitMessageStreaming).toHaveBeenCalledTimes(2);
   });
 
   it('uses separate sessions for different addon+agent pairs', async () => {
@@ -271,16 +271,16 @@ describe('AddonProxyAgentService', () => {
 
     expect(sessionSvc.createSession).toHaveBeenCalledTimes(2);
     expect(
-      vi.mocked(sessionSvc.submitMessage).mock.calls[0]![0].sessionId,
+      vi.mocked(sessionSvc.submitMessageStreaming).mock.calls[0]![0].sessionId,
     ).toBe('session-A');
     expect(
-      vi.mocked(sessionSvc.submitMessage).mock.calls[1]![0].sessionId,
+      vi.mocked(sessionSvc.submitMessageStreaming).mock.calls[1]![0].sessionId,
     ).toBe('session-B');
   });
 
-  it('propagates submitMessage errors as ok:false result', async () => {
+  it('propagates submitMessageStreaming errors as ok:false result', async () => {
     const sessionSvc = makeSessionService();
-    vi.mocked(sessionSvc.submitMessage).mockResolvedValue({
+    vi.mocked(sessionSvc.submitMessageStreaming).mockResolvedValue({
       ok: false,
       error: { code: 'agent.not_found', message: 'Agent not found' },
     } as never);
@@ -359,7 +359,7 @@ describe('Full addon → proxy → agent flow', () => {
     // Step 4: invoke agent
     const sessionSvc: SessionMessageService = {
       createSession: vi.fn().mockResolvedValue({ id: 'sess-xyz' }),
-      submitMessage: vi.fn().mockResolvedValue({
+      submitMessageStreaming: vi.fn().mockResolvedValue({
         ok: true,
         assistantMessage: { content: 'The answer is 42.' },
       }),

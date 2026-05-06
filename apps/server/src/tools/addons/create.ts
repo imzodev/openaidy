@@ -44,18 +44,12 @@ function isValidId(id: string): boolean {
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
 
 function sdkBootstrapSnippet(): string {
-  return `// Bootstrap: signal ready, then wait for OPENAIDY_INIT from the parent.
-// The parent sends the init message with apiBase and an addon token.
-window.addEventListener('message', function onInit(event) {
-  var msg = event.data;
-  if (!msg || msg.type !== 'OPENAIDY_INIT') return;
-  window.removeEventListener('message', onInit);
-  var script = document.createElement('script');
-  script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
-  script.onload = function() { onSdkReady(msg); };
-  document.head.appendChild(script);
-});
-window.parent.postMessage({ type: 'ADDON_READY' }, '*');`;
+  return `// Bootstrap: signal ready to the parent, then call your logic inside OpenAidy.ready().
+// The SDK is loaded statically via <script src="/sdk/openaidy-sdk.js"> in index.html.
+window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  // your addon logic here — sdk is fully initialized
+});`;
 }
 
 function buildSdkUsageComment(permissions: string[]): string {
@@ -83,7 +77,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'The addon appears in the sidebar immediately — no restart needed.',
       'An addon is a sandboxed HTML/JS UI loaded in an iframe inside the OpenAidy app.',
       'It communicates with the backend exclusively via the OpenAidy SDK (openaidy-sdk.js),',
-      'which is loaded dynamically — you never hardcode the server URL.',
+      'which is loaded as a static <script> tag — you never hardcode the server URL.',
       '',
       'ADDON STRUCTURE',
       '───────────────',
@@ -101,19 +95,37 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '',
       'Always use "basic" and provide the full UI in the `files` parameter.',
       '',
-      'SDK BOOTSTRAP PATTERN (always required — top of app/index.js)',
-      '──────────────────────────────────────────────────────────────',
-      'Copy this block verbatim at the top of app/index.js — do not modify it:',
+      'SDK BOOTSTRAP PATTERN (always required)',
+      '────────────────────────────────────────',
+      'app/index.html MUST load the SDK as a static script BEFORE index.js:',
+      '',
+      '  <script src="/sdk/openaidy-sdk.js"></script>',
+      '  <script src="index.js"></script>',
+      '</body>',
+      '</html>',
+      '',
+      'Then at the top of app/index.js:',
       '',
       sdkBootstrapSnippet(),
       '',
-      'Then define onSdkReady(msg) below it:',
       '',
-      'function onSdkReady(msg) {',
-      '  OpenAidy.ready(function(sdk) {',
-      '    // your addon logic here',
-      '  });',
-      '}',
+      'EXTERNAL DOMAINS (required when using fetch())',
+      '───────────────────────────────────────────────',
+      'If your addon calls fetch() on any external URL (anything that is not the OpenAidy',
+      'server), you MUST declare those hostnames in `externalDomains`. Without this the',
+      'browser will block the request with a CSP error and the addon will silently fail.',
+      '',
+      'Rule: scan every fetch() / XMLHttpRequest / WebSocket call in your code.',
+      'For every external hostname found, add it (bare, no protocol) to externalDomains.',
+      '',
+      'Example — addon that calls a weather API:',
+      '  externalDomains: ["api.open-meteo.com"]',
+      '',
+      'Example — addon that loads images from GitHub:',
+      '  externalImageDomains: ["raw.githubusercontent.com"]',
+      '',
+      'The OpenAidy server itself (localhost / the SDK proxy) is always allowed.',
+      'Do NOT list it in externalDomains.',
       '',
       'PERMISSIONS',
       '───────────',
@@ -136,7 +148,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '  "app/index.html" — the full UI page',
       '  "app/index.js"   — the bootstrap + addon logic',
       '',
-      'app/index.html must end with:',
+      'app/index.html must end with (SDK MUST come before index.js):',
+      '  <script src="/sdk/openaidy-sdk.js"></script>',
       '  <script src="index.js"></script>',
       '</body>',
       '</html>',
@@ -174,15 +187,19 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           items: { type: 'string' },
           description:
             'SDK permissions this addon requires. ' +
-            'Valid values: agents.list, agents.invoke, sessions.list, sessions.create, ' +
-            'sessions.read, config.read. Only request what you actually use.',
+            'Valid values: agents.list, agents.invoke, sessions.list, ' +
+            'sessions.read, sessions.write, config.read. Only request what you actually use. ' +
+            'NOTE: sessions are created automatically by agents.invoke — there is no sessions.create permission. ' +
+            'sessions.write = send a message to an existing session via sdk.sendMessage().',
         },
         externalDomains: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Bare hostnames the addon is allowed to call with fetch() directly in the browser ' +
-            '(e.g. ["api.open-meteo.com"]). Enforced via CSP connect-src. ' +
+            'REQUIRED whenever the addon calls fetch() on a URL that is not the OpenAidy server. ' +
+            'List every external hostname (bare, no protocol) the addon fetches from. ' +
+            'Without this the browser blocks the request via CSP and the addon silently fails. ' +
+            'Example: ["api.open-meteo.com"]. ' +
             'The OpenAidy server and SDK proxy are always allowed — do not list them here.',
         },
         externalImageDomains: {
@@ -287,15 +304,30 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       }
       {
         const html = (filesArg as Record<string, unknown>)['app/index.html'];
-        if (
-          typeof html === 'string' &&
-          !html.includes('<script src="index.js">')
-        ) {
-          return {
-            ok: false,
-            error:
-              'app/index.html must contain <script src="index.js"></script> before </body>',
-          };
+        if (typeof html === 'string') {
+          if (!html.includes('<script src="index.js">')) {
+            return {
+              ok: false,
+              error:
+                'app/index.html must contain <script src="index.js"></script> before </body>',
+            };
+          }
+          if (!html.includes('<script src="/sdk/openaidy-sdk.js">')) {
+            return {
+              ok: false,
+              error:
+                'app/index.html must load the SDK statically: <script src="/sdk/openaidy-sdk.js"></script> must appear before <script src="index.js">',
+            };
+          }
+          const sdkPos = html.indexOf('<script src="/sdk/openaidy-sdk.js">');
+          const jsPos = html.indexOf('<script src="index.js">');
+          if (sdkPos > jsPos) {
+            return {
+              ok: false,
+              error:
+                '<script src="/sdk/openaidy-sdk.js"> must appear before <script src="index.js"> in app/index.html',
+            };
+          }
         }
       }
       for (const [filePath, content] of Object.entries(
@@ -325,6 +357,39 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           };
         }
         extraFiles[filePath] = content;
+      }
+
+      // ── Validate externalDomains: detect undeclared external fetch() calls ─
+      {
+        const allContent = Object.values(extraFiles).join('\n');
+        const fetchMatches = allContent.match(
+          /fetch\(\s*['"`](https?:\/\/[^'"`\s]+)/g,
+        );
+        if (fetchMatches && fetchMatches.length > 0) {
+          const mentionedHosts = fetchMatches
+            .map((m) => {
+              const url = m.replace(/fetch\(\s*['"`]/, '');
+              try {
+                return new URL(url).hostname;
+              } catch {
+                return null;
+              }
+            })
+            .filter((h): h is string => h !== null);
+          const undeclared = mentionedHosts.filter(
+            (h) => !externalDomains || !externalDomains.includes(h),
+          );
+          if (undeclared.length > 0) {
+            const unique = [...new Set(undeclared)];
+            return {
+              ok: false,
+              error:
+                `Your addon calls fetch() on external URLs but externalDomains is missing or incomplete. ` +
+                `The browser will block these requests via CSP. ` +
+                `Add the following to externalDomains: [${unique.map((h) => `"${h}"`).join(', ')}]`,
+            };
+          }
+        }
       }
 
       // ── Step 1: scaffold files via shared template generator ─────────────

@@ -19,12 +19,14 @@ These permissions are fully functional today. Each one maps to a real SDK method
 
 ### Sessions
 
-| Permission        | SDK Method             | What It Does                 |
-| ----------------- | ---------------------- | ---------------------------- |
-| `sessions.list`   | `listSessions()`       | List all chat sessions       |
-| `sessions.read`   | `getSession(id)`       | Get a specific session by ID |
-| `sessions.write`  | `createSession(title)` | Create a new chat session    |
-| `sessions.delete` | —                      | Delete a session             |
+| Permission        | SDK Method                                 | What It Does                          |
+| ----------------- | ------------------------------------------ | ------------------------------------- |
+| `sessions.list`   | `listSessions()`                           | List all chat sessions                |
+| `sessions.read`   | `getSession(id)`                           | Get a specific session by ID          |
+| `sessions.write`  | `sendMessage(sessionId, content, agentId)` | Send a message to an existing session |
+| `sessions.delete` | —                                          | Delete a session                      |
+
+> **Note:** Sessions are created automatically when you call `invokeAgent()`. There is no `sessions.create` permission. Use `sessions.list` to discover sessions, then `sessions.write` to send messages to them.
 
 ### Agents
 
@@ -61,14 +63,14 @@ These will be implemented in future releases as addon capabilities expand.
 
 Not every action applies to every resource. The table below shows which actions are valid for the currently implemented resources.
 
-| Action   | sessions             | agents           | config         |
-| -------- | -------------------- | ---------------- | -------------- |
-| `list`   | ✅ List sessions     | ✅ List agents   | —              |
-| `read`   | ✅ Get session by ID | ✅ Get agent     | ✅ Read config |
-| `write`  | ✅ Create sessions   | —                | —              |
-| `delete` | ✅ Delete sessions   | —                | —              |
-| `invoke` | —                    | ✅ Invoke agents | —              |
-| `manage` | —                    | —                | —              |
+| Action   | sessions                   | agents           | config         |
+| -------- | -------------------------- | ---------------- | -------------- |
+| `list`   | ✅ List sessions           | ✅ List agents   | —              |
+| `read`   | ✅ Get session by ID       | ✅ Get agent     | ✅ Read config |
+| `write`  | ✅ Send message to session | —                | —              |
+| `delete` | ✅ Delete sessions         | —                | —              |
+| `invoke` | —                          | ✅ Invoke agents | —              |
+| `manage` | —                          | —                | —              |
 
 Actions marked with **—** are not implemented for that resource.
 
@@ -97,7 +99,7 @@ Can list sessions and agents. Cannot create, modify, or invoke anything.
 }
 ```
 
-Can list sessions, create new sessions, list agents, and invoke any agent.
+Can list sessions, send messages to existing sessions, list agents, and invoke any agent. Sessions are created automatically by `agents.invoke` — no extra permission needed.
 
 ### Scoped agent access
 
@@ -154,7 +156,12 @@ Addon API access is restricted at four levels:
     "minVersion": "0.1.0"
   },
   "entry": "dist/index.js",
-  "permissions": ["sessions.list", "sessions.write", "agents.invoke:analyzer"],
+  "permissions": [
+    "sessions.list",
+    "sessions.read",
+    "sessions.write",
+    "agents.invoke:analyzer"
+  ],
   "ui": {
     "sidebar": {
       "icon": "box",

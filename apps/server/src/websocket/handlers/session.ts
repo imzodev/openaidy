@@ -388,13 +388,14 @@ export class SessionHandler {
       const resolvedModelId =
         request.payload.modelId ??
         (request.payload.metadata?.modelId as string | undefined);
-      const result = await this.sessionService.submitMessage({
+      const result = await this.sessionService.submitMessageStreaming({
         sessionId: request.payload.sessionId,
         role: request.payload.role,
         content: request.payload.content,
         ...(resolvedAgentId != null && { agentId: resolvedAgentId }),
         ...(resolvedProviderId != null && { providerId: resolvedProviderId }),
         ...(resolvedModelId != null && { modelId: resolvedModelId }),
+        onStreamEvent: () => {},
       });
 
       if (!result.ok) {

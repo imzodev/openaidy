@@ -138,7 +138,10 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
       ...(body.modelId !== undefined && { modelId: body.modelId }),
     };
 
-    const result = await sessionService.submitMessage(submitInput);
+    const result = await sessionService.submitMessageStreaming({
+      ...submitInput,
+      onStreamEvent: () => {},
+    });
 
     if (result.ok) {
       reply.code(201);

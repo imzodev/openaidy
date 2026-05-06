@@ -113,13 +113,25 @@ function createMockProvider(
         created: new Date().toISOString(),
       });
     },
-    invokeStream: async function* () {
+    invokeStream: async function* (request: ModelRequest) {
       yield ok({
         type: 'stream.started' as const,
         timestamp: new Date().toISOString(),
         id: `stream_${Date.now()}`,
         model: 'mock-model',
         providerId: id,
+      });
+      yield ok({
+        type: 'stream.content_delta' as const,
+        timestamp: new Date().toISOString(),
+        id: `stream_${Date.now()}`,
+        delta: `Mock response to: ${request.messages[request.messages.length - 1]?.content}`,
+      });
+      yield ok({
+        type: 'stream.finished' as const,
+        timestamp: new Date().toISOString(),
+        id: `stream_${Date.now()}`,
+        finishReason: 'stop',
       });
     },
   };
