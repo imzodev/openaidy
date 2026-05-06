@@ -52,7 +52,7 @@ function makeEnabledAddon(addonId: string, permissions: string[]): Addon {
 function makeSessionService(sessions: object[] = []): SessionMessageService {
   return {
     listSessions: vi.fn().mockResolvedValue(sessions),
-    submitMessage: vi.fn().mockResolvedValue({
+    submitMessageStreaming: vi.fn().mockResolvedValue({
       ok: true,
       assistantMessage: { content: 'Agent response' },
     }),
@@ -267,12 +267,14 @@ describe('POST /api/addon-proxy/sessions/:sessionId/messages', () => {
       payload: { content: 'Summarize this', agentId: 'default' },
     });
     expect(res.statusCode).toBe(201);
-    expect(sessionSvc.submitMessage).toHaveBeenCalledWith({
-      sessionId: 'sess-123',
-      role: 'user',
-      content: 'Summarize this',
-      agentId: 'default',
-    });
+    expect(sessionSvc.submitMessageStreaming).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'sess-123',
+        role: 'user',
+        content: 'Summarize this',
+        agentId: 'default',
+      }),
+    );
     const body = res.json();
     expect(body.message).toBe('Agent response');
     expect(body.sessionId).toBe('sess-123');

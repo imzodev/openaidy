@@ -238,11 +238,12 @@ export const addonProxyRoutes: FastifyPluginAsync<
         });
       }
 
-      const result = await opts.sessionService.submitMessage({
+      const result = await opts.sessionService.submitMessageStreaming({
         sessionId,
         role: 'user',
         content,
         agentId,
+        onStreamEvent: () => {},
       });
 
       if (!result.ok) {

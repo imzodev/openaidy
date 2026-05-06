@@ -85,7 +85,7 @@ const createMockSessionService = () => ({
     if (id === 'non-existent-session') return false;
     return true;
   }),
-  submitMessage: vi.fn().mockResolvedValue({
+  submitMessageStreaming: vi.fn().mockResolvedValue({
     ok: true,
     userMessage: { id: 'msg-user', content: 'Hello', role: 'user' },
     assistantMessage: {

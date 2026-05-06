@@ -45,7 +45,7 @@ function createMockJobRunsRepo() {
 
 function createMockSessionService() {
   return {
-    submitMessage: vi.fn(),
+    submitMessageStreaming: vi.fn(),
     getSession: vi.fn(),
     createSession: vi.fn(),
     listSessions: vi.fn(),
@@ -217,7 +217,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -249,7 +249,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -279,7 +279,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -312,7 +312,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -343,7 +343,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
       });
@@ -380,7 +380,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
       });
@@ -444,7 +444,7 @@ describe('SchedulerService', () => {
           ? R
           : never,
       );
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -458,7 +458,7 @@ describe('SchedulerService', () => {
       expect(mockSessionsStore.create).toHaveBeenCalledWith({
         title: 'Pulse: Test Pulse',
       });
-      expect(mockSessionService.submitMessage).toHaveBeenCalledWith(
+      expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionId: 'new-session-id',
           role: 'user',
@@ -524,7 +524,7 @@ describe('SchedulerService', () => {
           ? R
           : never,
       );
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
       });
@@ -562,7 +562,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'succeeded',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -589,7 +589,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'succeeded',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: {},
         assistantMessage: {},
@@ -615,7 +615,7 @@ describe('SchedulerService', () => {
         ...mockRun,
         status: 'running',
       });
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
         error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
       });

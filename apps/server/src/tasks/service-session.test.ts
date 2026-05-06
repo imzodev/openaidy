@@ -29,7 +29,7 @@ describe('TaskService Session Integration', () => {
   let taskService: TaskService;
   let mockSessionService: {
     createSession: ReturnType<typeof vi.fn>;
-    submitMessage: ReturnType<typeof vi.fn>;
+    submitMessageStreaming: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
   };
   let mockTasksRepo: {
@@ -60,7 +60,7 @@ describe('TaskService Session Integration', () => {
   beforeEach(() => {
     mockSessionService = {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
-      submitMessage: vi.fn().mockResolvedValue({ ok: true }),
+      submitMessageStreaming: vi.fn().mockResolvedValue({ ok: true }),
       getSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
     };
 
@@ -149,11 +149,13 @@ describe('TaskService Session Integration', () => {
     it('submits task description as initial message', async () => {
       await taskService.executeTask('task-1');
 
-      expect(mockSessionService.submitMessage).toHaveBeenCalledWith({
-        sessionId: 'session-1',
-        content: 'Test description',
-        role: 'user',
-      });
+      expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          content: 'Test description',
+          role: 'user',
+        }),
+      );
     });
 
     it('updates task status to in_progress', async () => {
@@ -254,11 +256,13 @@ describe('TaskService Session Integration', () => {
     it('submits subtask description as initial message', async () => {
       await taskService.executeSubtask('subtask-1');
 
-      expect(mockSessionService.submitMessage).toHaveBeenCalledWith({
-        sessionId: 'session-1',
-        content: 'Subtask description',
-        role: 'user',
-      });
+      expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          content: 'Subtask description',
+          role: 'user',
+        }),
+      );
     });
 
     it('throws if subtask not found', async () => {

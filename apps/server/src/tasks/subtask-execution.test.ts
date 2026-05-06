@@ -77,7 +77,7 @@ describe('Subtask Execution', () => {
 
     mockSessionService = {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
-      submitMessage: vi.fn().mockResolvedValue({}),
+      submitMessageStreaming: vi.fn().mockResolvedValue({}),
     };
 
     taskService = new TaskService({

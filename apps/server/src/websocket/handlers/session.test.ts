@@ -62,7 +62,7 @@ describe('SessionHandler', () => {
       getSession: vi.fn(),
       listSessions: vi.fn(),
       deleteSession: vi.fn(),
-      submitMessage: vi.fn(),
+      submitMessageStreaming: vi.fn(),
     };
 
     handler = new SessionHandler(
@@ -380,7 +380,7 @@ describe('SessionHandler', () => {
         errorMessage: null,
       };
 
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage,
         assistantMessage,
@@ -495,7 +495,7 @@ describe('SessionHandler', () => {
         status: 'active',
       });
 
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
         error: {
           code: 'provider.error',
@@ -613,7 +613,7 @@ describe('SessionHandler Streaming', () => {
       getSession: vi.fn(),
       listSessions: vi.fn(),
       deleteSession: vi.fn(),
-      submitMessage: vi.fn(),
+      submitMessageStreaming: vi.fn(),
     };
 
     mockStreamManager = {
@@ -653,7 +653,7 @@ describe('SessionHandler Streaming', () => {
         status: 'active',
       });
 
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
         assistantMessage: {
@@ -763,7 +763,7 @@ describe('SessionHandler Streaming', () => {
         status: 'active',
       });
 
-      mockSessionService.submitMessage.mockResolvedValue({
+      mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
         userMessage: { id: 'msg-1', content: 'Hello', role: 'user' },
         assistantMessage: {

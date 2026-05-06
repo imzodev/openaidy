@@ -86,7 +86,7 @@ describe('SessionHandler - Issue #126', () => {
       }),
       listSessions: vi.fn().mockResolvedValue([]),
       deleteSession: vi.fn().mockResolvedValue(true),
-      submitMessage: vi.fn().mockResolvedValue({
+      submitMessageStreaming: vi.fn().mockResolvedValue({
         ok: true,
         userMessage: { id: 'user-msg-1', content: 'Hello', role: 'user' },
         assistantMessage: {

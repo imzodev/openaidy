@@ -276,8 +276,10 @@ export class SchedulerService {
       if (modelId !== undefined) messageInput.modelId = modelId;
 
       // Use SessionMessageService to submit message
-      const result =
-        await this.sessionMessageService.submitMessage(messageInput);
+      const result = await this.sessionMessageService.submitMessageStreaming({
+        ...messageInput,
+        onStreamEvent: () => {},
+      });
 
       if (!result.ok) {
         throw new Error(
@@ -296,16 +298,17 @@ export class SchedulerService {
 
       // Submit the message to the new session
       const submitInput: Parameters<
-        typeof this.sessionMessageService.submitMessage
+        typeof this.sessionMessageService.submitMessageStreaming
       >[0] = {
         sessionId: newSession.id,
         role: 'user',
         content: (job.payload.message as string) || 'Scheduled job execution',
+        onStreamEvent: () => {},
       };
       const agentId = job.payload.agentId as string | undefined;
       if (agentId !== undefined) submitInput.agentId = agentId;
       const result =
-        await this.sessionMessageService.submitMessage(submitInput);
+        await this.sessionMessageService.submitMessageStreaming(submitInput);
 
       if (!result.ok) {
         throw new Error(
