@@ -1,4 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
+import { ChoicesEvent } from '@openaidy/shared-types';
 
 /**
  * Run event types
@@ -8,7 +9,8 @@ export type RunEventType =
   | 'run.started'
   | 'run.delta'
   | 'run.completed'
-  | 'run.failed';
+  | 'run.failed'
+  | 'session.run.choices';
 
 /**
  * Run event envelope
@@ -215,6 +217,33 @@ export class RunEventEmitter {
         errorCode: params.errorCode,
         errorMessage: params.errorMessage,
       },
+    });
+  }
+
+  /**
+   * Emit a session.run.choices event
+   */
+  emitChoices(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    question?: string;
+    choices: string[];
+  }): void {
+    const payload: ChoicesEvent = {
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      ...(params.question !== undefined ? { question: params.question } : {}),
+      choices: params.choices,
+    };
+    this.emit({
+      type: 'session.run.choices',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: payload,
     });
   }
 
