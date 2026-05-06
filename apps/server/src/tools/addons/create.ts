@@ -109,6 +109,24 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       sdkBootstrapSnippet(),
       '',
       '',
+      'EXTERNAL DOMAINS (required when using fetch())',
+      '───────────────────────────────────────────────',
+      'If your addon calls fetch() on any external URL (anything that is not the OpenAidy',
+      'server), you MUST declare those hostnames in `externalDomains`. Without this the',
+      'browser will block the request with a CSP error and the addon will silently fail.',
+      '',
+      'Rule: scan every fetch() / XMLHttpRequest / WebSocket call in your code.',
+      'For every external hostname found, add it (bare, no protocol) to externalDomains.',
+      '',
+      'Example — addon that calls a weather API:',
+      '  externalDomains: ["api.open-meteo.com"]',
+      '',
+      'Example — addon that loads images from GitHub:',
+      '  externalImageDomains: ["raw.githubusercontent.com"]',
+      '',
+      'The OpenAidy server itself (localhost / the SDK proxy) is always allowed.',
+      'Do NOT list it in externalDomains.',
+      '',
       'PERMISSIONS',
       '───────────',
       'The `permissions` parameter declares what the addon is allowed to do.',
@@ -176,8 +194,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Bare hostnames the addon is allowed to call with fetch() directly in the browser ' +
-            '(e.g. ["api.open-meteo.com"]). Enforced via CSP connect-src. ' +
+            'REQUIRED whenever the addon calls fetch() on a URL that is not the OpenAidy server. ' +
+            'List every external hostname (bare, no protocol) the addon fetches from. ' +
+            'Without this the browser blocks the request via CSP and the addon silently fails. ' +
+            'Example: ["api.open-meteo.com"]. ' +
             'The OpenAidy server and SDK proxy are always allowed — do not list them here.',
         },
         externalImageDomains: {
@@ -335,6 +355,39 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           };
         }
         extraFiles[filePath] = content;
+      }
+
+      // ── Validate externalDomains: detect undeclared external fetch() calls ─
+      {
+        const allContent = Object.values(extraFiles).join('\n');
+        const fetchMatches = allContent.match(
+          /fetch\(\s*['"`](https?:\/\/[^'"`\s]+)/g,
+        );
+        if (fetchMatches && fetchMatches.length > 0) {
+          const mentionedHosts = fetchMatches
+            .map((m) => {
+              const url = m.replace(/fetch\(\s*['"`]/, '');
+              try {
+                return new URL(url).hostname;
+              } catch {
+                return null;
+              }
+            })
+            .filter((h): h is string => h !== null);
+          const undeclared = mentionedHosts.filter(
+            (h) => !externalDomains || !externalDomains.includes(h),
+          );
+          if (undeclared.length > 0) {
+            const unique = [...new Set(undeclared)];
+            return {
+              ok: false,
+              error:
+                `Your addon calls fetch() on external URLs but externalDomains is missing or incomplete. ` +
+                `The browser will block these requests via CSP. ` +
+                `Add the following to externalDomains: [${unique.map((h) => `"${h}"`).join(', ')}]`,
+            };
+          }
+        }
       }
 
       // ── Step 1: scaffold files via shared template generator ─────────────

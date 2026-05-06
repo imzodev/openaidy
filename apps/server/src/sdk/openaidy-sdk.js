@@ -25,6 +25,32 @@
   const _pendingRequests = new Map();
   const _readyCallbacks = [];
 
+  // Forward CSP violations to the parent app so it can show a warning banner.
+  // Violations that fire before OPENAIDY_INIT (nonce not yet known) are buffered
+  // and flushed once the nonce arrives.
+  var _cspViolationBuffer = [];
+  function _flushCspViolations() {
+    _cspViolationBuffer.forEach(function (blocked) {
+      window.parent.postMessage(
+        { type: 'ADDON_CSP_VIOLATION', blockedURI: blocked, nonce: _nonce },
+        '*',
+      );
+    });
+    _cspViolationBuffer = [];
+  }
+  document.addEventListener('securitypolicyviolation', function (e) {
+    var blocked = e.blockedURI;
+    if (!blocked || blocked === 'inline' || blocked === 'eval') return;
+    if (_nonce) {
+      window.parent.postMessage(
+        { type: 'ADDON_CSP_VIOLATION', blockedURI: blocked, nonce: _nonce },
+        '*',
+      );
+    } else {
+      _cspViolationBuffer.push(blocked);
+    }
+  });
+
   // Listen for INIT message from parent
   window.addEventListener('message', function (event) {
     const msg = event.data;
@@ -35,6 +61,7 @@
       _apiBase = msg.apiBase ?? null;
       _nonce = msg.nonce ?? null;
       _ready = true;
+      _flushCspViolations();
       _readyCallbacks.forEach(function (cb) {
         try {
           cb(global.OpenAidy);

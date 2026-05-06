@@ -196,6 +196,39 @@ OpenAidy.ready(function(sdk) {});`;
     );
   });
 
+  it('rejects undeclared external fetch() domains', async () => {
+    const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  fetch('https://api.example.com/data').then(r => r.json());
+});`;
+    expectError(
+      await tool.execute(
+        {
+          ...VALID_ARGS,
+          files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
+        },
+        { agentId: 'agent' },
+      ),
+      /externalDomains/,
+    );
+  });
+
+  it('accepts external fetch() when domain is declared in externalDomains', async () => {
+    const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  fetch('https://api.example.com/data').then(r => r.json());
+});`;
+    const result = await tool.execute(
+      {
+        ...VALID_ARGS,
+        externalDomains: ['api.example.com'],
+        files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
+      },
+      { agentId: 'agent' },
+    );
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects path traversal in extra files', async () => {
     const files = { ...VALID_ARGS.files, '../escape.js': 'bad' };
     expectError(
