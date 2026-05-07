@@ -23,7 +23,10 @@ describe('RunEventEmitter', () => {
       });
 
       expect(listener).toHaveBeenCalledOnce();
-      const event = listener.mock.calls[0][0];
+      const event = listener.mock.calls[0]![0] as {
+        type: string;
+        data: ChoicesEvent;
+      };
       expect(event.type).toBe('session.run.choices');
       expect(event.data).toBeDefined();
       const payload = event.data as ChoicesEvent;
@@ -42,7 +45,12 @@ describe('RunEventEmitter', () => {
       });
 
       expect(listener).toHaveBeenCalledOnce();
-      const event = listener.mock.calls[0][0];
+      const event = listener.mock.calls[0]![0] as {
+        runId: string;
+        sessionId: string;
+        agentId: string;
+        type: string;
+      };
       expect(event.runId).toBe('run-abc');
       expect(event.sessionId).toBe('session-xyz');
       expect(event.agentId).toBe('agent-1');
@@ -61,7 +69,10 @@ describe('RunEventEmitter', () => {
       });
 
       expect(listener).toHaveBeenCalledOnce();
-      const event = listener.mock.calls[0][0];
+      const event = listener.mock.calls[0]![0] as {
+        type: string;
+        data: ChoicesEvent;
+      };
       expect(event.type).toBe('session.run.choices');
       expect(event.data).toBeDefined();
       const payload = event.data as ChoicesEvent;

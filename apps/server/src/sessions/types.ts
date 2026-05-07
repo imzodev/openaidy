@@ -18,17 +18,28 @@ export type SubmitMessageInput = {
  */
 export type SubmitMessageStreamingInput = SubmitMessageInput & {
   /** Callback for stream events */
-  onStreamEvent: (event: {
-    type: 'delta' | 'tool_call' | 'usage' | 'error';
-    content?: string;
-    toolCall?: { id: string; name: string; arguments: Record<string, unknown> };
-    usage?: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-    };
-    error?: { code: string; message: string };
-  }) => void;
+  onStreamEvent: (
+    event:
+      | { type: 'delta'; content?: string }
+      | {
+          type: 'tool_call';
+          toolCall: {
+            id: string;
+            name: string;
+            arguments: Record<string, unknown>;
+          };
+        }
+      | {
+          type: 'usage';
+          usage: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+          };
+        }
+      | { type: 'error'; error: { code: string; message: string } }
+      | { type: 'choices'; question?: string; choices: string[] },
+  ) => void;
 };
 
 /**
