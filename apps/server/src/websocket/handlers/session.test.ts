@@ -51,7 +51,8 @@ describe('SessionHandler', () => {
     getSession: ReturnType<typeof vi.fn>;
     listSessions: ReturnType<typeof vi.fn>;
     deleteSession: ReturnType<typeof vi.fn>;
-    submitMessage: ReturnType<typeof vi.fn>;
+    submitMessage?: ReturnType<typeof vi.fn>;
+    submitMessageStreaming: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -587,7 +588,8 @@ describe('SessionHandler Streaming', () => {
     getSession: ReturnType<typeof vi.fn>;
     listSessions: ReturnType<typeof vi.fn>;
     deleteSession: ReturnType<typeof vi.fn>;
-    submitMessage: ReturnType<typeof vi.fn>;
+    submitMessage?: ReturnType<typeof vi.fn>;
+    submitMessageStreaming: ReturnType<typeof vi.fn>;
   };
   let mockStreamManager: {
     subscribeToRun: ReturnType<typeof vi.fn>;

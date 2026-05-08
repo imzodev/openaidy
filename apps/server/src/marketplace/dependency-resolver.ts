@@ -265,7 +265,7 @@ export class DependencyResolver {
     _options: ResolutionOptions = {},
   ): ResolutionResult {
     // Start with basic resolution
-    const bestResult = this.resolve(rootAddonId, rootVersion, options);
+    const bestResult = this.resolve(rootAddonId, rootVersion, _options);
 
     if (bestResult.success) {
       return bestResult;

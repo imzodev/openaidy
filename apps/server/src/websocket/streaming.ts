@@ -8,13 +8,13 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { RunEvent, RunEventEmitter } from '../dispatch/events';
 import type { ConnectionManager } from './connection-manager';
 import {
-  type WSMessage,
   type SessionStreamStart,
   type SessionStreamDelta,
   type SessionStreamToolCall,
   type SessionStreamUsage,
   type SessionStreamEnd,
   type SessionStreamError,
+  type SessionRunChoicesEvent,
   createWSMessage,
 } from '@openaidy/shared-types';
 
@@ -31,7 +31,8 @@ export type SessionStreamEvent =
   | SessionStreamToolCall
   | SessionStreamUsage
   | SessionStreamEnd
-  | SessionStreamError;
+  | SessionStreamError
+  | SessionRunChoicesEvent;
 
 /**
  * Tool call structure
@@ -58,7 +59,9 @@ export type Usage = {
 /**
  * Map a RunEvent to a SessionStreamEvent
  */
-export function mapRunEventToStreamEvent(event: RunEvent): SessionStreamEvent | null {
+export function mapRunEventToStreamEvent(
+  event: RunEvent,
+): SessionStreamEvent | null {
   switch (event.type) {
     case 'run.started': {
       return createWSMessage('session.stream.start', {
@@ -96,6 +99,16 @@ export function mapRunEventToStreamEvent(event: RunEvent): SessionStreamEvent | 
           message: (event.data.errorMessage as string) ?? 'Unknown error',
         },
       }) as SessionStreamError;
+    }
+
+    case 'session.run.choices': {
+      return createWSMessage('session.run.choices', {
+        runId: event.runId,
+        sessionId: event.sessionId,
+        agentId: event.agentId,
+        question: event.data.question as string | undefined,
+        choices: event.data.choices as string[],
+      }) as SessionRunChoicesEvent;
     }
 
     default:
@@ -141,10 +154,7 @@ export class StreamManager {
 
     // Check if already subscribed
     if (this.subscriptions.has(subKey)) {
-      this.logger.debug(
-        { runId, connectionId },
-        'Already subscribed to run',
-      );
+      this.logger.debug({ runId, connectionId }, 'Already subscribed to run');
       return;
     }
 
@@ -174,10 +184,7 @@ export class StreamManager {
     }
     this.connectionSubscriptions.get(connectionId)!.add(subKey);
 
-    this.logger.info(
-      { runId, connectionId },
-      'Subscribed to run stream',
-    );
+    this.logger.info({ runId, connectionId }, 'Subscribed to run stream');
   }
 
   /**
@@ -209,10 +216,7 @@ export class StreamManager {
         }
       }
 
-      this.logger.info(
-        { runId, connectionId },
-        'Unsubscribed from run stream',
-      );
+      this.logger.info({ runId, connectionId }, 'Unsubscribed from run stream');
     }
   }
 
@@ -294,8 +298,12 @@ export class StreamManager {
       this.unsubscribeFromRun(event.runId, connectionId);
     }
 
-    // If run completed or failed, auto-unsubscribe
-    if (event.type === 'run.completed' || event.type === 'run.failed') {
+    // If run completed, failed, or emitted choices (suspended), auto-unsubscribe
+    if (
+      event.type === 'run.completed' ||
+      event.type === 'run.failed' ||
+      event.type === 'session.run.choices'
+    ) {
       this.unsubscribeFromRun(event.runId, connectionId);
     }
   }

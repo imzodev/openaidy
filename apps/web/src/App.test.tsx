@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@solidjs/testing-library';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  cleanup,
+} from '@solidjs/testing-library';
 import App from './App';
 import { createSignal } from 'solid-js';
 
@@ -122,6 +128,7 @@ vi.mock('lucide-solid', () => ({
   Menu: () => <span>Menu</span>,
   KeyRound: () => <span>KR</span>,
   LogOut: () => <span>LO</span>,
+  X: () => <span>X</span>,
 }));
 
 describe('App', () => {
@@ -148,6 +155,7 @@ describe('App', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    cleanup();
   });
 
   it('should render the app with sidebar', async () => {
@@ -225,11 +233,176 @@ describe('App', () => {
 
       // Verify error is handled
     });
+  });
 
-    it('should have event handlers registered when connected', () => {
-      // Verify that the mock WebSocket context has the on method
-      expect(mockContext.client).toBeDefined();
-      expect(typeof mockContext.client().on).toBe('function');
+  it('should have event handlers registered when connected', () => {
+    // Verify that the mock WebSocket context has the on method
+    expect(mockContext.client).toBeDefined();
+    expect(typeof mockContext.client().on).toBe('function');
+  });
+
+  describe('ChoicesCard integration', () => {
+    it('renders ChoicesCard when session.run.choices event is received', async () => {
+      // Mock sessions so the app has a selected session
+      mockListSessions.mockResolvedValue({
+        items: [
+          { id: 'session-1', title: 'Test Session', createdAt: '2024-01-01' },
+        ],
+      });
+      mockListAgents.mockResolvedValue({
+        items: [{ id: 'agent-1', name: 'Test Agent', model: 'test/model' }],
+      });
+
+      render(() => <App />);
+
+      // Wait for app to load and select the session
+      await waitFor(() => {
+        expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+      });
+
+      // Emit a choices event
+      mockContext.emitStreamEvent('session.run.choices', {
+        type: 'session.run.choices',
+        payload: {
+          runId: 'run-1',
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          question: 'Which option do you prefer?',
+          choices: ['Option A', 'Option B', 'Option C'],
+        },
+      });
+
+      // Verify the ChoicesCard renders with the question and choices
+      await waitFor(() => {
+        expect(
+          screen.getByText('Which option do you prefer?'),
+        ).toBeInTheDocument();
+      });
+      expect(screen.getByText('Option A')).toBeInTheDocument();
+      expect(screen.getByText('Option B')).toBeInTheDocument();
+      expect(screen.getByText('Option C')).toBeInTheDocument();
+    });
+
+    it('submits chosen option as user message and clears card', async () => {
+      // Mock sessions so the app has a selected session
+      mockListSessions.mockResolvedValue({
+        items: [
+          { id: 'session-1', title: 'Test Session', createdAt: '2024-01-01' },
+        ],
+      });
+      mockListAgents.mockResolvedValue({
+        items: [{ id: 'agent-1', name: 'Test Agent', model: 'test/model' }],
+      });
+
+      // Capture the submit call
+      const submitMessageStreaming = await import('./lib/ws-api').then(
+        (m) => m.submitMessageStreaming as ReturnType<typeof vi.fn>,
+      );
+      submitMessageStreaming.mockResolvedValue({
+        ok: true,
+        userMessage: { id: 'u1', content: 'Option B', role: 'user' },
+        assistantMessage: { id: 'a1', content: '', role: 'assistant' },
+        run: { id: 'r1', status: 'streaming' },
+      });
+
+      render(() => <App />);
+
+      // Wait for app to load
+      await waitFor(() => {
+        expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+      });
+
+      // Emit a choices event
+      mockContext.emitStreamEvent('session.run.choices', {
+        type: 'session.run.choices',
+        payload: {
+          runId: 'run-1',
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          question: 'Which option do you prefer?',
+          choices: ['Option A', 'Option B', 'Option C'],
+        },
+      });
+
+      // Wait for card and click Option B
+      await waitFor(() => {
+        expect(screen.getByText('Option B')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Option B'));
+
+      // Verify submitMessageStreaming was called with the choice
+      await waitFor(() => {
+        expect(submitMessageStreaming).toHaveBeenCalledWith(
+          'session-1',
+          expect.objectContaining({
+            role: 'user',
+            content: 'Option B',
+          }),
+        );
+      });
+
+      // Card should be dismissed (no longer showing question)
+      expect(
+        screen.queryByText('Which option do you prefer?'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('clears card on dismiss without submitting', async () => {
+      // Mock sessions so the app has a selected session
+      mockListSessions.mockResolvedValue({
+        items: [
+          { id: 'session-1', title: 'Test Session', createdAt: '2024-01-01' },
+        ],
+      });
+      mockListAgents.mockResolvedValue({
+        items: [{ id: 'agent-1', name: 'Test Agent', model: 'test/model' }],
+      });
+
+      const submitMessageStreaming = await import('./lib/ws-api').then(
+        (m) => m.submitMessageStreaming as ReturnType<typeof vi.fn>,
+      );
+      submitMessageStreaming.mockClear();
+
+      render(() => <App />);
+
+      // Wait for app to load
+      await waitFor(() => {
+        expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+      });
+
+      // Emit a choices event
+      mockContext.emitStreamEvent('session.run.choices', {
+        type: 'session.run.choices',
+        payload: {
+          runId: 'run-1',
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          question: 'Which option do you prefer?',
+          choices: ['Option A', 'Option B', 'Option C'],
+        },
+      });
+
+      // Wait for card and click dismiss (X button)
+      await waitFor(() => {
+        expect(
+          screen.getByText('Which option do you prefer?'),
+        ).toBeInTheDocument();
+      });
+
+      // Find and click the dismiss button
+      const dismissButton = screen.getByLabelText('Dismiss');
+      fireEvent.click(dismissButton);
+
+      // Card should be dismissed
+      await waitFor(() => {
+        expect(
+          screen.queryByText('Which option do you prefer?'),
+        ).not.toBeInTheDocument();
+      });
+
+      // submitMessageStreaming should NOT have been called
+      expect(submitMessageStreaming).not.toHaveBeenCalled();
     });
   });
 });

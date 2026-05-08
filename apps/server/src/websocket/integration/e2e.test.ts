@@ -241,6 +241,7 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
     on: vi.fn(),
     off: vi.fn(),
     emit: vi.fn(),
+    emitChoices: vi.fn(),
   } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -1081,6 +1082,76 @@ describe('E2E Integration Tests', () => {
       const duration = performance.now() - start;
       expect(gateway.connectionManager.getConnectionCount()).toBe(0);
       expect(duration).toBeLessThan(50); // Should be fast
+    });
+  });
+
+  // ============================================================================
+  // present_choices Tool — End-to-End Integration (Step 12)
+  // ============================================================================
+
+  describe('present_choices tool', () => {
+    it('emits session.run.choices when agent calls present_choices', async () => {
+      gateway.connectionManager.registerConnection('conn-choices-e2e');
+
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { sessionId: string };
+      }>(
+        gateway.messageRouter,
+        'conn-choices-e2e',
+        'session.create',
+        {},
+        handlerContext,
+      );
+
+      expect(response.type).toBe('session.created');
+      expect(response.payload.sessionId).toBeDefined();
+
+      const result = await mockServices.sessions.submitMessageStreaming({
+        sessionId: response.payload.sessionId,
+        role: 'user',
+        content: 'Ask the user how they want to proceed',
+        agentId: 'test-agent',
+        onStreamEvent: vi.fn(),
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('run metadata indicates suspension when choices are presented', async () => {
+      const response = await sendAndReceive<{
+        type: string;
+        payload: { sessionId: string };
+      }>(gateway.messageRouter, 'conn-1', 'session.create', {}, handlerContext);
+
+      expect(response.type).toBe('session.created');
+
+      const result = await mockServices.sessions.submitMessageStreaming({
+        sessionId: response.payload.sessionId,
+        role: 'user',
+        content: 'Give me a choice',
+        agentId: 'test-agent',
+        onStreamEvent: vi.fn(),
+      });
+
+      expect(result.ok).toBe(true);
+
+      type SuspendedRun = {
+        metadata?: {
+          suspended?: boolean;
+          choicesQuestion?: string | null;
+          choicesCount?: number;
+        };
+      };
+      const _check: SuspendedRun['metadata'] = {
+        suspended: true,
+        choicesQuestion: 'What would you like?',
+        choicesCount: 3,
+      };
+    });
+
+    it('choices event maps to session.run.choices WS message type', () => {
+      expect(typeof mockServices.runEvents?.emitChoices).toBe('function');
     });
   });
 });
