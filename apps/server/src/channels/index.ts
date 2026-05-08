@@ -1,7 +1,8 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { ChannelConfig } from '@openaidy/config';
-import type { SessionMessageService } from '../sessions/service.js';
+import type { SessionMessageService } from '../../sessions/service.js';
 import { ChannelRegistry } from './registry.js';
+import { WhatsAppChannel } from './whatsapp/service.js';
 
 export type ChannelRegistryDeps = {
   sessionService: SessionMessageService;
@@ -30,13 +31,7 @@ export function createChannelRegistry(
   const registry = new ChannelRegistry();
   for (const cfg of configs ?? []) {
     if (cfg.type === 'whatsapp') {
-      // TODO: import and instantiate WhatsAppChannel once Phase 4 is merged
-      // const { WhatsAppChannel } = await import('./whatsapp/service.js');
-      // registry.register(new WhatsAppChannel(cfg, deps));
-      deps.logger.info(
-        { channelId: cfg.id },
-        'whatsapp channel configured (pending Phase 4)',
-      );
+      registry.register(new WhatsAppChannel(cfg, deps));
     }
     // Future channel types go here, e.g.:
     // if (cfg.type === 'telegram') {

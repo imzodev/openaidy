@@ -263,7 +263,7 @@ export class SessionMessageService {
    * This orchestrates the full flow:
    * 1. Validate session exists
    * 2. Persist user message
-   * 3. Create run record (queued)
+   3. Create run record (queued)
    * 4. Mark run as running
    * 5. Build request from session history + new message
    * 6. Invoke provider
@@ -405,6 +405,47 @@ export class SessionMessageService {
         result.error.code,
         result.error.message,
       );
+    }
+  }
+
+  /**
+   * Non-streaming submitMessage that returns the full assistant reply text.
+   * Used by channel handlers (WhatsApp, etc.) that need the complete response
+   * before sending it back over the messaging protocol.
+   *
+   * Returns { ok: true, assistantMessage: { content: string } } or
+   *        { ok: false, error: { code, message } }
+   */
+  async submitMessageNonStreaming(params: {
+    sessionId: string;
+    role: 'user' | 'system';
+    content: string;
+    agentId?: string;
+    providerId?: string;
+    modelId?: string;
+  }): Promise<
+    | { ok: true; assistantMessage: { content: string } }
+    | { ok: false; error: { code: string; message: string } }
+  > {
+    const result = await this.submitMessage({
+      sessionId: params.sessionId,
+      role: params.role,
+      content: params.content,
+      agentId: params.agentId,
+      providerId: params.providerId,
+      modelId: params.modelId,
+    });
+
+    if (result.ok) {
+      const content =
+        (result as { ok: true; assistantMessage: { content: string } })
+          .assistantMessage?.content ?? '';
+      return { ok: true, assistantMessage: { content } };
+    } else {
+      const err = (
+        result as { ok: false; error: { code: string; message: string } }
+      ).error;
+      return { ok: false, error: err };
     }
   }
 
