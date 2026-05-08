@@ -15,7 +15,14 @@ export type RequireAuthOptions = {
 export function requireAuth(opts: RequireAuthOptions) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const authHeader = request.headers.authorization ?? '';
-    const token = opts.authMiddleware.extractFromHeader(authHeader);
+    let token = opts.authMiddleware.extractFromHeader(authHeader);
+
+    // Fallback to query string token (for SSE EventSource connections)
+    if (!token && request.query && typeof request.query === 'object') {
+      token = opts.authMiddleware.extractFromQuery(
+        request.query as Record<string, string | undefined>,
+      );
+    }
 
     if (!token) {
       return reply

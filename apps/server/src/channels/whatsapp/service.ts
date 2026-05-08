@@ -84,9 +84,17 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
 
       if (qr) {
         try {
+          this.deps.logger.info(
+            { channelId: this.id },
+            'whatsapp: QR code received from Baileys',
+          );
           const dataUrl = await QRCode.toDataURL(qr);
           this.qr = dataUrl.replace('data:image/png;base64,', '');
           this.setStatus('qr');
+          this.deps.logger.info(
+            { channelId: this.id, qrLength: this.qr.length },
+            'whatsapp: emitting qr event to listeners',
+          );
           this.emit('qr', this.qr);
         } catch (err) {
           this.deps.logger.error(

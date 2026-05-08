@@ -1,6 +1,7 @@
 import {
   createResource,
   createSignal,
+  createEffect,
   For,
   Show,
   Switch,
@@ -16,11 +17,9 @@ import {
   QrCode,
 } from 'lucide-solid';
 import { Layout } from './Layout';
-import type {
-  ChannelStatusResponse,
-  ChannelSseEvent,
-} from '@openaidy/shared-types';
+import type { ChannelStatusResponse } from '@openaidy/shared-types';
 import { listChannels, connectChannel, disconnectChannel } from '../../lib/api';
+import { useWebSocketContext } from '../../lib/ws-provider';
 
 function StatusBadge(props: { status: ChannelStatusResponse['status'] }) {
   return (
@@ -56,29 +55,71 @@ function StatusBadge(props: { status: ChannelStatusResponse['status'] }) {
 function QrPanel(props: { channelId: string; onConnected: () => void }) {
   const [qr, setQr] = createSignal<string | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const [connected, setConnected] = createSignal(false);
 
-  const es = new EventSource(`/api/channels/${props.channelId}/qr/stream`);
+  const wsContext = useWebSocketContext();
 
-  es.onmessage = (e) => {
-    try {
-      const event: ChannelSseEvent = JSON.parse(e.data);
-      if (event.type === 'qr') {
-        setQr(event.qr);
-      }
-      if (event.type === 'status' && event.status === 'connected') {
-        es.close();
-        props.onConnected();
-      }
-    } catch {
-      setError('Failed to parse QR event');
+  // Subscribe to channel events when component mounts
+  onCleanup(() => {
+    const client = wsContext.client();
+    if (client && !connected()) {
+      // Unsubscribe from channel events
+      client.send({
+        type: 'channel.unsubscribe',
+        payload: { channelId: props.channelId },
+      } as never);
     }
-  };
+  });
 
-  es.onerror = () => {
-    setError('SSE connection lost');
-  };
+  // Watch for WebSocket connection and subscribe to channel events
+  createEffect(() => {
+    const client = wsContext.client();
+    console.log(
+      '[QrPanel] createEffect run, client:',
+      !!client,
+      'connected:',
+      connected(),
+    );
+    if (!client || connected()) return;
 
-  onCleanup(() => es.close());
+    // Subscribe to QR events
+    const unsubQr = client.on('channel.qr', (msg: unknown) => {
+      console.log('[QrPanel] Received channel.qr event:', msg);
+      const wsMsg = msg as { payload: { channelId: string; qr: string } };
+      if (wsMsg.payload.channelId === props.channelId) {
+        setQr(wsMsg.payload.qr);
+      }
+    });
+
+    // Subscribe to status events
+    const unsubStatus = client.on('channel.status', (msg: unknown) => {
+      console.log('[QrPanel] Received channel.status event:', msg);
+      const wsMsg = msg as { payload: { channelId: string; status: string } };
+      if (wsMsg.payload.channelId === props.channelId) {
+        if (wsMsg.payload.status === 'connected') {
+          setConnected(true);
+          props.onConnected();
+        }
+        if (wsMsg.payload.status === 'error') {
+          setError('Connection error');
+        }
+      }
+    });
+
+    // Send subscribe request (fire and forget)
+    console.log('[QrPanel] Sending channel.subscribe for:', props.channelId);
+    void client.sendRequest('channel.subscribe', {
+      channelId: props.channelId,
+    });
+
+    onCleanup(() => {
+      unsubQr();
+      unsubStatus();
+      void client.sendRequest('channel.unsubscribe', {
+        channelId: props.channelId,
+      });
+    });
+  });
 
   return (
     <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
