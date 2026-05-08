@@ -73,6 +73,7 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
       version,
       auth: state,
       printQRInTerminal: false,
+      browser: ['OpenAidy', '1.0.0', 'Ubuntu'],
     } as SocketConfig;
 
     this.socket = makeWASocket(socketConfig);
