@@ -10,53 +10,16 @@ import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
 import {
   type WSMessage,
-  type WSResponse,
-  type ErrorResponse,
   createWSMessage,
   createErrorResponse,
   WS_ERROR_CODES,
+  type ChannelStatus,
+  type ChannelSubscribeRequest,
+  type ChannelUnsubscribeRequest,
+  type ChannelSubscribedResponse,
+  type ChannelUnsubscribedResponse,
+  type ErrorResponse,
 } from '@openaidy/shared-types';
-import type { ChannelStatus } from '@openaidy/shared-types';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface ChannelSubscribeRequest {
-  id: string;
-  type: 'channel.subscribe';
-  payload: {
-    channelId: string;
-  };
-}
-
-interface ChannelUnsubscribeRequest {
-  id: string;
-  type: 'channel.unsubscribe';
-  payload: {
-    channelId: string;
-  };
-}
-
-type ChannelSubscribedResponse = WSMessage<
-  'channel.subscribed',
-  { channelId: string }
->;
-
-type ChannelUnsubscribedResponse = WSMessage<
-  'channel.unsubscribed',
-  { channelId: string }
->;
-
-type ChannelStatusResponse = WSMessage<
-  'channel.status',
-  { channelId: string; status: ChannelStatus }
->;
-
-type ChannelQrResponse = WSMessage<
-  'channel.qr',
-  { channelId: string; qr: string }
->;
 
 // ============================================================================
 // Channel Handler Class
@@ -92,31 +55,27 @@ export class ChannelHandler {
       );
     }
 
-    // Add to subscriptions
+    // Initialize subscription set for this connection if needed
     if (!this.subscriptions.has(connectionId)) {
       this.subscriptions.set(connectionId, new Set());
     }
     this.subscriptions.get(connectionId)!.add(channelId);
 
-    // Set up listeners for this channel on this connection
+    // Setup listeners for this channel
     this.setupChannelListeners(connectionId, channelId);
 
     this.logger.info({ connectionId, channelId }, 'Channel subscription added');
 
-    // Send initial status
+    // Send current status immediately
     const status = channel.getStatus();
     const statusResponse = createWSMessage(
       'channel.status',
       { channelId, status },
       request.id,
-    ) as ChannelStatusResponse;
+    );
     this.sendToConnection(connectionId, statusResponse);
 
-    return createWSMessage(
-      'channel.subscribed',
-      { channelId },
-      request.id,
-    ) as ChannelSubscribedResponse;
+    return createWSMessage('channel.subscribed', { channelId }, request.id);
   }
 
   /**
@@ -129,13 +88,9 @@ export class ChannelHandler {
   ): Promise<ChannelUnsubscribedResponse | ErrorResponse> {
     const { channelId } = request.payload;
 
-    // Remove from subscriptions
     const subs = this.subscriptions.get(connectionId);
     if (subs) {
       subs.delete(channelId);
-      if (subs.size === 0) {
-        this.subscriptions.delete(connectionId);
-      }
     }
 
     this.logger.info(
@@ -143,69 +98,45 @@ export class ChannelHandler {
       'Channel subscription removed',
     );
 
-    return createWSMessage(
-      'channel.unsubscribed',
-      { channelId },
-      request.id,
-    ) as ChannelUnsubscribedResponse;
+    return createWSMessage('channel.unsubscribed', { channelId }, request.id);
   }
 
   /**
-   * Set up listeners for a channel on a specific connection
+   * Setup listeners to forward channel events to the WebSocket client
    */
   private setupChannelListeners(connectionId: string, channelId: string): void {
     const channel = this.channelRegistry.get(channelId);
     if (!channel) return;
 
-    // Create handlers for QR and status events
+    // Handle QR updates
     const onQr = (qr: string) => {
       this.logger.debug(
         { connectionId, channelId, qrLength: qr.length },
         'Channel QR event received',
       );
-      const event = createWSMessage('channel.qr', {
-        channelId,
-        qr,
-      }) as ChannelQrResponse;
+      const event = createWSMessage('channel.qr', { channelId, qr });
       this.sendToConnection(connectionId, event);
     };
 
+    // Handle status changes
     const onStatus = (status: ChannelStatus) => {
       this.logger.debug(
         { connectionId, channelId, status },
         'Channel status event received',
       );
-      // Send status event
-      const event = createWSMessage('channel.status', {
-        channelId,
-        status,
-      }) as ChannelStatusResponse;
+      const event = createWSMessage('channel.status', { channelId, status });
       this.sendToConnection(connectionId, event);
     };
 
     channel.onQrUpdate(onQr);
     channel.onStatusChange(onStatus);
-    this.logger.info(
-      { connectionId, channelId },
-      'Channel listeners registered',
-    );
   }
 
   /**
-   * Send a message to a specific connection
+   * Send a message directly to a specific connection
    */
   private sendToConnection(connectionId: string, message: WSMessage): void {
-    const conn = this.connectionManager.getConnection(connectionId);
-    if (conn?.socket && conn.socket.readyState === 1) {
-      conn.socket.send(JSON.stringify(message));
-    }
-  }
-
-  /**
-   * Clean up subscriptions when a connection closes
-   */
-  cleanupConnection(connectionId: string): void {
-    this.subscriptions.delete(connectionId);
+    this.connectionManager.send(connectionId, message);
   }
 }
 
@@ -221,7 +152,7 @@ export function registerChannelHandlers(
         connId: string,
         msg: WSMessage,
         ctx: HandlerContext,
-      ) => Promise<WSResponse | void>,
+      ) => Promise<unknown>,
     ) => void;
   },
   handler: ChannelHandler,
@@ -233,7 +164,7 @@ export function registerChannelHandlers(
         connId,
         msg as ChannelSubscribeRequest,
         ctx,
-      ) as unknown as Promise<WSResponse | void>,
+      ) as unknown as Promise<unknown>,
   );
 
   router.registerHandler(
@@ -243,6 +174,6 @@ export function registerChannelHandlers(
         connId,
         msg as ChannelUnsubscribeRequest,
         ctx,
-      ) as unknown as Promise<WSResponse | void>,
+      ) as unknown as Promise<unknown>,
   );
 }

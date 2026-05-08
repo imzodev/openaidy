@@ -26,25 +26,67 @@ export type ChannelStatusResponse = {
   error?: string; // present only when status === 'error'
 };
 
+// ============================================================================
+// WebSocket message types for channel operations
+// ============================================================================
+
+import type { WSMessage } from './websocket.js';
+
 /**
- * SSE event shape pushed by GET /channels/:id/qr/stream
- * when a new QR code is available.
+ * WebSocket request to subscribe to channel QR and status updates.
+ * The server sends channel.qr and channel.status events to the subscriber.
+ */
+export type ChannelSubscribeRequest = WSMessage<
+  'channel.subscribe',
+  { channelId: string }
+>;
+
+/**
+ * WebSocket request to unsubscribe from channel updates.
+ */
+export type ChannelUnsubscribeRequest = WSMessage<
+  'channel.unsubscribe',
+  { channelId: string }
+>;
+
+/**
+ * Response confirming subscription to a channel.
+ */
+export type ChannelSubscribedResponse = WSMessage<
+  'channel.subscribed',
+  { channelId: string }
+>;
+
+/**
+ * Response confirming unsubscription from a channel.
+ */
+export type ChannelUnsubscribedResponse = WSMessage<
+  'channel.unsubscribed',
+  { channelId: string }
+>;
+
+/**
+ * Event pushed to subscribers when a new QR code is available.
  * The qr field is a base64 PNG string, suitable for:
- *   <img src={`data:image/png;base64,${event.qr}`} />
+ *   <img src={`data:image/png;base64,${qr}`} />
  */
-export type ChannelQrEvent = {
-  type: 'qr';
-  qr: string;
-};
+export type ChannelQrEvent = WSMessage<
+  'channel.qr',
+  { channelId: string; qr: string }
+>;
 
 /**
- * SSE event shape pushed by GET /channels/:id/qr/stream
- * when the connection status changes (e.g. 'connected' after QR scan).
+ * Event pushed to subscribers when channel status changes.
  */
-export type ChannelStatusEvent = {
-  type: 'status';
-  status: ChannelStatus;
-};
+export type ChannelStatusEvent = WSMessage<
+  'channel.status',
+  { channelId: string; status: ChannelStatus }
+>;
 
-/** Union of all SSE event shapes from the QR stream endpoint */
-export type ChannelSseEvent = ChannelQrEvent | ChannelStatusEvent;
+/**
+ * Error response for channel operations.
+ */
+export type ChannelErrorResponse = WSMessage<
+  'error',
+  { requestId: string; error: { code: string; message: string } }
+>;
