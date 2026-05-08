@@ -73,8 +73,7 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
       version,
       auth: state,
       printQRInTerminal: false,
-      logger: undefined, // suppress Baileys internal pino logger
-    };
+    } as SocketConfig;
 
     this.socket = makeWASocket(socketConfig);
 
