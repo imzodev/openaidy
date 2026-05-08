@@ -40,4 +40,7 @@ export interface IChannel {
   onQrUpdate(cb: (qr: string) => void): void;
   /** Register a callback invoked each time the connection status changes */
   onStatusChange(cb: (status: ChannelStatus) => void): void;
+  /** Remove a registered callback */
+  removeListener(event: 'qr', cb: (qr: string) => void): void;
+  removeListener(event: 'status', cb: (status: ChannelStatus) => void): void;
 }
