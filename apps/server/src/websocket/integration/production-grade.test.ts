@@ -213,6 +213,7 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
   mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   skills: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
   personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  channels: undefined as unknown as AppServices['channels'],
 });
 
 // ============================================================================

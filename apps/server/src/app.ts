@@ -52,6 +52,8 @@ import { createSkillRegistry } from './skills';
 import { skillRoutes } from './routes/skills';
 import { seedBundledSkills } from './skills/seed';
 import { createAgentPersonalityService } from './agents/personality-service';
+import { createChannelRegistry } from './channels/index.js';
+import { channelRoutes } from './routes/channels.js';
 import path from 'node:path';
 import type { AppServices } from './types';
 
@@ -197,6 +199,33 @@ export async function buildApp() {
 
   // Create run event emitter for SSE streaming
   const runEvents = new RunEventEmitter();
+
+  // Create and wire channel registry
+  const channelRegistry = createChannelRegistry(
+    configService.getConfig().channels,
+    {
+      sessionService,
+      authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
+      logger: app.log,
+    },
+  );
+
+  // Auto-connect enabled channels (non-blocking)
+  for (const channel of channelRegistry.getAll()) {
+    const cfg = configService
+      .getConfig()
+      .channels?.find((c) => c.id === channel.id);
+    if (cfg?.enabled) {
+      channel
+        .connect()
+        .catch((err) =>
+          app.log.warn(
+            { err, channelId: channel.id },
+            'channel auto-connect failed on startup',
+          ),
+        );
+    }
+  }
   const bootstrapAdmin = env.BOOTSTRAP_ADMIN_ENABLED
     ? new BootstrapAdminManager(new AuthMiddleware(wsConfig), app.log, {
         enabled: env.BOOTSTRAP_ADMIN_ENABLED,
@@ -239,6 +268,7 @@ export async function buildApp() {
     mcpService,
     skills: skillRegistry,
     personality: personalityService,
+    channels: channelRegistry,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -402,6 +432,12 @@ export async function buildApp() {
   await app.register(
     createMcpRoutesPlugin({ mcpService, configService, authMiddleware }),
   );
+
+  // Register channel routes
+  await app.register(channelRoutes, {
+    channelRegistry: services.channels,
+    authMiddleware,
+  });
 
   // Start scheduler after server is ready
   app.addHook('onReady', async () => {

@@ -19,6 +19,7 @@ import type { AgentPersonalityService } from './agents/personality-service';
 import type { McpClientService } from './mcp/client';
 import type { SkillRegistry } from './skills';
 import type { SchedulerService } from './scheduler';
+import type { ChannelRegistry } from './channels/index.js';
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
 
@@ -49,4 +50,5 @@ export type AppServices = {
   mcpService: McpClientService;
   skills: SkillRegistry;
   personality: AgentPersonalityService;
+  channels: ChannelRegistry;
 };

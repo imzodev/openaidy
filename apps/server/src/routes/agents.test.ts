@@ -125,6 +125,7 @@ describe('Agent Routes', () => {
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });
