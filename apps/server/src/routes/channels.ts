@@ -1,21 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { ChannelRegistry } from '../channels/index.js';
-import type { AuthMiddleware } from '../websocket/middleware/auth.js';
-import type { ChannelStatusResponse } from '@openaidy/shared-types';
 import { requireAuth } from '../middleware/require-auth.js';
 import type { IChannel } from '../channels/interface.js';
-
-export type ChannelRoutesOptions = {
-  channelRegistry: ChannelRegistry;
-  authMiddleware: AuthMiddleware;
-};
+import type { ChannelStatusResponse } from '@openaidy/shared-types';
+import type { ChannelRoutesOptions } from '../types.js';
 
 function toStatusResponse(channel: IChannel): ChannelStatusResponse {
   return {
     id: channel.id,
     type: channel.type,
     status: channel.getStatus(),
-    agentId: '', // enriched from config in Phase 6 AppServices integration
+    agentId: channel.agentId,
   };
 }
 

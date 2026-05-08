@@ -413,6 +413,11 @@ export class SessionMessageService {
    * Used by channel handlers (WhatsApp, etc.) that need the complete response
    * before sending it back over the messaging protocol.
    *
+   * NOTE: This method uses submitMessageStreaming internally (with a no-op
+   * onStreamEvent callback) so the full tool-call loop runs — WhatsApp channels
+   * CAN use builtin/MCP tools. This differs from the deprecated submitMessage()
+   * which skips the tool-call loop entirely.
+   *
    * Returns { ok: true, assistantMessage: { content: string } } or
    *        { ok: false, error: { code, message } }
    */
@@ -427,16 +432,23 @@ export class SessionMessageService {
     | { ok: true; assistantMessage: { content: string } }
     | { ok: false; error: { code: string; message: string } }
   > {
-    const result = await this.submitMessage({
+    const streamingInput: SubmitMessageStreamingInput = {
       sessionId: params.sessionId,
       role: params.role,
       content: params.content,
-      agentId: params.agentId,
-      providerId: params.providerId,
-      modelId: params.modelId,
-    });
+      onStreamEvent: () => {
+        // no-op — channel handlers don't need stream events
+      },
+    };
+    if (params.agentId !== undefined) streamingInput.agentId = params.agentId;
+    if (params.providerId !== undefined)
+      streamingInput.providerId = params.providerId;
+    if (params.modelId !== undefined) streamingInput.modelId = params.modelId;
+
+    const result = await this.submitMessageStreaming(streamingInput);
 
     if (result.ok) {
+      // Extract content from assistantMessage (which may be a full object with content)
       const content =
         (result as { ok: true; assistantMessage: { content: string } })
           .assistantMessage?.content ?? '';

@@ -15,6 +15,8 @@ export interface IChannel {
   readonly id: string;
   /** Channel type string e.g. 'whatsapp', 'telegram' */
   readonly type: string;
+  /** Agent ID configured for this channel (used for routing messages) */
+  readonly agentId: string;
   /** Current connection state */
   getStatus(): ChannelStatus;
 

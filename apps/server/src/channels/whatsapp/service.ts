@@ -23,6 +23,7 @@ import { handleInboundWhatsAppMessage } from './message-handler.js';
 export class WhatsAppChannel extends EventEmitter implements IChannel {
   readonly id: string;
   readonly type = 'whatsapp' as const;
+  readonly agentId: string;
 
   private status: ChannelStatus = 'disconnected';
   private qr: string | null = null;
@@ -34,6 +35,7 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
   ) {
     super();
     this.id = config.id;
+    this.agentId = config.agentId;
   }
 
   getStatus(): ChannelStatus {
@@ -106,6 +108,8 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
         const loggedOut = statusCode === DisconnectReason.loggedOut;
 
+        // Capture old socket reference before nulling so we can clean up listeners
+        const oldSocket = this.socket;
         this.socket = null;
         this.qr = null;
         this.setStatus('disconnected');
@@ -120,6 +124,8 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
             { channelId: this.id },
             'whatsapp: connection closed, reconnecting',
           );
+          // @ts-expect-error Baileys ev.removeAllListeners takes no args at runtime but types are mismatched
+          oldSocket?.ev.removeAllListeners();
           await this.connect();
         }
       }

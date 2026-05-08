@@ -6,12 +6,14 @@ function mockChannel(id: string): IChannel {
   return {
     id,
     type: 'test',
+    agentId: 'test-agent',
     getStatus: () => 'disconnected',
     getQr: () => null,
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     onQrUpdate: vi.fn(),
     onStatusChange: vi.fn(),
+    removeListener: vi.fn(),
   };
 }
 
