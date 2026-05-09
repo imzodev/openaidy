@@ -29,7 +29,7 @@ const baseParams: {
   channelId: string;
   agentId: string;
   allowlist: string[] | undefined;
-  sessionService: typeof mockSessionService;
+  sessionService: { submitMessageNonStreaming: typeof mockSessionService.submitMessageNonStreaming; listSessions: typeof mockSessionService.listSessions; createSession: typeof mockSessionService.createSession };
   logger: typeof mockLogger;
 } = {
   waId: '15551234567',
@@ -57,7 +57,10 @@ beforeEach(() => {
 
 describe('handleInboundWhatsAppMessage', () => {
   it('returns agent reply text for allowed sender', async () => {
-    const reply = await handleInboundWhatsAppMessage(baseParams);
+    const reply = await handleInboundWhatsAppMessage({
+      ...baseParams,
+      allowlist: ['15551234567'],
+    });
     expect(reply).toBe('Hello human!');
   });
 
@@ -70,12 +73,20 @@ describe('handleInboundWhatsAppMessage', () => {
     expect(mockSessionService.submitMessageNonStreaming).not.toHaveBeenCalled();
   });
 
-  it('allows any sender when allowlist is empty array', async () => {
+  it('rejects message when allowlist is empty', async () => {
     const reply = await handleInboundWhatsAppMessage({
       ...baseParams,
       allowlist: [],
     });
-    expect(reply).toBe('Hello human!');
+    expect(reply).toBeNull();
+  });
+
+  it('rejects message when allowlist is undefined', async () => {
+    const reply = await handleInboundWhatsAppMessage({
+      ...baseParams,
+      allowlist: undefined,
+    });
+    expect(reply).toBeNull();
   });
 
   it('returns null and logs error when agent invocation fails', async () => {
@@ -83,7 +94,10 @@ describe('handleInboundWhatsAppMessage', () => {
       ok: false,
       error: { code: 'provider.error', message: 'timeout' },
     });
-    const reply = await handleInboundWhatsAppMessage(baseParams);
+    const reply = await handleInboundWhatsAppMessage({
+      ...baseParams,
+      allowlist: ['15551234567'],
+    });
     expect(reply).toBeNull();
     expect(mockLogger.error).toHaveBeenCalled();
   });
@@ -92,7 +106,10 @@ describe('handleInboundWhatsAppMessage', () => {
     mockSessionService.listSessions.mockResolvedValueOnce([
       { id: 'existing-session', title: 'whatsapp:personal:15551234567' },
     ]);
-    await handleInboundWhatsAppMessage(baseParams);
+    await handleInboundWhatsAppMessage({
+      ...baseParams,
+      allowlist: ['15551234567'],
+    });
     expect(mockSessionService.createSession).not.toHaveBeenCalled();
     expect(mockSessionService.submitMessageNonStreaming).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'existing-session' }),

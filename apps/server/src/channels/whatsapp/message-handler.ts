@@ -81,14 +81,14 @@ export async function handleInboundWhatsAppMessage(params: {
   channelId: string;
   agentId: string;
   allowlist: string[] | undefined;
-  sessionService: SessionMessageService;
+  sessionService: Pick<SessionMessageService, 'listSessions' | 'createSession' | 'submitMessageNonStreaming'>;
   logger: FastifyBaseLogger;
 }): Promise<string | null> {
   const { waId, text, channelId, agentId, allowlist, sessionService, logger } =
     params;
-
-  // 1. Allowlist check (empty array = open to everyone)
-  if (allowlist?.length && !allowlist.includes(waId)) {
+  logger.debug({ waId, text, channelId, agentId, allowlist }, 'whatsapp: message received');
+  // 1. Allowlist check (empty or missing = reject all)
+  if (!allowlist?.length || !allowlist.includes(waId)) {
     logger.debug(
       { waId, channelId },
       'whatsapp: message rejected by allowlist',

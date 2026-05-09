@@ -143,13 +143,18 @@ export class WhatsAppChannel extends EventEmitter implements IChannel {
       if (type !== 'notify') return;
 
       for (const msg of messages) {
-        if (msg.key.fromMe) continue;
-
         const text =
           msg.message?.conversation ?? msg.message?.extendedTextMessage?.text;
         if (!text) continue;
 
-        const waId = msg.key.remoteJid?.replace('@s.whatsapp.net', '') ?? '';
+        const participant = msg.key.participant?.replace('@s.whatsapp.net', '');
+        const remoteJid = msg.key.remoteJid?.replace('@s.whatsapp.net', '');
+        const remoteJidAlt = msg.key.remoteJidAlt?.replace('@s.whatsapp.net', '');
+
+        let waId = participant || remoteJid || remoteJidAlt || '';
+        if (remoteJid?.includes('@lid')) {
+          waId = remoteJidAlt || participant || '';
+        }
         if (!waId) continue;
 
         try {
