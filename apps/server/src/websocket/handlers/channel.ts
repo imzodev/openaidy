@@ -108,17 +108,6 @@ export class ChannelHandler {
     const channel = this.channelRegistry.get(channelId);
     if (!channel) return;
 
-    // Handle QR updates
-    const onQr = (qr: string) => {
-      this.logger.debug(
-        { connectionId, channelId, qrLength: qr.length },
-        'Channel QR event received',
-      );
-      const event = createWSMessage('channel.qr', { channelId, qr });
-      this.sendToConnection(connectionId, event);
-    };
-
-    // Handle status changes
     const onStatus = (status: ChannelStatus) => {
       this.logger.debug(
         { connectionId, channelId, status },
@@ -127,9 +116,19 @@ export class ChannelHandler {
       const event = createWSMessage('channel.status', { channelId, status });
       this.sendToConnection(connectionId, event);
     };
-
-    channel.onQrUpdate(onQr);
     channel.onStatusChange(onStatus);
+
+    if ('getQr' in channel && typeof channel.getQr === 'function') {
+      const onQr = (qr: string) => {
+        this.logger.debug(
+          { connectionId, channelId, qrLength: qr.length },
+          'Channel QR event received',
+        );
+        const event = createWSMessage('channel.qr', { channelId, qr });
+        this.sendToConnection(connectionId, event);
+      };
+      channel.onQrUpdate(onQr);
+    }
   }
 
   /**

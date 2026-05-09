@@ -44,7 +44,7 @@ export function clearSessionMapForTesting(): void {
  */
 async function findOrCreateSession(
   sessionKey: string,
-  sessionService: SessionMessageService,
+  sessionService: Pick<SessionMessageService, 'listSessions' | 'createSession'>,
 ): Promise<string> {
   // Check in-memory cache first
   const cached = sessionMap.get(sessionKey);
@@ -81,12 +81,18 @@ export async function handleInboundWhatsAppMessage(params: {
   channelId: string;
   agentId: string;
   allowlist: string[] | undefined;
-  sessionService: Pick<SessionMessageService, 'listSessions' | 'createSession' | 'submitMessageNonStreaming'>;
+  sessionService: Pick<
+    SessionMessageService,
+    'listSessions' | 'createSession' | 'submitMessageNonStreaming'
+  >;
   logger: FastifyBaseLogger;
 }): Promise<string | null> {
   const { waId, text, channelId, agentId, allowlist, sessionService, logger } =
     params;
-  logger.debug({ waId, text, channelId, agentId, allowlist }, 'whatsapp: message received');
+  logger.debug(
+    { waId, text, channelId, agentId, allowlist },
+    'whatsapp: message received',
+  );
   // 1. Allowlist check (empty or missing = reject all)
   if (!allowlist?.length || !allowlist.includes(waId)) {
     logger.debug(

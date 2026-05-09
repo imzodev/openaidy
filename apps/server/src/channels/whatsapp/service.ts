@@ -6,7 +6,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
 import { EventEmitter } from 'node:events';
-import type { IChannel } from '../interface.js';
+import type { IQrChannel } from '../interface.js';
 import type { ChannelStatus } from '@openaidy/shared-types';
 import type { WhatsAppChannelConfig } from '@openaidy/config';
 import type { WhatsAppChannelDeps } from './types.js';
@@ -20,7 +20,7 @@ import { handleInboundWhatsAppMessage } from './message-handler.js';
  * invocation to message-handler.ts (which calls SessionMessageService).
  * No Baileys imports in message-handler — clean separation of concerns.
  */
-export class WhatsAppChannel extends EventEmitter implements IChannel {
+export class WhatsAppChannel extends EventEmitter implements IQrChannel {
   readonly id: string;
   readonly type = 'whatsapp' as const;
   readonly agentId: string;

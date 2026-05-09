@@ -3,10 +3,11 @@ import {
   handleInboundWhatsAppMessage,
   clearSessionMapForTesting,
 } from './message-handler.js';
+import type { SessionRecord } from '../../sessions/store.js';
 
 const mockSessionService = {
-  listSessions: vi.fn<() => Promise<Array<{ id: string; title: string }>>>(),
-  createSession: vi.fn<() => Promise<{ id: string; title: string }>>(),
+  listSessions: vi.fn<() => Promise<SessionRecord[]>>(),
+  createSession: vi.fn<() => Promise<SessionRecord>>(),
   submitMessageNonStreaming:
     vi.fn<
       () => Promise<
@@ -23,22 +24,14 @@ const mockLogger = {
   error: vi.fn<(err: unknown) => void>(),
 };
 
-const baseParams: {
-  waId: string;
-  text: string;
-  channelId: string;
-  agentId: string;
-  allowlist: string[] | undefined;
-  sessionService: { submitMessageNonStreaming: typeof mockSessionService.submitMessageNonStreaming; listSessions: typeof mockSessionService.listSessions; createSession: typeof mockSessionService.createSession };
-  logger: typeof mockLogger;
-} = {
+const baseParams = {
   waId: '15551234567',
   text: 'Hello agent',
   channelId: 'personal',
   agentId: 'my-agent',
-  allowlist: undefined,
+  allowlist: undefined as string[] | undefined,
   sessionService: mockSessionService,
-  logger: mockLogger,
+  logger: mockLogger as unknown as import('fastify').FastifyBaseLogger,
 };
 
 beforeEach(() => {
@@ -48,6 +41,7 @@ beforeEach(() => {
   mockSessionService.createSession.mockResolvedValue({
     id: 'session-123',
     title: 'whatsapp:personal:15551234567',
+    createdAt: new Date().toISOString(),
   });
   mockSessionService.submitMessageNonStreaming.mockResolvedValue({
     ok: true,
@@ -104,7 +98,11 @@ describe('handleInboundWhatsAppMessage', () => {
 
   it('reuses existing session on second message from same sender', async () => {
     mockSessionService.listSessions.mockResolvedValueOnce([
-      { id: 'existing-session', title: 'whatsapp:personal:15551234567' },
+      {
+        id: 'existing-session',
+        title: 'whatsapp:personal:15551234567',
+        createdAt: new Date().toISOString(),
+      },
     ]);
     await handleInboundWhatsAppMessage({
       ...baseParams,
