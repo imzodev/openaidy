@@ -35,6 +35,7 @@ type MockTaskAgentsRepo = {
 type MockSessionService = {
   createSession: ReturnType<typeof vi.fn>;
   submitMessage: ReturnType<typeof vi.fn>;
+  submitMessageStreaming: ReturnType<typeof vi.fn>;
 };
 
 describe('Subtask Execution', () => {
@@ -77,6 +78,7 @@ describe('Subtask Execution', () => {
 
     mockSessionService = {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
+      submitMessage: vi.fn(),
       submitMessageStreaming: vi.fn().mockResolvedValue({}),
     };
 

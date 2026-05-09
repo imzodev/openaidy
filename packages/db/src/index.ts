@@ -18,3 +18,5 @@ export * from './repositories/subtasks';
 export * from './repositories/task-agents';
 export * from './repositories/access-tokens';
 export * from './repositories/addons';
+export * from './repositories/marketplace';
+export * from './schema/marketplace';

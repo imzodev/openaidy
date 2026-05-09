@@ -126,7 +126,8 @@ describe('SchedulerService', () => {
       mockJobsRepo as unknown as JobsRepository,
       mockJobRunsRepo as unknown as JobRunsRepository,
       mockSessionService as unknown as SessionMessageService,
-      mockSessionsStore as unknown as SessionsStore,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockSessionsStore as any,
       mockLogger,
       { pollIntervalMs: 5000 },
     );
@@ -438,11 +439,9 @@ describe('SchedulerService', () => {
         status: 'running',
       });
       mockSessionsStore.create.mockResolvedValue(
-        mockNewSession as SessionsStore['create'] extends (
-          input: infer I,
-        ) => Promise<infer R>
-          ? R
-          : never,
+        mockNewSession as Awaited<
+          ReturnType<ReturnType<typeof createMockSessionsStore>['create']>
+        >,
       );
       mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: true,
@@ -518,11 +517,9 @@ describe('SchedulerService', () => {
         status: 'running',
       });
       mockSessionsStore.create.mockResolvedValue(
-        mockNewSession as SessionsStore['create'] extends (
-          input: infer I,
-        ) => Promise<infer R>
-          ? R
-          : never,
+        mockNewSession as Awaited<
+          ReturnType<ReturnType<typeof createMockSessionsStore>['create']>
+        >,
       );
       mockSessionService.submitMessageStreaming.mockResolvedValue({
         ok: false,
@@ -679,7 +676,8 @@ describe('createSchedulerService', () => {
       mockJobsRepo as unknown as JobsRepository,
       mockJobRunsRepo as unknown as JobRunsRepository,
       mockSessionService as unknown as SessionMessageService,
-      mockSessionsStore as unknown as SessionsStore,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      mockSessionsStore as any,
       mockLogger,
     );
 

@@ -614,12 +614,36 @@ export class SessionHandler {
                 errorMessage: event.error?.message ?? 'Streaming error',
               });
               break;
+            case 'choices':
+              this.runEvents?.emitChoices({
+                runId,
+                sessionId,
+                agentId,
+                ...(event.question !== undefined && {
+                  question: event.question,
+                }),
+                choices: event.choices,
+              });
+              break;
           }
         },
       });
 
       if (result.ok) {
         const run = result.run as SessionRun;
+
+        // If run was suspended (choices emitted), do NOT emit completion —
+        // the choices event was already emitted, and we're awaiting user input.
+        const suspended = (run as { metadata?: { suspended?: boolean } })
+          .metadata?.suspended;
+        if (suspended) {
+          this.logger.info(
+            { sessionId, runId },
+            'Streaming run suspended (choices presented)',
+          );
+          return;
+        }
+
         const assistantMessage = result.assistantMessage as SessionMessage;
 
         // Emit completion with final usage

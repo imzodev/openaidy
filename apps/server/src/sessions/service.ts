@@ -737,6 +737,44 @@ export class SessionMessageService {
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,
                 }));
+
+              // Check for INTERRUPT_CHOICES sentinel from present_choices tool
+              if (builtinResult.ok) {
+                try {
+                  const parsed = JSON.parse(builtinResult.content);
+                  if (parsed._type === 'INTERRUPT_CHOICES') {
+                    // Emit choices event and stop the agentic loop
+                    onStreamEvent({
+                      type: 'choices',
+                      question: parsed.question ?? undefined,
+                      choices: parsed.choices as string[],
+                    });
+                    // Mark the run as suspended (awaiting user input)
+                    await this.markRunSucceeded(run.id, {
+                      finishReason: 'stop',
+                      promptTokens: finalUsage.promptTokens,
+                      completionTokens: finalUsage.completionTokens,
+                      totalTokens: finalUsage.totalTokens,
+                      metadata: {
+                        providerId: finalProviderId,
+                        model: finalModelId,
+                        suspended: true,
+                        choicesQuestion: parsed.question ?? null,
+                        choicesCount: (parsed.choices as string[]).length,
+                      },
+                    }).catch(() => {});
+                    return {
+                      ok: true,
+                      userMessage,
+                      assistantMessage: undefined as unknown as never,
+                      run,
+                    };
+                  }
+                } catch {
+                  // Not INTERRUPT_CHOICES JSON — fall through to normal handling
+                }
+              }
+
               toolContent = builtinResult.ok
                 ? builtinResult.content
                 : `Error: ${builtinResult.error}`;
