@@ -19,6 +19,13 @@ import type { AgentPersonalityService } from './agents/personality-service';
 import type { McpClientService } from './mcp/client';
 import type { SkillRegistry } from './skills';
 import type { SchedulerService } from './scheduler';
+import type { ChannelRegistry } from './channels/index.js';
+import type { AuthMiddleware } from './websocket/middleware/auth.js';
+
+export type ChannelRoutesOptions = {
+  channelRegistry: ChannelRegistry;
+  authMiddleware: AuthMiddleware;
+};
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
 
@@ -49,4 +56,5 @@ export type AppServices = {
   mcpService: McpClientService;
   skills: SkillRegistry;
   personality: AgentPersonalityService;
+  channels: ChannelRegistry;
 };

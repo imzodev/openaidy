@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mcpServerConfigSchema, appConfigSchema } from './app-config';
+import {
+  mcpServerConfigSchema,
+  appConfigSchema,
+  whatsappChannelConfigSchema,
+} from './app-config';
 
 describe('mcpServerConfigSchema', () => {
   describe('stdio transport', () => {
@@ -259,6 +263,86 @@ describe('appConfigSchema with mcpServers', () => {
     };
     const result = appConfigSchema.safeParse(config);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('channel config validation', () => {
+  const baseConfig = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [{ id: 'gpt-4o-mini', name: 'GPT-4o Mini' }],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('accepts a valid whatsapp channel config', () => {
+    const result = appConfigSchema.safeParse({
+      ...baseConfig,
+      channels: [
+        {
+          type: 'whatsapp',
+          id: 'personal',
+          agentId: 'my-agent',
+          enabled: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects duplicate channel ids', () => {
+    const result = appConfigSchema.safeParse({
+      ...baseConfig,
+      channels: [
+        { type: 'whatsapp', id: 'dup', agentId: 'a', enabled: true },
+        { type: 'whatsapp', id: 'dup', agentId: 'b', enabled: true },
+      ],
+    });
+    expect(result.success).toBe(false);
+    const issue = result.error?.issues[0];
+    expect(issue?.message).toContain('Duplicate channel id');
+  });
+
+  it('accepts channels: undefined (backwards compatible)', () => {
+    const result = appConfigSchema.safeParse({ ...baseConfig });
+    expect(result.success).toBe(true);
+    expect(result.data?.channels).toBeUndefined();
+  });
+
+  it('rejects unknown channel type', () => {
+    const result = appConfigSchema.safeParse({
+      ...baseConfig,
+      channels: [{ type: 'unknown', id: 'x', agentId: 'y', enabled: true }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('applies enabled default of true', () => {
+    const result = whatsappChannelConfigSchema.parse({
+      type: 'whatsapp',
+      id: 'test',
+      agentId: 'agent',
+    });
+    expect(result.enabled).toBe(true);
   });
 });
 

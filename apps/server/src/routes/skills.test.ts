@@ -137,6 +137,7 @@ describe('Skill Routes', () => {
       mcpService: undefined as unknown as AppServices['mcpService'],
       skills: skillRegistry,
       personality: undefined as unknown as AppServices['personality'],
+      channels: undefined as unknown as AppServices['channels'],
     });
 
     await app.register(cors, { origin: '*' });

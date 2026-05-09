@@ -46,6 +46,7 @@ import {
   registerLogsHandlers,
   getLogSubscriptionManager,
 } from './handlers/logs';
+import { ChannelHandler, registerChannelHandlers } from './handlers/channel';
 import { getLogBuffer } from '../lib/log-buffer';
 import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
@@ -247,6 +248,16 @@ function createGateway(
 
   // Create logs handler
   const logsHandler = new LogsHandler(fastify.log);
+
+  // Create channel handler
+  const channelHandler = new ChannelHandler(
+    fastify.services.channels,
+    connectionManager,
+    fastify.log,
+  );
+
+  // Register channel handlers with the message router
+  registerChannelHandlers(messageRouter, channelHandler);
 
   // Register session handlers with the message router
   registerSessionHandlers(messageRouter, sessionHandler);

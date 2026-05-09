@@ -2,6 +2,27 @@ import { z } from 'zod';
 import { httpTimeoutSchema, retrySchema, vendorFamilySchema } from './provider';
 
 // ============================================================================
+// Channel Configuration
+// ============================================================================
+
+export const whatsappChannelConfigSchema = z.object({
+  type: z.literal('whatsapp'),
+  id: z.string().min(1),
+  agentId: z.string().min(1),
+  allowlist: z.array(z.string()).optional(),
+  enabled: z.boolean().default(true),
+});
+
+export const channelConfigSchema = z.discriminatedUnion('type', [
+  whatsappChannelConfigSchema,
+  // Future channels added here: telegram, discord, slack, etc.
+  // Adding a new channel = add its schema to this union. Zero other changes needed.
+]);
+
+export type WhatsAppChannelConfig = z.infer<typeof whatsappChannelConfigSchema>;
+export type ChannelConfig = z.infer<typeof channelConfigSchema>;
+
+// ============================================================================
 // MCP Server Configuration
 // ============================================================================
 
@@ -241,6 +262,7 @@ export const appConfigSchema = z
     providers: z.array(appProviderConfigSchema).min(1),
     agents: z.array(appAgentConfigSchema).min(1),
     mcpServers: z.array(mcpServerConfigSchema).optional(),
+    channels: z.array(channelConfigSchema).optional(),
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();
@@ -381,6 +403,21 @@ export const appConfigSchema = z
           });
         }
         mcpServerIds.add(server.id);
+      });
+    }
+
+    // Validate channel IDs are unique
+    if (config.channels) {
+      const channelIds = new Set<string>();
+      config.channels.forEach((channel, index) => {
+        if (channelIds.has(channel.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['channels', index, 'id'],
+            message: `Duplicate channel id "${channel.id}"`,
+          });
+        }
+        channelIds.add(channel.id);
       });
     }
   });

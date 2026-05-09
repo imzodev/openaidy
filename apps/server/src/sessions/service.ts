@@ -263,7 +263,7 @@ export class SessionMessageService {
    * This orchestrates the full flow:
    * 1. Validate session exists
    * 2. Persist user message
-   * 3. Create run record (queued)
+   3. Create run record (queued)
    * 4. Mark run as running
    * 5. Build request from session history + new message
    * 6. Invoke provider
@@ -405,6 +405,59 @@ export class SessionMessageService {
         result.error.code,
         result.error.message,
       );
+    }
+  }
+
+  /**
+   * Non-streaming submitMessage that returns the full assistant reply text.
+   * Used by channel handlers (WhatsApp, etc.) that need the complete response
+   * before sending it back over the messaging protocol.
+   *
+   * NOTE: This method uses submitMessageStreaming internally (with a no-op
+   * onStreamEvent callback) so the full tool-call loop runs — WhatsApp channels
+   * CAN use builtin/MCP tools. This differs from the deprecated submitMessage()
+   * which skips the tool-call loop entirely.
+   *
+   * Returns { ok: true, assistantMessage: { content: string } } or
+   *        { ok: false, error: { code, message } }
+   */
+  async submitMessageNonStreaming(params: {
+    sessionId: string;
+    role: 'user' | 'system';
+    content: string;
+    agentId?: string;
+    providerId?: string;
+    modelId?: string;
+  }): Promise<
+    | { ok: true; assistantMessage: { content: string } }
+    | { ok: false; error: { code: string; message: string } }
+  > {
+    const streamingInput: SubmitMessageStreamingInput = {
+      sessionId: params.sessionId,
+      role: params.role,
+      content: params.content,
+      onStreamEvent: () => {
+        // no-op — channel handlers don't need stream events
+      },
+    };
+    if (params.agentId !== undefined) streamingInput.agentId = params.agentId;
+    if (params.providerId !== undefined)
+      streamingInput.providerId = params.providerId;
+    if (params.modelId !== undefined) streamingInput.modelId = params.modelId;
+
+    const result = await this.submitMessageStreaming(streamingInput);
+
+    if (result.ok) {
+      // Extract content from assistantMessage (which may be a full object with content)
+      const content =
+        (result as { ok: true; assistantMessage: { content: string } })
+          .assistantMessage?.content ?? '';
+      return { ok: true, assistantMessage: { content } };
+    } else {
+      const err = (
+        result as { ok: false; error: { code: string; message: string } }
+      ).error;
+      return { ok: false, error: err };
     }
   }
 

@@ -1417,3 +1417,50 @@ export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
   });
   return response.json() as Promise<AuthVerifyResponse>;
 }
+
+// ============================================================================
+// Channel API functions
+// ============================================================================
+
+import type { ChannelStatusResponse } from '@openaidy/shared-types';
+export type { ChannelStatusResponse } from '@openaidy/shared-types';
+
+/**
+ * List all channels with their current connection status.
+ */
+export async function listChannels(): Promise<ChannelStatusResponse[]> {
+  const res = await apiFetch(`${API_BASE}/channels`);
+  if (!res.ok) throw new Error(`listChannels: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Get the connection status of a single channel.
+ */
+export async function getChannelStatus(
+  id: string,
+): Promise<ChannelStatusResponse> {
+  const res = await apiFetch(`${API_BASE}/channels/${id}/status`);
+  if (!res.ok) throw new Error(`getChannelStatus: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Trigger a channel connection (initiates QR flow for WhatsApp).
+ */
+export async function connectChannel(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/channels/${id}/connect`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`connectChannel: ${res.status}`);
+}
+
+/**
+ * Disconnect a channel.
+ */
+export async function disconnectChannel(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/channels/${id}/disconnect`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
+}
