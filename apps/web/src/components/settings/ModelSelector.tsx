@@ -32,7 +32,7 @@ export function ModelSelector(props: ModelSelectorProps) {
                 <span class="font-medium text-text-primary">{model.name}</span>
                 <Show when={model.contextWindow}>
                   <span class="text-xs text-text-tertiary">
-                    {model.contextWindow?.toLocaleString()} ctx
+                    {Number(model.contextWindow).toLocaleString()} ctx
                   </span>
                 </Show>
               </div>
