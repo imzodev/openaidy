@@ -148,19 +148,19 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
                 value={newModelId()}
                 onInput={(e) => setNewModelId(e.currentTarget.value)}
                 placeholder="Model ID"
-                class="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                class="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               <input
                 type="text"
                 value={newModelName()}
                 onInput={(e) => setNewModelName(e.currentTarget.value)}
                 placeholder="Display Name"
-                class="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                class="flex-1 min-w-0 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               <button
                 onClick={addCustomModel}
                 disabled={!newModelId() || !newModelName()}
-                class="p-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
+                class="shrink-0 p-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
               >
                 <Plus class="w-4 h-4" />
               </button>

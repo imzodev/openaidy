@@ -27,17 +27,19 @@ export function ModelSelector(props: ModelSelectorProps) {
               onChange={() => props.onSelect(model.id)}
               class="text-primary focus:ring-primary/50"
             />
-            <div class="flex-1">
-              <div class="flex items-center justify-between">
-                <span class="font-medium text-text-primary">{model.name}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-medium text-text-primary truncate">
+                  {model.name}
+                </span>
                 <Show when={model.contextWindow}>
-                  <span class="text-xs text-text-tertiary">
+                  <span class="text-xs text-text-tertiary shrink-0">
                     {Number(model.contextWindow).toLocaleString()} ctx
                   </span>
                 </Show>
               </div>
               <Show when={model.description}>
-                <span class="text-xs text-text-tertiary">
+                <span class="text-xs text-text-tertiary block truncate">
                   {model.description}
                 </span>
               </Show>
