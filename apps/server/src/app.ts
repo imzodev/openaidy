@@ -167,6 +167,11 @@ export async function buildApp() {
     : undefined;
 
   // Create builtin tool registry (native, in-process tools — separate from MCP)
+  // Session tools use a lazy getter to break the circular dependency:
+  //   tool registry → SessionMessageService → tool registry
+  // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in sessions getter
+  let sessionService: SessionMessageService | undefined;
+
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
     exec: execService,
@@ -177,9 +182,10 @@ export async function buildApp() {
     },
     agents: { registry: agentRegistry },
     web: true,
+    sessions: { getSessionService: () => sessionService! },
   });
 
-  const sessionService = new SessionMessageService({
+  sessionService = new SessionMessageService({
     providers: providerServices,
     logger: app.log,
     agents: agentRegistry,

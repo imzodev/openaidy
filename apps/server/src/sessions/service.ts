@@ -462,6 +462,93 @@ export class SessionMessageService {
   }
 
   /**
+   * Dispatch an agent to a session.
+   *
+   * Single shared entry point used by both addon proxies and agent tools.
+   * Handles agent validation, session creation/reuse, and fires
+   * submitMessageStreaming in the background.
+   *
+   * Returns the sessionId immediately plus a done promise so callers can
+   * choose to await the result (addon proxy, synchronous) or fire-and-forget
+   * (agent tool, asynchronous).
+   */
+  async dispatchAgent(params: {
+    agentId: string;
+    content: string;
+    sessionId?: string;
+    sessionTitle?: string;
+  }): Promise<
+    | {
+        ok: true;
+        sessionId: string;
+        done: Promise<SubmitMessageResult>;
+      }
+    | { ok: false; error: string }
+  > {
+    const agentId = params.agentId.trim();
+    const content = params.content.trim();
+
+    if (!agentId) {
+      return { ok: false, error: 'agentId is required' };
+    }
+    if (!content) {
+      return { ok: false, error: 'content is required' };
+    }
+
+    if (this.agents) {
+      const agent = this.agents.getAgent(agentId);
+      if (!agent) {
+        return {
+          ok: false,
+          error: `Agent "${agentId}" not found.`,
+        };
+      }
+      if (!agent.enabled) {
+        return {
+          ok: false,
+          error: `Agent "${agentId}" is disabled.`,
+        };
+      }
+    }
+
+    try {
+      let sessionId: string;
+      if (params.sessionId) {
+        const existing = await this.getSession(params.sessionId);
+        if (!existing) {
+          return {
+            ok: false,
+            error: `Session "${params.sessionId}" not found.`,
+          };
+        }
+        sessionId = params.sessionId;
+      } else {
+        const titlePrefix = content.slice(0, 80);
+        const title =
+          params.sessionTitle ??
+          `[agent:${agentId}] ${titlePrefix}${content.length > 80 ? '...' : ''}`;
+        const session = await this.createSession(title);
+        sessionId = session.id;
+      }
+
+      const done = this.submitMessageStreaming({
+        sessionId,
+        role: 'user',
+        content,
+        agentId,
+        onStreamEvent: () => {},
+      });
+
+      return { ok: true, sessionId, done };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /**
    * Submit a message with streaming response
    *
    * Similar to submitMessage but yields content as it arrives via the callback.
