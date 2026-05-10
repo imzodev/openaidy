@@ -1,7 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
-import type { SessionsToolDeps } from './index.js';
+import type { AgentToolsDeps } from './index.js';
 
-export function createAgentsInvokeTool(deps: SessionsToolDeps): BuiltinTool {
+export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
   return {
     name: 'agents_invoke',
     description:
@@ -54,6 +54,13 @@ export function createAgentsInvokeTool(deps: SessionsToolDeps): BuiltinTool {
         return {
           ok: false,
           error: 'content is required and must be a non-empty string',
+        };
+      }
+
+      if (!deps.getSessionService) {
+        return {
+          ok: false,
+          error: 'Session service is not available. Cannot invoke agent.',
         };
       }
 

@@ -180,7 +180,10 @@ export async function buildApp() {
       addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
       ...(addonService ? { addonService } : {}),
     },
-    agents: { registry: agentRegistry },
+    agents: {
+      registry: agentRegistry,
+      getSessionService: () => sessionService!,
+    },
     web: true,
     sessions: { getSessionService: () => sessionService! },
   });
