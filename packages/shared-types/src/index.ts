@@ -10,4 +10,5 @@ export * from './mcp.js';
 export * from './agents.js';
 export * from './personality.js';
 export * from './channels.js';
+export * from './providers-preset.js';
 export * from './choices.js';
