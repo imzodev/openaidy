@@ -3,7 +3,6 @@ import { Save } from 'lucide-solid';
 import type { AppConfig } from '../../lib/api';
 import { useConfig } from './hooks/useConfig';
 import { SaveMessage, Tabs, type Tab } from '../ui';
-import { AddProviderModal } from './AddProviderModal';
 import { DefaultsTab, ProvidersTab, AgentsTab, RawJsonTab } from './tabs';
 import type { ConfigTab } from './types';
 
@@ -179,63 +178,6 @@ export function SettingsView() {
     setLocalConfig(updatedConfig);
   };
 
-  // Provider modal state
-  const [showAddProviderModal, setShowAddProviderModal] = createSignal(false);
-  const [newProviderData, setNewProviderData] = createSignal({
-    id: '',
-    name: '',
-    vendorFamily: 'openai-compatible' as const,
-    enabled: true,
-    baseUrl: '',
-    apiKeyEnv: '',
-  });
-
-  const openAddProviderModal = () => {
-    setNewProviderData({
-      id: '',
-      name: '',
-      vendorFamily: 'openai-compatible',
-      enabled: true,
-      baseUrl: '',
-      apiKeyEnv: '',
-    });
-    setShowAddProviderModal(true);
-  };
-
-  const closeAddProviderModal = () => {
-    setShowAddProviderModal(false);
-  };
-
-  const saveNewProvider = async () => {
-    const providerData = newProviderData();
-    if (!providerData.id || !providerData.name) {
-      showSaveError('Provider ID and Name are required');
-      return false;
-    }
-
-    const newProvider: import('../../lib/api').ProviderConfig = {
-      id: providerData.id,
-      name: providerData.name,
-      vendorFamily: providerData.vendorFamily || 'openai-compatible',
-      enabled: providerData.enabled ?? true,
-      models: [{ id: 'default-model', name: 'Default Model', enabled: true }],
-    } as import('../../lib/api').ProviderConfig;
-
-    if (providerData.baseUrl) {
-      (newProvider as Record<string, unknown>).baseUrl = providerData.baseUrl;
-    }
-    if (providerData.apiKeyEnv) {
-      (newProvider as Record<string, unknown>).apiKeyEnv =
-        providerData.apiKeyEnv;
-    }
-
-    const result = await handleAddProvider(newProvider);
-    if (result) {
-      setShowAddProviderModal(false);
-    }
-    return result;
-  };
-
   // Handle tab change with raw JSON sync
   const handleTabChange = (tab: ConfigTab) => {
     setActiveTab(tab);
@@ -305,7 +247,7 @@ export function SettingsView() {
               <ProvidersTab
                 config={localConfig}
                 isPending={updateMutation.isPending}
-                onAddProvider={openAddProviderModal}
+                onAddProvider={handleAddProvider}
                 onDeleteProvider={handleDeleteProvider}
                 onUpdateProvider={handleUpdateProvider}
               />
@@ -335,16 +277,6 @@ export function SettingsView() {
           </Show>
         </div>
       </div>
-
-      {/* Add Provider Modal */}
-      <AddProviderModal
-        show={showAddProviderModal}
-        onClose={closeAddProviderModal}
-        onSave={saveNewProvider}
-        data={newProviderData}
-        setData={setNewProviderData}
-        isPending={updateMutation.isPending}
-      />
     </div>
   );
 }
