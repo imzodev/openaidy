@@ -22,6 +22,7 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  Trash2,
 } from 'lucide-solid';
 import {
   listAgents,
@@ -34,6 +35,7 @@ import {
   getConfig,
   getPersonalityFile,
   updatePersonalityFile,
+  deleteAgent,
   type Agent,
   type BuiltinToolInfo,
   type SkillInfo,
@@ -83,6 +85,7 @@ export function AgentsPage(props: AgentsPageProps) {
   const [mcpUpdating, setMcpUpdating] = createSignal<Set<string>>(new Set());
   const [providers, setProviders] = createSignal<ProviderConfig[]>([]);
   const [showCreateModal, setShowCreateModal] = createSignal(false);
+  const [isDeleting, setIsDeleting] = createSignal(false);
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
 
@@ -328,6 +331,28 @@ export function AgentsPage(props: AgentsPageProps) {
     }
   };
 
+  const handleDeleteAgent = async () => {
+    const agent = selectedAgent();
+    if (!agent) return;
+    const confirmed = window.confirm(
+      `Delete agent "${agent.name}"?\n\nThis will permanently remove the agent and its entire workspace directory. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    setIsDeleting(true);
+    try {
+      await deleteAgent(agent.id);
+      const remaining = agents().filter((a) => a.id !== agent.id);
+      setAgents(remaining);
+      setSelectedAgentId(remaining.length > 0 ? remaining[0].id : null);
+      setSelectedWorkspaceFile(null);
+      setHasUnsavedWorkspaceChanges(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete agent');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   createEffect(() => {
     const agentId = selectedAgentId();
     if (!agentId) return;
@@ -559,6 +584,17 @@ export function AgentsPage(props: AgentsPageProps) {
                         Start Chat
                       </button>
                     </Show>
+
+                    {/* Delete Agent button */}
+                    <button
+                      onClick={handleDeleteAgent}
+                      disabled={isDeleting()}
+                      class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Delete agent"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                      {isDeleting() ? 'Deleting…' : 'Delete'}
+                    </button>
 
                     {/* Status Badge */}
                     <div

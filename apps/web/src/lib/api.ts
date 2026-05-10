@@ -406,6 +406,22 @@ export async function createAgent(input: CreateAgentInput): Promise<Agent> {
 }
 
 /**
+ * Delete an agent by ID (also removes its workspace on the server)
+ */
+export async function deleteAgent(agentId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/agents/${agentId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to delete agent: ${response.statusText}`,
+    );
+  }
+}
+
+/**
  * Get personality file metadata for an agent
  */
 export async function listPersonalityFiles(

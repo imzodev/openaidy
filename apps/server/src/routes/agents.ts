@@ -76,7 +76,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
 
   /**
    * DELETE /agents/:agentId
-   * Delete an agent by ID.
+   * Delete an agent by ID. Also removes the agent's workspace directory.
    */
   app.delete('/agents/:agentId', async (request, reply) => {
     const { agentId } = request.params as { agentId: string };
@@ -85,6 +85,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
       reply.code(404);
       return { error: 'Agent not found', agentId };
     }
+    personalityService?.deleteWorkspace(agentId).catch(() => {});
     return { deleted };
   });
 

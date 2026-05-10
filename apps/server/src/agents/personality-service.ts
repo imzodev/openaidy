@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
@@ -222,6 +222,17 @@ export class AgentPersonalityService {
       if (isDefaultContent(content)) blank.push(meta.label);
     }
     return blank;
+  }
+
+  /**
+   * Delete the entire workspace directory for an agent.
+   * Called when an agent is deleted. No-op if the directory does not exist.
+   */
+  async deleteWorkspace(agentId: string): Promise<void> {
+    const dir = this.agentDir(agentId);
+    if (existsSync(dir)) {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   /**
