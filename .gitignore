@@ -15,3 +15,7 @@ apps/web/.solid
 apps/server/data/
 .openaidy/
 *.tsbuildinfo
+
+# Agents skills
+.agents/skills
+skills-lock.json
