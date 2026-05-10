@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -9,6 +9,7 @@ import websocket from '@fastify/websocket';
 import { agentRoutes } from './agents';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 import { createAgentRegistry } from '../agents';
+import { createAgentPersonalityService } from '../agents/personality-service';
 import type { AppConfigService } from '../config/service';
 import { createProviderServices } from '../providers';
 import { SessionMessageService } from '../sessions/service';
@@ -394,5 +395,150 @@ describe('Agent Routes', () => {
       const body = response.json();
       expect(body.error).toBe('Agent not found');
     });
+  });
+});
+
+describe('DELETE /agents/:agentId — workspace deletion', () => {
+  let app: FastifyInstance;
+  let workspaceDir: string;
+
+  beforeEach(async () => {
+    workspaceDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'test-agents-ws-delete-'),
+    );
+
+    const registry = createAgentRegistry({ initialAgents: [] });
+    registry.replaceAll([
+      {
+        id: 'ws-agent',
+        name: 'WS Agent',
+        enabled: true,
+        systemPrompt: 'Prompt',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+      },
+    ]);
+
+    const personalityService = createAgentPersonalityService({
+      workspaceBaseDir: workspaceDir,
+    });
+
+    await personalityService.scaffold('ws-agent');
+
+    const providerServices = createProviderServices();
+    const sessionService = new SessionMessageService({
+      providers: providerServices,
+    });
+    const runEvents = new RunEventEmitter();
+
+    const configServiceStub = {
+      getConfig: () => ({
+        version: 1,
+        defaults: {
+          agentId: 'ws-agent',
+          providerId: 'openai',
+          modelId: 'gpt-4o-mini',
+        },
+        providers: [],
+        agents: [],
+      }),
+      getStatus: () => ({ issues: [] }),
+    } as unknown as AppConfigService;
+
+    app = Fastify({ logger: false });
+    app.decorate('services', {
+      config: configServiceStub,
+      providers: providerServices,
+      sessions: sessionService,
+      agents: registry,
+      runEvents,
+      dbAdapter: undefined,
+      scheduler: undefined,
+      jobsRepo: undefined,
+      jobRunsRepo: undefined,
+      sessionsRepo: undefined,
+      bootstrapAdmin: undefined,
+      pairingRequestsRepo: undefined,
+      devicesRepo: undefined,
+      accessTokensRepo: undefined,
+      workspace: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      mcpService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      skills: {
+        load: () => {},
+        listSkills: () => [],
+        getSkill: () => undefined,
+        getSkillsForAgent: () => [],
+      } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    });
+
+    await app.register(cors, { origin: '*' });
+    await app.register(sensible);
+    await app.register(websocket);
+    await app.register(agentRoutes, {
+      agentRegistry: registry,
+      personalityService,
+      authMiddleware: mockAuthMiddleware,
+    });
+  });
+
+  afterEach(async () => {
+    await app.close();
+    fs.rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  it('deletes the agent workspace directory when the agent is deleted', async () => {
+    const agentDir = path.join(workspaceDir, 'ws-agent');
+    expect(fs.existsSync(agentDir)).toBe(true);
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: '/agents/ws-agent',
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fs.existsSync(agentDir)).toBe(false);
+  });
+
+  it('calls deleteWorkspace on the personality service', async () => {
+    const personalityService = createAgentPersonalityService({
+      workspaceBaseDir: workspaceDir,
+    });
+    const spy = vi.spyOn(personalityService, 'deleteWorkspace');
+
+    const registry2 = createAgentRegistry({ initialAgents: [] });
+    registry2.replaceAll([
+      {
+        id: 'spy-agent',
+        name: 'Spy Agent',
+        enabled: true,
+        systemPrompt: 'Prompt',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+      },
+    ]);
+
+    const spyApp = Fastify({ logger: false });
+    spyApp.decorate('services', {} as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+    await spyApp.register(cors, { origin: '*' });
+    await spyApp.register(sensible);
+    await spyApp.register(websocket);
+    await spyApp.register(agentRoutes, {
+      agentRegistry: registry2,
+      personalityService,
+      authMiddleware: mockAuthMiddleware,
+    });
+
+    await spyApp.inject({ method: 'DELETE', url: '/agents/spy-agent' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith('spy-agent');
+
+    await spyApp.close();
   });
 });
