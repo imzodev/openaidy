@@ -215,22 +215,32 @@ describe('AddonProxyService.validateToken', () => {
 
 describe('AddonProxyAgentService', () => {
   function makeSessionService(
-    assistantContent = 'Hello from agent',
+    opts: {
+      assistantContent?: string;
+      dispatchError?: string;
+    } = {},
   ): SessionMessageService {
+    const dispatchError = opts.dispatchError;
     return {
-      createSession: vi.fn().mockResolvedValue({
-        id: 'session-123',
-        title: 'addon:test-addon:agent-1',
-      }),
-      submitMessageStreaming: vi.fn().mockResolvedValue({
-        ok: true,
-        assistantMessage: { content: assistantContent },
-      }),
+      dispatchAgent: vi.fn().mockResolvedValue(
+        dispatchError
+          ? { ok: false as const, error: dispatchError }
+          : {
+              ok: true as const,
+              sessionId: 'session-123',
+              done: Promise.resolve({
+                ok: true as const,
+                assistantMessage: {
+                  content: opts.assistantContent ?? 'Hello from agent',
+                },
+              }),
+            },
+      ),
     } as unknown as SessionMessageService;
   }
 
   it('creates a session on first invoke and returns agent reply', async () => {
-    const sessionSvc = makeSessionService('Hi there!');
+    const sessionSvc = makeSessionService({ assistantContent: 'Hi there!' });
     const agentSvc = new AddonProxyAgentService(sessionSvc);
 
     const result = await agentSvc.invoke('test-addon', 'agent-1', 'Hello?');
@@ -240,50 +250,77 @@ describe('AddonProxyAgentService', () => {
     expect(result.message).toBe('Hi there!');
     expect(result.sessionId).toBe('session-123');
     expect(result.agentId).toBe('agent-1');
-    expect(sessionSvc.createSession).toHaveBeenCalledOnce();
-    expect(sessionSvc.createSession).toHaveBeenCalledWith(
-      'addon:test-addon:agent-1',
-    );
+    expect(sessionSvc.dispatchAgent).toHaveBeenCalledOnce();
+    expect(sessionSvc.dispatchAgent).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      content: 'Hello?',
+      sessionTitle: 'addon:test-addon:agent-1',
+    });
   });
 
   it('reuses the cached session on subsequent invocations', async () => {
-    const sessionSvc = makeSessionService('Cached reply');
+    const sessionSvc = makeSessionService({ assistantContent: 'Cached reply' });
     const agentSvc = new AddonProxyAgentService(sessionSvc);
 
     await agentSvc.invoke('test-addon', 'agent-1', 'First message');
     await agentSvc.invoke('test-addon', 'agent-1', 'Second message');
 
-    // createSession must only be called once — second call reuses the cache
-    expect(sessionSvc.createSession).toHaveBeenCalledOnce();
-    expect(sessionSvc.submitMessageStreaming).toHaveBeenCalledTimes(2);
+    expect(sessionSvc.dispatchAgent).toHaveBeenCalledTimes(2);
+    // First call: no sessionId (new session)
+    expect(vi.mocked(sessionSvc.dispatchAgent).mock.calls[0]![0]).toEqual({
+      agentId: 'agent-1',
+      content: 'First message',
+      sessionTitle: 'addon:test-addon:agent-1',
+    });
+    // Second call: includes sessionId from cache
+    expect(vi.mocked(sessionSvc.dispatchAgent).mock.calls[1]![0]).toEqual({
+      agentId: 'agent-1',
+      content: 'Second message',
+      sessionId: 'session-123',
+      sessionTitle: 'addon:test-addon:agent-1',
+    });
   });
 
   it('uses separate sessions for different addon+agent pairs', async () => {
     const sessionSvc = makeSessionService();
-    vi.mocked(sessionSvc.createSession)
-      .mockResolvedValueOnce({ id: 'session-A' } as never)
-      .mockResolvedValueOnce({ id: 'session-B' } as never);
+    vi.mocked(sessionSvc.dispatchAgent)
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionId: 'session-A',
+        done: Promise.resolve({
+          ok: true as const,
+          assistantMessage: { content: 'A' },
+        }),
+      } as never)
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionId: 'session-B',
+        done: Promise.resolve({
+          ok: true as const,
+          assistantMessage: { content: 'B' },
+        }),
+      } as never);
 
     const agentSvc = new AddonProxyAgentService(sessionSvc);
 
     await agentSvc.invoke('addon-1', 'agent-x', 'msg');
     await agentSvc.invoke('addon-2', 'agent-x', 'msg');
 
-    expect(sessionSvc.createSession).toHaveBeenCalledTimes(2);
+    expect(sessionSvc.dispatchAgent).toHaveBeenCalledTimes(2);
+    // First call: no sessionId (different addon+agent pair)
     expect(
-      vi.mocked(sessionSvc.submitMessageStreaming).mock.calls[0]![0].sessionId,
-    ).toBe('session-A');
+      vi.mocked(sessionSvc.dispatchAgent).mock.calls[0]![0].sessionId,
+    ).toBeUndefined();
+    // Second call: no sessionId either (different addon)
     expect(
-      vi.mocked(sessionSvc.submitMessageStreaming).mock.calls[1]![0].sessionId,
-    ).toBe('session-B');
+      vi.mocked(sessionSvc.dispatchAgent).mock.calls[1]![0].sessionId,
+    ).toBeUndefined();
   });
 
-  it('propagates submitMessageStreaming errors as ok:false result', async () => {
-    const sessionSvc = makeSessionService();
-    vi.mocked(sessionSvc.submitMessageStreaming).mockResolvedValue({
-      ok: false,
-      error: { code: 'agent.not_found', message: 'Agent not found' },
-    } as never);
+  it('propagates dispatchAgent errors as ok:false result', async () => {
+    const sessionSvc = makeSessionService({
+      dispatchError: 'Agent not found.',
+    });
 
     const agentSvc = new AddonProxyAgentService(sessionSvc);
     const result = await agentSvc.invoke(
@@ -294,8 +331,8 @@ describe('AddonProxyAgentService', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.code).toBe('agent.not_found');
-    expect(result.error.message).toBe('Agent not found');
+    expect(result.error.code).toBe('dispatch.failed');
+    expect(result.error.message).toBe('Agent not found.');
   });
 });
 
@@ -358,10 +395,13 @@ describe('Full addon → proxy → agent flow', () => {
 
     // Step 4: invoke agent
     const sessionSvc: SessionMessageService = {
-      createSession: vi.fn().mockResolvedValue({ id: 'sess-xyz' }),
-      submitMessageStreaming: vi.fn().mockResolvedValue({
+      dispatchAgent: vi.fn().mockResolvedValue({
         ok: true,
-        assistantMessage: { content: 'The answer is 42.' },
+        sessionId: 'sess-xyz',
+        done: Promise.resolve({
+          ok: true,
+          assistantMessage: { content: 'The answer is 42.' },
+        }),
       }),
     } as unknown as SessionMessageService;
 
