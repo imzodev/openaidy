@@ -13,14 +13,14 @@ interface TabsProps<T extends string> {
 
 export function Tabs<T extends string>(props: TabsProps<T>) {
   return (
-    <div class="bg-white dark:bg-gray-800 shadow rounded-t-lg">
-      <div class="border-b border-gray-200 dark:border-gray-700">
+    <div class="bg-white dark:bg-gray-800 shadow rounded-t-lg overflow-x-auto">
+      <div class="border-b border-gray-200 dark:border-gray-700 min-w-max">
         <nav class="flex -mb-px" aria-label="Tabs">
           <For each={props.tabs}>
             {(tab) => (
               <button
                 onClick={() => props.onTabChange(tab.id)}
-                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                class={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   props.activeTab() === tab.id
                     ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                     : 'border-transparent text-text-tertiary hover:text-text-secondary hover:border-gray-300 dark:hover:border-gray-600'

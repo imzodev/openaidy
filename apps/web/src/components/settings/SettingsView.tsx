@@ -191,7 +191,7 @@ export function SettingsView() {
 
   return (
     <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
-      <div class="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-5xl mx-auto py-4 sm:py-6 lg:py-8 px-3 sm:px-4 lg:px-8">
         <div class="flex items-center justify-between mb-6">
           <h1 class="text-2xl font-bold text-text-primary">Configuration</h1>
 

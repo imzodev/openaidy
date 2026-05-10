@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { Check } from 'lucide-solid';
+import { Check, Settings2 } from 'lucide-solid';
 import type { ProviderPreset } from '@openaidy/shared-types';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
@@ -13,39 +13,53 @@ export function PresetProviderCard(props: PresetProviderCardProps) {
   return (
     <button
       onClick={() => props.onSelect(props.preset)}
-      class={`group relative flex flex-col items-center p-4 rounded-xl border transition-all min-h-[120px] ${
+      class={`group relative flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${
         props.isConfigured
-          ? 'border-primary/30 bg-primary/5 dark:bg-primary/10 hover:border-primary/50'
-          : 'border-gray-200 dark:border-gray-700 hover:border-primary/50 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+          ? 'border-primary/40 bg-primary/[0.03] dark:bg-primary/[0.05] hover:border-primary/60 hover:bg-primary/[0.06]'
+          : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'
       }`}
     >
-      <Show when={props.isConfigured}>
-        <div class="absolute top-2 right-2 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center">
-          <Check class="w-3 h-3 text-white" />
-        </div>
-      </Show>
-
-      <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-3">
-        <i class={`bi ${props.preset.icon} text-lg text-primary`}></i>
-      </div>
-
-      <span class="text-sm font-semibold text-text-primary text-center leading-tight mb-1">
-        {props.preset.name}
-      </span>
-
-      <span class="text-xs text-text-tertiary mb-3">
-        {props.preset.models.length} models
-      </span>
-
-      <span
-        class={`mt-auto text-xs px-3 py-1 rounded-full ${
+      {/* Icon */}
+      <div
+        class={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
           props.isConfigured
             ? 'bg-primary/10 text-primary'
             : 'bg-gray-100 dark:bg-gray-800 text-text-secondary group-hover:bg-primary/10 group-hover:text-primary'
         }`}
       >
-        {props.isConfigured ? 'Edit' : 'Connect'}
-      </span>
+        <i class={`bi ${props.preset.icon} text-base`}></i>
+      </div>
+
+      {/* Content */}
+      <div class="flex-1 min-w-0 text-left">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-medium text-text-primary truncate">
+            {props.preset.name}
+          </span>
+          <Show when={props.isConfigured}>
+            <Check class="w-3.5 h-3.5 text-green-500 shrink-0" />
+          </Show>
+        </div>
+        <span class="text-xs text-text-tertiary">
+          {props.preset.models.length} models
+        </span>
+      </div>
+
+      {/* Action Indicator */}
+      <div
+        class={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center transition-all ${
+          props.isConfigured
+            ? 'bg-primary/10 text-primary'
+            : 'bg-transparent text-text-tertiary group-hover:bg-gray-100 dark:group-hover:bg-gray-700 group-hover:text-text-secondary'
+        }`}
+      >
+        <Show
+          when={props.isConfigured}
+          fallback={<span class="text-xs font-medium">+</span>}
+        >
+          <Settings2 class="w-3.5 h-3.5" />
+        </Show>
+      </div>
     </button>
   );
 }

@@ -51,18 +51,18 @@ export function ProvidersTab(props: ProvidersTabProps) {
   };
 
   return (
-    <div class="p-6 space-y-6">
-      <div class="flex items-center justify-between">
+    <div class="p-4 sm:p-6 space-y-5 sm:space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <h2 class="text-lg font-semibold text-text-primary">Providers</h2>
-          <p class="text-sm text-text-tertiary mt-1">
+          <p class="text-sm text-text-tertiary mt-0.5">
             Configure AI providers for your agents
           </p>
         </div>
         <button
           onClick={() => setShowCustomModal(true)}
           disabled={props.isPending}
-          class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-text-primary rounded-lg transition-colors text-sm font-medium"
+          class="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-text-primary rounded-lg transition-colors text-sm font-medium shrink-0"
         >
           <Settings2 class="w-4 h-4" />
           Add Custom
@@ -75,7 +75,7 @@ export function ProvidersTab(props: ProvidersTabProps) {
           <Sparkles class="w-4 h-4 text-primary" />
           <h3 class="text-sm font-medium text-text-primary">Ready Providers</h3>
         </div>
-        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-9 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           <For each={PROVIDER_PRESETS as ProviderPreset[]}>
             {(preset) => {
               const isConfigured = () =>
