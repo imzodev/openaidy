@@ -17,6 +17,7 @@ import type { TasksRepository } from '../repositories/tasks';
 import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
+import type { MemoriesRepository } from '../repositories/memories';
 
 export type SessionsStore = Pick<
   SessionsRepository,
@@ -96,6 +97,7 @@ export type TasksStore = TasksRepository;
 export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
 export type AddonsStore = AddonsRepository;
+export type MemoriesStore = MemoriesRepository;
 
 export type DatabaseRepositories = {
   sessions: SessionsStore;
@@ -110,6 +112,7 @@ export type DatabaseRepositories = {
   subtasks: SubtasksStore;
   taskAgents: TaskAgentsStore;
   addons: AddonsStore;
+  memories: MemoriesStore;
 };
 
 export type DatabaseAdapter = {
