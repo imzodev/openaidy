@@ -1,12 +1,11 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { SessionsToolDeps } from './index.js';
+import { sessionsListMeta } from '../catalog.js';
 
 export function createSessionsListTool(deps: SessionsToolDeps): BuiltinTool {
   return {
-    name: 'sessions_list',
-    description:
-      'List all sessions. Returns each session id, title, and creation timestamp. ' +
-      'Use this to discover existing sessions before reading them with sessions_read or sending messages with sessions_send.',
+    name: sessionsListMeta.name,
+    description: sessionsListMeta.description,
     parameters: {
       type: 'object',
       properties: {},

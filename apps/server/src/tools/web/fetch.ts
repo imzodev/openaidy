@@ -1,6 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import type { BuiltinTool } from '@openaidy/runtime';
+import { webFetchMeta } from '../catalog.js';
 
 const MAX_RESPONSE_BYTES = 1024 * 512; // 512 KB
 const FETCH_TIMEOUT_MS = 15_000;
@@ -24,12 +25,8 @@ const ALLOWED_PROTOCOLS = ['http:', 'https:'];
  *  - 15s timeout
  */
 export const webFetchTool: BuiltinTool = {
-  name: 'web_fetch',
-  description:
-    'Fetch the content of a public URL and return it. ' +
-    'Use format "text" (default) to get clean readable text extracted from HTML — best for articles, docs, and web pages. ' +
-    'Use format "raw" to get the original response body (useful for JSON APIs or plain-text files). ' +
-    'Private/internal network addresses are blocked. Response is capped at 512 KB.',
+  name: webFetchMeta.name,
+  description: webFetchMeta.description,
   parameters: {
     type: 'object',
     properties: {

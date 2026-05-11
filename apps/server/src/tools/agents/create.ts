@@ -1,15 +1,13 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
+import { agentsCreateMeta } from '../catalog.js';
 
 export function createAgentsCreateTool(
   agentRegistry: AgentRegistry,
 ): BuiltinTool {
   return {
-    name: 'agents_create',
-    description:
-      'Create a new agent and register it in this OpenAidy instance. ' +
-      'The agent is immediately available for use after creation. ' +
-      'Use agents_list first to verify the id does not already exist.',
+    name: agentsCreateMeta.name,
+    description: agentsCreateMeta.description,
     parameters: {
       type: 'object',
       properties: {

@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { WorkspaceService } from '../../workspace/service';
 import { WorkspaceError } from '../../workspace/service';
+import { workspaceReadMeta } from '../catalog.js';
 
 /**
  * workspace_read
@@ -11,10 +12,8 @@ export function createWorkspaceReadTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'workspace_read',
-    description:
-      'Read the contents of a file in the agent workspace. ' +
-      'Returns the file content as a string.',
+    name: workspaceReadMeta.name,
+    description: workspaceReadMeta.description,
     parameters: {
       type: 'object',
       properties: {

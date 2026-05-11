@@ -3,6 +3,9 @@ import type { SkillRegistry } from '../skills';
 import { sanitizeSkillBody } from '../skills/sanitize.js';
 import type { ProviderServices } from '../providers';
 import { autoFillPersonalityFiles } from './auto-fill-personality.js';
+import type { ToolDefinition } from '@openaidy/runtime';
+import type { WorkspacePermissionsInfo } from '../types.js';
+import { ALL_TOOL_METAS } from '../tools/catalog.js';
 
 export type BuildSystemPromptOptions = {
   agentId: string;
@@ -16,6 +19,10 @@ export type BuildSystemPromptOptions = {
   userMessage?: string | undefined;
   /** Provider services — required for personality auto-fill */
   providers?: ProviderServices | undefined;
+  /** Tools available to this agent for generating TOOL_GUIDELINES block */
+  tools?: ToolDefinition[] | undefined;
+  /** Workspace permissions for honest capability reporting */
+  workspacePermissions?: WorkspacePermissionsInfo | undefined;
 };
 
 /**
@@ -41,6 +48,8 @@ export async function buildSystemPrompt(
     isFirstMessage,
     userMessage,
     providers,
+    tools,
+    workspacePermissions,
   } = options;
 
   // Auto-fill blank personality files on first message of a session
@@ -83,5 +92,132 @@ export async function buildSystemPrompt(
     }
   }
 
+  // Inject tool guidelines with honest information about available tools and workspace permissions
+  if (tools?.length) {
+    prompt += buildToolGuidelinesBlock(tools, workspacePermissions);
+  }
+
   return prompt;
+}
+
+/**
+ * Build the TOOL_GUIDELINES block with honest information about available tools.
+ * This helps agents understand which tools they have access to and when to use each.
+ */
+function buildToolGuidelinesBlock(
+  tools: ToolDefinition[],
+  workspacePermissions?: WorkspacePermissionsInfo | undefined,
+): string {
+  // Build map of available tools for quick lookup
+  const availableTools = new Map(tools.map((t) => [t.name, t]));
+
+  // Build the tools list showing available vs unavailable
+  const toolsList = ALL_TOOL_METAS.map((tool) => {
+    const isAvailable = availableTools.has(tool.name);
+    const status = isAvailable ? '[ENABLED]' : '[NOT ENABLED]';
+    return `  ${status} ${tool.name} (${tool.category}): ${tool.description}`;
+  }).join('\n');
+
+  // Check for specific capabilities
+  const hasAgentsInvoke = availableTools.has('agents_invoke');
+  const hasAgentsInvokeAwait = availableTools.has('agents_invoke_await');
+
+  // Use workspace permissions if provided, otherwise fall back to tool availability
+  const hasWorkspaceRead =
+    workspacePermissions?.read ?? availableTools.has('workspace_read');
+  const hasWorkspaceWrite =
+    workspacePermissions?.write ?? availableTools.has('workspace_write');
+  const hasWorkspaceList =
+    workspacePermissions?.list ?? availableTools.has('workspace_list');
+  const hasWorkspaceDelete =
+    workspacePermissions?.delete ?? availableTools.has('workspace_delete');
+
+  let guidelines = `
+
+[TOOL_GUIDELINES]
+## All Tools in This System
+
+${toolsList}
+
+## Your Current Access
+You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked [NOT ENABLED] exist in the system but are NOT configured for you.
+
+## CRITICAL RULES FOR TOOL SELECTION
+`;
+
+  // Agent tools guidance
+  if (hasAgentsInvokeAwait || hasAgentsInvoke) {
+    guidelines += `
+### Agent Invocation Tools
+`;
+    if (hasAgentsInvokeAwait) {
+      guidelines += `- agents_invoke_await: USE THIS when you need the agent's response (questions, content requests, validation, sequential tasks)
+`;
+    }
+    if (hasAgentsInvoke) {
+      guidelines += `- agents_invoke: USE THIS for fire-and-forget tasks (logging, background processing, independent research)
+`;
+    }
+    if (hasAgentsInvoke && hasAgentsInvokeAwait) {
+      guidelines += `- DECISION RULE: If the user asks you to invoke an agent and implies they want a result ("ask X to do Y"), ALWAYS use agents_invoke_await, NOT agents_invoke + sessions_read.
+`;
+    }
+  }
+
+  // Workspace capabilities section - CRITICAL for honesty
+  guidelines += `
+### Your Workspace Capabilities (BE EXPLICITLY HONEST ABOUT THESE)
+`;
+  if (hasWorkspaceRead) {
+    guidelines += `- READ: ✅ You CAN read files from your workspace
+`;
+  } else {
+    guidelines += `- READ: ❌ You CANNOT read files (workspace_read not enabled)
+`;
+  }
+
+  if (hasWorkspaceWrite) {
+    guidelines += `- WRITE: ✅ You CAN create and modify files in your workspace
+`;
+  } else {
+    guidelines += `- WRITE: ❌ You CANNOT write files (workspace_write not enabled)
+`;
+  }
+
+  if (hasWorkspaceList) {
+    guidelines += `- LIST: ✅ You CAN list files in your workspace
+`;
+  } else {
+    guidelines += `- LIST: ❌ You CANNOT list files (workspace_list not enabled)
+`;
+  }
+
+  if (hasWorkspaceDelete) {
+    guidelines += `- DELETE: ✅ You CAN delete files from your workspace
+`;
+  } else {
+    guidelines += `- DELETE: ❌ You CANNOT delete files (workspace_delete not enabled)
+`;
+  }
+
+  guidelines += `
+## HONESTY REQUIREMENTS (VIOLATING THESE IS A BUG)
+
+1. ONLY use tools marked [ENABLED] above. Do not pretend to have access to disabled tools.
+
+2. If a user asks you to perform an action requiring a disabled tool:
+   - ❌ NEVER pretend you did it
+   - ✅ ALWAYS explain honestly: "I don't have access to [action]. My [tool_name] is not enabled."
+   - 💡 SUGGEST alternatives if possible
+
+3. BEFORE claiming you completed a task, VERIFY you actually used the tool successfully and got a success response.
+
+4. If asked to write/save/create a file and you don't have workspace_write:
+   Say EXPLICITLY: "I cannot write files because I don't have the workspace_write tool enabled."
+   Do NOT say "I've written the file" or "I'll save it" if you can't actually do it.
+
+5. Be UPFRONT about limitations immediately. Don't wait for the user to find out.
+[/TOOL_GUIDELINES]`;
+
+  return guidelines;
 }

@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { WorkspaceService } from '../../workspace/service';
 import { WorkspaceError } from '../../workspace/service';
+import { workspaceDeleteMeta } from '../catalog.js';
 
 /**
  * workspace_delete
@@ -11,8 +12,8 @@ export function createWorkspaceDeleteTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'workspace_delete',
-    description: 'Delete a file from the agent workspace.',
+    name: workspaceDeleteMeta.name,
+    description: workspaceDeleteMeta.description,
     parameters: {
       type: 'object',
       properties: {

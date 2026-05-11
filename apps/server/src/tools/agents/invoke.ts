@@ -1,16 +1,11 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { AgentToolsDeps } from './index.js';
+import { agentsInvokeMeta, agentsInvokeAwaitMeta } from '../catalog.js';
 
 export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
   return {
-    name: 'agents_invoke',
-    description:
-      '[BACKGROUND MODE] Invoke an agent and continue immediately WITHOUT waiting for the response. ' +
-      "ONLY use this when you do NOT need the agent's response to complete your current task. " +
-      'Examples: logging, background processing, fire-and-forget tasks, independent research. ' +
-      "If you need the agent's response to continue, use agents_invoke_await instead. " +
-      'Returns immediately with a sessionId. Use sessions_read later if you want to check results. ' +
-      'Use agents_list to discover available agent IDs.',
+    name: agentsInvokeMeta.name,
+    description: agentsInvokeMeta.description,
     parameters: {
       type: 'object',
       properties: {
@@ -104,14 +99,8 @@ export function createAgentsInvokeAndWaitTool(
   deps: AgentToolsDeps,
 ): BuiltinTool {
   return {
-    name: 'agents_invoke_await',
-    description:
-      '[AWAIT RESPONSE MODE] Invoke an agent and WAIT for the complete response before continuing. ' +
-      "ALWAYS use this when you need the agent's response to complete your current task. " +
-      'Examples: asking a question, requesting analysis, validation, sequential tasks, ' +
-      'any case where you need to use the result in your next step. ' +
-      "Returns the agent's full response after waiting up to 30 seconds. " +
-      'Use agents_list to discover available agent IDs.',
+    name: agentsInvokeAwaitMeta.name,
+    description: agentsInvokeAwaitMeta.description,
     parameters: {
       type: 'object',
       properties: {

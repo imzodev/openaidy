@@ -44,6 +44,7 @@ import type {
 } from './types';
 import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
 import type { AgentPersonalityService } from '../agents/personality-service';
+import type { WorkspacePermissionsInfo } from '../types.js';
 
 /**
  * Session message service
@@ -656,7 +657,44 @@ export class SessionMessageService {
       } as Message;
     });
 
-    // Build system prompt with personality files and skill bodies injected
+    // 5. Build tool definitions (needed for system prompt and invocation)
+    const mcpTools = this.buildMcpTools(agentId);
+    const nativeToolDefs = this.buildNativeToolDefinitions(agentId);
+    // All tool definitions sent to the model (MCP + builtin, merged)
+    const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
+
+    // Extract workspace permissions from agent config for honest reporting
+    const workspacePermissions: WorkspacePermissionsInfo | undefined = agent
+      ?.workspace?.enabled
+      ? {
+          read:
+            agent.workspace.defaultPermissions?.read ??
+            agent.workspace.workspaces?.some(
+              (w) => w.permissions?.read !== false,
+            ) ??
+            true,
+          write:
+            agent.workspace.defaultPermissions?.write ??
+            agent.workspace.workspaces?.some(
+              (w) => w.permissions?.write === true,
+            ) ??
+            false,
+          delete:
+            agent.workspace.defaultPermissions?.delete ??
+            agent.workspace.workspaces?.some(
+              (w) => w.permissions?.delete === true,
+            ) ??
+            false,
+          list:
+            agent.workspace.defaultPermissions?.list ??
+            agent.workspace.workspaces?.some(
+              (w) => w.permissions?.list !== false,
+            ) ??
+            true,
+        }
+      : undefined;
+
+    // Build system prompt with personality files, skill bodies, and tool guidelines injected
     const systemPrompt = await buildSystemPrompt({
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
@@ -666,16 +704,14 @@ export class SessionMessageService {
       isFirstMessage,
       userMessage: input.content,
       providers: this.providers,
+      tools: allTools,
+      workspacePermissions,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
       : historyMessages;
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
-    const mcpTools = this.buildMcpTools(agentId);
-    const nativeToolDefs = this.buildNativeToolDefinitions(agentId);
-    // All tool definitions sent to the model (MCP + builtin, merged)
-    const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
     // Build invocation options: client overrides take priority, then agent-resolved values
     const invokeOptions = {
       providerId: input.providerId ?? providerId,

@@ -29,6 +29,19 @@ export type ChannelRoutesOptions = {
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
 
+export type ToolMeta = {
+  name: string;
+  category: string;
+  description: string;
+};
+
+export type WorkspacePermissionsInfo = {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  list: boolean;
+};
+
 export type EnrichedSkillInfo = {
   id: string;
   name: string;

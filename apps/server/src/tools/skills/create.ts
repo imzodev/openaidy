@@ -4,6 +4,7 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import { parseSkillMd } from '../../skills/parser.js';
 import type { SkillRegistry } from '../../skills/index.js';
 import type { WorkspaceService } from '../../workspace/service.js';
+import { skillCreateMeta } from '../catalog.js';
 
 /**
  * skill_create
@@ -22,13 +23,8 @@ export function createSkillCreateTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'skill_create',
-    description:
-      'Create a new skill and save it to the skills directory. ' +
-      'A skill is a reusable set of instructions that can be assigned to agents. ' +
-      'Companion files (scripts, configs, .env.example, etc.) can be included ' +
-      'in the same skill folder via the `files` parameter and referenced from the skill body. ' +
-      'The skill is immediately available after creation.',
+    name: skillCreateMeta.name,
+    description: skillCreateMeta.description,
     parameters: {
       type: 'object',
       properties: {

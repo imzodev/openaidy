@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { WorkspaceService } from '../../workspace/service';
 import { WorkspaceError } from '../../workspace/service';
+import { workspaceWriteMeta } from '../catalog.js';
 
 /**
  * workspace_write
@@ -12,11 +13,8 @@ export function createWorkspaceWriteTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'workspace_write',
-    description:
-      'Write content to a file in the agent workspace. ' +
-      'Creates the file and any missing parent directories if they do not exist. ' +
-      'Overwrites the file if it already exists.',
+    name: workspaceWriteMeta.name,
+    description: workspaceWriteMeta.description,
     parameters: {
       type: 'object',
       properties: {

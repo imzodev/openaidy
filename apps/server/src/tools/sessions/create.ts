@@ -1,13 +1,11 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { SessionsToolDeps } from './index.js';
+import { sessionsCreateMeta } from '../catalog.js';
 
 export function createSessionsCreateTool(deps: SessionsToolDeps): BuiltinTool {
   return {
-    name: 'sessions_create',
-    description:
-      'Create a new session. A session is a conversation container that holds messages and runs. ' +
-      'Use this to create a session that you (or another agent via sessions_send) can send messages to. ' +
-      'Returns the session id, title, and creation timestamp.',
+    name: sessionsCreateMeta.name,
+    description: sessionsCreateMeta.description,
     parameters: {
       type: 'object',
       properties: {
