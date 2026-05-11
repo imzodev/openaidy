@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentsInvokeTool, createAgentTools } from './index.js';
+import {
+  createAgentsInvokeTool,
+  createAgentsInvokeAndWaitTool,
+  createAgentTools,
+} from './index.js';
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
 import type { SessionMessageService } from '../../sessions/service.js';
@@ -259,6 +263,193 @@ describe('agents_invoke tool', () => {
     expect(names).toContain('agents_list');
     expect(names).toContain('agents_create');
     expect(names).toContain('agents_invoke');
-    expect(names).toHaveLength(3);
+    expect(names).toContain('agents_invoke_await');
+    expect(names).toHaveLength(4);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// agents_invoke_await tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('agents_invoke_await tool', () => {
+  function makeTool(opts?: {
+    agentRegistry?: AgentRegistry;
+    sessionSvc?: SessionMessageService;
+  }) {
+    return createAgentsInvokeAndWaitTool(makeDeps(opts ?? {}));
+  }
+
+  // ── Tool metadata ────────────────────────────────────────────────────────────
+
+  it('has the correct name', () => {
+    expect(makeTool().name).toBe('agents_invoke_await');
+  });
+
+  it('requires agentId and content', () => {
+    const required = (
+      makeTool().parameters as unknown as { required: string[] }
+    ).required;
+    expect(required).toContain('agentId');
+    expect(required).toContain('content');
+    expect(required).not.toContain('sessionId');
+  });
+
+  // ── Input validation ─────────────────────────────────────────────────────────
+
+  it('rejects missing agentId', async () => {
+    const result = await executeTool(makeTool(), { content: 'hello' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/agentId is required/);
+  });
+
+  it('rejects empty agentId', async () => {
+    const result = await executeTool(makeTool(), {
+      agentId: '   ',
+      content: 'hello',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/agentId is required/);
+  });
+
+  it('rejects missing content', async () => {
+    const result = await executeTool(makeTool(), { agentId: 'researcher' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/content is required/);
+  });
+
+  // ── Session service unavailable ──────────────────────────────────────────────
+
+  it('returns error when session service is not available', async () => {
+    const deps = { ...makeDeps({}), getSessionService: undefined };
+    const tool = createAgentsInvokeAndWaitTool(deps as never);
+    const result = await executeTool(tool, {
+      agentId: 'researcher',
+      content: 'hello',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.error).toMatch(/Session service is not available/);
+  });
+
+  // ── Success with polling ────────────────────────────────────────────────────
+
+  it('waits for agent completion and returns response', async () => {
+    let callCount = 0;
+    const svc = makeSessionService({
+      dispatchAgent: vi.fn().mockResolvedValue({
+        ok: true,
+        sessionId: 'sess-abc',
+        done: Promise.resolve({
+          ok: true,
+          assistantMessage: { content: 'Agent response' },
+        }),
+      }),
+      listRuns: vi.fn().mockImplementation(() => {
+        callCount++;
+        // First call: running, second call: succeeded
+        if (callCount === 1) {
+          return Promise.resolve([{ id: 'run-1', status: 'running' }]);
+        }
+        return Promise.resolve([{ id: 'run-1', status: 'succeeded' }]);
+      }),
+      listMessages: vi.fn().mockResolvedValue([
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'Agent response' },
+      ]),
+    });
+
+    const tool = makeTool({ sessionSvc: svc });
+    const result = await executeTool(tool, {
+      agentId: 'researcher',
+      content: 'hello',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).toContain(
+        'Agent "researcher" completed successfully',
+      );
+      expect(result.content).toContain('Agent response');
+    }
+    expect(callCount).toBe(2);
+  });
+
+  // ── Agent failure handling ───────────────────────────────────────────────────
+
+  it('returns error when agent fails', async () => {
+    const svc = makeSessionService({
+      dispatchAgent: vi.fn().mockResolvedValue({
+        ok: true,
+        sessionId: 'sess-abc',
+        done: Promise.resolve({
+          ok: true,
+          assistantMessage: { content: 'response' },
+        }),
+      }),
+      listRuns: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'run-1', status: 'failed', errorMessage: 'Agent crashed' },
+        ]),
+    });
+
+    const tool = makeTool({ sessionSvc: svc });
+    const result = await executeTool(tool, {
+      agentId: 'researcher',
+      content: 'hello',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('failed');
+      expect(result.error).toContain('Agent crashed');
+    }
+  });
+
+  // ── Timeout handling ─────────────────────────────────────────────────────────
+
+  it('returns timeout error when agent takes too long', async () => {
+    const svc = makeSessionService({
+      dispatchAgent: vi.fn().mockResolvedValue({
+        ok: true,
+        sessionId: 'sess-abc',
+        done: Promise.resolve({
+          ok: true,
+          assistantMessage: { content: 'response' },
+        }),
+      }),
+      listRuns: vi.fn().mockResolvedValue([{ id: 'run-1', status: 'running' }]),
+    });
+
+    const tool = makeTool({ sessionSvc: svc });
+    const result = await executeTool(tool, {
+      agentId: 'researcher',
+      content: 'hello',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('Timeout');
+      expect(result.error).toContain('30s');
+    }
+  }, 35000); // 35 second timeout for this test
+
+  // ── dispatchAgent error propagation ─────────────────────────────────────────
+
+  it('propagates dispatchAgent errors', async () => {
+    const svc = makeSessionService({
+      dispatchAgent: vi
+        .fn()
+        .mockResolvedValue({ ok: false, error: 'Agent not found.' }),
+    });
+    const tool = makeTool({ sessionSvc: svc });
+    const result = await executeTool(tool, {
+      agentId: 'missing-agent',
+      content: 'hello',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('Agent not found.');
   });
 });

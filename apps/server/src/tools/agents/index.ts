@@ -3,11 +3,17 @@ import type { AgentRegistry } from '../../agents/registry.js';
 import type { SessionMessageService } from '../../sessions/service.js';
 import { createAgentsListTool } from './list.js';
 import { createAgentsCreateTool } from './create.js';
-import { createAgentsInvokeTool } from './invoke.js';
+import {
+  createAgentsInvokeTool,
+  createAgentsInvokeAndWaitTool,
+} from './invoke.js';
 
 export { createAgentsListTool } from './list.js';
 export { createAgentsCreateTool } from './create.js';
-export { createAgentsInvokeTool } from './invoke.js';
+export {
+  createAgentsInvokeTool,
+  createAgentsInvokeAndWaitTool,
+} from './invoke.js';
 
 export type AgentToolsDeps = {
   registry: AgentRegistry;
@@ -19,5 +25,6 @@ export function createAgentTools(deps: AgentToolsDeps): BuiltinTool[] {
     createAgentsListTool(deps.registry),
     createAgentsCreateTool(deps.registry),
     createAgentsInvokeTool(deps),
+    createAgentsInvokeAndWaitTool(deps),
   ];
 }
