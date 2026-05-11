@@ -26,13 +26,15 @@ import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
 import { createAddonTools } from './addons';
 import { createAgentTools } from './agents';
+import type { AgentToolsDeps } from './agents';
 import { createWebTools } from './web';
+import { createSessionTools } from './sessions';
 import { presentChoicesTool } from './present-choices';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
 import type { AddonToolDeps } from './addons';
-import type { AgentRegistry } from '../agents/registry';
+import type { SessionMessageService } from '../sessions/service';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
@@ -41,16 +43,18 @@ export { createSkillTools } from './skills';
 export { createAddonTools } from './addons';
 export type { AddonToolDeps } from './addons';
 export { createAgentTools } from './agents';
+export type { AgentToolsDeps } from './agents';
 export { createWebTools } from './web';
+export { createSessionTools } from './sessions';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
   exec?: ExecService;
   skills?: { registry: SkillRegistry };
   addons?: AddonToolDeps;
-  agents?: { registry: AgentRegistry };
+  agents?: AgentToolsDeps;
   web?: boolean;
-  // Add more service dependencies here as new tool categories are introduced.
+  sessions?: { getSessionService: () => SessionMessageService };
 };
 
 /**
@@ -89,7 +93,13 @@ export function createBuiltinToolRegistry(
   }
 
   if (deps.agents) {
-    for (const tool of createAgentTools(deps.agents.registry)) {
+    for (const tool of createAgentTools(deps.agents)) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.sessions) {
+    for (const tool of createSessionTools(deps.sessions)) {
       registry.register(tool);
     }
   }
