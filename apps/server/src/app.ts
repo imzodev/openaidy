@@ -34,6 +34,7 @@ import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
 import { createTaskService } from './tasks';
+import { createPlanningService } from './planning';
 import { createMcpClientService } from './mcp/client';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
@@ -401,14 +402,28 @@ export async function buildApp() {
 
   // Register task routes (requires DB)
   if (dbAdapter) {
+    // Create planning service for task decomposition
+    const planningService = createPlanningService({
+      providers: providerServices,
+      tasksRepo: dbAdapter.repositories.tasks,
+      subtasksRepo: dbAdapter.repositories.subtasks,
+      agents: services.agents,
+      getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+    });
+
     const taskService = createTaskService({
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
       agents: services.agents,
       sessionService: services.sessions,
+      planningService,
     });
-    await app.register(taskRoutes, { taskService, authMiddleware });
+    await app.register(taskRoutes, {
+      taskService,
+      planningService,
+      authMiddleware,
+    });
   }
 
   // Register access token routes (requires DB, admin auth enforced)

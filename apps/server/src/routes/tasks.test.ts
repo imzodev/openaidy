@@ -130,6 +130,8 @@ describe('taskRoutes', () => {
     expect(registeredRoutes).toContain('POST /tasks/:taskId/agents');
     expect(registeredRoutes).toContain('DELETE /tasks/:taskId/agents/:agentId');
     expect(registeredRoutes).toContain('GET /tasks/:taskId/progress');
+    expect(registeredRoutes).toContain('GET /tasks/:id/subtasks');
+    expect(registeredRoutes).toContain('POST /tasks/:id/plan');
   });
 
   describe('GET /tasks', () => {
@@ -355,6 +357,93 @@ describe('taskRoutes', () => {
       );
 
       expect((result as { ok: boolean }).ok).toBe(true);
+    });
+  });
+
+  describe('GET /tasks/:id/subtasks', () => {
+    const mockSubtask = {
+      id: 'sub1',
+      taskId: 'task1',
+      title: 'Subtask 1',
+      description: 'First subtask',
+      status: 'pending',
+      orderIndex: 0,
+      assignedAgentId: null,
+      sessionId: null,
+      parentSubtaskId: null,
+      result: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('returns subtasks for an existing task', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+
+      mockService.getTaskWithDetails.mockResolvedValue(mockTaskWithDetails);
+      mockService.getSubtasks.mockResolvedValue([mockSubtask]);
+
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:id/subtasks',
+      );
+      const result = await route!.handler(
+        { params: { id: 'task1' } },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(
+        (result as { ok: boolean; data: { items: unknown[] } }).data.items,
+      ).toHaveLength(1);
+      expect(mockService.getSubtasks).toHaveBeenCalledWith('task1');
+    });
+
+    it('returns empty items array when task has no subtasks', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+
+      mockService.getTaskWithDetails.mockResolvedValue(mockTaskWithDetails);
+      mockService.getSubtasks.mockResolvedValue([]);
+
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:id/subtasks',
+      );
+      const result = await route!.handler(
+        { params: { id: 'task1' } },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect(
+        (result as { ok: boolean; data: { items: unknown[] } }).data.items,
+      ).toHaveLength(0);
+    });
+
+    it('returns 404 for non-existent task', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+
+      mockService.getTaskWithDetails.mockResolvedValue(null);
+
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:id/subtasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        { params: { id: 'nonexistent' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(404);
     });
   });
 

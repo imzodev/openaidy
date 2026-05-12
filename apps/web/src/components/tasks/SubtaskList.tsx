@@ -61,7 +61,7 @@ export function SubtaskList(props: SubtaskListProps) {
   return (
     <div class="subtask-list space-y-2">
       <Show when={props.subtasks.length === 0}>
-        <div class="text-sm text-gray-500 py-4 text-center">
+        <div class="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
           No subtasks yet
         </div>
       </Show>
@@ -71,12 +71,12 @@ export function SubtaskList(props: SubtaskListProps) {
           <div
             class={`subtask-item p-3 rounded-md border ${
               subtask.status === 'completed'
-                ? 'bg-green-50 border-green-200'
+                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                 : subtask.status === 'failed'
-                ? 'bg-red-50 border-red-200'
-                : subtask.status === 'in_progress'
-                ? 'bg-yellow-50 border-yellow-200'
-                : 'bg-gray-50 border-gray-200'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                  : subtask.status === 'in_progress'
+                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                    : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
             }`}
           >
             <div class="flex items-start gap-3">
@@ -87,18 +87,18 @@ export function SubtaskList(props: SubtaskListProps) {
 
               {/* Content */}
               <div class="flex-1 min-w-0">
-                <h4 class="text-sm font-medium text-gray-900">
+                <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
                   {subtask.title}
                 </h4>
                 <Show when={subtask.description}>
-                  <p class="text-sm text-gray-600 mt-1">
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {subtask.description}
                   </p>
                 </Show>
 
                 {/* Assigned agent */}
                 <Show when={subtask.assignedAgentId}>
-                  <div class="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                  <div class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                     <span>Assigned:</span>
                     <span class="font-medium">
                       {getAgentName(subtask.assignedAgentId)}
@@ -108,7 +108,7 @@ export function SubtaskList(props: SubtaskListProps) {
 
                 {/* Result */}
                 <Show when={subtask.result}>
-                  <div class="mt-2 p-2 bg-white rounded text-xs text-gray-700 border border-gray-200">
+                  <div class="mt-2 p-2 bg-white dark:bg-gray-900 rounded text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
                     {subtask.result}
                   </div>
                 </Show>

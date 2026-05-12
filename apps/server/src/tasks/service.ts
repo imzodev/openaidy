@@ -1,5 +1,6 @@
 import type { AgentRegistry } from '../agents';
 import type { SessionMessageService } from '../sessions/service';
+import type { PlanningService } from '../planning';
 import { createLogger } from '../lib/logger';
 import {
   type TasksRepository,
@@ -24,6 +25,7 @@ export type TaskServiceOptions = {
   taskAgentsRepo: TaskAgentsRepository;
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
+  planningService?: PlanningService;
 };
 
 /**
@@ -103,6 +105,7 @@ export class TaskService {
   private readonly taskAgentsRepo: TaskAgentsRepository;
   private readonly agents: AgentRegistry | undefined;
   private readonly sessionService: SessionMessageService | undefined;
+  private readonly planningService: PlanningService | undefined;
   private readonly logger = createLogger('TaskService');
 
   constructor(options: TaskServiceOptions) {
@@ -111,6 +114,7 @@ export class TaskService {
     this.taskAgentsRepo = options.taskAgentsRepo;
     this.agents = options.agents;
     this.sessionService = options.sessionService;
+    this.planningService = options.planningService;
   }
 
   // ========================================
@@ -152,6 +156,31 @@ export class TaskService {
         ...(a.role !== undefined && { role: a.role }),
       }));
       await this.taskAgentsRepo.assignMultiple(task.id, agentsWithRoles);
+    }
+
+    // Trigger planning if enabled (async - don't await)
+    if (task.planningEnabled && this.planningService) {
+      this.planningService
+        .planTask(task.id)
+        .then((result) => {
+          if (!result.ok) {
+            this.logger.warn('Task planning failed', {
+              taskId: task.id,
+              error: result.error,
+            });
+          } else {
+            this.logger.info('Task planning completed', {
+              taskId: task.id,
+              subtasksCreated: result.subtasks.length,
+            });
+          }
+        })
+        .catch((err) => {
+          this.logger.error('Unexpected error during task planning', {
+            taskId: task.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
     }
 
     return { ok: true, data: task };

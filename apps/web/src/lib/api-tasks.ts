@@ -302,9 +302,7 @@ export async function removeAgent(
 /**
  * Get task progress
  */
-export async function getTaskProgress(
-  taskId: string,
-): Promise<
+export async function getTaskProgress(taskId: string): Promise<
   ApiResult<{
     total: number;
     completed: number;
@@ -327,7 +325,8 @@ export async function listSubtasks(
   if (!response.ok) {
     throw new Error(`Failed to list subtasks: ${response.statusText}`);
   }
-  return response.json();
+  const json = await response.json();
+  return json.data ?? json;
 }
 
 /**

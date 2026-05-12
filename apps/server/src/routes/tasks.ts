@@ -447,6 +447,26 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   });
 
   /**
+   * GET /tasks/:id/subtasks
+   * List all subtasks for a task
+   */
+  app.get('/tasks/:id/subtasks', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const task = await taskService.getTaskWithDetails(id);
+    if (!task) {
+      reply.code(404);
+      return {
+        ok: false,
+        error: { code: 'task.not_found', message: `Task "${id}" not found` },
+      };
+    }
+
+    const subtasks = await taskService.getSubtasks(id);
+    return { ok: true, data: { items: subtasks } };
+  });
+
+  /**
    * POST /tasks/:id/plan
    * Plan a task (decompose into subtasks using AI)
    */

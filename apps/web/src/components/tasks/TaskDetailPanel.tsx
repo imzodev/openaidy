@@ -7,10 +7,22 @@
 
 import { createSignal, createEffect, Show } from 'solid-js';
 import { X, Edit2, Trash2 } from 'lucide-solid';
-import { getTask, updateTask, deleteTask, listSubtasks, getTaskProgress, assignAgents } from '../../lib/api-tasks';
+import {
+  getTask,
+  updateTask,
+  deleteTask,
+  listSubtasks,
+  getTaskProgress,
+  assignAgents,
+} from '../../lib/api-tasks';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
-import type { Task, TaskStatus, TaskPriority, Subtask } from '../../lib/api-tasks';
+import type {
+  Task,
+  TaskStatus,
+  TaskPriority,
+  Subtask,
+} from '../../lib/api-tasks';
 
 /**
  * TaskWithAgents extends Task to include agents
@@ -187,11 +199,18 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   }
 
   return (
-    <div class="task-detail-panel bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       {/* Header */}
-      <div class="flex items-center justify-between p-4 border-b">
-        <Show when={!isEditing()} fallback={<h2 class="text-lg font-semibold">Edit Task</h2>}>
-          <h2 class="text-lg font-semibold text-gray-900">
+      <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <Show
+          when={!isEditing()}
+          fallback={
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Edit Task
+            </h2>
+          }
+        >
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {task()?.title || 'Task Details'}
           </h2>
         </Show>
@@ -199,7 +218,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           <Show when={!isEditing()}>
             <button
               type="button"
-              class="p-1.5 text-gray-400 hover:text-gray-600"
+              class="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
               onClick={startEditing}
               title="Edit task"
             >
@@ -207,7 +226,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
             </button>
             <button
               type="button"
-              class="p-1.5 text-red-400 hover:text-red-600"
+              class="p-1.5 text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400"
               onClick={handleDelete}
               disabled={isDeleting()}
               title="Delete task"
@@ -217,7 +236,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           </Show>
           <button
             type="button"
-            class="p-1.5 text-gray-400 hover:text-gray-600"
+            class="p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
             onClick={props.onClose}
           >
             <X class="w-5 h-5" />
@@ -230,13 +249,13 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
         {/* Loading state */}
         <Show when={isLoading()}>
           <div class="flex justify-center py-8">
-            <div class="text-gray-500">Loading task...</div>
+            <div class="text-gray-500 dark:text-gray-400">Loading task...</div>
           </div>
         </Show>
 
         {/* Error state */}
         <Show when={error()}>
-          <div class="p-4 bg-red-50 text-red-600 rounded-md">
+          <div class="p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md">
             {error()}
           </div>
         </Show>
@@ -245,10 +264,14 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
         <Show when={!isLoading() && task()}>
           {/* Status and Priority badges */}
           <div class="flex items-center gap-2">
-            <span class={`px-2 py-1 text-xs rounded ${STATUS_COLORS[task()!.status]}`}>
+            <span
+              class={`px-2 py-1 text-xs rounded ${STATUS_COLORS[task()!.status]}`}
+            >
               {task()!.status}
             </span>
-            <span class={`px-2 py-1 text-xs rounded ${PRIORITY_COLORS[task()!.priority]}`}>
+            <span
+              class={`px-2 py-1 text-xs rounded ${PRIORITY_COLORS[task()!.priority]}`}
+            >
               {task()!.priority}
             </span>
             <Show when={task()!.planningEnabled}>
@@ -261,10 +284,12 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           {/* Title (edit mode) */}
           <Show when={isEditing()}>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Title
+              </label>
               <input
                 type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={editTitle()}
                 onInput={(e) => setEditTitle(e.currentTarget.value)}
               />
@@ -274,9 +299,11 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           {/* Description */}
           <Show when={isEditing()}>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Description
+              </label>
               <textarea
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows={4}
                 value={editDescription()}
                 onInput={(e) => setEditDescription(e.currentTarget.value)}
@@ -285,16 +312,22 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           </Show>
           <Show when={!isEditing()}>
             <div>
-              <h3 class="text-sm font-medium text-gray-700 mb-1">Description</h3>
-              <p class="text-gray-900">{task()?.description}</p>
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Description
+              </h3>
+              <p class="text-gray-900 dark:text-gray-100">
+                {task()?.description}
+              </p>
             </div>
           </Show>
 
           {/* Progress (if planning enabled) */}
           <Show when={task()?.planningEnabled && progress()}>
             <div>
-              <h3 class="text-sm font-medium text-gray-700 mb-2">Progress</h3>
-              <div class="bg-gray-200 rounded-full h-2 overflow-hidden">
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Progress
+              </h3>
+              <div class="bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                 <div
                   class="bg-blue-500 h-full transition-all"
                   style={{
@@ -302,21 +335,26 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
                   }}
                 />
               </div>
-              <div class="mt-1 text-sm text-gray-500">
-                {progress()?.completed || 0} / {progress()?.total || 0} subtasks completed
+              <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {progress()?.completed || 0} / {progress()?.total || 0} subtasks
+                completed
               </div>
             </div>
           </Show>
 
           {/* Assigned Agents */}
           <div>
-            <h3 class="text-sm font-medium text-gray-700 mb-2">Assigned Agents</h3>
+            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Assigned Agents
+            </h3>
             <AgentSelector
               agents={props.agents}
-              selectedAgents={task()?.agents?.map((a) => ({
-                agentId: a.agentId,
-                role: a.role as 'primary' | 'secondary' | 'reviewer',
-              })) || []}
+              selectedAgents={
+                task()?.agents?.map((a) => ({
+                  agentId: a.agentId,
+                  role: a.role as 'primary' | 'secondary' | 'reviewer',
+                })) || []
+              }
               onChange={handleAgentChange}
               disabled={isEditing()}
             />
@@ -325,7 +363,9 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           {/* Subtasks (if planning enabled) */}
           <Show when={task()?.planningEnabled}>
             <div>
-              <h3 class="text-sm font-medium text-gray-700 mb-2">Subtasks</h3>
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Subtasks
+              </h3>
               <SubtaskList
                 subtasks={subtasks()}
                 agents={props.agents}
@@ -336,10 +376,10 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
 
           {/* Edit actions */}
           <Show when={isEditing()}>
-            <div class="flex justify-end gap-2 pt-4 border-t">
+            <div class="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                class="px-4 py-2 text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md"
+                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-md"
                 onClick={() => setIsEditing(false)}
               >
                 Cancel

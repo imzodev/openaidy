@@ -6,6 +6,8 @@
 
 import type { ProviderServices } from '../providers';
 import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
+import type { AgentRegistry } from '../agents';
+import { parseModelString } from '../agents/schema';
 import {
   PLANNING_AGENT_CONFIG,
   type PlanningOptions,
@@ -20,6 +22,8 @@ export type PlanningServiceOptions = {
   providers: ProviderServices;
   tasksRepo: TasksRepository;
   subtasksRepo: SubtasksRepository;
+  agents?: AgentRegistry;
+  getDefaultAgentId?: () => string | undefined;
 };
 
 /**
@@ -38,11 +42,44 @@ export class PlanningService {
   private readonly providers: ProviderServices;
   private readonly tasksRepo: TasksRepository;
   private readonly subtasksRepo: SubtasksRepository;
+  private readonly agents: AgentRegistry | undefined;
+  private readonly getDefaultAgentId: (() => string | undefined) | undefined;
 
   constructor(options: PlanningServiceOptions) {
     this.providers = options.providers;
     this.tasksRepo = options.tasksRepo;
     this.subtasksRepo = options.subtasksRepo;
+    this.agents = options.agents;
+    this.getDefaultAgentId = options.getDefaultAgentId;
+  }
+
+  /**
+   * Resolve the provider and model to use for planning.
+   * Priority: default agent's model > default provider config.
+   */
+  private resolveModelConfig():
+    | { providerId: string; modelId: string }
+    | undefined {
+    // 1. Try the default agent's model
+    const defaultAgentId = this.getDefaultAgentId?.();
+    const defaultAgent = defaultAgentId
+      ? this.agents?.getAgent(defaultAgentId)
+      : undefined;
+    if (defaultAgent?.model) {
+      const parsed = parseModelString(defaultAgent.model);
+      if (parsed) return parsed;
+    }
+
+    // 2. Fallback to the globally configured default provider
+    const defaultConfig = this.providers.registry.getDefault();
+    if (defaultConfig) {
+      return {
+        providerId: defaultConfig.providerId,
+        modelId: defaultConfig.modelId,
+      };
+    }
+
+    return undefined;
   }
 
   /**
@@ -81,22 +118,24 @@ export class PlanningService {
       // Build prompt
       const prompt = buildPlanningPrompt(task);
 
-      // Get default model
-      const defaultConfig = this.providers.registry.getDefault();
-      if (!defaultConfig) {
-        throw new Error('No default provider configured');
+      // Resolve model config from default agent or provider
+      const modelConfig = this.resolveModelConfig();
+      if (!modelConfig) {
+        throw new Error(
+          'No model configured: set a model on the default agent or configure a default provider',
+        );
       }
 
       // Invoke planning agent
       const result = await this.providers.invocation.invoke(
         {
-          model: defaultConfig.modelId,
+          model: modelConfig.modelId,
           messages: [
             { role: 'system', content: PLANNING_AGENT_CONFIG.systemPrompt },
             { role: 'user', content: prompt },
           ],
         },
-        { providerId: defaultConfig.providerId },
+        { providerId: modelConfig.providerId },
       );
 
       if (!result.ok) {

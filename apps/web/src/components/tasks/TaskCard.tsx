@@ -6,7 +6,7 @@
  */
 
 import { Show } from 'solid-js';
-import { Play } from 'lucide-solid';
+import { Play, Loader2, CheckCircle2, AlertCircle } from 'lucide-solid';
 import type { Task, TaskPriority } from '../../lib/api-tasks';
 
 /**
@@ -68,7 +68,7 @@ export function TaskCard(props: TaskCardProps) {
         {props.task.title}
       </h4>
 
-      {/* Priority Badge */}
+      {/* Priority Badge and Planning Status */}
       <div class="flex items-center gap-2">
         <span
           class={`text-xs px-2 py-0.5 rounded ${PRIORITY_COLORS[props.task.priority]}`}
@@ -76,14 +76,45 @@ export function TaskCard(props: TaskCardProps) {
           {props.task.priority}
         </span>
 
-        {/* Planning indicator */}
+        {/* Planning status indicator */}
         <Show when={props.task.planningEnabled}>
-          <span
-            class="text-xs text-purple-500 dark:text-purple-400"
-            title="Planning enabled"
+          <Show when={props.task.planningStatus === 'in_progress'}>
+            <span
+              class="text-xs text-blue-500 dark:text-blue-400 flex items-center gap-1"
+              title="Planning in progress..."
+            >
+              <Loader2 class="w-3 h-3 animate-spin" />
+            </span>
+          </Show>
+          <Show when={props.task.planningStatus === 'completed'}>
+            <span
+              class="text-xs text-green-500 dark:text-green-400 flex items-center gap-1"
+              title="Planning complete"
+            >
+              <CheckCircle2 class="w-3 h-3" />
+            </span>
+          </Show>
+          <Show when={props.task.planningStatus === 'failed'}>
+            <span
+              class="text-xs text-red-500 dark:text-red-400 flex items-center gap-1"
+              title="Planning failed"
+            >
+              <AlertCircle class="w-3 h-3" />
+            </span>
+          </Show>
+          <Show
+            when={
+              props.task.planningStatus === 'pending' ||
+              !props.task.planningStatus
+            }
           >
-            🧠
-          </span>
+            <span
+              class="text-xs text-purple-500 dark:text-purple-400 flex items-center gap-1"
+              title="Planning pending"
+            >
+              🧠
+            </span>
+          </Show>
         </Show>
       </div>
 
@@ -106,14 +137,29 @@ export function TaskCard(props: TaskCardProps) {
             e.stopPropagation();
             props.onExecute?.();
           }}
-          disabled={props.isExecuting}
-          class="mt-3 w-full flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded transition-colors"
+          disabled={
+            props.isExecuting || props.task.planningStatus === 'in_progress'
+          }
+          title={
+            props.task.planningStatus === 'in_progress'
+              ? 'Planning in progress...'
+              : props.task.planningStatus === 'failed'
+                ? 'Planning failed - retry or edit task'
+                : ''
+          }
+          class="mt-3 w-full flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed rounded transition-colors"
         >
           <Show
             when={props.isExecuting}
             fallback={
               <>
-                <Play class="w-3 h-3" /> Start Task
+                <Play class="w-3 h-3" />
+                <Show
+                  when={props.task.planningStatus === 'in_progress'}
+                  fallback="Start Task"
+                >
+                  Planning...
+                </Show>
               </>
             }
           >
