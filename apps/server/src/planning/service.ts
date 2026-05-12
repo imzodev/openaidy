@@ -13,7 +13,8 @@ import {
   type PlanningOptions,
   type PlannedSubtask,
 } from './config';
-import { buildPlanningPrompt } from './prompts';
+import { buildPlanningPrompt, buildComplexityPrompt } from './prompts';
+import type { Task } from '@openaidy/db';
 
 /**
  * Planning service options
@@ -115,9 +116,6 @@ export class PlanningService {
     await this.tasksRepo.updatePlanningStatus(taskId, 'in_progress');
 
     try {
-      // Build prompt
-      const prompt = buildPlanningPrompt(task);
-
       // Resolve model config from default agent or provider
       const modelConfig = this.resolveModelConfig();
       if (!modelConfig) {
@@ -125,6 +123,12 @@ export class PlanningService {
           'No model configured: set a model on the default agent or configure a default provider',
         );
       }
+
+      // Assess complexity to constrain the number of subtasks
+      const maxSubtasks = await this.assessComplexity(task, modelConfig);
+
+      // Build prompt with complexity-adjusted max
+      const prompt = buildPlanningPrompt(task, maxSubtasks);
 
       // Invoke planning agent
       const result = await this.providers.invocation.invoke(
@@ -167,6 +171,47 @@ export class PlanningService {
         },
       };
     }
+  }
+
+  /**
+   * Assess task complexity with a lightweight AI call.
+   * Returns the recommended max number of subtasks (2, 4, or 8).
+   * Falls back to the config default if the call fails.
+   */
+  private async assessComplexity(
+    task: Task,
+    modelConfig: { providerId: string; modelId: string },
+  ): Promise<number> {
+    try {
+      const result = await this.providers.invocation.invoke(
+        {
+          model: modelConfig.modelId,
+          maxTokens: 100,
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You assess task complexity. Respond with ONLY valid JSON.',
+            },
+            { role: 'user', content: buildComplexityPrompt(task) },
+          ],
+        },
+        { providerId: modelConfig.providerId },
+      );
+
+      if (!result.ok) return PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
+
+      const jsonMatch = result.value.content.match(
+        /\{[\s\S]*?"maxSubtasks"\s*:\s*(\d+)[\s\S]*?\}/,
+      );
+      if (jsonMatch?.[1]) {
+        const max = parseInt(jsonMatch[1], 10);
+        if (!isNaN(max) && max >= 1 && max <= 10) return max;
+      }
+    } catch {
+      // fall through to default
+    }
+    return PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
   }
 
   /**

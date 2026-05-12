@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlanningService, type PlanningServiceOptions } from './service';
-import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
+import { buildPlanningPrompt, buildComplexityPrompt } from './prompts';
+import type { TasksRepository, SubtasksRepository, Task } from '@openaidy/db';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 
@@ -130,9 +131,13 @@ describe('PlanningService', () => {
     });
 
     it('updates planning status to failed on error', async () => {
-      mockProviders.invocation.invoke.mockRejectedValueOnce(
-        new Error('API error'),
-      );
+      // First call is assessComplexity (succeeds with default), second call is the planning invoke (fails)
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"simple","maxSubtasks":2}' },
+        })
+        .mockRejectedValueOnce(new Error('API error'));
 
       const result = await service.planTask('task-1');
 
@@ -168,6 +173,157 @@ describe('PlanningService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('planning.not_enabled');
+      }
+    });
+  });
+
+  describe('assessComplexity (via planTask)', () => {
+    it('constrains to 2 subtasks for simple tasks', async () => {
+      // Complexity call returns simple, planning call returns 2 subtasks
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"simple","maxSubtasks":2}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+              { title: 'B', description: 'Step B', dependencies: [0] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(2);
+      }
+      // Verify the planning prompt used maxSubtasks=2
+      expect(mockProviders.invocation.invoke).toHaveBeenCalledTimes(2);
+    });
+
+    it('constrains to 4 subtasks for moderate tasks', async () => {
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"moderate","maxSubtasks":4}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+              { title: 'B', description: 'Step B', dependencies: [0] },
+              { title: 'C', description: 'Step C', dependencies: [1] },
+              { title: 'D', description: 'Step D', dependencies: [2] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(4);
+      }
+    });
+
+    it('constrains to 8 subtasks for complex tasks', async () => {
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"complex","maxSubtasks":8}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+              { title: 'B', description: 'Step B', dependencies: [0] },
+              { title: 'C', description: 'Step C', dependencies: [1] },
+              { title: 'D', description: 'Step D', dependencies: [2] },
+              { title: 'E', description: 'Step E', dependencies: [3] },
+              { title: 'F', description: 'Step F', dependencies: [4] },
+              { title: 'G', description: 'Step G', dependencies: [5] },
+              { title: 'H', description: 'Step H', dependencies: [6] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(8);
+      }
+    });
+
+    it('falls back to default maxSubtasks when complexity call fails', async () => {
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: false,
+          error: { code: 'provider.error', message: 'fail' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(1);
+      }
+    });
+
+    it('falls back to default when complexity response has no valid maxSubtasks', async () => {
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: 'some nonsense without json' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(1);
+      }
+    });
+
+    it('falls back to default when complexity provider throws', async () => {
+      mockProviders.invocation.invoke
+        .mockRejectedValueOnce(new Error('network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            content: JSON.stringify([
+              { title: 'A', description: 'Step A', dependencies: [] },
+            ]),
+          },
+        });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.subtasks).toHaveLength(1);
       }
     });
   });
@@ -320,6 +476,67 @@ describe('PlanningService', () => {
 
       expect(result[0]!.title).toBe('Subtask 1');
       expect(result[0]!.description).toBe('');
+    });
+  });
+
+  describe('buildPlanningPrompt', () => {
+    it('includes the maxSubtasks in the prompt', () => {
+      const task = {
+        id: 't1',
+        title: 'Test',
+        description: 'Do something',
+      } as MockTask;
+      const prompt = buildPlanningPrompt(task as unknown as Task, 3);
+
+      expect(prompt).toContain('1-3 subtasks');
+      expect(prompt).toContain('use as FEW as needed');
+    });
+
+    it('defaults to 10 when no maxSubtasks provided', () => {
+      const task = {
+        id: 't1',
+        title: 'Test',
+        description: 'Do something',
+      } as MockTask;
+      const prompt = buildPlanningPrompt(task as unknown as Task);
+
+      expect(prompt).toContain('1-10 subtasks');
+    });
+
+    it('includes task title and description', () => {
+      const task = {
+        id: 't1',
+        title: 'My Task',
+        description: 'Build a thing',
+      } as MockTask;
+      const prompt = buildPlanningPrompt(task as unknown as Task, 2);
+
+      expect(prompt).toContain('My Task');
+      expect(prompt).toContain('Build a thing');
+    });
+  });
+
+  describe('buildComplexityPrompt', () => {
+    it('includes task title and description', () => {
+      const task = {
+        id: 't1',
+        title: 'Test',
+        description: 'Fix a typo',
+      } as MockTask;
+      const prompt = buildComplexityPrompt(task as unknown as Task);
+
+      expect(prompt).toContain('Test');
+      expect(prompt).toContain('Fix a typo');
+    });
+
+    it('includes complexity levels and their maxSubtasks', () => {
+      const task = { id: 't1', title: 'T', description: 'D' } as MockTask;
+      const prompt = buildComplexityPrompt(task as unknown as Task);
+
+      expect(prompt).toContain('"simple"');
+      expect(prompt).toContain('"moderate"');
+      expect(prompt).toContain('"complex"');
+      expect(prompt).toContain('maxSubtasks');
     });
   });
 });
