@@ -124,7 +124,7 @@ export type KanbanBoard = {
  * Create task input
  */
 export type CreateTaskInput = {
-  title: string;
+  title?: string;
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;

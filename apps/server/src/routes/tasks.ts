@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/require-auth';
 
 // Validation schemas
 const createTaskSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).optional(),
   description: z.string().min(1),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   planningEnabled: z.boolean().optional(),
@@ -116,6 +116,12 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       };
     }
 
+    const derivedTitle =
+      parsed.title ??
+      (parsed.description.length > 60
+        ? `${parsed.description.slice(0, 60).trimEnd()}…`
+        : parsed.description);
+
     const createInput: {
       title: string;
       description: string;
@@ -126,7 +132,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         role?: 'primary' | 'secondary' | 'reviewer';
       }>;
     } = {
-      title: parsed.title,
+      title: derivedTitle,
       description: parsed.description,
     };
     if (parsed.priority !== undefined) {
