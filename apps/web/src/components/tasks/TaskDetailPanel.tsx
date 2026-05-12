@@ -5,7 +5,7 @@
  * progress, and allows editing.
  */
 
-import { createSignal, createEffect, Show } from 'solid-js';
+import { createSignal, createEffect, Show, For } from 'solid-js';
 import { X, Edit2, Trash2 } from 'lucide-solid';
 import {
   getTask,
@@ -347,17 +347,46 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
             <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Assigned Agents
             </h3>
-            <AgentSelector
-              agents={props.agents}
-              selectedAgents={
-                task()?.agents?.map((a) => ({
-                  agentId: a.agentId,
-                  role: a.role as 'primary' | 'secondary' | 'reviewer',
-                })) || []
+            <Show
+              when={isEditing()}
+              fallback={
+                <div class="flex flex-wrap gap-2">
+                  <For
+                    each={task()?.agents}
+                    fallback={
+                      <span class="text-sm text-gray-500 dark:text-gray-400">
+                        No agents assigned
+                      </span>
+                    }
+                  >
+                    {(a) => (
+                      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        <span class="w-4 h-4 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs">
+                          {props.agents.find((ag) => ag.id === a.agentId)
+                            ?.name?.[0] ?? '?'}
+                        </span>
+                        {props.agents.find((ag) => ag.id === a.agentId)?.name ??
+                          a.agentId}
+                        <span class="text-xs text-gray-400 dark:text-gray-500">
+                          {a.role}
+                        </span>
+                      </span>
+                    )}
+                  </For>
+                </div>
               }
-              onChange={handleAgentChange}
-              disabled={isEditing()}
-            />
+            >
+              <AgentSelector
+                agents={props.agents}
+                selectedAgents={
+                  task()?.agents?.map((a) => ({
+                    agentId: a.agentId,
+                    role: a.role as 'primary' | 'secondary' | 'reviewer',
+                  })) || []
+                }
+                onChange={handleAgentChange}
+              />
+            </Show>
           </div>
 
           {/* Subtasks (if planning enabled) */}
