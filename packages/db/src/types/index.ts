@@ -21,7 +21,13 @@ import type { MemoriesRepository } from '../repositories/memories';
 
 export type SessionsStore = Pick<
   SessionsRepository,
-  'create' | 'findById' | 'list' | 'updateTitle' | 'updateStatus' | 'delete'
+  | 'create'
+  | 'findById'
+  | 'list'
+  | 'updateTitle'
+  | 'updateStatus'
+  | 'delete'
+  | 'searchByTitle'
 >;
 
 export type SessionMessagesStore = Pick<

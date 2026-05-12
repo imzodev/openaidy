@@ -186,6 +186,15 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
+    ...(dbAdapter
+      ? {
+          memory: {
+            memoriesRepo: dbAdapter.repositories.memories,
+            sessionsRepo: dbAdapter.repositories.sessions,
+            defaultAgentId: configService.getConfig().defaults.agentId,
+          },
+        }
+      : {}),
   });
 
   sessionService = new SessionMessageService({

@@ -171,6 +171,43 @@ export const presentChoicesMeta: ToolMeta = {
     'Do NOT use for open-ended questions.',
 };
 
+// ── Memory ─────────────────────────────────────────────────────────────────────
+
+export const memorySaveMeta: ToolMeta = {
+  name: 'memory_save',
+  category: 'Memory',
+  description:
+    'Store a fact, decision, or note as a named memory scoped to the calling agent. ' +
+    'Use this to persist information that should be available in future conversations: ' +
+    'user preferences, project context, ongoing task state, key decisions, etc.',
+};
+
+export const memorySearchMeta: ToolMeta = {
+  name: 'memory_search',
+  category: 'Memory',
+  description:
+    'Search stored memories by keyword using FTS5 full-text search (BM25 ranking). ' +
+    "Returns memories ordered by relevance. The default agent can search all agents' memories; " +
+    'other agents only see their own.',
+};
+
+export const memoryDeleteMeta: ToolMeta = {
+  name: 'memory_delete',
+  category: 'Memory',
+  description:
+    'Delete a memory by its ID. ' +
+    'Agents can only delete their own memories. The default agent can delete any memory.',
+};
+
+export const sessionsSearchMeta: ToolMeta = {
+  name: 'sessions_search',
+  category: 'Memory',
+  description:
+    'Search past sessions by title keyword. ' +
+    'Use this to find a prior conversation by topic, then call sessions_read to load the full history. ' +
+    'Typical use: user says "let\'s continue the ABC project" → sessions_search("ABC project") → sessions_read.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -193,4 +230,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   webFetchMeta,
   addonCreateMeta,
   presentChoicesMeta,
+  memorySaveMeta,
+  memorySearchMeta,
+  memoryDeleteMeta,
+  sessionsSearchMeta,
 ];

@@ -6,8 +6,16 @@ import * as schema from '../schema/sessions';
 type Database = DatabaseClient;
 
 /**
+ * Helper to access raw better-sqlite3 instance from a Drizzle client.
+ */
+function getRawSqlite(db: DatabaseClient) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (db as any).session?.client ?? (db as any).driver;
+}
+
+/**
  * Sessions repository
- * 
+ *
  * Provides data access methods for session records.
  */
 export class SessionsRepository {
@@ -18,13 +26,16 @@ export class SessionsRepository {
    */
   async create(input: { title: string }): Promise<schema.Session> {
     const now = new Date();
-    const [session] = await this.db.insert(schema.sessions).values({
-      id: nanoid(),
-      title: input.title,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const [session] = await this.db
+      .insert(schema.sessions)
+      .values({
+        id: nanoid(),
+        title: input.title,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
     return session!;
   }
@@ -33,7 +44,8 @@ export class SessionsRepository {
    * Find a session by ID
    */
   async findById(id: string): Promise<schema.Session | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.sessions)
       .where(eq(schema.sessions.id, id))
       .limit(1);
@@ -45,12 +57,14 @@ export class SessionsRepository {
    */
   async list(status?: schema.SessionStatus): Promise<schema.Session[]> {
     if (status) {
-      return this.db.select()
+      return this.db
+        .select()
         .from(schema.sessions)
         .where(eq(schema.sessions.status, status))
         .orderBy(desc(schema.sessions.createdAt));
     }
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.sessions)
       .orderBy(desc(schema.sessions.createdAt));
   }
@@ -59,7 +73,8 @@ export class SessionsRepository {
    * Update a session's title
    */
   async updateTitle(id: string, title: string): Promise<schema.Session | null> {
-    const results = await this.db.update(schema.sessions)
+    const results = await this.db
+      .update(schema.sessions)
       .set({
         title,
         updatedAt: new Date(),
@@ -73,7 +88,10 @@ export class SessionsRepository {
   /**
    * Update a session's status
    */
-  async updateStatus(id: string, status: schema.SessionStatus): Promise<schema.Session | null> {
+  async updateStatus(
+    id: string,
+    status: schema.SessionStatus,
+  ): Promise<schema.Session | null> {
     const now = new Date();
     const updates: Partial<schema.Session> = {
       status,
@@ -84,7 +102,8 @@ export class SessionsRepository {
       updates.archivedAt = now;
     }
 
-    const results = await this.db.update(schema.sessions)
+    const results = await this.db
+      .update(schema.sessions)
       .set(updates)
       .where(eq(schema.sessions.id, id))
       .returning();
@@ -97,6 +116,40 @@ export class SessionsRepository {
    */
   async delete(id: string): Promise<schema.Session | null> {
     return this.updateStatus(id, 'deleted');
+  }
+
+  /**
+   * Full-text search sessions by title using FTS5.
+   * Returns sessions ordered by BM25 relevance rank (best match first).
+   */
+  async searchByTitle(query: string, limit = 5): Promise<schema.Session[]> {
+    const sqlite = getRawSqlite(this.db);
+    const rows = sqlite
+      .prepare(
+        `SELECT s.id, s.title, s.status, s.created_at, s.updated_at, s.archived_at
+         FROM sessions_fts fts
+         JOIN sessions s ON s.rowid = fts.rowid
+         WHERE sessions_fts MATCH ?
+         ORDER BY fts.rank
+         LIMIT ?`,
+      )
+      .all(query, limit) as {
+      id: string;
+      title: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      archived_at: string | null;
+    }[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status as schema.SessionStatus,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      archivedAt: row.archived_at ? new Date(row.archived_at) : null,
+    }));
   }
 }
 
