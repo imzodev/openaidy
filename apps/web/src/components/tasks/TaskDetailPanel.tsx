@@ -399,6 +399,12 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
                 subtasks={subtasks()}
                 agents={props.agents}
                 onSubtaskUpdate={loadTaskData}
+                onOpenSession={(sessionId) => {
+                  const url = new URL(window.location.href);
+                  url.pathname = '/chat';
+                  url.searchParams.set('sessionId', sessionId);
+                  window.open(url.toString(), '_blank');
+                }}
               />
             </div>
           </Show>

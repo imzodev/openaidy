@@ -5,6 +5,7 @@
  */
 
 import { Show, For } from 'solid-js';
+import { MessageSquare } from 'lucide-solid';
 import type { Subtask } from '../../lib/api-tasks';
 import type { Agent } from './AgentSelector';
 
@@ -13,8 +14,9 @@ import type { Agent } from './AgentSelector';
  */
 export type SubtaskListProps = {
   subtasks: Subtask[];
-  agents: Agent[];
+  agents?: Agent[];
   onSubtaskUpdate?: () => void;
+  onOpenSession?: (sessionId: string) => void;
 };
 
 /**
@@ -49,14 +51,6 @@ export function SubtaskList(props: SubtaskListProps) {
   const sortedSubtasks = () => {
     return [...props.subtasks].sort((a, b) => a.orderIndex - b.orderIndex);
   };
-
-  /**
-   * Get agent name by ID
-   */
-  function getAgentName(agentId: string | null): string | undefined {
-    if (!agentId) return undefined;
-    return props.agents.find((a) => a.id === agentId)?.name;
-  }
 
   return (
     <div class="subtask-list space-y-2">
@@ -95,24 +89,20 @@ export function SubtaskList(props: SubtaskListProps) {
                     {subtask.description}
                   </p>
                 </Show>
-
-                {/* Assigned agent */}
-                <Show when={subtask.assignedAgentId}>
-                  <div class="mt-2 flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Assigned:</span>
-                    <span class="font-medium">
-                      {getAgentName(subtask.assignedAgentId)}
-                    </span>
-                  </div>
-                </Show>
-
-                {/* Result */}
-                <Show when={subtask.result}>
-                  <div class="mt-2 p-2 bg-white dark:bg-gray-900 rounded text-xs text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                    {subtask.result}
-                  </div>
-                </Show>
               </div>
+
+              <Show when={subtask.sessionId && props.onOpenSession}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    subtask.sessionId && props.onOpenSession!(subtask.sessionId)
+                  }
+                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                  title="Open session"
+                >
+                  <MessageSquare class="w-4 h-4" />
+                </button>
+              </Show>
             </div>
           </div>
         )}

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
+import { createSignal, createEffect, Show, onCleanup, onMount } from 'solid-js';
 import {
   QueryClient,
   QueryClientProvider,
@@ -174,6 +174,16 @@ function AppContent(props: AppContentProps) {
       unsubUpdated();
       unsubChoices();
     });
+  });
+
+  // Handle sessionId from URL params on initial load
+  onMount(() => {
+    const sessionIdFromUrl = new URL(window.location.href).searchParams.get(
+      'sessionId',
+    );
+    if (sessionIdFromUrl) {
+      setSelectedSessionId(sessionIdFromUrl);
+    }
   });
 
   // Sessions query
