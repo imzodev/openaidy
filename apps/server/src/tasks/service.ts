@@ -1,6 +1,7 @@
 import type { AgentRegistry } from '../agents';
 import type { SessionMessageService } from '../sessions/service';
 import type { PlanningService } from '../planning';
+import type { RunEventEmitter } from '../dispatch/events';
 import { createLogger } from '../lib/logger';
 import {
   type TasksRepository,
@@ -26,6 +27,7 @@ export type TaskServiceOptions = {
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
   planningService?: PlanningService;
+  runEvents?: RunEventEmitter;
 };
 
 /**
@@ -106,7 +108,9 @@ export class TaskService {
   private readonly agents: AgentRegistry | undefined;
   private readonly sessionService: SessionMessageService | undefined;
   private readonly planningService: PlanningService | undefined;
+  private readonly runEvents: RunEventEmitter | undefined;
   private readonly logger = createLogger('TaskService');
+  private unsubscribeRunEvents: (() => void) | undefined;
 
   constructor(options: TaskServiceOptions) {
     this.tasksRepo = options.tasksRepo;
@@ -115,6 +119,131 @@ export class TaskService {
     this.agents = options.agents;
     this.sessionService = options.sessionService;
     this.planningService = options.planningService;
+    this.runEvents = options.runEvents;
+
+    // Subscribe to run events to auto-complete subtasks
+    if (this.runEvents) {
+      this.unsubscribeRunEvents = this.runEvents.subscribeAll((event) => {
+        void this.handleRunEvent(event);
+      });
+    }
+  }
+
+  /**
+   * Cleanup resources when service is destroyed
+   */
+  destroy(): void {
+    if (this.unsubscribeRunEvents) {
+      this.unsubscribeRunEvents();
+      this.unsubscribeRunEvents = void 0;
+    }
+  }
+
+  /**
+   * Handle run events to auto-complete subtasks when their sessions finish
+   */
+  private async handleRunEvent(
+    event: import('../dispatch/events').RunEvent,
+  ): Promise<void> {
+    // Only care about completed or failed runs
+    if (event.type !== 'run.completed' && event.type !== 'run.failed') {
+      return;
+    }
+
+    this.logger.info('Handling run event', {
+      type: event.type,
+      sessionId: event.sessionId,
+      runId: event.runId,
+    });
+
+    try {
+      // Find subtask linked to this session by checking all tasks
+      const tasks = await this.tasksRepo.list();
+      let linkedSubtask: Subtask | undefined;
+      let checkedSubtasks = 0;
+
+      for (const task of tasks) {
+        const subtasks = await this.subtasksRepo.listByTask(task.id);
+        const found = subtasks.find((s) => s.sessionId === event.sessionId);
+        checkedSubtasks += subtasks.length;
+        // Log all subtasks with their sessionIds for debugging
+        for (const s of subtasks) {
+          if (s.sessionId) {
+            this.logger.info('Checked subtask', {
+              subtaskId: s.id,
+              taskId: task.id,
+              sessionId: s.sessionId,
+              status: s.status,
+            });
+          }
+        }
+        if (found) {
+          linkedSubtask = found;
+          break;
+        }
+      }
+
+      if (!linkedSubtask) {
+        this.logger.warn('No subtask found linked to session', {
+          sessionId: event.sessionId,
+          checkedSubtasks,
+          totalTasks: tasks.length,
+        });
+        return;
+      }
+
+      this.logger.info('Found linked subtask', {
+        subtaskId: linkedSubtask.id,
+        taskId: linkedSubtask.taskId,
+        currentStatus: linkedSubtask.status,
+      });
+
+      if (event.type === 'run.completed') {
+        this.logger.info(
+          'Auto-completing subtask after session run completed',
+          { subtaskId: linkedSubtask.id, sessionId: event.sessionId },
+        );
+        // Get the last assistant message as the result
+        const sessionMessages = await this.sessionService?.listMessages(
+          event.sessionId,
+        );
+        const lastAssistantMessage = sessionMessages
+          ?.slice()
+          .reverse()
+          .find((m) => m.role === 'assistant');
+        const result = lastAssistantMessage?.content ?? 'Completed';
+
+        const completeResult = await this.completeSubtask(
+          linkedSubtask.id,
+          result,
+        );
+        if (completeResult.ok) {
+          this.logger.info('Subtask auto-completed successfully', {
+            subtaskId: linkedSubtask.id,
+            taskId: linkedSubtask.taskId,
+          });
+        } else {
+          this.logger.error('Failed to auto-complete subtask', {
+            subtaskId: linkedSubtask.id,
+            error: completeResult.error,
+          });
+        }
+      } else if (event.type === 'run.failed') {
+        this.logger.info('Auto-failing subtask after session run failed', {
+          subtaskId: linkedSubtask.id,
+          sessionId: event.sessionId,
+        });
+        const errorMessage =
+          (event.data.errorMessage as string | undefined) ?? 'Run failed';
+        await this.failSubtask(linkedSubtask.id, errorMessage);
+      }
+    } catch (err) {
+      this.logger.error('Failed to handle run event for subtask', {
+        error: err instanceof Error ? err.message : String(err),
+        sessionId: event.sessionId,
+        runId: event.runId,
+      });
+    }
   }
 
   // ========================================
@@ -677,7 +806,23 @@ export class TaskService {
       status: 'in_progress',
     });
 
-    // Submit initial message with task description
+    // Check if task has subtasks
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+
+    if (subtasks.length > 0) {
+      // Task has subtasks - execute them instead of the task directly
+      this.logger.info('Task has subtasks, executing subtasks', {
+        taskId,
+        subtaskCount: subtasks.length,
+      });
+      const subtaskResult = await this.executeSubtasks(taskId);
+      if (!subtaskResult.ok) {
+        return { ok: false, error: subtaskResult.error };
+      }
+      return { ok: true, data: { sessionId: session.id } };
+    }
+
+    // No subtasks - execute task directly
     const executionResult = await this.sessionService.submitMessageStreaming({
       sessionId: session.id,
       content: task.description,
@@ -697,16 +842,13 @@ export class TaskService {
       return { ok: false, error: executionResult.error };
     }
 
-    const subtasks = await this.subtasksRepo.listByTask(taskId);
-
-    if (subtasks.length === 0) {
-      await this.tasksRepo.updateStatus(taskId, 'review');
-      this.logger.info('Task moved to review', {
-        taskId,
-        status: 'review',
-        reason: 'no_subtasks',
-      });
-    }
+    // No subtasks - move directly to review
+    await this.tasksRepo.updateStatus(taskId, 'review');
+    this.logger.info('Task moved to review', {
+      taskId,
+      status: 'review',
+      reason: 'no_subtasks',
+    });
 
     return { ok: true, data: { sessionId: session.id } };
   }
@@ -738,6 +880,21 @@ export class TaskService {
       };
     }
 
+    // Guard: don't execute if already in progress or completed
+    if (subtask.status === 'in_progress' || subtask.status === 'completed') {
+      this.logger.info('Subtask already executed, skipping', {
+        subtaskId,
+        status: subtask.status,
+      });
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.already_executed',
+          message: `Subtask "${subtaskId}" is already ${subtask.status}`,
+        },
+      };
+    }
+
     // Check dependencies
     if (subtask.parentSubtaskId) {
       const parent = await this.subtasksRepo.findById(subtask.parentSubtaskId);
@@ -756,17 +913,49 @@ export class TaskService {
     const session = await this.sessionService.createSession(
       `Subtask: ${subtask.title}`,
     );
+    this.logger.info('Created session for subtask', {
+      subtaskId,
+      sessionId: session.id,
+    });
 
     // Link session to subtask
     await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
+    this.logger.info('Linked session to subtask', {
+      subtaskId,
+      sessionId: session.id,
+    });
 
     // Update status to in_progress
     await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
 
+    // Build message with context from completed dependencies
+    const allSubtasks = await this.subtasksRepo.listByTask(subtask.taskId);
+    const completedDeps = allSubtasks.filter(
+      (s) => s.status === 'completed' && s.result,
+    );
+
+    let messageContent = subtask.description;
+    if (completedDeps.length > 0) {
+      const contextParts = completedDeps.map(
+        (dep) => `## Result from "${dep.title}":\n${dep.result}`,
+      );
+      messageContent = `${subtask.description}\n\n---\n\n**Context from completed work:**\n\n${contextParts.join('\n\n')}`;
+      this.logger.info('Including context from completed dependencies', {
+        subtaskId,
+        depCount: completedDeps.length,
+        deps: completedDeps.map((d) => d.title),
+      });
+    }
+
     // Submit initial message with subtask description
+    this.logger.info('Submitting message to session', {
+      subtaskId,
+      sessionId: session.id,
+      hasContext: completedDeps.length > 0,
+    });
     await this.sessionService.submitMessageStreaming({
       sessionId: session.id,
-      content: subtask.description,
+      content: messageContent,
       role: 'user',
       onStreamEvent: () => {},
     });
@@ -880,8 +1069,23 @@ export class TaskService {
       result,
     });
 
+    this.logger.info('Subtask completed, checking for dependent subtasks', {
+      subtaskId,
+      taskId: subtask.taskId,
+    });
+
     // Check if parent task should be updated
     await this.checkTaskCompletion(subtask.taskId);
+
+    // Try to execute any pending subtasks that may now have their dependencies met
+    const executeResult = await this.executeSubtasks(subtask.taskId);
+    if (executeResult.ok && executeResult.data.startedCount > 0) {
+      this.logger.info('Started dependent subtasks after completion', {
+        subtaskId,
+        taskId: subtask.taskId,
+        startedCount: executeResult.data.startedCount,
+      });
+    }
 
     return { ok: true, data: updated! };
   }

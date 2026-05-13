@@ -103,6 +103,14 @@ describe('Subtask Execution', () => {
         status: 'pending',
         taskId: 'task-1',
       });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'Test Subtask',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
 
       const result = await taskService.executeSubtask('subtask-1');
 
@@ -180,6 +188,21 @@ describe('Subtask Execution', () => {
           id: 'subtask-1',
           status: 'completed',
         });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'Parent Subtask',
+          status: 'completed',
+          result: 'Parent result',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          title: 'Child Subtask',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
 
       const result = await taskService.executeSubtask('subtask-2');
 

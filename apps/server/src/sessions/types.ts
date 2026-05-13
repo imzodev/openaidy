@@ -70,6 +70,7 @@ import type { McpClientService } from '../mcp/client';
 import type { BuiltinToolRegistry } from '../tools';
 import type { SkillRegistry } from '../skills';
 import type { AgentPersonalityService } from '../agents/personality-service';
+import type { RunEventEmitter } from '../dispatch/events';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -91,6 +92,7 @@ export type SessionMessageServiceOptions = {
   /** Service for reading personality markdown files per agent */
   personality?: AgentPersonalityService;
   getDefaultAgentId?: () => string | undefined;
+  runEvents?: RunEventEmitter;
   repositories?:
     | {
         sessions: SessionsStore;

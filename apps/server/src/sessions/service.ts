@@ -45,6 +45,7 @@ import type {
 import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type { WorkspacePermissionsInfo } from '../types.js';
+import type { RunEventEmitter } from '../dispatch/events';
 
 /**
  * Session message service
@@ -71,6 +72,7 @@ export class SessionMessageService {
   private readonly runsRepo: SessionRunsStore | undefined;
   private readonly skillRegistry: import('../skills').SkillRegistry | undefined;
   private readonly personalityService: AgentPersonalityService | undefined;
+  private readonly runEvents: RunEventEmitter | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -81,6 +83,7 @@ export class SessionMessageService {
     this.getDefaultAgentId = options.getDefaultAgentId;
     this.skillRegistry = options.skills;
     this.personalityService = options.personality;
+    this.runEvents = options.runEvents;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -394,7 +397,7 @@ export class SessionMessageService {
     // 7 & 8. Handle result
     if (result.ok) {
       return this.handleSuccess(
-        run.id,
+        run,
         input.sessionId,
         userMessage,
         result.value,
@@ -873,7 +876,7 @@ export class SessionMessageService {
                       choices: parsed.choices as string[],
                     });
                     // Mark the run as suspended (awaiting user input)
-                    await this.markRunSucceeded(run.id, {
+                    await this.markRunSucceeded(run, {
                       finishReason: 'stop',
                       promptTokens: finalUsage.promptTokens,
                       completionTokens: finalUsage.completionTokens,
@@ -962,7 +965,7 @@ export class SessionMessageService {
       });
 
       // 8. Update run with success
-      const updatedRun = await this.markRunSucceeded(run.id, {
+      const updatedRun = await this.markRunSucceeded(run, {
         finishReason: (finalFinishReason as FinishReason) ?? 'stop',
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
@@ -1084,7 +1087,7 @@ export class SessionMessageService {
    * Mark a run as succeeded
    */
   private async markRunSucceeded(
-    id: string,
+    run: SessionRunRecord | SessionRun,
     input: {
       finishReason: FinishReason;
       promptTokens?: number;
@@ -1115,9 +1118,65 @@ export class SessionMessageService {
       if (input.metadata !== undefined) {
         successInput.metadata = input.metadata;
       }
-      return this.runsRepo.markSucceeded(id, successInput);
+      const updated = await this.runsRepo.markSucceeded(run.id, successInput);
+      // Emit run.completed event
+      if (this.runEvents && updated) {
+        const eventData: {
+          runId: string;
+          sessionId: string;
+          agentId: string;
+          finishReason: string;
+          usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+          };
+        } = {
+          runId: run.id,
+          sessionId: run.sessionId,
+          agentId: run.agentId,
+          finishReason: input.finishReason,
+        };
+        if (input.promptTokens !== undefined) {
+          eventData.usage = {
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens ?? 0,
+            totalTokens: input.totalTokens ?? 0,
+          };
+        }
+        this.runEvents.emitCompleted(eventData);
+      }
+      return updated;
     }
-    return markRunSucceeded(id, input) ?? null;
+    const updated = markRunSucceeded(run.id, input);
+    // Emit run.completed event for in-memory runs too
+    if (this.runEvents && updated) {
+      const eventData: {
+        runId: string;
+        sessionId: string;
+        agentId: string;
+        finishReason: string;
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        };
+      } = {
+        runId: run.id,
+        sessionId: run.sessionId,
+        agentId: run.agentId,
+        finishReason: input.finishReason,
+      };
+      if (input.promptTokens !== undefined) {
+        eventData.usage = {
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens ?? 0,
+          totalTokens: input.totalTokens ?? 0,
+        };
+      }
+      this.runEvents.emitCompleted(eventData);
+    }
+    return updated ?? null;
   }
 
   /**
@@ -1141,7 +1200,7 @@ export class SessionMessageService {
    * Handle successful provider invocation
    */
   private async handleSuccess(
-    runId: string,
+    run: SessionRunRecord | SessionRun,
     sessionId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     response: ModelResponse,
@@ -1154,12 +1213,12 @@ export class SessionMessageService {
       metadata: {
         providerId: response.providerId,
         model: response.model,
-        runId,
+        runId: run.id,
       },
     });
 
     // Update run with success
-    const updatedRun = await this.markRunSucceeded(runId, {
+    const updatedRun = await this.markRunSucceeded(run, {
       finishReason: response.finishReason as FinishReason,
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,

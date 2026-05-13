@@ -189,6 +189,9 @@ export async function buildApp() {
     sessions: { getSessionService: () => sessionService! },
   });
 
+  // Create run event emitter for SSE streaming (needed by sessionService)
+  const runEvents = new RunEventEmitter();
+
   sessionService = new SessionMessageService({
     providers: providerServices,
     logger: app.log,
@@ -198,6 +201,7 @@ export async function buildApp() {
     skills: skillRegistry,
     personality: personalityService,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+    runEvents,
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -206,9 +210,6 @@ export async function buildApp() {
         }
       : undefined,
   });
-
-  // Create run event emitter for SSE streaming
-  const runEvents = new RunEventEmitter();
 
   // Create and wire channel registry
   const channelRegistry = createChannelRegistry(
@@ -418,6 +419,7 @@ export async function buildApp() {
       agents: services.agents,
       sessionService: services.sessions,
       planningService,
+      runEvents: services.runEvents,
     });
     await app.register(taskRoutes, {
       taskService,
