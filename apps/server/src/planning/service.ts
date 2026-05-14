@@ -5,7 +5,11 @@
  */
 
 import type { ProviderServices } from '../providers';
-import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
+import type {
+  TasksRepository,
+  SubtasksRepository,
+  TaskAgentsRepository,
+} from '@openaidy/db';
 import type { AgentRegistry } from '../agents';
 import { parseModelString } from '../agents/schema';
 import {
@@ -13,7 +17,11 @@ import {
   type PlanningOptions,
   type PlannedSubtask,
 } from './config';
-import { buildPlanningPrompt, buildComplexityPrompt } from './prompts';
+import {
+  buildPlanningPrompt,
+  buildComplexityPrompt,
+  buildAgentContextPrompt,
+} from './prompts';
 import type { Task } from '@openaidy/db';
 
 /**
@@ -23,6 +31,7 @@ export type PlanningServiceOptions = {
   providers: ProviderServices;
   tasksRepo: TasksRepository;
   subtasksRepo: SubtasksRepository;
+  taskAgentsRepo?: TaskAgentsRepository;
   agents?: AgentRegistry;
   getDefaultAgentId?: () => string | undefined;
 };
@@ -43,6 +52,7 @@ export class PlanningService {
   private readonly providers: ProviderServices;
   private readonly tasksRepo: TasksRepository;
   private readonly subtasksRepo: SubtasksRepository;
+  private readonly taskAgentsRepo: TaskAgentsRepository | undefined;
   private readonly agents: AgentRegistry | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
 
@@ -50,6 +60,7 @@ export class PlanningService {
     this.providers = options.providers;
     this.tasksRepo = options.tasksRepo;
     this.subtasksRepo = options.subtasksRepo;
+    this.taskAgentsRepo = options.taskAgentsRepo;
     this.agents = options.agents;
     this.getDefaultAgentId = options.getDefaultAgentId;
   }
@@ -127,8 +138,18 @@ export class PlanningService {
       // Assess complexity to constrain the number of subtasks
       const maxSubtasks = await this.assessComplexity(task, modelConfig);
 
-      // Build prompt with complexity-adjusted max
-      const prompt = buildPlanningPrompt(task, maxSubtasks);
+      // Build agent context for the planning prompt
+      let agentContext: string | undefined;
+      if (this.agents) {
+        const agents = this.agents.listAllAgents();
+        if (agents.length > 0) {
+          const openAidyHome = process.env.OPENAIDY_HOME || '';
+          agentContext = buildAgentContextPrompt(agents, openAidyHome);
+        }
+      }
+
+      // Build prompt with complexity-adjusted max and agent context
+      const prompt = buildPlanningPrompt(task, maxSubtasks, agentContext);
 
       // Invoke planning agent
       const result = await this.providers.invocation.invoke(
@@ -154,6 +175,34 @@ export class PlanningService {
 
       // Create subtasks in database
       await this.createSubtasks(taskId, subtasks);
+
+      // After creating subtasks with assigned agents, also assign those agents to the parent task
+      if (this.taskAgentsRepo && subtasks.length > 0) {
+        const agentAssignments = new Map<string, string>();
+        for (const subtask of subtasks) {
+          if (subtask.assignedAgentId) {
+            // Use 'primary' role for the first assignment of each agent, 'secondary' for subsequent
+            const role = agentAssignments.has(subtask.assignedAgentId)
+              ? 'secondary'
+              : 'primary';
+            agentAssignments.set(subtask.assignedAgentId, role);
+          }
+        }
+
+        if (agentAssignments.size > 0) {
+          console.log(
+            '[PlanningService] Assigning agents to task:',
+            Array.from(agentAssignments.entries()),
+          );
+          const assignments = Array.from(agentAssignments.entries()).map(
+            ([agentId, role]) => ({
+              agentId,
+              role: role as 'primary' | 'secondary',
+            }),
+          );
+          await this.taskAgentsRepo.assignMultiple(taskId, assignments);
+        }
+      }
 
       // Update planning status to completed
       await this.tasksRepo.updatePlanningStatus(taskId, 'completed');
@@ -223,19 +272,29 @@ export class PlanningService {
   ): PlannedSubtask[] {
     let subtasks: PlannedSubtask[];
 
-    try {
-      subtasks = JSON.parse(content);
-    } catch {
-      // Try to extract JSON from response
-      const jsonMatch = content.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        try {
-          subtasks = JSON.parse(jsonMatch[0]);
-        } catch {
+    // Try to extract JSON from markdown code block first
+    const codeBlockMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+    if (codeBlockMatch && codeBlockMatch[1]) {
+      try {
+        subtasks = JSON.parse(codeBlockMatch[1]);
+      } catch {
+        throw new Error('Failed to parse planning response as JSON');
+      }
+    } else {
+      try {
+        subtasks = JSON.parse(content);
+      } catch {
+        // Try to extract JSON array from response using regex
+        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        if (jsonMatch) {
+          try {
+            subtasks = JSON.parse(jsonMatch[0]);
+          } catch {
+            throw new Error('Failed to parse planning response as JSON');
+          }
+        } else {
           throw new Error('Failed to parse planning response as JSON');
         }
-      } else {
-        throw new Error('Failed to parse planning response as JSON');
       }
     }
 
@@ -247,11 +306,24 @@ export class PlanningService {
     // Validate and limit subtasks
     const maxSubtasks =
       options?.maxSubtasks ?? PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
-    return subtasks.slice(0, maxSubtasks).map((s, index) => ({
-      title: s.title || `Subtask ${index + 1}`,
-      description: s.description || '',
-      dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
-    }));
+
+    return subtasks.slice(0, maxSubtasks).map((s, index) => {
+      const parsed: PlannedSubtask = {
+        title: s.title || `Subtask ${index + 1}`,
+        description: s.description || '',
+        dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
+      };
+
+      // Preserve agent assignment fields if present
+      if (s.assignedAgentId) {
+        parsed.assignedAgentId = s.assignedAgentId;
+      }
+      if (s.assignmentReason) {
+        parsed.assignmentReason = s.assignmentReason;
+      }
+
+      return parsed;
+    });
   }
 
   /**
@@ -274,13 +346,29 @@ export class PlanningService {
           ? created.get(subtask.dependencies[0])
           : undefined;
 
-      const createdSubtask = await this.subtasksRepo.create({
+      const createInput: {
+        taskId: string;
+        parentSubtaskId?: string;
+        title: string;
+        description: string;
+        orderIndex: number;
+        assignedAgentId?: string;
+      } = {
         taskId,
-        ...(parentSubtaskId !== undefined ? { parentSubtaskId } : {}),
         title: subtask.title,
         description: subtask.description,
         orderIndex: i,
-      });
+      };
+
+      if (parentSubtaskId !== undefined) {
+        createInput.parentSubtaskId = parentSubtaskId;
+      }
+
+      if (subtask.assignedAgentId) {
+        createInput.assignedAgentId = subtask.assignedAgentId;
+      }
+
+      const createdSubtask = await this.subtasksRepo.create(createInput);
 
       created.set(i, createdSubtask.id);
     }

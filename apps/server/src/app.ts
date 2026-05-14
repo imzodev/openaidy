@@ -408,6 +408,7 @@ export async function buildApp() {
       providers: providerServices,
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
+      taskAgentsRepo: dbAdapter.repositories.taskAgents,
       agents: services.agents,
       getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     });

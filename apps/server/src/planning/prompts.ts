@@ -4,21 +4,83 @@
  * Prompt builders for the planning agent.
  */
 
+import fs from 'fs';
+import path from 'path';
+import type { AgentSummary } from '../agents/schema';
 import type { Task } from '@openaidy/db';
+
+/**
+ * Build the agent context section for the planning prompt
+ */
+export function buildAgentContextPrompt(
+  agents: AgentSummary[],
+  openAidyHome: string,
+): string {
+  if (agents.length === 0) {
+    return 'No agents available for assignment.';
+  }
+
+  const agentProfiles = agents.map((agent) => {
+    // Read AGENT.md if exists
+    let agentMdContent = '';
+    const agentMdPath = path.join(
+      openAidyHome,
+      '.openaidy',
+      'workspaces',
+      agent.id,
+      'AGENT.md',
+    );
+
+    if (fs.existsSync(agentMdPath)) {
+      try {
+        agentMdContent = fs.readFileSync(agentMdPath, 'utf-8');
+      } catch {
+        // Ignore read errors
+      }
+    }
+
+    return `
+## ${agent.name} (${agent.id})
+- Description: ${agent.description || 'No description'}
+- Tools: ${agent.tools?.join(', ') || 'None'}
+- Skills: ${agent.skills?.join(', ') || 'None'}
+- MCP Servers: ${agent.mcpServers?.map((m) => m.id).join(', ') || 'None'}
+${agentMdContent ? `\nSpecialization (from AGENT.md):\n${agentMdContent}` : ''}
+`;
+  });
+
+  return `Available Agents:
+${agentProfiles.join('\n')}
+
+When assigning agents to subtasks, consider:
+1. Tool availability - use agents with required tools
+2. Skill match - prefer agents with relevant skills
+3. Specialization - check AGENT.md for domain expertise
+4. Keep workload balanced across agents`;
+}
 
 /**
  * Build the planning prompt for a task
  */
 export function buildPlanningPrompt(
   task: Task,
-  maxSubtasks: number = 10,
+  maxSubtasks: number,
+  agentContext?: string,
 ): string {
-  return `Please analyze the following task and break it down into subtasks.
+  let basePrompt = `Please analyze the following task and break it down into subtasks and assign the best agent for each.
 
 Task Title: ${task.title}
 
 Task Description:
-${task.description}
+${task.description}`;
+
+  if (agentContext) {
+    basePrompt += `\n\n${agentContext}`;
+  } else {
+    basePrompt += '\n\n(No agent context available - assign agents manually)';
+  }
+
+  basePrompt += `
 
 Requirements:
 1. Break down into 1-${maxSubtasks} subtasks — use as FEW as needed, do not pad with unnecessary steps
@@ -26,8 +88,16 @@ Requirements:
 3. Order subtasks logically (dependencies first)
 4. Include clear titles and descriptions
 5. Specify dependencies between subtasks
+6. Assign the best agent for each subtask based on capabilities
 
-Return the subtasks as a JSON array.`;
+Return the subtasks as a JSON array with:
+- title: Short, clear title
+- description: Detailed description of what needs to be done
+- dependencies: Array of subtask indices this depends on (optional)
+- assignedAgentId: ID of the agent best suited for this subtask (optional)
+- assignmentReason: Brief explanation of why this agent was chosen (optional)`;
+
+  return basePrompt;
 }
 
 /**

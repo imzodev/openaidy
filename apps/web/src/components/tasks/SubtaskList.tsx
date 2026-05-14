@@ -52,6 +52,14 @@ export function SubtaskList(props: SubtaskListProps) {
     return [...props.subtasks].sort((a, b) => a.orderIndex - b.orderIndex);
   };
 
+  /**
+   * Get agent name by ID
+   */
+  function getAgentName(agentId: string | null): string | undefined {
+    if (!agentId || !props.agents) return undefined;
+    return props.agents.find((a) => a.id === agentId)?.name;
+  }
+
   return (
     <div class="subtask-list space-y-2">
       <Show when={props.subtasks.length === 0}>
@@ -87,6 +95,13 @@ export function SubtaskList(props: SubtaskListProps) {
                 <Show when={subtask.description}>
                   <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     {subtask.description}
+                  </p>
+                </Show>
+                <Show when={subtask.assignedAgentId}>
+                  <p class="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                    Assigned to:{' '}
+                    {getAgentName(subtask.assignedAgentId) ??
+                      subtask.assignedAgentId}
                   </p>
                 </Show>
               </div>

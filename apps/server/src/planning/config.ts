@@ -72,4 +72,6 @@ export type PlannedSubtask = {
   title: string;
   description: string;
   dependencies: number[];
+  assignedAgentId?: string;
+  assignmentReason?: string;
 };
