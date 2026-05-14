@@ -93,6 +93,8 @@ export type SessionMessageServiceOptions = {
   personality?: AgentPersonalityService;
   getDefaultAgentId?: () => string | undefined;
   runEvents?: RunEventEmitter;
+  /** Base directory for agent workspaces (for loading agent workspace skills) */
+  workspaceBaseDir?: string;
   repositories?:
     | {
         sessions: SessionsStore;

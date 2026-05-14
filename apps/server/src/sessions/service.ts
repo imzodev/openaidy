@@ -73,6 +73,7 @@ export class SessionMessageService {
   private readonly skillRegistry: import('../skills').SkillRegistry | undefined;
   private readonly personalityService: AgentPersonalityService | undefined;
   private readonly runEvents: RunEventEmitter | undefined;
+  private readonly workspaceBaseDir: string | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -84,6 +85,7 @@ export class SessionMessageService {
     this.skillRegistry = options.skills;
     this.personalityService = options.personality;
     this.runEvents = options.runEvents;
+    this.workspaceBaseDir = options.workspaceBaseDir;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -372,6 +374,7 @@ export class SessionMessageService {
       isFirstMessage,
       userMessage: input.content,
       providers: this.providers,
+      workspaceBaseDir: this.workspaceBaseDir,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -709,6 +712,7 @@ export class SessionMessageService {
       providers: this.providers,
       tools: allTools,
       workspacePermissions,
+      workspaceBaseDir: this.workspaceBaseDir,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]

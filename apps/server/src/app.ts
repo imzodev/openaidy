@@ -202,6 +202,7 @@ export async function buildApp() {
     personality: personalityService,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     runEvents,
+    workspaceBaseDir: env.WORKSPACE_BASE_DIR,
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,

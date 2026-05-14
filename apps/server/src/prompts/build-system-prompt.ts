@@ -6,6 +6,9 @@ import { autoFillPersonalityFiles } from './auto-fill-personality.js';
 import type { ToolDefinition } from '@openaidy/runtime';
 import type { WorkspacePermissionsInfo } from '../types.js';
 import { ALL_TOOL_METAS } from '../tools/catalog.js';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseSkillMd } from '../skills/parser.js';
 
 export type BuildSystemPromptOptions = {
   agentId: string;
@@ -23,7 +26,52 @@ export type BuildSystemPromptOptions = {
   tools?: ToolDefinition[] | undefined;
   /** Workspace permissions for honest capability reporting */
   workspacePermissions?: WorkspacePermissionsInfo | undefined;
+  /** Base directory for agent workspaces (to resolve agent workspace skills) */
+  workspaceBaseDir?: string | undefined;
 };
+
+/**
+ * Load skill definitions from an agent's workspace skills directory.
+ * Returns a Map of skillId -> SkillDefinition for skills found.
+ */
+function loadAgentWorkspaceSkills(
+  agentId: string,
+  workspaceBaseDir?: string,
+): Map<
+  string,
+  { id: string; name: string; description: string; body: string }
+> {
+  const skills = new Map<
+    string,
+    { id: string; name: string; description: string; body: string }
+  >();
+  if (!workspaceBaseDir) return skills;
+
+  const agentSkillsDir = join(workspaceBaseDir, agentId, 'skills');
+  if (!existsSync(agentSkillsDir)) return skills;
+
+  let subdirs: string[];
+  try {
+    subdirs = readdirSync(agentSkillsDir);
+  } catch {
+    return skills;
+  }
+
+  for (const id of subdirs) {
+    const skillFile = join(agentSkillsDir, id, 'SKILL.md');
+    if (!existsSync(skillFile)) continue;
+    try {
+      const content = readFileSync(skillFile, 'utf-8');
+      const result = parseSkillMd(content, id, skillFile);
+      if ('errors' in result) continue;
+      skills.set(id, result);
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  return skills;
+}
 
 /**
  * Build the full system prompt for an agent.
@@ -50,6 +98,7 @@ export async function buildSystemPrompt(
     providers,
     tools,
     workspacePermissions,
+    workspaceBaseDir,
   } = options;
 
   // Auto-fill blank personality files on first message of a session
@@ -87,8 +136,24 @@ export async function buildSystemPrompt(
       .map((s) => sanitizeSkillBody(s.body))
       .filter(Boolean)
       .join('\n\n---\n\n');
-    if (bodies) {
-      prompt += '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
+
+    // Also load agent workspace skills (override global skills with same ID)
+    const agentWorkspaceSkills = loadAgentWorkspaceSkills(
+      agentId,
+      workspaceBaseDir,
+    );
+    const workspaceSkillBodies = skillIds
+      .map((id) => agentWorkspaceSkills.get(id))
+      .filter((s): s is NonNullable<typeof s> => s !== undefined)
+      .map((s) => sanitizeSkillBody(s.body))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+
+    const allBodies = [bodies, workspaceSkillBodies]
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+    if (allBodies) {
+      prompt += '\n\n[SKILL_CONTEXTS]\n' + allBodies + '\n[/SKILL_CONTEXTS]';
     }
   }
 
@@ -96,7 +161,6 @@ export async function buildSystemPrompt(
   if (tools?.length) {
     prompt += buildToolGuidelinesBlock(tools, workspacePermissions);
   }
-
   return prompt;
 }
 
