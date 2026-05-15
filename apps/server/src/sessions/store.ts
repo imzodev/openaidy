@@ -1,29 +1,13 @@
 import { nanoid } from 'nanoid';
+import type {
+  SessionType,
+  MessageRole,
+  RunStatus,
+  FinishReason,
+} from '@openaidy/shared-types';
 
-/**
- * Message role type
- */
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
-
-/**
- * Run status type
- */
-export type RunStatus =
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
-
-/**
- * Finish reason type
- */
-export type FinishReason =
-  | 'stop'
-  | 'length'
-  | 'tool_calls'
-  | 'content_filter'
-  | 'error';
+// Re-export types from shared-types
+export type { SessionType, MessageRole, RunStatus, FinishReason };
 
 /**
  * Session message record
@@ -67,6 +51,7 @@ export type SessionRunRecord = {
 export type SessionRecord = {
   id: string;
   title: string;
+  type?: SessionType;
   createdAt: string;
 };
 
@@ -84,10 +69,14 @@ export function findSessionRecord(id: string): SessionRecord | undefined {
   return sessions.get(id);
 }
 
-export function createSessionRecord(title: string): SessionRecord {
+export function createSessionRecord(
+  title: string,
+  type?: SessionType,
+): SessionRecord {
   const record: SessionRecord = {
     id: nanoid(),
     title,
+    type: type ?? 'chat',
     createdAt: new Date().toISOString(),
   };
   sessions.set(record.id, record);

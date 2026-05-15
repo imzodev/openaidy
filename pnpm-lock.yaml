@@ -183,6 +183,9 @@ importers:
       '@tanstack/solid-query':
         specifier: ^5.90.26
         version: 5.90.26(solid-js@1.9.11)
+      bootstrap-icons:
+        specifier: ^1.13.1
+        version: 1.13.1
       lucide-solid:
         specifier: ^0.577.0
         version: 0.577.0(solid-js@1.9.11)
@@ -281,6 +284,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@openaidy/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
       better-sqlite3:
         specifier: ^12.8.0
         version: 12.8.0
@@ -1637,12 +1643,6 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
-  '@types/long@4.0.2':
-    resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
-
-  '@types/node@10.17.60':
-    resolution: {integrity: sha512-F0KIgDJfy2nA3zMLmWGKxcH2ZVEtCZXHHdOQs2gSaQ27+lNeEfGxzkIw90aXswATX7AZ33tahPbzy6KAfUreVw==}
-
   '@types/node@24.12.0':
     resolution: {integrity: sha512-GYDxsZi3ChgmckRT9HPU0WEhKLP08ev/Yfcq2AstjrDASOYCSXeyjDsHg4v5t4jOj7cyDX3vmprafKlWIG9MXQ==}
 
@@ -1761,10 +1761,6 @@ packages:
         optional: true
       link-preview-js:
         optional: true
-
-  '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67':
-    resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67}
-    version: 2.0.1
 
   abstract-logging@2.0.1:
     resolution: {integrity: sha512-2BjRTZxTPvheOvGbBslFSYOUkr+SjPtOnrLP33f+VIWLzezQpZcqVg7ja3L4dBXmzzgwT+a029jRx5PCi3JuiA==}
@@ -1914,6 +1910,9 @@ packages:
 
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
+
+  bootstrap-icons@1.13.1:
+    resolution: {integrity: sha512-ijombt4v6bv5CLeXvRWKy7CuM3TRTuPEuGaGKvTV5cz65rQSY8RQ2JcHt6b90cBBAC7s8fsf2EkQDldzCoXUjw==}
 
   brace-expansion@1.1.12:
     resolution: {integrity: sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg==}
@@ -2811,6 +2810,10 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
+  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
+    resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7}
+    version: 6.0.0
+
   light-my-request@6.6.0:
     resolution: {integrity: sha512-CHYbu8RtboSIoVsHZ6Ye4cj4Aw/yg2oAFimlF7mNvfDV192LR7nDiKtSIfCuLT7KokPSTn/9kfVLm5OGN0A28A==}
 
@@ -2923,9 +2926,6 @@ packages:
   log-update@6.1.0:
     resolution: {integrity: sha512-9ie8ItPR6tjY5uYJh8K/Zrv/RMZ5VOlOWvtZdEHYSTFKZfIBPQa9tOAEeAWhd+AnIneLJ22w5fjOYtoutpWq5w==}
     engines: {node: '>=18'}
-
-  long@4.0.0:
-    resolution: {integrity: sha512-XsP+KhQif4bjX1kbuSiySJFNAehNxgLb6hPRGJ9QsUr8ajHkuXGdrHmFUTUUXhDwVX2R5bY4JNZEwbUiMhV+MA==}
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -3320,10 +3320,6 @@ packages:
 
   process-warning@5.0.0:
     resolution: {integrity: sha512-a39t9ApHNx2L4+HBnQKqxxHNs1r7KF+Intd8Q/g1bUh6q0WIp9voPXJ/x0j+ZL45KF1pJd9+q2jLIRMfvEshkA==}
-
-  protobufjs@6.8.8:
-    resolution: {integrity: sha512-AAmHtD5pXgZfi7GMpllpO3q1Xw1OYldr+dMUlAnffGTAhqkg72WdmSY71uKBF/JuyiKs8psYbtKrhi0ASCD8qw==}
-    hasBin: true
 
   protobufjs@7.5.6:
     resolution: {integrity: sha512-M71sTMB146U3u0di3yup8iM+zv8yPRNQVr1KK4tyBitl3qFvEGucq/rGDRShD2rsJhtN02RJaJ7j5X5hmy8SJg==}
@@ -5168,10 +5164,6 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
-  '@types/long@4.0.2': {}
-
-  '@types/node@10.17.60': {}
-
   '@types/node@24.12.0':
     dependencies:
       undici-types: 7.16.0
@@ -5330,7 +5322,7 @@ snapshots:
       '@cacheable/node-cache': 1.7.6
       '@hapi/boom': 9.1.4
       async-mutex: 0.5.0
-      libsignal: '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67'
+      libsignal: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7
       lru-cache: 11.2.7
       music-metadata: 11.12.3
       p-queue: 9.2.0
@@ -5343,11 +5335,6 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
-
-  '@whiskeysockets/libsignal-node@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/1c30d7d7e76a3b0aa120b04dc6a26f5a12dccf67':
-    dependencies:
-      curve25519-js: 0.0.4
-      protobufjs: 6.8.8
 
   abstract-logging@2.0.1: {}
 
@@ -5495,6 +5482,8 @@ snapshots:
       - supports-color
 
   boolbase@1.0.0: {}
+
+  bootstrap-icons@1.13.1: {}
 
   brace-expansion@1.1.12:
     dependencies:
@@ -6396,6 +6385,11 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
+  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
+    dependencies:
+      curve25519-js: 0.0.4
+      protobufjs: 7.5.6
+
   light-my-request@6.6.0:
     dependencies:
       cookie: 1.1.1
@@ -6498,8 +6492,6 @@ snapshots:
       slice-ansi: 7.1.2
       strip-ansi: 7.2.0
       wrap-ansi: 9.0.2
-
-  long@4.0.0: {}
 
   long@5.3.2: {}
 
@@ -6840,22 +6832,6 @@ snapshots:
   process-warning@4.0.1: {}
 
   process-warning@5.0.0: {}
-
-  protobufjs@6.8.8:
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-      '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.5
-      '@protobufjs/eventemitter': 1.1.0
-      '@protobufjs/fetch': 1.1.0
-      '@protobufjs/float': 1.0.2
-      '@protobufjs/inquire': 1.1.1
-      '@protobufjs/path': 1.1.2
-      '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.1
-      '@types/long': 4.0.2
-      '@types/node': 10.17.60
-      long: 4.0.0
 
   protobufjs@7.5.6:
     dependencies:

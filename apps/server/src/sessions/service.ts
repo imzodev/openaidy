@@ -19,6 +19,7 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
+import type { SessionType } from '@openaidy/shared-types';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -124,11 +125,17 @@ export class SessionMessageService {
   /**
    * Create a new session
    */
-  async createSession(title: string): Promise<SessionRecord | Session> {
+  async createSession(
+    title: string,
+    type?: 'chat' | 'task' | 'subtask',
+  ): Promise<SessionRecord | Session> {
     if (this.sessionsRepo) {
-      return this.sessionsRepo.create({ title });
+      return this.sessionsRepo.create({
+        title,
+        ...(type !== undefined && { type: type as SessionType }),
+      });
     }
-    return createSessionRecord(title);
+    return createSessionRecord(title, type);
   }
 
   /**

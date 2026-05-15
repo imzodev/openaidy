@@ -7,7 +7,7 @@ type Database = DatabaseClient;
 
 /**
  * Sessions repository
- * 
+ *
  * Provides data access methods for session records.
  */
 export class SessionsRepository {
@@ -16,15 +16,22 @@ export class SessionsRepository {
   /**
    * Create a new session
    */
-  async create(input: { title: string }): Promise<schema.Session> {
+  async create(input: {
+    title: string;
+    type?: schema.SessionType;
+  }): Promise<schema.Session> {
     const now = new Date();
-    const [session] = await this.db.insert(schema.sessions).values({
-      id: nanoid(),
-      title: input.title,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const [session] = await this.db
+      .insert(schema.sessions)
+      .values({
+        id: nanoid(),
+        title: input.title,
+        type: input.type ?? 'chat',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
     return session!;
   }
@@ -33,7 +40,8 @@ export class SessionsRepository {
    * Find a session by ID
    */
   async findById(id: string): Promise<schema.Session | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.sessions)
       .where(eq(schema.sessions.id, id))
       .limit(1);
@@ -45,12 +53,14 @@ export class SessionsRepository {
    */
   async list(status?: schema.SessionStatus): Promise<schema.Session[]> {
     if (status) {
-      return this.db.select()
+      return this.db
+        .select()
         .from(schema.sessions)
         .where(eq(schema.sessions.status, status))
         .orderBy(desc(schema.sessions.createdAt));
     }
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.sessions)
       .orderBy(desc(schema.sessions.createdAt));
   }
@@ -59,7 +69,8 @@ export class SessionsRepository {
    * Update a session's title
    */
   async updateTitle(id: string, title: string): Promise<schema.Session | null> {
-    const results = await this.db.update(schema.sessions)
+    const results = await this.db
+      .update(schema.sessions)
       .set({
         title,
         updatedAt: new Date(),
@@ -73,7 +84,10 @@ export class SessionsRepository {
   /**
    * Update a session's status
    */
-  async updateStatus(id: string, status: schema.SessionStatus): Promise<schema.Session | null> {
+  async updateStatus(
+    id: string,
+    status: schema.SessionStatus,
+  ): Promise<schema.Session | null> {
     const now = new Date();
     const updates: Partial<schema.Session> = {
       status,
@@ -84,7 +98,8 @@ export class SessionsRepository {
       updates.archivedAt = now;
     }
 
-    const results = await this.db.update(schema.sessions)
+    const results = await this.db
+      .update(schema.sessions)
       .set(updates)
       .where(eq(schema.sessions.id, id))
       .returning();

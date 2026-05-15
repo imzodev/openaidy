@@ -41,11 +41,13 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY NOT NULL,
       title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'chat',
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       archived_at TEXT
     );
+
 
     CREATE TABLE IF NOT EXISTS session_messages (
       id TEXT PRIMARY KEY NOT NULL,

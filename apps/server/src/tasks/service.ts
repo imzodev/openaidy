@@ -2,6 +2,7 @@ import type { AgentRegistry } from '../agents';
 import type { SessionMessageService } from '../sessions/service';
 import type { PlanningService } from '../planning';
 import type { RunEventEmitter } from '../dispatch/events';
+import type { SessionType } from '@openaidy/shared-types';
 import { createLogger } from '../lib/logger';
 import {
   type TasksRepository,
@@ -157,6 +158,29 @@ export class TaskService {
     });
 
     try {
+      // Check if this session is a task/subtask execution by checking session type
+      // Task/subtask sessions have type 'task' or 'subtask'
+      // Regular chat sessions have type 'chat', so we skip subtask lookup
+      const sessionRecord = await this.sessionService?.getSession(
+        event.sessionId,
+      );
+      const sessionType =
+        sessionRecord && 'type' in sessionRecord
+          ? (sessionRecord as { type?: SessionType }).type
+          : null;
+
+      const isTaskOrSubtaskSession =
+        sessionType === 'task' || sessionType === 'subtask';
+
+      if (!isTaskOrSubtaskSession) {
+        // Regular chat session - skip subtask lookup
+        this.logger.debug('Skipping subtask lookup for regular chat session', {
+          sessionId: event.sessionId,
+          sessionType: sessionType ?? 'unknown',
+        });
+        return;
+      }
+
       // Find subtask linked to this session by checking all tasks
       const tasks = await this.tasksRepo.list();
       let linkedSubtask: Subtask | undefined;
@@ -169,7 +193,7 @@ export class TaskService {
         // Log all subtasks with their sessionIds for debugging
         for (const s of subtasks) {
           if (s.sessionId) {
-            this.logger.info('Checked subtask', {
+            this.logger.debug('Checked subtask', {
               subtaskId: s.id,
               taskId: task.id,
               sessionId: s.sessionId,
@@ -794,6 +818,7 @@ export class TaskService {
     // Create session for task execution
     const session = await this.sessionService.createSession(
       `Task: ${task.title}`,
+      'task',
     );
 
     // Link session to task
@@ -912,6 +937,7 @@ export class TaskService {
     // Create session for subtask execution
     const session = await this.sessionService.createSession(
       `Subtask: ${subtask.title}`,
+      'subtask',
     );
     this.logger.info('Created session for subtask', {
       subtaskId,
