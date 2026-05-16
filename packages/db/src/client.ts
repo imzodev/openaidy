@@ -43,6 +43,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       title TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'chat',
       status TEXT NOT NULL DEFAULT 'active',
+      agent_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       archived_at TEXT
@@ -155,6 +156,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS session_messages_sequence_idx ON session_messages(sequence);
     CREATE INDEX IF NOT EXISTS session_runs_session_id_idx ON session_runs(session_id);
     CREATE INDEX IF NOT EXISTS session_runs_created_at_idx ON session_runs(created_at);
+    CREATE INDEX IF NOT EXISTS sessions_agent_id_idx ON sessions(agent_id);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_next_run_at_idx ON scheduled_jobs(next_run_at);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_status_idx ON scheduled_jobs(status);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_type_idx ON scheduled_jobs(type);

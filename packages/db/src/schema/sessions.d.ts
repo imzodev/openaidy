@@ -139,6 +139,27 @@ export declare const sessions: import('drizzle-orm/pg-core').PgTableWithColumns<
       {},
       {}
     >;
+    agentId: import('drizzle-orm/pg-core').PgColumn<
+      {
+        name: 'agent_id';
+        tableName: 'sessions';
+        dataType: 'string';
+        columnType: 'PgText';
+        data: string | null;
+        driverParam: string;
+        notNull: false;
+        hasDefault: false;
+        isPrimaryKey: false;
+        isAutoincrement: false;
+        hasRuntimeDefault: false;
+        enumValues: [string, ...string[]];
+        baseColumn: never;
+        identity: undefined;
+        generated: undefined;
+      },
+      {},
+      {}
+    >;
   };
   dialect: 'pg';
 }>;

@@ -52,13 +52,14 @@ export async function listSessions(): Promise<{ items: Session[] }> {
       }
 
       return {
-        items: response.payload.sessions.map(
-          (session: { id: string; title?: string; createdAt: string }) => ({
-            id: session.id,
-            title: session.title ?? 'Untitled Session',
-            createdAt: session.createdAt,
-          }),
-        ),
+        items: response.payload.sessions.map((session) => ({
+          id: session.id,
+          title: session.title ?? 'Untitled Session',
+          status: session.status,
+          agentId: session.agentId,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        })),
       };
     },
     () => listSessionsRest(),
@@ -94,7 +95,10 @@ export async function getSession(id: string): Promise<Session | ApiError> {
       return {
         id: response.payload.session.id,
         title: response.payload.session.title ?? 'Untitled Session',
+        status: response.payload.session.status,
+        agentId: response.payload.session.agentId,
         createdAt: response.payload.session.createdAt,
+        updatedAt: response.payload.session.updatedAt,
       };
     },
     () => getSessionRest(id),

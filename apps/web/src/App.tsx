@@ -13,6 +13,7 @@ import {
   submitMessageStreaming,
   listAgents,
   listRuns,
+  getSession,
   type Session,
   type SessionMessage,
   type Agent,
@@ -186,6 +187,15 @@ function AppContent(props: AppContentProps) {
     }
   });
 
+  // Clear explicit agent selection when session changes
+  // This ensures the session's stored agent (from latest run) is used
+  createEffect(() => {
+    const sessionId = selectedSessionId();
+    if (sessionId !== undefined) {
+      setSelectedAgentId(undefined);
+    }
+  });
+
   // Sessions query
   const sessionsQuery = createQuery(() => ({
     queryKey: ['sessions'],
@@ -211,6 +221,17 @@ function AppContent(props: AppContentProps) {
     queryKey: ['runs', selectedSessionId()],
     queryFn: () =>
       selectedSessionId() ? listRuns(selectedSessionId()!) : { items: [] },
+    enabled: !!selectedSessionId(),
+  }));
+
+  // Session query - to get session.agentId for agent selection
+  const sessionQuery = createQuery(() => ({
+    queryKey: ['session', selectedSessionId()],
+    queryFn: async () => {
+      const sessionId = selectedSessionId();
+      if (!sessionId) return null;
+      return getSession(sessionId);
+    },
     enabled: !!selectedSessionId(),
   }));
 
@@ -294,6 +315,32 @@ function AppContent(props: AppContentProps) {
     }
   };
 
+  // Effective agentId - user selection takes precedence, then session, then fallback
+  const effectiveAgentId = (): string | undefined => {
+    // If user has explicitly selected an agent (via dropdown), use it
+    const explicitSelection = selectedAgentId();
+    if (explicitSelection) {
+      return explicitSelection;
+    }
+
+    // Otherwise, derive from session's stored agentId
+    const sessionData = sessionQuery.data;
+    const sessionAgentId =
+      !sessionData || 'error' in sessionData ? null : sessionData?.agentId;
+    if (sessionAgentId) {
+      return sessionAgentId;
+    }
+
+    // Fallback to first available agent
+    const agentList = agents();
+    return agentList.length > 0 ? agentList[0].id : undefined;
+  };
+
+  // Handle agent selection - update local state for immediate UI feedback
+  const handleAgentSelect = (agentId: string | undefined) => {
+    setSelectedAgentId(agentId);
+  };
+
   // Data accessors
   const messages = (): SessionMessage[] => {
     const data = messagesQuery.data;
@@ -316,14 +363,6 @@ function AppContent(props: AppContentProps) {
   const agents = (): Agent[] => {
     return agentsQuery.data?.items || [];
   };
-
-  // Auto-select first agent when agents load
-  createEffect(() => {
-    const agentList = agents();
-    if (agentList.length > 0 && !selectedAgentId()) {
-      setSelectedAgentId(agentList[0].id);
-    }
-  });
 
   // Auto-select most recent session when on chat view with no session selected
   createEffect(() => {
@@ -560,8 +599,8 @@ function AppContent(props: AppContentProps) {
               disabled={isStreaming()}
               placeholder="Type your message..."
               agents={agents()}
-              selectedAgentId={selectedAgentId()}
-              onAgentSelect={setSelectedAgentId}
+              selectedAgentId={effectiveAgentId()}
+              onAgentSelect={handleAgentSelect}
             />
             <Show when={submitError()}>
               <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">

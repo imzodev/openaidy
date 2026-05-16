@@ -81,7 +81,13 @@ function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 export type Session = {
   id: string;
   title: string;
+  type?: 'chat' | 'task' | 'subtask';
+  status?: 'active' | 'archived' | 'deleted';
+  /** Last agent used in this session (set after each successful run) */
+  agentId?: string;
   createdAt: string;
+  updatedAt?: string;
+  archivedAt?: string;
 };
 
 /**

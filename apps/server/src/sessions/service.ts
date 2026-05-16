@@ -152,6 +152,20 @@ export class SessionMessageService {
   }
 
   /**
+   * Update a session's agentId (set to the agent of the latest run)
+   */
+  async updateSessionAgentId(
+    id: string,
+    agentId: string,
+  ): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.updateAgentId(id, agentId);
+    }
+    // In-memory store doesn't persist agentId - just return the session
+    return (await this.getSession(id)) ?? null;
+  }
+
+  /**
    * Generate a short title for a session from the first user message.
    *
    * Makes a single non-streaming provider call with max 12 tokens.
@@ -306,8 +320,12 @@ export class SessionMessageService {
     });
 
     // 3. Create run record (starts in 'queued' status)
+    // Resolve agent: input.agentId > session.agentId > system default
     const configuredDefaultAgentId = this.getDefaultAgentId?.();
-    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const resolvedAgentId =
+      input.agentId ??
+      (session as { agentId?: string }).agentId ??
+      configuredDefaultAgentId;
     const agent = resolvedAgentId
       ? this.agents?.getAgent(resolvedAgentId)
       : undefined;
@@ -595,8 +613,12 @@ export class SessionMessageService {
     });
 
     // 3. Create run record
+    // Resolve agent: input.agentId > session.agentId > system default
     const configuredDefaultAgentId = this.getDefaultAgentId?.();
-    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const resolvedAgentId =
+      input.agentId ??
+      (session as { agentId?: string }).agentId ??
+      configuredDefaultAgentId;
     const agent = resolvedAgentId
       ? this.agents?.getAgent(resolvedAgentId)
       : undefined;
@@ -984,6 +1006,10 @@ export class SessionMessageService {
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
 
+      // 9. Update session's agentId to reflect the agent that just ran
+      // This allows the session to "remember" which agent was last used
+      await this.updateSessionAgentId(input.sessionId, agentId);
+
       return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
       const errorMsg =
@@ -1240,6 +1266,9 @@ export class SessionMessageService {
         responseId: response.id,
       },
     });
+
+    // Update session's agentId to reflect the agent that just ran
+    await this.updateSessionAgentId(sessionId, run.agentId);
 
     return {
       ok: true,

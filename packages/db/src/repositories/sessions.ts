@@ -82,6 +82,25 @@ export class SessionsRepository {
   }
 
   /**
+   * Update a session's agentId (set to the agent of the latest run)
+   */
+  async updateAgentId(
+    id: string,
+    agentId: string,
+  ): Promise<schema.Session | null> {
+    const results = await this.db
+      .update(schema.sessions)
+      .set({
+        agentId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.sessions.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
+
+  /**
    * Update a session's status
    */
   async updateStatus(

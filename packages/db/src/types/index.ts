@@ -20,7 +20,13 @@ import type { AddonsRepository } from '../repositories/addons';
 
 export type SessionsStore = Pick<
   SessionsRepository,
-  'create' | 'findById' | 'list' | 'updateTitle' | 'updateStatus' | 'delete'
+  | 'create'
+  | 'findById'
+  | 'list'
+  | 'updateTitle'
+  | 'updateAgentId'
+  | 'updateStatus'
+  | 'delete'
 >;
 
 export type SessionMessagesStore = Pick<

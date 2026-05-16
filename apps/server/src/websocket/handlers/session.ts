@@ -114,6 +114,7 @@ export class SessionHandler {
       }
 
       const sessionRecord = session as Session;
+      const agentId = (sessionRecord as { agentId?: string }).agentId;
 
       return createWSMessage(
         'session.get',
@@ -122,6 +123,7 @@ export class SessionHandler {
             id: sessionRecord.id,
             title: sessionRecord.title,
             status: sessionRecord.status ?? 'active',
+            agentId,
             createdAt: new Date(sessionRecord.createdAt).toISOString(),
             updatedAt: sessionRecord.updatedAt
               ? new Date(sessionRecord.updatedAt).toISOString()
@@ -182,6 +184,7 @@ export class SessionHandler {
               id: session.id,
               title: session.title,
               status: session.status ?? 'active',
+              agentId: (session as { agentId?: string }).agentId,
               createdAt: new Date(session.createdAt).toISOString(),
               updatedAt: session.updatedAt
                 ? new Date(session.updatedAt).toISOString()

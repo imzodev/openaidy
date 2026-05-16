@@ -51,6 +51,8 @@ export type Session = {
   title: string;
   type?: SessionType;
   status?: SessionStatus;
+  /** Last agent used in this session (set after each successful run) */
+  agentId?: string;
   createdAt: string;
   updatedAt?: string;
   archivedAt?: string;
