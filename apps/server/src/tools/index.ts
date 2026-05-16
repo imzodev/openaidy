@@ -29,12 +29,14 @@ import { createAgentTools } from './agents';
 import type { AgentToolsDeps } from './agents';
 import { createWebTools } from './web';
 import { createSessionTools } from './sessions';
+import { createTasksTools } from './tasks';
 import { presentChoicesTool } from './present-choices';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
 import type { AddonToolDeps } from './addons';
 import type { SessionMessageService } from '../sessions/service';
+import type { TaskService } from '../tasks/service';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
@@ -46,6 +48,7 @@ export { createAgentTools } from './agents';
 export type { AgentToolsDeps } from './agents';
 export { createWebTools } from './web';
 export { createSessionTools } from './sessions';
+export { createTasksTools } from './tasks';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
@@ -55,6 +58,7 @@ export type BuiltinToolRegistryDeps = {
   agents?: AgentToolsDeps;
   web?: boolean;
   sessions?: { getSessionService: () => SessionMessageService };
+  tasks?: { getTaskService: () => TaskService };
 };
 
 /**
@@ -100,6 +104,12 @@ export function createBuiltinToolRegistry(
 
   if (deps.sessions) {
     for (const tool of createSessionTools(deps.sessions)) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.tasks) {
+    for (const tool of createTasksTools(deps.tasks)) {
       registry.register(tool);
     }
   }

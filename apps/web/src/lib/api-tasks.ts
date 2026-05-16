@@ -396,6 +396,24 @@ export async function getTaskSession(
 }
 
 /**
+ * Complete a subtask manually
+ */
+export async function completeSubtask(
+  subtaskId: string,
+  result?: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(
+    `${API_BASE}/subtasks/${subtaskId}/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ result }),
+    },
+  );
+  return response.json();
+}
+
+/**
  * Get the session linked to a subtask
  */
 export async function getSubtaskSession(

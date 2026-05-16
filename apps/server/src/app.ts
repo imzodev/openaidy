@@ -168,10 +168,13 @@ export async function buildApp() {
     : undefined;
 
   // Create builtin tool registry (native, in-process tools — separate from MCP)
-  // Session tools use a lazy getter to break the circular dependency:
+  // Session tools and Tasks tools use lazy getters to break circular dependencies:
   //   tool registry → SessionMessageService → tool registry
-  // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in sessions getter
+  //   tool registry → TaskService → SessionMessageService → tool registry
+  // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in getters
   let sessionService: SessionMessageService | undefined;
+   
+  let taskService: ReturnType<typeof createTaskService> | undefined;
 
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
@@ -187,6 +190,7 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
+    tasks: { getTaskService: () => taskService! },
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)
@@ -414,7 +418,7 @@ export async function buildApp() {
       getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     });
 
-    const taskService = createTaskService({
+    taskService = createTaskService({
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
@@ -468,12 +472,26 @@ export async function buildApp() {
   });
 
   // Start scheduler after server is ready
+  let stuckSubtaskInterval: ReturnType<typeof setInterval> | undefined;
   app.addHook('onReady', async () => {
     if (scheduler) {
       // Recover any stuck jobs from previous run
       await scheduler.recoverStuckJobs();
       scheduler.start();
       app.log.info('Scheduler started');
+    }
+
+    // Start periodic stuck subtask check
+    if (taskService) {
+      stuckSubtaskInterval = setInterval(
+        () => {
+          taskService!.checkStuckSubtasks().catch((err) => {
+            app.log.error('Failed to check stuck subtasks', err);
+          });
+        },
+        5 * 60 * 1000,
+      ); // Every 5 minutes
+      app.log.info('Stuck subtask checker started (every 5 minutes)');
     }
 
     // Auto-connect MCP servers from config
@@ -493,6 +511,10 @@ export async function buildApp() {
 
   // Clean up on close
   app.addHook('onClose', async () => {
+    if (stuckSubtaskInterval) {
+      clearInterval(stuckSubtaskInterval);
+      app.log.info('Stuck subtask checker stopped');
+    }
     if (scheduler) {
       await scheduler.stop();
       app.log.info('Scheduler stopped');

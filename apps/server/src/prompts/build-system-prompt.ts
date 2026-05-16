@@ -5,6 +5,7 @@ import type { ProviderServices } from '../providers';
 import { autoFillPersonalityFiles } from './auto-fill-personality.js';
 import type { ToolDefinition } from '@openaidy/runtime';
 import type { WorkspacePermissionsInfo } from '../types.js';
+import type { SessionType } from '@openaidy/shared-types';
 import { ALL_TOOL_METAS } from '../tools/catalog.js';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,6 +29,8 @@ export type BuildSystemPromptOptions = {
   workspacePermissions?: WorkspacePermissionsInfo | undefined;
   /** Base directory for agent workspaces (to resolve agent workspace skills) */
   workspaceBaseDir?: string | undefined;
+  /** Session type - used to inject context-specific reminders */
+  sessionType?: SessionType | undefined;
 };
 
 /**
@@ -99,6 +102,7 @@ export async function buildSystemPrompt(
     tools,
     workspacePermissions,
     workspaceBaseDir,
+    sessionType,
   } = options;
 
   // Auto-fill blank personality files on first message of a session
@@ -128,6 +132,15 @@ export async function buildSystemPrompt(
         prompt += `\n\n[ONBOARDING]\nSome context about you and the user has not been configured yet: ${blankLabels.join(', ')}. Before answering the user's message, greet them warmly, then ask them specific onboarding questions to fill in what is missing — one thing at a time, starting with the most important. Be concrete and give 2-3 short examples per question so the user knows what kind of answer to give. For Agent Identity: ask what name and emoji they would like, and what tone (e.g. "direct and concise", "warm and encouraging", "formal and precise"). For User Profile: ask their name, role, and how technical they are (e.g. "senior engineer", "product designer", "non-technical founder"). For Mission: ask what project or goal they are working on and the main technology or tools involved. For Rules: ask if there are any hard constraints the agent must always follow (e.g. "always respond in Spanish", "never suggest paid tools").\n\nYou have access to the \`present_choices\` tool. For each onboarding question, use it to present 3–4 concrete example answers as selectable options rather than asking open-endedly. The user can pick one or ignore the card and type freely.\n[/ONBOARDING]`;
       }
     }
+  }
+
+  // Inject subtask reminder for subtask sessions
+  if (sessionType === 'subtask') {
+    prompt += `
+
+[SUBTASK_REMINDER]
+You are currently executing a subtask. When you have completed the objective, you MUST call the 'subtask_complete' tool to mark this subtask as finished. This is REQUIRED - do not end your response without calling it when the work is done. Call it after any successful tool execution that completes your task.
+[/SUBTASK_REMINDER]`;
   }
 
   if (skillIds?.length && skillRegistry) {

@@ -6,7 +6,7 @@ import { createSkillRegistry } from '../../skills/index';
 import { WorkspaceService } from '../../workspace/service';
 import { createSkillCreateTool, createSkillTools } from './index';
 
-const CTX = { agentId: 'test-agent' };
+const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
 
 describe('skill tools', () => {
   let baseDir: string;

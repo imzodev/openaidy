@@ -151,7 +151,10 @@ describe('BuiltinToolRegistry', () => {
 
       const result = await registry
         .get('echo')!
-        .execute({ text: 'hello' }, { agentId: 'agent-1' });
+        .execute(
+          { text: 'hello' },
+          { agentId: 'agent-1', sessionId: 'test-session' },
+        );
       expect(result).toEqual({ ok: true, content: 'hello' });
     });
   });

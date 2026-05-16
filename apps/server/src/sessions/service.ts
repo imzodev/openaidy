@@ -127,7 +127,7 @@ export class SessionMessageService {
    */
   async createSession(
     title: string,
-    type?: 'chat' | 'task' | 'subtask',
+    type?: SessionType,
   ): Promise<SessionRecord | Session> {
     if (this.sessionsRepo) {
       return this.sessionsRepo.create({
@@ -400,6 +400,9 @@ export class SessionMessageService {
       userMessage: input.content,
       providers: this.providers,
       workspaceBaseDir: this.workspaceBaseDir,
+      sessionType: (session as { type?: string }).type as
+        | SessionType
+        | undefined,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -742,6 +745,9 @@ export class SessionMessageService {
       tools: allTools,
       workspacePermissions,
       workspaceBaseDir: this.workspaceBaseDir,
+      sessionType: (session as { type?: string }).type as
+        | SessionType
+        | undefined,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -891,7 +897,7 @@ export class SessionMessageService {
               : undefined;
             if (builtinTool) {
               const builtinResult = await builtinTool
-                .execute(tc.arguments, { agentId })
+                .execute(tc.arguments, { agentId, sessionId: input.sessionId })
                 .catch((e: unknown) => ({
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,

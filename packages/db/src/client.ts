@@ -194,6 +194,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
       order_index INTEGER NOT NULL DEFAULT 0,
       result TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -272,6 +273,23 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
   `);
 }
 
+/**
+ * Run migrations for SQLite schema updates
+ * Handles adding new columns to existing tables
+ */
+function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
+  // Migration: Add retry_count to subtasks if not exists
+  const tableInfo = sqlite.pragma('table_info(subtasks)') as Array<{
+    name: string;
+  }>;
+  const hasRetryCount = tableInfo.some((col) => col.name === 'retry_count');
+  if (!hasRetryCount) {
+    sqlite.exec(
+      `ALTER TABLE subtasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+}
+
 export async function createDatabaseClient(
   config: DatabaseClientConfig,
 ): Promise<DatabaseConnection> {
@@ -281,6 +299,7 @@ export async function createDatabaseClient(
     sqlite.pragma('foreign_keys = ON');
     sqlite.pragma('journal_mode = WAL');
     initializeSqliteSchema(sqlite);
+    runSqliteMigrations(sqlite);
 
     return {
       db: drizzleSqlite(sqlite, { schema }) as DatabaseClient,

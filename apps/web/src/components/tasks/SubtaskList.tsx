@@ -5,7 +5,7 @@
  */
 
 import { Show, For } from 'solid-js';
-import { MessageSquare } from 'lucide-solid';
+import { MessageSquare, CheckCircle, RotateCcw } from 'lucide-solid';
 import type { Subtask } from '../../lib/api-tasks';
 import type { Agent } from './AgentSelector';
 
@@ -17,6 +17,8 @@ export type SubtaskListProps = {
   agents?: Agent[];
   onSubtaskUpdate?: () => void;
   onOpenSession?: (sessionId: string) => void;
+  onCompleteSubtask?: (subtaskId: string) => void;
+  onRetrySubtask?: (subtaskId: string) => void;
 };
 
 /**
@@ -117,6 +119,32 @@ export function SubtaskList(props: SubtaskListProps) {
                 >
                   <MessageSquare class="w-4 h-4" />
                 </button>
+              </Show>
+
+              {/* Action buttons for stuck subtasks */}
+              <Show when={subtask.status === 'in_progress'}>
+                <div class="flex items-center gap-1 ml-1">
+                  <Show when={props.onCompleteSubtask}>
+                    <button
+                      type="button"
+                      onClick={() => props.onCompleteSubtask!(subtask.id)}
+                      class="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors"
+                      title="Mark as complete"
+                    >
+                      <CheckCircle class="w-4 h-4" />
+                    </button>
+                  </Show>
+                  <Show when={props.onRetrySubtask}>
+                    <button
+                      type="button"
+                      onClick={() => props.onRetrySubtask!(subtask.id)}
+                      class="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/30 rounded transition-colors"
+                      title="Retry subtask"
+                    >
+                      <RotateCcw class="w-4 h-4" />
+                    </button>
+                  </Show>
+                </div>
               </Show>
             </div>
           </div>

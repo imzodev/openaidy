@@ -8,7 +8,7 @@ import {
 } from './index.js';
 import type { SessionMessageService } from '../../sessions/service.js';
 
-const CTX = { agentId: 'test-agent' };
+const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
 
 function makeSessionService(
   overrides: Partial<Record<keyof SessionMessageService, unknown>> = {},

@@ -224,11 +224,7 @@ export class TaskService {
       });
 
       if (event.type === 'run.completed') {
-        this.logger.info(
-          'Auto-completing subtask after session run completed',
-          { subtaskId: linkedSubtask.id, sessionId: event.sessionId },
-        );
-        // Get the last assistant message as the result
+        // Get the last assistant message to analyze
         const sessionMessages = await this.sessionService?.listMessages(
           event.sessionId,
         );
@@ -238,20 +234,72 @@ export class TaskService {
           .find((m) => m.role === 'assistant');
         const result = lastAssistantMessage?.content ?? 'Completed';
 
-        const completeResult = await this.completeSubtask(
+        // Check if the agent indicated intention to retry/fix but didn't execute
+        const pendingIntent = this.detectPendingRetryIntent(result);
+
+        // Increment retry count
+        const updatedSubtask = await this.subtasksRepo.incrementRetryCount(
           linkedSubtask.id,
-          result,
         );
-        if (completeResult.ok) {
-          this.logger.info('Subtask auto-completed successfully', {
+        const retryCount = updatedSubtask?.retryCount ?? 0;
+        const MAX_RETRIES = 5;
+
+        if (pendingIntent && retryCount < MAX_RETRIES) {
+          // Agent said it would fix/retry but didn't - trigger an actual retry
+          this.logger.info(
+            'Subtask run completed with pending retry intent, triggering retry',
+            {
+              subtaskId: linkedSubtask.id,
+              sessionId: event.sessionId,
+              retryCount,
+              lastMessage: result.substring(0, 100),
+            },
+          );
+
+          // Trigger the retry by sending a message to the existing session
+          const retryResult = await this.triggerSubtaskRetry(linkedSubtask.id);
+          if (!retryResult.ok) {
+            this.logger.error('Failed to trigger retry for subtask', {
+              subtaskId: linkedSubtask.id,
+              error: retryResult.error,
+            });
+          }
+        } else if (retryCount >= MAX_RETRIES) {
+          // Max retries exceeded - mark as failed
+          this.logger.warn('Max retries exceeded, marking subtask as failed', {
             subtaskId: linkedSubtask.id,
-            taskId: linkedSubtask.taskId,
+            retryCount,
+            maxRetries: MAX_RETRIES,
           });
+          await this.failSubtask(
+            linkedSubtask.id,
+            `Failed after ${MAX_RETRIES} attempts. Last message: ${result.substring(0, 200)}`,
+          );
         } else {
-          this.logger.error('Failed to auto-complete subtask', {
-            subtaskId: linkedSubtask.id,
-            error: completeResult.error,
-          });
+          // No pending intent or within retry limit - auto-complete
+          this.logger.info(
+            'Auto-completing subtask after session run completed',
+            {
+              subtaskId: linkedSubtask.id,
+              sessionId: event.sessionId,
+              retryCount,
+            },
+          );
+          const completeResult = await this.completeSubtask(
+            linkedSubtask.id,
+            result,
+          );
+          if (completeResult.ok) {
+            this.logger.info('Subtask auto-completed successfully', {
+              subtaskId: linkedSubtask.id,
+              taskId: linkedSubtask.taskId,
+            });
+          } else {
+            this.logger.error('Failed to auto-complete subtask', {
+              subtaskId: linkedSubtask.id,
+              error: completeResult.error,
+            });
+          }
         }
       } else if (event.type === 'run.failed') {
         this.logger.info('Auto-failing subtask after session run failed', {
@@ -999,6 +1047,70 @@ export class TaskService {
   }
 
   /**
+   * Trigger a retry for a stuck subtask by sending a prompt to continue
+   * This is used when auto-detection finds a subtask that needs to continue
+   */
+  async triggerSubtaskRetry(
+    subtaskId: string,
+  ): Promise<ServiceResult<{ sessionId: string }>> {
+    if (!this.sessionService) {
+      return {
+        ok: false,
+        error: {
+          code: 'service.not_configured',
+          message: 'Session service is not configured',
+        },
+      };
+    }
+
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+
+    // Must have a linked session to retry
+    const sessionId = subtask.sessionId;
+    if (!sessionId) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.no_session',
+          message: `Subtask "${subtaskId}" has no linked session`,
+        },
+      };
+    }
+
+    // Send a prompt to continue/complete the subtask
+    const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
+    this.logger.info('Triggering retry for stuck subtask', {
+      subtaskId,
+      sessionId,
+      agentId,
+    });
+
+    const messageInput: SubmitMessageStreamingInput = {
+      sessionId,
+      content:
+        'Please complete this subtask. If you have already finished the work, call the subtask_complete tool to mark it as done.',
+      role: 'user',
+      onStreamEvent: () => {},
+    };
+    if (agentId !== undefined) {
+      messageInput.agentId = agentId;
+    }
+
+    await this.sessionService.submitMessageStreaming(messageInput);
+
+    return { ok: true, data: { sessionId } };
+  }
+
+  /**
    * Get the session linked to a task
    */
   async getTaskSession(
@@ -1036,6 +1148,32 @@ export class TaskService {
     }
 
     return { ok: true, data: { sessionId: subtask.sessionId } };
+  }
+
+  /**
+   * Find a subtask by its linked session ID
+   */
+  async getSubtaskBySessionId(
+    sessionId: string,
+  ): Promise<ServiceResult<Subtask>> {
+    // Search through all tasks to find subtask linked to this session
+    const tasks = await this.tasksRepo.list();
+
+    for (const task of tasks) {
+      const subtasks = await this.subtasksRepo.listByTask(task.id);
+      const found = subtasks.find((s) => s.sessionId === sessionId);
+      if (found) {
+        return { ok: true, data: found };
+      }
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: 'subtask.not_found',
+        message: `No subtask found linked to session "${sessionId}"`,
+      },
+    };
   }
 
   // ========================================
@@ -1181,6 +1319,179 @@ export class TaskService {
         status: 'review',
         reason: 'all_subtasks_completed',
       });
+    }
+  }
+
+  /**
+   * Detect if the agent's last message indicates intention to retry/fix but hasn't executed yet.
+   * Returns true if the message suggests pending work.
+   */
+  private detectPendingRetryIntent(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+
+    // Phrases that indicate the message is describing/analyzing the request, NOT intent to retry
+    const negationPatterns = [
+      'the user is asking',
+      'the user wants',
+      'the user needs',
+      'i understand that',
+      'i see that you',
+      'you are asking',
+      'you want me to',
+      'i will create',
+      'i will write',
+      'i will generate',
+      'i will build',
+      'i will design',
+      'i will make',
+      "i'll create",
+      "i'll write",
+      "i'll generate",
+      "i'll build",
+      "i'll design",
+      "i'll make",
+    ];
+
+    // If message is describing what the user wants, it's NOT a retry intent
+    const isDescribingRequest = negationPatterns.some((pattern) =>
+      lowerMessage.includes(pattern),
+    );
+    if (isDescribingRequest) {
+      return false;
+    }
+
+    // Phrases indicating intent to fix/retry/attempt (after errors or to correct)
+    const pendingPhrases = [
+      'let me fix',
+      'let me try',
+      'let me attempt',
+      'i will fix',
+      'i will try',
+      'i will attempt',
+      "i'll fix",
+      "i'll try",
+      "i'll attempt",
+      'need to fix',
+      'need to try',
+      'need to attempt',
+      'going to fix',
+      'going to try',
+      'going to attempt',
+      'attempt to fix',
+      'attempt to',
+      'try again',
+      'retry',
+      'correct this',
+      'fix this',
+      'try another',
+      'try a different',
+      'let me correct',
+      'i need to fix',
+      'i need to correct',
+    ];
+
+    // Check for pending intent phrases
+    const hasPendingPhrase = pendingPhrases.some((phrase) =>
+      lowerMessage.includes(phrase),
+    );
+
+    if (!hasPendingPhrase) {
+      return false;
+    }
+
+    // Check for confirmation phrases that suggest completion
+    const completionPhrases = [
+      'successfully',
+      'completed',
+      'done',
+      'finished',
+      'published',
+      'posted',
+      'executed',
+      'ran successfully',
+      'worked',
+      'succeeded',
+      'tweet has been',
+      'has been published',
+      'has been posted',
+    ];
+
+    const hasCompletionPhrase = completionPhrases.some((phrase) =>
+      lowerMessage.includes(phrase),
+    );
+
+    // If has pending phrase but no completion phrase, it's likely pending
+    return !hasCompletionPhrase;
+  }
+
+  /**
+   * Check for stuck subtasks (in_progress for too long) and auto-retry them
+   * Should be called periodically by a background job
+   */
+  async checkStuckSubtasks(): Promise<void> {
+    const STUCK_TIMEOUT_MINUTES = 3;
+    const MAX_RETRIES = 5;
+
+    // Find all in_progress subtasks
+    const allSubtasks = await this.subtasksRepo.listAll();
+    const inProgressSubtasks = allSubtasks.filter(
+      (s) => s.status === 'in_progress',
+    );
+
+    if (inProgressSubtasks.length === 0) {
+      return;
+    }
+
+    this.logger.info('Checking for stuck subtasks', {
+      count: inProgressSubtasks.length,
+    });
+
+    const now = new Date();
+
+    for (const subtask of inProgressSubtasks) {
+      // Check if subtask has been in_progress for too long
+      const updatedAt = subtask.updatedAt ? new Date(subtask.updatedAt) : null;
+      if (!updatedAt) {
+        continue;
+      }
+
+      const minutesSinceUpdate =
+        (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+
+      if (minutesSinceUpdate < STUCK_TIMEOUT_MINUTES) {
+        continue; // Not stuck yet
+      }
+
+      // Check retry count
+      const retryCount = (subtask as { retryCount?: number }).retryCount ?? 0;
+
+      if (retryCount >= MAX_RETRIES) {
+        this.logger.warn('Subtask exceeded max retries, marking as failed', {
+          subtaskId: subtask.id,
+          retryCount,
+        });
+        await this.subtasksRepo.updateStatus(subtask.id, 'failed');
+        continue;
+      }
+
+      // Auto-retry: increment retry count and trigger retry
+      this.logger.info('Auto-retrying stuck subtask', {
+        subtaskId: subtask.id,
+        retryCount,
+        minutesStuck: Math.round(minutesSinceUpdate),
+      });
+
+      await this.subtasksRepo.incrementRetryCount(subtask.id);
+
+      // Trigger retry via existing session
+      const result = await this.triggerSubtaskRetry(subtask.id);
+
+      if (!result.ok) {
+        this.logger.error('Auto-retry failed for stuck subtask', {
+          subtaskId: subtask.id,
+          error: result.error,
+        });
+      }
     }
   }
 }

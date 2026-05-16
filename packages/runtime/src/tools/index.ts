@@ -29,6 +29,8 @@ export type ToolDefinition = {
 export type BuiltinToolContext = {
   /** The agent that is invoking this tool */
   readonly agentId: string;
+  /** The session ID this tool call is executing within */
+  readonly sessionId: string;
 };
 
 /**

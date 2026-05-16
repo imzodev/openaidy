@@ -6,7 +6,7 @@ import { ExecService } from '../../exec/service';
 import { createWorkspaceService } from '../../workspace/service';
 import { createExecRunTool, createExecTools } from './index';
 
-const CTX = { agentId: 'test-agent' };
+const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
 
 describe('exec tools', () => {
   let testBaseDir: string;

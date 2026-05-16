@@ -1,4 +1,4 @@
-import { eq, desc, and, count } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/tasks';
@@ -25,19 +25,22 @@ export class SubtasksRepository {
     assignedAgentId?: string;
   }): Promise<schema.Subtask> {
     const now = new Date();
-    const [subtask] = await this.db.insert(schema.subtasks).values({
-      id: nanoid(),
-      taskId: input.taskId,
-      parentSubtaskId: input.parentSubtaskId ?? null,
-      title: input.title,
-      description: input.description,
-      status: 'pending',
-      orderIndex: input.orderIndex ?? 0,
-      assignedAgentId: input.assignedAgentId ?? null,
-      result: null,
-      createdAt: now,
-      updatedAt: now,
-    }).returning();
+    const [subtask] = await this.db
+      .insert(schema.subtasks)
+      .values({
+        id: nanoid(),
+        taskId: input.taskId,
+        parentSubtaskId: input.parentSubtaskId ?? null,
+        title: input.title,
+        description: input.description,
+        status: 'pending',
+        orderIndex: input.orderIndex ?? 0,
+        assignedAgentId: input.assignedAgentId ?? null,
+        result: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
     return subtask!;
   }
@@ -46,7 +49,8 @@ export class SubtasksRepository {
    * Find a subtask by ID
    */
   async findById(id: string): Promise<schema.Subtask | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.subtasks)
       .where(eq(schema.subtasks.id, id))
       .limit(1);
@@ -57,7 +61,8 @@ export class SubtasksRepository {
    * List all subtasks for a task
    */
   async listByTask(taskId: string): Promise<schema.Subtask[]> {
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.subtasks)
       .where(eq(schema.subtasks.taskId, taskId))
       .orderBy(desc(schema.subtasks.orderIndex));
@@ -66,13 +71,19 @@ export class SubtasksRepository {
   /**
    * List subtasks by status within a task
    */
-  async listByStatus(taskId: string, status: schema.SubtaskStatus): Promise<schema.Subtask[]> {
-    return this.db.select()
+  async listByStatus(
+    taskId: string,
+    status: schema.SubtaskStatus,
+  ): Promise<schema.Subtask[]> {
+    return this.db
+      .select()
       .from(schema.subtasks)
-      .where(and(
-        eq(schema.subtasks.taskId, taskId),
-        eq(schema.subtasks.status, status)
-      ))
+      .where(
+        and(
+          eq(schema.subtasks.taskId, taskId),
+          eq(schema.subtasks.status, status),
+        ),
+      )
       .orderBy(desc(schema.subtasks.orderIndex));
   }
 
@@ -88,9 +99,10 @@ export class SubtasksRepository {
       sessionId?: string | null;
       status?: schema.SubtaskStatus;
       result?: string | null;
-    }
+    },
   ): Promise<schema.Subtask | null> {
-    const results = await this.db.update(schema.subtasks)
+    const results = await this.db
+      .update(schema.subtasks)
       .set({
         ...input,
         updatedAt: new Date(),
@@ -104,8 +116,12 @@ export class SubtasksRepository {
   /**
    * Assign an agent to a subtask
    */
-  async assignAgent(id: string, agentId: string): Promise<schema.Subtask | null> {
-    const results = await this.db.update(schema.subtasks)
+  async assignAgent(
+    id: string,
+    agentId: string,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
       .set({
         assignedAgentId: agentId,
         status: 'assigned',
@@ -120,8 +136,12 @@ export class SubtasksRepository {
   /**
    * Update a subtask's status
    */
-  async updateStatus(id: string, status: schema.SubtaskStatus): Promise<schema.Subtask | null> {
-    const results = await this.db.update(schema.subtasks)
+  async updateStatus(
+    id: string,
+    status: schema.SubtaskStatus,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
       .set({
         status,
         updatedAt: new Date(),
@@ -136,7 +156,8 @@ export class SubtasksRepository {
    * Set the result of a subtask
    */
   async setResult(id: string, result: string): Promise<schema.Subtask | null> {
-    const results = await this.db.update(schema.subtasks)
+    const results = await this.db
+      .update(schema.subtasks)
       .set({
         result,
         updatedAt: new Date(),
@@ -150,7 +171,9 @@ export class SubtasksRepository {
   /**
    * Get counts of subtasks by status for a task
    */
-  async getCountsByStatus(taskId: string): Promise<Record<schema.SubtaskStatus, number>> {
+  async getCountsByStatus(
+    taskId: string,
+  ): Promise<Record<schema.SubtaskStatus, number>> {
     const subtasks = await this.listByTask(taskId);
     const counts: Record<schema.SubtaskStatus, number> = {
       pending: 0,
@@ -169,11 +192,38 @@ export class SubtasksRepository {
    * Delete a subtask
    */
   async delete(id: string): Promise<schema.Subtask | null> {
-    const results = await this.db.delete(schema.subtasks)
+    const results = await this.db
+      .delete(schema.subtasks)
       .where(eq(schema.subtasks.id, id))
       .returning();
 
     return results[0] ?? null;
+  }
+
+  /**
+   * Increment the retry count for a subtask
+   */
+  async incrementRetryCount(id: string): Promise<schema.Subtask | null> {
+    const subtask = await this.findById(id);
+    if (!subtask) return null;
+
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        retryCount: (subtask.retryCount ?? 0) + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
+
+  /**
+   * List all subtasks across all tasks
+   */
+  async listAll(): Promise<schema.Subtask[]> {
+    return this.db.select().from(schema.subtasks);
   }
 }
 
