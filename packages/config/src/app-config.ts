@@ -244,6 +244,7 @@ export const appAgentConfigSchema = z.object({
   tools: z.array(z.string()).optional(),
   mcpServers: z.array(appAgentMcpServerRefSchema).optional(),
   tags: z.array(z.string()).optional(),
+  skills: z.array(z.string()).optional(),
   workspace: appAgentWorkspaceConfigSchema.optional(),
   metadata: z.record(z.unknown()).optional(),
   version: z.number().int().positive().optional().default(1),
