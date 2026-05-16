@@ -1,5 +1,6 @@
 import type { AgentRegistry } from '../agents';
 import type { SessionMessageService } from '../sessions/service';
+import type { SubmitMessageStreamingInput } from '../sessions/types';
 import type { PlanningService } from '../planning';
 import type { RunEventEmitter } from '../dispatch/events';
 import type { SessionType } from '@openaidy/shared-types';
@@ -974,17 +975,25 @@ export class TaskService {
     }
 
     // Submit initial message with subtask description
+    // Use the subtask's assigned agent if available
+    const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
     this.logger.info('Submitting message to session', {
       subtaskId,
       sessionId: session.id,
+      agentId,
       hasContext: completedDeps.length > 0,
     });
-    await this.sessionService.submitMessageStreaming({
+
+    const messageInput: SubmitMessageStreamingInput = {
       sessionId: session.id,
       content: messageContent,
       role: 'user',
       onStreamEvent: () => {},
-    });
+    };
+    if (agentId !== undefined) {
+      messageInput.agentId = agentId;
+    }
+    await this.sessionService.submitMessageStreaming(messageInput);
 
     return { ok: true, data: { sessionId: session.id } };
   }
