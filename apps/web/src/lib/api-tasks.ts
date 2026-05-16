@@ -425,6 +425,7 @@ export async function getSubtaskSession(
 
 /**
  * Plan a task (decompose into subtasks using AI)
+ * Can be called again to re-plan even after initial planning
  */
 export async function planTask(
   taskId: string,
@@ -433,4 +434,14 @@ export async function planTask(
     method: 'POST',
   });
   return response.json();
+}
+
+/**
+ * Re-plan a task - calls planTask again to regenerate subtasks
+ * Useful when task requirements have changed or initial plan was inadequate
+ */
+export async function replanTask(
+  taskId: string,
+): Promise<ApiResult<{ subtasks: Subtask[] }>> {
+  return planTask(taskId);
 }

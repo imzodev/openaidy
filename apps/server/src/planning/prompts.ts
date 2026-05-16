@@ -64,7 +64,7 @@ When assigning agents to subtasks, consider:
  */
 export function buildPlanningPrompt(
   task: Task,
-  maxSubtasks: number,
+  maxSubtasks: number = 10,
   agentContext?: string,
 ): string {
   let basePrompt = `Please analyze the following task and break it down into subtasks and assign the best agent for each.

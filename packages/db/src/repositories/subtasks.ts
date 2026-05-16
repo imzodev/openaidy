@@ -189,6 +189,17 @@ export class SubtasksRepository {
   }
 
   /**
+   * Delete all subtasks for a task
+   */
+  async deleteByTask(taskId: string): Promise<schema.Subtask[]> {
+    const results = await this.db
+      .delete(schema.subtasks)
+      .where(eq(schema.subtasks.taskId, taskId))
+      .returning();
+    return results;
+  }
+
+  /**
    * Delete a subtask
    */
   async delete(id: string): Promise<schema.Subtask | null> {

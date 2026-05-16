@@ -14,6 +14,7 @@ import {
   listSubtasks,
   getTaskProgress,
   assignAgents,
+  replanTask,
 } from '../../lib/api-tasks';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
@@ -88,6 +89,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [editTitle, setEditTitle] = createSignal('');
   const [editDescription, setEditDescription] = createSignal('');
   const [isDeleting, setIsDeleting] = createSignal(false);
+  const [isReplanning, setIsReplanning] = createSignal(false);
 
   // Load task data when taskId changes
   createEffect(() => {
@@ -198,6 +200,29 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
     }
   }
 
+  /**
+   * Handle re-plan task
+   */
+  async function handleReplan() {
+    if (!confirm('This will regenerate subtasks for this task. Continue?'))
+      return;
+
+    setIsReplanning(true);
+    try {
+      const result = await replanTask(props.taskId);
+      if (result.ok) {
+        await loadTaskData();
+        props.onTaskUpdated();
+      } else {
+        setError(result.error.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-plan task');
+    } finally {
+      setIsReplanning(false);
+    }
+  }
+
   return (
     <div class="task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       {/* Header */}
@@ -278,6 +303,14 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
               <span class="px-2 py-1 text-xs rounded bg-purple-100 text-purple-600">
                 Planning enabled
               </span>
+              <button
+                type="button"
+                class="ml-auto px-3 py-1 text-xs rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+                onClick={handleReplan}
+                disabled={isReplanning()}
+              >
+                {isReplanning() ? 'Re-planning...' : 'Re-plan'}
+              </button>
             </Show>
           </div>
 

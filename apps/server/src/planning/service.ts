@@ -174,6 +174,8 @@ export class PlanningService {
       );
 
       // Create subtasks in database
+      // First delete existing subtasks if re-planning
+      await this.subtasksRepo.deleteByTask(taskId);
       await this.createSubtasks(taskId, subtasks);
 
       // After creating subtasks with assigned agents, also assign those agents to the parent task
@@ -194,6 +196,8 @@ export class PlanningService {
             '[PlanningService] Assigning agents to task:',
             Array.from(agentAssignments.entries()),
           );
+          // Remove existing agents first to avoid UNIQUE constraint conflicts on re-plan
+          await this.taskAgentsRepo.removeAllFromTask(taskId);
           const assignments = Array.from(agentAssignments.entries()).map(
             ([agentId, role]) => ({
               agentId,

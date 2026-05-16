@@ -78,6 +78,7 @@ const makeSubtasksRepo = () => ({
     description: 'Test description',
     orderIndex: 0,
   } as MockSubtask),
+  deleteByTask: vi.fn().mockResolvedValue([]),
 });
 
 describe('PlanningService', () => {
@@ -537,6 +538,111 @@ describe('PlanningService', () => {
       expect(prompt).toContain('"moderate"');
       expect(prompt).toContain('"complex"');
       expect(prompt).toContain('maxSubtasks');
+    });
+  });
+
+  describe('re-planning', () => {
+    it('deletes existing subtasks before creating new ones on re-plan', async () => {
+      // Reset all mocks to ensure clean state
+      vi.clearAllMocks();
+
+      mockSubtasksRepo.deleteByTask = vi.fn().mockResolvedValue([]);
+
+      // Each planTask makes 2 invoke calls: assessComplexity + planning
+      // First plan
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"simple","maxSubtasks":2}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: JSON.stringify([
+            { title: 'Subtask 1', description: 'First', dependencies: [] },
+            { title: 'Subtask 2', description: 'Second', dependencies: [0] },
+          ]),
+        });
+
+      // First plan
+      const firstResult = await service.planTask('task-1');
+      expect(firstResult.ok).toBe(true);
+      expect(mockSubtasksRepo.create).toHaveBeenCalledTimes(2);
+
+      // Reset mocks for second plan
+      mockSubtasksRepo.create.mockClear();
+      mockSubtasksRepo.deleteByTask.mockClear();
+      mockProviders.invocation.invoke.mockClear();
+
+      // Second plan (re-plan): complexity assessment + actual planning with new subtasks
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"simple","maxSubtasks":2}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: JSON.stringify([
+            { title: 'New Subtask 1', description: 'First', dependencies: [] },
+            {
+              title: 'New Subtask 2',
+              description: 'Second',
+              dependencies: [0],
+            },
+          ]),
+        });
+
+      // Second plan (re-plan)
+      const secondResult = await service.planTask('task-1');
+      expect(secondResult.ok).toBe(true);
+      // deleteByTask should have been called before creating new subtasks
+      expect(mockSubtasksRepo.deleteByTask).toHaveBeenCalledWith('task-1');
+      expect(mockSubtasksRepo.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears existing agent assignments before re-assigning on re-plan', async () => {
+      const mockTaskAgentsRepo = {
+        removeAllFromTask: vi.fn().mockResolvedValue([]),
+        assignMultiple: vi.fn().mockResolvedValue([]),
+      };
+
+      const svc = new PlanningService({
+        providers: mockProviders as unknown as ProviderServices,
+        tasksRepo: mockTasksRepo as unknown as TasksRepository,
+        subtasksRepo: mockSubtasksRepo as unknown as SubtasksRepository,
+        taskAgentsRepo: mockTaskAgentsRepo as never,
+      });
+
+      // Set up invoke to return subtasks with assigned agents
+      mockProviders.invocation.invoke
+        .mockResolvedValueOnce({
+          ok: true,
+          value: { content: '{"complexity":"simple","maxSubtasks":2}' },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: JSON.stringify([
+            {
+              title: 'Subtask 1',
+              description: 'First',
+              assignedAgentId: 'agent-1',
+              dependencies: [],
+            },
+            {
+              title: 'Subtask 2',
+              description: 'Second',
+              assignedAgentId: 'agent-2',
+              dependencies: [0],
+            },
+          ]),
+        });
+
+      await svc.planTask('task-1');
+
+      // On re-plan, removeAllFromTask should be called before assignMultiple
+      expect(mockTaskAgentsRepo.removeAllFromTask).toHaveBeenCalledWith(
+        'task-1',
+      );
+      expect(mockTaskAgentsRepo.assignMultiple).toHaveBeenCalled();
     });
   });
 });
