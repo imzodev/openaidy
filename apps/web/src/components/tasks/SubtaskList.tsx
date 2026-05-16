@@ -5,7 +5,7 @@
  */
 
 import { Show, For } from 'solid-js';
-import { MessageSquare, CheckCircle, RotateCcw } from 'lucide-solid';
+import { CheckCircle, RotateCcw, ExternalLink } from 'lucide-solid';
 import type { Subtask } from '../../lib/api-tasks';
 import type { Agent } from './AgentSelector';
 
@@ -16,7 +16,6 @@ export type SubtaskListProps = {
   subtasks: Subtask[];
   agents?: Agent[];
   onSubtaskUpdate?: () => void;
-  onOpenSession?: (sessionId: string) => void;
   onCompleteSubtask?: (subtaskId: string) => void;
   onRetrySubtask?: (subtaskId: string) => void;
 };
@@ -108,17 +107,20 @@ export function SubtaskList(props: SubtaskListProps) {
                 </Show>
               </div>
 
-              <Show when={subtask.sessionId && props.onOpenSession}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    subtask.sessionId && props.onOpenSession!(subtask.sessionId)
-                  }
-                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
-                  title="Open session"
+              <Show when={subtask.sessionId}>
+                <a
+                  href={`/chat?sessionId=${subtask.sessionId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors inline-flex"
+                  title="Open session in new tab"
+                  onClick={(e) => {
+                    // Ensure the link opens properly even if there are event handling issues
+                    e.stopPropagation();
+                  }}
                 >
-                  <MessageSquare class="w-4 h-4" />
-                </button>
+                  <ExternalLink class="w-4 h-4" />
+                </a>
               </Show>
 
               {/* Action buttons for stuck subtasks */}
