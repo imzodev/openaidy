@@ -1,4 +1,4 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/tasks';
@@ -65,7 +65,7 @@ export class SubtasksRepository {
       .select()
       .from(schema.subtasks)
       .where(eq(schema.subtasks.taskId, taskId))
-      .orderBy(desc(schema.subtasks.orderIndex));
+      .orderBy(asc(schema.subtasks.orderIndex));
   }
 
   /**
@@ -84,7 +84,7 @@ export class SubtasksRepository {
           eq(schema.subtasks.status, status),
         ),
       )
-      .orderBy(desc(schema.subtasks.orderIndex));
+      .orderBy(asc(schema.subtasks.orderIndex));
   }
 
   /**
