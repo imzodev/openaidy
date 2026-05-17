@@ -153,17 +153,52 @@ Your response will be automatically evaluated. Work is judged complete only if t
   }
 
   if (skillIds?.length && skillRegistry) {
-    const bodies = skillRegistry
-      .getSkillsForAgent(skillIds)
-      .map((s) => sanitizeSkillBody(s.body))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-
-    // Also load agent workspace skills (override global skills with same ID)
+    // Load agent workspace skills to get folder names
     const agentWorkspaceSkills = loadAgentWorkspaceSkills(
       agentId,
       workspaceBaseDir,
     );
+
+    // Build list of all available skill IDs (global + workspace)
+    const globalSkills = skillRegistry.getSkillsForAgent(skillIds);
+    const skillList: Array<{ id: string; name: string; description: string }> =
+      [];
+
+    for (const skill of globalSkills) {
+      skillList.push({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+      });
+    }
+
+    // Add workspace skills that aren't already in the list
+    for (const id of skillIds) {
+      const wsSkill = agentWorkspaceSkills.get(id);
+      if (wsSkill && !skillList.some((s) => s.id === id)) {
+        skillList.push({
+          id: wsSkill.id,
+          name: wsSkill.name,
+          description: wsSkill.description,
+        });
+      }
+    }
+
+    // Add [SKILLS_AVAILABLE] section with folder names
+    if (skillList.length > 0) {
+      const skillEntries = skillList
+        .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
+        .join('\n');
+
+      prompt += `\n\n[SKILLS_AVAILABLE]\nYou have access to the following skills in your workspace:\n${skillEntries}\n\nTo use a skill, read its files with workspace_read from the skills/{skill-id}/ directory. For example: workspace_read({ path: "skills/${skillList[0]?.id ?? 'example'}/SKILL.md" })\nReading a skill loads its guidelines into your context for that task.\n[/SKILLS_AVAILABLE]`;
+    }
+
+    // Also inject full skill content as context
+    const bodies = globalSkills
+      .map((s) => sanitizeSkillBody(s.body))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+
     const workspaceSkillBodies = skillIds
       .map((id) => agentWorkspaceSkills.get(id))
       .filter((s): s is NonNullable<typeof s> => s !== undefined)

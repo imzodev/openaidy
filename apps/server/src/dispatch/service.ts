@@ -710,6 +710,14 @@ export class DispatchService {
       personalityService: this.personality,
       skillRegistry: this.skills,
     });
+    console.log('---------------------------');
+    console.log('---------------------------');
+    console.log('---------------------------');
+    console.log('System prompt DISPATCH SERVICE:');
+    console.log(fullSystemPrompt);
+    console.log('---------------------------');
+    console.log('---------------------------');
+    console.log('---------------------------');
 
     // Add system prompt first
     messages.push({

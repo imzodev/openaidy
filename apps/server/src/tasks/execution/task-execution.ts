@@ -599,6 +599,8 @@ export class TaskExecution {
     const agentId = taskAgents[0]?.agentId;
 
     const toolCallsMade: string[] = [];
+    const consultedSkills = new Set<string>();
+
     if (sessionMessages && sessionMessages.length > 0) {
       for (const m of sessionMessages) {
         if (m.role === 'assistant') {
@@ -612,9 +614,18 @@ export class TaskExecution {
               toolCallsMade.push(`${tc.name}(${tc.arguments})`);
             }
           }
+          // Extract consulted skills from metadata
+          const skills = metadata?.consultedSkills as string[] | undefined;
+          if (skills && skills.length > 0) {
+            for (const skillId of skills) {
+              consultedSkills.add(skillId);
+            }
+          }
         }
       }
     }
+
+    const consultedSkillsList = Array.from(consultedSkills);
 
     const verificationPrompt = [
       `Evaluate whether this subtask was successfully completed.`,
@@ -629,6 +640,15 @@ export class TaskExecution {
             ``,
           ]
         : [`**No tools were invoked**`, ``]),
+      ...(consultedSkillsList.length > 0
+        ? [
+            `**Skills consulted during execution**: ${consultedSkillsList.join(', ')}`,
+            ``,
+          ]
+        : [
+            `**No skills were consulted** — the agent did not read any skill files from the skills/ directory.`,
+            ``,
+          ]),
       `**Agent's final response**:`,
       subtaskResult,
       ``,

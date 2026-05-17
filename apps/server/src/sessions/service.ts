@@ -870,6 +870,23 @@ export class SessionMessageService {
             arguments: JSON.stringify(tc.arguments),
           }));
 
+          // Extract consulted skills from workspace_read/workspace_list calls
+          const consultedSkills: string[] = [];
+          for (const tc of mappedToolCalls) {
+            if (tc.name === 'workspace_read' || tc.name === 'workspace_list') {
+              try {
+                const args = JSON.parse(tc.arguments) as { path?: string };
+                const path = args.path ?? '';
+                const match = path.match(/skills\/([^/]+)/);
+                if (match && match[1]) {
+                  consultedSkills.push(match[1]);
+                }
+              } catch {
+                // Invalid JSON arguments, skip
+              }
+            }
+          }
+
           // Persist the assistant tool-call turn so history can be fully
           // reconstructed on subsequent requests in this session.
           await this.appendMessage({
@@ -877,7 +894,10 @@ export class SessionMessageService {
             runId: run.id,
             role: 'assistant',
             content: accumulatedContent || '',
-            metadata: { toolCalls: mappedToolCalls },
+            metadata: {
+              toolCalls: mappedToolCalls,
+              ...(consultedSkills.length > 0 && { consultedSkills }),
+            },
           });
 
           // Append to in-process loop history with toolCalls for this round.
