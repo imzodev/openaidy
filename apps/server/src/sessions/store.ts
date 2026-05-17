@@ -15,6 +15,7 @@ export type { SessionType, MessageRole, RunStatus, FinishReason };
 export type SessionMessageRecord = {
   id: string;
   sessionId: string;
+  runId?: string;
   role: MessageRole;
   content: string;
   toolCallId?: string;
@@ -97,6 +98,7 @@ export function updateSessionTitleRecord(
 // Message operations
 export function appendMessageRecord(input: {
   sessionId: string;
+  runId?: string;
   role: MessageRole;
   content: string;
   toolCallId?: string;
@@ -117,6 +119,7 @@ export function appendMessageRecord(input: {
     content: input.content,
     sequence: nextSequence,
     createdAt: new Date().toISOString(),
+    ...(input.runId !== undefined && { runId: input.runId }),
     ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
     ...(input.metadata !== undefined && { metadata: input.metadata }),
   };

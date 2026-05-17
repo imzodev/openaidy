@@ -59,6 +59,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS session_messages (
       id TEXT PRIMARY KEY NOT NULL,
       session_id TEXT NOT NULL,
+      run_id TEXT,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       tool_call_id TEXT,
@@ -330,6 +331,34 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   );
   if (!hasTaskSessionIdIdx) {
     sqlite.exec(`CREATE INDEX tasks_session_id_idx ON tasks(session_id)`);
+  }
+
+  // Migration: Add run_id to session_messages if not exists
+  // Note: SQLite doesn't support adding foreign keys via ALTER TABLE,
+  // so we add the column without the constraint (enforced at app level)
+  const sessionMessagesInfo = sqlite.pragma(
+    'table_info(session_messages)',
+  ) as Array<{
+    name: string;
+  }>;
+  const hasRunId = sessionMessagesInfo.some((col) => col.name === 'run_id');
+  if (!hasRunId) {
+    sqlite.exec(`ALTER TABLE session_messages ADD COLUMN run_id TEXT`);
+  }
+
+  // Migration: Create session_messages.run_id index if not exists
+  const sessionMessagesIndices = sqlite.pragma(
+    'index_list(session_messages)',
+  ) as Array<{
+    name: string;
+  }>;
+  const hasRunIdIdx = sessionMessagesIndices.some(
+    (idx) => idx.name === 'session_messages_run_id_idx',
+  );
+  if (!hasRunIdIdx) {
+    sqlite.exec(
+      `CREATE INDEX session_messages_run_id_idx ON session_messages(run_id)`,
+    );
   }
 }
 

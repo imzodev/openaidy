@@ -638,13 +638,13 @@ export class DispatchService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId,
       role: 'assistant',
       content: response.content,
       metadata: {
         agentId: config.agentId,
         providerId: response.providerId,
         model: response.model,
-        runId,
       },
     });
 
@@ -763,6 +763,7 @@ export class DispatchService {
   // Message operations
   private async appendMessage(input: {
     sessionId: string;
+    runId?: string;
     role: 'user' | 'system' | 'assistant' | 'tool';
     content: string;
     toolCallId?: string;
@@ -771,6 +772,7 @@ export class DispatchService {
     if (this.messagesRepo) {
       const appendInput: {
         sessionId: string;
+        runId?: string;
         role: DbMessageRole;
         content: string;
         toolCallId?: string;
@@ -780,6 +782,9 @@ export class DispatchService {
         role: input.role as DbMessageRole,
         content: input.content,
       };
+      if (input.runId !== undefined) {
+        appendInput.runId = input.runId;
+      }
       if (input.toolCallId !== undefined) {
         appendInput.toolCallId = input.toolCallId;
       }
@@ -876,13 +881,13 @@ export class DispatchService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId,
       role: 'assistant',
       content: response.content,
       metadata: {
         agentId: config.agentId,
         providerId: response.providerId,
         model: response.model,
-        runId,
       },
     });
 

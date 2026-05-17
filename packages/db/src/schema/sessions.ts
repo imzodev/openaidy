@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgEnum,
+  index,
 } from 'drizzle-orm/pg-core';
 import {
   SESSION_TYPE_VALUES,
@@ -80,23 +81,33 @@ export const messageRoleEnum = pgEnum('message_role', MESSAGE_ROLE_VALUES);
  * Immutable transcript entries for sessions.
  * Uses append-only semantics with deterministic ordering via sequence number.
  */
-export const sessionMessages = pgTable('session_messages', {
-  id: text('id').primaryKey(),
-  sessionId: text('session_id')
-    .notNull()
-    .references(() => sessions.id, { onDelete: 'cascade' }),
-  role: messageRoleEnum('role').notNull(),
-  content: text('content').notNull(),
-  // For tool messages, identifies which tool call this responds to
-  toolCallId: text('tool_call_id'),
-  // Deterministic ordering within a session
-  sequence: integer('sequence').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  // Optional metadata (e.g., token counts, model info)
-  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
-});
+export const sessionMessages = pgTable(
+  'session_messages',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    // The run that generated this message (null for manually added messages)
+    runId: text('run_id').references(() => sessionRuns.id, {
+      onDelete: 'set null',
+    }),
+    role: messageRoleEnum('role').notNull(),
+    content: text('content').notNull(),
+    // For tool messages, identifies which tool call this responds to
+    toolCallId: text('tool_call_id'),
+    // Deterministic ordering within a session
+    sequence: integer('sequence').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Optional metadata (e.g., token counts, model info)
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  },
+  (table) => ({
+    runIdIdx: index('session_messages_run_id_idx').on(table.runId),
+  }),
+);
 
 /**
  * Run status enum

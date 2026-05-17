@@ -874,6 +874,7 @@ export class SessionMessageService {
           // reconstructed on subsequent requests in this session.
           await this.appendMessage({
             sessionId: input.sessionId,
+            runId: run.id,
             role: 'assistant',
             content: accumulatedContent || '',
             metadata: { toolCalls: mappedToolCalls },
@@ -971,6 +972,7 @@ export class SessionMessageService {
             // Persist tool result message
             await this.appendMessage({
               sessionId: input.sessionId,
+              runId: run.id,
               role: 'tool',
               content: toolContent,
               toolCallId: tc.id,
@@ -994,12 +996,12 @@ export class SessionMessageService {
       // 7. Persist assistant message with accumulated content
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
+        runId: run.id,
         role: 'assistant',
         content: accumulatedContent,
         metadata: {
           providerId: finalProviderId,
           model: finalModelId,
-          runId: run.id,
         },
       });
 
@@ -1070,6 +1072,7 @@ export class SessionMessageService {
    */
   private async appendMessage(input: {
     sessionId: string;
+    runId?: string;
     role: 'user' | 'system' | 'assistant' | 'tool';
     content: string;
     toolCallId?: string;
@@ -1078,6 +1081,7 @@ export class SessionMessageService {
     if (this.messagesRepo) {
       const appendInput: {
         sessionId: string;
+        runId?: string;
         role: DbMessageRole;
         content: string;
         toolCallId?: string;
@@ -1087,6 +1091,9 @@ export class SessionMessageService {
         role: input.role as DbMessageRole,
         content: input.content,
       };
+      if (input.runId !== undefined) {
+        appendInput.runId = input.runId;
+      }
       if (input.toolCallId !== undefined) {
         appendInput.toolCallId = input.toolCallId;
       }
@@ -1251,12 +1258,12 @@ export class SessionMessageService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId: run.id,
       role: 'assistant',
       content: response.content,
       metadata: {
         providerId: response.providerId,
         model: response.model,
-        runId: run.id,
       },
     });
 
