@@ -288,6 +288,13 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
 /**
  * Run migrations for SQLite schema updates
  * Handles adding new columns to existing tables
+ *
+ * TODO: Refactor to a proper migration system
+ * - Use a migrations table to track applied migrations
+ * - Support reversible migrations (up/down)
+ * - Use timestamp/version-based migration files
+ * - Handle complex schema changes (table renames, column type changes)
+ * - Consider using a library like better-sqlite3-migrations or node-sqlite-migrate
  */
 function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   // Migration: Add retry_count to subtasks if not exists
