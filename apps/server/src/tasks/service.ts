@@ -18,7 +18,9 @@ import {
   type PlanningStatus,
   type SubtaskStatus,
   type AgentRole,
+  type SessionMessage,
 } from '@openaidy/db';
+import { type SessionMessageRecord } from '../sessions/store';
 
 /**
  * TaskService options
@@ -252,7 +254,7 @@ export class TaskService {
       }
 
       if (event.type === 'run.completed') {
-        // Get the last assistant message to analyze
+        // Get all messages from the session to build complete context
         const sessionMessages = await this.sessionService?.listMessages(
           event.sessionId,
         );
@@ -296,6 +298,7 @@ export class TaskService {
           const verified = await this.submitVerificationToTaskSession(
             linkedSubtask,
             result,
+            sessionMessages,
           );
           if (!verified) {
             // No task session available - fall back to auto-complete
@@ -1331,6 +1334,7 @@ export class TaskService {
   private async submitVerificationToTaskSession(
     subtask: Subtask,
     subtaskResult: string,
+    sessionMessages?: (SessionMessage | SessionMessageRecord)[],
   ): Promise<boolean> {
     if (!this.sessionService) return false;
 
@@ -1346,19 +1350,57 @@ export class TaskService {
     const taskAgents = await this.taskAgentsRepo.listByTask(subtask.taskId);
     const agentId = taskAgents[0]?.agentId;
 
+    // Extract just the tool calls made from assistant messages
+    const toolCallsMade: string[] = [];
+    if (sessionMessages && sessionMessages.length > 0) {
+      for (const m of sessionMessages) {
+        if (m.role === 'assistant') {
+          const metadata = (m as { metadata?: Record<string, unknown> })
+            .metadata;
+          const toolCalls = metadata?.toolCalls as
+            | Array<{
+                name: string;
+                arguments: string;
+              }>
+            | undefined;
+          if (toolCalls && toolCalls.length > 0) {
+            for (const tc of toolCalls) {
+              toolCallsMade.push(`${tc.name}(${tc.arguments})`);
+            }
+          }
+        }
+      }
+    }
+
     const verificationPrompt = [
       `Evaluate whether this subtask was successfully completed.`,
       ``,
       `**Subtask**: ${subtask.title}`,
       `**Objective**: ${subtask.description}`,
       ``,
-      `**Agent's last response**:`,
+      ...(toolCallsMade.length > 0
+        ? [
+            `**Tools invoked during execution** (${toolCallsMade.length} calls):`,
+            ...toolCallsMade.map((tc) => `- ${tc}`),
+            ``,
+          ]
+        : [`**No tools were invoked**`, ``]),
+      `**Agent's final response**:`,
       subtaskResult,
       ``,
-      `Did the agent successfully complete the subtask objective? Reply with exactly COMPLETED if the work is done, or INCOMPLETE if the agent failed to finish, encountered an unresolved error, or the response does not show that actual work was performed.`,
+      `Reply with ONLY a JSON object in this exact format (no markdown, no extra text):`,
+      `{"verdict": "COMPLETED|INCOMPLETE", "reason": "brief explanation of why"}`,
+      ``,
+      `Use COMPLETED only if the work was actually done and tool usage confirms it. Use INCOMPLETE if the agent failed, encountered errors, or no actual work was performed.`,
     ].join('\n');
 
+    console.log('------------------------------');
+    console.log('------------------------------');
+    console.log('------------------------------');
     console.log('[TaskService] Verification prompt', verificationPrompt);
+    console.log('------------------------------');
+    console.log('------------------------------');
+    console.log('------------------------------');
 
     const messageInput: SubmitMessageStreamingInput = {
       sessionId: task.sessionId,
@@ -1405,22 +1447,31 @@ export class TaskService {
     const rawContent = (lastMsg as { content?: string })?.content ?? '';
     const content = stripThinking(rawContent);
 
-    const regex = /\bCOMPLETED\b/i;
+    // Parse JSON response for structured verdict
+    let isComplete = false;
+    let parsedVerdict: { verdict?: string; reason?: string } = {};
 
-    const isComplete = regex.test(content);
-
-    if (isComplete) {
-      const index = content.search(regex);
-
-      const context = content.slice(
-        Math.max(0, index - 40),
-        Math.min(content.length, index + 40),
-      );
-      console.log('=== VERIFICATION RESULT ===');
-      console.log('Found at:', index);
-      console.log('Context:', context);
-      console.log('=== END VERIFICATION RESULT ===');
+    try {
+      // Try to find JSON object in the response
+      const jsonMatch = content.match(/\{[^}]+\}/);
+      if (jsonMatch) {
+        parsedVerdict = JSON.parse(jsonMatch[0]);
+        isComplete = parsedVerdict.verdict?.toUpperCase() === 'COMPLETED';
+      } else {
+        // Fallback: check for explicit keywords if JSON parsing fails
+        isComplete =
+          /\bCOMPLETED\b/i.test(content) && !/\bINCOMPLETE\b/i.test(content);
+      }
+    } catch (_e) {
+      // JSON parsing failed - fallback to keyword detection
+      isComplete =
+        /\bCOMPLETED\b/i.test(content) && !/\bINCOMPLETE\b/i.test(content);
     }
+
+    console.log('=== VERIFICATION PARSING ===');
+    console.log('Parsed verdict:', parsedVerdict);
+    console.log('Final verdict:', isComplete ? 'COMPLETED' : 'INCOMPLETE');
+    console.log('=== END VERIFICATION PARSING ===');
 
     console.log('[TaskService] Verification result received', {
       subtaskId,
