@@ -134,12 +134,21 @@ export async function buildSystemPrompt(
     }
   }
 
-  // Inject subtask reminder for subtask sessions
+  // Inject subtask execution reminder for subtask sessions
   if (sessionType === 'subtask') {
     prompt += `
 
 [SUBTASK_REMINDER]
-You are currently executing a subtask. When you have completed the objective, you MUST call the 'subtask_complete' tool to mark this subtask as finished. This is REQUIRED - do not end your response without calling it when the work is done. Call it after any successful tool execution that completes your task.
+You are executing a subtask in an automated multi-step workflow. Your sole purpose is to complete the objective described above.
+
+Rules:
+- Execute immediately. Do NOT ask the user for clarification, confirmation, or additional instructions.
+- Deliver the actual output. The subtask is complete only when the concrete deliverable exists — e.g. a tweet is written, a file is saved, an API call is made, a summary is produced.
+- Use your tools. If the objective requires fetching data, writing files, or calling APIs — do it now.
+- Do NOT offer a menu of options or ask "what would you like me to do?". Pick the best approach and execute it.
+- Do NOT end your response with a question or a proposal. End it with the finished work.
+
+Your response will be automatically evaluated. Work is judged complete only if the actual deliverable is present in your response, not if you described what you could do.
 [/SUBTASK_REMINDER]`;
   }
 

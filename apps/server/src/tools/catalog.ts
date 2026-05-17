@@ -160,20 +160,6 @@ export const addonCreateMeta: ToolMeta = {
     'The addon appears in the sidebar immediately — no restart needed.',
 };
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-
-export const subtaskCompleteMeta: ToolMeta = {
-  name: 'subtask_complete',
-  category: 'Tasks',
-  description:
-    'REQUIRED: Mark the current subtask as successfully completed. ' +
-    'ALWAYS call this tool when you finish the subtask objective — this is MANDATORY, not optional. ' +
-    'Example: If asked to "post a tweet about AI", after calling twitter_post you MUST call subtask_complete to finish. ' +
-    'The subtask result will be recorded from your previous messages. ' +
-    'Do not end your response without calling this tool when the objective is done. ' +
-    'Do not call this if you encountered errors and have not resolved them.',
-};
-
 // ── UI ────────────────────────────────────────────────────────────────────────
 
 export const presentChoicesMeta: ToolMeta = {
@@ -205,7 +191,6 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   execRunMeta,
   skillCreateMeta,
   webFetchMeta,
-  subtaskCompleteMeta,
   addonCreateMeta,
   presentChoicesMeta,
 ];

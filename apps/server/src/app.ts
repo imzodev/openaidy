@@ -173,7 +173,7 @@ export async function buildApp() {
   //   tool registry → TaskService → SessionMessageService → tool registry
   // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in getters
   let sessionService: SessionMessageService | undefined;
-   
+
   let taskService: ReturnType<typeof createTaskService> | undefined;
 
   const builtinToolRegistry = createBuiltinToolRegistry({
@@ -190,7 +190,6 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
-    tasks: { getTaskService: () => taskService! },
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)

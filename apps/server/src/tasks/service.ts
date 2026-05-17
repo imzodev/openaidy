@@ -5,6 +5,7 @@ import type { PlanningService } from '../planning';
 import type { RunEventEmitter } from '../dispatch/events';
 import type { SessionType } from '@openaidy/shared-types';
 import { createLogger } from '../lib/logger';
+import { stripThinking } from '../lib/message.js';
 import {
   type TasksRepository,
   type SubtasksRepository,
@@ -113,6 +114,10 @@ export class TaskService {
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly logger = createLogger('TaskService');
   private unsubscribeRunEvents: (() => void) | undefined;
+  private readonly pendingVerifications = new Map<
+    string,
+    { subtaskId: string; result: string }
+  >();
 
   constructor(options: TaskServiceOptions) {
     this.tasksRepo = options.tasksRepo;
@@ -149,6 +154,26 @@ export class TaskService {
   ): Promise<void> {
     // Only care about completed or failed runs
     if (event.type !== 'run.completed' && event.type !== 'run.failed') {
+      return;
+    }
+
+    // Intercept verification runs before any subtask-finder logic
+    const verification = this.pendingVerifications.get(event.sessionId);
+    if (verification) {
+      this.pendingVerifications.delete(event.sessionId);
+      if (event.type === 'run.completed') {
+        await this.handleVerificationResult(
+          verification.subtaskId,
+          verification.result,
+          event.sessionId,
+        );
+      } else {
+        this.logger.warn(
+          'Verification run failed, auto-completing subtask as fallback',
+          { subtaskId: verification.subtaskId },
+        );
+        await this.completeSubtask(verification.subtaskId, verification.result);
+      }
       return;
     }
 
@@ -223,6 +248,18 @@ export class TaskService {
         currentStatus: linkedSubtask.status,
       });
 
+      // Skip if subtask already reached a terminal state (e.g. from a previous verification)
+      if (
+        linkedSubtask.status === 'completed' ||
+        linkedSubtask.status === 'failed'
+      ) {
+        this.logger.debug(
+          'Subtask already in terminal state, skipping run event handling',
+          { subtaskId: linkedSubtask.id, status: linkedSubtask.status },
+        );
+        return;
+      }
+
       if (event.type === 'run.completed') {
         // Get the last assistant message to analyze
         const sessionMessages = await this.sessionService?.listMessages(
@@ -232,10 +269,18 @@ export class TaskService {
           ?.slice()
           .reverse()
           .find((m) => m.role === 'assistant');
-        const result = lastAssistantMessage?.content ?? 'Completed';
+        const result = stripThinking(
+          lastAssistantMessage?.content ?? 'Completed',
+        );
 
-        // Check if the agent indicated intention to retry/fix but didn't execute
-        const pendingIntent = this.detectPendingRetryIntent(result);
+        console.log(
+          '[TaskService] Subtask run completed, sending to verification',
+          {
+            subtaskId: linkedSubtask.id,
+            subtaskTitle: linkedSubtask.title,
+            lastMessagePreview: result.substring(0, 300),
+          },
+        );
 
         // Increment retry count
         const updatedSubtask = await this.subtasksRepo.incrementRetryCount(
@@ -244,27 +289,7 @@ export class TaskService {
         const retryCount = updatedSubtask?.retryCount ?? 0;
         const MAX_RETRIES = 5;
 
-        if (pendingIntent && retryCount < MAX_RETRIES) {
-          // Agent said it would fix/retry but didn't - trigger an actual retry
-          this.logger.info(
-            'Subtask run completed with pending retry intent, triggering retry',
-            {
-              subtaskId: linkedSubtask.id,
-              sessionId: event.sessionId,
-              retryCount,
-              lastMessage: result.substring(0, 100),
-            },
-          );
-
-          // Trigger the retry by sending a message to the existing session
-          const retryResult = await this.triggerSubtaskRetry(linkedSubtask.id);
-          if (!retryResult.ok) {
-            this.logger.error('Failed to trigger retry for subtask', {
-              subtaskId: linkedSubtask.id,
-              error: retryResult.error,
-            });
-          }
-        } else if (retryCount >= MAX_RETRIES) {
+        if (retryCount >= MAX_RETRIES) {
           // Max retries exceeded - mark as failed
           this.logger.warn('Max retries exceeded, marking subtask as failed', {
             subtaskId: linkedSubtask.id,
@@ -276,29 +301,18 @@ export class TaskService {
             `Failed after ${MAX_RETRIES} attempts. Last message: ${result.substring(0, 200)}`,
           );
         } else {
-          // No pending intent or within retry limit - auto-complete
-          this.logger.info(
-            'Auto-completing subtask after session run completed',
-            {
-              subtaskId: linkedSubtask.id,
-              sessionId: event.sessionId,
-              retryCount,
-            },
-          );
-          const completeResult = await this.completeSubtask(
-            linkedSubtask.id,
+          // No pending intent - ask the default agent to verify completion
+          const verified = await this.submitVerificationToTaskSession(
+            linkedSubtask,
             result,
           );
-          if (completeResult.ok) {
-            this.logger.info('Subtask auto-completed successfully', {
-              subtaskId: linkedSubtask.id,
-              taskId: linkedSubtask.taskId,
-            });
-          } else {
-            this.logger.error('Failed to auto-complete subtask', {
-              subtaskId: linkedSubtask.id,
-              error: completeResult.error,
-            });
+          if (!verified) {
+            // No task session available - fall back to auto-complete
+            this.logger.info(
+              'No task session for verification, auto-completing subtask',
+              { subtaskId: linkedSubtask.id, sessionId: event.sessionId },
+            );
+            await this.completeSubtask(linkedSubtask.id, result);
           }
         }
       } else if (event.type === 'run.failed') {
@@ -1097,7 +1111,7 @@ export class TaskService {
     const messageInput: SubmitMessageStreamingInput = {
       sessionId,
       content:
-        'Please complete this subtask. If you have already finished the work, call the subtask_complete tool to mark it as done.',
+        'Please continue and complete this subtask. Focus on delivering the actual output requested. Do not ask what to do — execute the task directly.',
       role: 'user',
       onStreamEvent: () => {},
     };
@@ -1323,105 +1337,123 @@ export class TaskService {
   }
 
   /**
-   * Detect if the agent's last message indicates intention to retry/fix but hasn't executed yet.
-   * Returns true if the message suggests pending work.
+   * Submit a verification request to the task session's default agent to
+   * determine if the subtask was genuinely completed.
+   * Returns true if verification was submitted, false if no task session exists.
    */
-  private detectPendingRetryIntent(message: string): boolean {
-    const lowerMessage = message.toLowerCase();
+  private async submitVerificationToTaskSession(
+    subtask: Subtask,
+    subtaskResult: string,
+  ): Promise<boolean> {
+    if (!this.sessionService) return false;
 
-    // Phrases that indicate the message is describing/analyzing the request, NOT intent to retry
-    const negationPatterns = [
-      'the user is asking',
-      'the user wants',
-      'the user needs',
-      'i understand that',
-      'i see that you',
-      'you are asking',
-      'you want me to',
-      'i will create',
-      'i will write',
-      'i will generate',
-      'i will build',
-      'i will design',
-      'i will make',
-      "i'll create",
-      "i'll write",
-      "i'll generate",
-      "i'll build",
-      "i'll design",
-      "i'll make",
-    ];
-
-    // If message is describing what the user wants, it's NOT a retry intent
-    const isDescribingRequest = negationPatterns.some((pattern) =>
-      lowerMessage.includes(pattern),
-    );
-    if (isDescribingRequest) {
+    const task = await this.tasksRepo.findById(subtask.taskId);
+    if (!task?.sessionId) {
+      this.logger.warn('No task session found for subtask verification', {
+        subtaskId: subtask.id,
+        taskId: subtask.taskId,
+      });
       return false;
     }
 
-    // Phrases indicating intent to fix/retry/attempt (after errors or to correct)
-    const pendingPhrases = [
-      'let me fix',
-      'let me try',
-      'let me attempt',
-      'i will fix',
-      'i will try',
-      'i will attempt',
-      "i'll fix",
-      "i'll try",
-      "i'll attempt",
-      'need to fix',
-      'need to try',
-      'need to attempt',
-      'going to fix',
-      'going to try',
-      'going to attempt',
-      'attempt to fix',
-      'attempt to',
-      'try again',
-      'retry',
-      'correct this',
-      'fix this',
-      'try another',
-      'try a different',
-      'let me correct',
-      'i need to fix',
-      'i need to correct',
-    ];
+    const taskAgents = await this.taskAgentsRepo.listByTask(subtask.taskId);
+    const agentId = taskAgents[0]?.agentId;
 
-    // Check for pending intent phrases
-    const hasPendingPhrase = pendingPhrases.some((phrase) =>
-      lowerMessage.includes(phrase),
-    );
+    const verificationPrompt = [
+      `Evaluate whether this subtask was successfully completed.`,
+      ``,
+      `**Subtask**: ${subtask.title}`,
+      `**Objective**: ${subtask.description}`,
+      ``,
+      `**Agent's last response**:`,
+      subtaskResult,
+      ``,
+      `Did the agent successfully complete the subtask objective? Reply with exactly COMPLETED if the work is done, or INCOMPLETE if the agent failed to finish, encountered an unresolved error, or the response does not show that actual work was performed.`,
+    ].join('\n');
 
-    if (!hasPendingPhrase) {
-      return false;
+    console.log('[TaskService] Verification prompt', verificationPrompt);
+
+    const messageInput: SubmitMessageStreamingInput = {
+      sessionId: task.sessionId,
+      content: verificationPrompt,
+      role: 'user',
+      onStreamEvent: () => {},
+    };
+    if (agentId) {
+      messageInput.agentId = agentId;
     }
 
-    // Check for confirmation phrases that suggest completion
-    const completionPhrases = [
-      'successfully',
-      'completed',
-      'done',
-      'finished',
-      'published',
-      'posted',
-      'executed',
-      'ran successfully',
-      'worked',
-      'succeeded',
-      'tweet has been',
-      'has been published',
-      'has been posted',
-    ];
+    this.pendingVerifications.set(task.sessionId, {
+      subtaskId: subtask.id,
+      result: subtaskResult,
+    });
 
-    const hasCompletionPhrase = completionPhrases.some((phrase) =>
-      lowerMessage.includes(phrase),
+    this.logger.info('Submitting subtask verification to task session', {
+      subtaskId: subtask.id,
+      taskId: subtask.taskId,
+      taskSessionId: task.sessionId,
+    });
+
+    await this.sessionService.submitMessageStreaming(messageInput);
+    return true;
+  }
+
+  /**
+   * Handle the result of a verification run from the task session.
+   * Completes the subtask if the agent confirms it is done, otherwise retries.
+   */
+  private async handleVerificationResult(
+    subtaskId: string,
+    originalResult: string,
+    verificationSessionId: string,
+  ): Promise<void> {
+    const messages = await this.sessionService?.listMessages(
+      verificationSessionId,
     );
+    const lastMsg = messages
+      ?.slice()
+      .reverse()
+      .find((m) => (m as { role: string }).role === 'assistant');
+    const rawContent = (lastMsg as { content?: string })?.content ?? '';
+    const content = stripThinking(rawContent);
 
-    // If has pending phrase but no completion phrase, it's likely pending
-    return !hasCompletionPhrase;
+    const regex = /\bCOMPLETED\b/i;
+
+    const isComplete = regex.test(content);
+
+    if (isComplete) {
+      const index = content.search(regex);
+
+      const context = content.slice(
+        Math.max(0, index - 40),
+        Math.min(content.length, index + 40),
+      );
+      console.log('=== VERIFICATION RESULT ===');
+      console.log('Found at:', index);
+      console.log('Context:', context);
+      console.log('=== END VERIFICATION RESULT ===');
+    }
+
+    console.log('[TaskService] Verification result received', {
+      subtaskId,
+      isComplete,
+      verdict: content.substring(0, 300),
+    });
+
+    this.logger.info('Subtask verification result received', {
+      subtaskId,
+      isComplete,
+      verificationSummary: content,
+    });
+
+    if (isComplete) {
+      await this.completeSubtask(subtaskId, originalResult);
+    } else {
+      this.logger.info('Verification says incomplete, triggering retry', {
+        subtaskId,
+      });
+      await this.triggerSubtaskRetry(subtaskId);
+    }
   }
 
   /**
