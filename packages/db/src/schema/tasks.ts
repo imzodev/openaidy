@@ -6,6 +6,7 @@ import {
   boolean,
   pgEnum,
   primaryKey,
+  index,
 } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 import { sessions } from './sessions';
@@ -58,26 +59,32 @@ export const planningStatusEnum = pgEnum('planning_status', [
  * Main entity for the Kanban-style task management system.
  * Tasks can optionally use a planning agent to decompose into subtasks.
  */
-export const tasks = pgTable('tasks', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => nanoid()),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  status: taskStatusEnum('status').notNull().default('backlog'),
-  priority: taskPriorityEnum('priority').notNull().default('medium'),
-  planningEnabled: boolean('planning_enabled').notNull().default(false),
-  planningStatus: planningStatusEnum('planning_status'),
-  sessionId: text('session_id').references(() => sessions.id, {
-    onDelete: 'set null',
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    status: taskStatusEnum('status').notNull().default('backlog'),
+    priority: taskPriorityEnum('priority').notNull().default('medium'),
+    planningEnabled: boolean('planning_enabled').notNull().default(false),
+    planningStatus: planningStatusEnum('planning_status'),
+    sessionId: text('session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    sessionIdIdx: index('tasks_session_id_idx').on(table.sessionId),
   }),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+);
 
 /**
  * Subtask status enum
@@ -101,31 +108,39 @@ export const subtaskStatusEnum = pgEnum('subtask_status', [
  * Subtasks are created by the planning agent or manually.
  * Supports nested subtasks via parentSubtaskId.
  */
-export const subtasks = pgTable('subtasks', {
-  id: text('id')
-    .primaryKey()
-    .$defaultFn(() => nanoid()),
-  taskId: text('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
-  parentSubtaskId: text('parent_subtask_id').notNull(),
-  title: text('title').notNull(),
-  description: text('description').notNull(),
-  status: subtaskStatusEnum('status').notNull().default('pending'),
-  assignedAgentId: text('assigned_agent_id'),
-  sessionId: text('session_id').references(() => sessions.id, {
-    onDelete: 'set null',
+export const subtasks = pgTable(
+  'subtasks',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    parentSubtaskId: text('parent_subtask_id').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull(),
+    status: subtaskStatusEnum('status').notNull().default('pending'),
+    assignedAgentId: text('assigned_agent_id'),
+    sessionId: text('session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    orderIndex: integer('order_index').notNull().default(0),
+    result: text('result'),
+    retryCount: integer('retry_count').notNull().default(0),
+    // Stores the subtask result temporarily while awaiting verification
+    pendingVerificationResult: text('pending_verification_result'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    sessionIdIdx: index('subtasks_session_id_idx').on(table.sessionId),
   }),
-  orderIndex: integer('order_index').notNull().default(0),
-  result: text('result'),
-  retryCount: integer('retry_count').notNull().default(0),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+);
 
 /**
  * Agent role enum

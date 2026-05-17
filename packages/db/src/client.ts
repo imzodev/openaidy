@@ -26,6 +26,12 @@ export type DatabaseConnection = {
   db: DatabaseClient;
   close: () => Promise<void>;
   kind: DatabaseClientConfig['kind'];
+  /**
+   * Execute a function within a database transaction.
+   * For SQLite: uses better-sqlite3's transaction() wrapper
+   * For Postgres: uses node-postgres BEGIN/COMMIT/ROLLBACK
+   */
+  transaction: <T>(fn: (tx: DatabaseClient) => Promise<T>) => Promise<T>;
 };
 
 const schema: DatabaseSchema = {
@@ -195,9 +201,14 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       order_index INTEGER NOT NULL DEFAULT 0,
       result TEXT,
       retry_count INTEGER NOT NULL DEFAULT 0,
+      pending_verification_result TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE INDEX IF NOT EXISTS subtasks_session_id_idx ON subtasks(session_id);
+
+    CREATE INDEX IF NOT EXISTS tasks_session_id_idx ON tasks(session_id);
 
     CREATE TABLE IF NOT EXISTS task_agents (
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -288,6 +299,38 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       `ALTER TABLE subtasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
     );
   }
+
+  // Migration: Add pending_verification_result to subtasks if not exists
+  const hasPendingVerification = tableInfo.some(
+    (col) => col.name === 'pending_verification_result',
+  );
+  if (!hasPendingVerification) {
+    sqlite.exec(
+      `ALTER TABLE subtasks ADD COLUMN pending_verification_result TEXT`,
+    );
+  }
+
+  // Migration: Create subtasks.session_id index if not exists
+  const subtaskIndices = sqlite.pragma('index_list(subtasks)') as Array<{
+    name: string;
+  }>;
+  const hasSubtaskSessionIdIdx = subtaskIndices.some(
+    (idx) => idx.name === 'subtasks_session_id_idx',
+  );
+  if (!hasSubtaskSessionIdIdx) {
+    sqlite.exec(`CREATE INDEX subtasks_session_id_idx ON subtasks(session_id)`);
+  }
+
+  // Migration: Create tasks.session_id index if not exists
+  const taskIndices = sqlite.pragma('index_list(tasks)') as Array<{
+    name: string;
+  }>;
+  const hasTaskSessionIdIdx = taskIndices.some(
+    (idx) => idx.name === 'tasks_session_id_idx',
+  );
+  if (!hasTaskSessionIdIdx) {
+    sqlite.exec(`CREATE INDEX tasks_session_id_idx ON tasks(session_id)`);
+  }
 }
 
 export async function createDatabaseClient(
@@ -301,11 +344,19 @@ export async function createDatabaseClient(
     initializeSqliteSchema(sqlite);
     runSqliteMigrations(sqlite);
 
+    const db = drizzleSqlite(sqlite, { schema }) as DatabaseClient;
     return {
-      db: drizzleSqlite(sqlite, { schema }) as DatabaseClient,
+      db,
       kind: 'sqlite',
       close: async () => {
         sqlite.close();
+      },
+      // SQLite transactions via better-sqlite3's explicit transaction wrapper
+      transaction: async <T>(
+        fn: (tx: DatabaseClient) => Promise<T>,
+      ): Promise<T> => {
+        const tx = sqlite.transaction(() => fn(db));
+        return tx() as T;
       },
     };
   }
@@ -326,11 +377,30 @@ export async function createDatabaseClient(
     client.release();
   }
 
+  const db = drizzlePostgres(pool, { schema }) as DatabaseClient;
   return {
-    db: drizzlePostgres(pool, { schema }) as DatabaseClient,
+    db,
     kind: 'postgres',
     close: async () => {
       await pool.end();
+    },
+    // Postgres transactions using node-postgres client
+    transaction: async <T>(
+      fn: (tx: DatabaseClient) => Promise<T>,
+    ): Promise<T> => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const txDb = drizzlePostgres(client, { schema }) as DatabaseClient;
+        const result = await fn(txDb);
+        await client.query('COMMIT');
+        return result;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
   };
 }

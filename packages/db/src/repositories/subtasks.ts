@@ -236,6 +236,83 @@ export class SubtasksRepository {
   async listAll(): Promise<schema.Subtask[]> {
     return this.db.select().from(schema.subtasks);
   }
+
+  /**
+   * Find a subtask by its session ID (uses index)
+   */
+  async findBySessionId(sessionId: string): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .select()
+      .from(schema.subtasks)
+      .where(eq(schema.subtasks.sessionId, sessionId))
+      .limit(1);
+    return results[0] ?? null;
+  }
+
+  /**
+   * Set or clear the pending verification result for a subtask.
+   * This persists the result temporarily while awaiting verification,
+   * surviving process restarts.
+   */
+  async setPendingVerificationResult(
+    id: string,
+    result: string | null,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        pendingVerificationResult: result,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
+
+  /**
+   * Atomically complete a subtask: update status, set result, clear pending verification.
+   * Returns the updated subtask or null if not found.
+   */
+  async completeSubtask(
+    id: string,
+    result: string,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        status: 'completed',
+        result,
+        pendingVerificationResult: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
+
+  /**
+   * Atomically fail a subtask: update status, set error as result, clear pending verification.
+   * Returns the updated subtask or null if not found.
+   */
+  async failSubtask(
+    id: string,
+    errorMessage: string,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        status: 'failed',
+        result: errorMessage,
+        pendingVerificationResult: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
 }
 
 /**

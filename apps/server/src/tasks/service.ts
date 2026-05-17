@@ -114,10 +114,6 @@ export class TaskService {
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly logger = createLogger('TaskService');
   private unsubscribeRunEvents: (() => void) | undefined;
-  private readonly pendingVerifications = new Map<
-    string,
-    { subtaskId: string; result: string }
-  >();
 
   constructor(options: TaskServiceOptions) {
     this.tasksRepo = options.tasksRepo;
@@ -157,24 +153,42 @@ export class TaskService {
       return;
     }
 
-    // Intercept verification runs before any subtask-finder logic
-    const verification = this.pendingVerifications.get(event.sessionId);
-    if (verification) {
-      this.pendingVerifications.delete(event.sessionId);
-      if (event.type === 'run.completed') {
-        await this.handleVerificationResult(
-          verification.subtaskId,
-          verification.result,
-          event.sessionId,
+    // Intercept verification runs: check if this session is a task session
+    // that has a pending verification stored in the DB
+    const task = await this.tasksRepo.findBySessionId?.(event.sessionId);
+    if (task) {
+      // This is a task session - look for subtasks awaiting verification
+      const subtasks = await this.subtasksRepo.listByTask(task.id);
+      const pendingSubtask = subtasks.find(
+        (s) =>
+          s.pendingVerificationResult !== null &&
+          s.pendingVerificationResult !== undefined,
+      );
+      if (pendingSubtask) {
+        // Clear the pending verification first (idempotent)
+        await this.subtasksRepo.setPendingVerificationResult(
+          pendingSubtask.id,
+          null,
         );
-      } else {
-        this.logger.warn(
-          'Verification run failed, auto-completing subtask as fallback',
-          { subtaskId: verification.subtaskId },
-        );
-        await this.completeSubtask(verification.subtaskId, verification.result);
+
+        if (event.type === 'run.completed') {
+          await this.handleVerificationResult(
+            pendingSubtask.id,
+            pendingSubtask.pendingVerificationResult!,
+            event.sessionId,
+          );
+        } else {
+          this.logger.warn(
+            'Verification run failed, auto-completing subtask as fallback',
+            { subtaskId: pendingSubtask.id },
+          );
+          await this.completeSubtask(
+            pendingSubtask.id,
+            pendingSubtask.pendingVerificationResult!,
+          );
+        }
+        return;
       }
-      return;
     }
 
     this.logger.info('Handling run event', {
@@ -207,37 +221,14 @@ export class TaskService {
         return;
       }
 
-      // Find subtask linked to this session by checking all tasks
-      const tasks = await this.tasksRepo.list();
-      let linkedSubtask: Subtask | undefined;
-      let checkedSubtasks = 0;
-
-      for (const task of tasks) {
-        const subtasks = await this.subtasksRepo.listByTask(task.id);
-        const found = subtasks.find((s) => s.sessionId === event.sessionId);
-        checkedSubtasks += subtasks.length;
-        // Log all subtasks with their sessionIds for debugging
-        for (const s of subtasks) {
-          if (s.sessionId) {
-            this.logger.debug('Checked subtask', {
-              subtaskId: s.id,
-              taskId: task.id,
-              sessionId: s.sessionId,
-              status: s.status,
-            });
-          }
-        }
-        if (found) {
-          linkedSubtask = found;
-          break;
-        }
-      }
+      // Find subtask linked to this session using indexed lookup
+      const linkedSubtask = await this.subtasksRepo.findBySessionId(
+        event.sessionId,
+      );
 
       if (!linkedSubtask) {
         this.logger.warn('No subtask found linked to session', {
           sessionId: event.sessionId,
-          checkedSubtasks,
-          totalTasks: tasks.length,
         });
         return;
       }
@@ -1251,10 +1242,8 @@ export class TaskService {
       };
     }
 
-    const updated = await this.subtasksRepo.update(subtaskId, {
-      status: 'completed',
-      result,
-    });
+    // Use atomic method that updates status, result, and clears pending verification
+    const updated = await this.subtasksRepo.completeSubtask(subtaskId, result);
 
     this.logger.info('Subtask completed, checking for dependent subtasks', {
       subtaskId,
@@ -1295,10 +1284,8 @@ export class TaskService {
       };
     }
 
-    const updated = await this.subtasksRepo.update(subtaskId, {
-      status: 'failed',
-      result: error,
-    });
+    // Use atomic method that updates status, result, and clears pending verification
+    const updated = await this.subtasksRepo.failSubtask(subtaskId, error);
 
     return { ok: true, data: updated! };
   }
@@ -1383,10 +1370,11 @@ export class TaskService {
       messageInput.agentId = agentId;
     }
 
-    this.pendingVerifications.set(task.sessionId, {
-      subtaskId: subtask.id,
-      result: subtaskResult,
-    });
+    // Persist verification state to DB so it survives crashes/restarts
+    await this.subtasksRepo.setPendingVerificationResult(
+      subtask.id,
+      subtaskResult,
+    );
 
     this.logger.info('Submitting subtask verification to task session', {
       subtaskId: subtask.id,
