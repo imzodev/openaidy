@@ -6,6 +6,12 @@ import type {
   JobRunsStore,
   PairingRequestsStore,
   SessionsStore,
+  Task,
+  TaskAgent,
+  TaskStatus,
+  TaskPriority,
+  Subtask,
+  AgentRole,
 } from '@openaidy/db';
 export type { CreateAgentInput } from '@openaidy/shared-types';
 import type { ProviderServices } from './providers';
@@ -25,6 +31,58 @@ import type { AuthMiddleware } from './websocket/middleware/auth.js';
 export type ChannelRoutesOptions = {
   channelRegistry: ChannelRegistry;
   authMiddleware: AuthMiddleware;
+};
+
+export type ServiceResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
+
+export type CreateTaskInput = {
+  title: string;
+  description: string;
+  priority?: TaskPriority;
+  planningEnabled?: boolean;
+  agents?: Array<{ agentId: string; role?: AgentRole }>;
+};
+
+export type UpdateTaskInput = {
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  planningEnabled?: boolean;
+  sessionId?: string | null;
+};
+
+export type CreateSubtaskInput = {
+  taskId: string;
+  parentSubtaskId?: string;
+  title: string;
+  description: string;
+  orderIndex?: number;
+  assignedAgentId?: string;
+};
+
+export type TaskWithDetails = Task & {
+  agents: TaskAgent[];
+  subtasks: Subtask[];
+  progress: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    failed: number;
+  };
+};
+
+export type KanbanBoard = { [K in TaskStatus]: Task[] };
+
+export type TaskServiceOptions = {
+  tasksRepo: import('@openaidy/db').TasksRepository;
+  subtasksRepo: import('@openaidy/db').SubtasksRepository;
+  taskAgentsRepo: import('@openaidy/db').TaskAgentsRepository;
+  agents?: AgentRegistry;
+  sessionService?: SessionMessageService;
+  planningService?: import('./planning').PlanningService;
+  runEvents?: RunEventEmitter;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
