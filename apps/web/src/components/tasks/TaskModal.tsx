@@ -9,6 +9,7 @@ import { createSignal, Show, For, createEffect, on } from 'solid-js';
 import { X } from 'lucide-solid';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
+import { useEscapeKey } from '../settings/hooks';
 
 /**
  * TaskModal Props
@@ -131,20 +132,7 @@ export function TaskModal(props: TaskModalProps) {
   }
 
   // Add event listener when modal is open
-  createEffect(
-    on(
-      () => props.isOpen,
-      () => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.key === 'Escape') {
-            props.onClose();
-          }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-      },
-    ),
-  );
+  useEscapeKey(props.onClose, () => props.isOpen);
 
   const isLoading = () => props.isLoading || submitting();
 

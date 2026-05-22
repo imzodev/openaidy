@@ -21,6 +21,7 @@ import {
   type AgentRole,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
+import { useEscapeKey } from '../settings/hooks';
 
 export function TasksPage() {
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
@@ -221,6 +222,9 @@ export function TasksPage() {
       stopPlanningPolling();
     }
   }
+
+  // Add Esc key handler for detail panel
+  useEscapeKey(handleCloseDetail, () => !!detailTaskId());
 
   // Cleanup polling on unmount
   onCleanup(() => {
