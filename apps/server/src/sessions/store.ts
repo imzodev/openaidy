@@ -1,60 +1,13 @@
 import { nanoid } from 'nanoid';
 import type {
-  SessionType,
-  MessageRole,
-  RunStatus,
+  SessionRecord,
+  SessionMessageRecord,
+  SessionRunRecord,
+  AppendMessageInput,
   FinishReason,
-} from '@openaidy/shared-types';
-
-// Re-export types from shared-types
-export type { SessionType, MessageRole, RunStatus, FinishReason };
-
-/**
- * Session message record
- */
-export type SessionMessageRecord = {
-  id: string;
-  sessionId: string;
-  runId?: string;
-  role: MessageRole;
-  content: string;
-  toolCallId?: string;
-  sequence: number;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Session run record
- */
-export type SessionRunRecord = {
-  id: string;
-  sessionId: string;
-  agentId: string;
-  providerId: string;
-  modelId: string;
-  status: RunStatus;
-  finishReason?: FinishReason;
-  errorCode?: string;
-  errorMessage?: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  startedAt?: string;
-  finishedAt?: string;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Session record
- */
-export type SessionRecord = {
-  id: string;
-  title: string;
-  type?: SessionType;
-  createdAt: string;
-};
+} from '../types.js';
+import type { SessionType } from '@openaidy/shared-types';
+export type { SessionRecord, SessionMessageRecord, SessionRunRecord };
 
 // In-memory storage (will be replaced with database)
 const sessions = new Map<string, SessionRecord>();
@@ -96,14 +49,9 @@ export function updateSessionTitleRecord(
 }
 
 // Message operations
-export function appendMessageRecord(input: {
-  sessionId: string;
-  runId?: string;
-  role: MessageRole;
-  content: string;
-  toolCallId?: string;
-  metadata?: Record<string, unknown>;
-}): SessionMessageRecord {
+export function appendMessageRecord(
+  input: AppendMessageInput,
+): SessionMessageRecord {
   const sessionMessages = Array.from(messages.values()).filter(
     (m) => m.sessionId === input.sessionId,
   );
@@ -121,6 +69,9 @@ export function appendMessageRecord(input: {
     createdAt: new Date().toISOString(),
     ...(input.runId !== undefined && { runId: input.runId }),
     ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
+    ...(input.reasoningContent !== undefined && {
+      reasoningContent: input.reasoningContent,
+    }),
     ...(input.metadata !== undefined && { metadata: input.metadata }),
   };
   messages.set(record.id, record);

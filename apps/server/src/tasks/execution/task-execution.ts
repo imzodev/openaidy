@@ -12,8 +12,7 @@ import type { RunEventEmitter } from '../../dispatch/events';
 import type { SessionType } from '@openaidy/shared-types';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
-import type { SessionMessageRecord } from '../../sessions/store';
-import type { ServiceResult } from '../../types';
+import type { SessionMessageRecord, ServiceResult } from '../../types';
 
 const MAX_RETRIES = 5;
 const STUCK_TIMEOUT_MINUTES = 3;

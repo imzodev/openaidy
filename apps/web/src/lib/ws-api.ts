@@ -125,6 +125,7 @@ export async function listMessages(
             sequence: number;
             createdAt: string;
             metadata?: Record<string, unknown>;
+            reasoningContent?: string;
           }) => ({
             id: msg.id,
             sessionId: msg.sessionId,
@@ -133,6 +134,9 @@ export async function listMessages(
             sequence: msg.sequence,
             createdAt: msg.createdAt,
             metadata: msg.metadata,
+            ...(msg.reasoningContent
+              ? { reasoningContent: msg.reasoningContent }
+              : {}),
           }),
         ),
       };

@@ -14,6 +14,57 @@ import type {
   AgentRole,
 } from '@openaidy/db';
 export type { CreateAgentInput } from '@openaidy/shared-types';
+import type { MessageRole, FinishReason } from '@openaidy/shared-types';
+export type { MessageRole, FinishReason };
+
+/**
+ * In-memory session record (used by the fallback in-memory store)
+ */
+export type SessionRecord = {
+  id: string;
+  title: string;
+  type?: import('@openaidy/shared-types').SessionType;
+  createdAt: string;
+};
+
+/**
+ * In-memory session message record
+ */
+export type SessionMessageRecord = {
+  id: string;
+  sessionId: string;
+  runId?: string;
+  role: MessageRole;
+  content: string;
+  toolCallId?: string;
+  reasoningContent?: string;
+  sequence: number;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * In-memory session run record
+ */
+export type SessionRunRecord = {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  providerId: string;
+  modelId: string;
+  status: import('@openaidy/shared-types').RunStatus;
+  finishReason?: FinishReason;
+  errorCode?: string;
+  errorMessage?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  startedAt?: string;
+  finishedAt?: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
+};
+
 import type { ProviderServices } from './providers';
 import type { SessionMessageService } from './sessions/service';
 import type { AgentRegistry } from './agents';
@@ -86,6 +137,19 @@ export type TaskServiceOptions = {
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
+/**
+ * Input for appending a message to a session (shared by SessionMessageService and DispatchService)
+ */
+export type AppendMessageInput = {
+  sessionId: string;
+  runId?: string;
+  role: 'user' | 'system' | 'assistant' | 'tool';
+  content: string;
+  toolCallId?: string;
+  reasoningContent?: string;
+  metadata?: Record<string, unknown>;
+};
 
 export type ToolMeta = {
   name: string;

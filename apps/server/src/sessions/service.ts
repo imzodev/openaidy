@@ -32,10 +32,6 @@ import {
   markRunSucceeded,
   markRunFailed,
   listSessionRunRecords,
-  type SessionMessageRecord,
-  type SessionRunRecord,
-  type SessionRecord,
-  type FinishReason,
 } from './store';
 import type {
   SubmitMessageInput,
@@ -45,7 +41,14 @@ import type {
 } from './types';
 import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
 import type { AgentPersonalityService } from '../agents/personality-service';
-import type { WorkspacePermissionsInfo } from '../types.js';
+import type {
+  WorkspacePermissionsInfo,
+  AppendMessageInput,
+  SessionMessageRecord,
+  SessionRunRecord,
+  SessionRecord,
+  FinishReason,
+} from '../types.js';
 import type { RunEventEmitter } from '../dispatch/events';
 
 /**
@@ -683,10 +686,14 @@ export class SessionMessageService {
         const storedToolCalls = msgMetadata?.['toolCalls'] as
           | Array<{ id: string; name: string; arguments: string }>
           | undefined;
+        const msgReasoningContent = m.reasoningContent ?? undefined;
         return {
           role: 'assistant' as const,
           content: msgContent,
           ...(storedToolCalls?.length ? { toolCalls: storedToolCalls } : {}),
+          ...(msgReasoningContent
+            ? { reasoningContent: msgReasoningContent }
+            : {}),
         } as Message;
       }
       return {
@@ -763,6 +770,7 @@ export class SessionMessageService {
     let accumulatedContent = '';
     let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let finalFinishReason: string | undefined;
+    let finalReasoningContent: string | undefined;
     let finalProviderId = providerId;
     let finalModelId = modelId;
 
@@ -848,6 +856,8 @@ export class SessionMessageService {
             }
             case 'stream.finished': {
               finalFinishReason = value.finishReason;
+              if (value.reasoningContent)
+                finalReasoningContent = value.reasoningContent;
               break;
             }
           }
@@ -894,6 +904,9 @@ export class SessionMessageService {
             runId: run.id,
             role: 'assistant',
             content: accumulatedContent || '',
+            ...(finalReasoningContent
+              ? { reasoningContent: finalReasoningContent }
+              : {}),
             metadata: {
               toolCalls: mappedToolCalls,
               ...(consultedSkills.length > 0 && { consultedSkills }),
@@ -1019,6 +1032,9 @@ export class SessionMessageService {
         runId: run.id,
         role: 'assistant',
         content: accumulatedContent,
+        ...(finalReasoningContent
+          ? { reasoningContent: finalReasoningContent }
+          : {}),
         metadata: {
           providerId: finalProviderId,
           model: finalModelId,
@@ -1090,37 +1106,21 @@ export class SessionMessageService {
   /**
    * Append a message to a session
    */
-  private async appendMessage(input: {
-    sessionId: string;
-    runId?: string;
-    role: 'user' | 'system' | 'assistant' | 'tool';
-    content: string;
-    toolCallId?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<SessionMessageRecord | SessionMessage> {
+  private async appendMessage(
+    input: AppendMessageInput,
+  ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      const appendInput: {
-        sessionId: string;
-        runId?: string;
-        role: DbMessageRole;
-        content: string;
-        toolCallId?: string;
-        metadata?: Record<string, unknown>;
-      } = {
+      return this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
-      };
-      if (input.runId !== undefined) {
-        appendInput.runId = input.runId;
-      }
-      if (input.toolCallId !== undefined) {
-        appendInput.toolCallId = input.toolCallId;
-      }
-      if (input.metadata !== undefined) {
-        appendInput.metadata = input.metadata;
-      }
-      return this.messagesRepo.append(appendInput);
+        ...(input.runId !== undefined && { runId: input.runId }),
+        ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
+        ...(input.reasoningContent !== undefined && {
+          reasoningContent: input.reasoningContent,
+        }),
+        ...(input.metadata !== undefined && { metadata: input.metadata }),
+      });
     }
     return appendMessageRecord(input);
   }

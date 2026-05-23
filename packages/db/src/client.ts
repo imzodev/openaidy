@@ -63,6 +63,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       tool_call_id TEXT,
+      reasoning_content TEXT,
       sequence INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       metadata TEXT,
@@ -365,6 +366,16 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   if (!hasRunIdIdx) {
     sqlite.exec(
       `CREATE INDEX session_messages_run_id_idx ON session_messages(run_id)`,
+    );
+  }
+
+  // Migration: Add reasoning_content to session_messages if not exists
+  const hasReasoningContent = sessionMessagesInfo.some(
+    (col) => col.name === 'reasoning_content',
+  );
+  if (!hasReasoningContent) {
+    sqlite.exec(
+      `ALTER TABLE session_messages ADD COLUMN reasoning_content TEXT`,
     );
   }
 }

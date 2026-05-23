@@ -25,6 +25,7 @@ export class SessionMessagesRepository {
     role: schema.MessageRole;
     content: string;
     toolCallId?: string;
+    reasoningContent?: string;
     metadata?: Record<string, unknown>;
   }): Promise<schema.SessionMessage> {
     // Get the next sequence number for this session
@@ -39,6 +40,7 @@ export class SessionMessagesRepository {
         role: input.role,
         content: input.content,
         toolCallId: input.toolCallId,
+        reasoningContent: input.reasoningContent,
         sequence: nextSequence,
         metadata: input.metadata,
         createdAt: new Date(),

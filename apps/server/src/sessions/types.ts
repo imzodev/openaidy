@@ -1,5 +1,5 @@
 import type { SessionMessage, SessionRun } from '@openaidy/db';
-import type { SessionMessageRecord, SessionRunRecord } from './store';
+import type { SessionMessageRecord, SessionRunRecord } from '../types';
 
 /**
  * Input for submitting a message to a session

@@ -1,30 +1,116 @@
-// TODO: This file mixes API functions with type declarations — a known architectural violation.
-// All exported types should be moved to a dedicated `apps/web/src/lib/types.ts` file
-// and imported here. Do NOT add new types to this file.
-
-import {
-  type LogFilter,
-  type LogQueryResult,
-  type LogStats,
-  type ApiError,
-  type AccessTokenRecord,
-  type CreateAccessTokenRequest,
-  type CreateAccessTokenResponse,
-  type AuthVerifyResponse,
-  type McpServerRef,
-  type PersonalityFileId,
-  type PersonalityFileMeta,
-  type PersonalityFile,
-  ApiRequestError,
-} from '@openaidy/shared-types';
-export type { PersonalityFileId, PersonalityFileMeta, PersonalityFile };
-import { getStoredToken } from './auth-token';
-export type { McpServerRef };
-export type { AccessTokenRecord, CreateAccessTokenResponse };
-
 /**
- * API client for session endpoints
+ * REST API client — fetch functions only.
+ * All type definitions live in ./types.ts
  */
+
+import { ApiRequestError } from '@openaidy/shared-types';
+import { getStoredToken } from './auth-token';
+
+export type {
+  Session,
+  MessageRole,
+  SessionMessage,
+  RunStatus,
+  AgentWorkspacePermission,
+  AgentWorkspace,
+  AgentWorkspaceConfig,
+  Agent,
+  SessionRun,
+  BuiltinToolInfo,
+  SkillSource,
+  SkillInfo,
+  CreateAgentInput,
+  SubmitMessageInput,
+  SubmitMessageResult,
+  ModelCapability,
+  ModelConfig,
+  AgentDefaults,
+  AgentConfig,
+  AppDefaults,
+  OpenAICompatibleProviderConfig,
+  AnthropicProviderConfig,
+  GeminiProviderConfig,
+  ProviderConfig,
+  AppConfig,
+  ConfigIssue,
+  ConfigStatus,
+  WorkspaceFileInfo,
+  WorkspaceFileListResponse,
+  WorkspaceFileContentResponse,
+  WorkspaceWriteResponse,
+  WorkspaceErrorResponse,
+  AddonRecord,
+  Pulse,
+  PulseRun,
+  ScheduleInput,
+  CreatePulseBody,
+  UpdatePulseBody,
+} from './types';
+
+export type {
+  LogFilter,
+  LogQueryResult,
+  LogStats,
+  ApiError,
+  AccessTokenRecord,
+  CreateAccessTokenRequest,
+  CreateAccessTokenResponse,
+  AuthVerifyResponse,
+  McpServerRef,
+  PersonalityFileId,
+  PersonalityFileMeta,
+  PersonalityFile,
+  McpServerRecord,
+  McpToolWithSchema,
+  CreateMcpServerRequest,
+  UpdateMcpServerRequest,
+  ChannelStatusResponse,
+} from './types';
+
+export { ApiRequestError } from '@openaidy/shared-types';
+
+import type {
+  Session,
+  SessionMessage,
+  SessionRun,
+  Agent,
+  BuiltinToolInfo,
+  SkillInfo,
+  CreateAgentInput,
+  SubmitMessageInput,
+  SubmitMessageResult,
+  AppConfig,
+  ConfigStatus,
+  WorkspaceFileListResponse,
+  WorkspaceFileContentResponse,
+  WorkspaceWriteResponse,
+  WorkspaceErrorResponse,
+  AddonRecord,
+  Pulse,
+  PulseRun,
+  CreatePulseBody,
+  UpdatePulseBody,
+} from './types';
+
+import type {
+  LogFilter,
+  LogQueryResult,
+  LogStats,
+  ApiError,
+  AccessTokenRecord,
+  CreateAccessTokenRequest,
+  CreateAccessTokenResponse,
+  AuthVerifyResponse,
+  McpServerRef,
+  PersonalityFileId,
+  PersonalityFileMeta,
+  PersonalityFile,
+  McpServerRecord,
+  McpToolWithSchema,
+  CreateMcpServerRequest,
+  UpdateMcpServerRequest,
+  ChannelStatusResponse,
+} from './types';
 
 /**
  * Get the API base URL
@@ -58,6 +144,9 @@ function getApiBase(): string {
  */
 export const API_BASE = typeof window !== 'undefined' ? getApiBase() : '';
 
+// Export getApiBase for testing
+export { getApiBase };
+
 /**
  * Fetch wrapper that automatically injects the stored auth token
  */
@@ -74,109 +163,6 @@ function apiFetch(input: string, init?: RequestInit): Promise<Response> {
     },
   });
 }
-
-/**
- * Session record
- */
-export type Session = {
-  id: string;
-  title: string;
-  type?: 'chat' | 'task' | 'subtask';
-  status?: 'active' | 'archived' | 'deleted';
-  /** Last agent used in this session (set after each successful run) */
-  agentId?: string;
-  createdAt: string;
-  updatedAt?: string;
-  archivedAt?: string;
-};
-
-/**
- * Message role
- */
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
-
-/**
- * Session message record
- */
-export type SessionMessage = {
-  id: string;
-  sessionId: string;
-  role: MessageRole;
-  content: string;
-  sequence: number;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Run status
- */
-export type RunStatus =
-  | 'queued'
-  | 'running'
-  | 'streaming'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
-
-/**
- * Agent configuration
- */
-export type AgentWorkspacePermission = {
-  read: boolean;
-  write: boolean;
-  delete: boolean;
-  list: boolean;
-};
-
-export type AgentWorkspace = {
-  path: string;
-  permissions: AgentWorkspacePermission;
-};
-
-export type AgentWorkspaceConfig = {
-  enabled: boolean;
-  defaultPermissions?: AgentWorkspacePermission;
-  workspaces: AgentWorkspace[];
-};
-
-export type Agent = {
-  id: string;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  systemPrompt: string;
-  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
-  tags?: string[];
-  tools?: string[];
-  skills?: string[];
-  mcpServers?: McpServerRef[];
-  defaults: {
-    providerId?: string;
-    modelId?: string;
-    temperature?: number;
-    maxTokens?: number;
-  };
-  workspace?: AgentWorkspaceConfig;
-};
-
-/**
- * Session run record
- */
-export type SessionRun = {
-  id: string;
-  sessionId: string;
-  agentId?: string;
-  providerId: string;
-  modelId: string;
-  status: RunStatus;
-  finishReason?: string;
-  errorCode?: string;
-  errorMessage?: string;
-  createdAt: string;
-};
-
-export type { ApiError, ApiRequestError } from '@openaidy/shared-types';
 
 /**
  * List sessions
@@ -231,14 +217,6 @@ export async function listRuns(
   const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/runs`);
   return response.json();
 }
-
-/**
- * Builtin (native) tool info returned by GET /tools
- */
-export type BuiltinToolInfo = {
-  name: string;
-  description: string;
-};
 
 /**
  * List all available builtin tools registered on the server
@@ -305,19 +283,6 @@ export async function updateAgentMcpServers(
   return response.json();
 }
 
-export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
-
-/**
- * Skill info returned by GET /skills
- */
-export type SkillInfo = {
-  id: string;
-  name: string;
-  description: string;
-  source?: SkillSource;
-  agentId?: string;
-};
-
 /**
  * List all available skills registered on the server
  */
@@ -378,19 +343,6 @@ export async function getAgent(id: string): Promise<Agent | ApiError> {
   const response = await apiFetch(`${API_BASE}/agents/${id}`);
   return response.json();
 }
-
-/**
- * Input for creating a new agent
- */
-export type CreateAgentInput = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  systemPrompt: string;
-  model: string;
-  description?: string;
-  tags?: string[];
-};
 
 /**
  * Create a new agent
@@ -481,32 +433,6 @@ export async function updatePersonalityFile(
 }
 
 /**
- * Submit message input
- */
-export type SubmitMessageInput = {
-  role: 'user' | 'system';
-  content: string;
-  agentId?: string;
-  providerId?: string;
-  modelId?: string;
-};
-
-/**
- * Submit message result
- */
-export type SubmitMessageResult =
-  | {
-      ok: true;
-      userMessage: SessionMessage;
-      assistantMessage: SessionMessage;
-      run: SessionRun;
-    }
-  | {
-      ok: false;
-      error: { code: string; message: string };
-    };
-
-/**
  * Submit a message to a session
  */
 export async function submitMessage(
@@ -523,207 +449,6 @@ export async function submitMessage(
   );
   return response.json();
 }
-
-/**
- * Model capability
- */
-export type ModelCapability =
-  | 'text_generation'
-  | 'streaming'
-  | 'tool_calls'
-  | 'vision'
-  | 'audio_input'
-  | 'audio_output'
-  | 'embedding';
-
-/**
- * Model configuration within a provider
- */
-export type ModelConfig = {
-  id: string;
-  name: string;
-  enabled?: boolean;
-  description?: string;
-  capabilities?: ModelCapability[];
-  contextWindow?: number;
-  maxOutputTokens?: number;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Agent defaults
- */
-export type AgentDefaults = {
-  providerId?: string;
-  modelId?: string;
-  temperature?: number;
-  maxTokens?: number;
-};
-
-/**
- * Agent configuration
- */
-export type AgentConfig = {
-  id: string;
-  name: string;
-  enabled?: boolean;
-  description?: string;
-  systemPrompt: string;
-  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
-  tools?: string[];
-  tags?: string[];
-  metadata?: Record<string, unknown>;
-  version?: number;
-};
-
-/**
- * Application defaults
- */
-export type AppDefaults = {
-  providerId: string;
-  modelId: string;
-  agentId: string;
-};
-
-/**
- * Provider configuration (discriminated union by vendorFamily)
- */
-export type OpenAICompatibleProviderConfig = {
-  id: string;
-  name: string;
-  vendorFamily: 'openai-compatible';
-  enabled?: boolean;
-  baseUrl?: string;
-  apiKeyEnv?: string;
-  defaultModel?: string;
-  organizationId?: string;
-  timeout?: { connect?: number; read?: number; write?: number };
-  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
-  headers?: Record<string, string>;
-  priority?: number;
-  metadata?: Record<string, unknown>;
-  models: ModelConfig[];
-  chatModel?: string;
-  embeddingModel?: string;
-  audioModel?: string;
-  imageModel?: string;
-  useResponsesApi?: boolean;
-  enableTools?: boolean;
-  enableVision?: boolean;
-  enableStreaming?: boolean;
-  defaultTemperature?: number;
-  defaultMaxTokens?: number;
-};
-
-export type AnthropicProviderConfig = {
-  id: string;
-  name: string;
-  vendorFamily: 'anthropic';
-  enabled?: boolean;
-  baseUrl?: string;
-  apiKeyEnv?: string;
-  defaultModel?: string;
-  organizationId?: string;
-  timeout?: { connect?: number; read?: number; write?: number };
-  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
-  headers?: Record<string, string>;
-  priority?: number;
-  metadata?: Record<string, unknown>;
-  models: ModelConfig[];
-  apiVersion?: string;
-  messagesModel?: string;
-  betas?: string[];
-  enableExtendedThinking?: boolean;
-  maxThinkingTokens?: number;
-  enableTools?: boolean;
-  enableVision?: boolean;
-  enableStreaming?: boolean;
-  defaultMaxTokens?: number;
-  defaultTemperature?: number;
-  systemPrompt?: string;
-};
-
-export type GeminiProviderConfig = {
-  id: string;
-  name: string;
-  vendorFamily: 'gemini';
-  enabled?: boolean;
-  baseUrl?: string;
-  apiKeyEnv?: string;
-  defaultModel?: string;
-  organizationId?: string;
-  timeout?: { connect?: number; read?: number; write?: number };
-  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
-  headers?: Record<string, string>;
-  priority?: number;
-  metadata?: Record<string, unknown>;
-  models: ModelConfig[];
-  projectId?: string;
-  region?: string;
-  useVertexAI?: boolean;
-  embeddingModel?: string;
-  safetySettings?: Array<{
-    category:
-      | 'HARM_CATEGORY_HARASSMENT'
-      | 'HARM_CATEGORY_HATE_SPEECH'
-      | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
-      | 'HARM_CATEGORY_DANGEROUS_CONTENT'
-      | 'HARM_CATEGORY_CIVIC_INTEGRITY';
-    threshold:
-      | 'BLOCK_NONE'
-      | 'BLOCK_LOW_AND_ABOVE'
-      | 'BLOCK_MEDIUM_AND_ABOVE'
-      | 'BLOCK_ONLY_HIGH';
-  }>;
-  generationConfig?: {
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-    candidateCount?: number;
-    maxOutputTokens?: number;
-    stopSequences?: string[];
-    responseMimeType?: 'text/plain' | 'application/json';
-  };
-  enableTools?: boolean;
-  enableVision?: boolean;
-  enableAudioInput?: boolean;
-  enableStreaming?: boolean;
-  defaultTemperature?: number;
-  defaultMaxTokens?: number;
-  systemInstruction?: string;
-};
-
-export type ProviderConfig =
-  | OpenAICompatibleProviderConfig
-  | AnthropicProviderConfig
-  | GeminiProviderConfig;
-
-/**
- * Application configuration
- */
-export type AppConfig = {
-  version: number;
-  defaults: AppDefaults;
-  providers: ProviderConfig[];
-  agents: AgentConfig[];
-};
-
-/**
- * Configuration issue
- */
-export type ConfigIssue = {
-  scope: 'provider';
-  id: string;
-  code: string;
-  message: string;
-};
-
-/**
- * Configuration status
- */
-export type ConfigStatus = {
-  issues: ConfigIssue[];
-};
 
 /**
  * Get application configuration
@@ -756,57 +481,8 @@ export async function updateConfig(
 }
 
 // ============================================================================
-// Workspace Types and API Functions
+// Workspace API Functions
 // ============================================================================
-
-/**
- * Workspace file metadata
- */
-export type WorkspaceFileInfo = {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  size: number;
-  modifiedAt: string;
-};
-
-/**
- * Workspace file list response
- */
-export type WorkspaceFileListResponse = {
-  items: WorkspaceFileInfo[];
-  path?: string;
-};
-
-/**
- * Workspace file content response
- */
-export type WorkspaceFileContentResponse = {
-  content: string;
-  path: string;
-  isText: boolean;
-  mimeType: string;
-  size: number;
-  modifiedAt: string;
-  isTooLarge: boolean;
-  maxEditableBytes?: number;
-};
-
-/**
- * Workspace write response
- */
-export type WorkspaceWriteResponse = {
-  success: boolean;
-  path: string;
-};
-
-/**
- * Workspace error response
- */
-export type WorkspaceErrorResponse = {
-  error: string;
-  code: string;
-};
 
 /**
  * List files in an agent's workspace
@@ -927,9 +603,6 @@ export async function deleteWorkspaceFile(
   return response.json();
 }
 
-// Export getApiBase for testing
-export { getApiBase };
-
 /**
  * Query logs with filters
  */
@@ -982,22 +655,8 @@ export async function clearLogs(): Promise<{
   return response.json();
 }
 
-import type {
-  McpServerRecord,
-  McpToolWithSchema,
-  CreateMcpServerRequest,
-  UpdateMcpServerRequest,
-} from '@openaidy/shared-types';
-export type {
-  McpServerRecord,
-  McpToolWithSchema,
-  CreateMcpServerRequest,
-  UpdateMcpServerRequest,
-};
-
 /**
  * List all configured MCP servers and their live runtime status.
- * Returns both persisted config fields and current connection state.
  */
 export async function listMcpServers(): Promise<{
   servers: McpServerRecord[];
@@ -1162,20 +821,9 @@ export async function revokeAccessToken(
   return result.key;
 }
 
-export interface AddonRecord {
-  id: string;
-  addonId: string;
-  name: string;
-  version: string;
-  description?: string;
-  status: 'installed' | 'enabled' | 'disabled' | 'error';
-  installedAt: string;
-  installedBy: string;
-  manifest: Record<string, unknown>;
-  permissions?: string[];
-  approvedPermissions?: string[];
-}
-
+/**
+ * List all installed addons
+ */
 export async function listAddons(
   token: string,
 ): Promise<{ addons: AddonRecord[]; total: number }> {
@@ -1255,56 +903,6 @@ export async function uninstallAddon(
     throw new ApiRequestError(response.status, body);
   }
 }
-
-// ============================================================================
-// Pulse API types
-// ============================================================================
-
-export type Pulse = {
-  id: string;
-  name: string;
-  prompt: string;
-  scheduleHuman: string;
-  status: 'active' | 'paused' | 'completed' | 'failed';
-  agentId: string | null;
-  sessionId: string | null;
-  lastRunAt: string | null;
-  nextRunAt: string | null;
-  createdAt: string;
-};
-
-export type PulseRun = {
-  id: string;
-  status: 'queued' | 'running' | 'succeeded' | 'failed';
-  attemptNumber: number;
-  startedAt: string | null;
-  finishedAt: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-};
-
-export type ScheduleInput =
-  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
-  | { daily: { hour: number; minute: number } }
-  | { cron: string; tz?: string }
-  | { at: string };
-
-export type CreatePulseBody = {
-  name: string;
-  prompt: string;
-  schedule: ScheduleInput;
-  agentId?: string;
-  sessionId?: string;
-};
-
-export type UpdatePulseBody = {
-  name?: string;
-  prompt?: string;
-  schedule?: ScheduleInput;
-  status?: 'active' | 'paused' | 'completed' | 'failed';
-  agentId?: string;
-  sessionId?: string;
-};
 
 // ============================================================================
 // Pulse API functions
@@ -1443,9 +1041,6 @@ export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
 // ============================================================================
 // Channel API functions
 // ============================================================================
-
-import type { ChannelStatusResponse } from '@openaidy/shared-types';
-export type { ChannelStatusResponse } from '@openaidy/shared-types';
 
 /**
  * List all channels with their current connection status.

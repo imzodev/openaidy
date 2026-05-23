@@ -96,6 +96,8 @@ export const sessionMessages = pgTable(
     content: text('content').notNull(),
     // For tool messages, identifies which tool call this responds to
     toolCallId: text('tool_call_id'),
+    // For assistant messages in thinking mode (e.g., DeepSeek), stores the reasoning content
+    reasoningContent: text('reasoning_content'),
     // Deterministic ordering within a session
     sequence: integer('sequence').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })

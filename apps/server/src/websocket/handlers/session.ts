@@ -282,15 +282,20 @@ export class SessionHandler {
         'session.messages',
         {
           sessionId: request.payload.sessionId,
-          messages: paginated.map((msg) => ({
-            id: msg.id,
-            sessionId: msg.sessionId,
-            role: msg.role,
-            content: msg.content,
-            sequence: msg.sequence,
-            createdAt: new Date(msg.createdAt).toISOString(),
-            metadata: msg.metadata as Record<string, unknown> | undefined,
-          })),
+          messages: paginated.map((msg) => {
+            const reasoningContent = (msg as { reasoningContent?: string })
+              .reasoningContent;
+            return {
+              id: msg.id,
+              sessionId: msg.sessionId,
+              role: msg.role,
+              content: msg.content,
+              sequence: msg.sequence,
+              createdAt: new Date(msg.createdAt).toISOString(),
+              metadata: msg.metadata as Record<string, unknown> | undefined,
+              ...(reasoningContent ? { reasoningContent } : {}),
+            };
+          }),
           total: messages.length,
         },
         request.id,
