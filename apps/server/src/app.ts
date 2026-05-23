@@ -190,6 +190,7 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
+    getTaskService: () => taskService,
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)

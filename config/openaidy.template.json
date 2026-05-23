@@ -86,7 +86,7 @@
       "enabled": true,
       "systemPrompt": "You are an AI assistant. You are helpful, friendly, and knowledgeable. You can assist with a wide range of tasks including answering questions, providing explanations, and helping with various requests.",
       "model": "openai/gpt-4o-mini",
-      "tools": [],
+      "tools": ["tasks_create"],
       "tags": ["general", "default"],
       "workspace": {
         "enabled": true,

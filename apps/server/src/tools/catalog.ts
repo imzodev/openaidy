@@ -171,6 +171,16 @@ export const presentChoicesMeta: ToolMeta = {
     'Do NOT use for open-ended questions.',
 };
 
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export const tasksCreateMeta: ToolMeta = {
+  name: 'tasks_create',
+  category: 'Tasks',
+  description:
+    'Create a new task in the Kanban board. The task will be immediately visible ' +
+    'to the user in their Kanban view. Returns the created task details.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -193,4 +203,5 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   webFetchMeta,
   addonCreateMeta,
   presentChoicesMeta,
+  tasksCreateMeta,
 ];
