@@ -5,14 +5,36 @@
  * and dynamically updated options from field effects.
  */
 
-import { Show, For } from 'solid-js';
+import { Show, For, createMemo } from 'solid-js';
 import type { FieldRendererProps, FieldRenderer } from './types';
 import { FieldLabel } from './FieldLabel';
+import { useProviders } from './context';
 
 export const SelectField: FieldRenderer = (props: FieldRendererProps) => {
   const value = () => (props.value as string | undefined) ?? '';
-  // Use dynamic options if provided, otherwise use schema options
-  const options = () => props.dynamicOptions ?? props.schema.options ?? [];
+  const providers = useProviders();
+
+  const options = createMemo(() => {
+    if (providers && providers.length > 0) {
+      const opts: Array<{
+        value: string;
+        label: string;
+        description?: string;
+      }> = [];
+      for (const provider of providers) {
+        for (const model of provider.models ?? []) {
+          if (model.enabled !== false) {
+            opts.push({
+              value: `${provider.id}/${model.id}`,
+              label: `${model.name ?? model.id} (${provider.name})`,
+            });
+          }
+        }
+      }
+      return opts;
+    }
+    return props.schema.options ?? [];
+  });
 
   const handleChange = (e: Event) => {
     const target = e.currentTarget as HTMLSelectElement;

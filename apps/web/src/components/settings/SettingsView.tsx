@@ -257,6 +257,7 @@ export function SettingsView() {
             <Show when={activeTab() === 'agents'}>
               <AgentsTab
                 config={localConfig}
+                providers={localConfig()?.providers ?? []}
                 isPending={updateMutation.isPending}
                 onAddAgent={handleAddAgent}
                 onDeleteAgent={handleDeleteAgent}
