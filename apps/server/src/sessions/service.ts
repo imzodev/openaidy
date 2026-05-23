@@ -918,6 +918,9 @@ export class SessionMessageService {
             role: 'assistant',
             content: accumulatedContent || '',
             toolCalls: mappedToolCalls,
+            ...(finalReasoningContent
+              ? { reasoningContent: finalReasoningContent }
+              : {}),
           } as Message);
 
           for (const tc of toolCalls) {
