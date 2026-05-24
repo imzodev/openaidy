@@ -4,6 +4,7 @@ import type { PlanningService } from '../../planning';
 import { createTasksListTool } from './list';
 import { createTasksCreateTool } from './create';
 import { createTasksUpdateTool } from './update';
+import { createTasksDeleteTool } from './delete';
 
 export { createTasksCreateTool } from './create';
 export { createTasksUpdateTool } from './update';
@@ -19,5 +20,6 @@ export function createTaskTools(
     createTasksListTool(getTaskService),
     createTasksCreateTool(getTaskService),
     createTasksUpdateTool(getTaskService, getPlanningService),
+    createTasksDeleteTool(getTaskService),
   ];
 }

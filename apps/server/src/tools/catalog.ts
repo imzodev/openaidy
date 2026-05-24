@@ -197,6 +197,14 @@ export const tasksUpdateMeta: ToolMeta = {
     'priority, status, or planning settings. Returns the updated task details.',
 };
 
+export const tasksDeleteMeta: ToolMeta = {
+  name: 'tasks_delete',
+  category: 'Tasks',
+  description:
+    'Permanently delete a task from the Kanban board. This action cannot be undone. ' +
+    'Requires confirm=true to prevent accidental deletion.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -222,4 +230,5 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   tasksListMeta,
   tasksCreateMeta,
   tasksUpdateMeta,
+  tasksDeleteMeta,
 ];
