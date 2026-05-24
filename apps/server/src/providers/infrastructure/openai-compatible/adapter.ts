@@ -250,6 +250,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       this.logger.info(
         `invoke: model=${modelId} baseURL=${this.config.baseUrl}`,
       );
+      this.logger.info(
+        `invoke: request.tools = ${JSON.stringify(request.tools?.map((t) => t.name))}`,
+      );
       const messages = this.mapMessages(request.messages);
       const tools =
         request.tools && request.tools.length > 0
@@ -266,8 +269,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
       if (tools) {
         requestParams.tools = tools;
+        this.logger.info(
+          `invoke: requestParams.tools = ${JSON.stringify(tools)}`,
+        );
       }
 
+      this.logger.info(
+        `invoke: final requestParams = ${JSON.stringify({ ...requestParams, messages: '[...]' })}`,
+      );
       const response = await this.client.chat.completions.create(requestParams);
 
       return ok(this.mapResponse(response, modelId));
@@ -304,12 +313,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
       { id: string; name: string; arguments: string }
     > = new Map();
 
+    // Accumulate reasoning content for DeepSeek thinking mode
+    let reasoningContent = '';
+    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
+
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
-      this.logger.info(
-        `invokeStream: model=${modelId} baseURL=${this.config.baseUrl}`,
-      );
       const messages = this.mapMessages(request.messages);
       const tools =
         request.tools && request.tools.length > 0
@@ -347,6 +357,17 @@ export class OpenAICompatibleProvider implements ModelProvider {
             model: chunk.model,
             providerId: this.descriptor.id,
           });
+        }
+
+        // Handle reasoning content delta (DeepSeek thinking mode)
+        if (
+          isDeepSeek &&
+          (choice.delta as { reasoning_content?: string })?.reasoning_content
+        ) {
+          const delta =
+            (choice.delta as { reasoning_content?: string })
+              .reasoning_content ?? '';
+          reasoningContent += delta;
         }
 
         // Handle content delta
@@ -392,7 +413,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           toolCall: {
             id: tc.id,
             type: 'function',
-            name: tc.name,
+            name: isDeepSeek ? this.restoreToolName(tc.name) : tc.name,
             arguments: tc.arguments,
           },
         });
@@ -405,6 +426,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           timestamp: new Date().toISOString(),
           id: responseId,
           finishReason,
+          ...(reasoningContent ? { reasoningContent } : {}),
         });
       }
     } catch (error) {
@@ -419,6 +441,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private mapMessages(
     messages: ModelRequest['messages'],
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
+
     return messages.map((msg) => {
       if (msg.role === 'system') {
         return { role: 'system', content: msg.content };
@@ -427,7 +451,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
         return { role: 'user', content: msg.content };
       }
       if (msg.role === 'assistant') {
-        const assistantMsg: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
+        const assistantMsg: OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+          reasoning_content?: string;
+        } = {
           role: 'assistant',
           content: msg.content,
         };
@@ -438,6 +464,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
             type: 'function' as const,
             function: { name: tc.name, arguments: tc.arguments },
           }));
+        }
+        // DeepSeek requires reasoning_content to be passed back in thinking mode
+        if (isDeepSeek && aMsg.reasoningContent) {
+          assistantMsg.reasoning_content = aMsg.reasoningContent;
         }
         return assistantMsg;
       }
@@ -459,14 +489,26 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private mapTools(
     tools: NonNullable<ModelRequest['tools']>,
   ): OpenAI.Chat.ChatCompletionTool[] {
+    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
     return tools.map((tool) => ({
-      type: 'function',
+      type: 'function' as const,
       function: {
-        name: tool.name,
+        name: isDeepSeek ? this.sanitizeToolName(tool.name) : tool.name,
         description: tool.description,
         parameters: tool.parameters,
       },
     }));
+  }
+
+  private sanitizeToolName(name: string): string {
+    // DeepSeek only allows: ^[a-zA-Z0-9_-]+$
+    // Replace any character that is NOT a-z, A-Z, 0-9, _, or - with _
+    return name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+
+  private restoreToolName(name: string): string {
+    // This is a best-effort restore - may not be perfect if original had multiple _ chars
+    return name.replace(/_/g, '.');
   }
 
   private mapResponse(
@@ -479,6 +521,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
 
     const finishReason = choice.finish_reason ?? 'stop';
+    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
+
+    // Extract reasoning_content from DeepSeek responses (if present)
+    const reasoningContent = isDeepSeek
+      ? (choice.message as { reasoning_content?: string }).reasoning_content
+      : undefined;
 
     const result: ModelResponse = {
       id: response.id,
@@ -498,6 +546,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           }
         : { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       created: new Date().toISOString(),
+      ...(reasoningContent ? { reasoningContent } : {}),
     };
 
     // Only add toolCalls if there are tool calls
@@ -506,7 +555,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
         ...result,
         toolCalls: choice.message.tool_calls.map((tc) => ({
           id: tc.id,
-          name: (tc as { function: { name: string } }).function.name,
+          name: isDeepSeek
+            ? this.restoreToolName(
+                (tc as { function: { name: string } }).function.name,
+              )
+            : (tc as { function: { name: string } }).function.name,
           arguments: (tc as { function: { arguments: string } }).function
             .arguments,
         })),

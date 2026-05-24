@@ -5,7 +5,7 @@ describe('presentChoicesTool', () => {
   it('returns ok with JSON-serialized INTERRUPT_CHOICES including choices and question', async () => {
     const result = await presentChoicesTool.execute(
       { choices: ['Option A', 'Option B'], question: 'Pick one' },
-      { agentId: 'test-agent' },
+      { agentId: 'test-agent', sessionId: 'test-session' },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -18,7 +18,7 @@ describe('presentChoicesTool', () => {
   it('returns ok with INTERRUPT_CHOICES and null question when question omitted', async () => {
     const result = await presentChoicesTool.execute(
       { choices: ['Yes', 'No'] },
-      { agentId: 'test-agent' },
+      { agentId: 'test-agent', sessionId: 'test-session' },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;

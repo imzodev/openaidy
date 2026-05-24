@@ -11,7 +11,7 @@ import {
   createWorkspaceTools,
 } from './index';
 
-const CTX = { agentId: 'test-agent' };
+const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
 
 describe('workspace tools', () => {
   let testBaseDir: string;

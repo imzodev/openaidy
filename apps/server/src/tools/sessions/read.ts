@@ -1,13 +1,11 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { SessionsToolDeps } from './index.js';
+import { sessionsReadMeta } from '../catalog.js';
 
 export function createSessionsReadTool(deps: SessionsToolDeps): BuiltinTool {
   return {
-    name: 'sessions_read',
-    description:
-      'Read the full state of a session: its metadata, messages, and runs with their statuses. ' +
-      'Use this to check the progress of a session after dispatching a message with sessions_send. ' +
-      'Runs show the execution lifecycle: queued → running → succeeded / failed.',
+    name: sessionsReadMeta.name,
+    description: sessionsReadMeta.description,
     parameters: {
       type: 'object',
       properties: {

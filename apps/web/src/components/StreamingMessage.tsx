@@ -6,7 +6,8 @@
 
 import { Show, For, createMemo } from 'solid-js';
 import { Bot } from 'lucide-solid';
-import { MessageContent, ToolCallBlock } from './MessageContent';
+import { MessageContent } from './MessageContent';
+import { ToolCallBlock } from './ToolBlocks';
 import type {
   StreamingDelta,
   StreamingToolCall,

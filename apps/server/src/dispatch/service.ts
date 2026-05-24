@@ -12,6 +12,13 @@ import type { McpToolDefinition } from '../mcp/client';
 import type { SkillRegistry } from '../skills';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
+import type {
+  AppendMessageInput,
+  SessionMessageRecord,
+  SessionRunRecord,
+  SessionRecord,
+  FinishReason,
+} from '../types.js';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -30,10 +37,6 @@ import {
   markRunRunning,
   markRunSucceeded,
   markRunFailed,
-  type SessionMessageRecord,
-  type SessionRunRecord,
-  type SessionRecord,
-  type FinishReason,
 } from '../sessions/store';
 
 /**
@@ -638,13 +641,16 @@ export class DispatchService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId,
       role: 'assistant',
       content: response.content,
+      ...(response.reasoningContent !== undefined && {
+        reasoningContent: response.reasoningContent,
+      }),
       metadata: {
         agentId: config.agentId,
         providerId: response.providerId,
         model: response.model,
-        runId,
       },
     });
 
@@ -722,6 +728,7 @@ export class DispatchService {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
+      const msgReasoningContent = m.reasoningContent ?? undefined;
 
       if (msgRole === 'tool') {
         messages.push({
@@ -729,6 +736,14 @@ export class DispatchService {
           content: msgContent,
           toolCallId: msgToolCallId ?? '',
         });
+      } else if (msgRole === 'assistant') {
+        messages.push({
+          role: 'assistant',
+          content: msgContent,
+          ...(msgReasoningContent
+            ? { reasoningContent: msgReasoningContent }
+            : {}),
+        } as Message);
       } else if (msgRole !== 'system') {
         // Skip system messages from history (we use agent's system prompt)
         messages.push({
@@ -761,32 +776,21 @@ export class DispatchService {
   }
 
   // Message operations
-  private async appendMessage(input: {
-    sessionId: string;
-    role: 'user' | 'system' | 'assistant' | 'tool';
-    content: string;
-    toolCallId?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<SessionMessageRecord | SessionMessage> {
+  private async appendMessage(
+    input: AppendMessageInput,
+  ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      const appendInput: {
-        sessionId: string;
-        role: DbMessageRole;
-        content: string;
-        toolCallId?: string;
-        metadata?: Record<string, unknown>;
-      } = {
+      return this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
-      };
-      if (input.toolCallId !== undefined) {
-        appendInput.toolCallId = input.toolCallId;
-      }
-      if (input.metadata !== undefined) {
-        appendInput.metadata = input.metadata;
-      }
-      return this.messagesRepo.append(appendInput);
+        ...(input.runId !== undefined && { runId: input.runId }),
+        ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
+        ...(input.reasoningContent !== undefined && {
+          reasoningContent: input.reasoningContent,
+        }),
+        ...(input.metadata !== undefined && { metadata: input.metadata }),
+      });
     }
     return appendMessageRecord(input);
   }
@@ -876,13 +880,16 @@ export class DispatchService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId,
       role: 'assistant',
       content: response.content,
+      ...(response.reasoningContent !== undefined && {
+        reasoningContent: response.reasoningContent,
+      }),
       metadata: {
         agentId: config.agentId,
         providerId: response.providerId,
         model: response.model,
-        runId,
       },
     });
 

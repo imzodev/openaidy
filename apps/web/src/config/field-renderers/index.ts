@@ -25,6 +25,7 @@ export { SelectField } from './SelectField';
 export { ArrayField } from './ArrayField';
 export { ObjectField } from './ObjectField';
 export { DynamicField } from './DynamicField';
+export { ProvidersProvider, useProviders } from './context';
 export type { DynamicFieldProps } from './DynamicField';
 
 // Standard renderers registration

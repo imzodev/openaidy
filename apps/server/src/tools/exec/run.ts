@@ -2,6 +2,7 @@ import { resolve, relative } from 'node:path';
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { ExecService } from '../../exec/service';
 import type { WorkspaceService } from '../../workspace/service';
+import { execRunMeta } from '../catalog.js';
 
 /**
  * exec_run
@@ -22,11 +23,8 @@ export function createExecRunTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'exec_run',
-    description:
-      'Run a shell command inside the agent workspace and return its stdout, stderr, and exit code. ' +
-      'Supports pipes and redirects (executed via /bin/sh -c). ' +
-      'Times out after 30 seconds. The working directory is always confined to the agent workspace.',
+    name: execRunMeta.name,
+    description: execRunMeta.description,
     parameters: {
       type: 'object',
       properties: {

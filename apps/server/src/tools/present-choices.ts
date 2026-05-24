@@ -1,5 +1,6 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { PresentChoicesArgs } from '@openaidy/shared-types';
+import { presentChoicesMeta } from './catalog.js';
 
 /**
  * present_choices native tool
@@ -13,12 +14,8 @@ import type { PresentChoicesArgs } from '@openaidy/shared-types';
  * tool result.
  */
 export const presentChoicesTool: BuiltinTool = {
-  name: 'present_choices',
-  description:
-    'Present the user with a list of selectable options rendered as an interactive UI card. ' +
-    'Use this when you want the user to pick one of several predefined answers rather than typing freely. ' +
-    'Ideal for onboarding questions, configuration decisions, or guided workflows. ' +
-    'Do NOT use for open-ended questions.',
+  name: presentChoicesMeta.name,
+  description: presentChoicesMeta.description,
   parameters: {
     type: 'object',
     properties: {

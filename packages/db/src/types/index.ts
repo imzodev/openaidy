@@ -9,18 +9,25 @@ import type { SessionRunsRepository } from '../repositories/session-runs';
 import type { JobsRepository } from '../repositories/jobs';
 import type { JobRunsRepository } from '../repositories/job-runs';
 import type {
-  PairingRequestsRepository,
   DevicesRepository,
+  PairingRequestsRepository,
 } from '../repositories/pairing';
 import type { AccessTokensRepository } from '../repositories/access-tokens';
 import type { TasksRepository } from '../repositories/tasks';
 import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
+import type { DeliverablesRepository } from '../repositories/deliverables';
 
 export type SessionsStore = Pick<
   SessionsRepository,
-  'create' | 'findById' | 'list' | 'updateTitle' | 'updateStatus' | 'delete'
+  | 'create'
+  | 'findById'
+  | 'list'
+  | 'updateTitle'
+  | 'updateAgentId'
+  | 'updateStatus'
+  | 'delete'
 >;
 
 export type SessionMessagesStore = Pick<
@@ -96,6 +103,7 @@ export type TasksStore = TasksRepository;
 export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
 export type AddonsStore = AddonsRepository;
+export type DeliverablesStore = DeliverablesRepository;
 
 export type DatabaseRepositories = {
   sessions: SessionsStore;
@@ -110,6 +118,7 @@ export type DatabaseRepositories = {
   subtasks: SubtasksStore;
   taskAgents: TaskAgentsStore;
   addons: AddonsStore;
+  deliverables: DeliverablesStore;
 };
 
 export type DatabaseAdapter = {

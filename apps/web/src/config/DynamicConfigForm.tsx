@@ -8,9 +8,10 @@
 import { Show, For, createSignal, createMemo } from 'solid-js';
 import { ChevronDown, ChevronRight } from 'lucide-solid';
 import type { SectionSchema, FieldSchema, FormSchema } from './schema';
+import type { ProviderConfig } from '../lib/api';
 import { isFieldVisible } from './visibility';
 import { processFieldEffects, applyConfigUpdates } from './effects';
-import { DynamicField } from './field-renderers';
+import { DynamicField, ProvidersProvider } from './field-renderers';
 import type { FieldRendererRegistry } from './field-renderers';
 
 export type DynamicConfigFormProps = {
@@ -26,6 +27,8 @@ export type DynamicConfigFormProps = {
   disabled?: boolean;
   /** Custom field renderer registry (uses default if not provided) */
   registry?: FieldRendererRegistry;
+  /** Available providers for dynamic options */
+  providers?: ProviderConfig[];
 };
 
 /**
@@ -106,23 +109,25 @@ export function DynamicConfigForm(props: DynamicConfigFormProps) {
   };
 
   return (
-    <div class="dynamic-config-form space-y-6">
-      <For each={props.schema.sections}>
-        {(section) => (
-          <ConfigSection
-            section={section}
-            config={props.config}
-            errors={props.errors}
-            disabled={props.disabled}
-            registry={props.registry}
-            collapsed={isSectionCollapsed(section.id)}
-            onToggleCollapse={() => toggleSection(section.id)}
-            getFieldValue={getFieldValue}
-            onFieldChange={handleFieldChange}
-          />
-        )}
-      </For>
-    </div>
+    <ProvidersProvider providers={props.providers}>
+      <div class="dynamic-config-form space-y-6">
+        <For each={props.schema.sections}>
+          {(section) => (
+            <ConfigSection
+              section={section}
+              config={props.config}
+              errors={props.errors}
+              disabled={props.disabled}
+              registry={props.registry}
+              collapsed={isSectionCollapsed(section.id)}
+              onToggleCollapse={() => toggleSection(section.id)}
+              getFieldValue={getFieldValue}
+              onFieldChange={handleFieldChange}
+            />
+          )}
+        </For>
+      </div>
+    </ProvidersProvider>
   );
 }
 

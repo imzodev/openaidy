@@ -158,6 +158,18 @@ export class TasksRepository {
 
     return results[0] ?? null;
   }
+
+  /**
+   * Find a task by its session ID (uses index)
+   */
+  async findBySessionId(sessionId: string): Promise<schema.Task | null> {
+    const results = await this.db
+      .select()
+      .from(schema.tasks)
+      .where(eq(schema.tasks.sessionId, sessionId))
+      .limit(1);
+    return results[0] ?? null;
+  }
 }
 
 /**

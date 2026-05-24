@@ -140,6 +140,7 @@ describe('TaskService Session Integration', () => {
       }
       expect(mockSessionService.createSession).toHaveBeenCalledWith(
         'Task: Test Task',
+        'task',
       );
       expect(mockTasksRepo.update).toHaveBeenCalledWith('task-1', {
         sessionId: 'session-1',
@@ -238,6 +239,7 @@ describe('TaskService Session Integration', () => {
       }
       expect(mockSessionService.createSession).toHaveBeenCalledWith(
         'Subtask: Subtask',
+        'subtask',
       );
       expect(mockSubtasksRepo.update).toHaveBeenCalledWith('subtask-1', {
         sessionId: 'session-1',

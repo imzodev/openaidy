@@ -344,12 +344,13 @@ export class WorkspaceService {
 
   /**
    * Write a file to the workspace
+   * Returns the absolute path of the written file
    */
   async writeFile(
     agentId: string,
     filePath: string,
     content: string,
-  ): Promise<void> {
+  ): Promise<string> {
     const absolutePath = this.validatePath(agentId, filePath);
     log.debug('Writing file:', { agentId, filePath, absolutePath });
 
@@ -360,6 +361,7 @@ export class WorkspaceService {
 
       await writeFile(absolutePath, content, 'utf-8');
       log.info('File written:', { agentId, filePath });
+      return absolutePath;
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       log.error('Failed to write file:', { agentId, filePath }, err);

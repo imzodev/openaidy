@@ -76,7 +76,10 @@ OpenAidy.ready(function(sdk) {});`;
 
   it('rejects missing id', async () => {
     expectError(
-      await tool.execute({ ...VALID_ARGS, id: '' }, { agentId: 'agent' }),
+      await tool.execute(
+        { ...VALID_ARGS, id: '' },
+        { agentId: 'agent', sessionId: 'test-session' },
+      ),
       /id is required/,
     );
   });
@@ -85,7 +88,7 @@ OpenAidy.ready(function(sdk) {});`;
     expectError(
       await tool.execute(
         { ...VALID_ARGS, id: 'My Addon!' },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /lowercase/,
     );
@@ -93,7 +96,10 @@ OpenAidy.ready(function(sdk) {});`;
 
   it('rejects missing name', async () => {
     expectError(
-      await tool.execute({ ...VALID_ARGS, name: '' }, { agentId: 'agent' }),
+      await tool.execute(
+        { ...VALID_ARGS, name: '' },
+        { agentId: 'agent', sessionId: 'test-session' },
+      ),
       /name is required/,
     );
   });
@@ -102,7 +108,7 @@ OpenAidy.ready(function(sdk) {});`;
     expectError(
       await tool.execute(
         { ...VALID_ARGS, description: '' },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /description is required/,
     );
@@ -112,7 +118,7 @@ OpenAidy.ready(function(sdk) {});`;
     expectError(
       await tool.execute(
         { ...VALID_ARGS, permissions: 'agents.list' },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /permissions/,
     );
@@ -121,7 +127,10 @@ OpenAidy.ready(function(sdk) {});`;
   it('rejects missing files', async () => {
     const { files: _f, ...noFiles } = VALID_ARGS;
     expectError(
-      await tool.execute(noFiles, { agentId: 'agent' }),
+      await tool.execute(noFiles, {
+        agentId: 'agent',
+        sessionId: 'test-session',
+      }),
       /files is required/,
     );
   });
@@ -130,7 +139,7 @@ OpenAidy.ready(function(sdk) {});`;
     expectError(
       await tool.execute(
         { ...VALID_ARGS, files: { 'app/index.js': VALID_JS } },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /app\/index\.html/,
     );
@@ -140,7 +149,7 @@ OpenAidy.ready(function(sdk) {});`;
     expectError(
       await tool.execute(
         { ...VALID_ARGS, files: { 'app/index.html': VALID_HTML } },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /app\/index\.js/,
     );
@@ -156,7 +165,7 @@ OpenAidy.ready(function(sdk) {});`;
             'app/index.js': VALID_JS,
           },
         },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /script src/,
     );
@@ -173,7 +182,7 @@ OpenAidy.ready(function(sdk) {});`;
             'app/index.js': VALID_JS,
           },
         },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /sdk/i,
     );
@@ -190,7 +199,7 @@ OpenAidy.ready(function(sdk) {});`;
             'app/index.js': VALID_JS,
           },
         },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /before/,
     );
@@ -207,7 +216,7 @@ OpenAidy.ready(function(sdk) {
           ...VALID_ARGS,
           files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
         },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /externalDomains/,
     );
@@ -224,7 +233,7 @@ OpenAidy.ready(function(sdk) {
         externalDomains: ['api.example.com'],
         files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
       },
-      { agentId: 'agent' },
+      { agentId: 'agent', sessionId: 'test-session' },
     );
     expect(result.ok).toBe(true);
   });
@@ -232,7 +241,10 @@ OpenAidy.ready(function(sdk) {
   it('rejects path traversal in extra files', async () => {
     const files = { ...VALID_ARGS.files, '../escape.js': 'bad' };
     expectError(
-      await tool.execute({ ...VALID_ARGS, files }, { agentId: 'agent' }),
+      await tool.execute(
+        { ...VALID_ARGS, files },
+        { agentId: 'agent', sessionId: 'test-session' },
+      ),
       /relative/i,
     );
   });
@@ -241,16 +253,22 @@ OpenAidy.ready(function(sdk) {
     expectError(
       await tool.execute(
         { ...VALID_ARGS, files: { ...VALID_ARGS.files, 'addon.json': '{}' } },
-        { agentId: 'agent' },
+        { agentId: 'agent', sessionId: 'test-session' },
       ),
       /addon\.json/,
     );
   });
 
   it('rejects a duplicate addon id', async () => {
-    await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expectError(
-      await tool.execute(VALID_ARGS, { agentId: 'agent' }),
+      await tool.execute(VALID_ARGS, {
+        agentId: 'agent',
+        sessionId: 'test-session',
+      }),
       /already exists/,
     );
   });
@@ -258,17 +276,26 @@ OpenAidy.ready(function(sdk) {
   // ── Successful creation (basic template — default) ─────────────────────────
 
   it('returns ok: true on success', async () => {
-    const result = await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    const result = await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expect(result.ok).toBe(true);
   });
 
   it('creates the addon directory', async () => {
-    await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expect(fs.existsSync(path.join(addonsDir, 'my-addon'))).toBe(true);
   });
 
   it('writes addon.json with correct structure', async () => {
-    await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     const manifest = JSON.parse(
       fs.readFileSync(path.join(addonsDir, 'my-addon', 'addon.json'), 'utf-8'),
     );
@@ -279,7 +306,10 @@ OpenAidy.ready(function(sdk) {
   });
 
   it('writes app/index.html from files param', async () => {
-    await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     const htmlPath = path.join(addonsDir, 'my-addon', 'app', 'index.html');
     expect(fs.existsSync(htmlPath)).toBe(true);
     const html = fs.readFileSync(htmlPath, 'utf-8');
@@ -287,7 +317,10 @@ OpenAidy.ready(function(sdk) {
   });
 
   it('writes app/index.js from files param', async () => {
-    await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     const jsPath = path.join(addonsDir, 'my-addon', 'app', 'index.js');
     expect(fs.existsSync(jsPath)).toBe(true);
     const js = fs.readFileSync(jsPath, 'utf-8');
@@ -299,7 +332,10 @@ OpenAidy.ready(function(sdk) {
       ...VALID_ARGS.files,
       'app/styles.css': 'body { color: red; }',
     };
-    await tool.execute({ ...VALID_ARGS, files }, { agentId: 'agent' });
+    await tool.execute(
+      { ...VALID_ARGS, files },
+      { agentId: 'agent', sessionId: 'test-session' },
+    );
     const css = fs.readFileSync(
       path.join(addonsDir, 'my-addon', 'app', 'styles.css'),
       'utf-8',
@@ -308,7 +344,10 @@ OpenAidy.ready(function(sdk) {
   });
 
   it('success message lists template files', async () => {
-    const result = await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    const result = await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.content).toContain('addon.json');
@@ -318,7 +357,10 @@ OpenAidy.ready(function(sdk) {
   });
 
   it('success message includes usage hints for granted permissions', async () => {
-    const result = await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    const result = await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.content).toContain('listAgents');
   });
@@ -326,14 +368,17 @@ OpenAidy.ready(function(sdk) {
   it('does not include hints for permissions not granted', async () => {
     const result = await tool.execute(
       { ...VALID_ARGS, permissions: ['agents.list'] },
-      { agentId: 'agent' },
+      { agentId: 'agent', sessionId: 'test-session' },
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.content).not.toContain('invokeAgent');
   });
 
   it('success note mentions DB not configured when addonService is absent', async () => {
-    const result = await tool.execute(VALID_ARGS, { agentId: 'agent' });
+    const result = await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.content).toContain('openaidy addon install');
   });
@@ -357,6 +402,7 @@ OpenAidy.ready(function(sdk) {
     });
     const result = await toolWithService.execute(VALID_ARGS, {
       agentId: 'agent',
+      sessionId: 'test-session',
     });
     expect(result.ok).toBe(true);
     expect(installCalled).toBe(true);

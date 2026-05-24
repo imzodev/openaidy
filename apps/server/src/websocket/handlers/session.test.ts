@@ -77,7 +77,9 @@ describe('SessionHandler', () => {
       const mockSession: Session = {
         id: 'session-123',
         title: 'Session 2024-01-01T00:00:00.000Z',
+        type: 'chat',
         status: 'active',
+        agentId: null,
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:00:00.000Z'),
         archivedAt: null,
@@ -128,7 +130,9 @@ describe('SessionHandler', () => {
       const mockSession: Session = {
         id: 'session-123',
         title: 'Test Session',
+        type: 'chat',
         status: 'active',
+        agentId: null,
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:01:00.000Z'),
         archivedAt: null,
@@ -175,7 +179,9 @@ describe('SessionHandler', () => {
         {
           id: 'session-1',
           title: 'Session 1',
+          type: 'chat',
           status: 'active',
+          agentId: null,
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
           updatedAt: new Date('2024-01-01T00:00:00.000Z'),
           archivedAt: null,
@@ -183,7 +189,9 @@ describe('SessionHandler', () => {
         {
           id: 'session-2',
           title: 'Session 2',
+          type: 'chat',
           status: 'active',
+          agentId: null,
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
           updatedAt: new Date('2024-01-02T00:00:00.000Z'),
           archivedAt: null,
@@ -217,7 +225,9 @@ describe('SessionHandler', () => {
         {
           id: 'session-1',
           title: 'Session 1',
+          type: 'chat',
           status: 'active',
+          agentId: null,
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
           updatedAt: new Date('2024-01-01T00:00:00.000Z'),
           archivedAt: null,
@@ -225,7 +235,9 @@ describe('SessionHandler', () => {
         {
           id: 'session-2',
           title: 'Session 2',
+          type: 'chat',
           status: 'archived',
+          agentId: null,
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
           updatedAt: new Date('2024-01-02T00:00:00.000Z'),
           archivedAt: new Date('2024-01-02T00:00:00.000Z'),
@@ -253,7 +265,9 @@ describe('SessionHandler', () => {
       const mockSessions: Session[] = Array.from({ length: 100 }, (_, i) => ({
         id: `session-${i}`,
         title: `Session ${i}`,
-        status: 'active',
+        type: 'chat' as const,
+        status: 'active' as const,
+        agentId: null,
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:00:00.000Z'),
         archivedAt: null,

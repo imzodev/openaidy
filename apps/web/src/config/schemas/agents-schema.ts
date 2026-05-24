@@ -61,15 +61,14 @@ const agentSchema: FieldSchema = {
         'This prompt is sent at the beginning of each conversation to instruct the AI how to behave.',
     },
     model: {
-      type: 'string',
+      type: 'select',
       key: 'model',
       label: 'Model',
       required: true,
       description:
         'The model to use for this agent in "providerId/modelId" format',
-      placeholder: 'e.g., openai/gpt-4o-mini',
-      helpText:
-        'Specify the provider and model using the format "providerId/modelId". For example, "openai/gpt-4o-mini" or "anthropic/claude-3-5-sonnet-20241022".',
+      placeholder: 'Select a model...',
+      optionsSource: 'models',
     },
   },
 };

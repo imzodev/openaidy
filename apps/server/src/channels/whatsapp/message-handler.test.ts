@@ -3,7 +3,7 @@ import {
   handleInboundWhatsAppMessage,
   clearSessionMapForTesting,
 } from './message-handler.js';
-import type { SessionRecord } from '../../sessions/store.js';
+import type { SessionRecord } from '../../types.js';
 
 const mockSessionService = {
   listSessions: vi.fn<() => Promise<SessionRecord[]>>(),

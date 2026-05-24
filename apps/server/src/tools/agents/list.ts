@@ -1,15 +1,13 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
+import { agentsListMeta } from '../catalog.js';
 
 export function createAgentsListTool(
   agentRegistry: AgentRegistry,
 ): BuiltinTool {
   return {
-    name: 'agents_list',
-    description:
-      'List all enabled agents available in this OpenAidy instance. ' +
-      "Returns each agent's id, name, description, and model. " +
-      'Use this before creating an addon that invokes an agent — never hardcode an agent ID.',
+    name: agentsListMeta.name,
+    description: agentsListMeta.description,
     parameters: {
       type: 'object',
       properties: {},

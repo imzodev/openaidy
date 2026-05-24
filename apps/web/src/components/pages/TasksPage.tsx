@@ -5,10 +5,11 @@
  * and drag-and-drop status updates.
  */
 
-import { createSignal, Show, onMount } from 'solid-js';
+import { createSignal, Show, onMount, onCleanup } from 'solid-js';
 import { Layout } from './Layout';
 import { KanbanBoard } from '../tasks/KanbanBoard';
 import { TaskModal } from '../tasks/TaskModal';
+import { TaskDetailPanel } from '../tasks/TaskDetailPanel';
 import {
   type Task,
   type TaskStatus,
@@ -20,6 +21,7 @@ import {
   type AgentRole,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
+import { useEscapeKey } from '../settings/hooks';
 
 export function TasksPage() {
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
@@ -33,6 +35,12 @@ export function TasksPage() {
   const [executingTasks, setExecutingTasks] = createSignal<Set<string>>(
     new Set(),
   );
+  const [detailTaskId, setDetailTaskId] = createSignal<string | null>(null);
+  // Track tasks with planning in progress for polling
+  const [planningTasks, setPlanningTasks] = createSignal<Set<string>>(
+    new Set(),
+  );
+  let pollingInterval: number | null = null;
 
   // Load agents on mount
   onMount(async () => {
@@ -44,24 +52,8 @@ export function TasksPage() {
     }
   });
 
-  const handleTaskClick = async (task: Task) => {
-    setSelectedTask(task);
-    setSelectedTaskAgents([]);
-    setIsModalOpen(true);
-
-    try {
-      const result = await getTask(task.id);
-      if (result.ok) {
-        setSelectedTaskAgents(
-          result.data.agents.map((assignment) => ({
-            agentId: assignment.agentId,
-            role: assignment.role,
-          })),
-        );
-      }
-    } catch {
-      // Keep edit modal open even if agent assignments fail to load
-    }
+  const handleTaskClick = (task: Task) => {
+    setDetailTaskId(task.id);
   };
 
   const handleTaskStatusChange = async (
@@ -95,9 +87,14 @@ export function TasksPage() {
     }
   };
 
-  const handleTaskCreated = (_task: Task) => {
+  const handleTaskCreated = (task: Task) => {
     setIsModalOpen(false);
     setRefreshTrigger((prev) => prev + 1);
+
+    // Start polling if planning is enabled
+    if (task.planningEnabled && task.planningStatus === 'pending') {
+      startPlanningPolling(task.id);
+    }
   };
 
   const handleTaskUpdated = (_task: Task) => {
@@ -133,6 +130,106 @@ export function TasksPage() {
     setSelectedTask(null);
     setSelectedTaskAgents([]);
   };
+
+  const handleCloseDetail = () => {
+    setDetailTaskId(null);
+  };
+
+  const handleDetailTaskUpdated = () => {
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
+  const handleDetailTaskDeleted = () => {
+    setDetailTaskId(null);
+    setRefreshTrigger((prev) => prev + 1);
+  };
+
+  /**
+   * Start polling for planning status updates
+   */
+  function startPlanningPolling(taskId: string) {
+    setPlanningTasks((prev) => new Set(prev).add(taskId));
+
+    if (!pollingInterval) {
+      pollingInterval = window.setInterval(() => {
+        pollPlanningStatus();
+      }, 3000);
+    }
+  }
+
+  /**
+   * Stop polling when no more tasks need monitoring
+   */
+  function stopPlanningPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+
+  /**
+   * Poll planning status for all tracked tasks
+   */
+  async function pollPlanningStatus() {
+    const tasksToPoll = Array.from(planningTasks());
+    if (tasksToPoll.length === 0) {
+      stopPlanningPolling();
+      return;
+    }
+
+    let hasChanges = false;
+
+    for (const taskId of tasksToPoll) {
+      try {
+        const result = await getTask(taskId);
+        if (result.ok) {
+          const task = result.data;
+
+          // Check if planning is complete or failed
+          if (
+            task.planningStatus === 'completed' ||
+            task.planningStatus === 'failed'
+          ) {
+            setPlanningTasks((prev) => {
+              const next = new Set(prev);
+              next.delete(taskId);
+              return next;
+            });
+            hasChanges = true;
+
+            // Show notification
+            if (task.planningStatus === 'completed') {
+              console.log(
+                `Task "${task.title}" planning completed with ${task.subtasks.length} subtasks`,
+              );
+            } else {
+              console.warn(`Task "${task.title}" planning failed`);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Failed to poll task ${taskId}:`, err);
+      }
+    }
+
+    // Refresh kanban board if any tasks changed
+    if (hasChanges) {
+      setRefreshTrigger((prev) => prev + 1);
+    }
+
+    // Stop polling if no more tasks
+    if (planningTasks().size === 0) {
+      stopPlanningPolling();
+    }
+  }
+
+  // Add Esc key handler for detail panel
+  useEscapeKey(handleCloseDetail, () => !!detailTaskId());
+
+  // Cleanup polling on unmount
+  onCleanup(() => {
+    stopPlanningPolling();
+  });
 
   return (
     <Layout
@@ -187,7 +284,7 @@ export function TasksPage() {
         />
       </div>
 
-      {/* Task Modal */}
+      {/* Task Modal (create only) */}
       <TaskModal
         isOpen={isModalOpen()}
         onClose={handleCloseModal}
@@ -196,6 +293,24 @@ export function TasksPage() {
         agents={agents()}
         onSubmit={handleSubmit}
       />
+
+      {/* Task Detail Panel (view + subtasks) */}
+      <Show when={detailTaskId()}>
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseDetail();
+          }}
+        >
+          <TaskDetailPanel
+            taskId={detailTaskId()!}
+            agents={agents()}
+            onClose={handleCloseDetail}
+            onTaskUpdated={handleDetailTaskUpdated}
+            onTaskDeleted={handleDetailTaskDeleted}
+          />
+        </div>
+      </Show>
     </Layout>
   );
 }

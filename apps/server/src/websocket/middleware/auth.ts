@@ -78,6 +78,7 @@ export type AuthResult = {
 /**
  * Capability constants
  */
+// TODO: DO NOT REPEAT capabilities or constants, these are redeclared in @packages/shared-types/src/websocket.ts
 export const CAPABILITIES = {
   // Session capabilities
   SESSIONS_LIST: 'sessions.list',

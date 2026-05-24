@@ -6,10 +6,11 @@ import {
   type FormSchema,
 } from '../../../config';
 import { CollapsibleCard } from '../../ui';
-import type { AppConfig, AgentConfig } from '../../../lib/api';
+import type { AppConfig, AgentConfig, ProviderConfig } from '../../../lib/api';
 
 interface AgentsTabProps {
   config: () => AppConfig | undefined;
+  providers: ProviderConfig[];
   isPending: boolean;
   onAddAgent: () => void;
   onDeleteAgent: (agentId: string) => void;
@@ -72,6 +73,7 @@ export function AgentsTab(props: AgentsTabProps) {
                 schema={agentsSchema()}
                 onChange={(newConfig) => handleAgentChange(agent.id, newConfig)}
                 errors={{}}
+                providers={props.providers}
               />
             </CollapsibleCard>
           )}

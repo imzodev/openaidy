@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { WorkspaceService } from '../../workspace/service';
 import { WorkspaceError } from '../../workspace/service';
+import { workspaceListMeta } from '../catalog.js';
 
 /**
  * workspace_list
@@ -11,10 +12,8 @@ export function createWorkspaceListTool(
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
-    name: 'workspace_list',
-    description:
-      'List files and directories in the agent workspace. ' +
-      'Returns a JSON array of entries with name, path, size, and whether each entry is a directory.',
+    name: workspaceListMeta.name,
+    description: workspaceListMeta.description,
     parameters: {
       type: 'object',
       properties: {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskService, createTaskService } from './service';
 import type { Task, Subtask, TaskAgent } from '@openaidy/db';
+import type { PlanningService } from '../planning/service';
 
 // Mock repository types - use interface-like types for mocking
 interface MockTasksRepository {
@@ -227,6 +228,94 @@ describe('TaskService', () => {
       expect(taskAgentsRepo.assignMultiple).toHaveBeenCalledWith('task1', [
         { agentId: 'agent1', role: 'primary' },
       ]);
+    });
+  });
+
+  describe('createTask with planning', () => {
+    const mockPlanningTask = { ...mockTask, planningEnabled: true };
+
+    it('triggers planningService.planTask when planningEnabled=true', async () => {
+      tasksRepo.create = vi.fn().mockResolvedValue(mockPlanningTask);
+      const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
+      const serviceWithPlanning = createTaskService({
+        tasksRepo:
+          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+        subtasksRepo:
+          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+        taskAgentsRepo:
+          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+        planningService: { planTask } as unknown as PlanningService,
+      });
+
+      const result = await serviceWithPlanning.createTask({
+        title: 'Test Task',
+        description: 'Test description',
+        planningEnabled: true,
+      });
+
+      expect(result.ok).toBe(true);
+      // planTask is fire-and-forget — wait for it via a tick
+      await new Promise((r) => setTimeout(r, 0));
+      expect(planTask).toHaveBeenCalledWith('task1');
+    });
+
+    it('does NOT trigger planningService when planningEnabled=false', async () => {
+      tasksRepo.create = vi.fn().mockResolvedValue(mockTask);
+      const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
+      const serviceWithPlanning = createTaskService({
+        tasksRepo:
+          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+        subtasksRepo:
+          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+        taskAgentsRepo:
+          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+        planningService: { planTask } as unknown as PlanningService,
+      });
+
+      await serviceWithPlanning.createTask({
+        title: 'Test Task',
+        description: 'Test description',
+        planningEnabled: false,
+      });
+
+      await new Promise((r) => setTimeout(r, 0));
+      expect(planTask).not.toHaveBeenCalled();
+    });
+
+    it('does NOT trigger planning when no planningService provided', async () => {
+      tasksRepo.create = vi.fn().mockResolvedValue(mockPlanningTask);
+
+      const result = await service.createTask({
+        title: 'Test Task',
+        description: 'Test description',
+        planningEnabled: true,
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it('task creation succeeds even if planningService.planTask rejects', async () => {
+      tasksRepo.create = vi.fn().mockResolvedValue(mockPlanningTask);
+      const planTask = vi.fn().mockRejectedValue(new Error('unexpected error'));
+      const serviceWithPlanning = createTaskService({
+        tasksRepo:
+          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+        subtasksRepo:
+          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+        taskAgentsRepo:
+          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+        planningService: { planTask } as unknown as PlanningService,
+      });
+
+      const result = await serviceWithPlanning.createTask({
+        title: 'Test Task',
+        description: 'Test description',
+        planningEnabled: true,
+      });
+
+      expect(result.ok).toBe(true);
+      // Let the background promise reject without crashing
+      await new Promise((r) => setTimeout(r, 0));
     });
   });
 

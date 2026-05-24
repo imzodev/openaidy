@@ -124,7 +124,7 @@ export type KanbanBoard = {
  * Create task input
  */
 export type CreateTaskInput = {
-  title: string;
+  title?: string;
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
@@ -302,9 +302,7 @@ export async function removeAgent(
 /**
  * Get task progress
  */
-export async function getTaskProgress(
-  taskId: string,
-): Promise<
+export async function getTaskProgress(taskId: string): Promise<
   ApiResult<{
     total: number;
     completed: number;
@@ -327,7 +325,8 @@ export async function listSubtasks(
   if (!response.ok) {
     throw new Error(`Failed to list subtasks: ${response.statusText}`);
   }
-  return response.json();
+  const json = await response.json();
+  return json.data ?? json;
 }
 
 /**
@@ -397,6 +396,24 @@ export async function getTaskSession(
 }
 
 /**
+ * Complete a subtask manually
+ */
+export async function completeSubtask(
+  subtaskId: string,
+  result?: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(
+    `${API_BASE}/subtasks/${subtaskId}/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ result }),
+    },
+  );
+  return response.json();
+}
+
+/**
  * Get the session linked to a subtask
  */
 export async function getSubtaskSession(
@@ -408,6 +425,7 @@ export async function getSubtaskSession(
 
 /**
  * Plan a task (decompose into subtasks using AI)
+ * Can be called again to re-plan even after initial planning
  */
 export async function planTask(
   taskId: string,
@@ -415,5 +433,90 @@ export async function planTask(
   const response = await apiFetch(`${API_BASE}/tasks/${taskId}/plan`, {
     method: 'POST',
   });
+  return response.json();
+}
+
+/**
+ * Re-plan a task - calls planTask again to regenerate subtasks
+ * Useful when task requirements have changed or initial plan was inadequate
+ */
+export async function replanTask(
+  taskId: string,
+): Promise<ApiResult<{ subtasks: Subtask[] }>> {
+  return planTask(taskId);
+}
+
+// ── Deliverables ──────────────────────────────────────────────────────────────
+
+/**
+ * Deliverable type
+ */
+export type DeliverableType =
+  | 'document'
+  | 'image'
+  | 'code'
+  | 'report'
+  | 'data'
+  | 'link'
+  | 'other';
+
+/**
+ * Deliverable status
+ */
+export type DeliverableStatus = 'pending' | 'delivered' | 'verified';
+
+/**
+ * Deliverable record
+ */
+export type Deliverable = {
+  id: string;
+  taskId: string;
+  type: DeliverableType;
+  description: string;
+  status: DeliverableStatus;
+  format: string | null;
+  size: string | null;
+  path: string | null;
+  url: string | null;
+  version: string | null;
+  metadata: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Get deliverables for a task
+ */
+export async function listDeliverables(
+  taskId: string,
+): Promise<ApiResult<{ items: Deliverable[] }>> {
+  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/deliverables`);
+  return response.json();
+}
+
+/**
+ * Update a deliverable
+ */
+export async function updateDeliverable(
+  taskId: string,
+  id: string,
+  input: Partial<{
+    type: DeliverableType;
+    description: string;
+    status: DeliverableStatus;
+    format: string;
+    size: string;
+    path: string;
+    url: string;
+    version: string;
+  }>,
+): Promise<ApiResult<Deliverable>> {
+  const response = await apiFetch(
+    `${API_BASE}/tasks/${taskId}/deliverables/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+  );
   return response.json();
 }

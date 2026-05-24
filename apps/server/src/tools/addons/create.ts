@@ -23,6 +23,7 @@ import type { AddonService } from '../../addons/service.js';
 import type { AddonManifest } from '@openaidy/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import { renderSdkReference, SDK_METHODS } from '../../addons/sdk-reference.js';
+import { addonCreateMeta } from '../catalog.js';
 
 export type AddonToolDeps = {
   /** Absolute path to the root addons directory (e.g. .openaidy/addons) */
@@ -70,7 +71,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
   const sdkReference = renderSdkReference();
 
   return {
-    name: 'addon_create',
+    name: addonCreateMeta.name,
 
     description: [
       'Scaffold a new OpenAidy addon, register it in the database, and enable it.',

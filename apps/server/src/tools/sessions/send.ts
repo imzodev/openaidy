@@ -1,16 +1,11 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { SessionsToolDeps } from './index.js';
+import { sessionsSendMeta } from '../catalog.js';
 
 export function createSessionsSendTool(deps: SessionsToolDeps): BuiltinTool {
   return {
-    name: 'sessions_send',
-    description:
-      'Send a message to a session, optionally specifying which agent should respond. ' +
-      'This dispatches asynchronously — it returns immediately. ' +
-      'Use sessions_read to check progress and retrieve the response later. ' +
-      'The target agent runs its own tool-call loop independently. ' +
-      'You can send to a session you created with sessions_create, or to any existing session. ' +
-      'To orchestrate another agent: sessions_create a new session, then sessions_send to it with that agentId.',
+    name: sessionsSendMeta.name,
+    description: sessionsSendMeta.description,
     parameters: {
       type: 'object',
       properties: {

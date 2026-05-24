@@ -34,6 +34,7 @@ import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
 import { createTaskService } from './tasks';
+import { createPlanningService } from './planning';
 import { createMcpClientService } from './mcp/client';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
@@ -167,10 +168,15 @@ export async function buildApp() {
     : undefined;
 
   // Create builtin tool registry (native, in-process tools — separate from MCP)
-  // Session tools use a lazy getter to break the circular dependency:
+  // Session tools and Tasks tools use lazy getters to break circular dependencies:
   //   tool registry → SessionMessageService → tool registry
-  // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in sessions getter
+  //   tool registry → TaskService → SessionMessageService → tool registry
+  // eslint-disable-next-line prefer-const -- must be 'let' due to forward reference in getters
   let sessionService: SessionMessageService | undefined;
+
+  let taskService: ReturnType<typeof createTaskService> | undefined;
+
+  let planningService: ReturnType<typeof createPlanningService> | undefined;
 
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
@@ -186,7 +192,12 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
+    getTaskService: () => taskService,
+    getPlanningService: () => planningService,
   });
+
+  // Create run event emitter for SSE streaming (needed by sessionService)
+  const runEvents = new RunEventEmitter();
 
   sessionService = new SessionMessageService({
     providers: providerServices,
@@ -197,6 +208,8 @@ export async function buildApp() {
     skills: skillRegistry,
     personality: personalityService,
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+    runEvents,
+    workspaceBaseDir: env.WORKSPACE_BASE_DIR,
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -205,9 +218,6 @@ export async function buildApp() {
         }
       : undefined,
   });
-
-  // Create run event emitter for SSE streaming
-  const runEvents = new RunEventEmitter();
 
   // Create and wire channel registry
   const channelRegistry = createChannelRegistry(
@@ -401,14 +411,33 @@ export async function buildApp() {
 
   // Register task routes (requires DB)
   if (dbAdapter) {
-    const taskService = createTaskService({
+    planningService = createPlanningService({
+      providers: providerServices,
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
+      agents: services.agents,
+      getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+    });
+
+    taskService = createTaskService({
+      tasksRepo: dbAdapter.repositories.tasks,
+      subtasksRepo: dbAdapter.repositories.subtasks,
+      taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
       agents: services.agents,
       sessionService: services.sessions,
+      planningService,
+      runEvents: services.runEvents,
+      workspaceBaseDir: env.WORKSPACE_BASE_DIR,
     });
-    await app.register(taskRoutes, { taskService, authMiddleware });
+    await app.register(taskRoutes, {
+      taskService,
+      planningService,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
+      authMiddleware,
+    });
   }
 
   // Register access token routes (requires DB, admin auth enforced)
@@ -449,12 +478,26 @@ export async function buildApp() {
   });
 
   // Start scheduler after server is ready
+  let stuckSubtaskInterval: ReturnType<typeof setInterval> | undefined;
   app.addHook('onReady', async () => {
     if (scheduler) {
       // Recover any stuck jobs from previous run
       await scheduler.recoverStuckJobs();
       scheduler.start();
       app.log.info('Scheduler started');
+    }
+
+    // Start periodic stuck subtask check
+    if (taskService) {
+      stuckSubtaskInterval = setInterval(
+        () => {
+          taskService!.checkStuckSubtasks().catch((err) => {
+            app.log.error('Failed to check stuck subtasks', err);
+          });
+        },
+        5 * 60 * 1000,
+      ); // Every 5 minutes
+      app.log.info('Stuck subtask checker started (every 5 minutes)');
     }
 
     // Auto-connect MCP servers from config
@@ -474,6 +517,10 @@ export async function buildApp() {
 
   // Clean up on close
   app.addHook('onClose', async () => {
+    if (stuckSubtaskInterval) {
+      clearInterval(stuckSubtaskInterval);
+      app.log.info('Stuck subtask checker stopped');
+    }
     if (scheduler) {
       await scheduler.stop();
       app.log.info('Scheduler stopped');
