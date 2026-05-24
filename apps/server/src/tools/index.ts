@@ -58,6 +58,7 @@ export type BuiltinToolRegistryDeps = {
   web?: boolean;
   sessions?: { getSessionService: () => SessionMessageService };
   getTaskService?: () => TaskService | undefined;
+  getPlanningService?: () => import('../planning').PlanningService | undefined;
 };
 
 /**
@@ -114,7 +115,10 @@ export function createBuiltinToolRegistry(
   }
 
   if (deps.getTaskService) {
-    for (const tool of createTaskTools(deps.getTaskService)) {
+    for (const tool of createTaskTools(
+      deps.getTaskService,
+      deps.getPlanningService,
+    )) {
       registry.register(tool);
     }
   }

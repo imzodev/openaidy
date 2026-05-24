@@ -181,6 +181,14 @@ export const tasksCreateMeta: ToolMeta = {
     'to the user in their Kanban view. Returns the created task details.',
 };
 
+export const tasksUpdateMeta: ToolMeta = {
+  name: 'tasks_update',
+  category: 'Tasks',
+  description:
+    'Update an existing task in the Kanban board. Can change title, description, ' +
+    'priority, status, or planning settings. Returns the updated task details.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -204,4 +212,5 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   addonCreateMeta,
   presentChoicesMeta,
   tasksCreateMeta,
+  tasksUpdateMeta,
 ];

@@ -176,6 +176,8 @@ export async function buildApp() {
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
 
+  let planningService: ReturnType<typeof createPlanningService> | undefined;
+
   const builtinToolRegistry = createBuiltinToolRegistry({
     workspace: workspaceService,
     exec: execService,
@@ -191,6 +193,7 @@ export async function buildApp() {
     web: true,
     sessions: { getSessionService: () => sessionService! },
     getTaskService: () => taskService,
+    getPlanningService: () => planningService,
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)
@@ -408,8 +411,7 @@ export async function buildApp() {
 
   // Register task routes (requires DB)
   if (dbAdapter) {
-    // Create planning service for task decomposition
-    const planningService = createPlanningService({
+    planningService = createPlanningService({
       providers: providerServices,
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
