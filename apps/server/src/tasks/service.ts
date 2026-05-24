@@ -62,9 +62,11 @@ export class TaskService {
       options.tasksRepo,
       options.subtasksRepo,
       options.taskAgentsRepo,
+      options.deliverablesRepo,
       options.agents,
       options.sessionService,
       options.runEvents,
+      options.workspaceBaseDir,
     );
   }
 

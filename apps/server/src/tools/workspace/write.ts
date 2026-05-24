@@ -41,8 +41,16 @@ export function createWorkspaceWriteTool(
       }
 
       try {
-        await workspace.writeFile(ctx.agentId, filePath, content);
-        return { ok: true, content: `File written: ${filePath}` };
+        const absolutePath = await workspace.writeFile(
+          ctx.agentId,
+          filePath,
+          content,
+        );
+        return {
+          ok: true,
+          content: `File written: ${filePath}`,
+          absolutePath,
+        };
       } catch (err) {
         if (err instanceof WorkspaceError) {
           return { ok: false, error: err.message };

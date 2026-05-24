@@ -9,6 +9,7 @@ import type {
   TasksRepository,
   SubtasksRepository,
   TaskAgentsRepository,
+  DeliverablesRepository,
 } from '@openaidy/db';
 import type { AgentRegistry } from '../agents';
 import { parseModelString } from '../agents/schema';
@@ -32,6 +33,7 @@ export type PlanningServiceOptions = {
   tasksRepo: TasksRepository;
   subtasksRepo: SubtasksRepository;
   taskAgentsRepo?: TaskAgentsRepository;
+  deliverablesRepo?: DeliverablesRepository;
   agents?: AgentRegistry;
   getDefaultAgentId?: () => string | undefined;
 };
@@ -53,6 +55,7 @@ export class PlanningService {
   private readonly tasksRepo: TasksRepository;
   private readonly subtasksRepo: SubtasksRepository;
   private readonly taskAgentsRepo: TaskAgentsRepository | undefined;
+  private readonly deliverablesRepo: DeliverablesRepository | undefined;
   private readonly agents: AgentRegistry | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
 
@@ -61,6 +64,7 @@ export class PlanningService {
     this.tasksRepo = options.tasksRepo;
     this.subtasksRepo = options.subtasksRepo;
     this.taskAgentsRepo = options.taskAgentsRepo;
+    this.deliverablesRepo = options.deliverablesRepo;
     this.agents = options.agents;
     this.getDefaultAgentId = options.getDefaultAgentId;
   }
@@ -168,7 +172,7 @@ export class PlanningService {
       }
 
       // Parse response
-      const subtasks = this.parsePlanningResponse(
+      const planningResult = this.parsePlanningResponse(
         result.value.content,
         options,
       );
@@ -176,12 +180,12 @@ export class PlanningService {
       // Create subtasks in database
       // First delete existing subtasks if re-planning
       await this.subtasksRepo.deleteByTask(taskId);
-      await this.createSubtasks(taskId, subtasks);
+      await this.createSubtasks(taskId, planningResult.subtasks);
 
       // After creating subtasks with assigned agents, also assign those agents to the parent task
-      if (this.taskAgentsRepo && subtasks.length > 0) {
+      if (this.taskAgentsRepo && planningResult.subtasks.length > 0) {
         const agentAssignments = new Map<string, string>();
-        for (const subtask of subtasks) {
+        for (const subtask of planningResult.subtasks) {
           if (subtask.assignedAgentId) {
             // Use 'primary' role for the first assignment of each agent, 'secondary' for subsequent
             const role = agentAssignments.has(subtask.assignedAgentId)
@@ -208,10 +212,30 @@ export class PlanningService {
         }
       }
 
+      // Create deliverable for the task from AI response, or use default if not provided
+      if (this.deliverablesRepo) {
+        const deliverableType = planningResult.deliverable?.type || 'document';
+        const deliverableDescription =
+          planningResult.deliverable?.description ||
+          `Deliverable for task: ${task.title}`;
+        await this.deliverablesRepo.create({
+          taskId,
+          type: deliverableType as
+            | 'document'
+            | 'image'
+            | 'code'
+            | 'report'
+            | 'data'
+            | 'link'
+            | 'other',
+          description: deliverableDescription,
+        });
+      }
+
       // Update planning status to completed
       await this.tasksRepo.updatePlanningStatus(taskId, 'completed');
 
-      return { ok: true, subtasks };
+      return { ok: true, subtasks: planningResult.subtasks };
     } catch (error) {
       // Update planning status to failed
       await this.tasksRepo.updatePlanningStatus(taskId, 'failed');
@@ -273,26 +297,32 @@ export class PlanningService {
   parsePlanningResponse(
     content: string,
     options?: PlanningOptions,
-  ): PlannedSubtask[] {
-    let subtasks: PlannedSubtask[];
+  ): {
+    subtasks: PlannedSubtask[];
+    deliverable: { type: string; description: string } | null;
+  } {
+    let parsed: {
+      subtasks: PlannedSubtask[];
+      deliverable?: { type: string; description: string };
+    };
 
     // Try to extract JSON from markdown code block first
-    const codeBlockMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+    const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch && codeBlockMatch[1]) {
       try {
-        subtasks = JSON.parse(codeBlockMatch[1]);
+        parsed = JSON.parse(codeBlockMatch[1]);
       } catch {
         throw new Error('Failed to parse planning response as JSON');
       }
     } else {
       try {
-        subtasks = JSON.parse(content);
+        parsed = JSON.parse(content);
       } catch {
-        // Try to extract JSON array from response using regex
-        const jsonMatch = content.match(/\[[\s\S]*?\]/);
+        // Try to extract JSON object from response using regex
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           try {
-            subtasks = JSON.parse(jsonMatch[0]);
+            parsed = JSON.parse(jsonMatch[0]);
           } catch {
             throw new Error('Failed to parse planning response as JSON');
           }
@@ -302,32 +332,43 @@ export class PlanningService {
       }
     }
 
-    // Validate array
-    if (!Array.isArray(subtasks)) {
-      throw new Error('Planning response must be an array');
+    // Validate subtasks array
+    if (!Array.isArray(parsed.subtasks)) {
+      throw new Error('Planning response must contain a subtasks array');
     }
 
     // Validate and limit subtasks
     const maxSubtasks =
       options?.maxSubtasks ?? PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
 
-    return subtasks.slice(0, maxSubtasks).map((s, index) => {
-      const parsed: PlannedSubtask = {
+    const subtasks = parsed.subtasks.slice(0, maxSubtasks).map((s, index) => {
+      const result: PlannedSubtask = {
         title: s.title || `Subtask ${index + 1}`,
         description: s.description || '',
         dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
       };
 
-      // Preserve agent assignment fields if present
       if (s.assignedAgentId) {
-        parsed.assignedAgentId = s.assignedAgentId;
+        result.assignedAgentId = s.assignedAgentId;
       }
       if (s.assignmentReason) {
-        parsed.assignmentReason = s.assignmentReason;
+        result.assignmentReason = s.assignmentReason;
       }
 
-      return parsed;
+      return result;
     });
+
+    const deliverable =
+      parsed.deliverable &&
+      parsed.deliverable.type &&
+      parsed.deliverable.description
+        ? {
+            type: parsed.deliverable.type,
+            description: parsed.deliverable.description,
+          }
+        : null;
+
+    return { subtasks, deliverable };
   }
 
   /**

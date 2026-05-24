@@ -378,6 +378,38 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       `ALTER TABLE session_messages ADD COLUMN reasoning_content TEXT`,
     );
   }
+
+  // Migration: Create deliverables table if not exists
+  const deliverablesTableInfo = sqlite.pragma(
+    'table_info(deliverables)',
+  ) as Array<{
+    name: string;
+  }>;
+  if (deliverablesTableInfo.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE deliverables (
+        id           TEXT PRIMARY KEY,
+        task_id      TEXT NOT NULL,
+        type         TEXT NOT NULL,
+        description  TEXT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'pending',
+        format       TEXT,
+        size         TEXT,
+        path         TEXT,
+        url          TEXT,
+        version      TEXT,
+        metadata     TEXT,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS deliverables_task_id_idx ON deliverables(task_id)`,
+    );
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS deliverables_status_idx ON deliverables(status)`,
+    );
+  }
 }
 
 export async function createDatabaseClient(

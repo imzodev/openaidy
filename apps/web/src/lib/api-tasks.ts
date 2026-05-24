@@ -445,3 +445,78 @@ export async function replanTask(
 ): Promise<ApiResult<{ subtasks: Subtask[] }>> {
   return planTask(taskId);
 }
+
+// ── Deliverables ──────────────────────────────────────────────────────────────
+
+/**
+ * Deliverable type
+ */
+export type DeliverableType =
+  | 'document'
+  | 'image'
+  | 'code'
+  | 'report'
+  | 'data'
+  | 'link'
+  | 'other';
+
+/**
+ * Deliverable status
+ */
+export type DeliverableStatus = 'pending' | 'delivered' | 'verified';
+
+/**
+ * Deliverable record
+ */
+export type Deliverable = {
+  id: string;
+  taskId: string;
+  type: DeliverableType;
+  description: string;
+  status: DeliverableStatus;
+  format: string | null;
+  size: string | null;
+  path: string | null;
+  url: string | null;
+  version: string | null;
+  metadata: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Get deliverables for a task
+ */
+export async function listDeliverables(
+  taskId: string,
+): Promise<ApiResult<{ items: Deliverable[] }>> {
+  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/deliverables`);
+  return response.json();
+}
+
+/**
+ * Update a deliverable
+ */
+export async function updateDeliverable(
+  taskId: string,
+  id: string,
+  input: Partial<{
+    type: DeliverableType;
+    description: string;
+    status: DeliverableStatus;
+    format: string;
+    size: string;
+    path: string;
+    url: string;
+    version: string;
+  }>,
+): Promise<ApiResult<Deliverable>> {
+  const response = await apiFetch(
+    `${API_BASE}/tasks/${taskId}/deliverables/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    },
+  );
+  return response.json();
+}

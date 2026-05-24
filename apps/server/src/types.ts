@@ -130,10 +130,12 @@ export type TaskServiceOptions = {
   tasksRepo: import('@openaidy/db').TasksRepository;
   subtasksRepo: import('@openaidy/db').SubtasksRepository;
   taskAgentsRepo: import('@openaidy/db').TaskAgentsRepository;
+  deliverablesRepo?: import('@openaidy/db').DeliverablesRepository;
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
   planningService?: import('./planning').PlanningService;
   runEvents?: RunEventEmitter;
+  workspaceBaseDir?: string;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';

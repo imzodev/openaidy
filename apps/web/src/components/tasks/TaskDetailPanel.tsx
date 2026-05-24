@@ -15,7 +15,11 @@ import {
   getTaskProgress,
   assignAgents,
   replanTask,
+  listDeliverables,
+  updateDeliverable,
+  type Deliverable,
 } from '../../lib/api-tasks';
+import { readWorkspaceFile } from '../../lib/api';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
 import type {
@@ -83,6 +87,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [task, setTask] = createSignal<TaskWithAgents | null>(null);
   const [subtasks, setSubtasks] = createSignal<Subtask[]>([]);
   const [progress, setProgress] = createSignal<TaskProgress | null>(null);
+  const [deliverables, setDeliverables] = createSignal<Deliverable[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [isEditing, setIsEditing] = createSignal(false);
@@ -90,6 +95,12 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [editDescription, setEditDescription] = createSignal('');
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [isReplanning, setIsReplanning] = createSignal(false);
+  const [deliverableModal, setDeliverableModal] = createSignal<{
+    isOpen: boolean;
+    content: string;
+    path: string;
+    isText: boolean;
+  }>({ isOpen: false, content: '', path: '', isText: true });
 
   // Load task data when taskId changes
   createEffect(() => {
@@ -122,6 +133,12 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
         if (progressResult.ok) {
           setProgress(progressResult.data);
         }
+      }
+
+      // Load deliverables
+      const deliverablesResult = await listDeliverables(props.taskId);
+      if (deliverablesResult.ok) {
+        setDeliverables(deliverablesResult.data.items);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load task');
@@ -197,6 +214,90 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
       setError(err instanceof Error ? err.message : 'Failed to delete task');
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  /**
+   * Handle deliverable status change
+   */
+  async function handleDeliverableStatusChange(
+    id: string,
+    currentStatus: string,
+  ) {
+    const nextStatus =
+      currentStatus === 'pending'
+        ? 'delivered'
+        : currentStatus === 'delivered'
+          ? 'verified'
+          : 'verified';
+    if (nextStatus === currentStatus) return;
+
+    try {
+      const result = await updateDeliverable(props.taskId, id, {
+        status: nextStatus as 'pending' | 'delivered' | 'verified',
+      });
+      if (result.ok) {
+        await loadTaskData();
+        props.onTaskUpdated();
+      } else {
+        setError(result.error.message);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to update deliverable',
+      );
+    }
+  }
+
+  /**
+   * Handle open deliverable (path or URL)
+   * Uses readWorkspaceFile API to fetch file content instead of file:// URL
+   */
+  async function handleOpenDeliverable(d: Deliverable) {
+    if (d.url) {
+      window.open(d.url, '_blank', 'noopener,noreferrer');
+    } else if (d.path) {
+      // Determine the agentId from task agents - use first available
+      const agentId = task()?.agents?.[0]?.agentId;
+      if (!agentId) {
+        setError('No agent available to read workspace file');
+        return;
+      }
+
+      try {
+        // The path stored is the absolute path - we need to extract the relative path
+        // Expected format: .openaidy/workspaces/{agentId}/filename.txt
+        // So we need to extract everything after {agentId}/
+        const pathParts = d.path.split('/');
+        const workspaceIndex = pathParts.findIndex((p) => p === 'workspaces');
+        // relativePath = path after agentId folder (workspaceIndex + 2 to skip workspaces + agentId)
+        const relativePath =
+          workspaceIndex >= 0
+            ? pathParts.slice(workspaceIndex + 2).join('/')
+            : d.path;
+
+        const response = await readWorkspaceFile(
+          agentId,
+          relativePath,
+          agentId, // requestingAgentId - using same agent for simplicity
+        );
+
+        if ('error' in response) {
+          setError(`Failed to read file: ${response.error}`);
+          return;
+        }
+
+        setDeliverableModal({
+          isOpen: true,
+          content: response.content,
+          path: d.path,
+          isText: response.isText,
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Failed to open deliverable',
+        );
+      }
     }
   }
 
@@ -436,6 +537,77 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
             </div>
           </Show>
 
+          {/* Deliverables */}
+          <Show when={deliverables().length > 0}>
+            <div>
+              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Deliverables
+              </h3>
+              <div class="space-y-2">
+                <For each={deliverables()}>
+                  {(d) => (
+                    <div class="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                      <div class="flex items-start justify-between">
+                        <div class="flex items-center gap-2">
+                          <span class="px-2 py-0.5 text-xs rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                            {d.type}
+                          </span>
+                          <span
+                            class={`px-2 py-0.5 text-xs rounded ${
+                              d.status === 'verified'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                : d.status === 'delivered'
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                            }`}
+                          >
+                            {d.status}
+                          </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <Show when={d.path || d.url}>
+                            <button
+                              type="button"
+                              class="flex items-center gap-1 px-2 py-1 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+                              onClick={() => handleOpenDeliverable(d)}
+                            >
+                              Open
+                            </button>
+                          </Show>
+                          <button
+                            type="button"
+                            class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                            onClick={() =>
+                              handleDeliverableStatusChange(d.id, d.status)
+                            }
+                          >
+                            Update status
+                          </button>
+                        </div>
+                      </div>
+                      <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                        {d.description}
+                      </p>
+                      <Show when={d.format || d.path || d.url}>
+                        <div class="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <Show when={d.format}>
+                            <span>Format: {d.format}</span>
+                          </Show>
+                          <Show when={d.path}>
+                            <span>Path: {d.path}</span>
+                          </Show>
+                          <Show when={d.url}>
+                            <span>URL: {d.url}</span>
+                          </Show>
+                        </div>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
+
           {/* Edit actions */}
           <Show when={isEditing()}>
             <div class="flex justify-end gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
@@ -453,6 +625,50 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
               >
                 Save Changes
               </button>
+            </div>
+          </Show>
+
+          {/* Deliverable viewer modal */}
+          <Show when={deliverableModal().isOpen}>
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+                <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
+                    {deliverableModal().path.split('/').pop()}
+                  </h3>
+                  <button
+                    type="button"
+                    class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    onClick={() =>
+                      setDeliverableModal((prev) => ({
+                        ...prev,
+                        isOpen: false,
+                      }))
+                    }
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div class="flex-1 overflow-auto p-4">
+                  <Show
+                    when={deliverableModal().isText}
+                    fallback={
+                      <div class="flex items-center justify-center h-64 text-gray-500 dark:text-gray-400">
+                        Non-text file preview not available
+                      </div>
+                    }
+                  >
+                    <pre class="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-mono bg-gray-50 dark:bg-gray-800 p-4 rounded-md overflow-auto max-h-[60vh]">
+                      {deliverableModal().content}
+                    </pre>
+                  </Show>
+                </div>
+                <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    {deliverableModal().path}
+                  </span>
+                </div>
+              </div>
             </div>
           </Show>
         </Show>

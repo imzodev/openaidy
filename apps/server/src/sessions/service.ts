@@ -925,6 +925,7 @@ export class SessionMessageService {
 
           for (const tc of toolCalls) {
             let toolContent: string;
+            let absolutePathFromTool: string | undefined;
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session).
@@ -980,6 +981,18 @@ export class SessionMessageService {
               toolContent = builtinResult.ok
                 ? builtinResult.content
                 : `Error: ${builtinResult.error}`;
+              // workspace_write returns absolutePath but the BuiltinTool type
+              // doesn't expose it, so we need to cast to access it
+              if (builtinResult.ok) {
+                const resultWithPath = builtinResult as {
+                  ok: true;
+                  content: string;
+                  absolutePath?: string;
+                };
+                if (resultWithPath.absolutePath) {
+                  absolutePathFromTool = resultWithPath.absolutePath;
+                }
+              }
             } else {
               // Fall back to MCP tool
               const mcpResult = await this.mcp
@@ -1003,16 +1016,31 @@ export class SessionMessageService {
                     .map((c) => c.text ?? '')
                     .join('')
                 : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
+              // Try to extract absolutePath from MCP result if present
+              if (mcpResult && typeof mcpResult === 'object') {
+                const mcpResultObj = mcpResult as {
+                  content?: unknown[];
+                  absolutePath?: string;
+                };
+                if (mcpResultObj.absolutePath) {
+                  absolutePathFromTool = mcpResultObj.absolutePath;
+                }
+              }
             }
 
             // Persist tool result message
+            // Extract absolutePath from tool result if present (for workspace_write etc.)
+            const toolMetadata: Record<string, unknown> = { toolName: tc.name };
+            if (absolutePathFromTool) {
+              toolMetadata.absolutePath = absolutePathFromTool;
+            }
             await this.appendMessage({
               sessionId: input.sessionId,
               runId: run.id,
               role: 'tool',
               content: toolContent,
               toolCallId: tc.id,
-              metadata: { toolName: tc.name },
+              metadata: toolMetadata,
             });
 
             loopMessages.push({

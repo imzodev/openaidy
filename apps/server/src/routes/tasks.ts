@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
 import type { PlanningService } from '../planning/service';
+import type { DeliverablesRepository } from '@openaidy/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 
@@ -54,6 +55,7 @@ const assignAgentsSchema = z.object({
 export type TaskRoutesOptions = {
   taskService: TaskService;
   planningService?: PlanningService;
+  deliverablesRepo?: DeliverablesRepository;
   authMiddleware: AuthMiddleware;
 };
 
@@ -61,7 +63,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { taskService, authMiddleware } = options;
+  const { taskService, authMiddleware, deliverablesRepo } = options;
 
   app.addHook(
     'preHandler',
@@ -603,4 +605,113 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       return { ok: false, error: result.error };
     }
   });
+
+  // ── Deliverables ────────────────────────────────────────────────────────────
+
+  /**
+   * GET /tasks/:id/deliverables
+   * List all deliverables for a task
+   */
+  app.get('/tasks/:id/deliverables', async (request, reply) => {
+    if (!deliverablesRepo) {
+      reply.code(503);
+      return {
+        ok: false,
+        error: {
+          code: 'not_implemented',
+          message: 'Deliverables not available',
+        },
+      };
+    }
+
+    const { id } = request.params as { id: string };
+
+    const task = await taskService.getTask(id);
+    if (!task) {
+      reply.code(404);
+      return {
+        ok: false,
+        error: { code: 'task.not_found', message: 'Task not found' },
+      };
+    }
+
+    const deliverables = await deliverablesRepo.findByTask(id);
+    return { ok: true, data: { items: deliverables } };
+  });
+
+  /**
+   * PATCH /tasks/:taskId/deliverables/:deliverableId
+   * Update a deliverable
+   */
+  app.patch(
+    '/tasks/:taskId/deliverables/:deliverableId',
+    async (request, reply) => {
+      if (!deliverablesRepo) {
+        reply.code(503);
+        return {
+          ok: false,
+          error: {
+            code: 'not_implemented',
+            message: 'Deliverables not available',
+          },
+        };
+      }
+
+      const { taskId, deliverableId } = request.params as {
+        taskId: string;
+        deliverableId: string;
+      };
+
+      const task = await taskService.getTask(taskId);
+      if (!task) {
+        reply.code(404);
+        return {
+          ok: false,
+          error: { code: 'task.not_found', message: 'Task not found' },
+        };
+      }
+
+      const existing = await deliverablesRepo.findById(deliverableId);
+      if (!existing) {
+        reply.code(404);
+        return {
+          ok: false,
+          error: {
+            code: 'deliverable.not_found',
+            message: 'Deliverable not found',
+          },
+        };
+      }
+
+      const body = request.body as Partial<{
+        type: string;
+        description: string;
+        status: string;
+        format: string;
+        size: string;
+        path: string;
+        url: string;
+        version: string;
+      }>;
+
+      const updateInput: Parameters<typeof deliverablesRepo.update>[1] = {};
+      if (body.type)
+        updateInput.type = body.type as Parameters<
+          typeof deliverablesRepo.update
+        >[1]['type'];
+      if (body.description) updateInput.description = body.description;
+      if (body.status)
+        updateInput.status = body.status as Parameters<
+          typeof deliverablesRepo.update
+        >[1]['status'];
+      if (body.format) updateInput.format = body.format;
+      if (body.size) updateInput.size = body.size;
+      if (body.path) updateInput.path = body.path;
+      if (body.url) updateInput.url = body.url;
+      if (body.version) updateInput.version = body.version;
+
+      const updated = await deliverablesRepo.update(deliverableId, updateInput);
+      return { ok: true, data: updated };
+    },
+  );
 };

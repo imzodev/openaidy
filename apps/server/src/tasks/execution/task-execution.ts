@@ -2,6 +2,7 @@ import type {
   TasksRepository,
   SubtasksRepository,
   TaskAgentsRepository,
+  DeliverablesRepository,
   Subtask,
   SessionMessage,
 } from '@openaidy/db';
@@ -25,9 +26,11 @@ export class TaskExecution {
     private readonly tasksRepo: TasksRepository,
     private readonly subtasksRepo: SubtasksRepository,
     private readonly taskAgentsRepo: TaskAgentsRepository,
+    private readonly deliverablesRepo: DeliverablesRepository | undefined,
     private readonly agents: AgentRegistry | undefined,
     private readonly sessionService: SessionMessageService | undefined,
     private readonly runEvents: RunEventEmitter | undefined,
+    private readonly workspaceBaseDir: string | undefined,
   ) {
     this.logger = createLogger('TaskExecution');
 
@@ -743,6 +746,112 @@ export class TaskExecution {
         taskId,
         status: 'review',
         reason: 'all_subtasks_completed',
+      });
+
+      // Trigger deliverable verification when all subtasks are complete
+      await this.verifyDeliverables(taskId);
+    }
+  }
+
+  // ========================================
+  // Deliverable verification
+  // ========================================
+
+  /**
+   * Collect all absolute paths stored in tool message metadata across all subtask sessions.
+   */
+  private async collectDeliverablePaths(taskId: string): Promise<string[]> {
+    const paths: string[] = [];
+    if (!this.sessionService) return paths;
+
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+    for (const subtask of subtasks) {
+      if (!subtask.sessionId) continue;
+
+      const messages = await this.sessionService.listMessages(
+        subtask.sessionId,
+      );
+      for (const m of messages) {
+        if (m.role !== 'tool') continue;
+        const msg = m as { metadata?: Record<string, unknown> };
+        if (
+          msg.metadata?.absolutePath &&
+          typeof msg.metadata.absolutePath === 'string'
+        ) {
+          paths.push(msg.metadata.absolutePath);
+        }
+      }
+    }
+    return paths;
+  }
+
+  /**
+   * Verify deliverables for a task by checking stored absolute paths from tool execution.
+   * This is more reliable than asking an LLM to verify since we have the actual paths.
+   */
+  private async verifyDeliverables(taskId: string): Promise<void> {
+    if (!this.deliverablesRepo) {
+      this.logger.warn(
+        'Cannot verify deliverables: deliverablesRepo not configured',
+        { taskId },
+      );
+      return;
+    }
+
+    const task = await this.tasksRepo.findById(taskId);
+    if (!task) return;
+
+    const deliverables = await this.deliverablesRepo.findByTask(taskId);
+    if (deliverables.length === 0) {
+      this.logger.info('No deliverables found for task', { taskId });
+      return;
+    }
+
+    const deliverable = deliverables[0]!;
+
+    // Collect all paths from tool executions
+    const absolutePaths = await this.collectDeliverablePaths(taskId);
+    this.logger.info('Collected absolute paths from tool executions', {
+      taskId,
+      pathCount: absolutePaths.length,
+      paths: absolutePaths,
+    });
+
+    if (absolutePaths.length > 0) {
+      // Use the first path as the deliverable path
+      const deliverablePath = absolutePaths[0]!;
+      this.logger.info('Deliverable found at path', {
+        taskId,
+        deliverableId: deliverable.id,
+        path: deliverablePath,
+      });
+
+      // Determine if it's a URL or file path
+      const updateInput: Parameters<typeof this.deliverablesRepo.update>[1] = {
+        status: 'delivered',
+      };
+
+      if (
+        deliverablePath.startsWith('http://') ||
+        deliverablePath.startsWith('https://')
+      ) {
+        updateInput.url = deliverablePath;
+      } else {
+        updateInput.path = deliverablePath;
+      }
+
+      await this.deliverablesRepo.update(deliverable.id, updateInput);
+      this.logger.info('Deliverable marked as delivered', {
+        taskId,
+        deliverableId: deliverable.id,
+        path: updateInput.path,
+        url: updateInput.url,
+      });
+    } else {
+      // No paths found - deliverable not created
+      this.logger.info('No deliverable paths found, keeping as pending', {
+        taskId,
+        deliverableId: deliverable.id,
       });
     }
   }

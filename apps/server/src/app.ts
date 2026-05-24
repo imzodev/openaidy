@@ -416,6 +416,7 @@ export async function buildApp() {
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
       agents: services.agents,
       getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     });
@@ -424,14 +425,17 @@ export async function buildApp() {
       tasksRepo: dbAdapter.repositories.tasks,
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
       agents: services.agents,
       sessionService: services.sessions,
       planningService,
       runEvents: services.runEvents,
+      workspaceBaseDir: env.WORKSPACE_BASE_DIR,
     });
     await app.register(taskRoutes, {
       taskService,
       planningService,
+      deliverablesRepo: dbAdapter.repositories.deliverables,
       authMiddleware,
     });
   }
