@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import type { PlanningService } from '../../planning';
+import { createTasksListTool } from './list';
 import { createTasksCreateTool } from './create';
 import { createTasksUpdateTool } from './update';
 
@@ -15,6 +16,7 @@ export function createTaskTools(
   getPlanningService?: () => PlanningService | undefined,
 ): BuiltinTool[] {
   return [
+    createTasksListTool(getTaskService),
     createTasksCreateTool(getTaskService),
     createTasksUpdateTool(getTaskService, getPlanningService),
   ];

@@ -173,6 +173,14 @@ export const presentChoicesMeta: ToolMeta = {
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
+export const tasksListMeta: ToolMeta = {
+  name: 'tasks_list',
+  category: 'Tasks',
+  description:
+    'List all tasks in the Kanban board. Returns task IDs, titles, statuses, ' +
+    'priorities, and planning information. Use this to find a task ID before updating it.',
+};
+
 export const tasksCreateMeta: ToolMeta = {
   name: 'tasks_create',
   category: 'Tasks',
@@ -211,6 +219,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   webFetchMeta,
   addonCreateMeta,
   presentChoicesMeta,
+  tasksListMeta,
   tasksCreateMeta,
   tasksUpdateMeta,
 ];
