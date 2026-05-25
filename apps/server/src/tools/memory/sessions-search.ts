@@ -3,6 +3,8 @@ import type { MemoryToolDeps } from './index.js';
 import { sessionsSearchMeta } from '../catalog.js';
 
 export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
+  const log = deps.createLogger('sessions_search');
+
   return {
     name: sessionsSearchMeta.name,
     description: sessionsSearchMeta.description,
@@ -34,10 +36,14 @@ export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
         };
       }
 
+      log.info('sessions_search invoked', { query, limit: limit ?? 5 });
+
       const sessions = await deps.sessionsRepo.searchByTitle(
         query.trim(),
         limit ?? 5,
       );
+
+      log.info('sessions_search completed', { query, found: sessions.length });
 
       return {
         ok: true,

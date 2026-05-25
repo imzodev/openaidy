@@ -3,6 +3,8 @@ import type { MemoryToolDeps } from './index.js';
 import { memorySearchMeta } from '../catalog.js';
 
 export function createMemorySearchTool(deps: MemoryToolDeps): BuiltinTool {
+  const log = deps.createLogger('memory_search');
+
   return {
     name: memorySearchMeta.name,
     description: memorySearchMeta.description,
@@ -38,11 +40,19 @@ export function createMemorySearchTool(deps: MemoryToolDeps): BuiltinTool {
       const isDefault = ctx.agentId === deps.defaultAgentId;
       const scopedAgentId = isDefault ? undefined : ctx.agentId;
 
+      log.info('memory_search invoked', {
+        query,
+        limit: limit ?? 10,
+        agentId: scopedAgentId,
+      });
+
       const results = await deps.memoriesRepo.search(
         query.trim(),
         scopedAgentId,
         limit ?? 10,
       );
+
+      log.info('memory_search completed', { query, found: results.length });
 
       return { ok: true, content: JSON.stringify(results) };
     },

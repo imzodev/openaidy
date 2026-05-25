@@ -3,6 +3,8 @@ import type { MemoryToolDeps } from './index.js';
 import { memorySaveMeta } from '../catalog.js';
 
 export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
+  const log = deps.createLogger('memory_save');
+
   return {
     name: memorySaveMeta.name,
     description: memorySaveMeta.description,
@@ -60,6 +62,11 @@ export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
         };
       }
 
+      log.info('memory_save invoked', {
+        agentId: ctx.agentId,
+        title: title.trim(),
+      });
+
       const memory = await deps.memoriesRepo.create({
         agentId: ctx.agentId,
         title: title.trim(),
@@ -67,6 +74,8 @@ export function createMemorySaveTool(deps: MemoryToolDeps): BuiltinTool {
         tags: tags ?? [],
         importance: importance ?? 3,
       });
+
+      log.info('memory_save completed', { memoryId: memory.id });
 
       return {
         ok: true,

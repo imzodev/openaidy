@@ -13,7 +13,7 @@ import {
   createDatabaseAdapter,
 } from '@openaidy/db';
 import { env } from './lib/env';
-import { loggerOptions } from './lib/logger';
+import { loggerOptions, createLogger } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -201,6 +201,7 @@ export async function buildApp() {
             memoriesRepo: dbAdapter.repositories.memories,
             sessionsRepo: dbAdapter.repositories.sessions,
             defaultAgentId: configService.getConfig().defaults.agentId,
+            createLogger,
           },
         }
       : {}),

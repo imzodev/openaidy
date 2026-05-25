@@ -3,6 +3,8 @@ import type { MemoryToolDeps } from './index.js';
 import { memoryDeleteMeta } from '../catalog.js';
 
 export function createMemoryDeleteTool(deps: MemoryToolDeps): BuiltinTool {
+  const log = deps.createLogger('memory_delete');
+
   return {
     name: memoryDeleteMeta.name,
     description: memoryDeleteMeta.description,
@@ -31,7 +33,14 @@ export function createMemoryDeleteTool(deps: MemoryToolDeps): BuiltinTool {
       const isDefault = ctx.agentId === deps.defaultAgentId;
       const scopedAgentId = isDefault ? undefined : ctx.agentId;
 
+      log.info('memory_delete invoked', {
+        memoryId: id.trim(),
+        agentId: scopedAgentId,
+      });
+
       const deleted = await deps.memoriesRepo.delete(id.trim(), scopedAgentId);
+
+      log.info('memory_delete completed', { memoryId: id.trim(), deleted });
 
       if (deleted) {
         return { ok: true, content: 'Memory deleted.' };
