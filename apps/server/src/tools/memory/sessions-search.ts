@@ -14,8 +14,8 @@ export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
         query: {
           type: 'string',
           description:
-            'Keyword to search session titles by. Uses FTS5 full-text search — ' +
-            'best match first.',
+            'Keyword to search sessions by. Searches BOTH session titles AND message content. ' +
+            'Uses FTS5 full-text search — best match first.',
         },
         limit: {
           type: 'number',
@@ -25,9 +25,10 @@ export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
       required: ['query'],
     },
 
-    async execute(args) {
+    async execute(args, ctx) {
       const query = args['query'] as string;
       const limit = args['limit'] as number | undefined;
+      const currentSessionId = ctx.sessionId;
 
       if (typeof query !== 'string' || !query.trim()) {
         return {
@@ -36,14 +37,41 @@ export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
         };
       }
 
-      log.info('sessions_search invoked', { query, limit: limit ?? 5 });
+      log.info('sessions_search invoked', {
+        query,
+        limit: limit ?? 5,
+        currentSessionId,
+      });
 
-      const sessions = await deps.sessionsRepo.searchByTitle(
+      // Search by title first (faster, more specific)
+      // Exclude current session so we don't find the session we're already in
+      const byTitle = await deps.sessionsRepo.searchByTitle(
         query.trim(),
         limit ?? 5,
+        currentSessionId,
       );
 
-      log.info('sessions_search completed', { query, found: sessions.length });
+      // If title search found results, return those
+      // Otherwise, fall back to message content search (Option A)
+      // Option B (TODO): Use LLM-generated summaries for richer matching
+      // Option C (TODO): Use embeddings-based vector similarity
+      let sessions = byTitle;
+      if (sessions.length === 0) {
+        log.info(
+          'sessions_search: no title matches, searching message content (Option A)',
+        );
+        sessions = await deps.sessionsRepo.searchByContent(
+          query.trim(),
+          limit ?? 5,
+          currentSessionId,
+        );
+      }
+
+      log.info('sessions_search completed', {
+        query,
+        found: sessions.length,
+        byTitle: byTitle.length,
+      });
 
       return {
         ok: true,

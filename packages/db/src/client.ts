@@ -331,6 +331,33 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     INSERT INTO sessions_fts(rowid, title)
     SELECT rowid, title FROM sessions
     WHERE rowid NOT IN (SELECT rowid FROM sessions_fts);
+
+    -- Session Messages FTS5 (Option A: Direct content search)
+    -- Future enhancements:
+    -- Option B: Add 'summary' column and index summaries instead of full content
+    -- Option C: Add embedding vectors and use vector similarity search (requires sqlite-vector or pgvector)
+    CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+      content,
+      session_id UNINDEXED,
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+      INSERT INTO session_messages_fts(rowid, content, session_id)
+      VALUES (new.rowid, new.content, new.session_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+      INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_id)
+      VALUES ('delete', old.rowid, old.content, old.session_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_au AFTER UPDATE ON session_messages BEGIN
+      INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_id)
+      VALUES ('delete', old.rowid, old.content, old.session_id);
+      INSERT INTO session_messages_fts(rowid, content, session_id)
+      VALUES (new.rowid, new.content, new.session_id);
+    END;
   `);
 }
 

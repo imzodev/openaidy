@@ -122,7 +122,11 @@ export class SessionsRepository {
    * Full-text search sessions by title using FTS5.
    * Returns sessions ordered by BM25 relevance rank (best match first).
    */
-  async searchByTitle(query: string, limit = 5): Promise<schema.Session[]> {
+  async searchByTitle(
+    query: string,
+    limit = 5,
+    excludeSessionId?: string,
+  ): Promise<schema.Session[]> {
     const sqlite = getRawSqlite(this.db);
     const rows = sqlite
       .prepare(
@@ -130,10 +134,15 @@ export class SessionsRepository {
          FROM sessions_fts fts
          JOIN sessions s ON s.rowid = fts.rowid
          WHERE sessions_fts MATCH ?
+         ${excludeSessionId ? 'AND s.id != ?' : ''}
          ORDER BY fts.rank
          LIMIT ?`,
       )
-      .all(query, limit) as {
+      .all(
+        ...(excludeSessionId
+          ? [query, excludeSessionId, limit]
+          : [query, limit]),
+      ) as {
       id: string;
       title: string;
       status: string;
@@ -171,6 +180,102 @@ export class SessionsRepository {
     if (result.changes > 0) {
       sqlite
         .prepare("INSERT INTO sessions_fts(sessions_fts) VALUES('rebuild')")
+        .run();
+    }
+
+    return { indexed: result.changes };
+  }
+
+  /**
+   * Search session messages by content using FTS5.
+   *
+   * Option A: Direct content search via FTS5 on session_messages.content
+   * - Fast, keyword-based matching
+   * - Searches all message content in a session
+   *
+   * Option B (TODO): LLM-generated session summaries
+   * - Smaller index, more meaningful matches
+   * - Would add 'summary' column to sessions table
+   *
+   * Option C (TODO): Embeddings-based semantic search
+   * - Natural language understanding
+   * - Would require sqlite-vector or pgvector extension
+   *
+   * Returns sessions that have messages matching the query, ordered by relevance.
+   */
+  async searchByContent(
+    query: string,
+    limit = 5,
+    excludeSessionId?: string,
+  ): Promise<schema.Session[]> {
+    const sqlite = getRawSqlite(this.db);
+
+    // Search messages_fts for matching session_ids, grouped and ranked
+    const sql = `SELECT s.id, s.title, s.status, s.created_at, s.updated_at, s.archived_at,
+                COUNT(*) as match_count,
+                MAX(fts.rank) as max_rank
+         FROM session_messages_fts fts
+         JOIN sessions s ON s.id = fts.session_id
+         WHERE session_messages_fts MATCH ?
+         ${excludeSessionId ? 'AND s.id != ?' : ''}
+         GROUP BY s.id
+         ORDER BY match_count DESC, max_rank ASC
+         LIMIT ?`;
+    const params = excludeSessionId
+      ? [query, excludeSessionId, limit]
+      : [query, limit];
+    const rows = sqlite.prepare(sql).all(...params) as {
+      id: string;
+      title: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      archived_at: string | null;
+      match_count: number;
+      max_rank: number;
+    }[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status as schema.SessionStatus,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      archivedAt: row.archived_at ? new Date(row.archived_at) : null,
+    }));
+  }
+
+  /**
+   * Backfill session_messages_fts FTS5 index for any messages created before
+   * the FTS system was implemented. Safe to call multiple times.
+   *
+   * Option A: Index actual message content (current implementation)
+   * Option B (TODO): Index LLM-generated summaries instead of full content
+   * Option C (TODO): Use embeddings for semantic search (requires sqlite-vector)
+   */
+  async backfillMessagesFtsIndex(): Promise<{ indexed: number }> {
+    const sqlite = getRawSqlite(this.db);
+    console.log(`================================`); // Separator for logs
+    console.log(`================================`); // Separator for logs
+    console.log(`Backfilling session_messages_fts index...`);
+
+    const result = sqlite
+      .prepare(
+        `INSERT INTO session_messages_fts(rowid, content, session_id)
+         SELECT rowid, content, session_id FROM session_messages
+         WHERE rowid NOT IN (SELECT rowid FROM session_messages_fts)`,
+      )
+      .run();
+    console.log(`Backfill complete. Indexed ${result.changes} messages.`);
+
+    // Rebuild FTS5 index if needed (fixes corruption issues with WAL mode)
+    if (result.changes > 0) {
+      console.log(`Rebuilding session_messages_fts index...`);
+      console.log(`Rebuild complete.`);
+      sqlite
+        .prepare(
+          "INSERT INTO session_messages_fts(session_messages_fts) VALUES('rebuild')",
+        )
         .run();
     }
 

@@ -855,7 +855,7 @@ export class SessionMessageService {
               : undefined;
             if (builtinTool) {
               const builtinResult = await builtinTool
-                .execute(tc.arguments, { agentId })
+                .execute(tc.arguments, { agentId, sessionId: input.sessionId })
                 .catch((e: unknown) => ({
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,

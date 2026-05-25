@@ -120,6 +120,15 @@ export async function buildApp() {
         `Indexed ${indexed} pre-existing sessions into sessions_fts`,
       );
     }
+
+    // Backfill session_messages_fts index for any pre-existing messages
+    const { indexed: msgIndexed } =
+      await dbAdapter.repositories.sessions.backfillMessagesFtsIndex();
+    if (msgIndexed > 0) {
+      app.log.info(
+        `Indexed ${msgIndexed} pre-existing session messages into session_messages_fts`,
+      );
+    }
   }
 
   // Create shared services once per app instance
