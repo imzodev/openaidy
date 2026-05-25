@@ -151,6 +151,31 @@ export class SessionsRepository {
       archivedAt: row.archived_at ? new Date(row.archived_at) : null,
     }));
   }
+
+  /**
+   * Backfill sessions_fts FTS5 index for any sessions created before
+   * the FTS system was implemented. Safe to call multiple times.
+   */
+  async backfillFtsIndex(): Promise<{ indexed: number }> {
+    const sqlite = getRawSqlite(this.db);
+
+    const result = sqlite
+      .prepare(
+        `INSERT INTO sessions_fts(rowid, title)
+         SELECT rowid, title FROM sessions
+         WHERE rowid NOT IN (SELECT rowid FROM sessions_fts)`,
+      )
+      .run();
+
+    // Rebuild FTS5 index if needed (fixes corruption issues with WAL mode)
+    if (result.changes > 0) {
+      sqlite
+        .prepare("INSERT INTO sessions_fts(sessions_fts) VALUES('rebuild')")
+        .run();
+    }
+
+    return { indexed: result.changes };
+  }
 }
 
 /**

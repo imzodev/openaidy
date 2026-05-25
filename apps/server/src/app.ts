@@ -111,6 +111,15 @@ export async function buildApp() {
     pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
     devicesRepo = dbAdapter.repositories.devices;
     accessTokensRepo = dbAdapter.repositories.accessTokens;
+
+    // Backfill sessions_fts index for any pre-existing sessions
+    const { indexed } =
+      await dbAdapter.repositories.sessions.backfillFtsIndex();
+    if (indexed > 0) {
+      app.log.info(
+        `Indexed ${indexed} pre-existing sessions into sessions_fts`,
+      );
+    }
   }
 
   // Create shared services once per app instance

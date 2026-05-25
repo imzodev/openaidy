@@ -28,6 +28,7 @@ export type SessionsStore = Pick<
   | 'updateStatus'
   | 'delete'
   | 'searchByTitle'
+  | 'backfillFtsIndex'
 >;
 
 export type SessionMessagesStore = Pick<
