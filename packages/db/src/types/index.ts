@@ -33,6 +33,27 @@ export type SessionsStore = Pick<
   | 'backfillMessagesFtsIndex'
 >;
 
+/**
+ * Enhanced search result with match metadata for better agent decision-making.
+ * Returned by sessions_search tool to help agents determine relevance.
+ */
+export interface SessionSearchResult {
+  id: string;
+  title: string;
+  status: 'active' | 'archived' | 'deleted';
+  createdAt: Date;
+  updatedAt: Date;
+  archivedAt: Date | null;
+  /** How the match was found: 'title' or 'content' */
+  matchType: 'title' | 'content';
+  /** BM25 rank (lower = better match) */
+  rank: number;
+  /** For content matches: number of messages that matched */
+  matchCount?: number;
+  /** Snippet of matching content (truncated) - only set for content matches */
+  snippet: string | null;
+}
+
 export type SessionMessagesStore = Pick<
   SessionMessagesRepository,
   | 'append'

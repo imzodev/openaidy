@@ -2,6 +2,7 @@ import { eq, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/sessions';
+import type { SessionSearchResult } from '../types/index.js';
 
 type Database = DatabaseClient;
 
@@ -126,11 +127,12 @@ export class SessionsRepository {
     query: string,
     limit = 5,
     excludeSessionId?: string,
-  ): Promise<schema.Session[]> {
+  ): Promise<SessionSearchResult[]> {
     const sqlite = getRawSqlite(this.db);
     const rows = sqlite
       .prepare(
-        `SELECT s.id, s.title, s.status, s.created_at, s.updated_at, s.archived_at
+        `SELECT s.id, s.title, s.status, s.created_at, s.updated_at, s.archived_at,
+                fts.rank
          FROM sessions_fts fts
          JOIN sessions s ON s.rowid = fts.rowid
          WHERE sessions_fts MATCH ?
@@ -149,6 +151,7 @@ export class SessionsRepository {
       created_at: string;
       updated_at: string;
       archived_at: string | null;
+      rank: number;
     }[];
 
     return rows.map((row) => ({
@@ -158,6 +161,9 @@ export class SessionsRepository {
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       archivedAt: row.archived_at ? new Date(row.archived_at) : null,
+      matchType: 'title' as const,
+      rank: row.rank,
+      snippet: null,
     }));
   }
 
@@ -207,7 +213,7 @@ export class SessionsRepository {
     query: string,
     limit = 5,
     excludeSessionId?: string,
-  ): Promise<schema.Session[]> {
+  ): Promise<SessionSearchResult[]> {
     const sqlite = getRawSqlite(this.db);
 
     // Search messages_fts for matching session_ids, grouped and ranked
@@ -235,14 +241,36 @@ export class SessionsRepository {
       max_rank: number;
     }[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      status: row.status as schema.SessionStatus,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-      archivedAt: row.archived_at ? new Date(row.archived_at) : null,
-    }));
+    // For each session, get a snippet of the matching content
+    const results: SessionSearchResult[] = [];
+    for (const row of rows) {
+      const snippetRow = sqlite
+        .prepare(
+          `SELECT content FROM session_messages_fts
+           WHERE session_messages_fts MATCH ? AND session_id = ?
+           ORDER BY rank
+           LIMIT 1`,
+        )
+        .get(query, row.id) as { content: string } | undefined;
+
+      results.push({
+        id: row.id,
+        title: row.title,
+        status: row.status as schema.SessionStatus,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+        archivedAt: row.archived_at ? new Date(row.archived_at) : null,
+        matchType: 'content',
+        rank: row.max_rank,
+        matchCount: row.match_count,
+        snippet: snippetRow
+          ? snippetRow.content.substring(0, 200) +
+            (snippetRow.content.length > 200 ? '...' : '')
+          : null,
+      });
+    }
+
+    return results;
   }
 
   /**

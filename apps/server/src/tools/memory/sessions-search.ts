@@ -81,6 +81,10 @@ export function createSessionsSearchTool(deps: MemoryToolDeps): BuiltinTool {
             title: s.title,
             status: s.status,
             createdAt: s.createdAt,
+            matchType: s.matchType,
+            rank: s.rank,
+            matchCount: s.matchCount ?? null,
+            snippet: s.snippet ?? null,
           })),
         ),
       };
