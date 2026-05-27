@@ -122,6 +122,11 @@ function buildToolGuidelinesBlock(
   const hasAgentsInvoke = availableTools.has('agents_invoke');
   const hasAgentsInvokeAwait = availableTools.has('agents_invoke_await');
 
+  // Check memory tools
+  const hasMemorySave = availableTools.has('memory_save');
+  const hasMemorySearch = availableTools.has('memory_search');
+  const hasSessionsSearch = availableTools.has('sessions_search');
+
   // Use workspace permissions if provided, otherwise fall back to tool availability
   const hasWorkspaceRead =
     workspacePermissions?.read ?? availableTools.has('workspace_read');
@@ -164,39 +169,65 @@ You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked 
     }
   }
 
+  // Memory tools guidance
+  if (hasMemorySave || hasMemorySearch || hasSessionsSearch) {
+    guidelines += `
+### Memory Tools
+`;
+    if (hasMemorySave) {
+      guidelines += `- memory_save: USE THIS when you learn facts, decisions, user preferences, or important information that should be remembered for future conversations
+  - SAVE TO MEMORY when: user mentions a preference, you make a decision for the project, you learn something specific about the user's stack or goals, or you want to "bookmark" something for later
+`;
+    }
+    if (hasMemorySearch) {
+      guidelines += `- memory_search: USE THIS when you need to find previously saved information — searches your agent's memory by keywords
+`;
+    }
+    if (hasSessionsSearch) {
+      guidelines += `- sessions_search: USE THIS when you need to find information from past conversations — searches session titles AND message content
+  - USE sessions_search when: user asks "do you remember...", "what did we talk about...", "continue with that topic...", or references something discussed in a previous session
+  - INTERPRET THE RESULTS: A session may appear because the title matches OR because message content matched. Check the matchType field:
+    - "title": Session title matched the query
+    - "content": Message content matched (more relevant for finding actual discussion)
+    - matchCount: How many messages matched — higher = more relevant
+    - snippet: Shows a preview of matching content — use this to understand why the session was found
+`;
+    }
+  }
+
   // Workspace capabilities section - CRITICAL for honesty
   guidelines += `
 ### Your Workspace Capabilities (BE EXPLICITLY HONEST ABOUT THESE)
 `;
   if (hasWorkspaceRead) {
-    guidelines += `- READ: ✅ You CAN read files from your workspace
+    guidelines += `- READ: You CAN read files from your workspace
 `;
   } else {
-    guidelines += `- READ: ❌ You CANNOT read files (workspace_read not enabled)
+    guidelines += `- READ: You CANNOT read files (workspace_read not enabled)
 `;
   }
 
   if (hasWorkspaceWrite) {
-    guidelines += `- WRITE: ✅ You CAN create and modify files in your workspace
+    guidelines += `- WRITE: You CAN create and modify files in your workspace
 `;
   } else {
-    guidelines += `- WRITE: ❌ You CANNOT write files (workspace_write not enabled)
+    guidelines += `- WRITE: You CANNOT write files (workspace_write not enabled)
 `;
   }
 
   if (hasWorkspaceList) {
-    guidelines += `- LIST: ✅ You CAN list files in your workspace
+    guidelines += `- LIST: You CAN list files in your workspace
 `;
   } else {
-    guidelines += `- LIST: ❌ You CANNOT list files (workspace_list not enabled)
+    guidelines += `- LIST: You CANNOT list files (workspace_list not enabled)
 `;
   }
 
   if (hasWorkspaceDelete) {
-    guidelines += `- DELETE: ✅ You CAN delete files from your workspace
+    guidelines += `- DELETE: You CAN delete files from your workspace
 `;
   } else {
-    guidelines += `- DELETE: ❌ You CANNOT delete files (workspace_delete not enabled)
+    guidelines += `- DELETE: You CANNOT delete files (workspace_delete not enabled)
 `;
   }
 
@@ -206,9 +237,9 @@ You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked 
 1. ONLY use tools marked [ENABLED] above. Do not pretend to have access to disabled tools.
 
 2. If a user asks you to perform an action requiring a disabled tool:
-   - ❌ NEVER pretend you did it
-   - ✅ ALWAYS explain honestly: "I don't have access to [action]. My [tool_name] is not enabled."
-   - 💡 SUGGEST alternatives if possible
+   - NEVER pretend you did it
+   - ALWAYS explain honestly: "I don't have access to [action]. My [tool_name] is not enabled."
+   - SUGGEST alternatives if possible
 
 3. BEFORE claiming you completed a task, VERIFY you actually used the tool successfully and got a success response.
 
