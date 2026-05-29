@@ -78,11 +78,26 @@ export class RunEventEmitter {
   }
 
   /**
+   * Subscribe to all run events (for cross-cutting concerns like subtask tracking)
+   *
+   * Returns an unsubscribe function.
+   */
+  subscribeAll(listener: (event: RunEvent) => void): () => void {
+    this.emitter.on('*', listener);
+
+    return () => {
+      this.emitter.off('*', listener);
+    };
+  }
+
+  /**
    * Emit an event for a run
    */
   emit(event: RunEvent): void {
     const channel = this.getRunChannel(event.runId);
     this.emitter.emit(channel, event);
+    // Also emit to global channel for subscribers listening to all events
+    this.emitter.emit('*', event);
   }
 
   /**

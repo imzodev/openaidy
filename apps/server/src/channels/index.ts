@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { ChannelConfig } from '@openaidy/config';
-import type { SessionMessageService } from '../../sessions/service.js';
+import type { SessionMessageService } from '../sessions/service';
 import { ChannelRegistry } from './registry.js';
 import { WhatsAppChannel } from './whatsapp/service.js';
 

@@ -5,8 +5,12 @@ import type { ProviderServices } from '../providers';
 import { autoFillPersonalityFiles } from './auto-fill-personality.js';
 import type { ToolDefinition } from '@openaidy/runtime';
 import type { WorkspacePermissionsInfo } from '../types.js';
+import type { SessionType } from '@openaidy/shared-types';
 import { ALL_TOOL_METAS } from '../tools/catalog.js';
 import { formatSessionSearchResultDocs } from '@openaidy/db';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { parseSkillMd } from '../skills/parser.js';
 
 export type BuildSystemPromptOptions = {
   agentId: string;
@@ -24,7 +28,54 @@ export type BuildSystemPromptOptions = {
   tools?: ToolDefinition[] | undefined;
   /** Workspace permissions for honest capability reporting */
   workspacePermissions?: WorkspacePermissionsInfo | undefined;
+  /** Base directory for agent workspaces (to resolve agent workspace skills) */
+  workspaceBaseDir?: string | undefined;
+  /** Session type - used to inject context-specific reminders */
+  sessionType?: SessionType | undefined;
 };
+
+/**
+ * Load skill definitions from an agent's workspace skills directory.
+ * Returns a Map of skillId -> SkillDefinition for skills found.
+ */
+function loadAgentWorkspaceSkills(
+  agentId: string,
+  workspaceBaseDir?: string,
+): Map<
+  string,
+  { id: string; name: string; description: string; body: string }
+> {
+  const skills = new Map<
+    string,
+    { id: string; name: string; description: string; body: string }
+  >();
+  if (!workspaceBaseDir) return skills;
+
+  const agentSkillsDir = join(workspaceBaseDir, agentId, 'skills');
+  if (!existsSync(agentSkillsDir)) return skills;
+
+  let subdirs: string[];
+  try {
+    subdirs = readdirSync(agentSkillsDir);
+  } catch {
+    return skills;
+  }
+
+  for (const id of subdirs) {
+    const skillFile = join(agentSkillsDir, id, 'SKILL.md');
+    if (!existsSync(skillFile)) continue;
+    try {
+      const content = readFileSync(skillFile, 'utf-8');
+      const result = parseSkillMd(content, id, skillFile);
+      if ('errors' in result) continue;
+      skills.set(id, result);
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  return skills;
+}
 
 /**
  * Build the full system prompt for an agent.
@@ -51,6 +102,8 @@ export async function buildSystemPrompt(
     providers,
     tools,
     workspacePermissions,
+    workspaceBaseDir,
+    sessionType,
   } = options;
 
   // Auto-fill blank personality files on first message of a session
@@ -82,14 +135,83 @@ export async function buildSystemPrompt(
     }
   }
 
+  // Inject subtask execution reminder for subtask sessions
+  if (sessionType === 'subtask') {
+    prompt += `
+
+[SUBTASK_REMINDER]
+You are executing a subtask in an automated multi-step workflow. Your sole purpose is to complete the objective described above.
+
+Rules:
+- Execute immediately. Do NOT ask the user for clarification, confirmation, or additional instructions.
+- Deliver the actual output. The subtask is complete only when the concrete deliverable exists — e.g. a tweet is written, a file is saved, an API call is made, a summary is produced.
+- Use your tools. If the objective requires fetching data, writing files, or calling APIs — do it now.
+- Do NOT offer a menu of options or ask "what would you like me to do?". Pick the best approach and execute it.
+- Do NOT end your response with a question or a proposal. End it with the finished work.
+
+Your response will be automatically evaluated. Work is judged complete only if the actual deliverable is present in your response, not if you described what you could do.
+[/SUBTASK_REMINDER]`;
+  }
+
   if (skillIds?.length && skillRegistry) {
-    const bodies = skillRegistry
-      .getSkillsForAgent(skillIds)
+    // Load agent workspace skills to get folder names
+    const agentWorkspaceSkills = loadAgentWorkspaceSkills(
+      agentId,
+      workspaceBaseDir,
+    );
+
+    // Build list of all available skill IDs (global + workspace)
+    const globalSkills = skillRegistry.getSkillsForAgent(skillIds);
+    const skillList: Array<{ id: string; name: string; description: string }> =
+      [];
+
+    for (const skill of globalSkills) {
+      skillList.push({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+      });
+    }
+
+    // Add workspace skills that aren't already in the list
+    for (const id of skillIds) {
+      const wsSkill = agentWorkspaceSkills.get(id);
+      if (wsSkill && !skillList.some((s) => s.id === id)) {
+        skillList.push({
+          id: wsSkill.id,
+          name: wsSkill.name,
+          description: wsSkill.description,
+        });
+      }
+    }
+
+    // Add [SKILLS_AVAILABLE] section with folder names
+    if (skillList.length > 0) {
+      const skillEntries = skillList
+        .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
+        .join('\n');
+
+      prompt += `\n\n[SKILLS_AVAILABLE]\nYou have access to the following skills in your workspace:\n${skillEntries}\n\nTo use a skill, read its files with workspace_read from the skills/{skill-id}/ directory. For example: workspace_read({ path: "skills/${skillList[0]?.id ?? 'example'}/SKILL.md" })\nReading a skill loads its guidelines into your context for that task.\n[/SKILLS_AVAILABLE]`;
+    }
+
+    // Also inject full skill content as context
+    const bodies = globalSkills
       .map((s) => sanitizeSkillBody(s.body))
       .filter(Boolean)
       .join('\n\n---\n\n');
-    if (bodies) {
-      prompt += '\n\n[SKILL_CONTEXTS]\n' + bodies + '\n[/SKILL_CONTEXTS]';
+
+    const workspaceSkillBodies = skillIds
+      .map((id) => agentWorkspaceSkills.get(id))
+      .filter((s): s is NonNullable<typeof s> => s !== undefined)
+      .map((s) => sanitizeSkillBody(s.body))
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+
+    const allBodies = [bodies, workspaceSkillBodies]
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+    if (allBodies) {
+      prompt += '\n\n[SKILL_CONTEXTS]\n' + allBodies + '\n[/SKILL_CONTEXTS]';
     }
   }
 
@@ -97,7 +219,6 @@ export async function buildSystemPrompt(
   if (tools?.length) {
     prompt += buildToolGuidelinesBlock(tools, workspacePermissions);
   }
-
   return prompt;
 }
 

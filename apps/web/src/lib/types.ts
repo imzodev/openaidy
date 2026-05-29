@@ -1,0 +1,470 @@
+/**
+ * Frontend type definitions
+ *
+ * Single source of truth for all web-client types.
+ * API functions live in api.ts and ws-api.ts; no types should be declared there.
+ */
+
+export type {
+  LogFilter,
+  LogQueryResult,
+  LogStats,
+  ApiError,
+  AccessTokenRecord,
+  CreateAccessTokenRequest,
+  CreateAccessTokenResponse,
+  AuthVerifyResponse,
+  McpServerRef,
+  PersonalityFileId,
+  PersonalityFileMeta,
+  PersonalityFile,
+  McpServerRecord,
+  McpToolWithSchema,
+  CreateMcpServerRequest,
+  UpdateMcpServerRequest,
+  ChannelStatusResponse,
+  Session,
+  MessageRole,
+} from '@openaidy/shared-types';
+
+import type {
+  SessionMessage as SharedSessionMessage,
+  RunStatus as SharedRunStatus,
+  SessionRun as SharedSessionRun,
+} from '@openaidy/shared-types';
+
+/**
+ * Session message — extends shared type with UI-only reasoning content field
+ */
+export type SessionMessage = SharedSessionMessage & {
+  reasoningContent?: string;
+};
+
+/**
+ * Run status — extends shared type with 'streaming' for WebSocket live state
+ */
+export type RunStatus = SharedRunStatus | 'streaming';
+
+/**
+ * Agent configuration
+ */
+export type AgentWorkspacePermission = {
+  read: boolean;
+  write: boolean;
+  delete: boolean;
+  list: boolean;
+};
+
+export type AgentWorkspace = {
+  path: string;
+  permissions: AgentWorkspacePermission;
+};
+
+export type AgentWorkspaceConfig = {
+  enabled: boolean;
+  defaultPermissions?: AgentWorkspacePermission;
+  workspaces: AgentWorkspace[];
+};
+
+export type Agent = {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  systemPrompt: string;
+  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  tags?: string[];
+  tools?: string[];
+  skills?: string[];
+  mcpServers?: import('@openaidy/shared-types').McpServerRef[];
+  defaults: {
+    providerId?: string;
+    modelId?: string;
+    temperature?: number;
+    maxTokens?: number;
+  };
+  workspace?: AgentWorkspaceConfig;
+};
+
+/**
+ * Session run — extends shared type with optional agentId (API may omit it)
+ * and the frontend-extended RunStatus (includes 'streaming')
+ */
+export type SessionRun = Omit<
+  SharedSessionRun,
+  'agentId' | 'status' | 'finishReason'
+> & {
+  agentId?: string;
+  status: RunStatus;
+  finishReason?: string;
+};
+
+/**
+ * Builtin (native) tool info returned by GET /tools
+ */
+export type BuiltinToolInfo = {
+  name: string;
+  description: string;
+};
+
+export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
+/**
+ * Skill info returned by GET /skills
+ */
+export type SkillInfo = {
+  id: string;
+  name: string;
+  description: string;
+  source?: SkillSource;
+  agentId?: string;
+};
+
+/**
+ * Input for creating a new agent
+ */
+export type CreateAgentInput = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  systemPrompt: string;
+  model: string;
+  description?: string;
+  tags?: string[];
+};
+
+/**
+ * Submit message input
+ */
+export type SubmitMessageInput = {
+  role: 'user' | 'system';
+  content: string;
+  agentId?: string;
+  providerId?: string;
+  modelId?: string;
+};
+
+/**
+ * Submit message result
+ */
+export type SubmitMessageResult =
+  | {
+      ok: true;
+      userMessage: SessionMessage;
+      assistantMessage: SessionMessage;
+      run: SessionRun;
+    }
+  | {
+      ok: false;
+      error: { code: string; message: string };
+    };
+
+/**
+ * Model capability
+ */
+export type ModelCapability =
+  | 'text_generation'
+  | 'streaming'
+  | 'tool_calls'
+  | 'vision'
+  | 'audio_input'
+  | 'audio_output'
+  | 'embedding';
+
+/**
+ * Model configuration within a provider
+ */
+export type ModelConfig = {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  description?: string;
+  capabilities?: ModelCapability[];
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Agent defaults
+ */
+export type AgentDefaults = {
+  providerId?: string;
+  modelId?: string;
+  temperature?: number;
+  maxTokens?: number;
+};
+
+/**
+ * Agent configuration
+ */
+export type AgentConfig = {
+  id: string;
+  name: string;
+  enabled?: boolean;
+  description?: string;
+  systemPrompt: string;
+  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  tools?: string[];
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  version?: number;
+};
+
+/**
+ * Application defaults
+ */
+export type AppDefaults = {
+  providerId: string;
+  modelId: string;
+  agentId: string;
+};
+
+/**
+ * Provider configuration (discriminated union by vendorFamily)
+ */
+export type OpenAICompatibleProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'openai-compatible';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  chatModel?: string;
+  embeddingModel?: string;
+  audioModel?: string;
+  imageModel?: string;
+  useResponsesApi?: boolean;
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableStreaming?: boolean;
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
+};
+
+export type AnthropicProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'anthropic';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  apiVersion?: string;
+  messagesModel?: string;
+  betas?: string[];
+  enableExtendedThinking?: boolean;
+  maxThinkingTokens?: number;
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableStreaming?: boolean;
+  defaultMaxTokens?: number;
+  defaultTemperature?: number;
+  systemPrompt?: string;
+};
+
+export type GeminiProviderConfig = {
+  id: string;
+  name: string;
+  vendorFamily: 'gemini';
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  organizationId?: string;
+  timeout?: { connect?: number; read?: number; write?: number };
+  retry?: { maxAttempts?: number; baseDelay?: number; maxDelay?: number };
+  headers?: Record<string, string>;
+  priority?: number;
+  metadata?: Record<string, unknown>;
+  models: ModelConfig[];
+  projectId?: string;
+  region?: string;
+  useVertexAI?: boolean;
+  embeddingModel?: string;
+  safetySettings?: Array<{
+    category:
+      | 'HARM_CATEGORY_HARASSMENT'
+      | 'HARM_CATEGORY_HATE_SPEECH'
+      | 'HARM_CATEGORY_SEXUALLY_EXPLICIT'
+      | 'HARM_CATEGORY_DANGEROUS_CONTENT'
+      | 'HARM_CATEGORY_CIVIC_INTEGRITY';
+    threshold:
+      | 'BLOCK_NONE'
+      | 'BLOCK_LOW_AND_ABOVE'
+      | 'BLOCK_MEDIUM_AND_ABOVE'
+      | 'BLOCK_ONLY_HIGH';
+  }>;
+  generationConfig?: {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    candidateCount?: number;
+    maxOutputTokens?: number;
+    stopSequences?: string[];
+    responseMimeType?: 'text/plain' | 'application/json';
+  };
+  enableTools?: boolean;
+  enableVision?: boolean;
+  enableAudioInput?: boolean;
+  enableStreaming?: boolean;
+  defaultTemperature?: number;
+  defaultMaxTokens?: number;
+  systemInstruction?: string;
+};
+
+export type ProviderConfig =
+  | OpenAICompatibleProviderConfig
+  | AnthropicProviderConfig
+  | GeminiProviderConfig;
+
+/**
+ * Application configuration
+ */
+export type AppConfig = {
+  version: number;
+  defaults: AppDefaults;
+  providers: ProviderConfig[];
+  agents: AgentConfig[];
+};
+
+/**
+ * Configuration issue
+ */
+export type ConfigIssue = {
+  scope: 'provider';
+  id: string;
+  code: string;
+  message: string;
+};
+
+/**
+ * Configuration status
+ */
+export type ConfigStatus = {
+  issues: ConfigIssue[];
+};
+
+/**
+ * Workspace file metadata
+ */
+export type WorkspaceFileInfo = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modifiedAt: string;
+};
+
+/**
+ * Workspace file list response
+ */
+export type WorkspaceFileListResponse = {
+  items: WorkspaceFileInfo[];
+  path?: string;
+};
+
+/**
+ * Workspace file content response
+ */
+export type WorkspaceFileContentResponse = {
+  content: string;
+  path: string;
+  isText: boolean;
+  mimeType: string;
+  size: number;
+  modifiedAt: string;
+  isTooLarge: boolean;
+  maxEditableBytes?: number;
+};
+
+/**
+ * Workspace write response
+ */
+export type WorkspaceWriteResponse = {
+  success: boolean;
+  path: string;
+};
+
+/**
+ * Workspace error response
+ */
+export type WorkspaceErrorResponse = {
+  error: string;
+  code: string;
+};
+
+export interface AddonRecord {
+  id: string;
+  addonId: string;
+  name: string;
+  version: string;
+  description?: string;
+  status: 'installed' | 'enabled' | 'disabled' | 'error';
+  installedAt: string;
+  installedBy: string;
+  manifest: Record<string, unknown>;
+  permissions?: string[];
+  approvedPermissions?: string[];
+}
+
+export type Pulse = {
+  id: string;
+  name: string;
+  prompt: string;
+  scheduleHuman: string;
+  status: 'active' | 'paused' | 'completed' | 'failed';
+  agentId: string | null;
+  sessionId: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdAt: string;
+};
+
+export type PulseRun = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  attemptNumber: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+};
+
+export type ScheduleInput =
+  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
+  | { daily: { hour: number; minute: number } }
+  | { cron: string; tz?: string }
+  | { at: string };
+
+export type CreatePulseBody = {
+  name: string;
+  prompt: string;
+  schedule: ScheduleInput;
+  agentId?: string;
+  sessionId?: string;
+};
+
+export type UpdatePulseBody = {
+  name?: string;
+  prompt?: string;
+  schedule?: ScheduleInput;
+  status?: 'active' | 'paused' | 'completed' | 'failed';
+  agentId?: string;
+  sessionId?: string;
+};

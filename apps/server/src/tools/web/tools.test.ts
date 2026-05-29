@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { webFetchTool } from './fetch';
 
-const mockCtx = { agentId: 'test-agent' };
+const mockCtx = { agentId: 'test-agent', sessionId: 'test-session' };
 
 // ---------------------------------------------------------------------------
 // Helpers

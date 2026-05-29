@@ -32,11 +32,13 @@ import { createSessionTools } from './sessions';
 import { createMemoryTools } from './memory';
 import type { MemoryToolDeps } from './memory';
 import { presentChoicesTool } from './present-choices';
+import { createTaskTools } from './tasks';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
 import type { AddonToolDeps } from './addons';
 import type { SessionMessageService } from '../sessions/service';
+import type { TaskService } from '../tasks/service';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
@@ -60,6 +62,8 @@ export type BuiltinToolRegistryDeps = {
   web?: boolean;
   sessions?: { getSessionService: () => SessionMessageService };
   memory?: MemoryToolDeps;
+  getTaskService?: () => TaskService | undefined;
+  getPlanningService?: () => import('../planning').PlanningService | undefined;
 };
 
 /**
@@ -117,6 +121,15 @@ export function createBuiltinToolRegistry(
 
   if (deps.memory) {
     for (const tool of createMemoryTools(deps.memory)) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.getTaskService) {
+    for (const tool of createTaskTools(
+      deps.getTaskService,
+      deps.getPlanningService,
+    )) {
       registry.register(tool);
     }
   }

@@ -26,6 +26,12 @@ export type DatabaseConnection = {
   db: DatabaseClient;
   close: () => Promise<void>;
   kind: DatabaseClientConfig['kind'];
+  /**
+   * Execute a function within a database transaction.
+   * For SQLite: uses better-sqlite3's transaction() wrapper
+   * For Postgres: uses node-postgres BEGIN/COMMIT/ROLLBACK
+   */
+  transaction: <T>(fn: (tx: DatabaseClient) => Promise<T>) => Promise<T>;
 };
 
 const schema: DatabaseSchema = {
@@ -41,18 +47,23 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY NOT NULL,
       title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'chat',
       status TEXT NOT NULL DEFAULT 'active',
+      agent_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       archived_at TEXT
     );
 
+
     CREATE TABLE IF NOT EXISTS session_messages (
       id TEXT PRIMARY KEY NOT NULL,
       session_id TEXT NOT NULL,
+      run_id TEXT,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       tool_call_id TEXT,
+      reasoning_content TEXT,
       sequence INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       metadata TEXT,
@@ -153,6 +164,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS session_messages_sequence_idx ON session_messages(sequence);
     CREATE INDEX IF NOT EXISTS session_runs_session_id_idx ON session_runs(session_id);
     CREATE INDEX IF NOT EXISTS session_runs_created_at_idx ON session_runs(created_at);
+    CREATE INDEX IF NOT EXISTS sessions_agent_id_idx ON sessions(agent_id);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_next_run_at_idx ON scheduled_jobs(next_run_at);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_status_idx ON scheduled_jobs(status);
     CREATE INDEX IF NOT EXISTS scheduled_jobs_type_idx ON scheduled_jobs(type);
@@ -190,9 +202,15 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
       order_index INTEGER NOT NULL DEFAULT 0,
       result TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
+      pending_verification_result TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE INDEX IF NOT EXISTS subtasks_session_id_idx ON subtasks(session_id);
+
+    CREATE INDEX IF NOT EXISTS tasks_session_id_idx ON tasks(session_id);
 
     CREATE TABLE IF NOT EXISTS task_agents (
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -361,6 +379,132 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
   `);
 }
 
+/**
+ * Run migrations for SQLite schema updates
+ * Handles adding new columns to existing tables
+ *
+ * TODO: Refactor to a proper migration system
+ * - Use a migrations table to track applied migrations
+ * - Support reversible migrations (up/down)
+ * - Use timestamp/version-based migration files
+ * - Handle complex schema changes (table renames, column type changes)
+ * - Consider using a library like better-sqlite3-migrations or node-sqlite-migrate
+ */
+function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
+  // Migration: Add retry_count to subtasks if not exists
+  const tableInfo = sqlite.pragma('table_info(subtasks)') as Array<{
+    name: string;
+  }>;
+  const hasRetryCount = tableInfo.some((col) => col.name === 'retry_count');
+  if (!hasRetryCount) {
+    sqlite.exec(
+      `ALTER TABLE subtasks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0`,
+    );
+  }
+
+  // Migration: Add pending_verification_result to subtasks if not exists
+  const hasPendingVerification = tableInfo.some(
+    (col) => col.name === 'pending_verification_result',
+  );
+  if (!hasPendingVerification) {
+    sqlite.exec(
+      `ALTER TABLE subtasks ADD COLUMN pending_verification_result TEXT`,
+    );
+  }
+
+  // Migration: Create subtasks.session_id index if not exists
+  const subtaskIndices = sqlite.pragma('index_list(subtasks)') as Array<{
+    name: string;
+  }>;
+  const hasSubtaskSessionIdIdx = subtaskIndices.some(
+    (idx) => idx.name === 'subtasks_session_id_idx',
+  );
+  if (!hasSubtaskSessionIdIdx) {
+    sqlite.exec(`CREATE INDEX subtasks_session_id_idx ON subtasks(session_id)`);
+  }
+
+  // Migration: Create tasks.session_id index if not exists
+  const taskIndices = sqlite.pragma('index_list(tasks)') as Array<{
+    name: string;
+  }>;
+  const hasTaskSessionIdIdx = taskIndices.some(
+    (idx) => idx.name === 'tasks_session_id_idx',
+  );
+  if (!hasTaskSessionIdIdx) {
+    sqlite.exec(`CREATE INDEX tasks_session_id_idx ON tasks(session_id)`);
+  }
+
+  // Migration: Add run_id to session_messages if not exists
+  // Note: SQLite doesn't support adding foreign keys via ALTER TABLE,
+  // so we add the column without the constraint (enforced at app level)
+  const sessionMessagesInfo = sqlite.pragma(
+    'table_info(session_messages)',
+  ) as Array<{
+    name: string;
+  }>;
+  const hasRunId = sessionMessagesInfo.some((col) => col.name === 'run_id');
+  if (!hasRunId) {
+    sqlite.exec(`ALTER TABLE session_messages ADD COLUMN run_id TEXT`);
+  }
+
+  // Migration: Create session_messages.run_id index if not exists
+  const sessionMessagesIndices = sqlite.pragma(
+    'index_list(session_messages)',
+  ) as Array<{
+    name: string;
+  }>;
+  const hasRunIdIdx = sessionMessagesIndices.some(
+    (idx) => idx.name === 'session_messages_run_id_idx',
+  );
+  if (!hasRunIdIdx) {
+    sqlite.exec(
+      `CREATE INDEX session_messages_run_id_idx ON session_messages(run_id)`,
+    );
+  }
+
+  // Migration: Add reasoning_content to session_messages if not exists
+  const hasReasoningContent = sessionMessagesInfo.some(
+    (col) => col.name === 'reasoning_content',
+  );
+  if (!hasReasoningContent) {
+    sqlite.exec(
+      `ALTER TABLE session_messages ADD COLUMN reasoning_content TEXT`,
+    );
+  }
+
+  // Migration: Create deliverables table if not exists
+  const deliverablesTableInfo = sqlite.pragma(
+    'table_info(deliverables)',
+  ) as Array<{
+    name: string;
+  }>;
+  if (deliverablesTableInfo.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE deliverables (
+        id           TEXT PRIMARY KEY,
+        task_id      TEXT NOT NULL,
+        type         TEXT NOT NULL,
+        description  TEXT NOT NULL,
+        status       TEXT NOT NULL DEFAULT 'pending',
+        format       TEXT,
+        size         TEXT,
+        path         TEXT,
+        url          TEXT,
+        version      TEXT,
+        metadata     TEXT,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS deliverables_task_id_idx ON deliverables(task_id)`,
+    );
+    sqlite.exec(
+      `CREATE INDEX IF NOT EXISTS deliverables_status_idx ON deliverables(status)`,
+    );
+  }
+}
+
 export async function createDatabaseClient(
   config: DatabaseClientConfig,
 ): Promise<DatabaseConnection> {
@@ -370,12 +514,21 @@ export async function createDatabaseClient(
     sqlite.pragma('foreign_keys = ON');
     sqlite.pragma('journal_mode = WAL');
     initializeSqliteSchema(sqlite);
+    runSqliteMigrations(sqlite);
 
+    const db = drizzleSqlite(sqlite, { schema }) as DatabaseClient;
     return {
-      db: drizzleSqlite(sqlite, { schema }) as DatabaseClient,
+      db,
       kind: 'sqlite',
       close: async () => {
         sqlite.close();
+      },
+      // SQLite transactions via better-sqlite3's explicit transaction wrapper
+      transaction: async <T>(
+        fn: (tx: DatabaseClient) => Promise<T>,
+      ): Promise<T> => {
+        const tx = sqlite.transaction(() => fn(db));
+        return tx() as T;
       },
     };
   }
@@ -396,11 +549,30 @@ export async function createDatabaseClient(
     client.release();
   }
 
+  const db = drizzlePostgres(pool, { schema }) as DatabaseClient;
   return {
-    db: drizzlePostgres(pool, { schema }) as DatabaseClient,
+    db,
     kind: 'postgres',
     close: async () => {
       await pool.end();
+    },
+    // Postgres transactions using node-postgres client
+    transaction: async <T>(
+      fn: (tx: DatabaseClient) => Promise<T>,
+    ): Promise<T> => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const txDb = drizzlePostgres(client, { schema }) as DatabaseClient;
+        const result = await fn(txDb);
+        await client.query('COMMIT');
+        return result;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
   };
 }

@@ -9,6 +9,7 @@ import { createSignal, Show, For, createEffect, on } from 'solid-js';
 import { X } from 'lucide-solid';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
+import { useEscapeKey } from '../settings/hooks';
 
 /**
  * TaskModal Props
@@ -81,10 +82,6 @@ export function TaskModal(props: TaskModalProps) {
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
 
-    if (!title().trim()) {
-      newErrors.title = 'Title is required';
-    }
-
     if (!description().trim()) {
       newErrors.description = 'Description is required';
     }
@@ -109,7 +106,7 @@ export function TaskModal(props: TaskModalProps) {
         return;
       }
       await props.onSubmit({
-        title: title().trim(),
+        ...(title().trim() && { title: title().trim() }),
         description: description().trim(),
         priority: priority(),
         planningEnabled: planningEnabled(),
@@ -135,20 +132,7 @@ export function TaskModal(props: TaskModalProps) {
   }
 
   // Add event listener when modal is open
-  createEffect(
-    on(
-      () => props.isOpen,
-      () => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.key === 'Escape') {
-            props.onClose();
-          }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-      },
-    ),
-  );
+  useEscapeKey(props.onClose, () => props.isOpen);
 
   const isLoading = () => props.isLoading || submitting();
 
@@ -182,24 +166,20 @@ export function TaskModal(props: TaskModalProps) {
             {/* Title */}
             <div>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Title <span class="text-red-500">*</span>
+                Title
+                <span class="ml-1 text-xs text-gray-400 dark:text-gray-500 font-normal">
+                  (optional — auto-generated from description)
+                </span>
               </label>
               <input
                 type="text"
-                class={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100 ${
-                  errors().title
-                    ? 'border-red-500'
-                    : 'border-gray-300 dark:border-gray-600'
-                }`}
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-900 dark:text-gray-100"
                 value={title()}
                 onInput={(e) => setTitle(e.currentTarget.value)}
-                placeholder="Enter task title"
+                placeholder="Leave empty to auto-generate"
                 maxlength={100}
                 disabled={isLoading()}
               />
-              <Show when={errors().title}>
-                <p class="text-sm text-red-500">{errors().title}</p>
-              </Show>
             </div>
 
             {/* Description */}

@@ -15,6 +15,7 @@ import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
+import { createDeliverablesRepository } from './repositories/deliverables';
 
 export type { DatabaseAdapter, DatabaseRepositories } from './types';
 
@@ -38,6 +39,7 @@ export async function createDatabaseAdapter(
     taskAgents: createTaskAgentsRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
+    deliverables: createDeliverablesRepository(client),
   };
 
   return {

@@ -1,74 +1,13 @@
 import { nanoid } from 'nanoid';
-
-/**
- * Message role type
- */
-export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
-
-/**
- * Run status type
- */
-export type RunStatus =
-  | 'queued'
-  | 'running'
-  | 'succeeded'
-  | 'failed'
-  | 'cancelled';
-
-/**
- * Finish reason type
- */
-export type FinishReason =
-  | 'stop'
-  | 'length'
-  | 'tool_calls'
-  | 'content_filter'
-  | 'error';
-
-/**
- * Session message record
- */
-export type SessionMessageRecord = {
-  id: string;
-  sessionId: string;
-  role: MessageRole;
-  content: string;
-  toolCallId?: string;
-  sequence: number;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Session run record
- */
-export type SessionRunRecord = {
-  id: string;
-  sessionId: string;
-  agentId: string;
-  providerId: string;
-  modelId: string;
-  status: RunStatus;
-  finishReason?: FinishReason;
-  errorCode?: string;
-  errorMessage?: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  startedAt?: string;
-  finishedAt?: string;
-  createdAt: string;
-  metadata?: Record<string, unknown>;
-};
-
-/**
- * Session record
- */
-export type SessionRecord = {
-  id: string;
-  title: string;
-  createdAt: string;
-};
+import type {
+  SessionRecord,
+  SessionMessageRecord,
+  SessionRunRecord,
+  AppendMessageInput,
+  FinishReason,
+} from '../types.js';
+import type { SessionType } from '@openaidy/shared-types';
+export type { SessionRecord, SessionMessageRecord, SessionRunRecord };
 
 // In-memory storage (will be replaced with database)
 const sessions = new Map<string, SessionRecord>();
@@ -84,10 +23,14 @@ export function findSessionRecord(id: string): SessionRecord | undefined {
   return sessions.get(id);
 }
 
-export function createSessionRecord(title: string): SessionRecord {
+export function createSessionRecord(
+  title: string,
+  type?: SessionType,
+): SessionRecord {
   const record: SessionRecord = {
     id: nanoid(),
     title,
+    type: type ?? 'chat',
     createdAt: new Date().toISOString(),
   };
   sessions.set(record.id, record);
@@ -106,13 +49,9 @@ export function updateSessionTitleRecord(
 }
 
 // Message operations
-export function appendMessageRecord(input: {
-  sessionId: string;
-  role: MessageRole;
-  content: string;
-  toolCallId?: string;
-  metadata?: Record<string, unknown>;
-}): SessionMessageRecord {
+export function appendMessageRecord(
+  input: AppendMessageInput,
+): SessionMessageRecord {
   const sessionMessages = Array.from(messages.values()).filter(
     (m) => m.sessionId === input.sessionId,
   );
@@ -128,7 +67,11 @@ export function appendMessageRecord(input: {
     content: input.content,
     sequence: nextSequence,
     createdAt: new Date().toISOString(),
+    ...(input.runId !== undefined && { runId: input.runId }),
     ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
+    ...(input.reasoningContent !== undefined && {
+      reasoningContent: input.reasoningContent,
+    }),
     ...(input.metadata !== undefined && { metadata: input.metadata }),
   };
   messages.set(record.id, record);

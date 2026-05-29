@@ -1,5 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { convert } from 'html-to-text';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { webFetchMeta } from '../catalog.js';
 import { createLogger } from '../../lib/logger.js';
@@ -174,12 +175,68 @@ export const webFetchTool: BuiltinTool = {
       };
     }
 
+    // Pre-clean: aggressively remove script/style tags with regex before parsing
+    // This prevents parser failures on malformed/complex HTML from sites like YouTube
+    const cleanedHtml = rawBody
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .trim();
+
+    // Try html-to-text first for reliable text extraction
     try {
-      const { document } = parseHTML(rawBody);
+      const text = convert(cleanedHtml, {
+        selectors: [
+          { selector: 'script', format: 'skip' },
+          { selector: 'style', format: 'skip' },
+          { selector: 'noscript', format: 'skip' },
+          { selector: 'iframe', format: 'skip' },
+          { selector: 'nav', format: 'skip' },
+          { selector: 'footer', format: 'skip' },
+          { selector: 'header', format: 'skip' },
+          { selector: 'aside', format: 'skip' },
+          { selector: 'svg', format: 'skip' },
+          { selector: 'canvas', format: 'skip' },
+          { selector: 'img', format: 'skip' },
+          { selector: 'meta', format: 'skip' },
+          { selector: 'link', format: 'skip' },
+          { selector: 'a', options: { ignoreHref: true } },
+        ],
+        wordwrap: false,
+        limits: {
+          maxInputLength: MAX_RESPONSE_BYTES,
+        },
+      });
+
+      if (text && text.trim().length > 50) {
+        const cleaned = text.replace(/\n{3,}/g, '\n\n').trim();
+        return {
+          ok: true,
+          content: cleaned,
+          ...(truncated
+            ? {
+                warning: `Response truncated at ${MAX_RESPONSE_BYTES / 1024} KB`,
+              }
+            : {}),
+        };
+      }
+    } catch (err) {
+      logger.warn('html-to-text extraction failed', {
+        error: String(err),
+        url: parsed.toString(),
+      });
+      // Fall through to Readability
+    }
+
+    // Fallback to Readability if html-to-text fails
+    try {
+      const { document } = parseHTML(cleanedHtml);
       const reader = new Readability(document as unknown as Document);
       const article = reader.parse();
 
-      if (article?.textContent) {
+      if (article?.textContent && article.textContent.trim().length > 50) {
         const cleaned = article.textContent.replace(/\s{3,}/g, '\n\n').trim();
         logger.info('HTML parsed successfully', {
           url,

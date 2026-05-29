@@ -82,6 +82,7 @@ export type ModelResponse = {
   readonly providerId: string;
   readonly content: string;
   readonly toolCalls?: readonly ToolCallRequest[];
+  readonly reasoningContent?: string;
   readonly usage: UsageInfo;
   readonly finishReason: FinishReason;
   readonly created: string; // ISO timestamp
@@ -118,10 +119,11 @@ export type StreamStartedEvent = BaseStreamEvent<'stream.started'> & {
 /**
  * Content delta event
  */
-export type StreamContentDeltaEvent = BaseStreamEvent<'stream.content_delta'> & {
-  readonly id: string;
-  readonly delta: string;
-};
+export type StreamContentDeltaEvent =
+  BaseStreamEvent<'stream.content_delta'> & {
+    readonly id: string;
+    readonly delta: string;
+  };
 
 /**
  * Tool call event (during streaming)
@@ -145,6 +147,7 @@ export type StreamUsageEvent = BaseStreamEvent<'stream.usage'> & {
 export type StreamFinishedEvent = BaseStreamEvent<'stream.finished'> & {
   readonly id: string;
   readonly finishReason: FinishReason;
+  readonly reasoningContent?: string;
 };
 
 /**
@@ -170,37 +173,37 @@ export type ModelStreamEvent =
  * Type guards for stream events
  */
 export function isStreamStartedEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamStartedEvent {
   return event.type === 'stream.started';
 }
 
 export function isStreamContentDeltaEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamContentDeltaEvent {
   return event.type === 'stream.content_delta';
 }
 
 export function isStreamToolCallEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamToolCallEvent {
   return event.type === 'stream.tool_call';
 }
 
 export function isStreamUsageEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamUsageEvent {
   return event.type === 'stream.usage';
 }
 
 export function isStreamFinishedEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamFinishedEvent {
   return event.type === 'stream.finished';
 }
 
 export function isStreamErrorEvent(
-  event: ModelStreamEvent
+  event: ModelStreamEvent,
 ): event is StreamErrorEvent {
   return event.type === 'stream.error';
 }
@@ -246,7 +249,7 @@ export interface ModelProvider {
    * Returns an async iterable of stream events
    */
   invokeStream(
-    request: ModelRequest
+    request: ModelRequest,
   ): AsyncIterable<ProviderResult<ModelStreamEvent>>;
 }
 

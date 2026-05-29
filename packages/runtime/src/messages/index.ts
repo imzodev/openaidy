@@ -26,11 +26,12 @@ export type UserMessage = BaseMessage & {
 };
 
 /**
- * Assistant message (may include tool calls)
+ * Assistant message (may include tool calls and reasoning content)
  */
 export type AssistantMessage = BaseMessage & {
   readonly role: 'assistant';
   readonly toolCalls?: readonly ToolCallRequest[];
+  readonly reasoningContent?: string;
 };
 
 /**
@@ -70,7 +71,7 @@ export function isUserMessage(message: Message): message is UserMessage {
  * Type guard for assistant message
  */
 export function isAssistantMessage(
-  message: Message
+  message: Message,
 ): message is AssistantMessage {
   return message.role === 'assistant';
 }
@@ -79,7 +80,7 @@ export function isAssistantMessage(
  * Type guard for tool result message
  */
 export function isToolResultMessage(
-  message: Message
+  message: Message,
 ): message is ToolResultMessage {
   return message.role === 'tool';
 }

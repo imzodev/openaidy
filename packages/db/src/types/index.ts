@@ -18,6 +18,7 @@ import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
 import type { MemoriesRepository } from '../repositories/memories';
+import type { DeliverablesRepository } from '../repositories/deliverables';
 import { z } from 'zod';
 
 /**
@@ -140,6 +141,7 @@ export type SessionsStore = Pick<
   | 'findById'
   | 'list'
   | 'updateTitle'
+  | 'updateAgentId'
   | 'updateStatus'
   | 'delete'
   | 'searchByTitle'
@@ -222,6 +224,7 @@ export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
 export type AddonsStore = AddonsRepository;
 export type MemoriesStore = MemoriesRepository;
+export type DeliverablesStore = DeliverablesRepository;
 
 export type DatabaseRepositories = {
   sessions: SessionsStore;
@@ -237,6 +240,7 @@ export type DatabaseRepositories = {
   taskAgents: TaskAgentsStore;
   addons: AddonsStore;
   memories: MemoriesStore;
+  deliverables: DeliverablesStore;
 };
 
 export type DatabaseAdapter = {

@@ -1,5 +1,5 @@
 import type { SessionMessage, SessionRun } from '@openaidy/db';
-import type { SessionMessageRecord, SessionRunRecord } from './store';
+import type { SessionMessageRecord, SessionRunRecord } from '../types';
 
 /**
  * Input for submitting a message to a session
@@ -70,6 +70,7 @@ import type { McpClientService } from '../mcp/client';
 import type { BuiltinToolRegistry } from '../tools';
 import type { SkillRegistry } from '../skills';
 import type { AgentPersonalityService } from '../agents/personality-service';
+import type { RunEventEmitter } from '../dispatch/events';
 import type {
   SessionsStore,
   SessionMessagesStore,
@@ -91,6 +92,9 @@ export type SessionMessageServiceOptions = {
   /** Service for reading personality markdown files per agent */
   personality?: AgentPersonalityService;
   getDefaultAgentId?: () => string | undefined;
+  runEvents?: RunEventEmitter;
+  /** Base directory for agent workspaces (for loading agent workspace skills) */
+  workspaceBaseDir?: string;
   repositories?:
     | {
         sessions: SessionsStore;

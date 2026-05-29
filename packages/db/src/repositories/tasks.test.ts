@@ -3,7 +3,6 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as sessionSchema from '../schema/sessions';
 import * as tasksSchema from '../schema/tasks';
-import { SessionsRepository } from './sessions';
 import { TasksRepository } from './tasks';
 import { SubtasksRepository } from './subtasks';
 import { TaskAgentsRepository } from './task-agents';
@@ -24,7 +23,6 @@ describe('Tasks Repositories (integration)', () => {
 
   let pool: Pool | undefined;
   let db: Database | undefined;
-  let sessionsRepo: SessionsRepository | undefined;
   let tasksRepo: TasksRepository | undefined;
   let subtasksRepo: SubtasksRepository | undefined;
   let taskAgentsRepo: TaskAgentsRepository | undefined;
@@ -37,7 +35,6 @@ describe('Tasks Repositories (integration)', () => {
       schema: { ...sessionSchema, ...tasksSchema },
     }) as Database;
 
-    sessionsRepo = new SessionsRepository(db);
     tasksRepo = new TasksRepository(db);
     subtasksRepo = new SubtasksRepository(db);
     taskAgentsRepo = new TaskAgentsRepository(db);
@@ -129,18 +126,27 @@ describe('Tasks Repositories (integration)', () => {
 
       test('should filter by status', async () => {
         await tasksRepo!.create({ title: 'Backlog Task', description: 'D1' });
-        const inProgressTask = await tasksRepo!.create({ title: 'Progress Task', description: 'D2' });
+        const inProgressTask = await tasksRepo!.create({
+          title: 'Progress Task',
+          description: 'D2',
+        });
         await tasksRepo!.updateStatus(inProgressTask.id, 'in_progress');
 
         const backlogTasks = await tasksRepo!.list('backlog');
-        expect(backlogTasks.every(t => t.status === 'backlog')).toBe(true);
+        expect(backlogTasks.every((t) => t.status === 'backlog')).toBe(true);
       });
     });
 
     describe('listByStatuses()', () => {
       test('should return tasks matching any status', async () => {
-        const task1 = await tasksRepo!.create({ title: 'T1', description: 'D1' });
-        const task2 = await tasksRepo!.create({ title: 'T2', description: 'D2' });
+        const task1 = await tasksRepo!.create({
+          title: 'T1',
+          description: 'D1',
+        });
+        const task2 = await tasksRepo!.create({
+          title: 'T2',
+          description: 'D2',
+        });
         await tasksRepo!.updateStatus(task1.id, 'todo');
         await tasksRepo!.updateStatus(task2.id, 'in_progress');
 
@@ -189,7 +195,10 @@ describe('Tasks Repositories (integration)', () => {
           planningEnabled: true,
         });
 
-        const updated = await tasksRepo!.updatePlanningStatus(task.id, 'in_progress');
+        const updated = await tasksRepo!.updatePlanningStatus(
+          task.id,
+          'in_progress',
+        );
 
         expect(updated?.planningStatus).toBe('in_progress');
       });
@@ -292,7 +301,10 @@ describe('Tasks Repositories (integration)', () => {
           description: 'Test',
         });
 
-        const updated = await subtasksRepo!.updateStatus(subtask.id, 'in_progress');
+        const updated = await subtasksRepo!.updateStatus(
+          subtask.id,
+          'in_progress',
+        );
 
         expect(updated?.status).toBe('in_progress');
       });
@@ -306,7 +318,10 @@ describe('Tasks Repositories (integration)', () => {
           description: 'Test',
         });
 
-        const updated = await subtasksRepo!.assignAgent(subtask.id, 'agent-456');
+        const updated = await subtasksRepo!.assignAgent(
+          subtask.id,
+          'agent-456',
+        );
 
         expect(updated?.assignedAgentId).toBe('agent-456');
         expect(updated?.status).toBe('assigned');
@@ -321,7 +336,10 @@ describe('Tasks Repositories (integration)', () => {
           description: 'Test',
         });
 
-        const updated = await subtasksRepo!.setResult(subtask.id, 'Task completed successfully');
+        const updated = await subtasksRepo!.setResult(
+          subtask.id,
+          'Task completed successfully',
+        );
 
         expect(updated?.result).toBe('Task completed successfully');
       });
@@ -329,9 +347,21 @@ describe('Tasks Repositories (integration)', () => {
 
     describe('getCountsByStatus()', () => {
       test('should return counts by status', async () => {
-        const s1 = await subtasksRepo!.create({ taskId, title: 'S1', description: 'D1' });
-        const s2 = await subtasksRepo!.create({ taskId, title: 'S2', description: 'D2' });
-        const s3 = await subtasksRepo!.create({ taskId, title: 'S3', description: 'D3' });
+        const s1 = await subtasksRepo!.create({
+          taskId,
+          title: 'S1',
+          description: 'D1',
+        });
+        const s2 = await subtasksRepo!.create({
+          taskId,
+          title: 'S2',
+          description: 'D2',
+        });
+        const s3 = await subtasksRepo!.create({
+          taskId,
+          title: 'S3',
+          description: 'D3',
+        });
 
         await subtasksRepo!.updateStatus(s1.id, 'completed');
         await subtasksRepo!.updateStatus(s2.id, 'completed');
@@ -412,7 +442,10 @@ describe('Tasks Repositories (integration)', () => {
         });
 
         await taskAgentsRepo!.assign({ taskId, agentId: 'agent-123' });
-        await taskAgentsRepo!.assign({ taskId: task2.id, agentId: 'agent-123' });
+        await taskAgentsRepo!.assign({
+          taskId: task2.id,
+          agentId: 'agent-123',
+        });
 
         const tasks = await taskAgentsRepo!.listByAgent('agent-123');
         expect(tasks).toHaveLength(2);
@@ -426,7 +459,9 @@ describe('Tasks Repositories (integration)', () => {
         await taskAgentsRepo!.remove(taskId, 'agent-to-remove');
 
         const agents = await taskAgentsRepo!.listByTask(taskId);
-        expect(agents.find(a => a.agentId === 'agent-to-remove')).toBeUndefined();
+        expect(
+          agents.find((a) => a.agentId === 'agent-to-remove'),
+        ).toBeUndefined();
       });
     });
 
@@ -446,9 +481,17 @@ describe('Tasks Repositories (integration)', () => {
 
     describe('updateRole()', () => {
       test('should update agent role', async () => {
-        await taskAgentsRepo!.assign({ taskId, agentId: 'agent-1', role: 'primary' });
+        await taskAgentsRepo!.assign({
+          taskId,
+          agentId: 'agent-1',
+          role: 'primary',
+        });
 
-        const updated = await taskAgentsRepo!.updateRole(taskId, 'agent-1', 'reviewer');
+        const updated = await taskAgentsRepo!.updateRole(
+          taskId,
+          'agent-1',
+          'reviewer',
+        );
 
         expect(updated?.role).toBe('reviewer');
       });

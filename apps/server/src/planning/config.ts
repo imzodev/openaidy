@@ -19,26 +19,37 @@ When given a task:
 3. Create a list of subtasks with clear titles and descriptions
 4. Ensure each subtask is atomic and can be completed independently
 5. Order subtasks logically (dependencies first)
+6. Identify the expected deliverable for this task
 
 Output format:
-Return a JSON array of subtasks, each with:
-- title: Short, clear title
-- description: Detailed description of what needs to be done
-- dependencies: Array of subtask indices this depends on (optional)
+Return a JSON object with:
+- subtasks: Array of subtask objects, each with:
+  - title: Short, clear title
+  - description: Detailed description of what needs to be done
+  - dependencies: Array of subtask indices this depends on (optional)
+- deliverable: Object describing the expected output with:
+  - type: One of 'document', 'image', 'code', 'report', 'data', 'link', 'other'
+  - description: Clear description of what the deliverable is
 
 Example output:
-[
-  {
-    "title": "Set up database schema",
-    "description": "Create the database tables and indexes needed for the feature",
-    "dependencies": []
-  },
-  {
-    "title": "Implement API endpoints",
-    "description": "Create the REST API endpoints for CRUD operations",
-    "dependencies": [0]
+{
+  "subtasks": [
+    {
+      "title": "Set up database schema",
+      "description": "Create the database tables and indexes needed for the feature",
+      "dependencies": []
+    },
+    {
+      "title": "Implement API endpoints",
+      "description": "Create the REST API endpoints for CRUD operations",
+      "dependencies": [0]
+    }
+  ],
+  "deliverable": {
+    "type": "code",
+    "description": "Source code repository with working REST API endpoints for CRUD operations"
   }
-]`,
+}`,
 
   /**
    * Model requirements for planning
@@ -72,4 +83,6 @@ export type PlannedSubtask = {
   title: string;
   description: string;
   dependencies: number[];
+  assignedAgentId?: string;
+  assignmentReason?: string;
 };

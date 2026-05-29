@@ -208,6 +208,40 @@ export const sessionsSearchMeta: ToolMeta = {
     'Typical use: user says "let\'s continue the ABC project" → sessions_search("ABC project") → sessions_read.',
 };
 
+// ── Tasks ─────────────────────────────────────────────────────────────────────
+
+export const tasksListMeta: ToolMeta = {
+  name: 'tasks_list',
+  category: 'Tasks',
+  description:
+    'List all tasks in the Kanban board. Returns task IDs, titles, statuses, ' +
+    'priorities, and planning information. Use this to find a task ID before updating it.',
+};
+
+export const tasksCreateMeta: ToolMeta = {
+  name: 'tasks_create',
+  category: 'Tasks',
+  description:
+    'Create a new task in the Kanban board. The task will be immediately visible ' +
+    'to the user in their Kanban view. Returns the created task details.',
+};
+
+export const tasksUpdateMeta: ToolMeta = {
+  name: 'tasks_update',
+  category: 'Tasks',
+  description:
+    'Update an existing task in the Kanban board. Can change title, description, ' +
+    'priority, status, or planning settings. Returns the updated task details.',
+};
+
+export const tasksDeleteMeta: ToolMeta = {
+  name: 'tasks_delete',
+  category: 'Tasks',
+  description:
+    'Permanently delete a task from the Kanban board. This action cannot be undone. ' +
+    'Requires confirm=true to prevent accidental deletion.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -234,4 +268,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   memorySearchMeta,
   memoryDeleteMeta,
   sessionsSearchMeta,
+  tasksListMeta,
+  tasksCreateMeta,
+  tasksUpdateMeta,
+  tasksDeleteMeta,
 ];

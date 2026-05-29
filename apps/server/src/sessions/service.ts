@@ -19,6 +19,7 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
+import type { SessionType } from '@openaidy/shared-types';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -31,10 +32,6 @@ import {
   markRunSucceeded,
   markRunFailed,
   listSessionRunRecords,
-  type SessionMessageRecord,
-  type SessionRunRecord,
-  type SessionRecord,
-  type FinishReason,
 } from './store';
 import type {
   SubmitMessageInput,
@@ -44,7 +41,15 @@ import type {
 } from './types';
 import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
 import type { AgentPersonalityService } from '../agents/personality-service';
-import type { WorkspacePermissionsInfo } from '../types.js';
+import type {
+  WorkspacePermissionsInfo,
+  AppendMessageInput,
+  SessionMessageRecord,
+  SessionRunRecord,
+  SessionRecord,
+  FinishReason,
+} from '../types.js';
+import type { RunEventEmitter } from '../dispatch/events';
 
 /**
  * Session message service
@@ -71,6 +76,8 @@ export class SessionMessageService {
   private readonly runsRepo: SessionRunsStore | undefined;
   private readonly skillRegistry: import('../skills').SkillRegistry | undefined;
   private readonly personalityService: AgentPersonalityService | undefined;
+  private readonly runEvents: RunEventEmitter | undefined;
+  private readonly workspaceBaseDir: string | undefined;
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -81,6 +88,8 @@ export class SessionMessageService {
     this.getDefaultAgentId = options.getDefaultAgentId;
     this.skillRegistry = options.skills;
     this.personalityService = options.personality;
+    this.runEvents = options.runEvents;
+    this.workspaceBaseDir = options.workspaceBaseDir;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -119,11 +128,17 @@ export class SessionMessageService {
   /**
    * Create a new session
    */
-  async createSession(title: string): Promise<SessionRecord | Session> {
+  async createSession(
+    title: string,
+    type?: SessionType,
+  ): Promise<SessionRecord | Session> {
     if (this.sessionsRepo) {
-      return this.sessionsRepo.create({ title });
+      return this.sessionsRepo.create({
+        title,
+        ...(type !== undefined && { type: type as SessionType }),
+      });
     }
-    return createSessionRecord(title);
+    return createSessionRecord(title, type);
   }
 
   /**
@@ -137,6 +152,20 @@ export class SessionMessageService {
       return this.sessionsRepo.updateTitle(id, title);
     }
     return updateSessionTitleRecord(id, title) ?? null;
+  }
+
+  /**
+   * Update a session's agentId (set to the agent of the latest run)
+   */
+  async updateSessionAgentId(
+    id: string,
+    agentId: string,
+  ): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.updateAgentId(id, agentId);
+    }
+    // In-memory store doesn't persist agentId - just return the session
+    return (await this.getSession(id)) ?? null;
   }
 
   /**
@@ -294,8 +323,12 @@ export class SessionMessageService {
     });
 
     // 3. Create run record (starts in 'queued' status)
+    // Resolve agent: input.agentId > session.agentId > system default
     const configuredDefaultAgentId = this.getDefaultAgentId?.();
-    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const resolvedAgentId =
+      input.agentId ??
+      (session as { agentId?: string }).agentId ??
+      configuredDefaultAgentId;
     const agent = resolvedAgentId
       ? this.agents?.getAgent(resolvedAgentId)
       : undefined;
@@ -369,6 +402,10 @@ export class SessionMessageService {
       isFirstMessage,
       userMessage: input.content,
       providers: this.providers,
+      workspaceBaseDir: this.workspaceBaseDir,
+      sessionType: (session as { type?: string }).type as
+        | SessionType
+        | undefined,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -394,7 +431,7 @@ export class SessionMessageService {
     // 7 & 8. Handle result
     if (result.ok) {
       return this.handleSuccess(
-        run.id,
+        run,
         input.sessionId,
         userMessage,
         result.value,
@@ -582,8 +619,12 @@ export class SessionMessageService {
     });
 
     // 3. Create run record
+    // Resolve agent: input.agentId > session.agentId > system default
     const configuredDefaultAgentId = this.getDefaultAgentId?.();
-    const resolvedAgentId = input.agentId ?? configuredDefaultAgentId;
+    const resolvedAgentId =
+      input.agentId ??
+      (session as { agentId?: string }).agentId ??
+      configuredDefaultAgentId;
     const agent = resolvedAgentId
       ? this.agents?.getAgent(resolvedAgentId)
       : undefined;
@@ -645,10 +686,14 @@ export class SessionMessageService {
         const storedToolCalls = msgMetadata?.['toolCalls'] as
           | Array<{ id: string; name: string; arguments: string }>
           | undefined;
+        const msgReasoningContent = m.reasoningContent ?? undefined;
         return {
           role: 'assistant' as const,
           content: msgContent,
           ...(storedToolCalls?.length ? { toolCalls: storedToolCalls } : {}),
+          ...(msgReasoningContent
+            ? { reasoningContent: msgReasoningContent }
+            : {}),
         } as Message;
       }
       return {
@@ -706,6 +751,10 @@ export class SessionMessageService {
       providers: this.providers,
       tools: allTools,
       workspacePermissions,
+      workspaceBaseDir: this.workspaceBaseDir,
+      sessionType: (session as { type?: string }).type as
+        | SessionType
+        | undefined,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -721,6 +770,7 @@ export class SessionMessageService {
     let accumulatedContent = '';
     let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let finalFinishReason: string | undefined;
+    let finalReasoningContent: string | undefined;
     let finalProviderId = providerId;
     let finalModelId = modelId;
 
@@ -806,6 +856,8 @@ export class SessionMessageService {
             }
             case 'stream.finished': {
               finalFinishReason = value.finishReason;
+              if (value.reasoningContent)
+                finalReasoningContent = value.reasoningContent;
               break;
             }
           }
@@ -828,13 +880,37 @@ export class SessionMessageService {
             arguments: JSON.stringify(tc.arguments),
           }));
 
+          // Extract consulted skills from workspace_read/workspace_list calls
+          const consultedSkills: string[] = [];
+          for (const tc of mappedToolCalls) {
+            if (tc.name === 'workspace_read' || tc.name === 'workspace_list') {
+              try {
+                const args = JSON.parse(tc.arguments) as { path?: string };
+                const path = args.path ?? '';
+                const match = path.match(/skills\/([^/]+)/);
+                if (match && match[1]) {
+                  consultedSkills.push(match[1]);
+                }
+              } catch {
+                // Invalid JSON arguments, skip
+              }
+            }
+          }
+
           // Persist the assistant tool-call turn so history can be fully
           // reconstructed on subsequent requests in this session.
           await this.appendMessage({
             sessionId: input.sessionId,
+            runId: run.id,
             role: 'assistant',
             content: accumulatedContent || '',
-            metadata: { toolCalls: mappedToolCalls },
+            ...(finalReasoningContent
+              ? { reasoningContent: finalReasoningContent }
+              : {}),
+            metadata: {
+              toolCalls: mappedToolCalls,
+              ...(consultedSkills.length > 0 && { consultedSkills }),
+            },
           });
 
           // Append to in-process loop history with toolCalls for this round.
@@ -842,10 +918,14 @@ export class SessionMessageService {
             role: 'assistant',
             content: accumulatedContent || '',
             toolCalls: mappedToolCalls,
+            ...(finalReasoningContent
+              ? { reasoningContent: finalReasoningContent }
+              : {}),
           } as Message);
 
           for (const tc of toolCalls) {
             let toolContent: string | undefined;
+            let absolutePathFromTool: string | undefined;
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session).
@@ -873,7 +953,7 @@ export class SessionMessageService {
                       choices: parsed.choices as string[],
                     });
                     // Mark the run as suspended (awaiting user input)
-                    await this.markRunSucceeded(run.id, {
+                    await this.markRunSucceeded(run, {
                       finishReason: 'stop',
                       promptTokens: finalUsage.promptTokens,
                       completionTokens: finalUsage.completionTokens,
@@ -910,6 +990,16 @@ export class SessionMessageService {
                 toolContent = errorMessage; // Persist error message instead of raw content
               } else {
                 toolContent = builtinResult.content;
+                // workspace_write returns absolutePath but the BuiltinTool type
+                // doesn't expose it, so we need to cast to access it
+                const resultWithPath = builtinResult as {
+                  ok: true;
+                  content: string;
+                  absolutePath?: string;
+                };
+                if (resultWithPath.absolutePath) {
+                  absolutePathFromTool = resultWithPath.absolutePath;
+                }
               }
             } else {
               // Fall back to MCP tool
@@ -934,17 +1024,35 @@ export class SessionMessageService {
                     .map((c) => c.text ?? '')
                     .join('')
                 : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
+              // Try to extract absolutePath from MCP result if present
+              if (mcpResult && typeof mcpResult === 'object') {
+                const mcpResultObj = mcpResult as {
+                  content?: unknown[];
+                  absolutePath?: string;
+                };
+                if (mcpResultObj.absolutePath) {
+                  absolutePathFromTool = mcpResultObj.absolutePath;
+                }
+              }
             }
 
             // Only persist tool result if we have content
             if (toolContent !== undefined) {
+              // Extract absolutePath from tool result if present (for workspace_write etc.)
+              const toolMetadata: Record<string, unknown> = {
+                toolName: tc.name,
+              };
+              if (absolutePathFromTool) {
+                toolMetadata.absolutePath = absolutePathFromTool;
+              }
               // Persist tool result message
               await this.appendMessage({
                 sessionId: input.sessionId,
+                runId: run.id,
                 role: 'tool',
                 content: toolContent,
                 toolCallId: tc.id,
-                metadata: { toolName: tc.name },
+                metadata: toolMetadata,
               });
 
               loopMessages.push({
@@ -965,23 +1073,30 @@ export class SessionMessageService {
       // 7. Persist assistant message with accumulated content
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
+        runId: run.id,
         role: 'assistant',
         content: accumulatedContent,
+        ...(finalReasoningContent
+          ? { reasoningContent: finalReasoningContent }
+          : {}),
         metadata: {
           providerId: finalProviderId,
           model: finalModelId,
-          runId: run.id,
         },
       });
 
       // 8. Update run with success
-      const updatedRun = await this.markRunSucceeded(run.id, {
+      const updatedRun = await this.markRunSucceeded(run, {
         finishReason: (finalFinishReason as FinishReason) ?? 'stop',
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
+
+      // 9. Update session's agentId to reflect the agent that just ran
+      // This allows the session to "remember" which agent was last used
+      await this.updateSessionAgentId(input.sessionId, agentId);
 
       return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
@@ -1035,32 +1150,21 @@ export class SessionMessageService {
   /**
    * Append a message to a session
    */
-  private async appendMessage(input: {
-    sessionId: string;
-    role: 'user' | 'system' | 'assistant' | 'tool';
-    content: string;
-    toolCallId?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<SessionMessageRecord | SessionMessage> {
+  private async appendMessage(
+    input: AppendMessageInput,
+  ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      const appendInput: {
-        sessionId: string;
-        role: DbMessageRole;
-        content: string;
-        toolCallId?: string;
-        metadata?: Record<string, unknown>;
-      } = {
+      return this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
-      };
-      if (input.toolCallId !== undefined) {
-        appendInput.toolCallId = input.toolCallId;
-      }
-      if (input.metadata !== undefined) {
-        appendInput.metadata = input.metadata;
-      }
-      return this.messagesRepo.append(appendInput);
+        ...(input.runId !== undefined && { runId: input.runId }),
+        ...(input.toolCallId !== undefined && { toolCallId: input.toolCallId }),
+        ...(input.reasoningContent !== undefined && {
+          reasoningContent: input.reasoningContent,
+        }),
+        ...(input.metadata !== undefined && { metadata: input.metadata }),
+      });
     }
     return appendMessageRecord(input);
   }
@@ -1097,7 +1201,7 @@ export class SessionMessageService {
    * Mark a run as succeeded
    */
   private async markRunSucceeded(
-    id: string,
+    run: SessionRunRecord | SessionRun,
     input: {
       finishReason: FinishReason;
       promptTokens?: number;
@@ -1128,9 +1232,65 @@ export class SessionMessageService {
       if (input.metadata !== undefined) {
         successInput.metadata = input.metadata;
       }
-      return this.runsRepo.markSucceeded(id, successInput);
+      const updated = await this.runsRepo.markSucceeded(run.id, successInput);
+      // Emit run.completed event
+      if (this.runEvents && updated) {
+        const eventData: {
+          runId: string;
+          sessionId: string;
+          agentId: string;
+          finishReason: string;
+          usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+          };
+        } = {
+          runId: run.id,
+          sessionId: run.sessionId,
+          agentId: run.agentId,
+          finishReason: input.finishReason,
+        };
+        if (input.promptTokens !== undefined) {
+          eventData.usage = {
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens ?? 0,
+            totalTokens: input.totalTokens ?? 0,
+          };
+        }
+        this.runEvents.emitCompleted(eventData);
+      }
+      return updated;
     }
-    return markRunSucceeded(id, input) ?? null;
+    const updated = markRunSucceeded(run.id, input);
+    // Emit run.completed event for in-memory runs too
+    if (this.runEvents && updated) {
+      const eventData: {
+        runId: string;
+        sessionId: string;
+        agentId: string;
+        finishReason: string;
+        usage?: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        };
+      } = {
+        runId: run.id,
+        sessionId: run.sessionId,
+        agentId: run.agentId,
+        finishReason: input.finishReason,
+      };
+      if (input.promptTokens !== undefined) {
+        eventData.usage = {
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens ?? 0,
+          totalTokens: input.totalTokens ?? 0,
+        };
+      }
+      this.runEvents.emitCompleted(eventData);
+    }
+    return updated ?? null;
   }
 
   /**
@@ -1154,7 +1314,7 @@ export class SessionMessageService {
    * Handle successful provider invocation
    */
   private async handleSuccess(
-    runId: string,
+    run: SessionRunRecord | SessionRun,
     sessionId: string,
     userMessage: SessionMessageRecord | SessionMessage,
     response: ModelResponse,
@@ -1162,17 +1322,17 @@ export class SessionMessageService {
     // Persist assistant message
     const assistantMessage = await this.appendMessage({
       sessionId: sessionId,
+      runId: run.id,
       role: 'assistant',
       content: response.content,
       metadata: {
         providerId: response.providerId,
         model: response.model,
-        runId,
       },
     });
 
     // Update run with success
-    const updatedRun = await this.markRunSucceeded(runId, {
+    const updatedRun = await this.markRunSucceeded(run, {
       finishReason: response.finishReason as FinishReason,
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,
@@ -1183,6 +1343,9 @@ export class SessionMessageService {
         responseId: response.id,
       },
     });
+
+    // Update session's agentId to reflect the agent that just ran
+    await this.updateSessionAgentId(sessionId, run.agentId);
 
     return {
       ok: true,
