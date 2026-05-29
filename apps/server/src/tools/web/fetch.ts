@@ -2,6 +2,9 @@ import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { webFetchMeta } from '../catalog.js';
+import { createLogger } from '../../lib/logger.js';
+
+const logger = createLogger('web_fetch');
 
 const MAX_RESPONSE_BYTES = 1024 * 512; // 512 KB
 const FETCH_TIMEOUT_MS = 15_000;
@@ -178,6 +181,10 @@ export const webFetchTool: BuiltinTool = {
 
       if (article?.textContent) {
         const cleaned = article.textContent.replace(/\s{3,}/g, '\n\n').trim();
+        logger.info('HTML parsed successfully', {
+          url,
+          contentLength: cleaned.length,
+        });
         return {
           ok: true,
           content: cleaned,
@@ -189,16 +196,26 @@ export const webFetchTool: BuiltinTool = {
             : {}),
         };
       }
-    } catch {
-      // Fall back to returning raw body if Readability fails
+      // article is null or has no textContent - this happens on JavaScript-heavy pages
+      logger.error(
+        'Readability returned no textContent - page requires JavaScript',
+        { url, article: article ? 'parsed but empty' : 'null' },
+      );
+      return {
+        ok: false,
+        error: `Failed to extract content from "${parsed.hostname}". This page likely requires JavaScript to render. Try using "format": "raw" for simpler pages, or a different URL that returns pre-rendered content.`,
+      };
+    } catch (err) {
+      // Parsing itself failed
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.error('Readability parsing threw an error', {
+        url,
+        error: errorMessage,
+      });
+      return {
+        ok: false,
+        error: `HTML parsing failed for "${parsed.hostname}": ${errorMessage}. Try using "format": "raw" instead.`,
+      };
     }
-
-    return {
-      ok: true,
-      content: rawBody,
-      ...(truncated
-        ? { warning: `Response truncated at ${MAX_RESPONSE_BYTES / 1024} KB` }
-        : {}),
-    };
   },
 };

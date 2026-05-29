@@ -845,7 +845,7 @@ export class SessionMessageService {
           } as Message);
 
           for (const tc of toolCalls) {
-            let toolContent: string;
+            let toolContent: string | undefined;
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session).
@@ -898,9 +898,19 @@ export class SessionMessageService {
                 }
               }
 
-              toolContent = builtinResult.ok
-                ? builtinResult.content
-                : `Error: ${builtinResult.error}`;
+              if (!builtinResult.ok) {
+                // Store the error message (not raw HTML) for failed tool calls
+                // This ensures all tool calls are persisted and shown in the UI
+                const errorMessage = `Error: ${builtinResult.error}`;
+                loopMessages.push({
+                  role: 'tool',
+                  content: errorMessage,
+                  toolCallId: tc.id,
+                } as Message);
+                toolContent = errorMessage; // Persist error message instead of raw content
+              } else {
+                toolContent = builtinResult.content;
+              }
             } else {
               // Fall back to MCP tool
               const mcpResult = await this.mcp
@@ -926,20 +936,23 @@ export class SessionMessageService {
                 : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
             }
 
-            // Persist tool result message
-            await this.appendMessage({
-              sessionId: input.sessionId,
-              role: 'tool',
-              content: toolContent,
-              toolCallId: tc.id,
-              metadata: { toolName: tc.name },
-            });
+            // Only persist tool result if we have content
+            if (toolContent !== undefined) {
+              // Persist tool result message
+              await this.appendMessage({
+                sessionId: input.sessionId,
+                role: 'tool',
+                content: toolContent,
+                toolCallId: tc.id,
+                metadata: { toolName: tc.name },
+              });
 
-            loopMessages.push({
-              role: 'tool',
-              content: toolContent,
-              toolCallId: tc.id,
-            } as Message);
+              loopMessages.push({
+                role: 'tool',
+                content: toolContent,
+                toolCallId: tc.id,
+              } as Message);
+            }
           }
           // Continue loop for next model turn
           continue;
