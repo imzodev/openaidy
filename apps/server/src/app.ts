@@ -13,7 +13,7 @@ import {
   createDatabaseAdapter,
 } from '@openaidy/db';
 import { env } from './lib/env';
-import { loggerOptions } from './lib/logger';
+import { loggerOptions, createLogger } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -112,6 +112,24 @@ export async function buildApp() {
     pairingRequestsRepo = dbAdapter.repositories.pairingRequests;
     devicesRepo = dbAdapter.repositories.devices;
     accessTokensRepo = dbAdapter.repositories.accessTokens;
+
+    // Backfill sessions_fts index for any pre-existing sessions
+    const { indexed } =
+      await dbAdapter.repositories.sessions.backfillFtsIndex();
+    if (indexed > 0) {
+      app.log.info(
+        `Indexed ${indexed} pre-existing sessions into sessions_fts`,
+      );
+    }
+
+    // Backfill session_messages_fts index for any pre-existing messages
+    const { indexed: msgIndexed } =
+      await dbAdapter.repositories.sessions.backfillMessagesFtsIndex();
+    if (msgIndexed > 0) {
+      app.log.info(
+        `Indexed ${msgIndexed} pre-existing session messages into session_messages_fts`,
+      );
+    }
   }
 
   // Create shared services once per app instance
@@ -192,6 +210,16 @@ export async function buildApp() {
     },
     web: true,
     sessions: { getSessionService: () => sessionService! },
+    ...(dbAdapter
+      ? {
+          memory: {
+            memoriesRepo: dbAdapter.repositories.memories,
+            sessionsRepo: dbAdapter.repositories.sessions,
+            defaultAgentId: configService.getConfig().defaults.agentId,
+            createLogger,
+          },
+        }
+      : {}),
     getTaskService: () => taskService,
     getPlanningService: () => planningService,
   });

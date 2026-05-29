@@ -708,7 +708,7 @@ export class DispatchService {
     skillIds?: string[],
   ): Promise<Message[]> {
     const messages: Message[] = [];
-
+    // TODO: Analyze if we are duplicating buildSystemPrompt call here, since we also call it in apps/server/src/sessions/service.ts
     const fullSystemPrompt = await buildSystemPrompt({
       agentId,
       basePrompt: systemPrompt,

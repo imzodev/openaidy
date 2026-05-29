@@ -924,7 +924,7 @@ export class SessionMessageService {
           } as Message);
 
           for (const tc of toolCalls) {
-            let toolContent: string;
+            let toolContent: string | undefined;
             let absolutePathFromTool: string | undefined;
 
             // Route to builtin (native) tool only if it exists in the registry
@@ -978,12 +978,20 @@ export class SessionMessageService {
                 }
               }
 
-              toolContent = builtinResult.ok
-                ? builtinResult.content
-                : `Error: ${builtinResult.error}`;
-              // workspace_write returns absolutePath but the BuiltinTool type
-              // doesn't expose it, so we need to cast to access it
-              if (builtinResult.ok) {
+              if (!builtinResult.ok) {
+                // Store the error message (not raw HTML) for failed tool calls
+                // This ensures all tool calls are persisted and shown in the UI
+                const errorMessage = `Error: ${builtinResult.error}`;
+                loopMessages.push({
+                  role: 'tool',
+                  content: errorMessage,
+                  toolCallId: tc.id,
+                } as Message);
+                toolContent = errorMessage; // Persist error message instead of raw content
+              } else {
+                toolContent = builtinResult.content;
+                // workspace_write returns absolutePath but the BuiltinTool type
+                // doesn't expose it, so we need to cast to access it
                 const resultWithPath = builtinResult as {
                   ok: true;
                   content: string;
@@ -1028,26 +1036,31 @@ export class SessionMessageService {
               }
             }
 
-            // Persist tool result message
-            // Extract absolutePath from tool result if present (for workspace_write etc.)
-            const toolMetadata: Record<string, unknown> = { toolName: tc.name };
-            if (absolutePathFromTool) {
-              toolMetadata.absolutePath = absolutePathFromTool;
-            }
-            await this.appendMessage({
-              sessionId: input.sessionId,
-              runId: run.id,
-              role: 'tool',
-              content: toolContent,
-              toolCallId: tc.id,
-              metadata: toolMetadata,
-            });
+            // Only persist tool result if we have content
+            if (toolContent !== undefined) {
+              // Extract absolutePath from tool result if present (for workspace_write etc.)
+              const toolMetadata: Record<string, unknown> = {
+                toolName: tc.name,
+              };
+              if (absolutePathFromTool) {
+                toolMetadata.absolutePath = absolutePathFromTool;
+              }
+              // Persist tool result message
+              await this.appendMessage({
+                sessionId: input.sessionId,
+                runId: run.id,
+                role: 'tool',
+                content: toolContent,
+                toolCallId: tc.id,
+                metadata: toolMetadata,
+              });
 
-            loopMessages.push({
-              role: 'tool',
-              content: toolContent,
-              toolCallId: tc.id,
-            } as Message);
+              loopMessages.push({
+                role: 'tool',
+                content: toolContent,
+                toolCallId: tc.id,
+              } as Message);
+            }
           }
           // Continue loop for next model turn
           continue;

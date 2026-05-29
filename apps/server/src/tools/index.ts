@@ -29,6 +29,8 @@ import { createAgentTools } from './agents';
 import type { AgentToolsDeps } from './agents';
 import { createWebTools } from './web';
 import { createSessionTools } from './sessions';
+import { createMemoryTools } from './memory';
+import type { MemoryToolDeps } from './memory';
 import { presentChoicesTool } from './present-choices';
 import { createTaskTools } from './tasks';
 import type { WorkspaceService } from '../workspace/service';
@@ -48,6 +50,8 @@ export { createAgentTools } from './agents';
 export type { AgentToolsDeps } from './agents';
 export { createWebTools } from './web';
 export { createSessionTools } from './sessions';
+export { createMemoryTools } from './memory';
+export type { MemoryToolDeps } from './memory';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
@@ -57,6 +61,7 @@ export type BuiltinToolRegistryDeps = {
   agents?: AgentToolsDeps;
   web?: boolean;
   sessions?: { getSessionService: () => SessionMessageService };
+  memory?: MemoryToolDeps;
   getTaskService?: () => TaskService | undefined;
   getPlanningService?: () => import('../planning').PlanningService | undefined;
 };
@@ -110,6 +115,12 @@ export function createBuiltinToolRegistry(
 
   if (deps.web) {
     for (const tool of createWebTools()) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.memory) {
+    for (const tool of createMemoryTools(deps.memory)) {
       registry.register(tool);
     }
   }

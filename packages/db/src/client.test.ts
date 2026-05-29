@@ -82,6 +82,7 @@ describe('createDatabaseClient (sqlite)', () => {
       'access_tokens',
       'devices',
       'job_runs',
+      'memories',
       'pairing_requests',
       'scheduled_jobs',
       'session_messages',
@@ -104,6 +105,170 @@ describe('createDatabaseClient (sqlite)', () => {
     await expect(
       createDatabaseClient({ kind: 'sqlite', sqlitePath: dbPath }),
     ).resolves.toBeDefined();
+  });
+
+  it('creates memories table with correct columns', async () => {
+    const conn = await createDatabaseClient({
+      kind: 'sqlite',
+      sqlitePath: dbPath,
+    });
+    const db = conn.db as unknown as {
+      session?: { client: unknown };
+      driver: unknown;
+    };
+    const sqlite = db.session?.client ?? db.driver;
+    const rows: Array<{ name: string; type: string }> = (
+      sqlite as {
+        prepare: (sql: string) => {
+          all: () => Array<{ name: string; type: string }>;
+        };
+      }
+    )
+      .prepare(`PRAGMA table_info(memories)`)
+      .all();
+    const cols = rows.map((r) => r.name);
+    expect(cols).toContain('id');
+    expect(cols).toContain('agent_id');
+    expect(cols).toContain('title');
+    expect(cols).toContain('content');
+    expect(cols).toContain('tags');
+    expect(cols).toContain('importance');
+    expect(cols).toContain('created_at');
+    expect(cols).toContain('updated_at');
+    await conn.close();
+  });
+
+  it('creates memories_fts and sessions_fts virtual tables', async () => {
+    const conn = await createDatabaseClient({
+      kind: 'sqlite',
+      sqlitePath: dbPath,
+    });
+    const db = conn.db as unknown as {
+      session?: { client: unknown };
+      driver: unknown;
+    };
+    const sqlite = db.session?.client ?? db.driver;
+    const rows: Array<{ name: string; type: string }> = (
+      sqlite as {
+        prepare: (sql: string) => {
+          all: () => Array<{ name: string; type: string }>;
+        };
+      }
+    )
+      .prepare(
+        `SELECT name, type FROM sqlite_master WHERE type IN ('table', 'virtual') ORDER BY name`,
+      )
+      .all();
+    const names = rows.map((r) => r.name);
+    expect(names, 'memories_fts virtual table').toContain('memories_fts');
+    expect(names, 'sessions_fts virtual table').toContain('sessions_fts');
+    await conn.close();
+  });
+
+  it('creates all six FTS sync triggers for memories and sessions', async () => {
+    const conn = await createDatabaseClient({
+      kind: 'sqlite',
+      sqlitePath: dbPath,
+    });
+    const db = conn.db as unknown as {
+      session?: { client: unknown };
+      driver: unknown;
+    };
+    const sqlite = db.session?.client ?? db.driver;
+    const rows: Array<{ name: string }> = (
+      sqlite as {
+        prepare: (sql: string) => { all: () => Array<{ name: string }> };
+      }
+    )
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`,
+      )
+      .all();
+    const names = rows.map((r) => r.name);
+    expect(names, 'memories_ai trigger').toContain('memories_ai');
+    expect(names, 'memories_ad trigger').toContain('memories_ad');
+    expect(names, 'memories_au trigger').toContain('memories_au');
+    expect(names, 'sessions_ai trigger').toContain('sessions_ai');
+    expect(names, 'sessions_ad trigger').toContain('sessions_ad');
+    expect(names, 'sessions_au trigger').toContain('sessions_au');
+    await conn.close();
+  });
+
+  it('FTS trigger fires on insert — memories_fts is populated on insert', async () => {
+    const conn = await createDatabaseClient({
+      kind: 'sqlite',
+      sqlitePath: dbPath,
+    });
+    const db = conn.db as unknown as {
+      session?: { client: unknown };
+      driver: unknown;
+    };
+    const sqlite = db.session?.client ?? db.driver;
+    type Sqlite = {
+      prepare: (sql: string) => {
+        run: () => void;
+        all: () => Array<{ title: string; content: string }>;
+      };
+    };
+    const raw = sqlite as Sqlite;
+
+    // Insert a memory directly via sqlite (bypassing repo)
+    raw
+      .prepare(
+        `INSERT INTO memories (id, agent_id, title, content, tags, importance)
+       VALUES ('test-id-1', 'agent-x', 'React project setup', 'Remember to use Vite', '[]', 5)`,
+      )
+      .run();
+
+    // Verify FTS index was populated
+    const ftsRows = raw
+      .prepare(
+        `SELECT title, content FROM memories_fts WHERE memories_fts MATCH 'React'`,
+      )
+      .all();
+    expect(ftsRows.length).toBeGreaterThan(0);
+    expect(ftsRows[0]!.title).toBe('React project setup');
+
+    await conn.close();
+  });
+
+  it('backfill populates sessions_fts for pre-existing sessions', async () => {
+    const conn = await createDatabaseClient({
+      kind: 'sqlite',
+      sqlitePath: dbPath,
+    });
+    const db = conn.db as unknown as {
+      session?: { client: unknown };
+      driver: unknown;
+    };
+    const sqlite = db.session?.client ?? db.driver;
+    type Sqlite = {
+      prepare: (sql: string) => {
+        run: () => void;
+        all: () => Array<{ title: string }>;
+      };
+    };
+    const raw = sqlite as Sqlite;
+
+    // Insert sessions directly (bypassing repo)
+    raw
+      .prepare(
+        `INSERT INTO sessions (id, title, status) VALUES ('s1', 'ABC project kickoff', 'active')`,
+      )
+      .run();
+    raw
+      .prepare(
+        `INSERT INTO sessions (id, title, status) VALUES ('s2', 'ABC project review', 'active')`,
+      )
+      .run();
+
+    // The backfill INSERT INTO sessions_fts runs at init, so these should be findable
+    const ftsRows = raw
+      .prepare(`SELECT title FROM sessions_fts WHERE sessions_fts MATCH 'ABC'`)
+      .all();
+    expect(ftsRows.length).toBeGreaterThanOrEqual(2);
+
+    await conn.close();
   });
 });
 

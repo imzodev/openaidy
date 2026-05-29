@@ -29,7 +29,7 @@ export type ToolDefinition = {
 export type BuiltinToolContext = {
   /** The agent that is invoking this tool */
   readonly agentId: string;
-  /** The session ID this tool call is executing within */
+  /** The session in which the tool is being invoked */
   readonly sessionId: string;
 };
 

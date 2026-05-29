@@ -14,7 +14,7 @@ export { createTasksUpdateTool } from './update';
  */
 export function createTaskTools(
   getTaskService: () => TaskService | undefined,
-  getPlanningService: () => PlanningService | undefined,
+  getPlanningService?: () => PlanningService | undefined,
 ): BuiltinTool[] {
   return [
     createTasksListTool(getTaskService),

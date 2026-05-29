@@ -283,6 +283,99 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS addon_usage_addon_endpoint_date_idx ON addon_usage(addon_id, endpoint, date);
     CREATE INDEX IF NOT EXISTS addon_usage_addon_id_idx ON addon_usage(addon_id);
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id          TEXT PRIMARY KEY NOT NULL,
+      agent_id    TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      tags        TEXT NOT NULL DEFAULT '[]',
+      importance  INTEGER NOT NULL DEFAULT 3,
+      created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS memories_agent_id_idx  ON memories(agent_id);
+    CREATE INDEX IF NOT EXISTS memories_importance_idx ON memories(importance);
+    CREATE INDEX IF NOT EXISTS memories_created_at_idx ON memories(created_at);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      title,
+      content,
+      content='memories',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+      INSERT INTO memories_fts(rowid, title, content)
+      VALUES (new.rowid, new.title, new.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, title, content)
+      VALUES ('delete', old.rowid, old.title, old.content);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, title, content)
+      VALUES ('delete', old.rowid, old.title, old.content);
+      INSERT INTO memories_fts(rowid, title, content)
+      VALUES (new.rowid, new.title, new.content);
+    END;
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS sessions_fts USING fts5(
+      title,
+      content='sessions',
+      content_rowid='rowid',
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS sessions_ai AFTER INSERT ON sessions BEGIN
+      INSERT INTO sessions_fts(rowid, title) VALUES (new.rowid, new.title);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS sessions_ad AFTER DELETE ON sessions BEGIN
+      INSERT INTO sessions_fts(sessions_fts, rowid, title)
+      VALUES ('delete', old.rowid, old.title);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS sessions_au AFTER UPDATE ON sessions BEGIN
+      INSERT INTO sessions_fts(sessions_fts, rowid, title)
+      VALUES ('delete', old.rowid, old.title);
+      INSERT INTO sessions_fts(rowid, title) VALUES (new.rowid, new.title);
+    END;
+
+    INSERT INTO sessions_fts(rowid, title)
+    SELECT rowid, title FROM sessions
+    WHERE rowid NOT IN (SELECT rowid FROM sessions_fts);
+
+    -- Session Messages FTS5 (Option A: Direct content search)
+    -- Future enhancements:
+    -- Option B: Add 'summary' column and index summaries instead of full content
+    -- Option C: Add embedding vectors and use vector similarity search (requires sqlite-vector or pgvector)
+    CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+      content,
+      session_id UNINDEXED,
+      tokenize='unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+      INSERT INTO session_messages_fts(rowid, content, session_id)
+      VALUES (new.rowid, new.content, new.session_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+      INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_id)
+      VALUES ('delete', old.rowid, old.content, old.session_id);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS session_messages_au AFTER UPDATE ON session_messages BEGIN
+      INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_id)
+      VALUES ('delete', old.rowid, old.content, old.session_id);
+      INSERT INTO session_messages_fts(rowid, content, session_id)
+      VALUES (new.rowid, new.content, new.session_id);
+    END;
   `);
 }
 

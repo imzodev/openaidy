@@ -3,7 +3,9 @@ import { parseHTML } from 'linkedom';
 import { convert } from 'html-to-text';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { webFetchMeta } from '../catalog.js';
-import { logger } from '../../lib/logger.js';
+import { createLogger } from '../../lib/logger.js';
+
+const logger = createLogger('web_fetch');
 
 const MAX_RESPONSE_BYTES = 1024 * 512; // 512 KB
 const FETCH_TIMEOUT_MS = 15_000;
@@ -236,6 +238,10 @@ export const webFetchTool: BuiltinTool = {
 
       if (article?.textContent && article.textContent.trim().length > 50) {
         const cleaned = article.textContent.replace(/\s{3,}/g, '\n\n').trim();
+        logger.info('HTML parsed successfully', {
+          url,
+          contentLength: cleaned.length,
+        });
         return {
           ok: true,
           content: cleaned,
@@ -247,54 +253,26 @@ export const webFetchTool: BuiltinTool = {
             : {}),
         };
       }
+      // article is null or has no textContent - this happens on JavaScript-heavy pages
+      logger.error(
+        'Readability returned no textContent - page requires JavaScript',
+        { url, article: article ? 'parsed but empty' : 'null' },
+      );
+      return {
+        ok: false,
+        error: `Failed to extract content from "${parsed.hostname}". This page likely requires JavaScript to render. Try using "format": "raw" for simpler pages, or a different URL that returns pre-rendered content.`,
+      };
     } catch (err) {
-      logger.warn('Readability extraction failed', {
-        error: String(err),
-        url: parsed.toString(),
+      // Parsing itself failed
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.error('Readability parsing threw an error', {
+        url,
+        error: errorMessage,
       });
-      // Fall through
+      return {
+        ok: false,
+        error: `HTML parsing failed for "${parsed.hostname}": ${errorMessage}. Try using "format": "raw" instead.`,
+      };
     }
-
-    // Last resort: simple tag stripping
-    try {
-      // Remove all HTML tags, keep only text
-      const textOnly = cleanedHtml
-        .replace(/<[^>]+>/g, ' ') // Replace all tags with space
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\s{3,}/g, '\n\n') // Collapse multiple whitespace
-        .trim();
-
-      if (textOnly.length > 50) {
-        return {
-          ok: true,
-          content: textOnly.slice(0, 10000), // Limit fallback size
-          warning:
-            'Extracted using simple tag stripping. May contain irrelevant content.',
-        };
-      }
-    } catch (err) {
-      logger.error('Simple tag stripping failed', {
-        error: String(err),
-        url: parsed.toString(),
-      });
-    }
-
-    // All extraction methods failed - this typically happens with JS-heavy SPAs
-    // that require browser execution to render content (e.g., YouTube, Twitch, StreamElements)
-    logger.warn('All text extraction methods failed - likely JS-heavy SPA', {
-      url: parsed.toString(),
-      originalLength: rawBody.length,
-      cleanedLength: cleanedHtml.length,
-    });
-
-    return {
-      ok: false,
-      error: `Could not extract readable text from ${parsed.hostname}. This page appears to be a JavaScript-heavy application that requires browser rendering to display content. The raw HTML contains no extractable text content (likely renders dynamically via JavaScript). Try accessing a different URL or use the browser automation tool if available.`,
-    };
   },
 };

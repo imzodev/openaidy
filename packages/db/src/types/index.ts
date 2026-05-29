@@ -9,15 +9,131 @@ import type { SessionRunsRepository } from '../repositories/session-runs';
 import type { JobsRepository } from '../repositories/jobs';
 import type { JobRunsRepository } from '../repositories/job-runs';
 import type {
-  DevicesRepository,
   PairingRequestsRepository,
+  DevicesRepository,
 } from '../repositories/pairing';
 import type { AccessTokensRepository } from '../repositories/access-tokens';
 import type { TasksRepository } from '../repositories/tasks';
 import type { SubtasksRepository } from '../repositories/subtasks';
 import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
+import type { MemoriesRepository } from '../repositories/memories';
 import type { DeliverablesRepository } from '../repositories/deliverables';
+import { z } from 'zod';
+
+/**
+ * Schema for session search results — single source of truth for:
+ * - TypeScript type (via z.infer)
+ * - Field documentation (via describe() calls)
+ *
+ * When you add/remove a field, update this schema only.
+ */
+export const sessionSearchResultSchema = z.object({
+  id: z.string().describe('Unique session identifier'),
+  title: z.string().describe('Session title'),
+  status: z
+    .enum(['active', 'archived', 'deleted'])
+    .describe('Current session status'),
+  createdAt: z.date().describe('When the session was created'),
+  updatedAt: z.date().describe('When the session was last updated'),
+  archivedAt: z
+    .date()
+    .nullable()
+    .describe('When the session was archived (null if not archived)'),
+  matchType: z
+    .enum(['title', 'content'])
+    .describe(
+      'How the match was found: "title" = title field matched, "content" = message content matched',
+    ),
+  rank: z.number().describe('BM25 relevance rank (lower = better match)'),
+  matchCount: z
+    .number()
+    .optional()
+    .describe('For content matches: number of messages that matched the query'),
+  snippet: z
+    .string()
+    .nullable()
+    .describe(
+      'Preview of matching content (truncated to 200 chars), null for title matches',
+    ),
+});
+
+/**
+ * TypeScript type derived from sessionSearchResultSchema.
+ * Using z.infer ensures the type stays in sync with the schema.
+ */
+export type SessionSearchResult = z.infer<typeof sessionSearchResultSchema>;
+
+/**
+ * Field metadata for generating documentation.
+ */
+export interface SessionSearchFieldMeta {
+  name: string;
+  type: string;
+  description: string;
+}
+
+/**
+ * Generate field documentation for prompt injection.
+ * Reads descriptions from the Zod schema.
+ */
+export function formatSessionSearchResultDocs(): string {
+  const fields: SessionSearchFieldMeta[] = [
+    {
+      name: 'id',
+      type: 'string',
+      description: sessionSearchResultSchema.shape.id.description ?? '',
+    },
+    {
+      name: 'title',
+      type: 'string',
+      description: sessionSearchResultSchema.shape.title.description ?? '',
+    },
+    {
+      name: 'status',
+      type: "'active' | 'archived' | 'deleted'",
+      description: sessionSearchResultSchema.shape.status.description ?? '',
+    },
+    {
+      name: 'createdAt',
+      type: 'Date',
+      description: sessionSearchResultSchema.shape.createdAt.description ?? '',
+    },
+    {
+      name: 'updatedAt',
+      type: 'Date',
+      description: sessionSearchResultSchema.shape.updatedAt.description ?? '',
+    },
+    {
+      name: 'archivedAt',
+      type: 'Date | null',
+      description: sessionSearchResultSchema.shape.archivedAt.description ?? '',
+    },
+    {
+      name: 'matchType',
+      type: "'title' | 'content'",
+      description: sessionSearchResultSchema.shape.matchType.description ?? '',
+    },
+    {
+      name: 'rank',
+      type: 'number',
+      description: sessionSearchResultSchema.shape.rank.description ?? '',
+    },
+    {
+      name: 'matchCount',
+      type: 'number | undefined',
+      description: sessionSearchResultSchema.shape.matchCount.description ?? '',
+    },
+    {
+      name: 'snippet',
+      type: 'string | null',
+      description: sessionSearchResultSchema.shape.snippet.description ?? '',
+    },
+  ];
+  return fields
+    .map((f) => `    - ${f.name} (${f.type}): ${f.description}`)
+    .join('\n');
+}
 
 export type SessionsStore = Pick<
   SessionsRepository,
@@ -28,6 +144,10 @@ export type SessionsStore = Pick<
   | 'updateAgentId'
   | 'updateStatus'
   | 'delete'
+  | 'searchByTitle'
+  | 'searchByContent'
+  | 'backfillFtsIndex'
+  | 'backfillMessagesFtsIndex'
 >;
 
 export type SessionMessagesStore = Pick<
@@ -103,6 +223,7 @@ export type TasksStore = TasksRepository;
 export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
 export type AddonsStore = AddonsRepository;
+export type MemoriesStore = MemoriesRepository;
 export type DeliverablesStore = DeliverablesRepository;
 
 export type DatabaseRepositories = {
@@ -118,6 +239,7 @@ export type DatabaseRepositories = {
   subtasks: SubtasksStore;
   taskAgents: TaskAgentsStore;
   addons: AddonsStore;
+  memories: MemoriesStore;
   deliverables: DeliverablesStore;
 };
 

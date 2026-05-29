@@ -20,5 +20,6 @@ export * from './repositories/task-agents';
 export * from './repositories/deliverables';
 export * from './repositories/access-tokens';
 export * from './repositories/addons';
+export * from './repositories/memories';
 export * from './repositories/marketplace';
 export * from './schema/marketplace';
