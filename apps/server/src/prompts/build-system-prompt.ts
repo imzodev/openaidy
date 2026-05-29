@@ -6,6 +6,7 @@ import { autoFillPersonalityFiles } from './auto-fill-personality.js';
 import type { ToolDefinition } from '@openaidy/runtime';
 import type { WorkspacePermissionsInfo } from '../types.js';
 import { ALL_TOOL_METAS } from '../tools/catalog.js';
+import { formatSessionSearchResultDocs } from '@openaidy/db';
 
 export type BuildSystemPromptOptions = {
   agentId: string;
@@ -186,11 +187,8 @@ You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked 
     if (hasSessionsSearch) {
       guidelines += `- sessions_search: USE THIS when you need to find information from past conversations — searches session titles AND message content
   - USE sessions_search when: user asks "do you remember...", "what did we talk about...", "continue with that topic...", or references something discussed in a previous session
-  - INTERPRET THE RESULTS: A session may appear because the title matches OR because message content matched. Check the matchType field:
-    - "title": Session title matched the query
-    - "content": Message content matched (more relevant for finding actual discussion)
-    - matchCount: How many messages matched — higher = more relevant
-    - snippet: Shows a preview of matching content — use this to understand why the session was found
+  - INTERPRET THE RESULTS: Each result contains these fields:
+${formatSessionSearchResultDocs()}
 `;
     }
   }

@@ -160,7 +160,7 @@ describe('SessionsRepository', () => {
       const results = await sessionsRepo.searchByContent('A');
       const found = results.find((r) => r.id === session.id);
 
-      expect(found!.snippet!.length).toBeLessThanOrEqual(203); // 200 + '...'
+      expect((found!.snippet as string).length).toBeLessThanOrEqual(203);
       expect(found!.snippet).toContain('...');
     });
 
