@@ -126,11 +126,40 @@ export async function buildSystemPrompt(
     }
 
     // If this is the first message and some personality files are still unset,
-    // inject a targeted onboarding instruction so the agent asks specific questions.
+    // inject targeted onboarding instructions for each blank file.
     if (isFirstMessage) {
       const blankLabels = await personalityService.getBlankFileLabels(agentId);
       if (blankLabels.length > 0) {
-        prompt += `\n\n[ONBOARDING]\nSome context about you and the user has not been configured yet: ${blankLabels.join(', ')}. Before answering the user's message, greet them warmly, then ask them specific onboarding questions to fill in what is missing — one thing at a time, starting with the most important. Be concrete and give 2-3 short examples per question so the user knows what kind of answer to give. For Agent Identity: ask what name and emoji they would like, and what tone (e.g. "direct and concise", "warm and encouraging", "formal and precise"). For User Profile: ask their name, role, and how technical they are (e.g. "senior engineer", "product designer", "non-technical founder"). For Mission: ask what project or goal they are working on and the main technology or tools involved. For Rules: ask if there are any hard constraints the agent must always follow (e.g. "always respond in Spanish", "never suggest paid tools").\n\nYou have access to the \`present_choices\` tool. For each onboarding question, use it to present 3–4 concrete example answers as selectable options rather than asking open-endedly. The user can pick one or ignore the card and type freely.\n[/ONBOARDING]`;
+        prompt += `\n\n[ONBOARDING]`;
+        for (const label of blankLabels) {
+          if (label === 'Agent Identity') {
+            prompt += `\n\nYour Agent Identity profile is not configured. Before answering the user's message, ask them:
+- What name and emoji should I use?
+- What tone should I have? (e.g. "direct and concise", "warm and encouraging", "formal and precise")
+Use \`present_choices\` to offer 3-4 example tones as selectable options.`;
+          } else if (label === 'User Profile') {
+            prompt += `\n\nThe User Profile is not configured. Before answering the user's message, ask them:
+- What should I call them?
+- What is their role or profession?
+- How technical are they? (e.g. "senior engineer", "product designer", "non-technical founder")
+Use \`present_choices\` to offer 3-4 example roles/technicality levels as selectable options.`;
+          } else if (label === 'Mission') {
+            prompt += `\n\nThe Mission Context is not configured. You need to understand the user's mission — what they want to accomplish in this conversation. Before answering the user's message, explicitly tell them: "I need to know your mission to help you effectively." Then ask: "What is your mission for this conversation?" Use \`present_choices\` to offer example missions such as:
+- "Complete a task or project"
+- "Learn or explore a topic"
+- "Make a decision or get advice"
+- "Brainstorm or generate ideas"
+- "Solve a problem"
+Or let them type their own mission.`;
+          } else if (label === 'Rules') {
+            prompt += `\n\nThe Rules are not configured. Before answering the user's message, ask if there are any hard constraints you must always follow (e.g. "always respond in Spanish", "never suggest paid tools", "always double-check my work"). Use \`present_choices\` to offer 3-4 example rule sets as selectable options.`;
+          }
+        }
+        // Only add the "one at a time" instruction if there are multiple things to ask
+        if (blankLabels.length > 1) {
+          prompt += `\n\nImportant: Ask about ONE thing at a time. Use \`present_choices\` for each question to give concrete options rather than open-ended questions. Wait for the user's response before asking the next one.`;
+        }
+        prompt += `\n[/ONBOARDING]`;
       }
     }
   }
