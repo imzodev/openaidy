@@ -26,12 +26,15 @@
     "@tanstack/solid-query": "^5.90.26",
     "bootstrap-icons": "^1.13.1",
     "lucide-solid": "^0.577.0",
+    "marked": "^18.0.4",
     "solid-js": "^1.9.11",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",
+    "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.9.1",
+    "@types/marked": "^6.0.0",
     "@types/node": "^24.12.0",
     "autoprefixer": "^10.4.27",
     "jsdom": "^28.1.0",
