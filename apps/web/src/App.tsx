@@ -187,14 +187,9 @@ function AppContent(props: AppContentProps) {
     }
   });
 
-  // Clear explicit agent selection when session changes
-  // This ensures the session's stored agent (from latest run) is used
-  createEffect(() => {
-    const sessionId = selectedSessionId();
-    if (sessionId !== undefined) {
-      setSelectedAgentId(undefined);
-    }
-  });
+  // Note: We do NOT clear selectedAgentId when session changes.
+  // This allows the "Start Chat with Agent" flow to preserve the selected agent.
+  // If user wants to use session's stored agent, they can deselect explicitly.
 
   // Sessions query
   const sessionsQuery = createQuery(() => ({
