@@ -95,6 +95,9 @@ function AppContent(props: AppContentProps) {
   const [submitError, setSubmitError] = createSignal<string | undefined>(
     undefined,
   );
+  const [focusChatInput, setFocusChatInput] = createSignal<
+    (() => void) | undefined
+  >(undefined);
   const [selectedAgentId, setSelectedAgentId] = createSignal<
     string | undefined
   >(undefined);
@@ -135,6 +138,8 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({
         queryKey: ['runs', sessionId],
       });
+      // Focus the chat input after streaming completes
+      setTimeout(() => focusChatInput()?.(), 50);
     };
 
     const handleStreamError = (event: {
@@ -174,6 +179,7 @@ function AppContent(props: AppContentProps) {
       unsubError();
       unsubUpdated();
       unsubChoices();
+      setFocusChatInput(undefined); // Clear stale focus function
     });
   });
 
@@ -596,6 +602,7 @@ function AppContent(props: AppContentProps) {
               agents={agents()}
               selectedAgentId={effectiveAgentId()}
               onAgentSelect={handleAgentSelect}
+              onInputReady={(focus) => setFocusChatInput(() => focus)}
             />
             <Show when={submitError()}>
               <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">

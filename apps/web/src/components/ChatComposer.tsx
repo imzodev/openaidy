@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { Send } from 'lucide-solid';
 import { AgentPicker } from './AgentPicker';
 import type { Agent } from '../lib/api';
@@ -10,11 +10,24 @@ type ChatComposerProps = {
   agents: Agent[];
   selectedAgentId?: string;
   onAgentSelect: (agentId: string | undefined) => void;
+  /** Called when the component mounts, passing a focus function */
+  onInputReady?: (focus: () => void) => void;
 };
 
 export function ChatComposer(props: ChatComposerProps) {
   const [input, setInput] = createSignal('');
   const [isSending, setIsSending] = createSignal(false);
+  let textareaRef: HTMLTextAreaElement | undefined;
+
+  // Expose focus function to parent via callback when textarea is mounted
+  onMount(() => {
+    if (props.onInputReady) {
+      props.onInputReady(() => textareaRef?.focus());
+    }
+    onCleanup(() => {
+      textareaRef = undefined; // Clear ref on unmount to prevent stale closures
+    });
+  });
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
@@ -37,6 +50,10 @@ export function ChatComposer(props: ChatComposerProps) {
     }
   };
 
+  const setRef = (el: HTMLTextAreaElement | undefined) => {
+    textareaRef = el;
+  };
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -54,6 +71,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {/* Text input */}
         <div class="flex-1">
           <textarea
+            ref={setRef}
             value={input()}
             onInput={(e) => setInput(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
