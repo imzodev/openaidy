@@ -10,12 +10,13 @@ dotenvConfig({ path: envPath });
 
 import { buildApp } from './app';
 import { env } from './lib/env';
+import { logger } from './lib/logger';
 
 const app = await buildApp();
 
 try {
   await app.listen({ host: env.HOST, port: env.PORT });
 } catch (error) {
-  app.log.error(error);
+  logger.error('Server failed to start', error);
   process.exit(1);
 }

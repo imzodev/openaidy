@@ -91,8 +91,36 @@ export function createLogger(context: string = ''): Logger {
 export const logger = createLogger();
 
 // ============================================================================
-// Pino → LogBuffer bridge
+// Fastify HTTP Logging Plugin
 // ============================================================================
+
+import type { FastifyRequest, FastifyReply } from 'fastify';
+
+/**
+ * Registers HTTP request/response logging hooks on a Fastify app.
+ * Uses the singleton logger to log all HTTP requests (except /logs endpoints).
+ */
+export function registerHttpLogger(app: {
+  addHook: (
+    hook: 'onRequest' | 'onResponse',
+    fn: (request: FastifyRequest, reply?: FastifyReply) => Promise<void>,
+  ) => void;
+}): void {
+  app.addHook('onRequest', async (request) => {
+    request.startTime = Date.now();
+    logger.debug(`→ ${request.method} ${request.url}`);
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    // Skip logging for log query endpoints to avoid noise
+    if (request.url.startsWith('/logs')) return;
+    if (!reply) return;
+    const duration = Date.now() - (request.startTime ?? Date.now());
+    const level = reply.statusCode >= 400 ? 'warn' : 'info';
+    logger[level](
+      `← ${request.method} ${request.url} ${reply.statusCode} ${duration}ms`,
+    );
+  });
+}
 
 const PINO_TO_LEVEL: Record<number, LogLevel> = {
   10: 'debug',
@@ -113,7 +141,22 @@ function createPinoBufferStream(): Writable {
         const obj = JSON.parse(line) as Record<string, unknown>;
         const levelNum = typeof obj.level === 'number' ? obj.level : 30;
         const level: LogLevel = PINO_TO_LEVEL[levelNum] ?? 'info';
-        const msg = typeof obj.msg === 'string' ? obj.msg : JSON.stringify(obj);
+
+        // Extract request info from Fastify's serialized req/res
+        const req = obj.req as
+          | { method?: string; path?: string; url?: string }
+          | undefined;
+        const _res = obj.res as { statusCode?: number } | undefined;
+
+        // Build message with route info for incoming/request completed
+        let msg = typeof obj.msg === 'string' ? obj.msg : JSON.stringify(obj);
+        if (
+          (msg === 'incoming request' || msg === 'request completed') &&
+          req
+        ) {
+          msg = `${msg}: ${req.method} ${req.path ?? req.url}`;
+        }
+
         const context =
           typeof obj.context === 'string'
             ? obj.context
@@ -144,7 +187,24 @@ function createPinoBufferStream(): Writable {
   });
 }
 
-export const loggerOptions = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const loggerOptions: any = {
   level: currentLevel,
   stream: createPinoBufferStream(),
+  serializers: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    req(request: any) {
+      return {
+        method: request.method,
+        url: request.url,
+        path: request.routerPath ?? request.url.split('?')[0],
+      };
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    res(response: any) {
+      return {
+        statusCode: response.statusCode,
+      };
+    },
+  },
 };

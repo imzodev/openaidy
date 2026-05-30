@@ -7,6 +7,9 @@ import {
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
+import { createLogger } from '../lib/logger';
+
+const log = createLogger('workspace-routes');
 
 /**
  * Workspace routes options
@@ -148,8 +151,8 @@ export const workspaceRoutes: FastifyPluginAsync<
         }));
         return { items: response };
       } catch (error) {
-        app.log.error(
-          'Failed to list files: %s',
+        log.error(
+          'Failed to list files',
           error instanceof Error ? error.message : String(error),
         );
         reply.code(500);
@@ -283,8 +286,8 @@ export const workspaceRoutes: FastifyPluginAsync<
         reply.code(201);
         return { success: true, path: filePath };
       } catch (error) {
-        app.log.error(
-          'Failed to create file: %s',
+        log.error(
+          'Failed to create file',
           error instanceof Error ? error.message : String(error),
         );
         reply.code(500);
@@ -375,8 +378,8 @@ export const workspaceRoutes: FastifyPluginAsync<
           reply.code(404);
           return { error: 'File not found', code: 'NOT_FOUND' };
         }
-        app.log.error(
-          'Failed to update file: %s',
+        log.error(
+          'Failed to update file',
           error instanceof Error ? error.message : String(error),
         );
         reply.code(500);
@@ -425,8 +428,8 @@ export const workspaceRoutes: FastifyPluginAsync<
           reply.code(404);
           return { error: 'File not found', code: 'NOT_FOUND' };
         }
-        app.log.error(
-          'Failed to delete file: %s',
+        log.error(
+          'Failed to delete file',
           error instanceof Error ? error.message : String(error),
         );
         reply.code(500);
@@ -486,8 +489,8 @@ export const workspaceRoutes: FastifyPluginAsync<
           reply.code(409);
           return { error: 'Destination already exists', code: 'CONFLICT' };
         }
-        app.log.error(
-          'Failed to rename file: %s',
+        log.error(
+          'Failed to rename file',
           error instanceof Error ? error.message : String(error),
         );
         reply.code(500);

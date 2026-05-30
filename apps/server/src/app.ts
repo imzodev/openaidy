@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import type { FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
@@ -13,7 +14,7 @@ import {
   createDatabaseAdapter,
 } from '@openaidy/db';
 import { env } from './lib/env';
-import { loggerOptions, createLogger } from './lib/logger';
+import { createLogger, registerHttpLogger } from './lib/logger';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -62,7 +63,8 @@ import type { AppServices } from './types';
  * Build the Fastify application with unified service lifecycle
  */
 export async function buildApp() {
-  const app = Fastify({ logger: loggerOptions });
+  const app = Fastify({ logger: false });
+  const log = createLogger();
   const wsConfig = {
     enabled: env.WS_ENABLED,
     port: env.WS_PORT,
@@ -117,16 +119,14 @@ export async function buildApp() {
     const { indexed } =
       await dbAdapter.repositories.sessions.backfillFtsIndex();
     if (indexed > 0) {
-      app.log.info(
-        `Indexed ${indexed} pre-existing sessions into sessions_fts`,
-      );
+      log.info(`Indexed ${indexed} pre-existing sessions into sessions_fts`);
     }
 
     // Backfill session_messages_fts index for any pre-existing messages
     const { indexed: msgIndexed } =
       await dbAdapter.repositories.sessions.backfillMessagesFtsIndex();
     if (msgIndexed > 0) {
-      app.log.info(
+      log.info(
         `Indexed ${msgIndexed} pre-existing session messages into session_messages_fts`,
       );
     }
@@ -160,7 +160,9 @@ export async function buildApp() {
   await configService.load();
 
   // Create MCP client service (before sessionService so it can be injected)
-  const mcpService = createMcpClientService({ logger: app.log });
+  const mcpService = createMcpClientService({
+    logger: log as unknown as FastifyBaseLogger,
+  });
 
   // Create workspace service before sessionService so it can be injected into builtin tools
   const workspaceService = createWorkspaceService({
@@ -229,7 +231,7 @@ export async function buildApp() {
 
   sessionService = new SessionMessageService({
     providers: providerServices,
-    logger: app.log,
+    logger: log as unknown as FastifyBaseLogger,
     agents: agentRegistry,
     mcp: mcpService,
     builtinTools: builtinToolRegistry,
@@ -253,7 +255,7 @@ export async function buildApp() {
     {
       sessionService,
       authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
-      logger: app.log,
+      logger: log as unknown as FastifyBaseLogger,
     },
   );
 
@@ -266,20 +268,24 @@ export async function buildApp() {
       channel
         .connect()
         .catch((err) =>
-          app.log.warn(
-            { err, channelId: channel.id },
-            'channel auto-connect failed on startup',
-          ),
+          log.warn('channel auto-connect failed on startup', {
+            err,
+            channelId: channel.id,
+          }),
         );
     }
   }
   const bootstrapAdmin = env.BOOTSTRAP_ADMIN_ENABLED
-    ? new BootstrapAdminManager(new AuthMiddleware(wsConfig), app.log, {
-        enabled: env.BOOTSTRAP_ADMIN_ENABLED,
-        tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
-        clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
-        tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
-      })
+    ? new BootstrapAdminManager(
+        new AuthMiddleware(wsConfig),
+        log as unknown as FastifyBaseLogger,
+        {
+          enabled: env.BOOTSTRAP_ADMIN_ENABLED,
+          tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
+          clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
+          tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
+        },
+      )
     : undefined;
 
   await bootstrapAdmin?.ensureToken();
@@ -291,7 +297,7 @@ export async function buildApp() {
       jobRunsRepo,
       sessionService,
       sessionsRepo,
-      app.log,
+      log as unknown as FastifyBaseLogger,
       { pollIntervalMs: 5000 },
     );
   }
@@ -327,6 +333,9 @@ export async function buildApp() {
   });
   await app.register(sensible);
   await app.register(websocket);
+
+  // HTTP request logging using our single logger
+  registerHttpLogger(app);
 
   // Register WebSocket gateway
   await app.register(websocketGatewayPlugin, {
@@ -512,7 +521,7 @@ export async function buildApp() {
       // Recover any stuck jobs from previous run
       await scheduler.recoverStuckJobs();
       scheduler.start();
-      app.log.info('Scheduler started');
+      log.info('Scheduler started');
     }
 
     // Start periodic stuck subtask check
@@ -520,12 +529,12 @@ export async function buildApp() {
       stuckSubtaskInterval = setInterval(
         () => {
           taskService!.checkStuckSubtasks().catch((err) => {
-            app.log.error('Failed to check stuck subtasks', err);
+            log.error('Failed to check stuck subtasks', err);
           });
         },
         5 * 60 * 1000,
       ); // Every 5 minutes
-      app.log.info('Stuck subtask checker started (every 5 minutes)');
+      log.info('Stuck subtask checker started (every 5 minutes)');
     }
 
     // Auto-connect MCP servers from config
@@ -533,12 +542,12 @@ export async function buildApp() {
     for (const serverConfig of mcpServers) {
       try {
         await mcpService.connect(serverConfig);
-        app.log.info({ serverId: serverConfig.id }, 'MCP server connected');
+        log.info('MCP server connected', { serverId: serverConfig.id });
       } catch (err) {
-        app.log.warn(
-          { serverId: serverConfig.id, err },
-          'Failed to connect MCP server on startup',
-        );
+        log.warn('Failed to connect MCP server on startup', {
+          serverId: serverConfig.id,
+          err,
+        });
       }
     }
   });
@@ -547,11 +556,11 @@ export async function buildApp() {
   app.addHook('onClose', async () => {
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
-      app.log.info('Stuck subtask checker stopped');
+      log.info('Stuck subtask checker stopped');
     }
     if (scheduler) {
       await scheduler.stop();
-      app.log.info('Scheduler stopped');
+      log.info('Scheduler stopped');
     }
     if (dbAdapter) {
       await dbAdapter.close();
@@ -561,9 +570,12 @@ export async function buildApp() {
   return app;
 }
 
-// Extend Fastify type for services decoration
+// Extend Fastify type for services decoration and request timing
 declare module 'fastify' {
   interface FastifyInstance {
     services: AppServices;
+  }
+  interface FastifyRequest {
+    startTime?: number;
   }
 }

@@ -3,6 +3,9 @@ import { requireAuth } from '../middleware/require-auth.js';
 import type { IChannel } from '../channels/interface.js';
 import type { ChannelStatusResponse } from '@openaidy/shared-types';
 import type { ChannelRoutesOptions } from '../types.js';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('channel-routes');
 
 function toStatusResponse(channel: IChannel): ChannelStatusResponse {
   return {
@@ -47,10 +50,7 @@ export const channelRoutes: FastifyPluginAsync<ChannelRoutesOptions> = async (
       channel
         .connect()
         .catch((err) =>
-          app.log.error(
-            { err, channelId: req.params.id },
-            'channel connect error',
-          ),
+          log.error('channel connect error', { err, channelId: req.params.id }),
         );
       return reply.status(204).send();
     },
