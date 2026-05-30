@@ -56,7 +56,7 @@ export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
   // Session type to distinguish between chat, task, and subtask sessions
-  type: sessionTypeEnum('type'),
+  type: sessionTypeEnum('type').notNull().default('chat'),
   status: sessionStatusEnum('status').notNull().default('active'),
   // Last agent used in this session (derived from latest run's agentId)
   // This allows session to "remember" which agent was last used
