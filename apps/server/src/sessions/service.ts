@@ -39,7 +39,7 @@ import type {
   SubmitMessageResult,
   SessionMessageServiceOptions,
 } from './types';
-import { buildSystemPrompt } from '../prompts/build-system-prompt.js';
+import { buildSystemPrompt } from '../prompts/build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type {
   WorkspacePermissionsInfo,
@@ -48,7 +48,7 @@ import type {
   SessionRunRecord,
   SessionRecord,
   FinishReason,
-} from '../types.js';
+} from '../types';
 import type { RunEventEmitter } from '../dispatch/events';
 
 /**
@@ -78,6 +78,9 @@ export class SessionMessageService {
   private readonly personalityService: AgentPersonalityService | undefined;
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly workspaceBaseDir: string | undefined;
+  // In-memory counter for ONBOARDING messages per session
+  // Key: sessionId, Value: remaining count (2 = first message + first response)
+  private readonly onboardingCounter = new Map<string, number>();
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
@@ -619,6 +622,23 @@ export class SessionMessageService {
     });
 
     // 3. Create run record
+    // Track how many more messages should receive ONBOARDING.
+    // Starts at 2 (first message + first user response).
+    // Decremented each message, stops at 0.
+    if (isFirstMessage) {
+      this.onboardingCounter.set(input.sessionId, 5);
+    }
+    const onboardingMessagesRemaining =
+      this.onboardingCounter.get(input.sessionId) ?? 0;
+    if (onboardingMessagesRemaining > 0) {
+      this.onboardingCounter.set(
+        input.sessionId,
+        onboardingMessagesRemaining - 1,
+      );
+    } else {
+      this.onboardingCounter.delete(input.sessionId);
+    }
+
     // Resolve agent: input.agentId > session.agentId > system default
     const configuredDefaultAgentId = this.getDefaultAgentId?.();
     const resolvedAgentId =
@@ -755,7 +775,9 @@ export class SessionMessageService {
       sessionType: (session as { type?: string }).type as
         | SessionType
         | undefined,
+      onboardingMessagesRemaining,
     });
+
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
       : historyMessages;
@@ -776,6 +798,16 @@ export class SessionMessageService {
 
     // Running message history for the tool-call loop
     const loopMessages: Message[] = [...messages];
+
+    // Debug: log full system prompt length and first 500 chars
+    const sysPromptMsg = messages.find((m) => m.role === 'system');
+    this.logger?.info(
+      {
+        sessionId: input.sessionId,
+        systemPromptLength: sysPromptMsg?.content.length ?? 0,
+      },
+      'Building messages for streaming',
+    );
 
     try {
       const MAX_TOOL_ROUNDS = 10;
@@ -1060,6 +1092,24 @@ export class SessionMessageService {
                 content: toolContent,
                 toolCallId: tc.id,
               } as Message);
+
+              // If agent saved a personality file via workspace_write, stop onboarding
+              if (tc.name === 'workspace_write') {
+                const args = tc.arguments as { path?: string } | undefined;
+                const path = args?.path;
+                if (
+                  path === 'AGENT.md' ||
+                  path === 'USER.md' ||
+                  path === 'MISSION.md' ||
+                  path === 'RULES.md'
+                ) {
+                  this.logger?.info(
+                    { sessionId: input.sessionId, file: path },
+                    'Personality file saved - onboarding complete',
+                  );
+                  this.onboardingCounter.delete(input.sessionId);
+                }
+              }
             }
           }
           // Continue loop for next model turn

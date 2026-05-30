@@ -1,16 +1,17 @@
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type { SkillRegistry } from '../skills';
-import { sanitizeSkillBody } from '../skills/sanitize.js';
+import { sanitizeSkillBody } from '../skills/sanitize';
 import type { ProviderServices } from '../providers';
-import { autoFillPersonalityFiles } from './auto-fill-personality.js';
+import { autoFillPersonalityFiles } from './auto-fill-personality';
 import type { ToolDefinition } from '@openaidy/runtime';
-import type { WorkspacePermissionsInfo } from '../types.js';
+import type { WorkspacePermissionsInfo } from '../types';
 import type { SessionType } from '@openaidy/shared-types';
-import { ALL_TOOL_METAS } from '../tools/catalog.js';
+import { ALL_TOOL_METAS } from '../tools/catalog';
 import { formatSessionSearchResultDocs } from '@openaidy/db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseSkillMd } from '../skills/parser.js';
+import { parseSkillMd } from '../skills/parser';
+import { logger } from '../lib/logger';
 
 export type BuildSystemPromptOptions = {
   agentId: string;
@@ -32,6 +33,12 @@ export type BuildSystemPromptOptions = {
   workspaceBaseDir?: string | undefined;
   /** Session type - used to inject context-specific reminders */
   sessionType?: SessionType | undefined;
+  /**
+   * Number of remaining messages that should receive ONBOARDING injection.
+   * Onboarding runs until this reaches 0 or all personality files are configured.
+   * Default is 0 (no onboarding).
+   */
+  onboardingMessagesRemaining?: number | undefined;
 };
 
 /**
@@ -104,6 +111,7 @@ export async function buildSystemPrompt(
     workspacePermissions,
     workspaceBaseDir,
     sessionType,
+    onboardingMessagesRemaining = 0,
   } = options;
 
   // Auto-fill blank personality files on first message of a session
@@ -125,34 +133,80 @@ export async function buildSystemPrompt(
       prompt += `\n\n[${meta.systemPromptBlock}]\n${content}\n[/${meta.systemPromptBlock}]`;
     }
 
-    // If this is the first message and some personality files are still unset,
-    // inject targeted onboarding instructions for each blank file.
-    if (isFirstMessage) {
+    // If onboarding messages remain, inject targeted onboarding instructions for each blank file.
+    // This runs on the first message AND the first user response (onboardingMessagesRemaining = 2 initially).
+    if (onboardingMessagesRemaining > 0) {
       const blankLabels = await personalityService.getBlankFileLabels(agentId);
       if (blankLabels.length > 0) {
+        logger.info('Onboarding included in system prompt', {
+          agentId,
+          onboardingMessagesRemaining,
+          blankFileCount: blankLabels.length,
+        });
         prompt += `\n\n[ONBOARDING]`;
+        prompt += `\n\n## CRITICAL OVERRIDE: Save Personality Configuration to WORKSPACE FILES`;
+        prompt += `\nThe following tools are PERMANENTLY OVERRIDDEN for personality file creation:`;
+        // prompt += `\n- memory_save: NEVER use for personality files. The system prompt guidance about memory_save does NOT apply here.`;
+        prompt += `\n- You MUST use workspace_write for ALL personality files listed below.`;
+        prompt += `\n\nThis override exists because personality files (AGENT.md, USER.md, MISSION.md, RULES.md) MUST be saved as actual files in your workspace, not as searchable memories. Files are how personality context is injected on future conversations.`;
+
         for (const label of blankLabels) {
           if (label === 'Agent Identity') {
-            prompt += `\n\nYour Agent Identity profile is not configured. Before answering the user's message, ask them:
-- What name and emoji should I use?
-- What tone should I have? (e.g. "direct and concise", "warm and encouraging", "formal and precise")
-Use \`present_choices\` to offer 3-4 example tones as selectable options.`;
+            prompt += `\n\n**Agent Identity** (file: AGENT.md)`;
+            prompt += `\nYour Agent Identity profile is not configured. Before answering the user's message, ask them:`;
+            prompt += `\n- What name and emoji should I use?`;
+            prompt += `\n- What tone should I have? (e.g. "direct and concise", "warm and encouraging", "formal and precise")`;
+            prompt += `\nUse \`present_choices\` to offer 3-4 example tones as selectable options.`;
+            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
+            prompt += `\n\`\`\``;
+            prompt += `\nworkspace_write({`;
+            prompt += `\n  path: "AGENT.md",`;
+            prompt += `\n  content: "# Agent Identity\\n\\nName: [user's choice]\\nEmoji: [user's choice]\\nTone: [user's choice]"`;
+            prompt += `\n})`;
+            prompt += `\n\`\`\``;
           } else if (label === 'User Profile') {
-            prompt += `\n\nThe User Profile is not configured. Before answering the user's message, ask them:
-- What should I call them?
-- What is their role or profession?
-- How technical are they? (e.g. "senior engineer", "product designer", "non-technical founder")
-Use \`present_choices\` to offer 3-4 example roles/technicality levels as selectable options.`;
+            prompt += `\n\n**User Profile** (file: USER.md)`;
+            prompt += `\nThe User Profile is not configured. Before answering the user's message, ask them:`;
+            prompt += `\n- What should I call them?`;
+            prompt += `\n- What is their role or profession?`;
+            prompt += `\n- How technical are they? (e.g. "senior engineer", "product designer", "non-technical founder")`;
+            prompt += `\nUse \`present_choices\` to offer 3-4 example roles/technicality levels as selectable options.`;
+            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
+            prompt += `\n\`\`\``;
+            prompt += `\nworkspace_write({`;
+            prompt += `\n  path: "USER.md",`;
+            prompt += `\n  content: "# User Profile\\n\\nName: [user's choice]\\nRole: [user's choice]\\nTechnical level: [user's choice]"`;
+            prompt += `\n})`;
+            prompt += `\n\`\`\``;
           } else if (label === 'Mission') {
-            prompt += `\n\nThe Mission Context is not configured. You need to understand the user's mission — what they want to accomplish in this conversation. Before answering the user's message, explicitly tell them: "I need to know your mission to help you effectively." Then ask: "What is your mission for this conversation?" Use \`present_choices\` to offer example missions such as:
-- "Complete a task or project"
-- "Learn or explore a topic"
-- "Make a decision or get advice"
-- "Brainstorm or generate ideas"
-- "Solve a problem"
-Or let them type their own mission.`;
+            prompt += `\n\n**Mission** (file: MISSION.md)`;
+            prompt += `\nThe Mission Context is not configured. You MUST understand the user's mission.`;
+            prompt += `\nBefore answering their message, explicitly say: "I need to know your mission to help you effectively."`;
+            prompt += `\nAsk: "What is your mission for this conversation?" Use \`present_choices\` to offer:`;
+            prompt += `\n- "Complete a task or project"`;
+            prompt += `\n- "Learn or explore a topic"`;
+            prompt += `\n- "Make a decision or get advice"`;
+            prompt += `\n- "Brainstorm or generate ideas"`;
+            prompt += `\n- "Solve a problem"`;
+            prompt += `\nOr let them type their own mission.`;
+            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
+            prompt += `\n\`\`\``;
+            prompt += `\nworkspace_write({`;
+            prompt += `\n  path: "MISSION.md",`;
+            prompt += `\n  content: "# Mission\\n\\n[User's mission]"`;
+            prompt += `\n})`;
+            prompt += `\n\`\`\``;
           } else if (label === 'Rules') {
-            prompt += `\n\nThe Rules are not configured. Before answering the user's message, ask if there are any hard constraints you must always follow (e.g. "always respond in Spanish", "never suggest paid tools", "always double-check my work"). Use \`present_choices\` to offer 3-4 example rule sets as selectable options.`;
+            prompt += `\n\n**Rules** (file: RULES.md)`;
+            prompt += `\nThe Rules are not configured. Ask the user: "Do you have any hard constraints or rules I should always follow?" (e.g. "always respond in Spanish", "never suggest paid tools", "always verify my work").`;
+            prompt += `\nWait for their answer.`;
+            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
+            prompt += `\n\`\`\``;
+            prompt += `\nworkspace_write({`;
+            prompt += `\n  path: "RULES.md",`;
+            prompt += `\n  content: "# Rules\\n\\n[User's rules]"`;
+            prompt += `\n})`;
+            prompt += `\n\`\`\``;
           }
         }
         // Only add the "one at a time" instruction if there are multiple things to ask
@@ -248,6 +302,20 @@ Your response will be automatically evaluated. Work is judged complete only if t
   if (tools?.length) {
     prompt += buildToolGuidelinesBlock(tools, workspacePermissions);
   }
+  // Inject permanent reminder about personality files (on every message when personality service is available)
+  if (personalityService) {
+    prompt += `\n\n[PERSONALITY_FILES_REMINDER]
+## Personality Files
+Your personality configuration is stored in workspace files:
+- AGENT.md: Your agent identity (name, emoji, tone)
+- USER.md: User profile (name, role, technical level)
+- MISSION.md: The user's mission for this conversation
+- RULES.md: Hard constraints or rules to always follow
+
+When the user tells you something that should be saved to any of these files, ALWAYS use the workspace_write tool with the appropriate path and content format. Do NOT use memory_save for personality information.
+[/PERSONALITY_FILES_REMINDER]`;
+  }
+
   return prompt;
 }
 
