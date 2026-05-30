@@ -157,6 +157,9 @@ function AppContent(props: AppContentProps) {
 
     const handleChoicesEvent = (event: { payload: ChoicesEvent }) => {
       setCurrentChoices(event.payload);
+      // Clear streaming state so input becomes enabled for user to type their own answer
+      setIsStreaming(false);
+      setStreamingContent('');
     };
 
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
@@ -586,7 +589,10 @@ function AppContent(props: AppContentProps) {
                     setCurrentChoices(null);
                     handleSubmit(choice, selectedAgentId());
                   }}
-                  onDismiss={() => setCurrentChoices(null)}
+                  onDismiss={() => {
+                    setCurrentChoices(null);
+                    setTimeout(() => focusChatInput()?.(), 50);
+                  }}
                 />
               )}
             </Show>
