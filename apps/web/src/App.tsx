@@ -413,6 +413,7 @@ function AppContent(props: AppContentProps) {
         sessions={sessionsQuery.data?.items || []}
         selectedSessionId={selectedSessionId()}
         onSelectSession={setSelectedSessionId}
+        onClearSession={() => setSelectedSessionId(undefined)}
         onCreateSession={handleCreateSession}
         isLoadingSessions={sessionsQuery.isLoading}
         currentView={view()}

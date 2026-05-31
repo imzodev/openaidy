@@ -43,6 +43,7 @@ type SidebarProps = {
   selectedSessionId: string | undefined;
   onSelectSession: (id: string) => void;
   onCreateSession: () => void;
+  onClearSession?: () => void;
   isLoadingSessions?: boolean;
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
@@ -184,6 +185,7 @@ export function Sidebar(props: SidebarProps) {
               <button
                 type="button"
                 onClick={() => {
+                  props.onClearSession?.();
                   props.onNavigate('chat');
                   if (isMobileViewport()) {
                     props.onCollapse();
