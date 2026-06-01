@@ -257,7 +257,10 @@ export const jobsCreateMeta: ToolMeta = {
   category: 'Pulses',
   description:
     'Create a new pulse (scheduled AI task). A pulse fires a prompt to an agent on a schedule. ' +
-    'Supports intervals (every 15m/30m/1h/6h/12h/1d/1w), daily times, cron expressions, or one-shot dates. ' +
+    'Supports PRESET intervals (every 15m/30m/1h/6h/12h/1d/1w) OR custom schedules via cron expression. ' +
+    'IMPORTANT: For any interval NOT in the preset list (e.g., every 5 min), you MUST use schedule.cron ' +
+    'with a cron expression (e.g., "*/5 * * *" for every 5 min, "*/10 * * *" for every 10 min). ' +
+    'Also supports daily times and one-shot dates. ' +
     'Returns the created pulse details including ID and next run time.',
 };
 
@@ -266,7 +269,8 @@ export const jobsUpdateMeta: ToolMeta = {
   category: 'Pulses',
   description:
     'Update an existing pulse. Can change name, prompt, schedule, or status (active/paused). ' +
-    'Supports intervals (every 15m/30m/1h/6h/12h/1d/1w), daily times, cron expressions, or one-shot dates. ' +
+    'Supports PRESET intervals (every 15m/30m/1h/6h/12h/1d/1w) OR custom schedules via cron expression. ' +
+    'IMPORTANT: For any interval NOT in the preset list, use schedule.cron with a cron expression. ' +
     'Use pulses_list to find the pulse ID first. Returns the updated pulse details.',
 };
 

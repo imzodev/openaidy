@@ -24,11 +24,15 @@ export function createPulsesUpdateTool(deps: PulseToolDeps): BuiltinTool {
         },
         schedule: {
           type: 'object',
-          description: 'New schedule. One of: every, daily, cron, at.',
+          description:
+            'New schedule. Use schedule.every for PRESET intervals only. ' +
+            'For ANY other interval, use schedule.cron instead.',
           properties: {
             every: {
               type: 'string',
               enum: ['15m', '30m', '1h', '6h', '12h', '1d', '1w'],
+              description:
+                'PRESET intervals ONLY. For custom intervals, use schedule.cron.',
             },
             daily: {
               type: 'object',

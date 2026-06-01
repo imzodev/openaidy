@@ -21,12 +21,15 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
         schedule: {
           type: 'object',
           description:
-            'When and how often to fire. One of: every, daily, cron, at.',
+            'When and how often to fire. Use schedule.every for PRESET intervals only. ' +
+            'For ANY other interval (e.g., every 5min, every 10min), use schedule.cron instead. ' +
+            'One of: every, daily, cron, at.',
           properties: {
             every: {
               type: 'string',
               enum: ['15m', '30m', '1h', '6h', '12h', '1d', '1w'],
-              description: 'Fire at regular intervals.',
+              description:
+                'PRESET intervals ONLY. For custom intervals (e.g., 5min, 10min), use schedule.cron instead.',
             },
             daily: {
               type: 'object',
