@@ -55,6 +55,7 @@ import { skillRoutes } from './routes/skills';
 import { seedBundledSkills } from './skills/seed';
 import { createAgentPersonalityService } from './agents/personality-service';
 import { createChannelRegistry } from './channels/index.js';
+import { PulseService } from './pulses/service.js';
 import { channelRoutes } from './routes/channels.js';
 import path from 'node:path';
 import type { AppServices } from './types';
@@ -223,6 +224,12 @@ export async function buildApp() {
           pulses: {
             getJobsRepo: () => dbAdapter!.repositories.jobs,
             getSessionsRepo: () => dbAdapter!.repositories.sessions,
+            getPulseService: () =>
+              new PulseService(
+                dbAdapter!.repositories.jobs,
+                dbAdapter!.repositories.jobRuns,
+                dbAdapter!.repositories.sessions,
+              ),
           },
         }
       : {}),

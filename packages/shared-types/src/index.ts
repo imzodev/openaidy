@@ -13,3 +13,4 @@ export * from './channels.js';
 export * from './providers-preset.js';
 export * from './choices.js';
 export * from './memory.js';
+export * from './pulses.js';

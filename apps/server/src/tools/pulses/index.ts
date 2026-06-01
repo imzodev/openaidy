@@ -6,7 +6,9 @@ import { createPulsesDeleteTool } from './delete.js';
 import type { PulseToolDeps } from './types.js';
 
 export { createPulsesCreateTool } from './create.js';
+export { createPulsesListTool } from './list.js';
 export { createPulsesUpdateTool } from './update.js';
+export { createPulsesDeleteTool } from './delete.js';
 
 export type { PulseToolDeps } from './types.js';
 

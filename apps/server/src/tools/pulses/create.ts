@@ -1,7 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import { jobsCreateMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
-import { parseScheduleInput, jobToPulse } from '../../pulses/utils.js';
+import type { CreatePulseInput } from '@openaidy/shared-types';
 
 export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
   return {
@@ -68,10 +68,9 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
     },
 
     async execute(args, _ctx) {
-      const jobsRepo = deps.getJobsRepo();
-      const sessionsRepo = deps.getSessionsRepo();
+      const service = deps.getPulseService();
 
-      if (!jobsRepo) {
+      if (!service) {
         return {
           ok: false,
           error: 'Database is not available.',
@@ -84,7 +83,6 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
       const agentId = args['agentId'] as string | undefined;
       const sessionId = args['sessionId'] as string | undefined;
 
-      // Validate required fields
       if (!name?.trim()) {
         return { ok: false, error: 'Pulse name is required.' };
       }
@@ -92,83 +90,47 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
         return { ok: false, error: 'Pulse prompt is required.' };
       }
 
-      // Verify session exists if provided
-      if (sessionId && sessionsRepo) {
-        const session = await sessionsRepo.findById(sessionId);
-        if (!session) {
-          return { ok: false, error: `Session "${sessionId}" not found.` };
-        }
-      }
-
-      // Parse schedule - build discriminated union based on which field is present
-      let parsedSchedule;
-      try {
-        if (schedule['every']) {
-          parsedSchedule = parseScheduleInput({
-            every: schedule['every'] as
-              | '15m'
-              | '30m'
-              | '1h'
-              | '6h'
-              | '12h'
-              | '1d'
-              | '1w',
-          });
-        } else if (schedule['daily']) {
-          const daily = schedule['daily'] as { hour: number; minute: number };
-          parsedSchedule = parseScheduleInput({
-            daily: { hour: daily.hour, minute: daily.minute },
-          });
-        } else if (schedule['cron']) {
-          const cronObj = schedule['cron'] as {
-            expression: string;
-            tz?: string;
-          };
-          parsedSchedule = parseScheduleInput({
-            cron: cronObj['expression'],
-            ...(cronObj['tz'] ? { tz: cronObj['tz'] } : {}),
-          });
-        } else if (schedule['at']) {
-          parsedSchedule = parseScheduleInput({ at: schedule['at'] as string });
-        } else {
-          return { ok: false, error: 'Invalid schedule format.' };
-        }
-      } catch (err) {
-        return {
-          ok: false,
-          error: `Invalid schedule: ${err instanceof Error ? err.message : String(err)}`,
+      // Build ScheduleInput discriminated union from tool args
+      let scheduleInput: import('@openaidy/shared-types').ScheduleInput;
+      if (schedule['every']) {
+        scheduleInput = {
+          every: schedule['every'] as
+            | '15m'
+            | '30m'
+            | '1h'
+            | '6h'
+            | '12h'
+            | '1d'
+            | '1w',
         };
+      } else if (schedule['daily']) {
+        const daily = schedule['daily'] as { hour: number; minute: number };
+        scheduleInput = { daily: { hour: daily.hour, minute: daily.minute } };
+      } else if (schedule['cron']) {
+        const cronObj = schedule['cron'] as {
+          expression: string;
+          tz?: string;
+        };
+        scheduleInput = {
+          cron: cronObj['expression'],
+          ...(cronObj['tz'] ? { tz: cronObj['tz'] } : {}),
+        };
+      } else if (schedule['at']) {
+        scheduleInput = { at: schedule['at'] as string };
+      } else {
+        return { ok: false, error: 'Invalid schedule format.' };
       }
 
       try {
-        const createJobInput: Parameters<typeof jobsRepo.create>[0] = {
-          type: parsedSchedule.type,
-          targetType: sessionId ? 'session' : 'isolated',
-          payload: {
-            message: prompt,
-            agentId,
-          },
-          status: 'active',
-          metadata: {
-            kind: 'pulse',
-            name: name.trim(),
-            prompt,
-          },
-          nextRunAt: parsedSchedule.nextRunAt,
+        const input: CreatePulseInput = {
+          name: name.trim(),
+          prompt,
+          schedule: scheduleInput,
         };
+        if (agentId !== undefined) input.agentId = agentId;
+        if (sessionId !== undefined) input.sessionId = sessionId;
 
-        if (sessionId) {
-          createJobInput.targetSessionId = sessionId;
-        }
-        if (parsedSchedule.schedule !== undefined) {
-          createJobInput.schedule = parsedSchedule.schedule;
-        }
-        if (parsedSchedule.cronExpression !== undefined) {
-          createJobInput.cronExpression = parsedSchedule.cronExpression;
-        }
-
-        const job = await jobsRepo.create(createJobInput);
-        const pulse = jobToPulse(job);
+        const pulse = await service.createPulse(input);
 
         return {
           ok: true,

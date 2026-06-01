@@ -22,9 +22,9 @@ export function createPulsesDeleteTool(deps: PulseToolDeps): BuiltinTool {
     },
 
     async execute(args, _ctx) {
-      const jobsRepo = deps.getJobsRepo();
+      const service = deps.getPulseService();
 
-      if (!jobsRepo) {
+      if (!service) {
         return {
           ok: false,
           error: 'Database is not available.',
@@ -45,27 +45,20 @@ export function createPulsesDeleteTool(deps: PulseToolDeps): BuiltinTool {
         };
       }
 
-      // Check pulse exists and is actually a pulse
-      const existingJob = await jobsRepo.findById(id);
-      if (!existingJob) {
-        return { ok: false, error: `Pulse "${id}" not found.` };
-      }
-
-      const metadata = existingJob.metadata as Record<string, unknown> | null;
-      if (metadata?.kind !== 'pulse') {
-        return { ok: false, error: `Job "${id}" is not a pulse.` };
-      }
-
       try {
-        await jobsRepo.delete(id);
+        await service.deletePulse(id);
         return {
           ok: true,
-          content: `Successfully deleted pulse "${metadata['name'] as string}" (ID: ${id}).`,
+          content: `Successfully deleted pulse "${id}".`,
         };
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg === 'Pulse not found') {
+          return { ok: false, error: `Pulse "${id}" not found.` };
+        }
         return {
           ok: false,
-          error: `Failed to delete pulse: ${err instanceof Error ? err.message : String(err)}`,
+          error: `Failed to delete pulse: ${msg}`,
         };
       }
     },

@@ -1,7 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import { jobsListMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
-import { jobToPulse } from '../../pulses/utils.js';
+import type { ListPulsesFilters, PulseRecord } from '@openaidy/shared-types';
 
 export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
   return {
@@ -32,8 +32,8 @@ export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
     },
 
     async execute(args, _ctx) {
-      const jobsRepo = deps.getJobsRepo();
-      if (!jobsRepo) {
+      const service = deps.getPulseService();
+      if (!service) {
         return {
           ok: false,
           error: 'Database is not available.',
@@ -50,25 +50,13 @@ export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
       const offset = Math.max(Number(args['offset']) || 0, 0);
 
       try {
-        const allJobs = await jobsRepo.list({ limit: 1000 });
+        const filters: ListPulsesFilters = { limit, offset };
+        if (status !== undefined) filters.status = status;
 
-        // Filter to only pulses (metadata.kind === 'pulse')
-        let pulses = allJobs.filter((job) => {
-          const metadata = job.metadata as Record<string, unknown> | null;
-          return metadata?.kind === 'pulse';
-        });
+        const result = await service.listPulses(filters);
+        const { items: pulses, total } = result;
 
-        // Apply status filter
-        if (status) {
-          pulses = pulses.filter((job) => job.status === status);
-        }
-
-        const total = pulses.length;
-
-        // Apply pagination
-        const paginatedPulses = pulses.slice(offset, offset + limit);
-
-        if (paginatedPulses.length === 0) {
+        if (pulses.length === 0) {
           return {
             ok: true,
             content:
@@ -78,9 +66,8 @@ export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
           };
         }
 
-        const pulseLines = paginatedPulses.map((job) => {
-          const pulse = jobToPulse(job);
-          return [
+        const pulseLines = pulses.map((pulse: PulseRecord) =>
+          [
             `ID: ${pulse.id}`,
             `Name: ${pulse.name}`,
             `Status: ${pulse.status}`,
@@ -92,14 +79,14 @@ export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
             pulse.agentId ? `Agent: ${pulse.agentId}` : null,
           ]
             .filter(Boolean)
-            .join('\n');
-        });
+            .join('\n'),
+        );
 
         const header = status ? `Pulses with status "${status}"` : 'All pulses';
 
         return {
           ok: true,
-          content: `${header} (${total} total, showing ${paginatedPulses.length}):\n\n${pulseLines.join('\n\n---\n\n')}`,
+          content: `${header} (${total} total, showing ${pulses.length}):\n\n${pulseLines.join('\n\n---\n\n')}`,
         };
       } catch (err) {
         return {

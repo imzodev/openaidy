@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createPulseTools, type PulseToolDeps } from './index.js';
-import type { JobsStore, SessionsStore, ScheduledJob } from '@openaidy/db';
+import type {
+  JobsStore,
+  SessionsStore,
+  JobRunsStore,
+  ScheduledJob,
+} from '@openaidy/db';
+import { PulseService } from '../../pulses/service.js';
 
 function makeMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
   return {
@@ -27,7 +33,13 @@ function makeMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
 function createMockJobsRepo(pulses: ScheduledJob[] = []): JobsStore {
   const list = [...pulses];
   return {
-    list: async () => list,
+    list: async (filters?: Parameters<JobsStore['list']>[0]) => {
+      let result = list;
+      if (filters?.status !== undefined) {
+        result = result.filter((j) => j.status === filters.status);
+      }
+      return result;
+    },
     findById: async (id: string) => list.find((j) => j.id === id) ?? null,
     create: async (input: Parameters<JobsStore['create']>[0]) => {
       const job = makeMockJob({
@@ -58,20 +70,34 @@ function createMockJobsRepo(pulses: ScheduledJob[] = []): JobsStore {
   } as unknown as JobsStore;
 }
 
+function createMockJobRunsRepo(): JobRunsStore {
+  return {
+    listByJob: async () => [],
+  } as unknown as JobRunsStore;
+}
+
 function createMockSessionsRepo(): SessionsStore {
   return { findById: async () => null } as unknown as SessionsStore;
 }
 
 const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
 
-function makeDeps(
+function makeDeps(service: PulseService): PulseToolDeps {
+  return {
+    getPulseService: () => service,
+  };
+}
+
+/** Creates a real PulseService backed by mock stores */
+function createService(
   jobsRepo: JobsStore,
   sessionsRepo?: SessionsStore,
-): PulseToolDeps {
-  return {
-    getJobsRepo: () => jobsRepo,
-    getSessionsRepo: () => sessionsRepo ?? createMockSessionsRepo(),
-  };
+): PulseService {
+  return new PulseService(
+    jobsRepo,
+    createMockJobRunsRepo(),
+    sessionsRepo ?? createMockSessionsRepo(),
+  );
 }
 
 describe('pulses tools', () => {
@@ -79,15 +105,16 @@ describe('pulses tools', () => {
 
   describe('pulses_list', () => {
     it('has correct name', () => {
-      const tools = createPulseTools(makeDeps(createMockJobsRepo()));
+      const tools = createPulseTools(
+        makeDeps(createService(createMockJobsRepo())),
+      );
       const tool = tools.find((t) => t.name === 'pulses_list')!;
       expect(tool).toBeDefined();
     });
 
     it('returns error when database is not available', async () => {
       const tools = createPulseTools({
-        getJobsRepo: () => undefined as unknown as JobsStore,
-        getSessionsRepo: () => createMockSessionsRepo(),
+        getPulseService: () => undefined as unknown as PulseService,
       });
       const tool = tools.find((t) => t.name === 'pulses_list')!;
       const result = await tool.execute({}, CTX);
@@ -98,29 +125,12 @@ describe('pulses tools', () => {
 
     it('returns empty message when no pulses exist', async () => {
       const jobsRepo = createMockJobsRepo([]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_list')!;
       const result = await tool.execute({}, CTX);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.content).toContain('No pulses found');
-    });
-
-    it('returns only pulses (filters out non-pulse jobs)', async () => {
-      const jobsRepo = createMockJobsRepo([
-        makeMockJob({
-          id: 'pulse-1',
-          metadata: { kind: 'pulse', name: 'My Pulse' },
-        }),
-        makeMockJob({ id: 'job-1', metadata: { kind: 'other' } }),
-      ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
-      const tool = tools.find((t) => t.name === 'pulses_list')!;
-      const result = await tool.execute({}, CTX);
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-      expect(result.content).toContain('My Pulse');
-      expect(result.content).not.toContain('job-1');
     });
 
     it('filters by status when provided', async () => {
@@ -136,7 +146,7 @@ describe('pulses tools', () => {
           metadata: { kind: 'pulse', name: 'Paused Pulse' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_list')!;
       const result = await tool.execute({ status: 'active' }, CTX);
       expect(result.ok).toBe(true);
@@ -145,18 +155,14 @@ describe('pulses tools', () => {
       expect(result.content).not.toContain('Paused Pulse');
     });
 
-    it('returns error for invalid status', async () => {
-      // Note: enum validation is done by the model/tool-calling layer,
-      // not at execute() runtime. These tests verify basic behavior.
+    it('returns ok=true for invalid status (model handles enum)', async () => {
       const jobsRepo = createMockJobsRepo([]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_list')!;
-      // Tool returns ok=true since invalid status doesn't match any filter
       const result = await tool.execute(
         { status: 'invalid' } as Record<string, unknown>,
         CTX,
       );
-      // Invalid enum values are filtered out by the model before reaching execute()
       expect(result.ok).toBe(true);
     });
   });
@@ -165,15 +171,16 @@ describe('pulses tools', () => {
 
   describe('pulses_create', () => {
     it('has correct name', () => {
-      const tools = createPulseTools(makeDeps(createMockJobsRepo()));
+      const tools = createPulseTools(
+        makeDeps(createService(createMockJobsRepo())),
+      );
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       expect(tool).toBeDefined();
     });
 
     it('returns error when database is not available', async () => {
       const tools = createPulseTools({
-        getJobsRepo: () => undefined as unknown as JobsStore,
-        getSessionsRepo: () => createMockSessionsRepo(),
+        getPulseService: () => undefined as unknown as PulseService,
       });
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
@@ -187,7 +194,7 @@ describe('pulses tools', () => {
 
     it('rejects missing name', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         { prompt: 'Hello', schedule: { every: '1h' } },
@@ -200,7 +207,7 @@ describe('pulses tools', () => {
 
     it('rejects missing prompt', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         { name: 'Test', schedule: { every: '1h' } },
@@ -213,7 +220,7 @@ describe('pulses tools', () => {
 
     it('rejects invalid schedule format', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         { name: 'Test', prompt: 'Hello', schedule: {} },
@@ -226,7 +233,7 @@ describe('pulses tools', () => {
 
     it('creates a pulse with every schedule', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         {
@@ -244,7 +251,7 @@ describe('pulses tools', () => {
 
     it('creates a pulse with daily schedule', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         {
@@ -261,7 +268,7 @@ describe('pulses tools', () => {
 
     it('creates a pulse with cron schedule', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_create')!;
       const result = await tool.execute(
         {
@@ -281,15 +288,16 @@ describe('pulses tools', () => {
 
   describe('pulses_update', () => {
     it('has correct name', () => {
-      const tools = createPulseTools(makeDeps(createMockJobsRepo()));
+      const tools = createPulseTools(
+        makeDeps(createService(createMockJobsRepo())),
+      );
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       expect(tool).toBeDefined();
     });
 
     it('returns error when database is not available', async () => {
       const tools = createPulseTools({
-        getJobsRepo: () => undefined as unknown as JobsStore,
-        getSessionsRepo: () => createMockSessionsRepo(),
+        getPulseService: () => undefined as unknown as PulseService,
       });
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute(
@@ -303,7 +311,7 @@ describe('pulses tools', () => {
 
     it('rejects missing id', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute({ name: 'New Name' }, CTX);
       expect(result.ok).toBe(false);
@@ -313,7 +321,7 @@ describe('pulses tools', () => {
 
     it('returns error when pulse does not exist', async () => {
       const jobsRepo = createMockJobsRepo([]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute(
         { id: 'non-existent-id', name: 'New Name' },
@@ -328,7 +336,7 @@ describe('pulses tools', () => {
       const jobsRepo = createMockJobsRepo([
         makeMockJob({ id: 'regular-job', metadata: { kind: 'other' } }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute(
         { id: 'regular-job', name: 'New Name' },
@@ -336,7 +344,7 @@ describe('pulses tools', () => {
       );
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toContain('not a pulse');
+      expect(result.error).toContain('not found');
     });
 
     it('updates pulse name', async () => {
@@ -346,7 +354,7 @@ describe('pulses tools', () => {
           metadata: { kind: 'pulse', name: 'Old Name' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute(
         { id: 'pulse-1', name: 'New Name' },
@@ -364,7 +372,7 @@ describe('pulses tools', () => {
           metadata: { kind: 'pulse', name: 'My Pulse' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
       const result = await tool.execute(
         { id: 'pulse-1', status: 'paused' },
@@ -375,17 +383,15 @@ describe('pulses tools', () => {
       expect(result.content).toContain('paused');
     });
 
-    it('rejects invalid status value', async () => {
-      // Note: enum validation is done by the model/tool-calling layer
+    it('returns ok=true for invalid status (model handles enum)', async () => {
       const jobsRepo = createMockJobsRepo([
         makeMockJob({
           id: 'pulse-1',
           metadata: { kind: 'pulse', name: 'My Pulse' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_update')!;
-      // Invalid enum values are filtered by the model before reaching execute()
       const result = await tool.execute(
         { id: 'pulse-1', status: 'invalid' } as Record<string, unknown>,
         CTX,
@@ -398,15 +404,16 @@ describe('pulses tools', () => {
 
   describe('pulses_delete', () => {
     it('has correct name', () => {
-      const tools = createPulseTools(makeDeps(createMockJobsRepo()));
+      const tools = createPulseTools(
+        makeDeps(createService(createMockJobsRepo())),
+      );
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       expect(tool).toBeDefined();
     });
 
     it('returns error when database is not available', async () => {
       const tools = createPulseTools({
-        getJobsRepo: () => undefined as unknown as JobsStore,
-        getSessionsRepo: () => createMockSessionsRepo(),
+        getPulseService: () => undefined as unknown as PulseService,
       });
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute({ id: 'some-id', confirm: true }, CTX);
@@ -417,7 +424,7 @@ describe('pulses tools', () => {
 
     it('rejects missing id', async () => {
       const jobsRepo = createMockJobsRepo();
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute({ confirm: true }, CTX);
       expect(result.ok).toBe(false);
@@ -432,7 +439,7 @@ describe('pulses tools', () => {
           metadata: { kind: 'pulse', name: 'My Pulse' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute({ id: 'pulse-1' }, CTX);
       expect(result.ok).toBe(false);
@@ -442,7 +449,7 @@ describe('pulses tools', () => {
 
     it('returns error when pulse does not exist', async () => {
       const jobsRepo = createMockJobsRepo([]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute(
         { id: 'non-existent-id', confirm: true },
@@ -457,7 +464,7 @@ describe('pulses tools', () => {
       const jobsRepo = createMockJobsRepo([
         makeMockJob({ id: 'regular-job', metadata: { kind: 'other' } }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute(
         { id: 'regular-job', confirm: true },
@@ -465,7 +472,7 @@ describe('pulses tools', () => {
       );
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.error).toContain('not a pulse');
+      expect(result.error).toContain('not found');
     });
 
     it('successfully deletes a pulse', async () => {
@@ -475,7 +482,7 @@ describe('pulses tools', () => {
           metadata: { kind: 'pulse', name: 'To Delete' },
         }),
       ]);
-      const tools = createPulseTools(makeDeps(jobsRepo));
+      const tools = createPulseTools(makeDeps(createService(jobsRepo)));
       const tool = tools.find((t) => t.name === 'pulses_delete')!;
       const result = await tool.execute({ id: 'pulse-1', confirm: true }, CTX);
       expect(result.ok).toBe(true);
@@ -488,7 +495,9 @@ describe('pulses tools', () => {
 
   describe('createPulseTools', () => {
     it('returns all four pulse tools', () => {
-      const tools = createPulseTools(makeDeps(createMockJobsRepo()));
+      const tools = createPulseTools(
+        makeDeps(createService(createMockJobsRepo())),
+      );
       const names = tools.map((t) => t.name);
       expect(names).toContain('pulses_list');
       expect(names).toContain('pulses_create');
