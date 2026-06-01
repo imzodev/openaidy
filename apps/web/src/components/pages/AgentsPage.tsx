@@ -35,7 +35,6 @@ import {
   getConfig,
   getPersonalityFile,
   updatePersonalityFile,
-  deleteAgent,
   type Agent,
   type BuiltinToolInfo,
   type SkillInfo,
@@ -47,6 +46,7 @@ import {
   type PersonalityFile,
 } from '../../lib/api';
 import { CreateAgentModal } from './CreateAgentModal';
+import { DeleteAgentModal } from './DeleteAgentModal';
 import {
   FileExplorer,
   WorkspaceEditor,
@@ -85,7 +85,7 @@ export function AgentsPage(props: AgentsPageProps) {
   const [mcpUpdating, setMcpUpdating] = createSignal<Set<string>>(new Set());
   const [providers, setProviders] = createSignal<ProviderConfig[]>([]);
   const [showCreateModal, setShowCreateModal] = createSignal(false);
-  const [isDeleting, setIsDeleting] = createSignal(false);
+  const [showDeleteModal, setShowDeleteModal] = createSignal(false);
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
 
@@ -331,26 +331,17 @@ export function AgentsPage(props: AgentsPageProps) {
     }
   };
 
-  const handleDeleteAgent = async () => {
-    const agent = selectedAgent();
-    if (!agent) return;
-    const confirmed = window.confirm(
-      `Delete agent "${agent.name}"?\n\nThis will permanently remove the agent and its entire workspace directory. This cannot be undone.`,
-    );
-    if (!confirmed) return;
-    setIsDeleting(true);
-    try {
-      await deleteAgent(agent.id);
-      const remaining = agents().filter((a) => a.id !== agent.id);
-      setAgents(remaining);
-      setSelectedAgentId(remaining.length > 0 ? remaining[0].id : null);
-      setSelectedWorkspaceFile(null);
-      setHasUnsavedWorkspaceChanges(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete agent');
-    } finally {
-      setIsDeleting(false);
-    }
+  const handleDeleteAgent = () => {
+    if (!selectedAgent()) return;
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteAgentConfirm = async (agentId: string) => {
+    const remaining = agents().filter((a) => a.id !== agentId);
+    setAgents(remaining);
+    setSelectedAgentId(remaining.length > 0 ? remaining[0].id : null);
+    setSelectedWorkspaceFile(null);
+    setHasUnsavedWorkspaceChanges(false);
   };
 
   createEffect(() => {
@@ -588,12 +579,11 @@ export function AgentsPage(props: AgentsPageProps) {
                     {/* Delete Agent button */}
                     <button
                       onClick={handleDeleteAgent}
-                      disabled={isDeleting()}
-                      class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       title="Delete agent"
                     >
                       <Trash2 class="w-4 h-4" />
-                      {isDeleting() ? 'Deleting…' : 'Delete'}
+                      Delete
                     </button>
 
                     {/* Status Badge */}
@@ -1274,6 +1264,14 @@ export function AgentsPage(props: AgentsPageProps) {
         onClose={() => setShowCreateModal(false)}
         onCreated={handleAgentCreated}
       />
+      <Show when={selectedAgent()}>
+        <DeleteAgentModal
+          agent={selectedAgent()!}
+          isOpen={showDeleteModal()}
+          onClose={() => setShowDeleteModal(false)}
+          onDeleted={handleDeleteAgentConfirm}
+        />
+      </Show>
     </Layout>
   );
 }
