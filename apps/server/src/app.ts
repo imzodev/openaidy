@@ -220,6 +220,10 @@ export async function buildApp() {
             defaultAgentId: configService.getConfig().defaults.agentId,
             createLogger,
           },
+          pulses: {
+            getJobsRepo: () => dbAdapter!.repositories.jobs,
+            getSessionsRepo: () => dbAdapter!.repositories.sessions,
+          },
         }
       : {}),
     getTaskService: () => taskService,
@@ -265,14 +269,12 @@ export async function buildApp() {
       .getConfig()
       .channels?.find((c) => c.id === channel.id);
     if (cfg?.enabled) {
-      channel
-        .connect()
-        .catch((err) =>
-          log.warn('channel auto-connect failed on startup', {
-            err,
-            channelId: channel.id,
-          }),
-        );
+      channel.connect().catch((err) =>
+        log.warn('channel auto-connect failed on startup', {
+          err,
+          channelId: channel.id,
+        }),
+      );
     }
   }
   const bootstrapAdmin = env.BOOTSTRAP_ADMIN_ENABLED

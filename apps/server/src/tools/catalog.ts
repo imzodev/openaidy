@@ -242,6 +242,42 @@ export const tasksDeleteMeta: ToolMeta = {
     'Requires confirm=true to prevent accidental deletion.',
 };
 
+// ── Pulses ────────────────────────────────────────────────────────────────────
+
+export const jobsListMeta: ToolMeta = {
+  name: 'pulses_list',
+  category: 'Pulses',
+  description:
+    'List all pulses (scheduled AI tasks). Returns pulse IDs, names, schedules, statuses, ' +
+    'and next run times. Use this to discover existing pulses before updating or deleting them.',
+};
+
+export const jobsCreateMeta: ToolMeta = {
+  name: 'pulses_create',
+  category: 'Pulses',
+  description:
+    'Create a new pulse (scheduled AI task). A pulse fires a prompt to an agent on a schedule. ' +
+    'Supports intervals (every 15m/30m/1h/6h/12h/1d/1w), daily times, cron expressions, or one-shot dates. ' +
+    'Returns the created pulse details including ID and next run time.',
+};
+
+export const jobsUpdateMeta: ToolMeta = {
+  name: 'pulses_update',
+  category: 'Pulses',
+  description:
+    'Update an existing pulse. Can change name, prompt, schedule, or status (active/paused). ' +
+    'Supports intervals (every 15m/30m/1h/6h/12h/1d/1w), daily times, cron expressions, or one-shot dates. ' +
+    'Use pulses_list to find the pulse ID first. Returns the updated pulse details.',
+};
+
+export const jobsDeleteMeta: ToolMeta = {
+  name: 'pulses_delete',
+  category: 'Pulses',
+  description:
+    'Permanently delete a pulse. This action cannot be undone. ' +
+    'Requires confirm=true to prevent accidental deletion.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -272,4 +308,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   tasksCreateMeta,
   tasksUpdateMeta,
   tasksDeleteMeta,
+  jobsListMeta,
+  jobsCreateMeta,
+  jobsUpdateMeta,
+  jobsDeleteMeta,
 ];
