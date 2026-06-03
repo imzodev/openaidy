@@ -530,7 +530,117 @@ registerCommand(
   },
 );
 
-// Devices commands
+// ============================================================================
+// Sessions Commands
+// ============================================================================
+
+registerGroup({
+  name: 'sessions',
+  description: 'Manage chat sessions',
+  commands: {
+    'sessions list': {
+      description: 'List all sessions',
+      usage: 'openaidy sessions list [--limit <n>]',
+      examples: [
+        'pnpm openaidy sessions list',
+        'pnpm openaidy sessions list --limit 20',
+      ],
+    },
+    'sessions create': {
+      description: 'Create a new session',
+      usage: 'openaidy sessions create [title]',
+      examples: [
+        'pnpm openaidy sessions create',
+        'pnpm openaidy sessions create "My Chat"',
+      ],
+    },
+    'sessions get': {
+      description: 'Get session details by ID',
+      usage: 'openaidy sessions get <sessionId>',
+      examples: ['pnpm openaidy sessions get sess_abc123'],
+    },
+    'sessions messages': {
+      description: 'List all messages in a session',
+      usage: 'openaidy sessions messages <sessionId>',
+      examples: ['pnpm openaidy sessions messages sess_abc123'],
+    },
+    'sessions runs': {
+      description: 'List all runs for a session',
+      usage: 'openaidy sessions runs <sessionId>',
+      examples: ['pnpm openaidy sessions runs sess_abc123'],
+    },
+  },
+});
+
+registerCommand(
+  'sessions list',
+  async (args: string[]) => {
+    const { sessionsListHandler } = await import('./sessions/list.js');
+    return sessionsListHandler(args);
+  },
+  {
+    description: 'List all sessions',
+    usage: 'openaidy sessions list [--limit <n>]',
+    examples: ['pnpm openaidy sessions list', 'pnpm openaidy sessions list --limit 20'],
+  },
+);
+
+registerCommand(
+  'sessions create',
+  async (args: string[]) => {
+    const { sessionsCreateHandler } = await import('./sessions/create.js');
+    return sessionsCreateHandler(args);
+  },
+  {
+    description: 'Create a new session',
+    usage: 'openaidy sessions create [title]',
+    examples: ['pnpm openaidy sessions create', 'pnpm openaidy sessions create "My Chat"'],
+  },
+);
+
+registerCommand(
+  'sessions get',
+  async (args: string[]) => {
+    const { sessionsGetHandler } = await import('./sessions/get.js');
+    return sessionsGetHandler(args);
+  },
+  {
+    description: 'Get session details by ID',
+    usage: 'openaidy sessions get <sessionId>',
+    examples: ['pnpm openaidy sessions get sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions messages',
+  async (args: string[]) => {
+    const { sessionsMessagesHandler } = await import('./sessions/messages.js');
+    return sessionsMessagesHandler(args);
+  },
+  {
+    description: 'List all messages in a session',
+    usage: 'openaidy sessions messages <sessionId>',
+    examples: ['pnpm openaidy sessions messages sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions runs',
+  async (args: string[]) => {
+    const { sessionsRunsHandler } = await import('./sessions/runs.js');
+    return sessionsRunsHandler(args);
+  },
+  {
+    description: 'List all runs for a session',
+    usage: 'openaidy sessions runs <sessionId>',
+    examples: ['pnpm openaidy sessions runs sess_abc123'],
+  },
+);
+
+// ============================================================================
+// Devices Commands
+// ============================================================================
+
 registerCommand(
   'devices list',
   async (args: string[]) => {

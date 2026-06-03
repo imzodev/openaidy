@@ -221,3 +221,20 @@ export interface DocsResult {
   message: string;
   outputPath?: string;
 }
+
+// ============================================================================
+// Sessions command types
+// ============================================================================
+
+/**
+ * A run record returned by GET /sessions/:id/runs
+ */
+export type SessionRun = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  providerId?: string;
+  modelId?: string;
+  durationMs?: number;
+  error?: string;
+  createdAt: string;
+};

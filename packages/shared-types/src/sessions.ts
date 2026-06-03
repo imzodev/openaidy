@@ -124,3 +124,32 @@ export type SessionRun = {
   createdAt: string;
   metadata?: Record<string, unknown>;
 };
+
+// ========================================
+// CLI-specific session types
+// Lightweight summaries used by the CLI when calling REST API endpoints
+// ========================================
+
+/**
+ * Summary fields returned by GET /sessions (list)
+ */
+export type SessionSummary = Pick<Session, 'id' | 'title' | 'createdAt'>;
+
+/**
+ * Detail fields returned by GET /sessions/:id (get)
+ */
+export type SessionDetail = Pick<
+  Session,
+  'id' | 'title' | 'createdAt' | 'updatedAt'
+>;
+
+/**
+ * Summary fields returned by GET /sessions/:id/runs
+ */
+export type SessionRunSummary = Pick<
+  SessionRun,
+  'id' | 'status' | 'providerId' | 'modelId' | 'createdAt'
+> & {
+  /** Duration in ms — derived by the server when marking a run finished */
+  durationMs?: number;
+};
