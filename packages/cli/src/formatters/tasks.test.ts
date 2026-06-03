@@ -58,7 +58,7 @@ describe('formatDate', () => {
     expect(formatDate(fiveMinsAgo)).toBe('5m ago');
   });
 
-  it('returns hours ago for today's older dates', () => {
+  it('returns hours ago for older hours', () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     expect(formatDate(twoHoursAgo)).toBe('2h ago');
   });

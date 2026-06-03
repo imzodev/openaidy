@@ -40,9 +40,8 @@ Exit Codes:
   const config = resolveCLIConfig();
   const tokenResult = await readAdminToken(config.tokenPath);
   if (!tokenResult.ok) {
-    const msg = `Bootstrap admin token not found at ${config.tokenPath}.`;
-    p.log.error(msg);
-    return { exitCode: 1, error: msg };
+    p.log.error(tokenResult.error);
+    return { exitCode: 1, error: tokenResult.error };
   }
 
   const positional: string[] = [];
@@ -83,8 +82,9 @@ Exit Codes:
 
   if (!res.ok) {
     if (res.status === 404) {
-      p.log.error(`Subtask "${subtaskId}" not found.`);
-      return { exitCode: 1, error: `Subtask "${subtaskId}" not found.` };
+      const msg = `Subtask "${subtaskId}" not found.`;
+      p.log.error(msg);
+      return { exitCode: 1, error: msg };
     }
     const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
     const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;

@@ -36,12 +36,10 @@ Exit Codes:
   const config = resolveCLIConfig();
   const tokenResult = await readAdminToken(config.tokenPath);
   if (!tokenResult.ok) {
-    const msg = `Bootstrap admin token not found at ${config.tokenPath}.`;
-    p.log.error(msg);
-    return { exitCode: 1, error: msg };
+    p.log.error(tokenResult.error);
+    return { exitCode: 1, error: tokenResult.error };
   }
 
-  // Collect positional args
   const positional: string[] = [];
   for (const arg of args) {
     if (arg.startsWith('--')) break;

@@ -136,3 +136,32 @@ export type SubtaskWithDetails = {
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Subtask summary (used in list responses)
+ */
+export type SubtaskSummary = {
+  id: string;
+  taskId: string;
+  title: string;
+  status: SubtaskStatus;
+  assignedAgentId: string | null;
+  result: string | null;
+  retryCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Input for completing a subtask
+ */
+export type CompleteSubtaskInput = {
+  result?: string;
+};
+
+/**
+ * Input for failing a subtask
+ */
+export type FailSubtaskInput = {
+  reason?: string;
+};

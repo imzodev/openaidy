@@ -8,9 +8,10 @@ import * as p from '@clack/prompts';
 import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import type { CommandResult } from '../../types.js';
+import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
 
-const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
-const VALID_STATUSES   = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'];
+const VALID_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
+const VALID_STATUSES: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'];
 
 export async function tasksUpdateHandler(
   args: string[],
@@ -47,14 +48,13 @@ Exit Codes:
   const config = resolveCLIConfig();
   const tokenResult = await readAdminToken(config.tokenPath);
   if (!tokenResult.ok) {
-    const msg = `Bootstrap admin token not found at ${config.tokenPath}.`;
-    p.log.error(msg);
-    return { exitCode: 1, error: msg };
+    p.log.error(tokenResult.error);
+    return { exitCode: 1, error: tokenResult.error };
   }
 
-  // Collect positional args (task ID)
   const positional: string[] = [];
-  const updates: Record<string, unknown> = {};
+  const updates: Record<string, string> = {};
+  let newStatus: TaskStatus | undefined;
 
   let i = 0;
   while (i < args.length) {
@@ -64,7 +64,7 @@ Exit Codes:
     } else if (arg === '--description' && i + 1 < args.length) {
       updates.description = args[++i];
     } else if (arg === '--priority' && i + 1 < args.length) {
-      const val = args[++i];
+      const val = args[++i] as TaskPriority;
       if (!VALID_PRIORITIES.includes(val)) {
         const msg = `--priority must be one of: ${VALID_PRIORITIES.join(', ')}`;
         p.log.error(msg);
@@ -72,14 +72,13 @@ Exit Codes:
       }
       updates.priority = val;
     } else if (arg === '--status' && i + 1 < args.length) {
-      const val = args[++i];
+      const val = args[++i] as TaskStatus;
       if (!VALID_STATUSES.includes(val)) {
         const msg = `--status must be one of: ${VALID_STATUSES.join(', ')}`;
         p.log.error(msg);
         return { exitCode: 2, error: msg };
       }
-      // Route to PATCH /tasks/:id for title/desc/priority,
-      // and to PATCH /tasks/:id/status for status
+      newStatus = val;
     } else if (!arg.startsWith('--')) {
       positional.push(arg);
     }
@@ -93,11 +92,8 @@ Exit Codes:
   }
 
   const taskId = positional[0];
-
-  // Separate status update from other updates
-  const { status: _status, ...generalUpdates } = updates;
-  const hasGeneral  = Object.keys(generalUpdates).length > 0;
-  const hasStatus   = 'status' in updates;
+  const hasGeneral = Object.keys(updates).length > 0;
+  const hasStatus = newStatus !== undefined;
 
   if (!hasGeneral && !hasStatus) {
     const msg = 'No updates provided. Use --title, --description, --priority, or --status.';
@@ -115,35 +111,28 @@ Exit Codes:
       const res = await fetch(`${config.httpUrl}/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify(generalUpdates),
+        body: JSON.stringify(updates),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
         const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;
-        if (res.status === 404) {
-          p.log.error(`Task "${taskId}" not found.`);
-          return { exitCode: 1, error: msg };
-        }
-        p.log.error(msg);
+        if (res.status === 404) p.log.error(`Task "${taskId}" not found.`);
+        else p.log.error(msg);
         return { exitCode: 1, error: msg };
       }
     }
 
     if (hasStatus) {
-      const statusUpdate = updates.status as string;
       const res = await fetch(`${config.httpUrl}/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ status: statusUpdate }),
+        body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
         const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;
-        if (res.status === 404) {
-          p.log.error(`Task "${taskId}" not found.`);
-          return { exitCode: 1, error: msg };
-        }
-        p.log.error(msg);
+        if (res.status === 404) p.log.error(`Task "${taskId}" not found.`);
+        else p.log.error(msg);
         return { exitCode: 1, error: msg };
       }
     }

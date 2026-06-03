@@ -7,44 +7,9 @@
 import * as p from '@clack/prompts';
 import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
+import { formatKanbanBoard } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
-
-type KanbanColumn = Array<{ id: string; title: string; priority: string }>;
-
-const STATUS_LABELS: Record<string, string> = {
-  backlog:     'Backlog',
-  todo:        'To Do',
-  in_progress: 'In Progress',
-  review:      'Review',
-  done:        'Done',
-  cancelled:   'Cancelled',
-};
-const PRIORITY_CHARS: Record<string, string> = {
-  low: '⚐', medium: '⚐', high: '⚑', urgent: '✷',
-};
-
-function formatStatus(s: string) { return STATUS_LABELS[s] ?? s; }
-function formatPriority(p: string) { return PRIORITY_CHARS[p] ?? ' '; }
-
-function formatKanbanBoard(
-  board: Record<string, KanbanColumn>,
-): string {
-  const order = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'];
-  const lines: string[] = ['Kanban Board', '============', ''];
-  for (const status of order) {
-    const col = board[status] ?? [];
-    lines.push(`${formatStatus(status)} (${col.length})`);
-    if (col.length === 0) {
-      lines.push('  —');
-    } else {
-      for (const t of col) {
-        lines.push(`  ${formatPriority(t.priority)} ${t.title}  [${t.id}]`);
-      }
-    }
-    lines.push('');
-  }
-  return lines.join('\n');
-}
+import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
 
 export async function tasksKanbanHandler(
   args: string[],
@@ -69,9 +34,8 @@ Exit Codes:
   const config = resolveCLIConfig();
   const tokenResult = await readAdminToken(config.tokenPath);
   if (!tokenResult.ok) {
-    const msg = `Bootstrap admin token not found at ${config.tokenPath}.`;
-    p.log.error(msg);
-    return { exitCode: 1, error: msg };
+    p.log.error(tokenResult.error);
+    return { exitCode: 1, error: tokenResult.error };
   }
 
   let res: Response;
@@ -92,7 +56,10 @@ Exit Codes:
     return { exitCode: 1, error: msg };
   }
 
-  const board = (await res.json()) as Record<string, KanbanColumn>;
+  const board = (await res.json()) as Record<
+    TaskStatus,
+    Array<{ id: string; title: string; priority: TaskPriority }>
+  >;
   p.note(formatKanbanBoard(board), 'Kanban Board');
   return { exitCode: 0 };
 }

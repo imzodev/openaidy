@@ -8,9 +8,9 @@ import * as p from '@clack/prompts';
 import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import type { CommandResult } from '../../types.js';
+import type { TaskPriority } from '@openaidy/shared-types';
 
-const VALID_PRIORITIES = ['low', 'medium', 'high', 'urgent'];
-const VALID_STATUSES   = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'];
+const VALID_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 
 export async function tasksCreateHandler(
   args: string[],
@@ -46,14 +46,12 @@ Exit Codes:
   const config = resolveCLIConfig();
   const tokenResult = await readAdminToken(config.tokenPath);
   if (!tokenResult.ok) {
-    const msg = `Bootstrap admin token not found at ${config.tokenPath}.`;
-    p.log.error(msg);
-    return { exitCode: 1, error: msg };
+    p.log.error(tokenResult.error);
+    return { exitCode: 1, error: tokenResult.error };
   }
 
-  // Parse flags
   let description: string | undefined;
-  let priority: string = 'medium';
+  let priority: TaskPriority = 'medium';
   let planningEnabled = false;
   let positionalTitle: string | undefined;
 
@@ -63,7 +61,7 @@ Exit Codes:
     if (arg === '--description' && i + 1 < args.length) {
       description = args[++i];
     } else if (arg === '--priority' && i + 1 < args.length) {
-      const val = args[++i];
+      const val = args[++i] as TaskPriority;
       if (!VALID_PRIORITIES.includes(val)) {
         const msg = `--priority must be one of: ${VALID_PRIORITIES.join(', ')}`;
         p.log.error(msg);
@@ -78,15 +76,12 @@ Exit Codes:
     i++;
   }
 
-  // Require either a positional title or --description
   if (!positionalTitle && !description) {
     const msg = 'Either a task title or --description is required.\nUsage: openaidy tasks create [title] [--description <desc>]';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }
 
-  // If title is provided as positional but description is not, use title as description
-  // (API will derive title from description if title is omitted)
   const body: Record<string, unknown> = {
     description: description ?? positionalTitle!,
   };
