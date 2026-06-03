@@ -530,6 +530,195 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Tasks Command Group
+// ============================================================================
+
+registerGroup({
+  name: 'tasks',
+  description: 'Manage tasks and subtasks via the CLI',
+  commands: {
+    'tasks list': {
+      description: 'List all tasks, optionally filtered by status',
+      usage: 'openaidy tasks list [--status <status>] [--limit <n>]',
+      examples: [
+        'pnpm openaidy tasks list',
+        'pnpm openaidy tasks list --status in_progress',
+        'pnpm openaidy tasks list --limit 10',
+      ],
+    },
+    'tasks get': {
+      description: 'Get full details for a specific task',
+      usage: 'openaidy tasks get <id>',
+      examples: ['pnpm openaidy tasks get abc123'],
+    },
+    'tasks create': {
+      description: 'Create a new task',
+      usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+      examples: [
+        'pnpm openaidy tasks create "Fix login bug" --priority high',
+        'pnpm openaidy tasks create --description "Implement the new API"',
+      ],
+    },
+    'tasks update': {
+      description: 'Update a task (title, description, priority, status)',
+      usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+      examples: [
+        'pnpm openaidy tasks update abc123 --priority high',
+        'pnpm openaidy tasks update abc123 --status done',
+      ],
+    },
+    'tasks delete': {
+      description: 'Delete a task permanently',
+      usage: 'openaidy tasks delete <id>',
+      examples: ['pnpm openaidy tasks delete abc123'],
+    },
+    'tasks kanban': {
+      description: 'Display tasks grouped by status in Kanban board layout',
+      usage: 'openaidy tasks kanban',
+      examples: ['pnpm openaidy tasks kanban'],
+    },
+    'subtasks list': {
+      description: 'List all subtasks for a specific task',
+      usage: 'openaidy subtasks list <taskId>',
+      examples: ['pnpm openaidy subtasks list abc123'],
+    },
+    'subtasks complete': {
+      description: 'Mark a subtask as completed',
+      usage: 'openaidy subtasks complete <subtaskId> [--result <result>]',
+      examples: [
+        'pnpm openaidy subtasks complete abc123',
+        'pnpm openaidy subtasks complete abc123 --result "Done"',
+      ],
+    },
+    'subtasks fail': {
+      description: 'Mark a subtask as failed',
+      usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+      examples: [
+        'pnpm openaidy subtasks fail abc123',
+        'pnpm openaidy subtasks fail abc123 --reason "Rate limited"',
+      ],
+    },
+  },
+});
+
+// Tasks list
+registerCommand(
+  'tasks list',
+  async (args: string[]) => {
+    const { tasksListHandler } = await import('./tasks/list.js');
+    return tasksListHandler(args);
+  },
+  {
+    description: 'List all tasks, optionally filtered by status',
+    usage: 'openaidy tasks list [--status <status>] [--limit <n>]',
+  },
+);
+
+// Tasks get
+registerCommand(
+  'tasks get',
+  async (args: string[]) => {
+    const { tasksGetHandler } = await import('./tasks/get.js');
+    return tasksGetHandler(args);
+  },
+  {
+    description: 'Get full details for a specific task',
+    usage: 'openaidy tasks get <id>',
+  },
+);
+
+// Tasks create
+registerCommand(
+  'tasks create',
+  async (args: string[]) => {
+    const { tasksCreateHandler } = await import('./tasks/create.js');
+    return tasksCreateHandler(args);
+  },
+  {
+    description: 'Create a new task',
+    usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+  },
+);
+
+// Tasks update
+registerCommand(
+  'tasks update',
+  async (args: string[]) => {
+    const { tasksUpdateHandler } = await import('./tasks/update.js');
+    return tasksUpdateHandler(args);
+  },
+  {
+    description: 'Update a task (title, description, priority, status)',
+    usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+  },
+);
+
+// Tasks delete
+registerCommand(
+  'tasks delete',
+  async (args: string[]) => {
+    const { tasksDeleteHandler } = await import('./tasks/delete.js');
+    return tasksDeleteHandler(args);
+  },
+  {
+    description: 'Delete a task permanently',
+    usage: 'openaidy tasks delete <id>',
+  },
+);
+
+// Tasks kanban
+registerCommand(
+  'tasks kanban',
+  async (args: string[]) => {
+    const { tasksKanbanHandler } = await import('./tasks/kanban.js');
+    return tasksKanbanHandler(args);
+  },
+  {
+    description: 'Display tasks grouped by status in Kanban board layout',
+    usage: 'openaidy tasks kanban',
+  },
+);
+
+// Subtasks list
+registerCommand(
+  'subtasks list',
+  async (args: string[]) => {
+    const { subtasksListHandler } = await import('./tasks/subtasks/list.js');
+    return subtasksListHandler(args);
+  },
+  {
+    description: 'List all subtasks for a specific task',
+    usage: 'openaidy subtasks list <taskId>',
+  },
+);
+
+// Subtasks complete
+registerCommand(
+  'subtasks complete',
+  async (args: string[]) => {
+    const { subtasksCompleteHandler } = await import('./tasks/subtasks/complete.js');
+    return subtasksCompleteHandler(args);
+  },
+  {
+    description: 'Mark a subtask as completed',
+    usage: 'openaidy subtasks complete <subtaskId> [--result <result>]',
+  },
+);
+
+// Subtasks fail
+registerCommand(
+  'subtasks fail',
+  async (args: string[]) => {
+    const { subtasksFailHandler } = await import('./tasks/subtasks/fail.js');
+    return subtasksFailHandler(args);
+  },
+  {
+    description: 'Mark a subtask as failed',
+    usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+  },
+);
+
 // Devices commands
 registerCommand(
   'devices list',
