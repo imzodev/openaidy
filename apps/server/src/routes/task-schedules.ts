@@ -190,10 +190,19 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // -------------------------------------------------------------
   // GET /api/tasks/:taskId/schedule
   // -------------------------------------------------------------
+  // Returns 200 with `{ schedule: null }` when no schedule exists
+  // for the task. This is intentional: the kanban view fetches a
+  // schedule for every task on screen, and a 404 (even if the
+  // client handles it) would log noise in the browser console.
+  // The resource being "absent" is a normal, expected state — not
+  // an error. Other failure modes still return 4xx/5xx.
   app.get('/api/tasks/:taskId/schedule', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.getScheduleForTask(taskId);
     if (result.ok) return { schedule: result.data };
+    if (result.error.code === 'schedule.not_found') {
+      return { schedule: null };
+    }
     reply.code(statusForError(result.error.code));
     return { error: result.error.code, message: result.error.message };
   });

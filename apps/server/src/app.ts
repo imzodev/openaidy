@@ -518,143 +518,119 @@ export async function buildApp() {
       authMiddleware,
     });
 
+    // Duck-typed adapter: SessionMessageService is structurally compatible
+    // with the executor's narrower ExecutorSessionService, but TS's
+    // exactOptionalPropertyTypes on onStreamEvent makes the subtype
+    // check fail. The cast is safe because the executor never sets
+    // onStreamEvent (it would be a no-op).
+    const sessionServiceForExecutor =
+      services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
+    const executorDeps: TaskScheduleExecutorDeps = {
+      tasksRepo: dbAdapter.repositories.tasks,
+      subtasksRepo: dbAdapter.repositories.subtasks,
+      taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      taskService: {
+        executeTask: (taskId) => taskService!.executeTask(taskId),
+        executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+      },
+      sessionService: sessionServiceForExecutor,
+      defaultAgentIdProvider: () => configService.getConfig().defaults.agentId,
+      calculateNextRun: (cron, now) => calculateNextRun(cron, now),
+      logger: log as unknown as TaskScheduleExecutorDeps['logger'],
+      // planningService is omitted when planning isn't configured; the
+      // executor falls back to a warning + the description-execution
+      // path. The optional key works with exactOptionalPropertyTypes
+      // because we only add the field when it has a real value.
+      ...(planningService
+        ? {
+            planningService: {
+              planTask: (taskId: string) => planningService!.planTask(taskId),
+            },
+          }
+        : {}),
+    };
+    const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+
+    // Note: `taskScheduleService` is declared in the outer scope (a `let`
+    // with `| undefined`) so that the schedule routes can be wired
+    // up here without depending on the feature flag. The service
+    // is only instantiated when RECURRING_TASKS_ENABLED is on; the
+    // routes only get registered if the service is set.
+    taskScheduleService = new TaskScheduleService({
+      tasksRepo: dbAdapter.repositories.tasks,
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      taskScheduleExecutor,
+    });
+    services.taskSchedules = taskScheduleService;
+
     // Schedule endpoints (Phase 4) — nested under /api/tasks/:taskId/schedule.
     // These give the UI a dedicated surface for CRUD + pause/resume +
     // trigger + history. The `schedule` field on POST /api/tasks is
     // still supported as a convenience for creating a task with a
     // schedule in one call.
-    if (taskScheduleService) {
-      await app.register(taskScheduleRoutes, {
-        taskScheduleService,
-        authMiddleware,
-      });
-    }
+    await app.register(taskScheduleRoutes, {
+      taskScheduleService,
+      authMiddleware,
+    });
 
-    // -----------------------------------------------------------
-    // Recurring tasks (Phase 2): executor + dedicated polling loop.
-    //
-    // Shipped behind RECURRING_TASKS_ENABLED. When the flag is off,
-    // the executor and service are not constructed — the existing
-    // Pulse scheduler is the only thing polling the DB. When the
-    // flag is on, we run a 5-second polling loop that claims and
-    // executes `task_schedules` rows, mirroring the legacy
-    // scheduler's cadence.
-    //
-    // In Phase 7 the executor becomes a registered `ScheduledRunnable`
-    // inside the legacy `SchedulerService`, replacing this loop.
-    // For now, the loop is self-contained and won't conflict with
-    // Pulses (they read from a different table).
-    // -----------------------------------------------------------
-    if (env.RECURRING_TASKS_ENABLED) {
-      // Duck-typed adapter: SessionMessageService is structurally compatible
-      // with the executor's narrower ExecutorSessionService, but TS's
-      // exactOptionalPropertyTypes on onStreamEvent makes the subtype
-      // check fail. The cast is safe because the executor never sets
-      // onStreamEvent (it would be a no-op).
-      const sessionServiceForExecutor =
-        services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
-      const executorDeps: TaskScheduleExecutorDeps = {
-        tasksRepo: dbAdapter.repositories.tasks,
-        subtasksRepo: dbAdapter.repositories.subtasks,
-        taskAgentsRepo: dbAdapter.repositories.taskAgents,
-        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-        taskService: {
-          executeTask: (taskId) => taskService!.executeTask(taskId),
-          executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
-        },
-        sessionService: sessionServiceForExecutor,
-        defaultAgentIdProvider: () =>
-          configService.getConfig().defaults.agentId,
-        calculateNextRun: (cron, now) => calculateNextRun(cron, now),
-        logger: log as unknown as TaskScheduleExecutorDeps['logger'],
-        // planningService is omitted when planning isn't configured; the
-        // executor falls back to a warning + the description-execution
-        // path. The optional key works with exactOptionalPropertyTypes
-        // because we only add the field when it has a real value.
-        ...(planningService
-          ? {
-              planningService: {
-                planTask: (taskId: string) => planningService!.planTask(taskId),
-              },
-            }
-          : {}),
-      };
-      const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+    // Wire the schedule service into the TaskService so that
+    // createTask and getTaskWithDetails can attach schedules.
+    taskService!.setTaskSchedulesService(taskScheduleService);
 
-      // Note: `taskScheduleService` is declared in the outer scope (a `let`
-      // with `| undefined`) so that the schedule routes can be wired
-      // up here without depending on the feature flag. The service
-      // is only instantiated when RECURRING_TASKS_ENABLED is on; the
-      // routes only get registered if the service is set.
-      taskScheduleService = new TaskScheduleService({
-        tasksRepo: dbAdapter.repositories.tasks,
-        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-        taskScheduleExecutor,
-      });
-      services.taskSchedules = taskScheduleService;
-
-      // Wire the schedule service into the TaskService so that
-      // createTask and getTaskWithDetails can attach schedules.
-      taskService!.setTaskSchedulesService(taskScheduleService);
-
-      // The recurring service logger is the same pino instance — the
-      // GenericLogger mismatch is only in method signature shape.
-      // We also wire the run-event subscription so history rows are
-      // finalised (planned -> verifying -> completed/failed) when the
-      // task session the executor created finishes its run.
-      recurringTasksService = createRecurringTasksService({
-        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-        executor: taskScheduleExecutor,
-        runEvents: services.runEvents,
-        // Pull the session type from the SessionsStore (or fall through
-        // to a type field if it's on the record). This filters out
-        // subtask and chat sessions so we only finalise history rows
-        // for the top-level task runs the executor created.
-        getSessionType: async (sessionId) => {
-          const session =
-            await dbAdapter!.repositories.sessions.findById(sessionId);
-          return session && 'type' in session
-            ? (session as { type?: string }).type
-            : null;
-        },
-        logger: log as unknown as Parameters<
-          typeof createRecurringTasksService
-        >[0] extends infer T
-          ? T extends { logger?: infer L }
-            ? L
-            : never
-          : never,
-      });
-      // Phase 7: register the executor as a ScheduledRunnable on the
-      // central scheduler. The scheduler's tick now drives the
-      // recurring-tasks claim → execute → reschedule cycle alongside
-      // (or interleaved with) the legacy Pulse path. The recurring
-      // tasks service is purely an event listener + delegator now.
-      if (scheduler) {
-        scheduler.registerRunnable(taskScheduleExecutor);
-        // Start the run-event subscription so history rows transition
-        // to their terminal state when the executor's runs complete.
-        recurringTasksService.start();
-        log.info(
-          `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
-        );
-      } else {
-        // Should never happen — the recurring-tasks feature flag is
-        // gated on the database being available, and so is the
-        // scheduler. This branch exists only to keep the type-narrower
-        // happy; if it ever runs, we have a wiring bug.
-        log.error(
-          'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
-        );
-        recurringTasksService.start();
-      }
-    } else {
+    // The recurring service logger is the same pino instance — the
+    // GenericLogger mismatch is only in method signature shape.
+    // We also wire the run-event subscription so history rows are
+    // finalised (planned -> verifying -> completed/failed) when the
+    // task session the executor created finishes its run.
+    recurringTasksService = createRecurringTasksService({
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      executor: taskScheduleExecutor,
+      runEvents: services.runEvents,
+      // Pull the session type from the SessionsStore (or fall through
+      // to a type field if it's on the record). This filters out
+      // subtask and chat sessions so we only finalise history rows
+      // for the top-level task runs the executor created.
+      getSessionType: async (sessionId) => {
+        const session =
+          await dbAdapter!.repositories.sessions.findById(sessionId);
+        return session && 'type' in session
+          ? (session as { type?: string }).type
+          : null;
+      },
+      logger: log as unknown as Parameters<
+        typeof createRecurringTasksService
+      >[0] extends infer T
+        ? T extends { logger?: infer L }
+          ? L
+          : never
+        : never,
+    });
+    // Phase 7: register the executor as a ScheduledRunnable on the
+    // central scheduler. The scheduler's tick now drives the
+    // recurring-tasks claim → execute → reschedule cycle alongside
+    // (or interleaved with) the legacy Pulse path. The recurring
+    // tasks service is purely an event listener + delegator now.
+    if (scheduler) {
+      scheduler.registerRunnable(taskScheduleExecutor);
+      // Start the run-event subscription so history rows transition
+      // to their terminal state when the executor's runs complete.
+      recurringTasksService.start();
       log.info(
-        'Recurring tasks feature disabled (set RECURRING_TASKS_ENABLED=true to enable)',
+        `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
       );
+    } else {
+      // Should never happen — the recurring-tasks feature flag is
+      // gated on the database being available, and so is the
+      // scheduler. This branch exists only to keep the type-narrower
+      // happy; if it ever runs, we have a wiring bug.
+      log.error(
+        'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
+      );
+      recurringTasksService.start();
     }
   }
 

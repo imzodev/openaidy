@@ -284,10 +284,25 @@ describe('taskScheduleRoutes', () => {
       expect(result).toEqual({ schedule: mockSchedule });
     });
 
-    it('returns 404 when not found', async () => {
+    it('returns { schedule: null } when not found (avoids 404 noise in browser console)', async () => {
       mockService.getScheduleForTask.mockResolvedValue({
         ok: false,
         error: { code: 'schedule.not_found', message: 'no schedule' },
+      });
+      const handler = findRoute(app, 'GET', '/api/tasks/:taskId/schedule');
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await handler(
+        { params: { taskId: 'task-1' } },
+        reply as unknown as { code: () => { mockReturnThis: () => unknown } },
+      );
+      expect(reply.code).not.toHaveBeenCalled();
+      expect(result).toEqual({ schedule: null });
+    });
+
+    it('still returns an error code for non-not-found failures', async () => {
+      mockService.getScheduleForTask.mockResolvedValue({
+        ok: false,
+        error: { code: 'task.not_found', message: 'task does not exist' },
       });
       const handler = findRoute(app, 'GET', '/api/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
