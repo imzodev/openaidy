@@ -49,6 +49,36 @@ export class TaskScheduleService {
     return { ok: true, data: taskScheduleToDto(schedule) };
   }
 
+  /**
+   * List all schedules system-wide, paginated.
+   * Used by the task_schedules_list tool when no taskId is provided.
+   */
+  async listAllSchedules(
+    limit: number,
+    offset: number,
+  ): Promise<
+    ServiceResult<{
+      items: TaskScheduleDto[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>
+  > {
+    const { items, total } = await this.deps.taskSchedulesRepo.listAll(
+      limit,
+      offset,
+    );
+    return {
+      ok: true,
+      data: {
+        items: items.map(taskScheduleToDto),
+        total,
+        limit,
+        offset,
+      },
+    };
+  }
+
   // ========================================
   // Create
   // ========================================

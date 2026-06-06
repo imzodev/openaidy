@@ -183,6 +183,28 @@ export class TaskSchedulesRepository {
   }
 
   /**
+   * List all schedules, paginated. Used by the system-wide list tool
+   * (task_schedules_list without a taskId) and admin views.
+   */
+  async listAll(
+    limit: number,
+    offset: number,
+  ): Promise<{ items: schema.TaskSchedule[]; total: number }> {
+    const [items, countRows] = await Promise.all([
+      this.db
+        .select()
+        .from(schema.taskSchedules)
+        .orderBy(asc(schema.taskSchedules.nextRunAt))
+        .limit(limit)
+        .offset(offset),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.taskSchedules),
+    ]);
+    return { items, total: countRows[0]?.count ?? 0 };
+  }
+
+  /**
    * List schedules by status. Used by the admin UI to show "all paused
    * schedules" or "all expired schedules".
    */

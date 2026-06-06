@@ -2,435 +2,211 @@
 
 ## Overview
 
-Phase 5 exposes the schedule functionality to AI agents through the built-in tool registry. An agent can now read a task's schedule, attach a new schedule, pause/resume, trigger, and inspect execution history — all through the same `tasks_*` tool namespace they already use.
+Phase 5 exposes the schedule functionality to AI agents through the built-in tool registry. Instead of extending the existing `tasks_*` tools (which would have bloated them), we introduce a separate `task_schedules_*` namespace — mirroring the 1:1 relationship between tasks and their schedules (a task has zero or one schedule).
+
+An agent can now read a task's schedule, attach a new schedule, update it, pause/resume, trigger an immediate run, and inspect execution history — all through the `task_schedules_*` tool namespace.
 
 This is what makes recurring tasks usable from the chat UI: an agent can say "I'll run this task every hour from now on" and have it actually happen.
 
+## Design decision: separate `task_schedules_*` namespace
+
+Rather than extending `tasks_create`, `tasks_update`, and `tasks_list`, we chose a dedicated namespace:
+
+| Rationale                     | Detail                                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Clean separation**          | The existing `tasks_*` tools remain simple and unchanged. Schedule operations have their own domain with dedicated verbs.                 |
+| **1:1 mapping with REST API** | The REST API has `/api/tasks/:id/schedule` endpoints — the tool namespace mirrors this structure naturally.                               |
+| **DRY service layer**         | All tools delegate to `TaskScheduleService`, which already implements the full lifecycle. Tools are thin pass-throughs.                   |
+| **Lazy registration**         | The `getTaskScheduleService` getter follows the same pattern as `getTaskService`. Tools gracefully degrade when the DB is not configured. |
+
 ## Objectives
 
-- Extend `tasks_create` to accept an optional `schedule` parameter
-- Extend `tasks_update` to accept optional schedule parameters (and `schedule: null` to remove)
-- Extend `tasks_list` to include the `schedule` field in the response
-- Add `tasks_pause_schedule` tool
-- Add `tasks_resume_schedule` tool
-- Add `tasks_trigger_now` tool (forces an immediate run)
-- Add `tasks_list_executions` tool
-- Add all new `ToolMeta` entries to `ALL_TOOL_METAS` in `catalog.ts`
+- Add `task_schedules_list` — read the schedule for a task
+- Add `task_schedules_create` — attach a schedule to an existing task
+- Add `task_schedules_update` — patch fields (replan policy, maxExecutions, status, schedule)
+- Add `task_schedules_pause` — pause a schedule (preserves row and history)
+- Add `task_schedules_resume` — resume a paused schedule
+- Add `task_schedules_trigger` — force an immediate run (async)
+- Add `task_schedules_delete` — remove the schedule (with `confirm=true` safety interlock)
+- Add `task_schedules_list_executions` — paginated history of past runs
+- Add all 8 `ToolMeta` entries to `ALL_TOOL_METAS` in [`catalog.ts`](apps/server/src/tools/catalog.ts)
+- Register the tools via `createTaskScheduleTools()` in [`tools/index.ts`](apps/server/src/tools/index.ts)
 - Follow the existing tool naming conventions (snake_case, no abbreviations)
 - Add tool tests with mocked services
 
 ## Success criteria
 
-- All 6 tools are registered in the catalog
-- An agent can call `tasks_create` with a `schedule` parameter and the result includes the schedule
-- An agent can call `tasks_update` with `schedule: null` to remove the schedule
-- An agent can call `tasks_pause_schedule` to suspend a recurring task
-- An agent can call `tasks_list_executions` and get a paginated history
+- All 8 tools are registered in the catalog
+- All 8 tools are registered in [`BuiltinToolRegistry`](apps/server/src/tools/registry.ts) when `getTaskScheduleService` is provided
+- An agent can call `task_schedules_create` with a `schedule` parameter and the result includes the schedule
+- An agent can call `task_schedules_pause`/`task_schedules_resume` to control execution
+- An agent can call `task_schedules_delete` with `confirm=true` to remove a schedule
+- An agent can call `task_schedules_list_executions` and get a paginated history
 - Tool descriptions are clear and self-explanatory
-- All tools have input validation via Zod
-- All tools return the standard `ServiceResult` shape
+- All tools delegate to `TaskScheduleService` — they are thin pass-throughs
+- All tools return the standard `ServiceResult` shape (via the BuiltinTool `{ ok, content/error }` pattern)
 
 ---
 
-## Implementation tasks
+## Implementation
 
-### 1. Update `tasks_list` to include the `schedule` field
+### Files created
 
-**Update: `apps/server/src/tools/tasks/list.ts`**
+| File                                                                                                       | Purpose                                                              |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`apps/server/src/tools/task-schedules/types.ts`](apps/server/src/tools/task-schedules/types.ts)           | `TaskScheduleToolDeps` type                                          |
+| [`apps/server/src/tools/task-schedules/utils.ts`](apps/server/src/tools/task-schedules/utils.ts)           | Shared `buildScheduleInput()` helper (used by `create` and `update`) |
+| [`apps/server/src/tools/task-schedules/list.ts`](apps/server/src/tools/task-schedules/list.ts)             | `task_schedules_list` tool                                           |
+| [`apps/server/src/tools/task-schedules/create.ts`](apps/server/src/tools/task-schedules/create.ts)         | `task_schedules_create` tool                                         |
+| [`apps/server/src/tools/task-schedules/update.ts`](apps/server/src/tools/task-schedules/update.ts)         | `task_schedules_update` tool                                         |
+| [`apps/server/src/tools/task-schedules/pause.ts`](apps/server/src/tools/task-schedules/pause.ts)           | `task_schedules_pause` tool                                          |
+| [`apps/server/src/tools/task-schedules/resume.ts`](apps/server/src/tools/task-schedules/resume.ts)         | `task_schedules_resume` tool                                         |
+| [`apps/server/src/tools/task-schedules/delete.ts`](apps/server/src/tools/task-schedules/delete.ts)         | `task_schedules_delete` tool                                         |
+| [`apps/server/src/tools/task-schedules/trigger.ts`](apps/server/src/tools/task-schedules/trigger.ts)       | `task_schedules_trigger` tool                                        |
+| [`apps/server/src/tools/task-schedules/executions.ts`](apps/server/src/tools/task-schedules/executions.ts) | `task_schedules_list_executions` tool                                |
+| [`apps/server/src/tools/task-schedules/index.ts`](apps/server/src/tools/task-schedules/index.ts)           | Barrel + `createTaskScheduleTools()` factory                         |
 
-```ts
-export const tasksListMeta: ToolMeta = {
-  name: 'tasks_list',
-  category: 'Tasks',
-  description:
-    'List all tasks. Each task includes its schedule (nextRunAt, lastRunAt, executionCount, status) ' +
-    'when a schedule is attached. Use this to discover recurring tasks and their current state.',
-};
+### Files modified
 
-export async function tasksListTool(
-  args: { status?: TaskStatus },
-  ctx: { taskService: TaskService },
-): Promise<ServiceResult<TaskWithDetails[]>> {
-  const tasks = await ctx.taskService.listTasks(args.status);
-  // Augment with schedule (already done in TaskService.listTasksForKanban;
-  // we replicate the lookup here for the non-kanban endpoint)
-  const withSchedules = await Promise.all(
-    tasks.map(async (task) => {
-      const details = await ctx.taskService.getTaskWithDetails(task.id);
-      return details ?? task;
-    }),
-  );
-  return { ok: true, data: withSchedules };
-}
+| File                                                                   | Change                                                                                                                            |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [`apps/server/src/tools/catalog.ts`](apps/server/src/tools/catalog.ts) | Added 8 `ToolMeta` entries in a new `Task Schedules` section, appended to `ALL_TOOL_METAS`                                        |
+| [`apps/server/src/tools/index.ts`](apps/server/src/tools/index.ts)     | Added `getTaskScheduleService` to `BuiltinToolRegistryDeps`, wired `createTaskScheduleTools()` into `createBuiltinToolRegistry()` |
+| [`apps/server/src/app.ts`](apps/server/src/app.ts)                     | Passed `getTaskScheduleService: () => taskScheduleService` to the registry builder                                                |
+
+### Architecture
+
+```
+Agent calls task_schedules_*
+        │
+        ▼
+BuiltinToolRegistry ──► task-schedules/*.ts (thin tool wrapper)
+                              │
+                              ▼
+                       TaskScheduleService
+                              │
+                    ┌─────────┼─────────┐
+                    ▼         ▼         ▼
+              Repo Layer  Executor   Pulse Utils
+              (CRUD)      (trigger)  (parseScheduleInput)
 ```
 
-### 2. Update `tasks_create` to accept `schedule`
+Each tool is a `BuiltinTool` with:
 
-**Update: `apps/server/src/tools/tasks/create.ts`**
+- `name` — from the catalog `ToolMeta`
+- `description` — from the catalog `ToolMeta`
+- `parameters` — inline JSON Schema (consistent with other builtin tools)
+- `execute(args, ctx)` — validates inputs, delegates to the service, formats the response
 
-```ts
-import type { CreateTaskScheduleInput } from '@openaidy/shared-types';
+### Tool details
 
-export const tasksCreateMeta: ToolMeta = {
-  name: 'tasks_create',
-  category: 'Tasks',
-  description:
-    'Create a new task. Optionally attach a schedule (recurring or one-shot) using the same ' +
-    'human-friendly schedule formats as pulses: { every: "1h" }, { daily: { hour: 9, minute: 0 } }, ' +
-    '{ cron: "0 9 * * 1-5" }, or { at: "2026-12-31T23:59:00Z" }. ' +
-    'When a schedule is attached, the task re-runs on every tick with full planning + subtask lifecycle. ' +
-    'Returns the created task including the schedule.',
-};
+#### `task_schedules_list`
 
-export const tasksCreateInputSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().min(1).max(10_000),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  planningEnabled: z.boolean().optional(),
-  schedule: z
-    .object({
-      schedule: z.union([
-        z.object({
-          every: z.enum(['15m', '30m', '1h', '6h', '12h', '1d', '1w']),
-        }),
-        z.object({
-          daily: z.object({
-            hour: z.number().int().min(0).max(23),
-            minute: z.number().int().min(0).max(59),
-          }),
-        }),
-        z.object({ cron: z.string().min(1), tz: z.string().optional() }),
-        z.object({ at: z.string().datetime() }),
-      ]),
-      maxExecutions: z.number().int().positive().optional(), // positive integer; defaults to 9999, no null
-      replanPolicy: z
-        .enum(['never', 'on-description-change', 'always'])
-        .optional(),
-    })
-    .optional(),
-});
+Read the schedule attached to a task. Schedules are 1:1 with tasks.
 
-export async function tasksCreateTool(
-  args: z.infer<typeof tasksCreateInputSchema>,
-  ctx: { taskService: TaskService },
-): Promise<ServiceResult<TaskWithDetails>> {
-  const createInput: CreateTaskInput = {
-    title: args.title,
-    description: args.description,
-    ...(args.priority !== undefined ? { priority: args.priority } : {}),
-    ...(args.planningEnabled !== undefined
-      ? { planningEnabled: args.planningEnabled }
-      : {}),
-    ...(args.schedule
-      ? {
-          schedule: {
-            schedule: args.schedule
-              .schedule as CreateTaskScheduleInput['schedule'],
-            ...(args.schedule.maxExecutions !== undefined
-              ? { maxExecutions: args.schedule.maxExecutions }
-              : {}),
-            ...(args.schedule.replanPolicy !== undefined
-              ? { replanPolicy: args.schedule.replanPolicy }
-              : {}),
-          },
-        }
-      : {}),
-  };
-  const result = await ctx.taskService.createTask(createInput);
-  if (!result.ok) return { ok: false, error: result.error };
-  const details = await ctx.taskService.getTaskWithDetails(result.data.id);
-  return { ok: true, data: details ?? result.data };
-}
-```
+- **Input**: `taskId` (required)
+- **Output**: Human-readable schedule info (`ID`, `Schedule`, `Status`, `Replan policy`, `Max executions`, `Next run`, etc.)
+- **Not found**: Returns a friendly "No schedule attached to task" message (still `ok: true`)
 
-### 3. Update `tasks_update` to accept schedule changes
+#### `task_schedules_create`
 
-**Update: `apps/server/src/tools/tasks/update.ts`**
+Attach a schedule to an existing task. Refuses if the task already has a schedule.
 
-```ts
-export const tasksUpdateMeta: ToolMeta = {
-  name: 'tasks_update',
-  category: 'Tasks',
-  description:
-    'Update a task. Pass schedule={...} to add or change a schedule. Pass schedule=null to remove it. ' +
-    'Pass maxExecutions (positive integer; defaults to 9999) to change the cap. ' +
-    'Pass replanPolicy ("never" | "on-description-change" | "always") to control re-planning on each run. ' +
-    'The default replanPolicy is "never" — subtasks are reused on every run.',
-};
+- **Input**: `taskId`, `schedule` (required); `replanPolicy`, `maxExecutions` (optional)
+- **Schedule shape**: `{ every, daily, cron, at }` — same discriminated union as pulses
+- **Output**: Created schedule details
 
-export const tasksUpdateInputSchema = z.object({
-  taskId: z.string().min(1),
-  title: z.string().min(1).max(200).optional(),
-  description: z.string().min(1).max(10_000).optional(),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
-  status: z
-    .enum(['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'])
-    .optional(),
-  // Pass a schedule object to add/update, or null to remove.
-  schedule: z
-    .union([
-      z.object({
-        schedule: z.union([
-          z.object({
-            every: z.enum(['15m', '30m', '1h', '6h', '12h', '1d', '1w']),
-          }),
-          z.object({
-            daily: z.object({
-              hour: z.number().int().min(0).max(23),
-              minute: z.number().int().min(0).max(59),
-            }),
-          }),
-          z.object({ cron: z.string().min(1), tz: z.string().optional() }),
-          z.object({ at: z.string().datetime() }),
-        ]),
-        maxExecutions: z.number().int().positive().optional(), // positive integer; no null
-      }),
-      z.null(),
-    ])
-    .optional(),
-});
-```
+#### `task_schedules_update`
 
-Implementation handles the two cases (add/update vs remove) by branching on `args.schedule === null`.
+Patch an existing schedule. All fields except `taskId` are optional.
 
-### 4. Add `tasks_pause_schedule`
+- **Input**: `taskId` (required); `schedule`, `replanPolicy`, `maxExecutions`, `status` (optional)
+- **Validation**: Rejects empty body (at least one field must be provided)
+- **Note**: Prefer `pause`/`resume` tools for status toggles — they encode intent more clearly
 
-**New file: `apps/server/src/tools/tasks/pause-schedule.ts`**
+#### `task_schedules_pause`
 
-```ts
-import { z } from 'zod';
-import type { ToolMeta } from '../types';
+Pause a schedule. The scheduler skips this row until resumed. The schedule row, its `nextRunAt`, and execution history are preserved.
 
-export const tasksPauseScheduleMeta: ToolMeta = {
-  name: 'tasks_pause_schedule',
-  category: 'Tasks',
-  description:
-    'Pause a recurring task. The schedule remains attached but the task will not fire until ' +
-    'tasks_resume_schedule is called. Does not affect in-progress runs.',
-};
+- **Input**: `taskId` (required)
+- **Output**: Updated schedule with `status: 'paused'`
 
-export const tasksPauseScheduleInputSchema = z.object({
-  taskId: z.string().min(1),
-});
+#### `task_schedules_resume`
 
-export async function tasksPauseScheduleTool(
-  args: z.infer<typeof tasksPauseScheduleInputSchema>,
-  ctx: { taskScheduleService: TaskScheduleService },
-): Promise<ServiceResult<TaskScheduleDto>> {
-  return ctx.taskScheduleService.pauseSchedule(args.taskId);
-}
-```
+Resume a paused schedule. The next run happens at the next cron tick after the resume time — missed runs are NOT caught up.
 
-### 5. Add `tasks_resume_schedule`
+- **Input**: `taskId` (required)
+- **Output**: Updated schedule with `status: 'active'`
 
-**New file: `apps/server/src/tools/tasks/resume-schedule.ts`**
+#### `task_schedules_delete`
 
-```ts
-export const tasksResumeScheduleMeta: ToolMeta = {
-  name: 'tasks_resume_schedule',
-  category: 'Tasks',
-  description:
-    'Resume a paused recurring task. The schedule becomes active and the task will fire on its next ' +
-    'computed nextRunAt. Cannot resume an expired schedule (one that reached maxExecutions).',
-};
+Permanently remove a task's schedule. Execution history rows are cascade-deleted.
 
-export const tasksResumeScheduleInputSchema = z.object({
-  taskId: z.string().min(1),
-});
+- **Input**: `taskId`, `confirm` (both required)
+- **Safety**: `confirm=true` is a mandatory interlock against accidental deletion
 
-export async function tasksResumeScheduleTool(
-  args: z.infer<typeof tasksResumeScheduleInputSchema>,
-  ctx: { taskScheduleService: TaskScheduleService },
-): Promise<ServiceResult<TaskScheduleDto>> {
-  return ctx.taskScheduleService.resumeSchedule(args.taskId);
-}
-```
+#### `task_schedules_trigger`
 
-### 6. Add `tasks_trigger_now`
+Force an immediate run of a task schedule, without affecting `nextRunAt` or `executionCount`.
 
-**New file: `apps/server/src/tools/tasks/trigger-now.ts`**
+- **Input**: `taskId` (required)
+- **Output**: `History ID` for tracking
+- **Async**: Returns immediately; poll `task_schedules_list_executions` to track progress
 
-```ts
-export const tasksTriggerNowMeta: ToolMeta = {
-  name: 'tasks_trigger_now',
-  category: 'Tasks',
-  description:
-    'Run a recurring task immediately, regardless of its nextRunAt. Creates an execution history ' +
-    'row but does not change the nextRunAt or executionCount. Useful when the user wants to test ' +
-    'a recurring task without waiting for the next scheduled time.',
-};
+#### `task_schedules_list_executions`
 
-export const tasksTriggerNowInputSchema = z.object({
-  taskId: z.string().min(1),
-});
+Paginated history of past runs, newest first.
 
-export async function tasksTriggerNowTool(
-  args: z.infer<typeof tasksTriggerNowInputSchema>,
-  ctx: { taskScheduleService: TaskScheduleService },
-): Promise<ServiceResult<{ historyId: string }>> {
-  return ctx.taskScheduleService.triggerNow(args.taskId);
-}
-```
+- **Input**: `taskId` (required); `status`, `limit` (default 20, max 100), `offset` (optional)
+- **Output**: Each run includes `id`, `status`, `startedAt`, `durationMs`, `didReplan`, `sessionId`, and error info for failed runs
 
-### 7. Add `tasks_list_executions`
+### Shared utility: `buildScheduleInput()`
 
-**New file: `apps/server/src/tools/tasks/list-executions.ts`**
+Extracted to [`utils.ts`](apps/server/src/tools/task-schedules/utils.ts) to avoid duplication between [`create.ts`](apps/server/src/tools/task-schedules/create.ts) and [`update.ts`](apps/server/src/tools/task-schedules/update.ts). Converts the tool's `schedule` object shape into a `ScheduleInput` discriminated union.
 
-```ts
-export const tasksListExecutionsMeta: ToolMeta = {
-  name: 'tasks_list_executions',
-  category: 'Tasks',
-  description:
-    'List past executions of a recurring task. Each execution has a status (planned/planning/' +
-    'executing/verifying/completed/failed), timestamps, duration, and a link to the underlying session. ' +
-    'Use this to investigate failed runs or check that a task is firing on schedule.',
-};
+---
 
-export const tasksListExecutionsInputSchema = z.object({
-  taskId: z.string().min(1),
-  status: z
-    .enum([
-      'planned',
-      'planning',
-      'executing',
-      'verifying',
-      'completed',
-      'failed',
-    ])
-    .optional(),
-  limit: z.number().int().positive().max(100).optional(),
-  offset: z.number().int().nonnegative().optional(),
-});
+## Tests
 
-export async function tasksListExecutionsTool(
-  args: z.infer<typeof tasksListExecutionsInputSchema>,
-  ctx: { taskScheduleService: TaskScheduleService },
-): Promise<
-  ServiceResult<{
-    items: TaskExecutionHistoryDto[];
-    total: number;
-    limit: number;
-    offset: number;
-  }>
-> {
-  return ctx.taskScheduleService.listExecutions(args.taskId, {
-    ...(args.status ? { status: args.status } : {}),
-    ...(args.limit !== undefined ? { limit: args.limit } : {}),
-    ...(args.offset !== undefined ? { offset: args.offset } : {}),
-  });
-}
-```
+**File: [`apps/server/src/tools/task-schedules/task-schedules.test.ts`](apps/server/src/tools/task-schedules/task-schedules.test.ts)**
 
-### 8. Register all new tools in the catalog
+20 test cases covering:
 
-**Update: `apps/server/src/tools/catalog.ts`**
+| Area                             | Tests                                                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Registration                     | 8 tools registered, correct names, `task_schedules_` prefix                                                         |
+| Service unavailable              | Every tool returns a friendly error when service is `undefined`                                                     |
+| `task_schedules_list`            | Returns schedule for task, "no schedule" message, empty taskId rejection                                            |
+| `task_schedules_create`          | Preset, cron+tz, replanPolicy/maxExecutions pass-through, missing taskId/schedule rejection, service error verbatim |
+| `task_schedules_update`          | Field updates, status pass-through, empty body rejection, missing taskId                                            |
+| `task_schedules_pause`           | Pauses and returns updated schedule, service error, requires taskId                                                 |
+| `task_schedules_resume`          | Resumes and returns updated schedule, service error, requires taskId                                                |
+| `task_schedules_delete`          | Success with confirm=true, safety interlock (false/omitted), 404 error                                              |
+| `task_schedules_trigger`         | History ID returned, no-schedule error, requires taskId                                                             |
+| `task_schedules_list_executions` | Pagination, status filter, empty result message, error info for failed runs                                         |
 
-Append the new metas to `ALL_TOOL_METAS`:
-
-```ts
-import { tasksPauseScheduleMeta } from './tasks/pause-schedule.js';
-import { tasksResumeScheduleMeta } from './tasks/resume-schedule.js';
-import { tasksTriggerNowMeta } from './tasks/trigger-now.js';
-import { tasksListExecutionsMeta } from './tasks/list-executions.js';
-
-export const ALL_TOOL_METAS: ToolMeta[] = [
-  // ... existing ...
-  tasksListMeta,
-  tasksCreateMeta,
-  tasksUpdateMeta,
-  tasksDeleteMeta,
-  tasksDeliverableUpdateMeta,
-  // New (appended in the same Tasks category block):
-  tasksPauseScheduleMeta,
-  tasksResumeScheduleMeta,
-  tasksTriggerNowMeta,
-  tasksListExecutionsMeta,
-];
-```
-
-### 9. Update `tools/tasks/index.ts` to re-export the new tools
-
-**Update: `apps/server/src/tools/tasks/index.ts`**
-
-```ts
-export * from './create.js';
-export * from './list.js';
-export * from './update.js';
-export * from './delete.js';
-// New
-export * from './pause-schedule.js';
-export * from './resume-schedule.js';
-export * from './trigger-now.js';
-export * from './list-executions.js';
-```
-
-### 10. Register the tool implementations in `tools/registry.ts`
-
-**Update: `apps/server/src/tools/registry.ts`**
-
-Inside the `createBuiltinToolRegistry` (or wherever tasks tools are wired), add the new tools:
-
-```ts
-const tasksTools = {
-  tasks_list: tasksListTool,
-  tasks_create: tasksCreateTool,
-  tasks_update: tasksUpdateTool,
-  tasks_delete: tasksDeleteTool,
-  tasks_pause_schedule: tasksPauseScheduleTool,
-  tasks_resume_schedule: tasksResumeScheduleTool,
-  tasks_trigger_now: tasksTriggerNowTool,
-  tasks_list_executions: tasksListExecutionsTool,
-};
-```
-
-Ensure the registry iterates these and registers them with their `ToolMeta`.
-
-### 11. Tests
-
-**New file: `apps/server/src/tools/tasks/tools.test.ts`** (extend the existing one)
-
-Cover each new tool:
-
-- `tasks_pause_schedule` calls the service and returns the DTO
-- `tasks_resume_schedule` calls the service and returns the DTO
-- `tasks_trigger_now` calls the executor and returns the history ID
-- `tasks_list_executions` paginates correctly
-- `tasks_create` with a schedule forwards it to the service
-- `tasks_create` without a schedule is backward compatible
-- `tasks_update` with `schedule: null` removes the schedule
-- `tasks_update` with `schedule: {...}` updates the schedule
-- All tools return `ServiceResult` shape
-
-Use mock services — the tools are thin pass-throughs.
-
-### 12. Update the agent's system prompt
-
-The system prompt that lists available tools is built from `ALL_TOOL_METAS`. No code change is needed, but verify that the new tools appear in the system prompt by:
-
-1. Starting the server
-2. Opening a chat session
-3. Asking "what tools do you have?"
-4. Verifying the new tools are listed
+All tests use a mock `TaskScheduleService` — the tools are thin pass-throughs.
 
 ---
 
 ## Rollout
 
-Phase 5 makes the feature accessible to agents. The user can now ask in chat: "Make this task run every 5 minutes."
+Phase 5 makes the feature accessible to agents. The user can now ask in chat: "Make this task run every hour."
 
 Rollout steps:
 
-1. Ship the tool changes
-2. Manual chat test: create a task in chat, then say "run it every 5 minutes" and verify the agent uses `tasks_update` with a schedule
-3. Verify all 6 new tools are listed in the agent's tool manifest
-4. Run the tool test suite
+1. Ship the tool changes (all files in `apps/server/src/tools/task-schedules/` + catalog + registry wiring)
+2. Run the test suite: `npx vitest run apps/server/src/tools/task-schedules/task-schedules.test.ts`
+3. Manual chat test: ask the agent to "show me the schedule for task X" → verify it uses `task_schedules_list`
+4. Verify all 8 new tools appear in the agent's tool manifest (built from `ALL_TOOL_METAS`)
 5. If clean, proceed to Phase 6
 
 ## Risk assessment
 
-| Risk                                           | Mitigation                                                                                         |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Agent accidentally removes a schedule          | `tasks_update` requires the agent to pass `schedule: null` explicitly — not destructive by default |
-| Tool description is misleading                 | Descriptions are reviewed for clarity; examples in description help                                |
-| Tool call overflows token budget               | Zod schemas reject oversized inputs at parse time                                                  |
-| New tool appears in system prompt unexpectedly | The agent's tool list grows by 4; tested in CI for prompt length                                   |
+| Risk                                             | Mitigation                                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Agent accidentally removes a schedule            | `task_schedules_delete` requires `confirm=true` explicitly — not destructive by default          |
+| Tool description is misleading                   | Descriptions are reviewed for clarity; examples in description help                              |
+| Tool call overflows token budget                 | Parameter schemas are inline JSON Schema (no Zod) matching existing tool patterns                |
+| New tools appear in system prompt unexpectedly   | The agent's tool list grows by 8; tested for prompt length                                       |
+| Missing tool implementations for catalog entries | All 8 catalog entries have corresponding tool implementations in the `task-schedules/` directory |
