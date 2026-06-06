@@ -88,6 +88,8 @@ const createMockServices = (_authMiddleware: AuthMiddleware): AppServices => ({
     getSkillsForAgent: () => [],
   } as unknown as AppServices['skills'],
   personality: undefined as unknown as AppServices['personality'],
+  taskSchedules: undefined,
+  channels: undefined as unknown as AppServices['channels'],
 });
 
 // ============================================================================

@@ -137,6 +137,9 @@ export class TaskSchedulesRepository {
       descriptionHash?: string | null;
       /** Bump the execution counter. Executor sets this on every run. */
       executionCount?: number;
+      cronExpression?: string | null;
+      preset?: string | null;
+      scheduleDate?: Date | null;
     },
   ): Promise<schema.TaskSchedule | null> {
     const rows = await this.db

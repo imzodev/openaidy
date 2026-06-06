@@ -12,6 +12,9 @@ import type {
   TaskPriority,
   Subtask,
   AgentRole,
+  TasksRepository,
+  TaskSchedulesRepository,
+  TaskExecutionHistoryRepository,
 } from '@openaidy/db';
 export type { CreateAgentInput } from '@openaidy/shared-types';
 import type { MessageRole, FinishReason } from '@openaidy/shared-types';
@@ -78,10 +81,19 @@ import type { SkillRegistry } from './skills';
 import type { SchedulerService } from './scheduler';
 import type { ChannelRegistry } from './channels/index.js';
 import type { AuthMiddleware } from './websocket/middleware/auth.js';
+import type { TaskScheduleService } from './tasks/schedule-service';
+import type { TaskScheduleExecutor } from './tasks/execution/task-schedule-executor';
 
 export type ChannelRoutesOptions = {
   channelRegistry: ChannelRegistry;
   authMiddleware: AuthMiddleware;
+};
+
+export type TaskScheduleServiceDeps = {
+  tasksRepo: TasksRepository;
+  taskSchedulesRepo: TaskSchedulesRepository;
+  taskExecutionHistoryRepo: TaskExecutionHistoryRepository;
+  taskScheduleExecutor: TaskScheduleExecutor;
 };
 
 export type ServiceResult<T> =
@@ -94,6 +106,7 @@ export type CreateTaskInput = {
   priority?: TaskPriority;
   planningEnabled?: boolean;
   agents?: Array<{ agentId: string; role?: AgentRole }>;
+  schedule?: import('@openaidy/shared-types').CreateTaskScheduleInput;
 };
 
 export type UpdateTaskInput = {
@@ -122,6 +135,7 @@ export type TaskWithDetails = Task & {
     inProgress: number;
     failed: number;
   };
+  schedule?: import('@openaidy/shared-types').TaskScheduleDto;
 };
 
 export type KanbanBoard = { [K in TaskStatus]: Task[] };
@@ -194,4 +208,5 @@ export type AppServices = {
   skills: SkillRegistry;
   personality: AgentPersonalityService;
   channels: ChannelRegistry;
+  taskSchedules: TaskScheduleService | undefined;
 };
