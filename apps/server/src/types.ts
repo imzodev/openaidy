@@ -96,6 +96,11 @@ export type TaskScheduleServiceDeps = {
   taskScheduleExecutor: TaskScheduleExecutor;
 };
 
+export type TaskScheduleRoutesOptions = {
+  taskScheduleService: TaskScheduleService;
+  authMiddleware: AuthMiddleware;
+};
+
 export type ServiceResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: { code: string; message: string } };
