@@ -2,13 +2,15 @@
  * Task Modal Component
  *
  * Modal for creating and editing tasks with title, description,
- * priority selection, planning toggle, and agent assignment.
+ * priority selection, planning toggle, recurring schedule, and agent assignment.
  */
 
 import { createSignal, Show, For, createEffect, on } from 'solid-js';
 import { X } from 'lucide-solid';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import type { Task, TaskPriority, CreateTaskInput } from '../../lib/api-tasks';
+import type { ScheduleInput } from '../../lib/types';
+import { ScheduleEditor } from '../common/ScheduleEditor';
 import { useEscapeKey } from '../settings/hooks';
 
 /**
@@ -44,6 +46,10 @@ export function TaskModal(props: TaskModalProps) {
   const [description, setDescription] = createSignal('');
   const [priority, setPriority] = createSignal<TaskPriority>('medium');
   const [planningEnabled, setPlanningEnabled] = createSignal(false);
+  const [recurringEnabled, setRecurringEnabled] = createSignal(false);
+  const [draftSchedule, setDraftSchedule] = createSignal<ScheduleInput | null>(
+    null,
+  );
   const [selectedAgents, setSelectedAgents] = createSignal<SelectedAgent[]>([]);
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [submitting, setSubmitting] = createSignal(false);
@@ -69,6 +75,9 @@ export function TaskModal(props: TaskModalProps) {
             setPlanningEnabled(false);
             setSelectedAgents([]);
           }
+          // Always reset schedule (not stored on Task type)
+          setRecurringEnabled(false);
+          setDraftSchedule(null);
           setErrors({});
           setSubmitting(false);
         }
@@ -110,6 +119,9 @@ export function TaskModal(props: TaskModalProps) {
         description: description().trim(),
         priority: priority(),
         planningEnabled: planningEnabled(),
+        ...(recurringEnabled() && draftSchedule()
+          ? { schedule: draftSchedule()! }
+          : {}),
         agents: selectedAgents().map((a) => ({
           agentId: a.agentId,
           role: a.role,
@@ -121,6 +133,8 @@ export function TaskModal(props: TaskModalProps) {
       setDescription('');
       setPriority('medium');
       setPlanningEnabled(false);
+      setRecurringEnabled(false);
+      setDraftSchedule(null);
       setSelectedAgents([]);
       setSubmitting(false);
     } catch (err) {
@@ -238,6 +252,41 @@ export function TaskModal(props: TaskModalProps) {
               <p class="text-sm text-gray-500 dark:text-gray-400">
                 Let the agent break down the task into subtasks automatically
               </p>
+            </div>
+
+            {/* Recurring schedule toggle */}
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 dark:bg-gray-900"
+                    checked={recurringEnabled()}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setRecurringEnabled(checked);
+                      if (checked && !draftSchedule()) {
+                        setDraftSchedule({ every: '1h' });
+                      }
+                    }}
+                    disabled={isLoading()}
+                  />
+                  <span class="text-sm text-gray-700 dark:text-gray-300">
+                    Enable recurring schedule
+                  </span>
+                </label>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  Automatically re-run this task on a schedule
+                </p>
+              </div>
+
+              {/* Schedule editor (visible when checkbox is checked) */}
+              <Show when={recurringEnabled()}>
+                <ScheduleEditor
+                  value={draftSchedule()}
+                  onChange={(v) => setDraftSchedule(v)}
+                />
+              </Show>
             </div>
 
             {/* Agent selector */}

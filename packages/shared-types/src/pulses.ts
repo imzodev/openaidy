@@ -21,6 +21,16 @@ export type ScheduleInput =
   | { at: string };
 
 /**
+ * Result of parsing a ScheduleInput into cron / one-shot form.
+ */
+export type ParsedSchedule = {
+  type: 'cron' | 'one-shot';
+  cronExpression?: string;
+  schedule?: Date;
+  nextRunAt: Date;
+};
+
+/**
  * Pulse status values.
  */
 export type PulseStatus = 'active' | 'paused' | 'completed' | 'failed';
