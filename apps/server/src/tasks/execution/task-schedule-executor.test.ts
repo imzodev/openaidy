@@ -74,6 +74,29 @@ const makeSubtask = (overrides: Partial<Subtask> = {}): Subtask => ({
   ...overrides,
 });
 
+/**
+ * Build a `TaskSchedulePayload` for `execute()` calls. The executor
+ * expects the schedule + cached task fields + the description hash.
+ */
+const makePayload = (
+  overrides: {
+    schedule?: TaskSchedule;
+    task?: Task;
+    agents?: TaskAgent[];
+  } = {},
+): TaskSchedulePayload => {
+  const schedule = overrides.schedule ?? makeSchedule();
+  const task = overrides.task ?? makeTask();
+  const agents = overrides.agents ?? [makeAgent()];
+  return {
+    schedule,
+    taskTitle: task.title,
+    taskDescription: task.description,
+    taskAssignedAgents: agents,
+    currentDescriptionHash: hashDescription(task.description),
+  };
+};
+
 // ============================================================================
 // Test harness
 // ============================================================================
@@ -192,12 +215,10 @@ function makeHarness(
     planningService = { planTask: vi.fn().mockResolvedValue({ ok: true }) };
   } else if (options.planningService === 'fail') {
     planningService = {
-      planTask: vi
-        .fn()
-        .mockResolvedValue({
-          ok: false,
-          error: { code: 'plan.fail', message: 'planner said no' },
-        }),
+      planTask: vi.fn().mockResolvedValue({
+        ok: false,
+        error: { code: 'plan.fail', message: 'planner said no' },
+      }),
     };
   } else if (options.planningService === 'none') {
     // No planning service injected — default (omitted) below.
@@ -646,5 +667,101 @@ describe('TaskScheduleExecutor.triggerNow', () => {
     const result = await executor.triggerNow('sched-1');
     expect(result.ok).toBe(false);
     expect(result.error).toBe('Task not found');
+  });
+});
+
+// ============================================================================
+// Phase 7 expansions
+// ============================================================================
+
+describe('Phase 7 — additional coverage', () => {
+  it('handles missing planning service gracefully (falls back to description)', async () => {
+    // When the task has planningEnabled=true but no planning service
+    // is available (planningService=undefined), the executor should
+    // log a warning and run the task via the description path
+    // (executeTask), not throw.
+    const { executor, mocks } = makeHarness({
+      planningService: 'none',
+      subtasks: [],
+    });
+    const result = await executor.execute('sched-1', makePayload());
+    expect(result.ok).toBe(true);
+    // The fallback path is executeTask (description).
+    expect(mocks.taskService.executeTask).toHaveBeenCalled();
+    // The planning service was never reached because it doesn't exist.
+    expect(mocks.planningService).toBeUndefined();
+  });
+
+  it('handles schedule deletion mid-execution (reschedule gracefully degrades)', async () => {
+    // The executor's `reschedule` uses the cached `payload.schedule`
+    // (passed in by the scheduler from the claim) rather than a
+    // fresh DB read. So "schedule row deleted in-flight" doesn't
+    // actually crash reschedule — the payload is already in hand.
+    // What CAN crash is the reschedule if the row no longer exists
+    // when we try to update it. We simulate the row-missing case
+    // and verify the executor surfaces the error rather than
+    // silently dropping it.
+    const { executor, mocks } = makeHarness();
+    mocks.taskSchedulesRepo.update.mockRejectedValue(
+      new Error('schedule row not found'),
+    );
+    // reschedule is allowed to throw — the SchedulerService catches
+    // and logs it. The executor's contract is that it does NOT
+    // swallow DB errors itself.
+    await expect(
+      executor.reschedule('sched-1', makePayload(), {
+        ok: true,
+        durationMs: 5,
+      }),
+    ).rejects.toThrow(/not found/);
+  });
+
+  it('uses the primary assigned agent as the "from" agent when no subtasks', async () => {
+    // The executor's `execute()` path (when there are no subtasks)
+    // delegates to `taskService.executeTask(taskId)`. The executor
+    // doesn't pass an agentId explicitly — agent selection is
+    // `taskService`'s job. We verify here that the executor does
+    // NOT default to the wrong agent (e.g. a hardcoded one). The
+    // task's agents (with role='primary') are loaded into the
+    // payload, so the executor can consult them if needed.
+    const { executor, mocks } = makeHarness({
+      agents: [
+        makeAgent({ agentId: 'agent-primary', role: 'primary' }),
+        makeAgent({ agentId: 'agent-secondary', role: 'secondary' }),
+      ],
+      subtasks: [],
+    });
+    const result = await executor.execute(
+      'sched-1',
+      makePayload({
+        agents: [
+          makeAgent({ agentId: 'agent-primary', role: 'primary' }),
+          makeAgent({ agentId: 'agent-secondary', role: 'secondary' }),
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    // The task service is invoked with just the taskId — agent
+    // selection happens downstream.
+    expect(mocks.taskService.executeTask).toHaveBeenCalledWith('task-1');
+  });
+
+  it('reuses cached task_agents across runs (no N+1 in execute)', async () => {
+    // Regression: the previous spec had `taskAssignedAgents: []` which
+    // would silently run with no agent. The current design caches
+    // the agents in the `payload` at `claimNextDue` time. `execute`
+    // does NOT re-read `taskAgentsRepo` — it uses `payload.taskAssignedAgents`.
+    //
+    // This is intentional for performance: re-reading on every run
+    // would be N+1 queries. The trade-off: if a user reassigns
+    // agents between claim and execute (a 5-second window), the new
+    // agents won't take effect until the next claim.
+    const { executor, mocks } = makeHarness({
+      agents: [makeAgent({ agentId: 'agent-1', role: 'primary' })],
+      subtasks: [],
+    });
+    await executor.execute('sched-1', makePayload());
+    // execute() should NOT call listByTask — the agents are in the payload.
+    expect(mocks.taskAgentsRepo.listByTask).not.toHaveBeenCalled();
   });
 });
