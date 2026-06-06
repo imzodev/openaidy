@@ -85,6 +85,7 @@ describe(
       scheduler.registerRunnable(
         createPulseRunnableAdapter({
           jobsRepo,
+          jobRunsRepo,
           sessionsStore,
           sessionMessageService: sessionService,
           logger: {

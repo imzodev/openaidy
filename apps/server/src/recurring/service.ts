@@ -13,10 +13,9 @@ import type { RunEventEmitter } from '../dispatch/events';
  * After the Phase 0 scheduling refactor, the polling loop lives in
  * the central `SchedulerService`. The `TaskScheduleExecutor` is
  * registered as a `ScheduledRunnable` (kind: 'task'), and the
- * scheduler's tick iterates registered runnables before falling back
- * to the legacy `executeJob` (Pulse) path. This means recurring
- * tasks share the scheduler's cadence and lifecycle, and they no
- * longer need their own loop.
+ * scheduler's tick iterates registered runnables. This means
+ * recurring tasks share the scheduler's cadence and lifecycle,
+ * and they no longer need their own loop.
  *
  * What this service DOES still own:
  *
