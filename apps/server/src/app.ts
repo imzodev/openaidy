@@ -251,6 +251,12 @@ export async function buildApp() {
       : {}),
     getTaskService: () => taskService,
     getPlanningService: () => planningService,
+    // The schedule service is constructed later (when dbAdapter +
+    // RECURRING_TASKS_ENABLED are both available), so this getter
+    // returns `undefined` at registry construction time. The tools
+    // it produces check for `undefined` at execute time and return
+    // a friendly error if the service is missing.
+    getTaskScheduleService: () => taskScheduleService,
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)
