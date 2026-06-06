@@ -34,6 +34,7 @@ import { addonProxyRoutes } from './addons/proxy-routes';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
+import { taskScheduleRoutes } from './routes/task-schedules';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
 import {
@@ -210,6 +211,7 @@ export async function buildApp() {
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
   let recurringTasksService: RecurringTasksService | undefined;
+  let taskScheduleService: TaskScheduleService | undefined;
 
   let planningService: ReturnType<typeof createPlanningService> | undefined;
 
@@ -500,6 +502,18 @@ export async function buildApp() {
       authMiddleware,
     });
 
+    // Schedule endpoints (Phase 4) — nested under /api/tasks/:taskId/schedule.
+    // These give the UI a dedicated surface for CRUD + pause/resume +
+    // trigger + history. The `schedule` field on POST /api/tasks is
+    // still supported as a convenience for creating a task with a
+    // schedule in one call.
+    if (taskScheduleService) {
+      await app.register(taskScheduleRoutes, {
+        taskScheduleService,
+        authMiddleware,
+      });
+    }
+
     // -----------------------------------------------------------
     // Recurring tasks (Phase 2): executor + dedicated polling loop.
     //
@@ -552,7 +566,12 @@ export async function buildApp() {
       };
       const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
 
-      const taskScheduleService = new TaskScheduleService({
+      // Note: `taskScheduleService` is declared in the outer scope (a `let`
+      // with `| undefined`) so that the schedule routes can be wired
+      // up here without depending on the feature flag. The service
+      // is only instantiated when RECURRING_TASKS_ENABLED is on; the
+      // routes only get registered if the service is set.
+      taskScheduleService = new TaskScheduleService({
         tasksRepo: dbAdapter.repositories.tasks,
         taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
         taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
