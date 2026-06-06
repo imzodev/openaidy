@@ -333,8 +333,7 @@ export async function buildApp() {
       { pollIntervalMs: 5000 },
     );
 
-    // Register the PulseRunnableAdapter. This replaces the legacy
-    // `SchedulerService.executeJob()` switch — pulses are now driven
+    // Register the PulseRunnableAdapter. Pulses are now driven
     // by the same `ScheduledRunnable` contract as recurring tasks.
     // Order matters: pulse is registered first so that when both
     // a pulse and a recurring task are due at the same time, the
@@ -342,6 +341,7 @@ export async function buildApp() {
     scheduler.registerRunnable(
       createPulseRunnableAdapter({
         jobsRepo,
+        jobRunsRepo,
         sessionsStore: sessionsRepo,
         sessionMessageService: sessionService,
         logger: log as unknown as FastifyBaseLogger,
@@ -452,14 +452,8 @@ export async function buildApp() {
   });
 
   // Register scheduler routes (if database is available)
-  if (
-    services.scheduler &&
-    services.jobsRepo &&
-    services.jobRunsRepo &&
-    services.sessionsRepo
-  ) {
+  if (services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
     await app.register(schedulerRoutes, {
-      schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
@@ -469,16 +463,16 @@ export async function buildApp() {
 
   // Register pulse routes (if database is available)
   if (
-    services.scheduler &&
+    services.sessions &&
     services.jobsRepo &&
     services.jobRunsRepo &&
     services.sessionsRepo
   ) {
     await app.register(pulseRoutes, {
-      schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
+      sessionMessageService: services.sessions,
       authMiddleware,
     });
   }

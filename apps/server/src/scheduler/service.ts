@@ -1,7 +1,5 @@
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
-import type { ScheduledJob, JobRun } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
-import { calculateNextRun } from './cron-utils';
 import type { ScheduledRunnable } from '@openaidy/runtime';
 
 /**
@@ -41,12 +39,24 @@ export class SchedulerService {
   private isRunning = false;
   private tickInProgress = false;
   private readonly pollIntervalMs: number;
-  private readonly maxBackoffMs: number = 300000; // 5 minutes max
 
   constructor(
+    /**
+     * The `JobsStore` is unused now — pulses are driven by the
+     * `PulseRunnableAdapter`. Kept on the constructor so
+     * `createSchedulerService` doesn't break.
+     */
     private readonly jobsRepo: JobsStore,
     private readonly jobRunsRepo: JobRunsStore,
+    /**
+     * Unused — kept for backward compatibility. The
+     * `PulseRunnableAdapter` consumes this directly.
+     */
     private readonly sessionMessageService: SessionMessageService,
+    /**
+     * Unused — kept for backward compatibility. The
+     * `PulseRunnableAdapter` consumes this directly.
+     */
     private readonly sessionsStore: SessionsStore,
     private readonly logger: GenericLogger,
     options?: SchedulerServiceOptions,
@@ -147,18 +157,17 @@ export class SchedulerService {
   }
 
   /**
-   * Single tick - claim and execute one due job.
+   * Single tick - claim and execute one item from a registered
+   * `ScheduledRunnable` adapter. The first runnable to claim wins
+   * for that tick.
    *
-   * Order of operations (Phase 0 dispatch):
+   * Order of operations:
    * 1. Iterate registered `ScheduledRunnable` adapters in
    *    registration order. The first one to return a claimed
    *    item wins; we run it, reschedule, and return.
-   * 2. If no runnable claimed anything, fall back to the legacy
-   *    `claimNextDueJob` path. This preserves Pulse behaviour
-   *    bit-for-bit when no runnables are registered.
    *
-   * Returns true if a job (or a runnable's claimed item) was
-   * executed, false otherwise.
+   * Returns true if a runnable's claimed item was executed,
+   * false otherwise.
    */
   async tick(): Promise<boolean> {
     if (!this.isRunning) {
@@ -168,72 +177,13 @@ export class SchedulerService {
     this.tickInProgress = true;
 
     try {
-      // 1. Try registered runnables first (Phase 0 dispatch).
       for (const runnable of this.runnables.values()) {
         const claimed = await runnable.claimNextDue();
         if (!claimed) continue;
         await this.runRunnable(runnable, claimed.id, claimed.payload);
         return true;
       }
-
-      // 2. Fall back to the legacy Pulse path.
-      // 1. Claim next due job atomically
-      const job = await this.jobsRepo.claimNextDueJob();
-      if (!job) {
-        return false; // No due jobs
-      }
-
-      this.logger.info({ jobId: job.id }, 'Claimed job for execution');
-
-      // 2. Create job run record
-      const run = await this.jobRunsRepo.create({
-        jobId: job.id,
-        status: 'queued',
-        attemptNumber: job.retryCount + 1,
-      });
-
-      // 3. Update run to running
-      await this.jobRunsRepo.updateStatus(run.id, {
-        status: 'running',
-        startedAt: new Date(),
-      });
-
-      // 4. Execute job based on type
-      try {
-        await this.executeJob(job, run);
-
-        // 5a. Success: mark run succeeded
-        await this.jobRunsRepo.updateStatus(run.id, {
-          status: 'succeeded',
-          finishedAt: new Date(),
-        });
-
-        // 5b. Update job based on type
-        if (job.type === 'one-shot') {
-          await this.jobsRepo.update(job.id, {
-            status: 'completed',
-            lastRunAt: new Date(),
-          });
-          this.logger.info({ jobId: job.id }, 'One-shot job completed');
-        } else if (job.type === 'cron') {
-          const nextRun = calculateNextRun(job.cronExpression!, new Date());
-          await this.jobsRepo.update(job.id, {
-            nextRunAt: nextRun,
-            lastRunAt: new Date(),
-            retryCount: 0, // reset retry count on success
-          });
-          this.logger.info(
-            { jobId: job.id, nextRunAt: nextRun },
-            'Cron job completed, rescheduled',
-          );
-        }
-
-        return true;
-      } catch (error) {
-        // 6. Failure: handle retry logic
-        await this.handleJobFailure(job, run, error);
-        return true;
-      }
+      return false;
     } catch (error) {
       this.logger.error(
         {
@@ -248,54 +198,6 @@ export class SchedulerService {
     } finally {
       this.tickInProgress = false;
     }
-  }
-
-  /**
-   * Manual trigger - execute a specific job immediately
-   */
-  async triggerJob(jobId: string): Promise<JobRun> {
-    const job = await this.jobsRepo.findById(jobId);
-    if (!job) {
-      throw new Error('Job not found');
-    }
-
-    // Create and execute run immediately
-    const run = await this.jobRunsRepo.create({
-      jobId: job.id,
-      status: 'queued',
-      attemptNumber: 0, // manual trigger doesn't count as retry
-    });
-
-    await this.jobRunsRepo.updateStatus(run.id, {
-      status: 'running',
-      startedAt: new Date(),
-    });
-
-    try {
-      await this.executeJob(job, run);
-      await this.jobRunsRepo.updateStatus(run.id, {
-        status: 'succeeded',
-        finishedAt: new Date(),
-      });
-      this.logger.info(
-        { jobId: job.id, runId: run.id },
-        'Manual trigger succeeded',
-      );
-    } catch (error) {
-      await this.jobRunsRepo.updateStatus(run.id, {
-        status: 'failed',
-        finishedAt: new Date(),
-        errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
-        errorMessage: error instanceof Error ? error.message : String(error),
-      });
-      this.logger.error(
-        { jobId: job.id, runId: run.id, error },
-        'Manual trigger failed',
-      );
-      throw error;
-    }
-
-    return run;
   }
 
   /**
@@ -415,144 +317,12 @@ export class SchedulerService {
   }
 
   /**
-   * Execute job based on target type
-   */
-  private async executeJob(job: ScheduledJob, _run: JobRun): Promise<void> {
-    if (job.targetType === 'session') {
-      // Execute against existing session
-      if (!job.targetSessionId) {
-        throw new Error('Session job missing targetSessionId');
-      }
-
-      // Build the message input, only including optional fields if they have values
-      const messageInput: {
-        sessionId: string;
-        role: 'user';
-        content: string;
-        agentId?: string;
-        providerId?: string;
-        modelId?: string;
-      } = {
-        sessionId: job.targetSessionId,
-        role: 'user',
-        content: (job.payload.message as string) || 'Scheduled job execution',
-      };
-
-      const agentId = job.payload.agentId as string | undefined;
-      const providerId = job.payload.providerId as string | undefined;
-      const modelId = job.payload.modelId as string | undefined;
-
-      if (agentId !== undefined) messageInput.agentId = agentId;
-      if (providerId !== undefined) messageInput.providerId = providerId;
-      if (modelId !== undefined) messageInput.modelId = modelId;
-
-      // Use SessionMessageService to submit message
-      const result = await this.sessionMessageService.submitMessageStreaming({
-        ...messageInput,
-        onStreamEvent: () => {},
-      });
-
-      if (!result.ok) {
-        throw new Error(
-          `Job execution failed: ${result.error.code} - ${result.error.message}`,
-        );
-      }
-    } else {
-      // Isolated execution - create a fresh session for the pulse
-      const metadata = job.metadata as Record<string, unknown> | null;
-      const pulseName = (metadata?.name as string | undefined) ?? 'unnamed';
-
-      // Create a new session for this isolated execution
-      const newSession = await this.sessionsStore.create({
-        title: `Pulse: ${pulseName}`,
-      });
-
-      // Submit the message to the new session
-      const submitInput: Parameters<
-        typeof this.sessionMessageService.submitMessageStreaming
-      >[0] = {
-        sessionId: newSession.id,
-        role: 'user',
-        content: (job.payload.message as string) || 'Scheduled job execution',
-        onStreamEvent: () => {},
-      };
-      const agentId = job.payload.agentId as string | undefined;
-      if (agentId !== undefined) submitInput.agentId = agentId;
-      const result =
-        await this.sessionMessageService.submitMessageStreaming(submitInput);
-
-      if (!result.ok) {
-        throw new Error(
-          `Isolated job execution failed: ${result.error.code} - ${result.error.message}`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Handle job failure with retry logic
-   */
-  private async handleJobFailure(
-    job: ScheduledJob,
-    run: JobRun,
-    error: unknown,
-  ): Promise<void> {
-    // Mark run as failed
-    await this.jobRunsRepo.updateStatus(run.id, {
-      status: 'failed',
-      finishedAt: new Date(),
-      errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
-      errorMessage: error instanceof Error ? error.message : String(error),
-    });
-
-    // Check if should retry
-    if (job.retryCount < job.maxRetries) {
-      // Calculate exponential backoff
-      const backoffMs = this.calculateBackoff(job.backoffMs, job.retryCount);
-      const nextRunAt = new Date(Date.now() + backoffMs);
-
-      await this.jobsRepo.update(job.id, {
-        retryCount: job.retryCount + 1,
-        nextRunAt,
-        lastRunAt: new Date(),
-      });
-
-      this.logger.warn(
-        {
-          jobId: job.id,
-          attempt: job.retryCount + 1,
-          maxRetries: job.maxRetries,
-          backoffMs,
-        },
-        `Job failed, retry scheduled`,
-      );
-    } else {
-      // Max retries exceeded, mark job as failed
-      await this.jobsRepo.update(job.id, {
-        status: 'failed',
-        lastRunAt: new Date(),
-      });
-
-      this.logger.error(
-        { jobId: job.id, maxRetries: job.maxRetries },
-        'Job permanently failed after max retries',
-      );
-    }
-  }
-
-  /**
-   * Calculate exponential backoff
-   */
-  private calculateBackoff(baseBackoffMs: number, retryCount: number): number {
-    // Exponential: backoff * 2^retryCount
-    const backoff = baseBackoffMs * Math.pow(2, retryCount);
-
-    // Cap at maximum
-    return Math.min(backoff, this.maxBackoffMs);
-  }
-
-  /**
-   * Recover stuck jobs that were running when scheduler crashed
+   * Recover stuck runs — rows that were marked `running` when
+   * the scheduler crashed. We can't safely call the runnable's
+   * `reschedule()` here (the runnable may have changed since the
+   * crash), so we just finalise the audit row. The runnable
+   * itself will pick up the item again on the next tick if it's
+   * still pending.
    */
   async recoverStuckJobs(): Promise<void> {
     const stuckRuns = await this.jobRunsRepo.listByStatus('running');
@@ -567,18 +337,12 @@ export class SchedulerService {
         status: 'failed',
         finishedAt: new Date(),
         errorCode: 'SCHEDULER_CRASH',
-        errorMessage: 'Job was running when scheduler stopped',
+        errorMessage: 'Run was in progress when scheduler stopped',
       });
-
-      // Trigger retry for the job
-      const job = await this.jobsRepo.findById(run.jobId);
-      if (job && job.status === 'active') {
-        await this.handleJobFailure(job, run, new Error('Scheduler crash'));
-      }
     }
 
     if (stuckRuns.length > 0) {
-      this.logger.info({ count: stuckRuns.length }, 'Recovered stuck jobs');
+      this.logger.info({ count: stuckRuns.length }, 'Recovered stuck runs');
     }
   }
 }

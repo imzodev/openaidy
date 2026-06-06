@@ -7,12 +7,11 @@
  * executed alongside the recurring-tasks executor (and any future
  * kind) inside the central polling loop.
  *
- * Before this adapter, pulses were dispatched by the `executeJob()`
- * switch in `SchedulerService.tick()`. They shared the scheduler's
- * tick but had their own execution and retry logic hard-coded in
- * the service. After this adapter, all of that lives in one place
- * (this file), the scheduler's tick is uniform, and the
- * `recoverStuckJobs` mechanism can be unified.
+ * Before this adapter, pulses were dispatched by the
+ * `SchedulerService` via a hard-coded switch on `targetType`
+ * (session vs isolated). After this adapter, all of that lives in
+ * one place (this file), the scheduler's tick is uniform, and the
+ * `recoverStuckJobs` mechanism covers pulses too.
  *
  * Contract mapping
  * ----------------
@@ -20,21 +19,22 @@
  *                         repository returns the next due job row;
  *                         we wrap it in the `PulsePayload` shape.
  * - `execute`          -> delegates to `sessionMessageService`
- *                         exactly as the legacy `executeJob` did
- *                         (session vs. isolated target type).
- * - `reschedule`       -> mirrors the legacy `handleJobFailure`
- *                         logic: increment retryCount on failure,
- *                         schedule the next run with exponential
- *                         backoff, or mark the job `failed` if
- *                         retries are exhausted. On success, advance
- *                         nextRunAt via the cron/preset schedule.
+ *                         with the same session-vs-isolated
+ *                         switch the scheduler used to do
+ *                         inline.
+ * - `reschedule`       -> mirrors the backoff/retry logic: on
+ *                         success, advance nextRunAt via the cron
+ *                         schedule; on failure, increment
+ *                         retryCount, schedule the next run with
+ *                         exponential backoff, or mark the job
+ *                         `failed` if retries are exhausted.
  *
  * What this adapter does NOT do
  * -----------------------------
  * - It does NOT create `job_runs` rows. The central `SchedulerService`
  *   creates and updates those for `pulse`-kind runs automatically
- *   (see `runRunnableWithJobRun`). The adapter is unaware of the
- *   audit trail, so the same code path is reusable for future
+ *   (see `runRunnable` in `service.ts`). The adapter is unaware of
+ *   the audit trail, so the same code path is reusable for future
  *   scheduled kinds that may want different audit-trail shapes.
  * - It does NOT implement leader election or distributed locking.
  *   SQLite deployments are single-server; Postgres deployments will
@@ -46,7 +46,13 @@ import type {
   ClaimedItem,
   ExecutionResult,
 } from '@openaidy/runtime';
-import type { JobsStore, SessionsStore, ScheduledJob } from '@openaidy/db';
+import type {
+  JobsStore,
+  JobRunsStore,
+  SessionsStore,
+  ScheduledJob,
+  JobRun,
+} from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import type { GenericLogger } from './service';
 import { calculateNextRun } from './cron-utils';
@@ -72,25 +78,16 @@ export type PulsePayload = {
 
 /**
  * The minimal surface area the adapter needs from the session
- * service. Mirrors the existing usage in `SchedulerService.executeJob`.
+ * service. We keep `SessionMessageService` direct (not a wrapper)
+ * so the adapter is straightforward to test.
  */
 export type PulseSessionService = Pick<
   SessionMessageService,
   'submitMessageStreaming'
 >;
-
-/**
- * Dependencies the adapter needs. The `sessionService` here is a
- * pre-injected wrapper that already knows the message content
- * (the adapter does not need to know whether a pulse is
- * session-attached or isolated — the wrapper does).
- *
- * We keep `SessionMessageService` direct (not the wrapper) so the
- * adapter is easy to test and so the legacy `executeJob` path can
- * be deleted cleanly once this adapter is the only consumer.
- */
 export type PulseRunnableDeps = {
   jobsRepo: JobsStore;
+  jobRunsRepo: JobRunsStore;
   sessionsStore: SessionsStore;
   sessionMessageService: PulseSessionService;
   logger: GenericLogger;
@@ -171,10 +168,10 @@ export function createPulseRunnableAdapter(
 // ============================================================================
 
 /**
- * Run the pulse's actual work. Splits the legacy `executeJob` switch
- * on `targetType` into a function the adapter can call. Throws on
- * failure (the adapter's `execute` catches and converts to a
- * failure `ExecutionResult`).
+ * Run the pulse's actual work. Splits on `targetType`: a
+ * session-attached pulse reuses an existing session, an isolated
+ * pulse creates a fresh one. Throws on failure (the adapter's
+ * `execute` catches and converts to a failure `ExecutionResult`).
  */
 async function executePulseJob(
   job: ScheduledJob,
@@ -267,9 +264,9 @@ function nextRunForSuccess(job: ScheduledJob): Date | null {
 }
 
 /**
- * Compute exponential backoff in ms. Same formula as
- * `SchedulerService.calculateBackoff` (kept duplicated here so the
- * adapter has zero coupling to the scheduler class).
+ * Compute exponential backoff in ms. Duplicated here (not
+ * imported from `SchedulerService`) so the adapter has zero
+ * coupling to the scheduler class.
  */
 function calculateBackoff(
   baseBackoffMs: number,
@@ -281,9 +278,10 @@ function calculateBackoff(
 }
 
 /**
- * Apply the result of an execution to the job's DB row. Mirrors
- * `SchedulerService.handleJobFailure` (for failure) and the
- * success-path of the legacy tick (for success).
+ * Apply the result of an execution to the job's DB row. On
+ * success, advances `nextRunAt` according to the schedule (or
+ * marks the job `completed` for one-shots). On failure, decides
+ * retry vs. terminal based on `retryCount` and `maxRetries`.
  *
  * Returns the new `nextRunAt` Date, or `null` for a terminal job.
  */
@@ -354,4 +352,71 @@ async function reschedulePulseJob(
     'Pulse permanently failed after max retries',
   );
   return null;
+}
+
+// ============================================================================
+// Manual trigger
+// ============================================================================
+
+/**
+ * Run a specific pulse job immediately, without waiting for the
+ * scheduler's tick. Mirrors the legacy `SchedulerService.triggerJob`
+ * (which we removed when migrating pulses to the runnable
+ * registry) so the `POST /api/pulses/:id/trigger` route still
+ * works.
+ *
+ * Creates a fresh `JobRun` row (the scheduler is unaware of this
+ * manual run), executes the pulse, updates the run to its
+ * terminal status, and returns the run.
+ *
+ * Does NOT touch the job's `nextRunAt`/`retryCount` — a manual
+ * trigger does not consume a scheduled run.
+ */
+export async function triggerPulseNow(
+  jobId: string,
+  deps: PulseRunnableDeps,
+): Promise<JobRun> {
+  const job = await deps.jobsRepo.findById(jobId);
+  if (!job) {
+    throw new Error('Job not found');
+  }
+
+  // Create and execute run immediately. Same shape the scheduler
+  // would have created for a tracked-kind run.
+  const run = await deps.jobRunsRepo.create({
+    jobId: job.id,
+    status: 'queued',
+    attemptNumber: 0, // manual trigger doesn't count as retry
+  });
+
+  await deps.jobRunsRepo.updateStatus(run.id, {
+    status: 'running',
+    startedAt: new Date(),
+  });
+
+  try {
+    await executePulseJob(job, deps.sessionsStore, deps.sessionMessageService);
+    await deps.jobRunsRepo.updateStatus(run.id, {
+      status: 'succeeded',
+      finishedAt: new Date(),
+    });
+    deps.logger.info(
+      { jobId: job.id, runId: run.id },
+      'Manual pulse trigger succeeded',
+    );
+  } catch (error) {
+    await deps.jobRunsRepo.updateStatus(run.id, {
+      status: 'failed',
+      finishedAt: new Date(),
+      errorCode: error instanceof Error ? error.name : 'UNKNOWN_ERROR',
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    deps.logger.error(
+      { jobId: job.id, runId: run.id, error },
+      'Manual pulse trigger failed',
+    );
+    throw error;
+  }
+
+  return run;
 }
