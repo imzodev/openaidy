@@ -2,7 +2,7 @@
  * Task Detail Panel Component
  *
  * Displays full task information including assigned agents, subtasks,
- * progress, and allows editing.
+ * progress, schedule, and allows editing.
  */
 
 import { createSignal, createEffect, Show, For } from 'solid-js';

@@ -5,9 +5,10 @@
  * and agent avatars. Supports drag-and-drop and click to open detail view.
  */
 
-import { Show } from 'solid-js';
-import { Play, Loader2, CheckCircle2, AlertCircle } from 'lucide-solid';
+import { Show, createResource } from 'solid-js';
+import { Play, Loader2, CheckCircle2, AlertCircle, Repeat } from 'lucide-solid';
 import type { Task, TaskPriority } from '../../lib/api-tasks';
+import { getTaskSchedule } from '../../lib/api-tasks';
 
 /**
  * Priority badge colors
@@ -63,6 +64,9 @@ export function TaskCard(props: TaskCardProps) {
       onDragEnd={handleDragEnd}
       onClick={props.onClick}
     >
+      {/* Recurring schedule badge */}
+      <ScheduleBadge taskId={props.task.id} />
+
       {/* Title */}
       <h4 class="font-medium text-gray-900 dark:text-gray-100 text-sm mb-2 line-clamp-2">
         {props.task.title}
@@ -168,5 +172,38 @@ export function TaskCard(props: TaskCardProps) {
         </button>
       </Show>
     </div>
+  );
+}
+
+/**
+ * Internal badge that fetches the schedule for a task and displays
+ * a recurring indicator if one exists.
+ */
+function ScheduleBadge(props: { taskId: string }) {
+  const [schedule] = createResource(
+    () => props.taskId,
+    async (id) => {
+      try {
+        return await getTaskSchedule(id);
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  return (
+    <Show when={schedule()}>
+      {(s) => (
+        <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
+          <Repeat class="w-3 h-3" />
+          <span>{s().scheduleHuman}</span>
+          <Show when={s().status === 'paused'}>
+            <span class="px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded text-xs">
+              paused
+            </span>
+          </Show>
+        </div>
+      )}
+    </Show>
   );
 }
