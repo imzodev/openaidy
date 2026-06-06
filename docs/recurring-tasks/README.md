@@ -105,13 +105,11 @@ type ExecutionResult =
 
 The scheduler tick iterates all registered runnables in
 registration order. The first one to claim an item wins for that
-tick; if no runnable claims and the legacy `scheduled_jobs` path
-has a due job, the legacy `executeJob()` dispatch runs (this is
-how Pulses still fire — see [Known limitations](./known-limitations.md)
-for why Pulses haven't been migrated to the registry yet).
-
-Adding a new kind is a matter of implementing the interface and
-calling `scheduler.registerRunnable(yourExecutor)`. See
+tick; the legacy `executeJob()` path now lives behind a fallback
+in case no runnable claims (it's a no-op in production since
+pulses are themselves a registered runnable). Adding a new kind
+is a matter of implementing the interface and calling
+`scheduler.registerRunnable(yourExecutor)`. See
 [Adding a new scheduled kind](./adding-a-new-scheduled-kind.md)
 for the full walkthrough with the six contract constraints and
 a reference implementation.
@@ -168,16 +166,16 @@ Recurring task definition
 
 ## Relationship to existing features
 
-| Feature                   | Relationship                                                                                                                                                                                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Pulses**                | Shares `ScheduleInput` and `cron-utils`. Different execution semantics (flat prompt vs full task lifecycle). Pulses still use the legacy `executeJob()` path; migrating them to the runnable registry is deferred — see [Known limitations](./known-limitations.md). |
-| **Tasks**                 | 1-to-1 extension: every recurring task is a regular task with a schedule attached. The same `task_agents` rows are reused on every run.                                                                                                                              |
-| **Scheduler**             | `SchedulerService` is the **single** polling loop after Phase 7's retroactive refactor. The legacy `scheduled_jobs` path and the new `task_schedules` runnable are interleaved on every tick.                                                                        |
-| **RecurringTasksService** | A **listener-only** service (post-Phase 7). It no longer has its own polling loop; it subscribes to `RunEventEmitter` to finalise `task_execution_history` rows when the executor's sessions finish.                                                                 |
-| **Sessions**              | Each task execution creates a new `task` session, parallel to the existing pattern.                                                                                                                                                                                  |
-| **RunEventEmitter**       | The task execution path is unchanged — it still subscribes to `run.completed` and `run.failed`.                                                                                                                                                                      |
-| **Planning**              | Re-invoked on every run **only when** the schedule's `replanPolicy` is `'always'` or `'on-description-change'` with a hash mismatch. Default (`'never'`) is cheap — the existing subtasks are reused.                                                                |
-| **Skills / Workspaces**   | Unaffected. The assigned agent still uses the same workspace and skills per session.                                                                                                                                                                                 |
+| Feature                   | Relationship                                                                                                                                                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pulses**                | Shares `ScheduleInput` and `cron-utils`. Different execution semantics (flat prompt vs full task lifecycle). Pulses are now driven by the `PulseRunnableAdapter` (`scheduler/pulse-runnable-adapter.ts`) on the central scheduler, registered **before** recurring-tasks to preserve the pre-migration dispatch priority. |
+| **Tasks**                 | 1-to-1 extension: every recurring task is a regular task with a schedule attached. The same `task_agents` rows are reused on every run.                                                                                                                                                                                   |
+| **Scheduler**             | `SchedulerService` is the **single** polling loop after Phase 7's retroactive refactor. The legacy `scheduled_jobs` path and the new `task_schedules` runnable are interleaved on every tick.                                                                                                                             |
+| **RecurringTasksService** | A **listener-only** service (post-Phase 7). It no longer has its own polling loop; it subscribes to `RunEventEmitter` to finalise `task_execution_history` rows when the executor's sessions finish.                                                                                                                      |
+| **Sessions**              | Each task execution creates a new `task` session, parallel to the existing pattern.                                                                                                                                                                                                                                       |
+| **RunEventEmitter**       | The task execution path is unchanged — it still subscribes to `run.completed` and `run.failed`.                                                                                                                                                                                                                           |
+| **Planning**              | Re-invoked on every run **only when** the schedule's `replanPolicy` is `'always'` or `'on-description-change'` with a hash mismatch. Default (`'never'`) is cheap — the existing subtasks are reused.                                                                                                                     |
+| **Skills / Workspaces**   | Unaffected. The assigned agent still uses the same workspace and skills per session.                                                                                                                                                                                                                                      |
 
 ## Out of scope (v1)
 

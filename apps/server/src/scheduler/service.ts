@@ -309,6 +309,13 @@ export class SchedulerService {
    * Run a claimed item from a `ScheduledRunnable` adapter. Handles
    * the timing + error contract, then delegates to the runnable's
    * `reschedule()`. Logs lifecycle events.
+   *
+   * For runnables whose `kind` matches a "tracked" kind (currently
+   * `'pulse'`), wraps the execute + reschedule with a `JobRun`
+   * row lifecycle. The adapter itself does not need to know about
+   * audit trails — the scheduler centralises that concern so the
+   * adapter is reusable for future kinds with different audit
+   * requirements.
    */
   private async runRunnable(
     runnable: ScheduledRunnable,
@@ -317,6 +324,25 @@ export class SchedulerService {
   ): Promise<void> {
     const startedAt = Date.now();
     this.logger.info({ kind: runnable.kind, id }, 'Runnable claimed an item');
+
+    // Create a JobRun row up front for tracked kinds. We do this
+    // BEFORE execute so that crashes during the run still leave a
+    // `running` row that the recovery sweep can clean up.
+    const trackedKinds: ReadonlyArray<string> = ['pulse'];
+    const isTracked = trackedKinds.includes(runnable.kind);
+    const run = isTracked
+      ? await this.jobRunsRepo.create({
+          jobId: id,
+          status: 'queued',
+          attemptNumber: 0,
+        })
+      : null;
+    if (run) {
+      await this.jobRunsRepo.updateStatus(run.id, {
+        status: 'running',
+        startedAt: new Date(),
+      });
+    }
 
     let result: import('@openaidy/runtime').ExecutionResult;
     try {
@@ -330,6 +356,33 @@ export class SchedulerService {
         error: err instanceof Error ? err : new Error(String(err)),
         durationMs: Date.now() - startedAt,
       };
+    }
+
+    // Update the JobRun row with the final status.
+    if (run) {
+      try {
+        const update: {
+          status: 'succeeded' | 'failed';
+          finishedAt: Date;
+          errorCode?: string;
+          errorMessage?: string;
+        } = {
+          status: result.ok ? 'succeeded' : 'failed',
+          finishedAt: new Date(),
+        };
+        if (!result.ok) {
+          update.errorCode = result.error.name ?? 'EXECUTION_ERROR';
+          update.errorMessage = result.error.message;
+        }
+        await this.jobRunsRepo.updateStatus(run.id, update);
+      } catch (err) {
+        // The audit trail is best-effort — a failure to write the
+        // JobRun row should not block the reschedule.
+        this.logger.warn(
+          { runId: run.id, kind: runnable.kind, err: String(err) },
+          'Failed to update JobRun row',
+        );
+      }
     }
 
     try {

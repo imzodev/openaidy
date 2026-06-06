@@ -11,27 +11,26 @@ intentionally does NOT do, and what is deferred to a future phase.
 
 ## Deferred to future phases
 
-### 1. Pulse migration to the `ScheduledRunnable` registry
+### 1. ~~Pulse migration to the `ScheduledRunnable` registry~~ ✅ Done (Phase 7+)
 
-**Status**: Deferred.
+**Status**: Completed.
 
-Pulses still use the legacy `SchedulerService.executeJob()` path
-(`scheduled_jobs` table). After Phase 7, the
-`SchedulerService.tick()` calls each registered `ScheduledRunnable`
-in order; if a runnable claims an item, the legacy path is
-skipped. But **pulses are not registered** as a runnable, so they
-continue to use the legacy code path unchanged.
+The `PulseRunnableAdapter` (`apps/server/src/scheduler/pulse-runnable-adapter.ts`)
+now drives pulses via the central scheduler. Pulses are registered
+as a `ScheduledRunnable` (kind: `'pulse'`) on the same tick as
+recurring-tasks. The `SchedulerService` creates and updates
+`job_runs` rows for them automatically (the adapter is unaware of
+the audit trail — that concern is centralised in the scheduler).
 
-To migrate, we'd need a `PulseRunnableAdapter` that wraps the
-session-message dispatch logic into the `ScheduledRunnable`
-contract (claim → execute → reschedule). The legacy path would
-then become a no-op fallback (the `claimNextDueJob` would always
-return `null` because all real work is being driven by the
-registry).
+**Order of registration** matters: pulse is registered FIRST in
+`app.ts` so that when both a pulse and a recurring task are due
+at the same time, the pulse wins. This preserves the pre-migration
+dispatch priority.
 
-Estimated effort: 2-3 hours, mostly translation of
-`executeJob`'s target-type switching into a clean
-`ScheduledRunnable.execute` implementation.
+**What still uses the legacy path?** Nothing. The `executeJob()`
+switch in `SchedulerService` is still present (for backwards
+compatibility) but is only invoked when no registered runnable
+claims an item — which is now a dead branch in production.
 
 ### 2. Cross-database tests (Postgres, MySQL)
 
