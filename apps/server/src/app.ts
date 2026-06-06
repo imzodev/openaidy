@@ -40,6 +40,7 @@ import {
   TaskScheduleExecutor,
   type TaskScheduleExecutorDeps,
 } from './tasks/execution/task-schedule-executor';
+import { TaskScheduleService } from './tasks/schedule-service';
 import {
   RecurringTasksService,
   createRecurringTasksService,
@@ -344,6 +345,7 @@ export async function buildApp() {
     skills: skillRegistry,
     personality: personalityService,
     channels: channelRegistry,
+    taskSchedules: undefined,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -549,6 +551,19 @@ export async function buildApp() {
           : {}),
       };
       const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+
+      const taskScheduleService = new TaskScheduleService({
+        tasksRepo: dbAdapter.repositories.tasks,
+        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+        taskScheduleExecutor,
+      });
+      services.taskSchedules = taskScheduleService;
+
+      // Wire the schedule service into the TaskService so that
+      // createTask and getTaskWithDetails can attach schedules.
+      taskService!.setTaskSchedulesService(taskScheduleService);
+
       // The recurring service logger is the same pino instance — the
       // GenericLogger mismatch is only in method signature shape.
       // We also wire the run-event subscription so history rows are

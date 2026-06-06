@@ -137,6 +137,7 @@ describe('Skill Routes', () => {
       mcpService: undefined as unknown as AppServices['mcpService'],
       skills: skillRegistry,
       personality: undefined as unknown as AppServices['personality'],
+      taskSchedules: undefined,
       channels: undefined as unknown as AppServices['channels'],
     });
 

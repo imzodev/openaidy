@@ -126,6 +126,7 @@ describe('Agent Routes', () => {
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      taskSchedules: undefined,
       channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
@@ -470,6 +471,7 @@ describe('DELETE /agents/:agentId — workspace deletion', () => {
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      taskSchedules: undefined,
       channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
