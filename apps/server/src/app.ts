@@ -618,8 +618,29 @@ export async function buildApp() {
             : never
           : never,
       });
-      recurringTasksService.start();
-      log.info('Recurring tasks feature enabled and running');
+      // Phase 7: register the executor as a ScheduledRunnable on the
+      // central scheduler. The scheduler's tick now drives the
+      // recurring-tasks claim → execute → reschedule cycle alongside
+      // (or interleaved with) the legacy Pulse path. The recurring
+      // tasks service is purely an event listener + delegator now.
+      if (scheduler) {
+        scheduler.registerRunnable(taskScheduleExecutor);
+        // Start the run-event subscription so history rows transition
+        // to their terminal state when the executor's runs complete.
+        recurringTasksService.start();
+        log.info(
+          `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
+        );
+      } else {
+        // Should never happen — the recurring-tasks feature flag is
+        // gated on the database being available, and so is the
+        // scheduler. This branch exists only to keep the type-narrower
+        // happy; if it ever runs, we have a wiring bug.
+        log.error(
+          'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
+        );
+        recurringTasksService.start();
+      }
     } else {
       log.info(
         'Recurring tasks feature disabled (set RECURRING_TASKS_ENABLED=true to enable)',

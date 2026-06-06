@@ -15,6 +15,8 @@ Think of a recurring task as a "Kanban card that walks itself across the board" 
 - [Phase 5: Built-in Tools](./recurring-tasks-phase-5-tools.md) — agent-facing tools for `tasks_create`, `tasks_update`, `tasks_trigger_now`
 - [Phase 6: Web UI](./recurring-tasks-phase-6-frontend.md) — Schedule tab in `TaskModal`, recurring badge, executions history page
 - [Phase 7: Testing and Validation](./recurring-tasks-phase-7-testing.md) — unit + E2E tests, regression sweep for Pulses
+- [Adding a new scheduled kind](./adding-a-new-scheduled-kind.md) — how to register a new runnable with the central scheduler
+- [Known limitations](./known-limitations.md) — what's deferred (pulse migration, cross-DB tests, soak test, retention), and conscious trade-offs
 
 ## Core concepts
 
@@ -43,14 +45,22 @@ A new `task_schedules` table keeps both domains clean, while still sharing the *
 
 ### Schedule types
 
-Reuses the existing `ScheduleInput` discriminated union from `pulses/utils.ts` (which is moved to `apps/server/src/scheduler/schedule-input.ts` in Phase 0). The type itself is re-exported from `@openaidy/shared-types/src/scheduling.ts`; the runtime parser stays server-only because it depends on `croner`:
+The `ScheduleInput` discriminated union lives in
+`packages/shared-types/src/pulses.ts` (re-exported from
+`@openaidy/shared-types`). The **type** is shared across the server,
+web, and tool layers; the **runtime parser** (preset-to-cron
+mapping, cron validation via `croner`) lives server-side in
+`apps/server/src/scheduler/cron-utils.ts` and
+`apps/server/src/scheduler/schedule-input.ts`. The shared-type
+contract uses **untagged** discrimination (`'every' in v` vs a
+`v.kind` field) to match the JSON shape the API receives.
 
-| Type     | Example                | Use case                      |
-| -------- | ---------------------- | ----------------------------- |
-| Interval | every 30 minutes       | Frequent health checks, syncs |
-| Daily    | every day at 9am       | Morning briefs, daily digests |
-| Cron     | `0 9 * * 1-5`          | Weekday-only schedules        |
-| One-shot | at a specific datetime | One-time deferred tasks       |
+| Type     | Example                         | Use case                      |
+| -------- | ------------------------------- | ----------------------------- |
+| Interval | `every: '30m'`                  | Frequent health checks, syncs |
+| Daily    | `daily: { hour: 9, minute: 0 }` | Morning briefs, daily digests |
+| Cron     | `cron: '0 9 * * 1-5'`           | Weekday-only schedules        |
+| One-shot | `at: '2026-12-31T23:59:00Z'`    | One-time deferred tasks       |
 
 ### Execution model
 
@@ -70,25 +80,46 @@ Each run is **fully independent**: subtasks and the previous session are cleaned
 
 ### Scheduler integration (polymorphic runnables)
 
-The current `SchedulerService` is hard-wired to `JobsStore` and `targetType: 'session' | 'isolated'`. Phase 0 introduces a `ScheduledRunnable` interface and a registry of runnables keyed by `kind`:
+The `SchedulerService` is the **single** polling loop for every
+scheduled kind in the system. Phase 0 (executed retroactively
+during Phase 7) introduced a `ScheduledRunnable` interface and
+a registry of runnables keyed by `kind`. The interface lives in
+`packages/runtime/src/scheduling.ts` and looks like this:
 
 ```ts
-interface ScheduledRunnable {
-  kind: string;
-  claimNextDue(): Promise<{ id: string; runnable: unknown } | null>;
-  execute(id: string, runnable: unknown): Promise<ExecutionResult>;
+interface ScheduledRunnable<P = unknown> {
+  readonly kind: string;
+  claimNextDue(): Promise<{ id: string; payload: P } | null>;
+  execute(id: string, payload: P): Promise<ExecutionResult>;
   reschedule(
     id: string,
-    runnable: unknown,
-    success: boolean,
-    error?: Error,
+    payload: P,
+    result: ExecutionResult,
   ): Promise<Date | null>;
 }
+
+type ExecutionResult =
+  | { ok: true; durationMs: number }
+  | { ok: false; error: { code: string; message: string } };
 ```
 
-Pulses become `PulseRunnable` (kind: `'pulse'`), tasks become `TaskRunnable` (kind: `'task'`). Adding a third kind (recurring memory cleanup, daily backup, etc.) is a matter of implementing the interface and registering it.
+The scheduler tick iterates all registered runnables in
+registration order. The first one to claim an item wins for that
+tick; if no runnable claims and the legacy `scheduled_jobs` path
+has a due job, the legacy `executeJob()` dispatch runs (this is
+how Pulses still fire — see [Known limitations](./known-limitations.md)
+for why Pulses haven't been migrated to the registry yet).
 
-The scheduler tick iterates all registered runnables, claims the next due item from each, and dispatches to the appropriate `execute` method. This is the same conceptual model as Kubernetes controllers, but kept deliberately simple.
+Adding a new kind is a matter of implementing the interface and
+calling `scheduler.registerRunnable(yourExecutor)`. See
+[Adding a new scheduled kind](./adding-a-new-scheduled-kind.md)
+for the full walkthrough with the six contract constraints and
+a reference implementation.
+
+This is the same conceptual model as Kubernetes controllers, but
+kept deliberately simple: one tick, one claim, one execution.
+No leader election, no distributed locking. For multi-server
+deployments, see the "Out of scope" section.
 
 ### Run history
 
@@ -116,20 +147,20 @@ Recurring task definition
         ├── run #2: 2026-04-22 10:00 → succeeded
         └── run #3: 2026-04-22 11:00 → failed (timeout)
 
-         ↓  scheduler fires (every 1h)
+         ↓  scheduler fires (every 5s)
 
-  TaskRunnable.claimNextDue()
+  TaskScheduleExecutor.claimNextDue()  (kind: 'task')
     → finds task_schedule where nextRunAt <= now AND status = 'active'
-  TaskRunnable.execute()
-    ├── subtasksRepo.deleteByTask(taskId)  ← ONLY when replanPolicy is not 'never'
+  TaskScheduleExecutor.execute(payload)
+    ├── if replanPolicy is not 'never': subtasksRepo.deleteByTask(taskId)
     ├── sessionService.createSession('Task: …', 'task')
     ├── if replanPolicy = 'on-description-change' and hash differs:
-    │     planningService.plan(taskId, sessionId)  ← hash check makes this cheap
+    │     planningService.planTask(taskId)  ← hash check makes this cheap
     │   elif replanPolicy = 'always':
-    │     planningService.plan(taskId, sessionId)  ← expensive, opt-in
+    │     planningService.planTask(taskId)  ← expensive, opt-in
     │   else ('never', default): skip planning, reuse existing subtasks
-    └── taskExecution.executeSubtasks(taskId)  ← uses the original task_agents
-  TaskRunnable.reschedule()
+    └── taskService.executeSubtasks(taskId)  ← uses the original task_agents
+  TaskScheduleExecutor.reschedule(payload, result)
     ├── calculateNextRun(cron) → nextRunAt
     ├── executionCount += 1
     └── if executionCount >= maxExecutions (default 9999): status = 'expired'
@@ -137,15 +168,16 @@ Recurring task definition
 
 ## Relationship to existing features
 
-| Feature                 | Relationship                                                                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Pulses**              | Shares `ScheduleInput` and `cron-utils`. Different execution semantics (flat prompt vs full task lifecycle).                                                                                          |
-| **Tasks**               | 1-to-1 extension: every recurring task is a regular task with a schedule attached. The same `task_agents` rows are reused on every run.                                                               |
-| **Scheduler**           | `SchedulerService` becomes a registry of `ScheduledRunnable` implementations.                                                                                                                         |
-| **Sessions**            | Each task execution creates a new `task` session, parallel to the existing pattern.                                                                                                                   |
-| **RunEventEmitter**     | The task execution path is unchanged — it still subscribes to `run.completed` and `run.failed`.                                                                                                       |
-| **Planning**            | Re-invoked on every run **only when** the schedule's `replanPolicy` is `'always'` or `'on-description-change'` with a hash mismatch. Default (`'never'`) is cheap — the existing subtasks are reused. |
-| **Skills / Workspaces** | Unaffected. The assigned agent still uses the same workspace and skills per session.                                                                                                                  |
+| Feature                   | Relationship                                                                                                                                                                                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pulses**                | Shares `ScheduleInput` and `cron-utils`. Different execution semantics (flat prompt vs full task lifecycle). Pulses still use the legacy `executeJob()` path; migrating them to the runnable registry is deferred — see [Known limitations](./known-limitations.md). |
+| **Tasks**                 | 1-to-1 extension: every recurring task is a regular task with a schedule attached. The same `task_agents` rows are reused on every run.                                                                                                                              |
+| **Scheduler**             | `SchedulerService` is the **single** polling loop after Phase 7's retroactive refactor. The legacy `scheduled_jobs` path and the new `task_schedules` runnable are interleaved on every tick.                                                                        |
+| **RecurringTasksService** | A **listener-only** service (post-Phase 7). It no longer has its own polling loop; it subscribes to `RunEventEmitter` to finalise `task_execution_history` rows when the executor's sessions finish.                                                                 |
+| **Sessions**              | Each task execution creates a new `task` session, parallel to the existing pattern.                                                                                                                                                                                  |
+| **RunEventEmitter**       | The task execution path is unchanged — it still subscribes to `run.completed` and `run.failed`.                                                                                                                                                                      |
+| **Planning**              | Re-invoked on every run **only when** the schedule's `replanPolicy` is `'always'` or `'on-description-change'` with a hash mismatch. Default (`'never'`) is cheap — the existing subtasks are reused.                                                                |
+| **Skills / Workspaces**   | Unaffected. The assigned agent still uses the same workspace and skills per session.                                                                                                                                                                                 |
 
 ## Out of scope (v1)
 
@@ -154,4 +186,4 @@ Recurring task definition
 - Conditional scheduling ("only run if previous run failed")
 - Distributed locking for multi-server deployments (SQLite skip-locked pattern; PostgreSQL is a Phase 7 stretch goal)
 - Timezone-aware cron (`tz` field) — already deferred in Pulses; will be revisited project-wide
-- **No "infinite" max executions.** Every recurring task must declare a finite cap. Default is 9999.
+- **`maxExecutions` default is 9999** (a "practically infinite" sentinel — see [Adding a new scheduled kind](./adding-a-new-scheduled-kind.md#why-maxexecutions-9999-by-default) for the design rationale). The user explicitly chose this over a small finite default like 20, which would force a cap decision on every task.

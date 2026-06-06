@@ -8,25 +8,36 @@ import { createLogger } from '../lib/logger';
 import type { RunEventEmitter } from '../dispatch/events';
 
 /**
- * Recurring tasks service
+ * Recurring tasks service — Phase 7 refactor.
  *
- * Wires the TaskScheduleExecutor to a simple polling loop. The executor
- * implements the `ScheduledRunnable` interface from `@openaidy/runtime`
- * (Phase 0), but we drive it with our own loop instead of the legacy
- * `SchedulerService` because:
+ * After the Phase 0 scheduling refactor, the polling loop lives in
+ * the central `SchedulerService`. The `TaskScheduleExecutor` is
+ * registered as a `ScheduledRunnable` (kind: 'task'), and the
+ * scheduler's tick iterates registered runnables before falling back
+ * to the legacy `executeJob` (Pulse) path. This means recurring
+ * tasks share the scheduler's cadence and lifecycle, and they no
+ * longer need their own loop.
  *
- * 1. The legacy scheduler's `executeJob` is hard-coded to the
- *    `scheduled_jobs` table (Pulses) and has no polymorphic dispatch
- *    yet. Rewiring that is Phase 7.
- * 2. The recurring-tasks polling has different semantics: we claim
- *    one schedule per tick, run it, wait for the reschedule callback
- *    to compute the next run, and immediately go again. There's no
- *    "queue of jobs" — there's exactly one next run per schedule.
- * 3. Keeping this isolated means we can ship the feature behind a
- *    flag (RECURRING_TASKS_ENABLED) without touching the Pulse flow.
+ * What this service DOES still own:
  *
- * The loop matches the scheduler's default 5s tick — same overhead
- * budget as a Pulse claim, just a different table.
+ * 1. `RunEventEmitter` subscription. When a task session reaches
+ *    `run.completed` or `run.failed`, the matching `task_execution_history`
+ *    row needs to transition from `verifying` to its terminal state
+ *    with `durationMs`. This is unique to the recurring-tasks domain
+ *    (the Pulse path doesn't have a history table) and can't be moved
+ *    into the generic scheduler.
+ *
+ * 2. The `tick()` method. The scheduler calls `runnable.execute()`
+ *    directly, but tests drive `tick()` manually. We keep it as a
+ *    public method that runs one full claim → execute → reschedule
+ *    cycle, delegating each step to the executor.
+ *
+ * 3. `triggerNow()`. Manual trigger of a schedule, used by the API
+ *    and the `task_schedules_trigger` tool. Delegates to the
+ *    executor's `triggerNow`.
+ *
+ * 4. Lifecycle: `start()` subscribes to RunEventEmitter; `stop()`
+ *    unsubscribes. Both are idempotent.
  */
 export type RecurringTasksServiceOptions = {
   taskSchedulesRepo: TaskSchedulesStore;
@@ -45,8 +56,7 @@ export type RecurringTasksServiceOptions = {
    *
    * If not provided, history rows stay in `verifying` forever (the
    * TaskExecution.handleRunEvent flow handles subtasks but not the
-   * top-level task session created by the executor). This is a Phase 7
-   * quality-of-life improvement; the feature still works without it.
+   * top-level task session created by the executor).
    */
   runEvents?: RunEventEmitter;
   /**
@@ -61,10 +71,9 @@ export class RecurringTasksService {
   private readonly logger: GenericLogger;
   private readonly pollIntervalMs: number;
   private readonly now: () => Date;
-  private intervalId: ReturnType<typeof setInterval> | undefined;
   private isRunning = false;
-  private tickInProgress = false;
   private unsubscribeRunEvents: (() => void) | undefined;
+  private tickInProgress = false;
 
   // We hold direct references to the executor + repos so the loop
   // doesn't go through any intermediate abstraction.
@@ -90,16 +99,15 @@ export class RecurringTasksService {
   }
 
   /**
-   * Start the polling loop. Idempotent.
+   * Subscribe to run events. Idempotent.
+   *
+   * The polling loop itself is now driven by the central
+   * `SchedulerService` after this service registers the executor as
+   * a `ScheduledRunnable`. We no longer start a `setInterval` here.
    */
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.intervalId = setInterval(() => {
-      this.tick().catch((err) => {
-        this.logger.error({ err: String(err) }, 'Recurring tasks tick failed');
-      });
-    }, this.pollIntervalMs);
 
     // Subscribe to run events to finalise history rows.
     if (this.runEvents) {
@@ -118,35 +126,36 @@ export class RecurringTasksService {
 
     this.logger.info(
       { pollIntervalMs: this.pollIntervalMs },
-      'Recurring tasks scheduler started',
+      'Recurring tasks service started (event listener only; polling driven by SchedulerService)',
     );
   }
 
   /**
-   * Stop the polling loop. Idempotent.
+   * Unsubscribe from run events. Idempotent.
    */
   async stop(): Promise<void> {
     if (!this.isRunning) return;
     this.isRunning = false;
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = undefined;
-    }
+
     if (this.unsubscribeRunEvents) {
       this.unsubscribeRunEvents();
       this.unsubscribeRunEvents = undefined;
     }
+
+    // Wait for any in-progress tick to complete. The SchedulerService
+    // drives ticks; we only need to wait for the in-flight handleRunEvent
+    // calls if any.
     while (this.tickInProgress) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    this.logger.info('Recurring tasks scheduler stopped');
+
+    this.logger.info('Recurring tasks service stopped');
   }
 
   /**
-   * Handle a run event for the top-level task session. We filter on
-   * session type `task` so we don't accidentally try to finalise a
-   * history row for a subtask or chat session. The TaskExecution flow
-   * already handles subtask verification, so this is purely additive.
+   * Process a single run event. Filters by session type (`task`)
+   * to avoid double-handling subtask events that the
+   * `TaskExecution.handleRunEvent` flow already covers.
    */
   private async handleRunEvent(
     event: import('../dispatch/events').RunEvent,
@@ -154,12 +163,7 @@ export class RecurringTasksService {
     if (event.type !== 'run.completed' && event.type !== 'run.failed') return;
     if (!this.getSessionType) return;
 
-    let sessionType: string | null | undefined;
-    try {
-      sessionType = await this.getSessionType(event.sessionId);
-    } catch {
-      return;
-    }
+    const sessionType = await this.getSessionType(event.sessionId);
     if (sessionType !== 'task') return;
 
     const history = await this.taskExecutionHistoryRepo.findBySessionId(
@@ -183,9 +187,9 @@ export class RecurringTasksService {
     } else {
       await this.taskExecutionHistoryRepo.markFailed(history.id, durationMs, {
         code: 'RUN_FAILED',
-        message: 'Run failed (reported by RunEventEmitter)',
+        message: 'Run failed (see session for details)',
       });
-      this.logger.warn(
+      this.logger.info(
         { historyId: history.id, sessionId: event.sessionId, durationMs },
         'History row marked failed',
       );
@@ -193,10 +197,11 @@ export class RecurringTasksService {
   }
 
   /**
-   * Run one tick. Returns true if a schedule was claimed and run.
+   * Run one tick: claim → execute → reschedule.
    *
-   * This is the public entry point used by tests. The production code
-   * drives ticks via the `setInterval` started in `start()`.
+   * In production the central `SchedulerService` drives this via
+   * the registered `ScheduledRunnable` (the `TaskScheduleExecutor`).
+   * The method is kept public so tests can drive ticks deterministically.
    */
   async tick(): Promise<boolean> {
     if (this.tickInProgress) return false;

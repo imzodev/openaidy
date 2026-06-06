@@ -2,6 +2,7 @@ import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import type { ScheduledJob, JobRun } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import { calculateNextRun } from './cron-utils';
+import type { ScheduledRunnable } from '@openaidy/runtime';
 
 /**
  * Generic logger interface compatible with both pino.Logger and FastifyBaseLogger
@@ -58,6 +59,48 @@ export class SchedulerService {
   }
 
   /**
+   * Registered `ScheduledRunnable` adapters, keyed by `kind`. The
+   * scheduler iterates these in registration order on every tick
+   * BEFORE the legacy `executeJob` path. The first runnable that
+   * claims a due item gets to run it; the rest stand down for that
+   * tick. This means: a tick can execute AT MOST ONE runnable's
+   * claimed item, not all of them.
+   *
+   * The registry is opt-in: until you call `registerRunnable`, the
+   * scheduler behaves exactly as it did before Phase 0. This keeps
+   * the existing Pulse flow regression-free.
+   */
+  private readonly runnables = new Map<string, ScheduledRunnable>();
+
+  /**
+   * Register a runnable with the scheduler. The runnable's
+   * `claimNextDue()` will be called on every tick. If it returns
+   * a claimed item, the scheduler invokes `execute()` and then
+   * `reschedule()`. The legacy `executeJob` path is skipped for
+   * that tick.
+   *
+   * @throws if a runnable with the same `kind` is already registered.
+   */
+  registerRunnable(runnable: ScheduledRunnable): void {
+    if (this.runnables.has(runnable.kind)) {
+      throw new Error(
+        `A ScheduledRunnable with kind "${runnable.kind}" is already registered. ` +
+          `Use a unique kind string per implementation.`,
+      );
+    }
+    this.runnables.set(runnable.kind, runnable);
+    this.logger.info({ kind: runnable.kind }, 'ScheduledRunnable registered');
+  }
+
+  /**
+   * Returns the kinds of registered runnables. Used by the
+   * `/api/scheduler` admin route (Phase 7 observability).
+   */
+  getRunnableKinds(): string[] {
+    return Array.from(this.runnables.keys());
+  }
+
+  /**
    * Start the scheduler polling loop
    */
   start(): void {
@@ -104,8 +147,18 @@ export class SchedulerService {
   }
 
   /**
-   * Single tick - claim and execute one due job
-   * Returns true if a job was executed, false if none due
+   * Single tick - claim and execute one due job.
+   *
+   * Order of operations (Phase 0 dispatch):
+   * 1. Iterate registered `ScheduledRunnable` adapters in
+   *    registration order. The first one to return a claimed
+   *    item wins; we run it, reschedule, and return.
+   * 2. If no runnable claimed anything, fall back to the legacy
+   *    `claimNextDueJob` path. This preserves Pulse behaviour
+   *    bit-for-bit when no runnables are registered.
+   *
+   * Returns true if a job (or a runnable's claimed item) was
+   * executed, false otherwise.
    */
   async tick(): Promise<boolean> {
     if (!this.isRunning) {
@@ -115,6 +168,15 @@ export class SchedulerService {
     this.tickInProgress = true;
 
     try {
+      // 1. Try registered runnables first (Phase 0 dispatch).
+      for (const runnable of this.runnables.values()) {
+        const claimed = await runnable.claimNextDue();
+        if (!claimed) continue;
+        await this.runRunnable(runnable, claimed.id, claimed.payload);
+        return true;
+      }
+
+      // 2. Fall back to the legacy Pulse path.
       // 1. Claim next due job atomically
       const job = await this.jobsRepo.claimNextDueJob();
       if (!job) {
@@ -241,6 +303,62 @@ export class SchedulerService {
    */
   isActive(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Run a claimed item from a `ScheduledRunnable` adapter. Handles
+   * the timing + error contract, then delegates to the runnable's
+   * `reschedule()`. Logs lifecycle events.
+   */
+  private async runRunnable(
+    runnable: ScheduledRunnable,
+    id: string,
+    payload: unknown,
+  ): Promise<void> {
+    const startedAt = Date.now();
+    this.logger.info({ kind: runnable.kind, id }, 'Runnable claimed an item');
+
+    let result: import('@openaidy/runtime').ExecutionResult;
+    try {
+      result = await runnable.execute(id, payload);
+    } catch (err) {
+      // A runnable that throws is treated as a failure (the contract
+      // says implementations should report errors via the result, not
+      // throw — but we defend against bad citizens).
+      result = {
+        ok: false,
+        error: err instanceof Error ? err : new Error(String(err)),
+        durationMs: Date.now() - startedAt,
+      };
+    }
+
+    try {
+      const nextRunAt = await runnable.reschedule(id, payload, result);
+      if (nextRunAt) {
+        this.logger.info(
+          {
+            kind: runnable.kind,
+            id,
+            nextRunAt: nextRunAt.toISOString(),
+            ok: result.ok,
+          },
+          'Runnable rescheduled',
+        );
+      } else {
+        this.logger.info(
+          { kind: runnable.kind, id, ok: result.ok },
+          'Runnable reschedule returned null (terminal)',
+        );
+      }
+    } catch (err) {
+      // A reschedule that throws is logged but doesn't crash the
+      // tick — the run already happened, and we'd rather not lose
+      // the fact that it ran.
+      this.logger.error(
+        { kind: runnable.kind, id, err: String(err) },
+        'Runnable reschedule threw — item is not rescheduled',
+      );
+    }
   }
 
   /**
