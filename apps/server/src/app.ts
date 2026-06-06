@@ -36,12 +36,24 @@ import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
+import {
+  TaskScheduleExecutor,
+  type TaskScheduleExecutorDeps,
+} from './tasks/execution/task-schedule-executor';
+import {
+  RecurringTasksService,
+  createRecurringTasksService,
+} from './recurring';
 import { createMcpClientService } from './mcp/client';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
-import { SchedulerService, createSchedulerService } from './scheduler';
+import {
+  SchedulerService,
+  createSchedulerService,
+  calculateNextRun,
+} from './scheduler';
 import { createAppConfigService } from './config/service';
 import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
@@ -196,6 +208,7 @@ export async function buildApp() {
   let sessionService: SessionMessageService | undefined;
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
+  let recurringTasksService: RecurringTasksService | undefined;
 
   let planningService: ReturnType<typeof createPlanningService> | undefined;
 
@@ -484,6 +497,94 @@ export async function buildApp() {
       deliverablesRepo: dbAdapter.repositories.deliverables,
       authMiddleware,
     });
+
+    // -----------------------------------------------------------
+    // Recurring tasks (Phase 2): executor + dedicated polling loop.
+    //
+    // Shipped behind RECURRING_TASKS_ENABLED. When the flag is off,
+    // the executor and service are not constructed — the existing
+    // Pulse scheduler is the only thing polling the DB. When the
+    // flag is on, we run a 5-second polling loop that claims and
+    // executes `task_schedules` rows, mirroring the legacy
+    // scheduler's cadence.
+    //
+    // In Phase 7 the executor becomes a registered `ScheduledRunnable`
+    // inside the legacy `SchedulerService`, replacing this loop.
+    // For now, the loop is self-contained and won't conflict with
+    // Pulses (they read from a different table).
+    // -----------------------------------------------------------
+    if (env.RECURRING_TASKS_ENABLED) {
+      // Duck-typed adapter: SessionMessageService is structurally compatible
+      // with the executor's narrower ExecutorSessionService, but TS's
+      // exactOptionalPropertyTypes on onStreamEvent makes the subtype
+      // check fail. The cast is safe because the executor never sets
+      // onStreamEvent (it would be a no-op).
+      const sessionServiceForExecutor =
+        services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
+      const executorDeps: TaskScheduleExecutorDeps = {
+        tasksRepo: dbAdapter.repositories.tasks,
+        subtasksRepo: dbAdapter.repositories.subtasks,
+        taskAgentsRepo: dbAdapter.repositories.taskAgents,
+        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+        taskService: {
+          executeTask: (taskId) => taskService!.executeTask(taskId),
+          executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+        },
+        sessionService: sessionServiceForExecutor,
+        defaultAgentIdProvider: () =>
+          configService.getConfig().defaults.agentId,
+        calculateNextRun: (cron, now) => calculateNextRun(cron, now),
+        logger: log as unknown as TaskScheduleExecutorDeps['logger'],
+        // planningService is omitted when planning isn't configured; the
+        // executor falls back to a warning + the description-execution
+        // path. The optional key works with exactOptionalPropertyTypes
+        // because we only add the field when it has a real value.
+        ...(planningService
+          ? {
+              planningService: {
+                planTask: (taskId: string) => planningService!.planTask(taskId),
+              },
+            }
+          : {}),
+      };
+      const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+      // The recurring service logger is the same pino instance — the
+      // GenericLogger mismatch is only in method signature shape.
+      // We also wire the run-event subscription so history rows are
+      // finalised (planned -> verifying -> completed/failed) when the
+      // task session the executor created finishes its run.
+      recurringTasksService = createRecurringTasksService({
+        taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+        taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+        executor: taskScheduleExecutor,
+        runEvents: services.runEvents,
+        // Pull the session type from the SessionsStore (or fall through
+        // to a type field if it's on the record). This filters out
+        // subtask and chat sessions so we only finalise history rows
+        // for the top-level task runs the executor created.
+        getSessionType: async (sessionId) => {
+          const session =
+            await dbAdapter!.repositories.sessions.findById(sessionId);
+          return session && 'type' in session
+            ? (session as { type?: string }).type
+            : null;
+        },
+        logger: log as unknown as Parameters<
+          typeof createRecurringTasksService
+        >[0] extends infer T
+          ? T extends { logger?: infer L }
+            ? L
+            : never
+          : never,
+      });
+      recurringTasksService.start();
+      log.info('Recurring tasks feature enabled and running');
+    } else {
+      log.info(
+        'Recurring tasks feature disabled (set RECURRING_TASKS_ENABLED=true to enable)',
+      );
+    }
   }
 
   // Register access token routes (requires DB, admin auth enforced)
@@ -566,6 +667,9 @@ export async function buildApp() {
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
+    }
+    if (recurringTasksService) {
+      await recurringTasksService.stop();
     }
     if (scheduler) {
       await scheduler.stop();

@@ -71,6 +71,14 @@ const envSchema = z
     WORKSPACE_BASE_DIR: z.string().optional(),
     // Skills configuration
     SKILLS_DIR: z.string().optional(),
+    // Recurring tasks feature flag. Default: off in all envs — this is
+    // a v1 feature and we're shipping behind a flag until Phase 7's
+    // regression sweep. Production should explicitly opt in once the
+    // integration tests pass.
+    RECURRING_TASKS_ENABLED: z
+      .string()
+      .transform((val) => val === 'true')
+      .default('false'),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {

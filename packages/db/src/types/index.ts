@@ -19,6 +19,8 @@ import type { TaskAgentsRepository } from '../repositories/task-agents';
 import type { AddonsRepository } from '../repositories/addons';
 import type { MemoriesRepository } from '../repositories/memories';
 import type { DeliverablesRepository } from '../repositories/deliverables';
+import type { TaskSchedulesRepository } from '../repositories/task-schedules';
+import type { TaskExecutionHistoryRepository } from '../repositories/task-execution-history';
 import { z } from 'zod';
 
 /**
@@ -222,6 +224,14 @@ export type AccessTokensStore = Pick<
 export type TasksStore = TasksRepository;
 export type SubtasksStore = SubtasksRepository;
 export type TaskAgentsStore = TaskAgentsRepository;
+/**
+ * Public surface of TaskSchedulesRepository. The executor needs claim/find/update
+ * but not the maintenance helpers (pause/resume/listByStatus), which are used by
+ * the service layer (Phase 3) and the REST API (Phase 4). We re-export the full
+ * class to keep the adapter wiring simple — the executor only uses a subset.
+ */
+export type TaskSchedulesStore = TaskSchedulesRepository;
+export type TaskExecutionHistoryStore = TaskExecutionHistoryRepository;
 export type AddonsStore = AddonsRepository;
 export type MemoriesStore = MemoriesRepository;
 export type DeliverablesStore = DeliverablesRepository;
@@ -238,6 +248,8 @@ export type DatabaseRepositories = {
   tasks: TasksStore;
   subtasks: SubtasksStore;
   taskAgents: TaskAgentsStore;
+  taskSchedules: TaskSchedulesStore;
+  taskExecutionHistory: TaskExecutionHistoryStore;
   addons: AddonsStore;
   memories: MemoriesStore;
   deliverables: DeliverablesStore;
