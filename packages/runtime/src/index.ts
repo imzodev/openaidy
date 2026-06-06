@@ -14,4 +14,8 @@ export * from './errors';
 export * from './events';
 
 // Polymorphic scheduler extension (Phase 0 of recurring-tasks). See ./scheduling.ts.
-export type { ScheduledRunnable, ExecutionResult } from './scheduling';
+export type {
+  ScheduledRunnable,
+  ClaimedItem,
+  ExecutionResult,
+} from './scheduling';

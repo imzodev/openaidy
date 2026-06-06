@@ -55,6 +55,7 @@ import {
   SchedulerService,
   createSchedulerService,
   calculateNextRun,
+  createPulseRunnableAdapter,
 } from './scheduler';
 import { createAppConfigService } from './config/service';
 import { websocketGatewayPlugin } from './websocket';
@@ -330,6 +331,21 @@ export async function buildApp() {
       sessionsRepo,
       log as unknown as FastifyBaseLogger,
       { pollIntervalMs: 5000 },
+    );
+
+    // Register the PulseRunnableAdapter. This replaces the legacy
+    // `SchedulerService.executeJob()` switch — pulses are now driven
+    // by the same `ScheduledRunnable` contract as recurring tasks.
+    // Order matters: pulse is registered first so that when both
+    // a pulse and a recurring task are due at the same time, the
+    // pulse wins (preserves the pre-migration dispatch priority).
+    scheduler.registerRunnable(
+      createPulseRunnableAdapter({
+        jobsRepo,
+        sessionsStore: sessionsRepo,
+        sessionMessageService: sessionService,
+        logger: log as unknown as FastifyBaseLogger,
+      }),
     );
   }
 

@@ -33,6 +33,18 @@ export type ExecutionResult =
   | { ok: false; error: Error; durationMs: number };
 
 /**
+ * The shape returned by `ScheduledRunnable.claimNextDue`. The
+ * scheduler passes these to `execute(id, payload)` and
+ * `reschedule(id, payload, result)`. The `id` is the same id the
+ * runnable returned; the `payload` is opaque to the scheduler
+ * (it's the runnable's per-item context).
+ */
+export type ClaimedItem<TPayload> = {
+  id: string;
+  payload: TPayload;
+};
+
+/**
  * A work item that the scheduler can claim, execute, and reschedule.
  *
  * The scheduler doesn't know what's inside — it just calls these three

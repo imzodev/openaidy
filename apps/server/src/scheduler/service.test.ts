@@ -720,7 +720,11 @@ function makeRunnable(
         (async () => ({ id: 'item-1', payload: { foo: 'bar' } })),
     ),
     execute: vi.fn(
-      options.execute ?? (async () => ({ ok: true, durationMs: 5 })),
+      (options.execute ??
+        (async () => ({ ok: true as const, durationMs: 5 }))) as (
+        id: string,
+        payload: unknown,
+      ) => Promise<import('@openaidy/runtime').ExecutionResult>,
     ),
     reschedule: vi.fn(options.reschedule ?? (async () => null)),
   };
