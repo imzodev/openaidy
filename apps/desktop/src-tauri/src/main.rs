@@ -4,6 +4,7 @@
 mod commands;
 mod keychain;
 mod service;
+mod service_install;
 mod tray;
 mod window;
 
