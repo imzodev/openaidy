@@ -31,3 +31,6 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+[dev-dependencies]
+futures = "0.3.32"

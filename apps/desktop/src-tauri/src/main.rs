@@ -6,7 +6,9 @@ mod keychain;
 mod service;
 mod tray;
 
+use commands::AppState;
 use log::{error, info};
+use service::ServiceManager;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -22,25 +24,34 @@ async fn main() {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("openaidy");
 
+    // Create ServiceManager (replaces old ServiceHandle pattern)
+    let service_manager = Arc::new(ServiceManager::new(openaidy_home.clone()));
+
     // Load credentials from keychain (stubbed until Task 04)
     let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();
 
-    // Start the core service
-    let service_handle = service::start_service(openaidy_home.clone(), keychain_creds)
+    // Start the service using the new ServiceManager
+    let port = service_manager
+        .start(keychain_creds)
         .await
         .expect("Failed to start core service");
 
-    let port = service_handle.port;
     info!("Core service started on port {port}");
 
-    // Store service handle in app state so it lives for the duration of the app
-    let app_handle = Arc::new(service_handle);
+    let app_state = AppState {
+        service: service_manager,
+    };
 
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(app_handle.clone())
+        .manage(app_state)
+        .invoke_handler(tauri::generate_handler![
+            commands::get_service_status,
+            commands::restart_service,
+            commands::stop_service,
+        ])
         .setup(move |app| {
             info!("Tauri setup complete; core service on port {port}");
 
@@ -76,5 +87,5 @@ async fn main() {
     }
 
     // Shutdown service on app exit
-    service::stop_service().await;
+    // Note: service.stop() is called via AppState's drop or explicitly
 }
