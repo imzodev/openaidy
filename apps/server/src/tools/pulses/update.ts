@@ -47,11 +47,12 @@ export function createPulsesUpdateTool(deps: PulseToolDeps): BuiltinTool {
               },
             },
             cron: {
-              type: 'object',
-              properties: {
-                expression: { type: 'string' },
-                tz: { type: 'string' },
-              },
+              type: 'string',
+              description: 'Cron expression (e.g., "0 9 * * *").',
+            },
+            tz: {
+              type: 'string',
+              description: 'IANA timezone (optional).',
             },
             at: {
               type: 'string',
@@ -107,13 +108,9 @@ export function createPulsesUpdateTool(deps: PulseToolDeps): BuiltinTool {
           const daily = schedule['daily'] as { hour: number; minute: number };
           scheduleInput = { daily: { hour: daily.hour, minute: daily.minute } };
         } else if (schedule['cron']) {
-          const cronObj = schedule['cron'] as {
-            expression: string;
-            tz?: string;
-          };
           scheduleInput = {
-            cron: cronObj['expression'],
-            ...(cronObj['tz'] ? { tz: cronObj['tz'] } : {}),
+            cron: schedule['cron'] as string,
+            ...(schedule['tz'] ? { tz: schedule['tz'] as string } : {}),
           };
         } else if (schedule['at']) {
           scheduleInput = { at: schedule['at'] as string };

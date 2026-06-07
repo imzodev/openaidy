@@ -18,6 +18,7 @@ import {
   executeTask,
   getTask,
   type CreateTaskInput,
+  type UpdateTaskInput,
   type AgentRole,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
@@ -107,15 +108,24 @@ export function TasksPage() {
   const handleSubmit = async (input: CreateTaskInput) => {
     const task = selectedTask();
     if (task) {
-      // Update existing task
-      const result = await updateTask(task.id, input);
+      // Update existing task. PATCH /tasks/:id does NOT accept
+      // `schedule` — the server silently strips it, which would
+      // give the false impression the schedule was removed from
+      // the task view. Schedules have their own endpoints
+      // (POST/PATCH/DELETE /api/tasks/:taskId/schedule).
+      const updateInput: UpdateTaskInput = {
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+      };
+      const result = await updateTask(task.id, updateInput);
       if (result.ok) {
         handleTaskUpdated(result.data);
       } else {
         throw new Error(result.error.message);
       }
     } else {
-      // Create new task
+      // Create new task (with optional schedule attached on creation).
       const result = await createTask(input);
       if (result.ok) {
         handleTaskCreated(result.data);

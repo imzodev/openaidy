@@ -9,6 +9,7 @@ import type {
   ReplanPolicy,
   TaskScheduleDto,
   TaskExecutionHistoryDto,
+  CreateTaskScheduleInput,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -130,14 +131,21 @@ export type KanbanBoard = {
 };
 
 /**
- * Create task input
+ * Create task input.
+ *
+ * `schedule` uses the same `CreateTaskScheduleInput` shape as the
+ * dedicated `POST /api/tasks/:taskId/schedule` endpoint. The server
+ * expects an envelope, not the bare `ScheduleInput` discriminated
+ * union, so the `TaskModal` wraps the editor's `ScheduleInput` in
+ * `{ schedule: ... }` before posting. See
+ * `packages/shared-types/src/task-schedules.ts`.
  */
 export type CreateTaskInput = {
   title?: string;
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
-  schedule?: ScheduleInput;
+  schedule?: CreateTaskScheduleInput;
   agents?: Array<{
     agentId: string;
     role?: AgentRole;
@@ -469,7 +477,6 @@ export type {
   TaskScheduleDto as TaskSchedule,
   TaskExecutionHistoryStatus,
   TaskExecutionHistoryDto as TaskExecutionHistoryItem,
-  CreateTaskScheduleInput,
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
