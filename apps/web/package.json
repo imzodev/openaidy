@@ -28,7 +28,8 @@
     "lucide-solid": "^0.577.0",
     "marked": "^18.0.4",
     "solid-js": "^1.9.11",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@tauri-apps/api": "^2"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",

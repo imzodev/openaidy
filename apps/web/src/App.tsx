@@ -20,6 +20,7 @@ import {
   type SessionRun,
 } from './lib/ws-api';
 import { ThemeProvider } from './lib/theme';
+import { TauriProvider } from './lib/tauri-provider';
 import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
@@ -635,12 +636,14 @@ function AuthGate() {
     >
       <WebSocketProvider>
         <QueryClientProvider client={queryClient}>
-          <AppContent
-            onLogout={() => {
-              clearToken();
-              setAuthenticated(false);
-            }}
-          />
+          <TauriProvider>
+            <AppContent
+              onLogout={() => {
+                clearToken();
+                setAuthenticated(false);
+              }}
+            />
+          </TauriProvider>
         </QueryClientProvider>
       </WebSocketProvider>
     </Show>
