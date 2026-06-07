@@ -51,6 +51,10 @@ async fn main() {
             commands::get_service_status,
             commands::restart_service,
             commands::stop_service,
+            keychain::store_credential,
+            keychain::get_credential,
+            keychain::delete_credential,
+            keychain::list_credentials,
         ])
         .setup(move |app| {
             info!("Tauri setup complete; core service on port {port}");
