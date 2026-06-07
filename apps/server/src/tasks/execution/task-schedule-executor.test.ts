@@ -398,14 +398,25 @@ describe('TaskScheduleExecutor.execute', () => {
     const { executor, mocks } = harness;
     const subtask = makeSubtask();
     mocks.subtasksRepo.listByTask.mockResolvedValue([subtask]);
+    // Mock executeSubtasks to return startedCount: 1 (one subtask was executed)
+    mocks.taskService.executeSubtasks.mockResolvedValue({
+      ok: true,
+      data: { startedCount: 1 },
+    });
     const schedule = makeSchedule({ replanPolicy: 'never' });
     await executor.execute('sched-1', payloadFor({ schedule }));
     // No planning call
     expect(mocks.planningService).toBeUndefined();
     // No subtask delete
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
-    // Subtasks were executed (the existing plan was reused)
-    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith('task-1');
+    // Subtasks were executed (the existing plan was reused) and the
+    // session created by the executor was passed through so we don't
+    // create a duplicate "Subtask: <title>" session.
+    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ sessionId: expect.any(String) }),
+    );
+    // executeTask is NOT called because work was submitted (startedCount > 0)
     expect(mocks.taskService.executeTask).not.toHaveBeenCalled();
   });
 
@@ -494,7 +505,12 @@ describe('TaskScheduleExecutor.execute', () => {
     const { executor, mocks } = harness;
     mocks.subtasksRepo.listByTask.mockResolvedValue([]);
     await executor.execute('sched-1', payloadFor());
-    expect(mocks.taskService.executeTask).toHaveBeenCalledWith('task-1');
+    // The session created by the executor is passed through so the
+    // duplicate "Task: <title>" session is no longer created.
+    expect(mocks.taskService.executeTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ sessionId: expect.any(String) }),
+    );
     expect(mocks.taskService.executeSubtasks).not.toHaveBeenCalled();
   });
 
@@ -741,9 +757,13 @@ describe('Phase 7 — additional coverage', () => {
       }),
     );
     expect(result.ok).toBe(true);
-    // The task service is invoked with just the taskId — agent
-    // selection happens downstream.
-    expect(mocks.taskService.executeTask).toHaveBeenCalledWith('task-1');
+    // The task service is invoked with just the taskId (plus the
+    // session created by the executor) — agent selection happens
+    // downstream.
+    expect(mocks.taskService.executeTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ sessionId: expect.any(String) }),
+    );
   });
 
   it('reuses cached task_agents across runs (no N+1 in execute)', async () => {

@@ -532,7 +532,8 @@ export async function buildApp() {
       taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
       taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
       taskService: {
-        executeTask: (taskId) => taskService!.executeTask(taskId),
+        executeTask: (taskId, options) =>
+          taskService!.executeTask(taskId, options),
         executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
       },
       sessionService: sessionServiceForExecutor,
