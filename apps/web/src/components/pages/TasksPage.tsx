@@ -351,10 +351,12 @@ export function TasksPage() {
             />
           </Show>
           <Show when={detailView() === 'executions'}>
-            <TaskExecutionsPage
-              taskId={detailTaskId()!}
-              onBack={handleBackToDetail}
-            />
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+              <TaskExecutionsPage
+                taskId={detailTaskId()!}
+                onBack={handleBackToDetail}
+              />
+            </div>
           </Show>
         </div>
       </Show>
