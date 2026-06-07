@@ -266,11 +266,13 @@ export class TaskExecution {
         taskId,
         subtaskCount: subtasks.length,
       });
-      // Pass the session down so subtasks also reuse it instead of
-      // creating "Subtask: <title>" sessions.
-      const result = await this.executeSubtasks(taskId, {
-        sessionId: session.id,
-      });
+      // Only pass the session down to subtasks if the caller (e.g. the
+      // recurring-task executor) already created one. For normal API
+      // calls, each subtask should create its own session.
+      const executeSubtasksOptions = options.sessionId
+        ? { sessionId: options.sessionId }
+        : {};
+      const result = await this.executeSubtasks(taskId, executeSubtasksOptions);
       if (!result.ok) return { ok: false, error: result.error };
       return { ok: true, data: { sessionId: session.id } };
     }
