@@ -119,8 +119,12 @@ export function TaskModal(props: TaskModalProps) {
         description: description().trim(),
         priority: priority(),
         planningEnabled: planningEnabled(),
+        // The server expects `CreateTaskScheduleInput` (an envelope),
+        // not the bare `ScheduleInput` discriminated union. Wrap
+        // the schedule in `{ schedule: ... }` so the shape matches.
+        // See packages/shared-types/src/task-schedules.ts:121.
         ...(recurringEnabled() && draftSchedule()
-          ? { schedule: draftSchedule()! }
+          ? { schedule: { schedule: draftSchedule()! } }
           : {}),
         agents: selectedAgents().map((a) => ({
           agentId: a.agentId,

@@ -12,6 +12,17 @@ import { requireAuth } from '../middleware/require-auth';
 // CreateTaskScheduleInput shape, with `replanPolicy` and
 // `maxExecutions` as optional fields. Server-side defaults:
 // `replanPolicy='never'`, `maxExecutions=9999`.
+// API input for a task's schedule. Mirrors the canonical
+// `ScheduleInput` discriminated union from
+// `packages/shared-types/src/pulses.ts`:
+//   - one-level `cron: string` (plus optional `tz`),
+//   - `every: preset`, `daily: { hour, minute }`, `at: ISO datetime`.
+//
+// The `ScheduleEditor` in the web client produces this shape
+// directly, and the same shape is also produced by the
+// `pulses_create` / `pulses_update` / `task_schedules_create` /
+// `task_schedules_update` tools (we unified them on this canonical
+// shape in Phase 5).
 const taskScheduleInputSchema = z.object({
   schedule: z.union([
     z.object({
@@ -24,10 +35,8 @@ const taskScheduleInputSchema = z.object({
       }),
     }),
     z.object({
-      cron: z.object({
-        expression: z.string().min(1),
-        tz: z.string().optional(),
-      }),
+      cron: z.string().min(1),
+      tz: z.string().optional(),
     }),
     z.object({
       at: z.string().datetime(),
@@ -199,28 +208,20 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       }));
     }
     if (parsed.schedule !== undefined) {
-      // Convert the API `cron: { expression, tz? }` shape into the
-      // service's flat `ScheduleInput` discriminated union.
-      const sched = parsed.schedule.schedule;
-      let scheduleInput: import('@openaidy/shared-types').ScheduleInput;
-      if ('every' in sched) {
-        scheduleInput = { every: sched.every };
-      } else if ('daily' in sched) {
-        scheduleInput = { daily: sched.daily };
-      } else if ('cron' in sched) {
-        const out: import('@openaidy/shared-types').ScheduleInput = {
-          cron: sched.cron.expression,
-        };
-        if (sched.cron.tz !== undefined) {
-          (out as { cron: string; tz?: string }).tz = sched.cron.tz;
-        }
-        scheduleInput = out;
-      } else {
-        scheduleInput = { at: sched.at };
-      }
+      // The schema accepts the canonical ScheduleInput shape (one
+      // level deep: `cron: string`, `every: preset`, `daily: ...`,
+      // `at: ISO`). Pass it through to the service as-is.
+      //
+      // The Zod-inferred type allows `tz: string | undefined` while
+      // ScheduleInput is `tz?: string` (omittable, not explicitly
+      // undefined) under exactOptionalPropertyTypes. We cast through
+      // `unknown` to coerce — safe because the Zod schema and
+      // ScheduleInput both accept the same shape (the same union
+      // variants, just different optional semantics).
       const createScheduleInput: import('@openaidy/shared-types').CreateTaskScheduleInput =
         {
-          schedule: scheduleInput,
+          schedule: parsed.schedule
+            .schedule as unknown as import('@openaidy/shared-types').ScheduleInput,
         };
       if (parsed.schedule.replanPolicy !== undefined) {
         createScheduleInput.replanPolicy = parsed.schedule.replanPolicy;

@@ -44,12 +44,17 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
               },
             },
             cron: {
-              type: 'object',
-              description: 'Fire using a cron expression.',
-              properties: {
-                expression: { type: 'string' },
-                tz: { type: 'string' },
-              },
+              type: 'string',
+              description:
+                'Cron expression (e.g., "0 9 * * *"). For custom intervals ' +
+                '(e.g., every 5min) use cron directly — "*/5 * * * *".',
+            },
+            tz: {
+              type: 'string',
+              description:
+                'IANA timezone string (e.g., "America/Mexico_City"). ' +
+                'Optional. Note: timezone-aware parsing is not implemented yet; ' +
+                'the executor currently uses UTC.',
             },
             at: {
               type: 'string',
@@ -110,13 +115,9 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
         const daily = schedule['daily'] as { hour: number; minute: number };
         scheduleInput = { daily: { hour: daily.hour, minute: daily.minute } };
       } else if (schedule['cron']) {
-        const cronObj = schedule['cron'] as {
-          expression: string;
-          tz?: string;
-        };
         scheduleInput = {
-          cron: cronObj['expression'],
-          ...(cronObj['tz'] ? { tz: cronObj['tz'] } : {}),
+          cron: schedule['cron'] as string,
+          ...(schedule['tz'] ? { tz: schedule['tz'] as string } : {}),
         };
       } else if (schedule['at']) {
         scheduleInput = { at: schedule['at'] as string };
