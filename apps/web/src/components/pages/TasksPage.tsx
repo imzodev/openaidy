@@ -25,7 +25,11 @@ import {
 import { listAgents, type Agent } from '../../lib/api';
 import { useEscapeKey } from '../settings/hooks';
 
-export function TasksPage() {
+export type TasksPageProps = {
+  onOpenSession: (sessionId: string) => void;
+};
+
+export function TasksPage(props: TasksPageProps) {
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
   const [error, setError] = createSignal<string | null>(null);
   const [isModalOpen, setIsModalOpen] = createSignal(false);
@@ -355,6 +359,7 @@ export function TasksPage() {
               <TaskExecutionsPage
                 taskId={detailTaskId()!}
                 onBack={handleBackToDetail}
+                onOpenSession={props.onOpenSession}
               />
             </div>
           </Show>
