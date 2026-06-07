@@ -5,11 +5,13 @@ mod commands;
 mod keychain;
 mod service;
 mod tray;
+mod window;
 
 use commands::AppState;
 use log::{error, info};
 use service::ServiceManager;
 use std::sync::Arc;
+use window::setup_close_to_tray;
 
 #[tokio::main]
 async fn main() {
@@ -47,6 +49,16 @@ async fn main() {
         .plugin(tauri_plugin_keychain::init())
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
+        .setup(move |app| {
+            info!("Setting up system tray");
+            tray::setup_tray(app)?;
+
+            info!("Setting up close-to-tray handler");
+            setup_close_to_tray(app.handle().clone())?;
+
+            info!("Tauri setup complete; core service on port {port}");
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::get_service_status,
             commands::restart_service,
@@ -55,41 +67,14 @@ async fn main() {
             keychain::get_credential,
             keychain::delete_credential,
             keychain::list_credentials,
+            window::show_main_window,
+            window::minimize_window,
+            window::toggle_maximize,
+            window::close_window,
         ])
-        .setup(move |app| {
-            info!("Tauri setup complete; core service on port {port}");
-
-            // Validate that the web dist exists (in dev, the Vite server handles this)
-            #[cfg(not(debug_assertions))]
-            {
-                let dist_path = app.path().resolve(
-                    "frontend/dist",
-                    app.config()
-                        .app
-                        .as_ref()
-                        .unwrap()
-                        .windows
-                        .first()
-                        .map(|w| w.label.as_str())
-                        .unwrap_or("main"),
-                );
-                if !dist_path.exists() {
-                    error!("Frontend dist not found at {:?}", dist_path);
-                    return Err("Frontend dist not found. Run `pnpm build` first.".into());
-                }
-            }
-
-            #[cfg(debug_assertions)]
-            let _ = app;
-
-            Ok(())
-        })
         .run(tauri::generate_context!());
 
     if let Err(e) = result {
         error!("Tauri error: {e}");
     }
-
-    // Shutdown service on app exit
-    // Note: service.stop() is called via AppState's drop or explicitly
 }
