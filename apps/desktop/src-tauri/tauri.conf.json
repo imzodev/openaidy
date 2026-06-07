@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "pnpm --filter web build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -29,12 +29,12 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: https:;"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "dmg", "deb", "appimage"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,14 +42,40 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": ["scripts/openaidy-service.sh"],
+    "category": "Productivity",
+    "shortDescription": "AI Assistant Desktop App",
+    "longDescription": "OpenAidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
+    "copyright": "Copyright © 2024",
+    "publisher": "OpenAidy",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "languages": ["English", "Spanish", "Portuguese"],
+        "displayLanguageSelector": true
+      },
+      "wix": {
+        "language": ["en-US", "es-ES", "pt-BR"]
+      }
+    },
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "frameworks": [],
+      "signingIdentity": "-",
+      "providerShortName": "OpenAidy",
+      "entitlements": "bundle/macos/entitlements.plist"
     },
     "linux": {
-      "appimage": { "bundleMediaFramework": false }
-    },
-    "windows": {
-      "nsis": { "installMode": "currentUser" }
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libsecret-1-0"]
+      },
+      "rpm": {
+        "release": "1"
+      }
     }
   },
   "plugins": {
