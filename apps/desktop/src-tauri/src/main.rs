@@ -11,7 +11,8 @@ use commands::AppState;
 use log::{error, info};
 use service::ServiceManager;
 use std::sync::Arc;
-use window::setup_close_to_tray;
+use tauri::Manager;
+use window::{set_openaidy_home, setup_close_to_tray, WindowState};
 
 #[tokio::main]
 async fn main() {
@@ -44,6 +45,9 @@ async fn main() {
         service: service_manager,
     };
 
+    // Load saved window state for restoration
+    let window_state = WindowState::load(&openaidy_home);
+
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_keychain::init())
@@ -55,6 +59,26 @@ async fn main() {
 
             info!("Setting up close-to-tray handler");
             setup_close_to_tray(app.handle().clone())?;
+
+            // Set openaidy home for window state saving
+            set_openaidy_home(openaidy_home.clone());
+
+            // Restore window state if saved
+            if let Some(state) = window_state.as_ref() {
+                if let Some(window) = app.get_webview_window("main") {
+                    if !state.is_maximized {
+                        let _ = window.set_position(tauri::Position::Physical(
+                            tauri::PhysicalPosition::new(state.x, state.y),
+                        ));
+                        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+                            state.width,
+                            state.height,
+                        )));
+                    } else {
+                        let _ = window.maximize();
+                    }
+                }
+            }
 
             info!("Tauri setup complete; core service on port {port}");
             Ok(())
@@ -71,6 +95,7 @@ async fn main() {
             window::minimize_window,
             window::toggle_maximize,
             window::close_window,
+            window::toggle_fullscreen,
         ])
         .run(tauri::generate_context!());
 
