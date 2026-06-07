@@ -6,7 +6,7 @@
  */
 
 import { createSignal, createEffect, Show, For } from 'solid-js';
-import { X, Edit2, Trash2, History } from 'lucide-solid';
+import { X, Edit2, Trash2, History, Pause, Play, Square } from 'lucide-solid';
 import {
   getTask,
   updateTask,
@@ -18,6 +18,9 @@ import {
   listDeliverables,
   updateDeliverable,
   getTaskSchedule,
+  pauseTaskSchedule,
+  resumeTaskSchedule,
+  removeTaskSchedule,
   type Deliverable,
 } from '../../lib/api-tasks';
 import { readWorkspaceFile } from '../../lib/api';
@@ -107,6 +110,8 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [editDescription, setEditDescription] = createSignal('');
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [isReplanning, setIsReplanning] = createSignal(false);
+  const [isPausingResuming, setIsPausingResuming] = createSignal(false);
+  const [isStopping, setIsStopping] = createSignal(false);
   const [deliverableModal, setDeliverableModal] = createSignal<{
     isOpen: boolean;
     content: string;
@@ -347,6 +352,46 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
     }
   }
 
+  /**
+   * Pause or resume the recurring schedule
+   */
+  async function handlePauseResume() {
+    if (!schedule()) return;
+    setIsPausingResuming(true);
+    try {
+      const isPaused = schedule()!.status === 'paused';
+      const updated = isPaused
+        ? await resumeTaskSchedule(props.taskId)
+        : await pauseTaskSchedule(props.taskId);
+      setSchedule(updated);
+    } catch (err) {
+      console.error('[TaskDetailPanel] failed to pause/resume schedule', err);
+      setError(
+        `Failed to ${schedule()!.status === 'paused' ? 'resume' : 'pause'} schedule`,
+      );
+    } finally {
+      setIsPausingResuming(false);
+    }
+  }
+
+  /**
+   * Stop (remove) the recurring schedule
+   */
+  async function handleStopSchedule() {
+    if (!schedule()) return;
+    if (!confirm('Stop this recurring task? This cannot be undone.')) return;
+    setIsStopping(true);
+    try {
+      await removeTaskSchedule(props.taskId);
+      setSchedule(null);
+    } catch (err) {
+      console.error('[TaskDetailPanel] failed to stop schedule', err);
+      setError('Failed to stop schedule');
+    } finally {
+      setIsStopping(false);
+    }
+  }
+
   return (
     <div class="task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       {/* Header */}
@@ -506,6 +551,49 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
                 size="md"
                 showStatus={true}
               />
+              {/* Action buttons for the schedule */}
+              <div class="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  onClick={handlePauseResume}
+                  disabled={isPausingResuming() || isStopping()}
+                  title={
+                    schedule()!.status === 'paused'
+                      ? 'Resume the schedule'
+                      : 'Pause the schedule'
+                  }
+                >
+                  <Show
+                    when={isPausingResuming()}
+                    fallback={
+                      schedule()!.status === 'paused' ? (
+                        <Play class="w-3.5 h-3.5" />
+                      ) : (
+                        <Pause class="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    <span class="w-3.5 h-3.5 inline-block animate-spin">⟳</span>
+                  </Show>
+                  {schedule()!.status === 'paused' ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-red-300 dark:border-red-600 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  onClick={handleStopSchedule}
+                  disabled={isPausingResuming() || isStopping()}
+                  title="Stop and remove this recurring schedule"
+                >
+                  <Show
+                    when={isStopping()}
+                    fallback={<Square class="w-3.5 h-3.5" />}
+                  >
+                    <span class="w-3.5 h-3.5 inline-block animate-spin">⟳</span>
+                  </Show>
+                  Stop
+                </button>
+              </div>
               <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
                 <div>
                   <span class="text-gray-500 dark:text-gray-500">
