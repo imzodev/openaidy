@@ -254,20 +254,23 @@ export class TaskService {
 
   async executeTask(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
-    return this.execution.executeTask(taskId);
+    return this.execution.executeTask(taskId, options);
   }
 
   async executeSubtask(
     subtaskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
-    return this.execution.executeSubtask(subtaskId);
+    return this.execution.executeSubtask(subtaskId, options);
   }
 
   async executeSubtasks(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ startedCount: number }>> {
-    return this.execution.executeSubtasks(taskId);
+    return this.execution.executeSubtasks(taskId, options);
   }
 
   async triggerSubtaskRetry(

@@ -59,12 +59,14 @@ export type TaskSchedulePayload = {
 export type ExecutorTaskService = {
   executeTask(
     taskId: string,
+    options?: { sessionId?: string },
   ): Promise<
     | { ok: true; data: { sessionId: string } }
     | { ok: false; error: { code: string; message: string } }
   >;
   executeSubtasks(
     taskId: string,
+    options?: { sessionId?: string },
   ): Promise<
     | { ok: true; data: { startedCount: number } }
     | { ok: false; error: { code: string; message: string } }
@@ -306,20 +308,35 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
 
       // 6. Run the work. We re-use the existing `TaskService` flow
       //    rather than re-implementing session/subtask dispatch here.
-      //    - If subtasks exist (either from a prior plan, or from this
-      //      run's planning): `executeSubtasks` walks them in order.
-      //    - If no subtasks: `executeTask` falls back to running the
-      //      description as a single agent message.
+      //    The session was already created above (with the "run #N"
+      //    title) — pass its id through so `executeTask` /
+      //    `executeSubtasks` reuse it instead of creating a second
+      //    "Task: <title>" or "Subtask: <title>" session for the
+      //    same run.
       const subtasks = await this.deps.subtasksRepo.listByTask(taskId);
+      let submittedWork = false;
       if (subtasks.length > 0) {
-        const result = await this.deps.taskService.executeSubtasks(taskId);
+        const result = await this.deps.taskService.executeSubtasks(taskId, {
+          sessionId: session.id,
+        });
         if (!result.ok) {
           throw new Error(
             `executeSubtasks failed: ${result.error.code} — ${result.error.message}`,
           );
         }
-      } else {
-        const result = await this.deps.taskService.executeTask(taskId);
+        // If no subtasks were actually executed (all completed or no pending),
+        // fall through to executeTask to submit the task description to the
+        // executor's session. This ensures the "run #N" session always has content.
+        submittedWork = result.data.startedCount > 0;
+      }
+
+      // If no work was submitted (no subtasks, or all subtasks were already done),
+      // submit the task description directly to the executor's session so the
+      // "run #N" session always has content.
+      if (!submittedWork) {
+        const result = await this.deps.taskService.executeTask(taskId, {
+          sessionId: session.id,
+        });
         if (!result.ok) {
           throw new Error(
             `executeTask failed: ${result.error.code} — ${result.error.message}`,

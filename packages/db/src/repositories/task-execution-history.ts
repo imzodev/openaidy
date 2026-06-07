@@ -30,20 +30,44 @@ export class TaskExecutionHistoryRepository {
     taskDescription: string;
     attemptNumber?: number;
   }): Promise<schema.TaskExecutionHistoryRow> {
-    const [row] = await this.db
-      .insert(schema.taskExecutionHistory)
-      .values({
-        id: nanoid(),
-        taskId: input.taskId,
-        scheduleId: input.scheduleId,
-        status: 'planned',
-        taskTitle: input.taskTitle,
-        taskDescription: input.taskDescription,
-        attemptNumber: input.attemptNumber ?? 1,
-        startedAt: new Date(),
-      })
-      .returning();
-    return row!;
+    // We bypass the typed Drizzle insert because the table is declared
+    // with `pgTable` (Postgres-style types), but the actual driver in
+    // the dev SQLite DB is better-sqlite3. Two mismatches:
+    //   1. `defaultNow()` would compile to `now()` in SQL, which
+    //      SQLite doesn't have. `task_execution_history` is created
+    //      via raw CREATE TABLE in client.ts with `TEXT NOT NULL
+    //      DEFAULT CURRENT_TIMESTAMP` (so the SQL default works) but
+    //      Drizzle still emits `now()` from the typed schema.
+    //   2. `timestamp({ withTimezone: true })` columns try to bind
+    //      JS `Date` objects, but better-sqlite3 only accepts
+    //      numbers/strings/bigints/buffers/null. Other repos work
+    //      around this by passing the value through a different path,
+    //      but `create` here is the only place that does an INSERT
+    //      (everywhere else is an UPDATE which Drizzle handles).
+    //
+    // Using raw SQL is the only way to avoid the schema-vs-driver
+    // mismatch for inserts to this table.
+    const id = nanoid();
+    const now = new Date().toISOString();
+    const _result = await this.db.run(
+      // drizzle-orm exposes `sql` for parameterised raw queries.
+      sql`INSERT INTO task_execution_history
+            (id, task_id, schedule_id, status, task_title,
+             task_description, attempt_number, started_at, created_at)
+          VALUES
+            (${id}, ${input.taskId}, ${input.scheduleId}, ${'planned'},
+             ${input.taskTitle}, ${input.taskDescription},
+             ${input.attemptNumber ?? 1}, ${now}, ${now})`,
+    );
+    // `result` from a Drizzle SQLite run doesn't echo the row back;
+    // look it up to return a row-shaped object.
+    const found = await this.findById(id);
+    if (!found) {
+      throw new Error(
+        `task_execution_history.create: row not found after insert (id=${id})`,
+      );
+    }
+    return found;
   }
 
   /**
