@@ -9,7 +9,7 @@ import { createResource, createSignal, For, Show } from 'solid-js';
 import { listTaskExecutions, getTaskSchedule } from '../../lib/api-tasks';
 import type { TaskExecutionHistoryStatus } from '../../lib/types';
 import { ScheduleDisplay } from '../common/ScheduleDisplay';
-import { ArrowLeft, AlertCircle } from 'lucide-solid';
+import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-solid';
 
 const STATUS_COLORS: Record<TaskExecutionHistoryStatus, string> = {
   planned: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -26,6 +26,7 @@ const STATUS_COLORS: Record<TaskExecutionHistoryStatus, string> = {
 export type TaskExecutionsPageProps = {
   taskId: string;
   onBack: () => void;
+  onOpenSession: (sessionId: string) => void;
 };
 
 const PAGE_SIZE = 20;
@@ -156,7 +157,10 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                   Duration
                 </th>
                 <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
-                  Attempt
+                  Run #
+                </th>
+                <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
+                  Session
                 </th>
                 <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
                   Error
@@ -187,8 +191,30 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                         ? `${(ex.durationMs / 1000).toFixed(1)}s`
                         : '-'}
                     </td>
-                    <td class="px-4 py-3 text-gray-500 dark:text-gray-500">
+                    <td class="px-4 py-3 text-gray-500 dark:text-gray-500 font-mono">
                       #{ex.attemptNumber}
+                    </td>
+                    <td class="px-4 py-3">
+                      <Show
+                        when={ex.sessionId}
+                        fallback={
+                          <span class="text-gray-400 dark:text-gray-600 text-xs">
+                            —
+                          </span>
+                        }
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            ex.sessionId && props.onOpenSession(ex.sessionId)
+                          }
+                          class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-xs"
+                          title="View session"
+                        >
+                          <ExternalLink class="w-3.5 h-3.5" />
+                          View
+                        </button>
+                      </Show>
                     </td>
                     <td class="px-4 py-3">
                       <Show when={ex.errorMessage}>

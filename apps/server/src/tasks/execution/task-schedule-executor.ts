@@ -244,6 +244,7 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
       scheduleId: schedule.id,
       taskTitle,
       taskDescription,
+      attemptNumber: schedule.executionCount + 1,
     });
 
     try {
@@ -496,6 +497,7 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
       scheduleId: schedule.id,
       taskTitle: task.title,
       taskDescription: task.description,
+      attemptNumber: schedule.executionCount + 1,
     });
 
     const result = await this.execute(schedule.id, payload);
