@@ -506,8 +506,8 @@ describe('TaskScheduleExecutor.execute', () => {
       expect.objectContaining({ sessionId: 'session-1' }), // fresh session-1 from Run 2
     );
     // Verify: the stale session was NOT passed through
-    const executeCall = mocks.taskService.executeSubtasks.mock.calls[0][1];
-    expect(executeCall.sessionId).not.toBe('run-1-stale-session');
+    const executeCall = mocks.taskService.executeSubtasks.mock.calls[0]?.[1];
+    expect(executeCall?.sessionId).not.toBe('run-1-stale-session');
   });
 
   it('creates a new session and links it to the task before running', async () => {
