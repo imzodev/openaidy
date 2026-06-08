@@ -87,6 +87,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       finished_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       metadata TEXT,
+      first_message_id TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
@@ -549,6 +550,17 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     sqlite.exec(
       `CREATE INDEX IF NOT EXISTS deliverables_status_idx ON deliverables(status)`,
     );
+  }
+
+  // Migration: Add first_message_id to session_runs if not exists
+  const sessionRunsInfo = sqlite.pragma('table_info(session_runs)') as Array<{
+    name: string;
+  }>;
+  const hasFirstMessageId = sessionRunsInfo.some(
+    (col) => col.name === 'first_message_id',
+  );
+  if (!hasFirstMessageId) {
+    sqlite.exec(`ALTER TABLE session_runs ADD COLUMN first_message_id TEXT`);
   }
 }
 
