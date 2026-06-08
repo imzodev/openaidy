@@ -1256,6 +1256,7 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
+        firstMessageId: assistantMessage.id,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
 
@@ -1372,6 +1373,7 @@ export class SessionMessageService {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
+      firstMessageId?: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
@@ -1383,6 +1385,7 @@ export class SessionMessageService {
           completionTokens: number;
           totalTokens: number;
         };
+        firstMessageId?: string;
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
@@ -1393,6 +1396,9 @@ export class SessionMessageService {
           completionTokens: input.completionTokens ?? 0,
           totalTokens: input.totalTokens ?? 0,
         };
+      }
+      if (input.firstMessageId !== undefined) {
+        successInput.firstMessageId = input.firstMessageId;
       }
       if (input.metadata !== undefined) {
         successInput.metadata = input.metadata;

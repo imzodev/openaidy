@@ -84,6 +84,8 @@ export type SessionMessage = {
   role: MessageRole;
   content: string;
   toolCallId?: string;
+  /** ID of the run that produced this message (assistant messages only) */
+  runId?: string;
   sequence: number;
   createdAt: string;
   metadata?: Record<string, unknown>;
@@ -143,5 +145,7 @@ export type SessionRun = {
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
+  /** ID of the first assistant message produced by this run */
+  firstMessageId?: string;
   metadata?: Record<string, unknown>;
 };

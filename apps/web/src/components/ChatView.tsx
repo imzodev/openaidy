@@ -12,6 +12,8 @@ type ChatViewProps = {
   error?: string;
   streamingContent?: string;
   isStreaming?: boolean;
+  /** Message ID to scroll to (e.g. from clicking a run) */
+  scrollToMessageId?: string;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -31,6 +33,18 @@ export function ChatView(props: ChatViewProps) {
     void props.streamingContent;
     if (!isUserScrolledUp) {
       bottomRef?.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // Scroll to a specific message when scrollToMessageId is set (e.g. from clicking a run)
+  createEffect(() => {
+    const targetId = props.scrollToMessageId;
+    if (!targetId || !scrollContainerRef) return;
+    const el = scrollContainerRef.querySelector(
+      `[data-message-id="${targetId}"]`,
+    );
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
 
@@ -140,7 +154,10 @@ export function ChatView(props: ChatViewProps) {
       <Show when={!props.isLoading && props.messages.length > 0}>
         <For each={props.messages}>
           {(message) => (
-            <div class={`rounded-lg p-4 ${getRoleClass(message)}`}>
+            <div
+              class={`rounded-lg p-4 ${getRoleClass(message)}`}
+              data-message-id={message.id}
+            >
               <div class="flex items-start gap-3">
                 <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
                   {getRoleIcon(message)}
