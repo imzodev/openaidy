@@ -25,6 +25,7 @@ export type {
   ChannelStatusResponse,
   Session,
   MessageRole,
+  SessionSearchResult,
   // Pulse types from shared-types — single source of truth.
   ScheduleInput,
   // Recurring task schedules (Phase 6). These mirror the
