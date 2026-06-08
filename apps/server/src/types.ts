@@ -66,6 +66,7 @@ export type SessionRunRecord = {
   finishedAt?: string;
   createdAt: string;
   metadata?: Record<string, unknown>;
+  firstMessageId?: string;
 };
 
 import type { ProviderServices } from './providers';
