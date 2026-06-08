@@ -111,6 +111,7 @@ type ExecutorMocks = {
   subtasksRepo: {
     listByTask: ReturnType<typeof vi.fn>;
     deleteByTask?: ReturnType<typeof vi.fn>;
+    clearSessionIdsByTask?: ReturnType<typeof vi.fn>;
   };
   taskAgentsRepo: {
     listByTask: ReturnType<typeof vi.fn>;
@@ -181,6 +182,7 @@ function makeHarness(
   const subtasksRepo: ExecutorMocks['subtasksRepo'] = {
     listByTask: vi.fn().mockResolvedValue(subtasks),
     deleteByTask: vi.fn().mockResolvedValue(undefined),
+    clearSessionIdsByTask: vi.fn().mockResolvedValue(undefined),
   };
   const taskAgentsRepo = {
     listByTask: vi.fn().mockResolvedValue(agents),
@@ -394,7 +396,7 @@ describe('TaskScheduleExecutor.execute', () => {
     );
   });
 
-  it('with replanPolicy=never: skips planning, reuses subtasks, does NOT delete them', async () => {
+  it('with replanPolicy=never: skips planning, reuses subtasks, does NOT delete them but DOES clear sessionIds', async () => {
     const { executor, mocks } = harness;
     const subtask = makeSubtask();
     mocks.subtasksRepo.listByTask.mockResolvedValue([subtask]);
@@ -407,8 +409,12 @@ describe('TaskScheduleExecutor.execute', () => {
     await executor.execute('sched-1', payloadFor({ schedule }));
     // No planning call
     expect(mocks.planningService).toBeUndefined();
-    // No subtask delete
+    // No subtask delete (they are reused)
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
+    // sessionIds are cleared so Run N subtasks don't reuse Run N-1 sessions
+    expect(mocks.subtasksRepo.clearSessionIdsByTask).toHaveBeenCalledWith(
+      'task-1',
+    );
     // Subtasks were executed (the existing plan was reused) and the
     // session created by the executor was passed through so we don't
     // create a duplicate "Subtask: <title>" session.
@@ -469,6 +475,39 @@ describe('TaskScheduleExecutor.execute', () => {
     );
     expect(mocks.planningService!.planTask).not.toHaveBeenCalled();
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
+  });
+
+  it('Run 2 of recurring planned task: clears sessionIds so subtasks attach to the new run session', async () => {
+    // Regression: on the 2nd run of a recurring planned task, subtasks
+    // from Run 1 had stale sessionId refs. When executeSubtask checked
+    // 'subtask.sessionId ? skip : create new', it reused the Run 1 session
+    // instead of creating a Run 2 session — breaking verification routing.
+    // Fix: cleanup block calls clearSessionIdsByTask (not deleteByTask) so
+    // each subtask gets a fresh session attached to the new run.
+    const schedule = makeSchedule({ replanPolicy: 'never' });
+    const { executor, mocks } = makeHarness({ schedule });
+    // Simulate Run 1 left subtasks with stale sessionIds
+    const staleSubtask = makeSubtask({ sessionId: 'run-1-stale-session' });
+    mocks.subtasksRepo.listByTask.mockResolvedValue([staleSubtask]);
+    mocks.taskService.executeSubtasks.mockResolvedValue({
+      ok: true,
+      data: { startedCount: 1 },
+    });
+    await executor.execute('sched-1', payloadFor({ schedule }));
+    // deleteByTask was NOT called (subtasks are kept)
+    expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
+    // sessionIds were cleared so each subtask creates a fresh session
+    expect(mocks.subtasksRepo.clearSessionIdsByTask).toHaveBeenCalledWith(
+      'task-1',
+    );
+    // executeSubtasks received the NEW run session (not the stale one)
+    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ sessionId: 'session-1' }), // fresh session-1 from Run 2
+    );
+    // Verify: the stale session was NOT passed through
+    const executeCall = mocks.taskService.executeSubtasks.mock.calls[0][1];
+    expect(executeCall.sessionId).not.toBe('run-1-stale-session');
   });
 
   it('creates a new session and links it to the task before running', async () => {
