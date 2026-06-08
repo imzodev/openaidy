@@ -257,10 +257,17 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
 
       // 3. Cleanup previous run. Subtasks are deleted ONLY when we're
       //    about to replan (otherwise the new session will execute the
-      //    existing ones — the cheap path). The session reference is
-      //    always reset so the new run starts fresh.
+      //    existing ones — the cheap path). We also clear subtask
+      //    sessionIds so Run N subtasks don't accidentally reuse Run
+      //    N-1 sessions (which would break verification event routing).
       if (willReplan) {
         await this.deps.subtasksRepo.deleteByTask?.(taskId);
+      } else {
+        // No replan: subtasks are kept (cheap path) but their sessionIds
+        // must be cleared so each run's subtasks attach to the new
+        // "Task: <title> (run #N)" session instead of stale sessions
+        // from a previous run.
+        await this.deps.subtasksRepo.clearSessionIdsByTask?.(taskId);
       }
       await this.deps.tasksRepo.update(taskId, { sessionId: null });
       await this.deps.tasksRepo.updateStatus?.(taskId, 'todo');

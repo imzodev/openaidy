@@ -200,6 +200,21 @@ export class SubtasksRepository {
   }
 
   /**
+   * Clear sessionId on all subtasks for a task.
+   * Used by the recurring-task executor to reset subtask sessions
+   * between runs so Run N subtasks attach to the Run N session
+   * instead of stale sessions from previous runs.
+   */
+  async clearSessionIdsByTask(taskId: string): Promise<schema.Subtask[]> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({ sessionId: null, updatedAt: new Date() })
+      .where(eq(schema.subtasks.taskId, taskId))
+      .returning();
+    return results;
+  }
+
+  /**
    * Delete a subtask
    */
   async delete(id: string): Promise<schema.Subtask | null> {
