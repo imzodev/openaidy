@@ -1,6 +1,17 @@
-import { Show, For } from 'solid-js';
-import { MessageSquare, Plus, Trash2, Clock } from 'lucide-solid';
+import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
+import {
+  MessageSquare,
+  Plus,
+  Trash2,
+  Clock,
+  Search,
+  X,
+  FileText,
+  AlignLeft,
+} from 'lucide-solid';
+import { searchSessions } from '../../lib/api';
 import type { Session } from '../../lib/api';
+import type { SessionSearchResult } from '../../lib/types';
 
 type SessionsPageProps = {
   sessions: Session[];
@@ -12,9 +23,80 @@ type SessionsPageProps = {
 };
 
 export function SessionsPage(props: SessionsPageProps) {
+  const [searchQuery, setSearchQuery] = createSignal('');
+  const [searchResults, setSearchResults] = createSignal<
+    SessionSearchResult[] | null
+  >(null);
+  const [isSearching, setIsSearching] = createSignal(false);
+  const [searchError, setSearchError] = createSignal<string | null>(null);
+
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString();
   };
+
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    try {
+      const result = await searchSessions(query.trim(), {
+        limit: 20,
+        currentSessionId: props.selectedSessionId,
+      });
+      setSearchResults(result.items);
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed');
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Debounced search on query change
+  createEffect(() => {
+    const query = searchQuery();
+    if (debounceTimer) clearTimeout(debounceTimer);
+
+    if (!query.trim()) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    debounceTimer = setTimeout(() => {
+      performSearch(query);
+    }, 300);
+  });
+
+  onCleanup(() => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+  });
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults(null);
+    setSearchError(null);
+  };
+
+  const handleSelectSearchResult = (session: SessionSearchResult) => {
+    props.onSelectSession(session.id);
+    // Optionally clear search after selection
+    clearSearch();
+  };
+
+  const isSearching_ = () => isSearching();
+  const hasSearchResults = () => searchResults() !== null;
+  const searchResults_ = () => searchResults() ?? [];
+  const sessions_ = () => props.sessions;
 
   return (
     <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
@@ -30,73 +112,164 @@ export function SessionsPage(props: SessionsPageProps) {
           </button>
         </div>
 
-        <Show when={props.isLoading}>
-          <div class="text-center py-12">
-            <div class="animate-pulse text-text-tertiary">
-              Loading sessions...
+        {/* Search bar */}
+        <div class="mb-4">
+          <div class="relative">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+            <input
+              type="text"
+              placeholder="Search sessions by title or message content..."
+              value={searchQuery()}
+              onInput={(e) => setSearchQuery(e.currentTarget.value)}
+              class="w-full pl-8 pr-8 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 text-text-primary placeholder:text-text-tertiary"
+            />
+            <Show when={searchQuery()}>
+              <button
+                onClick={clearSearch}
+                class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-text-tertiary hover:text-text-primary transition-colors"
+                title="Clear search"
+              >
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </Show>
+          </div>
+          <Show when={isSearching_()}>
+            <div class="mt-2 text-xs text-text-tertiary">Searching...</div>
+          </Show>
+          <Show when={searchError()}>
+            <div class="mt-2 text-xs text-red-500">{searchError()}</div>
+          </Show>
+        </div>
+
+        {/* Search results */}
+        <Show when={hasSearchResults()}>
+          <div class="mb-4">
+            <p class="text-sm text-text-secondary mb-2">
+              {searchResults_().length > 0
+                ? `${searchResults_().length} result${searchResults_().length === 1 ? '' : 's'} for "${searchQuery()}"`
+                : `No results for "${searchQuery()}"`}
+            </p>
+            <div class="grid gap-3">
+              <For each={searchResults_()}>
+                {(result) => (
+                  <div
+                    class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/50 transition-all cursor-pointer"
+                    onClick={() => handleSelectSearchResult(result)}
+                  >
+                    <div class="flex items-start gap-3">
+                      <div class="mt-0.5">
+                        <Show
+                          when={result.matchType === 'title'}
+                          fallback={
+                            <FileText class="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                          }
+                        >
+                          <AlignLeft class="w-4 h-4 text-green-500 dark:text-green-400" />
+                        </Show>
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                          <h3 class="font-medium text-text-primary truncate text-sm">
+                            {result.title}
+                          </h3>
+                          <span
+                            class={`shrink-0 text-xs px-1.5 py-0.5 rounded ${
+                              result.matchType === 'title'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                            }`}
+                          >
+                            {result.matchType === 'title' ? 'title' : 'content'}
+                          </span>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs text-text-tertiary mb-1">
+                          <Clock class="w-3 h-3" />
+                          <span>{formatDate(result.createdAt)}</span>
+                        </div>
+                        <Show when={result.snippet}>
+                          <p class="text-xs text-text-secondary line-clamp-2 italic">
+                            "...{result.snippet}..."
+                          </p>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </For>
             </div>
           </div>
         </Show>
 
-        <Show when={!props.isLoading && props.sessions.length === 0}>
-          <div class="text-center py-12">
-            <MessageSquare class="w-12 h-12 mx-auto mb-4 text-text-muted" />
-            <h3 class="text-lg font-medium text-text-primary mb-2">
-              No sessions yet
-            </h3>
-            <p class="text-text-secondary mb-4">
-              Create a new session to start chatting with agents
-            </p>
-            <button
-              onClick={props.onCreateSession}
-              class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors"
-            >
-              Create Session
-            </button>
-          </div>
-        </Show>
+        {/* Default session list (shown when not searching) */}
+        <Show when={!hasSearchResults()}>
+          <Show when={props.isLoading}>
+            <div class="text-center py-12">
+              <div class="animate-pulse text-text-tertiary">
+                Loading sessions...
+              </div>
+            </div>
+          </Show>
 
-        <Show when={!props.isLoading && props.sessions.length > 0}>
-          <div class="grid gap-4">
-            <For each={props.sessions}>
-              {(session) => (
-                <div
-                  class={`p-4 rounded-lg border transition-all cursor-pointer ${
-                    props.selectedSessionId === session.id
-                      ? 'border-primary bg-blue-50 dark:bg-blue-900/20'
-                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
-                  onClick={() => props.onSelectSession(session.id)}
-                >
-                  <div class="flex items-start justify-between gap-4">
-                    <div class="flex-1 min-w-0">
-                      <h3 class="font-medium text-text-primary truncate">
-                        {session.title}
-                      </h3>
-                      <div class="flex items-center gap-2 mt-1 text-sm text-text-tertiary">
-                        <Clock class="w-3.5 h-3.5" />
-                        <span>{formatDate(session.createdAt)}</span>
+          <Show when={!props.isLoading && sessions_().length === 0}>
+            <div class="text-center py-12">
+              <MessageSquare class="w-12 h-12 mx-auto mb-4 text-text-muted" />
+              <h3 class="text-lg font-medium text-text-primary mb-2">
+                No sessions yet
+              </h3>
+              <p class="text-text-secondary mb-4">
+                Create a new session to start chatting with agents
+              </p>
+              <button
+                onClick={props.onCreateSession}
+                class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors"
+              >
+                Create Session
+              </button>
+            </div>
+          </Show>
+
+          <Show when={!props.isLoading && sessions_().length > 0}>
+            <div class="grid gap-4">
+              <For each={sessions_()}>
+                {(session) => (
+                  <div
+                    class={`p-4 rounded-lg border transition-all cursor-pointer ${
+                      props.selectedSessionId === session.id
+                        ? 'border-primary bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                    onClick={() => props.onSelectSession(session.id)}
+                  >
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="flex-1 min-w-0">
+                        <h3 class="font-medium text-text-primary truncate">
+                          {session.title}
+                        </h3>
+                        <div class="flex items-center gap-2 mt-1 text-sm text-text-tertiary">
+                          <Clock class="w-3.5 h-3.5" />
+                          <span>{formatDate(session.createdAt)}</span>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <Show when={props.onDeleteSession}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              props.onDeleteSession?.(session.id);
+                            }}
+                            class="p-1.5 text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                            title="Delete session"
+                          >
+                            <Trash2 class="w-4 h-4" />
+                          </button>
+                        </Show>
                       </div>
                     </div>
-                    <div class="flex items-center gap-2">
-                      <Show when={props.onDeleteSession}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            props.onDeleteSession?.(session.id);
-                          }}
-                          class="p-1.5 text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                          title="Delete session"
-                        >
-                          <Trash2 class="w-4 h-4" />
-                        </button>
-                      </Show>
-                    </div>
                   </div>
-                </div>
-              )}
-            </For>
-          </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </Show>
       </div>
     </div>
