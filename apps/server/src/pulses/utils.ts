@@ -1,28 +1,14 @@
 import type { ScheduledJob } from '@openaidy/db';
+import type {
+  ScheduleInput,
+  ParsedSchedule,
+  PulseRecord,
+} from '@openaidy/shared-types';
 import {
   validateCronExpression,
   calculateNextRun,
   describeCronExpression,
 } from '../scheduler/cron-utils';
-
-/**
- * Schedule input types - discriminated union for different scheduling options
- */
-export type ScheduleInput =
-  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
-  | { daily: { hour: number; minute: number } }
-  | { cron: string; tz?: string }
-  | { at: string };
-
-/**
- * Parsed schedule result
- */
-export type ParsedSchedule = {
-  type: 'cron' | 'one-shot';
-  cronExpression?: string;
-  schedule?: Date;
-  nextRunAt: Date;
-};
 
 /**
  * Mapping of 'every' values to cron expressions
@@ -113,23 +99,6 @@ export function parseScheduleInput(schedule: ScheduleInput): ParsedSchedule {
 
   throw new Error('Invalid schedule input');
 }
-
-/**
- * Pulse record type - the API response format for a pulse
- */
-export type PulseRecord = {
-  id: string;
-  name: string;
-  prompt: string;
-  schedule: { cron?: string } | { at: string };
-  scheduleHuman: string;
-  status: 'active' | 'paused' | 'completed' | 'failed';
-  agentId?: string;
-  sessionId?: string;
-  lastRunAt?: Date;
-  nextRunAt: Date;
-  createdAt: Date;
-};
 
 /**
  * Convert a ScheduledJob to a PulseRecord

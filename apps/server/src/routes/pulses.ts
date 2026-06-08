@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { SchedulerService } from '../scheduler/service';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { SessionMessageService } from '../sessions/service';
+import { triggerPulseNow } from '../scheduler';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { PulseService } from '../pulses/service.js';
@@ -117,7 +118,7 @@ export type PulseRoutesOptions = {
   jobsRepo: JobsStore;
   jobRunsRepo: JobRunsStore;
   sessionsRepo: SessionsStore;
-  schedulerService: SchedulerService;
+  sessionMessageService: SessionMessageService;
   authMiddleware: AuthMiddleware;
 };
 
@@ -129,7 +130,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { schedulerService, authMiddleware } = options;
+  const { authMiddleware } = options;
 
   const service = new PulseService(
     options.jobsRepo,
@@ -282,7 +283,13 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
 
     try {
       const run = await service.triggerPulse(id, (jobId) =>
-        schedulerService.triggerJob(jobId),
+        triggerPulseNow(jobId, {
+          jobsRepo: options.jobsRepo,
+          jobRunsRepo: options.jobRunsRepo,
+          sessionsStore: options.sessionsRepo,
+          sessionMessageService: options.sessionMessageService,
+          logger: app.log,
+        }),
       );
       const updatedRun = await options.jobRunsRepo.findById(run.id);
       return { run: updatedRun || run };

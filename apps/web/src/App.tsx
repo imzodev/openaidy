@@ -498,7 +498,12 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'tasks'}>
-          <TasksPage />
+          <TasksPage
+            onOpenSession={(sessionId) => {
+              setSelectedSessionId(sessionId);
+              navigate('chat');
+            }}
+          />
         </Show>
 
         <Show when={view() === 'pulses'}>

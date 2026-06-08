@@ -219,6 +219,7 @@ export class TaskExecution {
 
   async executeTask(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -241,10 +242,20 @@ export class TaskExecution {
       };
     }
 
-    const session = await this.sessionService.createSession(
-      `Task: ${task.title}`,
-      'task',
-    );
+    // Reuse the existing session when the caller (e.g. the
+    // recurring-task executor) has already created one and just needs
+    // us to dispatch the work. Without this, every recurring run
+    // would create a second "Task: <title>" session on top of the
+    // "Task: <title> (run #N)" session the executor created.
+    let session: { id: string };
+    if (options.sessionId) {
+      session = { id: options.sessionId };
+    } else {
+      session = await this.sessionService.createSession(
+        `Task: ${task.title}`,
+        'task',
+      );
+    }
     await this.tasksRepo.update(taskId, { sessionId: session.id });
     await this.tasksRepo.updateStatus(taskId, 'in_progress');
     this.logger.info('Task moved to in_progress', { taskId });
@@ -255,7 +266,13 @@ export class TaskExecution {
         taskId,
         subtaskCount: subtasks.length,
       });
-      const result = await this.executeSubtasks(taskId);
+      // Only pass the session down to subtasks if the caller (e.g. the
+      // recurring-task executor) already created one. For normal API
+      // calls, each subtask should create its own session.
+      const executeSubtasksOptions = options.sessionId
+        ? { sessionId: options.sessionId }
+        : {};
+      const result = await this.executeSubtasks(taskId, executeSubtasksOptions);
       if (!result.ok) return { ok: false, error: result.error };
       return { ok: true, data: { sessionId: session.id } };
     }
@@ -287,6 +304,7 @@ export class TaskExecution {
 
   async executeSubtask(
     subtaskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -336,14 +354,27 @@ export class TaskExecution {
       }
     }
 
-    const session = await this.sessionService.createSession(
-      `Subtask: ${subtask.title}`,
-      'subtask',
+    // Reuse the existing session if the caller (e.g. the recurring-task
+    // executor) already created one. Otherwise create a per-subtask
+    // session like before.
+    let session: { id: string };
+    if (options.sessionId) {
+      session = { id: options.sessionId };
+    } else {
+      session = await this.sessionService.createSession(
+        `Subtask: ${subtask.title}`,
+        'subtask',
+      );
+    }
+    this.logger.info(
+      options.sessionId
+        ? 'Reusing session for subtask (called by recurring executor)'
+        : 'Created session for subtask',
+      {
+        subtaskId,
+        sessionId: session.id,
+      },
     );
-    this.logger.info('Created session for subtask', {
-      subtaskId,
-      sessionId: session.id,
-    });
 
     await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
     await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
@@ -386,6 +417,7 @@ export class TaskExecution {
 
   async executeSubtasks(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ startedCount: number }>> {
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
@@ -409,7 +441,11 @@ export class TaskExecution {
 
     let startedCount = 0;
     for (const subtask of executable) {
-      const result = await this.executeSubtask(subtask.id);
+      const result = options.sessionId
+        ? await this.executeSubtask(subtask.id, {
+            sessionId: options.sessionId,
+          })
+        : await this.executeSubtask(subtask.id);
       if (result.ok) startedCount++;
     }
 

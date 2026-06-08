@@ -4,6 +4,16 @@
 
 import { API_BASE } from './api';
 import { getStoredToken } from './auth-token';
+import type {
+  ScheduleInput,
+  ReplanPolicy,
+  TaskScheduleDto,
+  TaskExecutionHistoryDto,
+  CreateTaskScheduleInput,
+} from './types';
+
+type TaskSchedule = TaskScheduleDto;
+type TaskExecutionHistoryItem = TaskExecutionHistoryDto;
 
 function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   const token = getStoredToken();
@@ -121,13 +131,21 @@ export type KanbanBoard = {
 };
 
 /**
- * Create task input
+ * Create task input.
+ *
+ * `schedule` uses the same `CreateTaskScheduleInput` shape as the
+ * dedicated `POST /api/tasks/:taskId/schedule` endpoint. The server
+ * expects an envelope, not the bare `ScheduleInput` discriminated
+ * union, so the `TaskModal` wraps the editor's `ScheduleInput` in
+ * `{ schedule: ... }` before posting. See
+ * `packages/shared-types/src/task-schedules.ts`.
  */
 export type CreateTaskInput = {
   title?: string;
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
+  schedule?: CreateTaskScheduleInput;
   agents?: Array<{
     agentId: string;
     role?: AgentRole;
@@ -444,6 +462,156 @@ export async function replanTask(
   taskId: string,
 ): Promise<ApiResult<{ subtasks: Subtask[] }>> {
   return planTask(taskId);
+}
+
+// ── Recurring Task Schedules ──────────────────────────────────────────────────
+//
+// All schedule-related types are re-exported from `./types` (which
+// re-exports them from `@openaidy/shared-types`). Do NOT redeclare them
+// here — the API contract and the web client share the same source.
+export type {
+  ScheduleInput,
+  SchedulePreset,
+  TaskScheduleStatus,
+  ReplanPolicy,
+  TaskScheduleDto as TaskSchedule,
+  TaskExecutionHistoryStatus,
+  TaskExecutionHistoryDto as TaskExecutionHistoryItem,
+  UpdateTaskScheduleInput,
+  ListTaskExecutionsFilters,
+  PaginatedTaskExecutions,
+} from './types';
+
+/**
+ * Get the schedule for a task. Returns null when no schedule exists.
+ */
+export async function getTaskSchedule(
+  taskId: string,
+): Promise<TaskSchedule | null> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`);
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(`Failed to fetch task schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Create or update a task schedule. Uses POST when no schedule exists,
+ * PATCH when one already does.
+ */
+export async function createOrUpdateTaskSchedule(
+  taskId: string,
+  input: {
+    schedule: ScheduleInput;
+    maxExecutions?: number;
+    replanPolicy?: ReplanPolicy;
+    status?: 'active' | 'paused';
+  },
+): Promise<TaskSchedule> {
+  const existing = await getTaskSchedule(taskId);
+  const method = existing ? 'PATCH' : 'POST';
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to ${existing ? 'update' : 'create'} task schedule: ${response.status}`,
+    );
+  }
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Remove a task's schedule (DELETE, idempotent).
+ */
+export async function removeTaskSchedule(taskId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`, {
+    method: 'DELETE',
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to remove schedule: ${response.status}`);
+  }
+}
+
+/**
+ * Pause a task schedule. Returns the updated schedule.
+ */
+export async function pauseTaskSchedule(taskId: string): Promise<TaskSchedule> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/pause`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to pause schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Resume a paused task schedule. Returns the updated schedule.
+ */
+export async function resumeTaskSchedule(
+  taskId: string,
+): Promise<TaskSchedule> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/resume`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to resume schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Trigger an immediate execution of a scheduled task.
+ * Returns the new history row ID.
+ */
+export async function triggerTaskNow(
+  taskId: string,
+): Promise<{ historyId: string }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/trigger`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to trigger task: ${response.status}`);
+  return response.json();
+}
+
+/**
+ * List execution history for a task schedule, newest first.
+ */
+export async function listTaskExecutions(
+  taskId: string,
+  filters: { status?: string; limit?: number; offset?: number } = {},
+): Promise<{
+  items: TaskExecutionHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+  if (filters.offset !== undefined)
+    params.set('offset', String(filters.offset));
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/executions?${params.toString()}`,
+  );
+  if (!response.ok)
+    throw new Error(`Failed to list executions: ${response.status}`);
+  const json = await response.json();
+  return {
+    items: (json.executions ?? []) as TaskExecutionHistoryItem[],
+    total: json.total as number,
+    limit: json.limit as number,
+    offset: json.offset as number,
+  };
 }
 
 // ── Deliverables ──────────────────────────────────────────────────────────────

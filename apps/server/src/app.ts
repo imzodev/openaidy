@@ -34,14 +34,29 @@ import { addonProxyRoutes } from './addons/proxy-routes';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
+import { taskScheduleRoutes } from './routes/task-schedules';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
+import {
+  TaskScheduleExecutor,
+  type TaskScheduleExecutorDeps,
+} from './tasks/execution/task-schedule-executor';
+import { TaskScheduleService } from './tasks/schedule-service';
+import {
+  RecurringTasksService,
+  createRecurringTasksService,
+} from './recurring';
 import { createMcpClientService } from './mcp/client';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry } from './agents';
 import { RunEventEmitter } from './dispatch';
-import { SchedulerService, createSchedulerService } from './scheduler';
+import {
+  SchedulerService,
+  createSchedulerService,
+  calculateNextRun,
+  createPulseRunnableAdapter,
+} from './scheduler';
 import { createAppConfigService } from './config/service';
 import { websocketGatewayPlugin } from './websocket';
 import { BootstrapAdminManager } from './bootstrap-admin';
@@ -196,6 +211,8 @@ export async function buildApp() {
   let sessionService: SessionMessageService | undefined;
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
+  let recurringTasksService: RecurringTasksService | undefined;
+  let taskScheduleService: TaskScheduleService | undefined;
 
   let planningService: ReturnType<typeof createPlanningService> | undefined;
 
@@ -235,6 +252,12 @@ export async function buildApp() {
       : {}),
     getTaskService: () => taskService,
     getPlanningService: () => planningService,
+    // The schedule service is constructed later (when dbAdapter +
+    // RECURRING_TASKS_ENABLED are both available), so this getter
+    // returns `undefined` at registry construction time. The tools
+    // it produces check for `undefined` at execute time and return
+    // a friendly error if the service is missing.
+    getTaskScheduleService: () => taskScheduleService,
   });
 
   // Create run event emitter for SSE streaming (needed by sessionService)
@@ -309,6 +332,21 @@ export async function buildApp() {
       log as unknown as FastifyBaseLogger,
       { pollIntervalMs: 5000 },
     );
+
+    // Register the PulseRunnableAdapter. Pulses are now driven
+    // by the same `ScheduledRunnable` contract as recurring tasks.
+    // Order matters: pulse is registered first so that when both
+    // a pulse and a recurring task are due at the same time, the
+    // pulse wins (preserves the pre-migration dispatch priority).
+    scheduler.registerRunnable(
+      createPulseRunnableAdapter({
+        jobsRepo,
+        jobRunsRepo,
+        sessionsStore: sessionsRepo,
+        sessionMessageService: sessionService,
+        logger: log as unknown as FastifyBaseLogger,
+      }),
+    );
   }
 
   const services: AppServices = {
@@ -331,6 +369,7 @@ export async function buildApp() {
     skills: skillRegistry,
     personality: personalityService,
     channels: channelRegistry,
+    taskSchedules: undefined,
   };
 
   // Decorate the app with services for access in routes/plugins
@@ -413,14 +452,8 @@ export async function buildApp() {
   });
 
   // Register scheduler routes (if database is available)
-  if (
-    services.scheduler &&
-    services.jobsRepo &&
-    services.jobRunsRepo &&
-    services.sessionsRepo
-  ) {
+  if (services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
     await app.register(schedulerRoutes, {
-      schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
@@ -430,16 +463,16 @@ export async function buildApp() {
 
   // Register pulse routes (if database is available)
   if (
-    services.scheduler &&
+    services.sessions &&
     services.jobsRepo &&
     services.jobRunsRepo &&
     services.sessionsRepo
   ) {
     await app.register(pulseRoutes, {
-      schedulerService: services.scheduler,
       jobsRepo: services.jobsRepo,
       jobRunsRepo: services.jobRunsRepo,
       sessionsRepo: services.sessionsRepo,
+      sessionMessageService: services.sessions,
       authMiddleware,
     });
   }
@@ -484,6 +517,122 @@ export async function buildApp() {
       deliverablesRepo: dbAdapter.repositories.deliverables,
       authMiddleware,
     });
+
+    // Duck-typed adapter: SessionMessageService is structurally compatible
+    // with the executor's narrower ExecutorSessionService, but TS's
+    // exactOptionalPropertyTypes on onStreamEvent makes the subtype
+    // check fail. The cast is safe because the executor never sets
+    // onStreamEvent (it would be a no-op).
+    const sessionServiceForExecutor =
+      services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
+    const executorDeps: TaskScheduleExecutorDeps = {
+      tasksRepo: dbAdapter.repositories.tasks,
+      subtasksRepo: dbAdapter.repositories.subtasks,
+      taskAgentsRepo: dbAdapter.repositories.taskAgents,
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      taskService: {
+        executeTask: (taskId, options) =>
+          taskService!.executeTask(taskId, options),
+        executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+      },
+      sessionService: sessionServiceForExecutor,
+      defaultAgentIdProvider: () => configService.getConfig().defaults.agentId,
+      calculateNextRun: (cron, now) => calculateNextRun(cron, now),
+      logger: log as unknown as TaskScheduleExecutorDeps['logger'],
+      // planningService is omitted when planning isn't configured; the
+      // executor falls back to a warning + the description-execution
+      // path. The optional key works with exactOptionalPropertyTypes
+      // because we only add the field when it has a real value.
+      ...(planningService
+        ? {
+            planningService: {
+              planTask: (taskId: string) => planningService!.planTask(taskId),
+            },
+          }
+        : {}),
+    };
+    const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+
+    // Note: `taskScheduleService` is declared in the outer scope (a `let`
+    // with `| undefined`) so that the schedule routes can be wired
+    // up here without depending on the feature flag. The service
+    // is only instantiated when RECURRING_TASKS_ENABLED is on; the
+    // routes only get registered if the service is set.
+    taskScheduleService = new TaskScheduleService({
+      tasksRepo: dbAdapter.repositories.tasks,
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      taskScheduleExecutor,
+    });
+    services.taskSchedules = taskScheduleService;
+
+    // Schedule endpoints (Phase 4) — nested under /api/tasks/:taskId/schedule.
+    // These give the UI a dedicated surface for CRUD + pause/resume +
+    // trigger + history. The `schedule` field on POST /api/tasks is
+    // still supported as a convenience for creating a task with a
+    // schedule in one call.
+    await app.register(taskScheduleRoutes, {
+      taskScheduleService,
+      authMiddleware,
+    });
+
+    // Wire the schedule service into the TaskService so that
+    // createTask and getTaskWithDetails can attach schedules.
+    taskService!.setTaskSchedulesService(taskScheduleService);
+
+    // The recurring service logger is the same pino instance — the
+    // GenericLogger mismatch is only in method signature shape.
+    // We also wire the run-event subscription so history rows are
+    // finalised (planned -> verifying -> completed/failed) when the
+    // task session the executor created finishes its run.
+    recurringTasksService = createRecurringTasksService({
+      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+      executor: taskScheduleExecutor,
+      runEvents: services.runEvents,
+      // Pull the session type from the SessionsStore (or fall through
+      // to a type field if it's on the record). This filters out
+      // subtask and chat sessions so we only finalise history rows
+      // for the top-level task runs the executor created.
+      getSessionType: async (sessionId) => {
+        const session =
+          await dbAdapter!.repositories.sessions.findById(sessionId);
+        return session && 'type' in session
+          ? (session as { type?: string }).type
+          : null;
+      },
+      logger: log as unknown as Parameters<
+        typeof createRecurringTasksService
+      >[0] extends infer T
+        ? T extends { logger?: infer L }
+          ? L
+          : never
+        : never,
+    });
+    // Phase 7: register the executor as a ScheduledRunnable on the
+    // central scheduler. The scheduler's tick now drives the
+    // recurring-tasks claim → execute → reschedule cycle alongside
+    // (or interleaved with) the legacy Pulse path. The recurring
+    // tasks service is purely an event listener + delegator now.
+    if (scheduler) {
+      scheduler.registerRunnable(taskScheduleExecutor);
+      // Start the run-event subscription so history rows transition
+      // to their terminal state when the executor's runs complete.
+      recurringTasksService.start();
+      log.info(
+        `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
+      );
+    } else {
+      // Should never happen — the recurring-tasks feature flag is
+      // gated on the database being available, and so is the
+      // scheduler. This branch exists only to keep the type-narrower
+      // happy; if it ever runs, we have a wiring bug.
+      log.error(
+        'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
+      );
+      recurringTasksService.start();
+    }
   }
 
   // Register access token routes (requires DB, admin auth enforced)
@@ -566,6 +715,9 @@ export async function buildApp() {
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
+    }
+    if (recurringTasksService) {
+      await recurringTasksService.stop();
     }
     if (scheduler) {
       await scheduler.stop();

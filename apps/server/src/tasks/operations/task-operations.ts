@@ -16,6 +16,7 @@ import type {
   KanbanBoard,
   ServiceResult,
 } from '../../types';
+import type { TaskScheduleService } from '../schedule-service';
 
 export class TaskOperations {
   constructor(
@@ -24,8 +25,18 @@ export class TaskOperations {
     private readonly taskAgentsRepo: TaskAgentsRepository,
     private readonly agents: AgentRegistry | undefined,
     private readonly planningService: PlanningService | undefined,
+    private taskSchedulesService: TaskScheduleService | undefined,
     private readonly logger: ReturnType<typeof createLogger>,
   ) {}
+
+  /**
+   * Inject or update the TaskScheduleService after construction.
+   * Used when TaskService is created before the recurring tasks block
+   * (which creates the TaskScheduleService) in app.ts.
+   */
+  setTaskSchedulesService(service: TaskScheduleService | undefined): void {
+    this.taskSchedulesService = service;
+  }
 
   async createTask(input: CreateTaskInput): Promise<ServiceResult<Task>> {
     if (input.agents && this.agents) {
@@ -57,6 +68,20 @@ export class TaskOperations {
         ...(a.role !== undefined && { role: a.role }),
       }));
       await this.taskAgentsRepo.assignMultiple(task.id, agentsWithRoles);
+    }
+
+    // Phase 3: if a schedule was provided, create the schedule row.
+    if (input.schedule && this.taskSchedulesService) {
+      const scheduleResult = await this.taskSchedulesService.createSchedule(
+        task.id,
+        input.schedule,
+      );
+      if (!scheduleResult.ok) {
+        this.logger.warn('Failed to create schedule for task', {
+          taskId: task.id,
+          error: scheduleResult.error,
+        });
+      }
     }
 
     if (task.planningEnabled && this.planningService) {
@@ -100,7 +125,16 @@ export class TaskOperations {
       this.subtasksRepo.getCountsByStatus(id),
     ]);
 
-    return {
+    let schedule: TaskWithDetails['schedule'];
+    if (this.taskSchedulesService) {
+      const scheduleResult =
+        await this.taskSchedulesService.getScheduleForTask(id);
+      if (scheduleResult.ok) {
+        schedule = scheduleResult.data;
+      }
+    }
+
+    const result: TaskWithDetails = {
       ...task,
       agents,
       subtasks,
@@ -111,6 +145,10 @@ export class TaskOperations {
         failed: statusCounts.failed,
       },
     };
+    if (schedule !== undefined) {
+      result.schedule = schedule;
+    }
+    return result;
   }
 
   async listTasks(status?: TaskStatus): Promise<Task[]> {
