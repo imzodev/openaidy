@@ -1320,7 +1320,7 @@ export class SessionMessageService {
     input: AppendMessageInput,
   ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      return this.messagesRepo.append({
+      const result = await this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
@@ -1331,6 +1331,7 @@ export class SessionMessageService {
         }),
         ...(input.metadata !== undefined && { metadata: input.metadata }),
       });
+      return result;
     }
     return appendMessageRecord(input);
   }

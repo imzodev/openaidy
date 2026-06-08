@@ -131,7 +131,9 @@ export function RunList(props: RunListProps) {
               {(run) => (
                 <div
                   class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                  onClick={() => props.onRunClick?.(run.firstMessageId)}
+                  onClick={() => {
+                    props.onRunClick?.(run.firstMessageId);
+                  }}
                 >
                   <div class="flex items-center justify-between gap-2">
                     {/* Left side: status and ID */}

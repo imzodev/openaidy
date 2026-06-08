@@ -134,6 +134,7 @@ export function markRunSucceeded(
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    firstMessageId?: string;
     metadata?: Record<string, unknown>;
   },
 ): SessionRunRecord | undefined {
@@ -150,6 +151,8 @@ export function markRunSucceeded(
   if (input.completionTokens !== undefined)
     updates.completionTokens = input.completionTokens;
   if (input.totalTokens !== undefined) updates.totalTokens = input.totalTokens;
+  if (input.firstMessageId !== undefined)
+    updates.firstMessageId = input.firstMessageId;
   if (input.metadata !== undefined) updates.metadata = input.metadata;
 
   return updateRunRecord(id, updates);
