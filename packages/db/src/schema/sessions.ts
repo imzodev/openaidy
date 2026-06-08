@@ -160,6 +160,8 @@ export const sessionRuns = pgTable('session_runs', {
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // ID of the first assistant message produced by this run
+  firstMessageId: text('first_message_id'),
   // Optional metadata
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
