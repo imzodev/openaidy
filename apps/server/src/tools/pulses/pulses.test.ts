@@ -274,7 +274,7 @@ describe('pulses tools', () => {
         {
           name: 'Cron Job',
           prompt: 'Run task',
-          schedule: { cron: { expression: '0 9 * * *' } },
+          schedule: { cron: '0 9 * * *' },
         },
         CTX,
       );

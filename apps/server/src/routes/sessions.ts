@@ -45,6 +45,38 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
   });
 
   /**
+   * GET /sessions/search
+   * Search sessions by title or message content using FTS5
+   */
+  app.get('/sessions/search', async (request, reply) => {
+    const { q, limit, currentSessionId } = request.query as {
+      q?: string;
+      limit?: string;
+      currentSessionId?: string;
+    };
+
+    if (!q || typeof q !== 'string' || !q.trim()) {
+      reply.code(400);
+      return {
+        error: 'validation.invalid_request',
+        message:
+          'Query parameter "q" is required and must be a non-empty string',
+      };
+    }
+
+    const searchOptions: Record<string, string | number> = {};
+    if (limit) searchOptions['limit'] = parseInt(limit, 10);
+    if (currentSessionId) searchOptions['currentSessionId'] = currentSessionId;
+
+    const results = await sessionService.searchSessions(
+      q.trim(),
+      searchOptions as { limit?: number; currentSessionId?: string },
+    );
+
+    return { items: results };
+  });
+
+  /**
    * POST /sessions
    * Create a new session
    */

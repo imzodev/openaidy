@@ -262,6 +262,121 @@ export class SessionMessageService {
   }
 
   /**
+   * Search sessions by title or message content using FTS5.
+   * Falls back to in-memory filtering if DB is not available.
+   */
+  async searchSessions(
+    query: string,
+    options?: { limit?: number; currentSessionId?: string },
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      createdAt: string;
+      updatedAt?: string;
+      archivedAt?: string;
+      matchType: 'title' | 'content';
+      rank: number;
+      matchCount?: number;
+      snippet?: string;
+    }>
+  > {
+    const limit = options?.limit ?? 10;
+
+    if (this.sessionsRepo) {
+      const byTitle = await this.sessionsRepo.searchByTitle(
+        query,
+        limit,
+        options?.currentSessionId,
+      );
+
+      let sessions = byTitle;
+      if (sessions.length === 0) {
+        sessions = await this.sessionsRepo.searchByContent(
+          query,
+          limit,
+          options?.currentSessionId,
+        );
+      }
+
+      return sessions.map((s) => {
+        const base = {
+          id: s.id,
+          title: s.title,
+          status: s.status,
+          createdAt:
+            s.createdAt instanceof Date
+              ? s.createdAt.toISOString()
+              : s.createdAt,
+          matchType: s.matchType,
+          rank: s.rank,
+        };
+        const optionals: Record<string, string | number | undefined> = {};
+        if (s.updatedAt) {
+          optionals.updatedAt =
+            s.updatedAt instanceof Date
+              ? s.updatedAt.toISOString()
+              : s.updatedAt;
+        }
+        if (s.archivedAt) {
+          optionals.archivedAt =
+            s.archivedAt instanceof Date
+              ? s.archivedAt.toISOString()
+              : s.archivedAt;
+        }
+        if (s.matchCount !== undefined) optionals.matchCount = s.matchCount;
+        if (s.snippet) optionals.snippet = s.snippet;
+        return Object.assign({}, base, optionals);
+      });
+    }
+
+    // In-memory fallback: filter by title substring (no ranking)
+    // Cast to the shape we know the in-memory store returns
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const records = (await this.listSessions()) as any[];
+    const normalized = query.toLowerCase();
+    return records
+      .filter(
+        (s) =>
+          s.title?.toLowerCase().includes(normalized) &&
+          s.id !== options?.currentSessionId,
+      )
+      .slice(0, limit)
+      .map((s, i) => {
+        const result: {
+          id: string;
+          title: string;
+          status: string;
+          createdAt: string;
+          matchType: 'title';
+          rank: number;
+          updatedAt?: string;
+          archivedAt?: string;
+        } = {
+          id: s.id as string,
+          title: s.title as string,
+          status: String(s.status ?? 'active'),
+          createdAt: String(
+            s.createdAt instanceof Date
+              ? s.createdAt.toISOString()
+              : s.createdAt,
+          ),
+          matchType: 'title',
+          rank: i,
+        };
+        if (s.updatedAt) {
+          result.updatedAt = String(
+            s.updatedAt instanceof Date
+              ? s.updatedAt.toISOString()
+              : s.updatedAt,
+          );
+        }
+        return result;
+      });
+  }
+
+  /**
    * List messages for a session
    */
   async listMessages(
@@ -1141,6 +1256,7 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
+        firstMessageId: assistantMessage.id,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
 
@@ -1204,7 +1320,7 @@ export class SessionMessageService {
     input: AppendMessageInput,
   ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      return this.messagesRepo.append({
+      const result = await this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
@@ -1215,6 +1331,7 @@ export class SessionMessageService {
         }),
         ...(input.metadata !== undefined && { metadata: input.metadata }),
       });
+      return result;
     }
     return appendMessageRecord(input);
   }
@@ -1257,6 +1374,7 @@ export class SessionMessageService {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
+      firstMessageId?: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
@@ -1268,6 +1386,7 @@ export class SessionMessageService {
           completionTokens: number;
           totalTokens: number;
         };
+        firstMessageId?: string;
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
@@ -1278,6 +1397,9 @@ export class SessionMessageService {
           completionTokens: input.completionTokens ?? 0,
           totalTokens: input.totalTokens ?? 0,
         };
+      }
+      if (input.firstMessageId !== undefined) {
+        successInput.firstMessageId = input.firstMessageId;
       }
       if (input.metadata !== undefined) {
         successInput.metadata = input.metadata;

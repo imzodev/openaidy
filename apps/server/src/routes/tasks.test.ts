@@ -235,6 +235,101 @@ describe('taskRoutes', () => {
       expect(reply.code).toHaveBeenCalledWith(201);
     });
 
+    it('accepts a schedule field in the CreateTaskScheduleInput shape (wrapped)', async () => {
+      // The frontend sends `{ schedule: { schedule: { every: '1h' } } }`
+      // (outer = CreateTaskScheduleInput, inner = ScheduleInput discriminated
+      // union). The server must accept this so the kanban "enable recurring
+      // schedule" checkbox can attach a schedule on task creation.
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createTask.mockResolvedValue({ ok: true, data: mockTask });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          body: {
+            description: 'Recurring test',
+            schedule: { schedule: { every: '1h' } },
+          },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      // The service expects `CreateTaskScheduleInput` shape (envelope),
+      // not the bare `ScheduleInput` discriminated union.
+      expect(mockService.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          schedule: { schedule: { every: '1h' } },
+        }),
+      );
+    });
+
+    it('accepts the bare ScheduleInput as the cron variant (string form)', async () => {
+      // Regression: a previous version of the schema only accepted
+      // `cron: { expression, tz? }` and rejected the canonical
+      // `ScheduleInput` shape `cron: string` (which is what the
+      // web client sends). The schema now accepts both.
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createTask.mockResolvedValue({ ok: true, data: mockTask });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          body: {
+            description: 'Cron test',
+            schedule: { schedule: { cron: '0 9 * * 1-5' } },
+          },
+        },
+        reply,
+      );
+      expect((result as { ok: boolean }).ok).toBe(true);
+      // Cron is normalised to the canonical string form.
+      expect(mockService.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          schedule: { schedule: { cron: '0 9 * * 1-5' } },
+        }),
+      );
+    });
+
+    it('returns 400 for a schedule that matches none of the variants', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createTask.mockResolvedValue({ ok: true, data: mockTask });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      await route!.handler(
+        {
+          body: {
+            description: 'Garbage',
+            // Empty schedule object: matches none of the variants.
+            schedule: { schedule: {} },
+          },
+        },
+        reply,
+      );
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
     it('should return 400 for invalid input', async () => {
       const app = buildApp();
       await taskRoutes(app, {

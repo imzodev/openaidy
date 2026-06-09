@@ -109,6 +109,10 @@ function AppContent(props: AppContentProps) {
   const [currentChoices, setCurrentChoices] = createSignal<ChoicesEvent | null>(
     null,
   );
+  /** Message ID to scroll to in ChatView (set when user clicks a run) */
+  const [scrollToMessageId, setScrollToMessageId] = createSignal<
+    string | undefined
+  >(undefined);
 
   // Subscribe to streaming events when a session is selected
   createEffect(() => {
@@ -498,7 +502,12 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'tasks'}>
-          <TasksPage />
+          <TasksPage
+            onOpenSession={(sessionId) => {
+              setSelectedSessionId(sessionId);
+              navigate('chat');
+            }}
+          />
         </Show>
 
         <Show when={view() === 'pulses'}>
@@ -580,6 +589,7 @@ function AppContent(props: AppContentProps) {
               error={messagesQuery.error?.message}
               isStreaming={isStreaming()}
               streamingContent={isStreaming() ? streamingContent() : undefined}
+              scrollToMessageId={scrollToMessageId()}
             />
             <Show when={currentChoices()}>
               {(c) => (
@@ -601,6 +611,11 @@ function AppContent(props: AppContentProps) {
               runs={runs()}
               isLoading={runsQuery.isLoading}
               error={runsQuery.error?.message}
+              onRunClick={(firstMessageId) => {
+                if (firstMessageId) {
+                  setScrollToMessageId(firstMessageId);
+                }
+              }}
             />
             <ChatComposer
               onSend={handleSubmit}

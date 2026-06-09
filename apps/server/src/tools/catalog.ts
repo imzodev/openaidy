@@ -282,6 +282,88 @@ export const jobsDeleteMeta: ToolMeta = {
     'Requires confirm=true to prevent accidental deletion.',
 };
 
+// ── Task Schedules (recurring tasks) ──────────────────────────────────────────
+
+export const taskSchedulesListMeta: ToolMeta = {
+  name: 'task_schedules_list',
+  category: 'Tasks',
+  description:
+    "Read the schedule attached to a task. Pass taskId to get that task's " +
+    'schedule. Schedules are 1:1 with tasks (a task has zero or one). ' +
+    'Returns the schedule human-readable description, next/last run times, ' +
+    'replan policy, and execution count.',
+};
+
+export const taskSchedulesCreateMeta: ToolMeta = {
+  name: 'task_schedules_create',
+  category: 'Tasks',
+  description:
+    'Attach a schedule to an existing task. Each task can have at most one ' +
+    'schedule. Use schedule.every for PRESET intervals (every 15m/30m/1h/6h/12h/1d/1w). ' +
+    'For ANY other interval (e.g. every 5min), use schedule.cron with a cron expression. ' +
+    'Also supports daily times and one-shot datetimes. ' +
+    'replanPolicy controls when the planning agent re-runs: ' +
+    "'never' (default; cheap, reuses subtasks), " +
+    "'on-description-change' (re-plans only when the description changes), " +
+    "or 'always' (re-plans on every run, expensive). " +
+    'maxExecutions caps the total runs (default 9999, no "infinite" option). ' +
+    'Returns the created schedule with its ID and next-run time.',
+};
+
+export const taskSchedulesUpdateMeta: ToolMeta = {
+  name: 'task_schedules_update',
+  category: 'Tasks',
+  description:
+    'Update an existing task schedule. Can change the schedule definition, ' +
+    'replanPolicy, maxExecutions, or status. To pause/resume use the dedicated ' +
+    'task_schedules_pause and task_schedules_resume tools. To stop firing, ' +
+    'use task_schedules_delete. Returns the updated schedule.',
+};
+
+export const taskSchedulesPauseMeta: ToolMeta = {
+  name: 'task_schedules_pause',
+  category: 'Tasks',
+  description:
+    'Pause a task schedule. The scheduler will skip this row until resumed. ' +
+    'The schedule row, its nextRunAt, and execution history are preserved.',
+};
+
+export const taskSchedulesResumeMeta: ToolMeta = {
+  name: 'task_schedules_resume',
+  category: 'Tasks',
+  description:
+    'Resume a previously paused task schedule. The next run happens at ' +
+    'the next cron tick after the resume time (we do not "catch up" missed runs).',
+};
+
+export const taskSchedulesDeleteMeta: ToolMeta = {
+  name: 'task_schedules_delete',
+  category: 'Tasks',
+  description:
+    "Permanently remove a task's schedule. The schedule row and all its " +
+    'execution history are deleted. This action cannot be undone. ' +
+    'Requires confirm=true to prevent accidental deletion.',
+};
+
+export const taskSchedulesTriggerMeta: ToolMeta = {
+  name: 'task_schedules_trigger',
+  category: 'Tasks',
+  description:
+    'Force an immediate run of a task schedule, without affecting nextRunAt ' +
+    'or executionCount. The run is async: returns the new history row ID; ' +
+    'poll task_schedules_list_executions with the same taskId to track progress.',
+};
+
+export const taskSchedulesListExecutionsMeta: ToolMeta = {
+  name: 'task_schedules_list_executions',
+  category: 'Tasks',
+  description:
+    "List execution history for a task's schedule, newest first. " +
+    'Use the status filter to focus on failed runs or currently-executing runs. ' +
+    'Returns for each run: id, status, startedAt, durationMs, didReplan, ' +
+    'sessionId, and any error info if the run failed.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -316,4 +398,12 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   jobsCreateMeta,
   jobsUpdateMeta,
   jobsDeleteMeta,
+  taskSchedulesListMeta,
+  taskSchedulesCreateMeta,
+  taskSchedulesUpdateMeta,
+  taskSchedulesPauseMeta,
+  taskSchedulesResumeMeta,
+  taskSchedulesDeleteMeta,
+  taskSchedulesTriggerMeta,
+  taskSchedulesListExecutionsMeta,
 ];

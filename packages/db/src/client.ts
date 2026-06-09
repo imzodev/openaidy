@@ -87,6 +87,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       finished_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       metadata TEXT,
+      first_message_id TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
@@ -226,6 +227,53 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS subtasks_status_idx ON subtasks(status);
     CREATE INDEX IF NOT EXISTS task_agents_task_id_idx ON task_agents(task_id);
     CREATE INDEX IF NOT EXISTS task_agents_agent_id_idx ON task_agents(agent_id);
+
+    -- ------------------------------------------------------------
+    -- Recurring tasks (Phase 1): task_schedules + task_execution_history
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS task_schedules (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+      cron_expression TEXT,
+      preset TEXT,
+      schedule_date TEXT,
+      next_run_at TEXT NOT NULL,
+      last_run_at TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      replan_policy TEXT NOT NULL DEFAULT 'never',
+      max_executions INTEGER NOT NULL DEFAULT 9999,
+      execution_count INTEGER NOT NULL DEFAULT 0,
+      description_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS task_schedules_next_run_at_idx ON task_schedules(next_run_at);
+    CREATE INDEX IF NOT EXISTS task_schedules_status_idx ON task_schedules(status);
+    CREATE INDEX IF NOT EXISTS task_schedules_task_id_idx ON task_schedules(task_id);
+
+    CREATE TABLE IF NOT EXISTS task_execution_history (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      schedule_id TEXT NOT NULL REFERENCES task_schedules(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'planned',
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TEXT,
+      duration_ms INTEGER,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      task_title TEXT NOT NULL,
+      task_description TEXT NOT NULL,
+      did_replan INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT,
+      error_message TEXT,
+      attempt_number INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS task_execution_history_task_id_idx ON task_execution_history(task_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_schedule_id_idx ON task_execution_history(schedule_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_session_id_idx ON task_execution_history(session_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_started_at_idx ON task_execution_history(started_at);
 
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY NOT NULL,
@@ -502,6 +550,17 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     sqlite.exec(
       `CREATE INDEX IF NOT EXISTS deliverables_status_idx ON deliverables(status)`,
     );
+  }
+
+  // Migration: Add first_message_id to session_runs if not exists
+  const sessionRunsInfo = sqlite.pragma('table_info(session_runs)') as Array<{
+    name: string;
+  }>;
+  const hasFirstMessageId = sessionRunsInfo.some(
+    (col) => col.name === 'first_message_id',
+  );
+  if (!hasFirstMessageId) {
+    sqlite.exec(`ALTER TABLE session_runs ADD COLUMN first_message_id TEXT`);
   }
 }
 

@@ -20,6 +20,7 @@ export type RunUsage = {
 export type SuccessOptions = {
   finishReason: schema.FinishReason;
   usage?: RunUsage;
+  firstMessageId?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -34,7 +35,7 @@ export type FailureOptions = {
 
 /**
  * Session runs repository
- * 
+ *
  * Provides data access methods for session run records.
  * Tracks provider invocations with support for async execution states.
  */
@@ -51,16 +52,19 @@ export class SessionRunsRepository {
     modelId: string;
     metadata?: Record<string, unknown>;
   }): Promise<schema.SessionRun> {
-    const [run] = await this.db.insert(schema.sessionRuns).values({
-      id: nanoid(),
-      sessionId: input.sessionId,
-      agentId: input.agentId,
-      providerId: input.providerId,
-      modelId: input.modelId,
-      status: 'queued',
-      createdAt: new Date(),
-      metadata: input.metadata,
-    }).returning();
+    const [run] = await this.db
+      .insert(schema.sessionRuns)
+      .values({
+        id: nanoid(),
+        sessionId: input.sessionId,
+        agentId: input.agentId,
+        providerId: input.providerId,
+        modelId: input.modelId,
+        status: 'queued',
+        createdAt: new Date(),
+        metadata: input.metadata,
+      })
+      .returning();
 
     return run!;
   }
@@ -69,7 +73,8 @@ export class SessionRunsRepository {
    * Find a run by ID
    */
   async findById(id: string): Promise<schema.SessionRun | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.sessionRuns)
       .where(eq(schema.sessionRuns.id, id))
       .limit(1);
@@ -81,7 +86,8 @@ export class SessionRunsRepository {
    * List all runs for a session
    */
   async listBySession(sessionId: string): Promise<schema.SessionRun[]> {
-    return this.db.select()
+    return this.db
+      .select()
       .from(schema.sessionRuns)
       .where(eq(schema.sessionRuns.sessionId, sessionId))
       .orderBy(desc(schema.sessionRuns.createdAt));
@@ -91,7 +97,8 @@ export class SessionRunsRepository {
    * Mark a run as running
    */
   async markRunning(id: string): Promise<schema.SessionRun | null> {
-    const results = await this.db.update(schema.sessionRuns)
+    const results = await this.db
+      .update(schema.sessionRuns)
       .set({
         status: 'running',
         startedAt: new Date(),
@@ -105,7 +112,10 @@ export class SessionRunsRepository {
   /**
    * Mark a run as succeeded
    */
-  async markSucceeded(id: string, input: SuccessOptions): Promise<schema.SessionRun | null> {
+  async markSucceeded(
+    id: string,
+    input: SuccessOptions,
+  ): Promise<schema.SessionRun | null> {
     const now = new Date();
     const updates: Partial<schema.SessionRun> = {
       status: 'succeeded',
@@ -119,11 +129,16 @@ export class SessionRunsRepository {
       updates.totalTokens = input.usage.totalTokens;
     }
 
+    if (input.firstMessageId) {
+      updates.firstMessageId = input.firstMessageId;
+    }
+
     if (input.metadata) {
       updates.metadata = input.metadata;
     }
 
-    const results = await this.db.update(schema.sessionRuns)
+    const results = await this.db
+      .update(schema.sessionRuns)
       .set(updates)
       .where(eq(schema.sessionRuns.id, id))
       .returning();
@@ -134,7 +149,10 @@ export class SessionRunsRepository {
   /**
    * Mark a run as failed
    */
-  async markFailed(id: string, input: FailureOptions): Promise<schema.SessionRun | null> {
+  async markFailed(
+    id: string,
+    input: FailureOptions,
+  ): Promise<schema.SessionRun | null> {
     const now = new Date();
     const updates: Partial<schema.SessionRun> = {
       status: 'failed',
@@ -148,7 +166,8 @@ export class SessionRunsRepository {
       updates.metadata = input.metadata;
     }
 
-    const results = await this.db.update(schema.sessionRuns)
+    const results = await this.db
+      .update(schema.sessionRuns)
       .set(updates)
       .where(eq(schema.sessionRuns.id, id))
       .returning();
@@ -160,7 +179,8 @@ export class SessionRunsRepository {
    * Mark a run as cancelled
    */
   async markCancelled(id: string): Promise<schema.SessionRun | null> {
-    const results = await this.db.update(schema.sessionRuns)
+    const results = await this.db
+      .update(schema.sessionRuns)
       .set({
         status: 'cancelled',
         finishedAt: new Date(),
@@ -175,7 +195,8 @@ export class SessionRunsRepository {
    * Get the latest run for a session
    */
   async getLatest(sessionId: string): Promise<schema.SessionRun | null> {
-    const results = await this.db.select()
+    const results = await this.db
+      .select()
       .from(schema.sessionRuns)
       .where(eq(schema.sessionRuns.sessionId, sessionId))
       .orderBy(desc(schema.sessionRuns.createdAt))
@@ -189,26 +210,28 @@ export class SessionRunsRepository {
    */
   async getActive(sessionId: string): Promise<schema.SessionRun | null> {
     // First check for running runs
-    const runningResults = await this.db.select()
+    const runningResults = await this.db
+      .select()
       .from(schema.sessionRuns)
       .where(
         and(
           eq(schema.sessionRuns.sessionId, sessionId),
-          eq(schema.sessionRuns.status, 'running')
-        )
+          eq(schema.sessionRuns.status, 'running'),
+        ),
       )
       .limit(1);
 
     if (runningResults[0]) return runningResults[0];
 
     // Then check for queued runs
-    const queuedResults = await this.db.select()
+    const queuedResults = await this.db
+      .select()
       .from(schema.sessionRuns)
       .where(
         and(
           eq(schema.sessionRuns.sessionId, sessionId),
-          eq(schema.sessionRuns.status, 'queued')
-        )
+          eq(schema.sessionRuns.status, 'queued'),
+        ),
       )
       .orderBy(desc(schema.sessionRuns.createdAt))
       .limit(1);
@@ -219,15 +242,18 @@ export class SessionRunsRepository {
   /**
    * Count runs by status for a session
    */
-  async countByStatus(sessionId: string, status: schema.RunStatus): Promise<number> {
+  async countByStatus(
+    sessionId: string,
+    status: schema.RunStatus,
+  ): Promise<number> {
     const result = await this.db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(schema.sessionRuns)
       .where(
         and(
           eq(schema.sessionRuns.sessionId, sessionId),
-          eq(schema.sessionRuns.status, status)
-        )
+          eq(schema.sessionRuns.status, status),
+        ),
       );
 
     return Number(result[0]?.count ?? 0);
@@ -237,6 +263,8 @@ export class SessionRunsRepository {
 /**
  * Create a session runs repository instance
  */
-export function createSessionRunsRepository(db: Database): SessionRunsRepository {
+export function createSessionRunsRepository(
+  db: Database,
+): SessionRunsRepository {
   return new SessionRunsRepository(db);
 }

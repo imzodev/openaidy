@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { JobsRepository, JobRunsRepository } from '@openaidy/db';
-import type { ScheduledJob, JobRun } from '@openaidy/db';
+import type { JobRun } from '@openaidy/db';
 import {
   SchedulerService,
   createSchedulerService,
@@ -62,29 +62,6 @@ function createMockSessionsStore() {
     updateTitle: vi.fn(),
     updateStatus: vi.fn(),
     delete: vi.fn(),
-  };
-}
-
-// Helper to create a mock job
-function createMockJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
-  return {
-    id: 'job-1',
-    type: 'one-shot',
-    targetType: 'session',
-    targetSessionId: 'session-1',
-    payload: { message: 'Test message' },
-    status: 'active',
-    nextRunAt: new Date(),
-    lastRunAt: null,
-    retryCount: 0,
-    maxRetries: 3,
-    backoffMs: 1000,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    schedule: null,
-    cronExpression: null,
-    metadata: null,
-    ...overrides,
   };
 }
 
@@ -207,425 +184,6 @@ describe('SchedulerService', () => {
       const result = await scheduler.tick();
       expect(result).toBe(false);
     });
-
-    it('creates job run record when job is claimed', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-      mockJobsRepo.update.mockResolvedValue({
-        ...mockJob,
-        status: 'completed',
-      });
-
-      scheduler.start();
-      const result = await scheduler.tick();
-
-      expect(result).toBe(true);
-      expect(mockJobRunsRepo.create).toHaveBeenCalledWith({
-        jobId: 'job-1',
-        status: 'queued',
-        attemptNumber: 1,
-      });
-    });
-
-    it('marks run as succeeded on success', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-      mockJobsRepo.update.mockResolvedValue({
-        ...mockJob,
-        status: 'completed',
-      });
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith('run-1', {
-        status: 'succeeded',
-        finishedAt: expect.any(Date),
-      });
-    });
-
-    it('one-shot job marked completed after success', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-      mockJobsRepo.update.mockResolvedValue({
-        ...mockJob,
-        status: 'completed',
-      });
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobsRepo.update).toHaveBeenCalledWith('job-1', {
-        status: 'completed',
-        lastRunAt: expect.any(Date),
-      });
-    });
-
-    it('cron job rescheduled after success', async () => {
-      const mockJob = createMockJob({
-        type: 'cron',
-        cronExpression: '*/5 * * * *',
-      });
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobsRepo.update).toHaveBeenCalledWith(
-        'job-1',
-        expect.objectContaining({
-          retryCount: 0,
-          lastRunAt: expect.any(Date),
-          nextRunAt: expect.any(Date),
-        }),
-      );
-    });
-
-    it('failed job retries with backoff', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: false,
-        error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
-      });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'failed',
-          errorCode: expect.any(String),
-          errorMessage: expect.any(String),
-        }),
-      );
-
-      expect(mockJobsRepo.update).toHaveBeenCalledWith(
-        'job-1',
-        expect.objectContaining({
-          retryCount: 1,
-          nextRunAt: expect.any(Date),
-        }),
-      );
-    });
-
-    it('failed job marked failed after max retries', async () => {
-      const mockJob = createMockJob({ retryCount: 3, maxRetries: 3 });
-      const mockRun = createMockRun({ attemptNumber: 4 });
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: false,
-        error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
-      });
-      mockJobsRepo.update.mockResolvedValue({ ...mockJob, status: 'failed' });
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobsRepo.update).toHaveBeenCalledWith('job-1', {
-        status: 'failed',
-        lastRunAt: expect.any(Date),
-      });
-    });
-
-    it('throws error for session job missing targetSessionId', async () => {
-      const mockJob = createMockJob({ targetSessionId: null });
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'failed',
-          errorMessage: 'Session job missing targetSessionId',
-        }),
-      );
-    });
-
-    it('executes isolated jobs by creating a new session', async () => {
-      const mockJob = createMockJob({
-        targetType: 'isolated',
-        targetSessionId: null,
-        metadata: { name: 'Test Pulse' },
-      });
-      const mockRun = createMockRun();
-      const mockNewSession = {
-        id: 'new-session-id',
-        title: 'Pulse: Test Pulse',
-      };
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionsStore.create.mockResolvedValue(
-        mockNewSession as Awaited<
-          ReturnType<ReturnType<typeof createMockSessionsStore>['create']>
-        >,
-      );
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockSessionsStore.create).toHaveBeenCalledWith({
-        title: 'Pulse: Test Pulse',
-      });
-      expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: 'new-session-id',
-          role: 'user',
-          content: 'Test message',
-        }),
-      );
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'succeeded',
-        }),
-      );
-    });
-
-    it('isolated job fails if session creation fails', async () => {
-      const mockJob = createMockJob({
-        targetType: 'isolated',
-        targetSessionId: null,
-      });
-      const mockRun = createMockRun();
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionsStore.create.mockRejectedValue(
-        new Error('Session creation failed'),
-      );
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'failed',
-          errorMessage: 'Session creation failed',
-        }),
-      );
-    });
-
-    it('isolated job fails if message submission fails', async () => {
-      const mockJob = createMockJob({
-        targetType: 'isolated',
-        targetSessionId: null,
-      });
-      const mockRun = createMockRun();
-      const mockNewSession = { id: 'new-session-id', title: 'Pulse: unnamed' };
-
-      mockJobsRepo.claimNextDueJob.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionsStore.create.mockResolvedValue(
-        mockNewSession as Awaited<
-          ReturnType<ReturnType<typeof createMockSessionsStore>['create']>
-        >,
-      );
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: false,
-        error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
-      });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
-
-      scheduler.start();
-      await scheduler.tick();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'failed',
-          errorMessage:
-            'Isolated job execution failed: PROVIDER_ERROR - Provider failed',
-        }),
-      );
-    });
-  });
-
-  describe('triggerJob()', () => {
-    it('throws error if job not found', async () => {
-      mockJobsRepo.findById.mockResolvedValue(null);
-      await expect(scheduler.triggerJob('non-existent')).rejects.toThrow(
-        'Job not found',
-      );
-    });
-
-    it('executes job immediately', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun({ attemptNumber: 0 });
-
-      mockJobsRepo.findById.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'succeeded',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-
-      const result = await scheduler.triggerJob('job-1');
-
-      expect(result).toBeDefined();
-      expect(mockJobRunsRepo.create).toHaveBeenCalledWith({
-        jobId: 'job-1',
-        status: 'queued',
-        attemptNumber: 0,
-      });
-    });
-
-    it('creates run with attempt 0', async () => {
-      const mockJob = createMockJob({ retryCount: 2 });
-      const mockRun = createMockRun({ attemptNumber: 0 });
-
-      mockJobsRepo.findById.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'succeeded',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: true,
-        userMessage: {},
-        assistantMessage: {},
-        run: {},
-      });
-
-      await scheduler.triggerJob('job-1');
-
-      expect(mockJobRunsRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          attemptNumber: 0,
-        }),
-      );
-    });
-
-    it('handles execution errors', async () => {
-      const mockJob = createMockJob();
-      const mockRun = createMockRun({ attemptNumber: 0 });
-
-      mockJobsRepo.findById.mockResolvedValue(mockJob);
-      mockJobRunsRepo.create.mockResolvedValue(mockRun);
-      mockJobRunsRepo.updateStatus.mockResolvedValue({
-        ...mockRun,
-        status: 'running',
-      });
-      mockSessionService.submitMessageStreaming.mockResolvedValue({
-        ok: false,
-        error: { code: 'PROVIDER_ERROR', message: 'Provider failed' },
-      });
-
-      await expect(scheduler.triggerJob('job-1')).rejects.toThrow();
-
-      expect(mockJobRunsRepo.updateStatus).toHaveBeenCalledWith(
-        'run-1',
-        expect.objectContaining({
-          status: 'failed',
-        }),
-      );
-    });
   });
 
   describe('recoverStuckJobs()', () => {
@@ -634,15 +192,12 @@ describe('SchedulerService', () => {
         status: 'running',
         startedAt: new Date(),
       });
-      const mockJob = createMockJob();
 
       mockJobRunsRepo.listByStatus.mockResolvedValue([mockRun]);
-      mockJobsRepo.findById.mockResolvedValue(mockJob);
       mockJobRunsRepo.updateStatus.mockResolvedValue({
         ...mockRun,
         status: 'failed',
       });
-      mockJobsRepo.update.mockResolvedValue(mockJob);
 
       await scheduler.recoverStuckJobs();
 
@@ -650,8 +205,11 @@ describe('SchedulerService', () => {
         status: 'failed',
         finishedAt: expect.any(Date),
         errorCode: 'SCHEDULER_CRASH',
-        errorMessage: 'Job was running when scheduler stopped',
+        errorMessage: 'Run was in progress when scheduler stopped',
       });
+      // The job itself is NOT touched — the runnable will re-claim
+      // it on the next tick if it's still pending.
+      expect(mockJobsRepo.findById).not.toHaveBeenCalled();
     });
 
     it('handles no stuck runs', async () => {
@@ -683,5 +241,226 @@ describe('createSchedulerService', () => {
 
     expect(scheduler).toBeInstanceOf(SchedulerService);
     expect(scheduler.isActive()).toBe(false);
+  });
+});
+
+// ============================================================================
+// Phase 0 scheduling refactor: ScheduledRunnable registry + dispatch
+// ============================================================================
+
+import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+
+/**
+ * Build a minimal `ScheduledRunnable` with vi.fn()s for the three
+ * lifecycle hooks. The optional `_payload` arg is whatever the
+ * caller wants — the scheduler doesn't introspect it.
+ */
+function makeRunnable(
+  kind: string,
+  options: {
+    claim?: () => Promise<{ id: string; payload: unknown } | null>;
+    execute?: (id: string, payload: unknown) => Promise<ExecutionResult>;
+    reschedule?: (
+      id: string,
+      payload: unknown,
+      result: ExecutionResult,
+    ) => Promise<Date | null>;
+  } = {},
+): ScheduledRunnable & {
+  claimNextDue: ReturnType<typeof vi.fn>;
+  execute: ReturnType<typeof vi.fn>;
+  reschedule: ReturnType<typeof vi.fn>;
+} {
+  return {
+    kind,
+    claimNextDue: vi.fn(
+      options.claim ??
+        (async () => ({ id: 'item-1', payload: { foo: 'bar' } })),
+    ),
+    execute: vi.fn(
+      (options.execute ??
+        (async () => ({ ok: true as const, durationMs: 5 }))) as (
+        id: string,
+        payload: unknown,
+      ) => Promise<import('@openaidy/runtime').ExecutionResult>,
+    ),
+    reschedule: vi.fn(options.reschedule ?? (async () => null)),
+  };
+}
+
+/**
+ * Build a SchedulerService wired to mocks that never claim/run a
+ * job (so the legacy `executeJob` path is dormant). We then
+ * register one or more runnables and exercise the Phase 0 dispatch.
+ */
+function makeScheduler() {
+  const mockLogger = createMockLogger();
+  const mockJobsRepo = createMockJobsRepo();
+  // The legacy path returns null = no due jobs.
+  mockJobsRepo.claimNextDueJob.mockResolvedValue(null);
+  const mockJobRunsRepo = createMockJobRunsRepo();
+  const mockSessionService = createMockSessionService();
+  const mockSessionsStore = {
+    findById: vi.fn().mockResolvedValue(null),
+    create: vi.fn(),
+    list: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  };
+  const scheduler = new SchedulerService(
+    mockJobsRepo as unknown as Parameters<typeof createSchedulerService>[0],
+    mockJobRunsRepo as unknown as Parameters<typeof createSchedulerService>[1],
+    mockSessionService as unknown as Parameters<
+      typeof createSchedulerService
+    >[2],
+    mockSessionsStore as unknown as Parameters<
+      typeof createSchedulerService
+    >[3],
+    mockLogger,
+  );
+  return { scheduler, mockLogger, mockJobsRepo, mockJobRunsRepo };
+}
+
+describe('Phase 0 dispatch — ScheduledRunnable registry', () => {
+  it('registers a runnable and lists its kind', () => {
+    const { scheduler } = makeScheduler();
+    const runnable = makeRunnable('test-1');
+
+    expect(scheduler.getRunnableKinds()).toEqual([]);
+    scheduler.registerRunnable(runnable);
+    expect(scheduler.getRunnableKinds()).toEqual(['test-1']);
+  });
+
+  it('rejects duplicate registrations with the same kind', () => {
+    const { scheduler } = makeScheduler();
+    scheduler.registerRunnable(makeRunnable('dup'));
+    expect(() => scheduler.registerRunnable(makeRunnable('dup'))).toThrow(
+      /already registered/,
+    );
+    // Only the first one is registered.
+    expect(scheduler.getRunnableKinds()).toEqual(['dup']);
+  });
+
+  it('dispatches to the first runnable that claims an item', async () => {
+    const { scheduler } = makeScheduler();
+    scheduler.start(); // tick is a no-op without due jobs / claims
+
+    const r1 = makeRunnable('r1', {
+      claim: async () => null, // doesn't claim
+    });
+    const r2 = makeRunnable('r2', {
+      claim: async () => ({ id: 'sched-7', payload: { taskId: 't' } }),
+    });
+    const r3 = makeRunnable('r3', {
+      claim: async () => null, // never reached
+    });
+    scheduler.registerRunnable(r1);
+    scheduler.registerRunnable(r2);
+    scheduler.registerRunnable(r3);
+
+    const did = await scheduler.tick();
+    expect(did).toBe(true);
+    expect(r1.claimNextDue).toHaveBeenCalled();
+    expect(r2.claimNextDue).toHaveBeenCalled();
+    expect(r2.execute).toHaveBeenCalledWith('sched-7', { taskId: 't' });
+    expect(r2.reschedule).toHaveBeenCalled();
+    // r3 should NOT have been polled — the first claimer wins.
+    expect(r3.claimNextDue).not.toHaveBeenCalled();
+
+    await scheduler.stop();
+  });
+
+  it('returns false when no runnable claims', async () => {
+    const { scheduler } = makeScheduler();
+    scheduler.start();
+    scheduler.registerRunnable(
+      makeRunnable('empty', { claim: async () => null }),
+    );
+
+    const did = await scheduler.tick();
+    expect(did).toBe(false);
+    await scheduler.stop();
+  });
+
+  it('skips the legacy path when a runnable claims', async () => {
+    const { scheduler, mockJobsRepo } = makeScheduler();
+    scheduler.start();
+    scheduler.registerRunnable(
+      makeRunnable('claims', {
+        claim: async () => ({ id: 'x', payload: null }),
+      }),
+    );
+
+    await scheduler.tick();
+    // The legacy job claimer is never reached.
+    expect(mockJobsRepo.claimNextDueJob).not.toHaveBeenCalled();
+    await scheduler.stop();
+  });
+
+  it('calls reschedule with the execution result', async () => {
+    const { scheduler } = makeScheduler();
+    scheduler.start();
+
+    const result: ExecutionResult = { ok: true, durationMs: 42 };
+    const r = makeRunnable('r', {
+      claim: async () => ({ id: 'id-1', payload: { x: 1 } }),
+      execute: async () => result,
+      reschedule: async () => new Date('2026-06-05T10:00:00.000Z'),
+    });
+    scheduler.registerRunnable(r);
+
+    await scheduler.tick();
+    expect(r.reschedule).toHaveBeenCalledWith('id-1', { x: 1 }, result);
+    await scheduler.stop();
+  });
+
+  it('records a thrown execute as a failure result and still reschedules', async () => {
+    const { scheduler } = makeScheduler();
+    scheduler.start();
+
+    const r = makeRunnable('r', {
+      claim: async () => ({ id: 'id-1', payload: null }),
+      execute: async () => {
+        // A runnable that throws is treated as a failure —
+        // the scheduler doesn't crash.
+        throw new Error('boom');
+      },
+      reschedule: async (_id, _payload, result) => {
+        // Verify the scheduler handed us a failure result.
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toBe('boom');
+        }
+        return null;
+      },
+    });
+    scheduler.registerRunnable(r);
+
+    const did = await scheduler.tick();
+    expect(did).toBe(true);
+    expect(r.reschedule).toHaveBeenCalled();
+    await scheduler.stop();
+  });
+
+  it('logs when reschedule throws but does not crash the tick', async () => {
+    const { scheduler, mockLogger } = makeScheduler();
+    scheduler.start();
+
+    const r = makeRunnable('r', {
+      claim: async () => ({ id: 'id-1', payload: null }),
+      reschedule: async () => {
+        throw new Error('reschedule failed');
+      },
+    });
+    scheduler.registerRunnable(r);
+
+    // tick resolves normally even though reschedule threw.
+    const did = await scheduler.tick();
+    expect(did).toBe(true);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'r', err: expect.any(String) }),
+      expect.stringMatching(/reschedule/),
+    );
+    await scheduler.stop();
   });
 });

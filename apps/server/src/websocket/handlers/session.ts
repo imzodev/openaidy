@@ -353,6 +353,7 @@ export class SessionHandler {
             errorCode: run.errorCode ?? undefined,
             errorMessage: run.errorMessage ?? undefined,
             createdAt: new Date(run.createdAt).toISOString(),
+            firstMessageId: run.firstMessageId ?? undefined,
           })),
           total: runs.length,
         },

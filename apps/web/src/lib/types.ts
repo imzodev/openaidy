@@ -25,6 +25,22 @@ export type {
   ChannelStatusResponse,
   Session,
   MessageRole,
+  SessionSearchResult,
+  // Pulse types from shared-types — single source of truth.
+  ScheduleInput,
+  // Recurring task schedules (Phase 6). These mirror the
+  // @openaidy/shared-types/task-schedules.ts DTOs — the web client
+  // does NOT redeclare them.
+  SchedulePreset,
+  TaskScheduleStatus,
+  ReplanPolicy,
+  TaskScheduleDto,
+  TaskExecutionHistoryStatus,
+  TaskExecutionHistoryDto,
+  CreateTaskScheduleInput,
+  UpdateTaskScheduleInput,
+  ListTaskExecutionsFilters,
+  PaginatedTaskExecutions,
 } from '@openaidy/shared-types';
 
 import type {
@@ -446,25 +462,7 @@ export type PulseRun = {
   errorMessage: string | null;
 };
 
-export type ScheduleInput =
-  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
-  | { daily: { hour: number; minute: number } }
-  | { cron: string; tz?: string }
-  | { at: string };
-
-export type CreatePulseBody = {
-  name: string;
-  prompt: string;
-  schedule: ScheduleInput;
-  agentId?: string;
-  sessionId?: string;
-};
-
-export type UpdatePulseBody = {
-  name?: string;
-  prompt?: string;
-  schedule?: ScheduleInput;
-  status?: 'active' | 'paused' | 'completed' | 'failed';
-  agentId?: string;
-  sessionId?: string;
-};
+export type {
+  CreatePulseInput as CreatePulseBody,
+  UpdatePulseInput as UpdatePulseBody,
+} from '@openaidy/shared-types';

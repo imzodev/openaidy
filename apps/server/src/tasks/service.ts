@@ -8,6 +8,7 @@ import type {
   AgentRole,
 } from '@openaidy/db';
 import { createLogger } from '../lib/logger';
+import type { TaskScheduleService } from './schedule-service';
 import { TaskOperations } from './operations/task-operations';
 import { SubtaskOperations } from './operations/subtask-operations';
 import { TaskExecution } from './execution/task-execution';
@@ -42,7 +43,10 @@ export class TaskService {
   private readonly subtaskOps: SubtaskOperations;
   private readonly execution: TaskExecution;
 
-  constructor(options: TaskServiceOptions) {
+  constructor(
+    options: TaskServiceOptions,
+    taskSchedulesService?: TaskScheduleService,
+  ) {
     const logger = createLogger('TaskService');
     this.ops = new TaskOperations(
       options.tasksRepo,
@@ -50,6 +54,7 @@ export class TaskService {
       options.taskAgentsRepo,
       options.agents,
       options.planningService,
+      taskSchedulesService,
       logger,
     );
     this.subtaskOps = new SubtaskOperations(
@@ -72,6 +77,15 @@ export class TaskService {
 
   destroy(): void {
     this.execution.destroy();
+  }
+
+  /**
+   * Inject the TaskScheduleService after construction.
+   * Used when taskService is created before the recurring tasks block
+   * (which creates the TaskScheduleService) in app.ts.
+   */
+  setTaskSchedulesService(service: TaskScheduleService | undefined): void {
+    this.ops.setTaskSchedulesService(service);
   }
 
   // ========================================
@@ -240,20 +254,23 @@ export class TaskService {
 
   async executeTask(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
-    return this.execution.executeTask(taskId);
+    return this.execution.executeTask(taskId, options);
   }
 
   async executeSubtask(
     subtaskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
-    return this.execution.executeSubtask(subtaskId);
+    return this.execution.executeSubtask(subtaskId, options);
   }
 
   async executeSubtasks(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ startedCount: number }>> {
-    return this.execution.executeSubtasks(taskId);
+    return this.execution.executeSubtasks(taskId, options);
   }
 
   async triggerSubtaskRetry(

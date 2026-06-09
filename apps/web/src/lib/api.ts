@@ -176,6 +176,26 @@ export async function listSessions(): Promise<{ items: Session[] }> {
 }
 
 /**
+ * Search sessions by title or message content.
+ * Falls back to title-only search if no DB backend.
+ */
+export async function searchSessions(
+  query: string,
+  options?: { limit?: number; currentSessionId?: string },
+): Promise<{ items: import('@openaidy/shared-types').SessionSearchResult[] }> {
+  const params = new URLSearchParams({ q: query });
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.currentSessionId)
+    params.set('currentSessionId', options.currentSessionId);
+
+  const response = await apiFetch(`${API_BASE}/sessions/search?${params}`);
+  if (!response.ok) {
+    throw new Error(`Failed to search sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
  * Create a new session
  */
 export async function createSession(title: string): Promise<Session> {

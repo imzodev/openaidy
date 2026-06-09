@@ -13,6 +13,8 @@ import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
 import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
+import { createTaskSchedulesRepository } from './repositories/task-schedules';
+import { createTaskExecutionHistoryRepository } from './repositories/task-execution-history';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
 import { createDeliverablesRepository } from './repositories/deliverables';
@@ -37,6 +39,8 @@ export async function createDatabaseAdapter(
     tasks: createTasksRepository(client),
     subtasks: createSubtasksRepository(client),
     taskAgents: createTaskAgentsRepository(client),
+    taskSchedules: createTaskSchedulesRepository(client),
+    taskExecutionHistory: createTaskExecutionHistoryRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
     deliverables: createDeliverablesRepository(client),

@@ -14,6 +14,8 @@ type RunListProps = {
   runs: SessionRun[];
   isLoading: boolean;
   error?: string;
+  /** Called when user clicks on a run — passes the run's firstMessageId to scroll to */
+  onRunClick?: (firstMessageId: string | undefined) => void;
 };
 
 /**
@@ -127,7 +129,12 @@ export function RunList(props: RunListProps) {
           <div class="max-h-48 overflow-y-auto">
             <For each={props.runs}>
               {(run) => (
-                <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                <div
+                  class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  onClick={() => {
+                    props.onRunClick?.(run.firstMessageId);
+                  }}
+                >
                   <div class="flex items-center justify-between gap-2">
                     {/* Left side: status and ID */}
                     <div class="flex items-center gap-2">

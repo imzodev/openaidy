@@ -3,8 +3,12 @@ import { fileURLToPath } from 'node:url';
 
 vi.mock('../lib/env', () => ({
   env: (() => {
-    const appConfigPath = fileURLToPath(new URL('../../../.openaidy/test-scheduler-config.json', import.meta.url));
-    const appConfigTemplatePath = fileURLToPath(new URL('../../../../config/openaidy.template.json', import.meta.url));
+    const appConfigPath = fileURLToPath(
+      new URL('../../../.openaidy/test-scheduler-config.json', import.meta.url),
+    );
+    const appConfigTemplatePath = fileURLToPath(
+      new URL('../../../../config/openaidy.template.json', import.meta.url),
+    );
 
     return {
       HOST: '0.0.0.0',
@@ -23,7 +27,8 @@ vi.mock('../lib/env', () => ({
 import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 
-const describeSchedulerRoutes = process.env.OPENAIDY_RUN_DB_TESTS === '1' ? describe : describe.skip;
+const describeSchedulerRoutes =
+  process.env.OPENAIDY_RUN_DB_TESTS === '1' ? describe : describe.skip;
 
 describeSchedulerRoutes('Scheduler Routes', () => {
   let app: FastifyInstance;
@@ -39,7 +44,7 @@ describeSchedulerRoutes('Scheduler Routes', () => {
   describe('POST /api/jobs', () => {
     it('should create a one-shot job successfully', async () => {
       const schedule = new Date(Date.now() + 60000).toISOString(); // 1 minute from now
-      
+
       const response = await app.inject({
         method: 'POST',
         url: '/api/jobs',
@@ -187,7 +192,7 @@ describeSchedulerRoutes('Scheduler Routes', () => {
 
     it('should calculate nextRunAt correctly for one-shot', async () => {
       const schedule = new Date(Date.now() + 60000);
-      
+
       const response = await app.inject({
         method: 'POST',
         url: '/api/jobs',
@@ -202,7 +207,9 @@ describeSchedulerRoutes('Scheduler Routes', () => {
       expect(response.statusCode).toBe(201);
       const body = response.json();
       const nextRunAt = new Date(body.nextRunAt);
-      expect(Math.abs(nextRunAt.getTime() - schedule.getTime())).toBeLessThan(1000);
+      expect(Math.abs(nextRunAt.getTime() - schedule.getTime())).toBeLessThan(
+        1000,
+      );
     });
 
     it('should calculate nextRunAt correctly for cron', async () => {
@@ -275,7 +282,7 @@ describeSchedulerRoutes('Scheduler Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      body.jobs.forEach((job: any) => {
+      body.jobs.forEach((job: { status: string }) => {
         expect(job.status).toBe('active');
       });
     });
@@ -288,7 +295,7 @@ describeSchedulerRoutes('Scheduler Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      body.jobs.forEach((job: any) => {
+      body.jobs.forEach((job: { type: string }) => {
         expect(job.type).toBe('cron');
       });
     });
@@ -480,53 +487,6 @@ describeSchedulerRoutes('Scheduler Routes', () => {
     });
   });
 
-  describe('POST /api/jobs/:id/trigger', () => {
-    let jobId: string;
-
-    beforeEach(async () => {
-      const createResponse = await app.inject({
-        method: 'POST',
-        url: '/api/jobs',
-        payload: {
-          type: 'one-shot',
-          schedule: new Date(Date.now() + 60000).toISOString(),
-          targetType: 'isolated',
-          payload: { message: 'Manual trigger test' },
-        },
-      });
-      jobId = createResponse.json().id;
-    });
-
-    it('should trigger job execution', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: `/api/jobs/${jobId}/trigger`,
-      });
-
-      // Note: This will fail because isolated execution is not implemented
-      // The test verifies the route exists and handles the error correctly
-      expect([200, 500]).toContain(response.statusCode);
-      
-      if (response.statusCode === 200) {
-        const body = response.json();
-        expect(body.run).toBeDefined();
-        expect(body.run.jobId).toBe(jobId);
-        expect(body.run.attemptNumber).toBe(0);
-      }
-    });
-
-    it('should return 404 for non-existent job', async () => {
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/jobs/00000000-0000-0000-0000-000000000000/trigger',
-      });
-
-      expect(response.statusCode).toBe(404);
-      const body = response.json();
-      expect(body.error).toBe('job.not_found');
-    });
-  });
-
   describe('GET /api/jobs/:id/runs', () => {
     let jobId: string;
 
@@ -595,37 +555,6 @@ describeSchedulerRoutes('Scheduler Routes', () => {
   });
 
   describe('Integration Tests', () => {
-    it('should create job, trigger manually, and verify run created', async () => {
-      // Create job
-      const createResponse = await app.inject({
-        method: 'POST',
-        url: '/api/jobs',
-        payload: {
-          type: 'one-shot',
-          schedule: new Date(Date.now() + 60000).toISOString(),
-          targetType: 'isolated',
-          payload: { test: 'integration' },
-        },
-      });
-      expect(createResponse.statusCode).toBe(201);
-      const jobId = createResponse.json().id;
-
-      // Trigger job (will fail due to isolated execution not implemented)
-      await app.inject({
-        method: 'POST',
-        url: `/api/jobs/${jobId}/trigger`,
-      });
-
-      // Check runs (should have at least one run attempt)
-      const runsResponse = await app.inject({
-        method: 'GET',
-        url: `/api/jobs/${jobId}/runs`,
-      });
-      expect(runsResponse.statusCode).toBe(200);
-      const runsBody = runsResponse.json();
-      expect(runsBody.runs.length).toBeGreaterThanOrEqual(0);
-    });
-
     it('should pause job and verify status change', async () => {
       // Create job
       const createResponse = await app.inject({
@@ -684,7 +613,7 @@ describeSchedulerRoutes('Scheduler Routes', () => {
         url: '/api/jobs',
       });
       const jobs = listResponse.json().jobs;
-      expect(jobs.find((j: any) => j.id === jobId)).toBeUndefined();
+      expect(jobs.find((j: { id: string }) => j.id === jobId)).toBeUndefined();
     });
   });
 });
