@@ -34,6 +34,7 @@ import { PulsesPage } from './components/pages/PulsesPage';
 import { ChannelsPage } from './components/pages/ChannelsPage';
 import { WebhooksPage } from './components/pages/WebhooksPage';
 import { AgentsPage } from './components/pages/AgentsPage';
+import { HomePage } from './components/pages/HomePage';
 import { SkillsPage } from './components/pages/SkillsPage';
 import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
@@ -479,6 +480,13 @@ function AppContent(props: AppContentProps) {
             </button>
           </div>
         </header>
+
+        <Show when={view() === 'home'}>
+          <HomePage
+            onNavigate={navigate}
+            onCreateSession={handleCreateSession}
+          />
+        </Show>
 
         <Show when={view() === 'settings'}>
           <SettingsView />

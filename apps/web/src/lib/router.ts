@@ -3,6 +3,7 @@ import type { ViewType } from '../components/Sidebar';
 
 // Route path constants - single source of truth
 export const RoutePaths = {
+  HOME: '/',
   SESSIONS: '/sessions',
   CHAT: '/chat',
   TASKS: '/tasks',
@@ -23,6 +24,7 @@ export type RoutePath = (typeof RoutePaths)[keyof typeof RoutePaths];
 
 // Map ViewType to RoutePaths
 export const viewToRouteMap: Record<ViewType, RoutePath> = {
+  home: RoutePaths.HOME,
   sessions: RoutePaths.SESSIONS,
   chat: RoutePaths.CHAT,
   tasks: RoutePaths.TASKS,
@@ -42,7 +44,7 @@ export const viewToRouteMap: Record<ViewType, RoutePath> = {
 
 // Map RoutePaths to ViewType
 export const routeToViewMap: Record<string, ViewType> = {
-  '/': 'chat',
+  '/': 'home',
   [RoutePaths.SESSIONS]: 'sessions',
   [RoutePaths.CHAT]: 'chat',
   [RoutePaths.TASKS]: 'tasks',
@@ -70,13 +72,7 @@ export function createRouter() {
   // Handle root path redirect on initial load
   const getInitialPath = () => {
     if (typeof window !== 'undefined') {
-      const path = window.location.pathname;
-      // Redirect root to chat
-      if (path === '/') {
-        window.history.replaceState({}, '', RoutePaths.CHAT);
-        return RoutePaths.CHAT;
-      }
-      return path;
+      return window.location.pathname || DEFAULT_ROUTE;
     }
     return DEFAULT_ROUTE;
   };
