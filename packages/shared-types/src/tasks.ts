@@ -11,7 +11,12 @@ export const TASK_STATUS_VALUES = [
   'cancelled',
 ] as const;
 
-export const TASK_PRIORITY_VALUES = ['low', 'medium', 'high', 'urgent'] as const;
+export const TASK_PRIORITY_VALUES = [
+  'low',
+  'medium',
+  'high',
+  'urgent',
+] as const;
 
 export const SUBTASK_STATUS_VALUES = [
   'pending',
@@ -72,7 +77,12 @@ export type TaskWithDetails = {
   planningStatus: PlanningStatus | null;
   sessionId: string | null;
   agents: TaskAgentInfo[];
-  subtaskCount: { pending: number; in_progress: number; completed: number; failed: number };
+  progress: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    failed: number;
+  };
   createdAt: string;
   updatedAt: string;
 };

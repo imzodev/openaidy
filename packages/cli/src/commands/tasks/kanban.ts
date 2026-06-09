@@ -40,7 +40,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/tasks/kanban`, {
+    res = await fetch(`${config.httpUrl}/tasks/kanban`, {
       headers: { Authorization: `Bearer ${tokenResult.token}` },
     });
   } catch (err) {
@@ -50,7 +50,9 @@ Exit Codes:
   }
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as { error?: string };
     const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };

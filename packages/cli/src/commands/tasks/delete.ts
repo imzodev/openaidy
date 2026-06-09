@@ -56,7 +56,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/tasks/${taskId}`, {
+    res = await fetch(`${config.httpUrl}/tasks/${taskId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${tokenResult.token}` },
     });
@@ -72,7 +72,9 @@ Exit Codes:
       p.log.error(msg);
       return { exitCode: 1, error: msg };
     }
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as { error?: string };
     const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };
