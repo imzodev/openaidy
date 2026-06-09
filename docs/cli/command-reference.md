@@ -840,6 +840,284 @@ pnpm openaidy agents delete my-agent
 
 ---
 
+### `tasks` - Task Management
+
+Commands for managing tasks and subtasks.
+
+---
+
+#### `tasks list`
+
+List all tasks, optionally filtered by status.
+
+**Usage:**
+
+```bash
+openaidy tasks list [--status <status>] [--limit <n>]
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--status <status>` | Filter by status: backlog, todo, in_progress, review, done, cancelled |
+| `--limit <n>` | Limit number of results (default: 50) |
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks list
+pnpm openaidy tasks list --status in_progress
+pnpm openaidy tasks list --limit 10
+```
+
+**Exit Codes:** `0` success, `1` error, `2` invalid arguments
+
+---
+
+#### `tasks get`
+
+Get full details for a specific task.
+
+**Usage:**
+
+```bash
+openaidy tasks get <id>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<id>` | Task ID (required) |
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks get abc123
+```
+
+**Exit Codes:** `0` success, `1` error, `2` missing task ID
+
+---
+
+#### `tasks create`
+
+Create a new task.
+
+**Usage:**
+
+```bash
+openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `[title]` | Task title (optional — derived from description if omitted) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--description <desc>` | Task description (required if no title) |
+| `--priority <p>` | Priority: low, medium, high, urgent (default: medium) |
+| `--planning` | Enable planning agent to decompose into subtasks |
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks create "Fix login bug" --priority high
+pnpm openaidy tasks create --description "Implement the new API endpoint"
+pnpm openaidy tasks create "Plan database migration" --planning
+```
+
+**Exit Codes:** `0` success, `1` error, `2` invalid arguments
+
+---
+
+#### `tasks update`
+
+Update a task's title, description, priority, or status.
+
+**Usage:**
+
+```bash
+openaidy tasks update <id> [--title <title>] [--description <desc>] [--priority <p>] [--status <s>]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<id>` | Task ID (required) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--title <title>` | New task title |
+| `--description <desc>` | New task description |
+| `--priority <p>` | Priority: low, medium, high, urgent |
+| `--status <s>` | Status: backlog, todo, in_progress, review, done, cancelled |
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks update abc123 --priority high
+pnpm openaidy tasks update abc123 --status done
+pnpm openaidy tasks update abc123 --title "New title" --priority urgent
+```
+
+**Exit Codes:** `0` success, `1` error, `2` invalid arguments
+
+---
+
+#### `tasks delete`
+
+Delete a task permanently.
+
+**Usage:**
+
+```bash
+openaidy tasks delete <id>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<id>` | Task ID (required) |
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks delete abc123
+```
+
+**Exit Codes:** `0` success, `1` error, `2` missing task ID
+
+---
+
+#### `tasks kanban`
+
+Display all tasks grouped by status in Kanban board layout.
+
+**Usage:**
+
+```bash
+openaidy tasks kanban
+```
+
+**Examples:**
+
+```bash
+pnpm openaidy tasks kanban
+```
+
+**Exit Codes:** `0` success, `1` error
+
+---
+
+### `subtasks` - Subtask Management
+
+Commands for managing subtasks within a task.
+
+---
+
+#### `subtasks list`
+
+List all subtasks for a specific task.
+
+**Usage:**
+
+```bash
+openaidy subtasks list <taskId>
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<taskId>` | Task ID (required) |
+
+**Examples:**
+
+```bash
+pnpm openaidy subtasks list abc123
+```
+
+**Exit Codes:** `0` success, `1` error, `2` missing task ID
+
+---
+
+#### `subtasks complete`
+
+Mark a subtask as completed.
+
+**Usage:**
+
+```bash
+openaidy subtasks complete <subtaskId> [--result <result>]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<subtaskId>` | Subtask ID (required) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--result <r>` | Completion result / summary (optional) |
+
+**Examples:**
+
+```bash
+pnpm openaidy subtasks complete abc123
+pnpm openaidy subtasks complete abc123 --result "API endpoint implemented and tested"
+```
+
+**Exit Codes:** `0` success, `1` error, `2` missing subtask ID
+
+---
+
+#### `subtasks fail`
+
+Mark a subtask as failed.
+
+**Usage:**
+
+```bash
+openaidy subtasks fail <subtaskId> [--reason <reason>]
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|-------------|
+| `<subtaskId>` | Subtask ID (required) |
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--reason <r>` | Failure reason / error message (optional) |
+
+**Examples:**
+
+```bash
+pnpm openaidy subtasks fail abc123
+pnpm openaidy subtasks fail abc123 --reason "API rate limit exceeded"
+```
+
+**Exit Codes:** `0` success, `1` error, `2` missing subtask ID
+
+---
+
 ## Future Commands
 
 The following commands are planned but not yet implemented:
