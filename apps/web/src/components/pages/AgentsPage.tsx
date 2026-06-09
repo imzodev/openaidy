@@ -482,89 +482,128 @@ export function AgentsPage(props: AgentsPageProps) {
       <Show when={!isLoading() && agents().length === 0}>
         <div class="w-full max-w-5xl mx-auto">
           {/* Banner Image */}
-          <div class="rounded-2xl overflow-hidden shadow-lg mb-8 border border-gray-200 dark:border-gray-700">
+          <div class="relative rounded-2xl overflow-hidden shadow-lg mb-10 border border-gray-200 dark:border-gray-700 group">
             <img
               src="../../../docs/assets/banner.png"
-              alt="OpenAidy"
-              class="w-full object-cover"
-              style="max-height: 280px;"
+              alt="OpenAidy platform"
+              class="w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              style="max-height: 300px;"
             />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
           </div>
 
           {/* Headline + CTA */}
           <div class="text-center mb-10">
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium mb-4">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium mb-5">
               <Bot class="w-3.5 h-3.5" />
               AI Agents
             </div>
-            <h2 class="text-3xl font-bold text-text-primary mb-3">
+
+            <h2 class="text-3xl sm:text-4xl font-bold text-text-primary mb-4 tracking-tight">
               Create your first agent
             </h2>
-            <p class="text-text-secondary text-base max-w-lg mx-auto mb-6">
-              Agents are AI-powered assistants with custom personalities, tools,
-              skills, and MCP integrations — tailored to your workflow.
+            <p class="text-text-secondary text-base sm:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
+              Powerful AI assistants with custom personalities, built-in tools,
+              skills, and MCP integrations — all tailored to your workflow.
             </p>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              class="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-primary-hover shadow-sm transition-colors"
-            >
-              <Plus class="w-4 h-4" />
-              Create Agent
-            </button>
+
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={() => setShowCreateModal(true)}
+                class="inline-flex items-center gap-2.5 px-7 py-3.5 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-primary-hover shadow-md hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200 active:scale-95"
+              >
+                <Plus class="w-4 h-4" />
+                Create Agent
+                <kbd class="hidden sm:inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 text-xs font-normal bg-white/20 rounded">
+                  N
+                </kbd>
+              </button>
+              <span class="text-xs text-text-muted">
+                or press{' '}
+                <kbd class="font-mono text-[10px] px-1 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded">
+                  N
+                </kbd>{' '}
+                anywhere
+              </span>
+            </div>
           </div>
 
           {/* Feature Grid */}
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
-              <div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-3">
-                <Lightbulb class="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-10">
+            {/* Custom Personality */}
+            <div class="group relative bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-lg hover:shadow-blue-500/10 transition-all duration-200 cursor-default">
+              <div class="absolute top-5 right-5 w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50 group-hover:shadow-lg group-hover:shadow-blue-400/30 transition-all duration-300">
+                <Lightbulb class="w-4 h-4 text-blue-500 dark:text-blue-400" />
               </div>
-              <h3 class="text-sm font-semibold text-text-primary mb-1">
+              <h3 class="text-base font-semibold text-text-primary mb-2 pr-8">
                 Custom Personality
               </h3>
-              <p class="text-xs text-text-secondary leading-relaxed">
+              <p class="text-sm text-text-secondary leading-relaxed">
                 Define identity, tone, and behavior through personality files —
                 AGENT, USER, MISSION, and RULES.
               </p>
+              <div class="absolute bottom-0 left-6 right-6 h-0.5 bg-gradient-to-r from-blue-500/0 via-blue-500/60 to-blue-500/0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
-              <div class="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center mb-3">
+
+            {/* Built-in Tools */}
+            <div class="group relative bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-600 hover:shadow-lg hover:shadow-green-500/10 transition-all duration-200 cursor-default">
+              <div class="absolute top-5 right-5 w-8 h-8 rounded-xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center group-hover:bg-green-100 dark:group-hover:bg-green-900/50 group-hover:shadow-lg group-hover:shadow-green-400/30 transition-all duration-300">
                 <Wrench class="w-4 h-4 text-green-600 dark:text-green-400" />
               </div>
-              <h3 class="text-sm font-semibold text-text-primary mb-1">
+              <h3 class="text-base font-semibold text-text-primary mb-2 pr-8">
                 Built-in Tools
               </h3>
-              <p class="text-xs text-text-secondary leading-relaxed">
+              <p class="text-sm text-text-secondary leading-relaxed">
                 Equip agents with tools for web search, code execution, file
                 operations, and more.
               </p>
+              <div class="absolute bottom-0 left-6 right-6 h-0.5 bg-gradient-to-r from-green-500/0 via-green-500/60 to-green-500/0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
-              <div class="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center mb-3">
+
+            {/* MCP Integration */}
+            <div class="group relative bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-200 cursor-default">
+              <div class="absolute top-5 right-5 w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center group-hover:bg-purple-100 dark:group-hover:bg-purple-900/50 group-hover:shadow-lg group-hover:shadow-purple-400/30 transition-all duration-300">
                 <Server class="w-4 h-4 text-purple-600 dark:text-purple-400" />
               </div>
-              <h3 class="text-sm font-semibold text-text-primary mb-1">
+              <h3 class="text-base font-semibold text-text-primary mb-2 pr-8">
                 MCP Integration
               </h3>
-              <p class="text-xs text-text-secondary leading-relaxed">
+              <p class="text-sm text-text-secondary leading-relaxed">
                 Connect to any MCP server to extend agent capabilities with
                 external APIs and services.
               </p>
+              <div class="absolute bottom-0 left-6 right-6 h-0.5 bg-gradient-to-r from-purple-500/0 via-purple-500/60 to-purple-500/0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             </div>
           </div>
 
-          {/* Secondary hint */}
-          <div class="text-center">
-            <p class="text-xs text-text-muted">
-              Agents run in persistent sessions with real-time streaming — head
-              to <span class="font-medium text-text-tertiary">Sessions</span> to
-              chat once created.
+          {/* Divider + secondary hint */}
+          <div class="flex items-center justify-center gap-4 mb-6">
+            <div class="flex-1 h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent" />
+            <p class="text-xs text-text-muted px-4 text-center">
+              Agents run in persistent sessions with real-time streaming — go to{' '}
+              <span class="font-medium text-text-secondary">Sessions</span> to
+              start chatting once created.
             </p>
+            <div class="flex-1 h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-700 to-transparent" />
+          </div>
+
+          {/* Quick stats strip */}
+          <div class="flex items-center justify-center gap-6 text-xs text-text-muted">
+            <div class="flex items-center gap-1.5">
+              <div class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span>Persistent sessions</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <div class="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              <span>Real-time streaming</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <div class="w-1.5 h-1.5 rounded-full bg-purple-400" />
+              <span>Plugin extensible</span>
+            </div>
           </div>
         </div>
       </Show>
-
-      {/* Main Content - Split View */}
       <Show when={!isLoading() && agents().length > 0}>
         <div class="flex h-[calc(100vh-200px)] gap-4">
           {/* Agent List - Left Panel */}
