@@ -19,6 +19,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter ./apps/server --filter ./apps/web dev",
+    "dev:landing": "pnpm --filter ./landing dev",
     "dev:server": "pnpm --filter ./apps/server dev",
     "dev:web": "pnpm --filter ./apps/web dev",
     "build": "pnpm -r build",
