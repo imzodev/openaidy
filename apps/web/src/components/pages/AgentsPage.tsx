@@ -478,19 +478,88 @@ export function AgentsPage(props: AgentsPageProps) {
         </div>
       </Show>
 
-      {/* Empty State */}
+      {/* Empty State — Hero Landing */}
       <Show when={!isLoading() && agents().length === 0}>
-        <div class="flex items-center justify-center h-64">
-          <div class="text-center">
-            <Bot class="w-12 h-12 mx-auto mb-4 text-text-tertiary" />
-            <p class="text-text-tertiary mb-2">No agents configured</p>
+        <div class="w-full max-w-5xl mx-auto">
+          {/* Banner Image */}
+          <div class="rounded-2xl overflow-hidden shadow-lg mb-8 border border-gray-200 dark:border-gray-700">
+            <img
+              src="../../../docs/assets/banner.png"
+              alt="OpenAidy"
+              class="w-full object-cover"
+              style="max-height: 280px;"
+            />
+          </div>
+
+          {/* Headline + CTA */}
+          <div class="text-center mb-10">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium mb-4">
+              <Bot class="w-3.5 h-3.5" />
+              AI Agents
+            </div>
+            <h2 class="text-3xl font-bold text-text-primary mb-3">
+              Create your first agent
+            </h2>
+            <p class="text-text-secondary text-base max-w-lg mx-auto mb-6">
+              Agents are AI-powered assistants with custom personalities, tools,
+              skills, and MCP integrations — tailored to your workflow.
+            </p>
             <button
               onClick={() => setShowCreateModal(true)}
-              class="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+              class="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-primary rounded-xl hover:bg-primary-hover shadow-sm transition-colors"
             >
               <Plus class="w-4 h-4" />
-              Create your first agent
+              Create Agent
             </button>
+          </div>
+
+          {/* Feature Grid */}
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+              <div class="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+                <Lightbulb class="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 class="text-sm font-semibold text-text-primary mb-1">
+                Custom Personality
+              </h3>
+              <p class="text-xs text-text-secondary leading-relaxed">
+                Define identity, tone, and behavior through personality files —
+                AGENT, USER, MISSION, and RULES.
+              </p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+              <div class="w-9 h-9 rounded-lg bg-green-50 dark:bg-green-900/30 flex items-center justify-center mb-3">
+                <Wrench class="w-4 h-4 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 class="text-sm font-semibold text-text-primary mb-1">
+                Built-in Tools
+              </h3>
+              <p class="text-xs text-text-secondary leading-relaxed">
+                Equip agents with tools for web search, code execution, file
+                operations, and more.
+              </p>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+              <div class="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center mb-3">
+                <Server class="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h3 class="text-sm font-semibold text-text-primary mb-1">
+                MCP Integration
+              </h3>
+              <p class="text-xs text-text-secondary leading-relaxed">
+                Connect to any MCP server to extend agent capabilities with
+                external APIs and services.
+              </p>
+            </div>
+          </div>
+
+          {/* Secondary hint */}
+          <div class="text-center">
+            <p class="text-xs text-text-muted">
+              Agents run in persistent sessions with real-time streaming — head
+              to <span class="font-medium text-text-tertiary">Sessions</span> to
+              chat once created.
+            </p>
           </div>
         </div>
       </Show>
