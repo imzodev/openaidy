@@ -886,3 +886,70 @@ registerCommand(
     examples: ['pnpm openaidy devices deny abc123'],
   },
 );
+
+// Provider commands
+registerCommand(
+  'providers list',
+  async (args: string[]) => {
+    const { providersListHandler } = await import('./providers/list.js');
+    return providersListHandler(args);
+  },
+  {
+    description: 'List all available providers',
+    usage: 'openaidy providers list',
+    examples: ['pnpm openaidy providers list'],
+  },
+);
+
+registerCommand(
+  'providers connect',
+  async (args: string[]) => {
+    const { providersConnectHandler } = await import('./providers/connect.js');
+    return providersConnectHandler(args);
+  },
+  {
+    description: 'Connect to a provider',
+    usage: 'openaidy providers connect <provider-id> [--api-key <key>]',
+    examples: ['pnpm openaidy providers connect openai --api-key sk-...'],
+  },
+);
+
+registerCommand(
+  'providers disconnect',
+  async (args: string[]) => {
+    const { providersDisconnectHandler } =
+      await import('./providers/disconnect.js');
+    return providersDisconnectHandler(args);
+  },
+  {
+    description: 'Disconnect from a provider',
+    usage: 'openaidy providers disconnect <provider-id>',
+    examples: ['pnpm openaidy providers disconnect openai'],
+  },
+);
+
+registerCommand(
+  'providers status',
+  async (args: string[]) => {
+    const { providersStatusHandler } = await import('./providers/status.js');
+    return providersStatusHandler(args);
+  },
+  {
+    description: 'Show connection status of all providers',
+    usage: 'openaidy providers status',
+    examples: ['pnpm openaidy providers status'],
+  },
+);
+
+registerCommand(
+  'providers auth',
+  async (args: string[]) => {
+    const { providersAuthHandler } = await import('./providers/auth.js');
+    return providersAuthHandler(args);
+  },
+  {
+    description: 'Show authentication methods for a provider',
+    usage: 'openaidy providers auth <provider-id>',
+    examples: ['pnpm openaidy providers auth openai'],
+  },
+);
