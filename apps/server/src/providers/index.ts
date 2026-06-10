@@ -2,22 +2,13 @@
 export * from './types';
 
 // Registry service
-export {
-  ProviderRegistryService,
-  createProviderRegistry,
-} from './registry';
+export { ProviderRegistryService, createProviderRegistry } from './registry';
 
 // Selection service
-export {
-  ProviderSelectionService,
-  createProviderSelection,
-} from './selection';
+export { ProviderSelectionService, createProviderSelection } from './selection';
 
 // Invocation service
-export {
-  ModelInvocationService,
-  createModelInvocation,
-} from './invocation';
+export { ModelInvocationService, createModelInvocation } from './invocation';
 
 // Integrated invocation
 export {
@@ -29,6 +20,9 @@ export {
   type SelectionWithConfigResult,
 } from './integrated-invocation';
 
+// Connection service
+export { ProviderConnectionService } from './connection-service';
+
 // Unified service container
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 import { ProviderSelectionService, createProviderSelection } from './selection';
@@ -36,7 +30,7 @@ import { ModelInvocationService, createModelInvocation } from './invocation';
 
 /**
  * Container for all provider-related services
- * 
+ *
  * This ensures a single instance of each service per application,
  * preventing architectural drift from multiple isolated registries.
  */
@@ -48,12 +42,12 @@ export type ProviderServices = {
 
 /**
  * Create a unified set of provider services
- * 
+ *
  * This factory creates all provider services with proper dependencies:
  * - Registry is created first (no dependencies)
  * - Selection depends on registry
  * - Invocation depends on both registry and selection
- * 
+ *
  * All services share the same underlying registry instance.
  */
 export function createProviderServices(): ProviderServices {

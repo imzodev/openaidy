@@ -6,8 +6,14 @@ import {
   type ProviderServices,
   type ProviderRegistryService,
   type RegisteredProvider,
+  ProviderConnectionService,
 } from '../providers';
 import type { Message, ModelRequest } from '@openaidy/runtime';
+import type { DatabaseClient } from '@openaidy/db';
+import type {
+  ProviderInfo as ConnectionProviderInfo,
+  ConnectProviderResponse,
+} from '@openaidy/shared-types';
 
 /**
  * Schema for test-invoke request
@@ -111,6 +117,7 @@ type TestInvokeResponse = {
 type ProviderRoutesOptions = {
   services: ProviderServices;
   authMiddleware: AuthMiddleware;
+  db?: DatabaseClient;
 };
 
 /**
@@ -127,13 +134,16 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
   options,
 ) => {
   // Use injected services from app initialization
-  const { services, authMiddleware } = options;
+  const { services, authMiddleware, db } = options;
 
   app.addHook(
     'preHandler',
     requireAuth({ authMiddleware, requiredScope: 'providers.read' }),
   );
   const { registry, invocation } = services;
+
+  // Create connection service only if database is available
+  const connectionService = db ? new ProviderConnectionService(db) : null;
   // Selection is available via services.selection if needed for future routes
 
   /**
@@ -415,6 +425,262 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       }),
       ...(entry.config !== undefined && { config: entry.config }),
       registeredAt: entry.registeredAt.toISOString(),
+    };
+  });
+
+  // =========================================================================
+  // Provider Connection Routes (only if database is available)
+  // =========================================================================
+
+  if (!connectionService) {
+    // Database not available - skip connection routes
+    return;
+  }
+
+  /**
+   * GET /providers/connection
+   * List available providers with their connection status
+   */
+  app.get(
+    '/providers/connection',
+    async (): Promise<{
+      providers: ConnectionProviderInfo[];
+    }> => {
+      const providers = connectionService.listAvailableProviders();
+      return { providers };
+    },
+  );
+
+  /**
+   * GET /providers/:providerId/auth-methods
+   * Get available authentication methods for a provider
+   */
+  app.get('/providers/:providerId/auth-methods', async (request, reply) => {
+    const { providerId } = request.params as { providerId: string };
+
+    try {
+      const authMethods = connectionService.getAuthMethods(providerId);
+      return { providerId, authMethods };
+    } catch (_error) {
+      reply.code(404);
+      return {
+        error: 'Provider not found',
+        providerId,
+      };
+    }
+  });
+
+  /**
+   * POST /providers/:providerId/connect/api-key
+   * Connect a provider using an API key
+   */
+  app.post(
+    '/providers/:providerId/connect/api-key',
+    async (request, reply): Promise<ConnectProviderResponse> => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        apiKey: z.string().min(1, 'API key is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      const result = await connectionService.connectWithApiKey(
+        providerId,
+        body.apiKey,
+      );
+
+      if (!result.success) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * POST /providers/:providerId/connect/oauth/start
+   * Start OAuth flow for a provider
+   */
+  app.post(
+    '/providers/:providerId/connect/oauth/start',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        redirectUri: z.string().url('Valid redirect URI is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      try {
+        const result = await connectionService.startOAuthFlow(
+          providerId,
+          body.redirectUri,
+        );
+        return result;
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to start OAuth flow',
+        };
+      }
+    },
+  );
+
+  /**
+   * GET /providers/:providerId/connect/oauth/callback
+   * OAuth callback handler (redirect-based)
+   */
+  app.get(
+    '/providers/:providerId/connect/oauth/callback',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+      const query = request.query as {
+        code?: string;
+        state?: string;
+        error?: string;
+      };
+
+      if (query.error) {
+        reply.code(400);
+        return {
+          success: false,
+          providerId,
+          error: query.error,
+        };
+      }
+
+      if (!query.code) {
+        reply.code(400);
+        return {
+          success: false,
+          providerId,
+          error: 'Authorization code missing',
+        };
+      }
+
+      const result = await connectionService.completeOAuthFlow(
+        providerId,
+        query.code,
+        '', // redirectUri not available in GET request
+      );
+
+      if (!result.success) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * POST /providers/:providerId/connect/device-code/start
+   * Start device code flow for CLI/Desktop apps
+   */
+  app.post(
+    '/providers/:providerId/connect/device-code/start',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      try {
+        const result = await connectionService.startDeviceCodeFlow(providerId);
+        return result;
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to start device code flow',
+        };
+      }
+    },
+  );
+
+  /**
+   * POST /providers/:providerId/connect/device-code/poll
+   * Poll for device code authorization completion
+   */
+  app.post(
+    '/providers/:providerId/connect/device-code/poll',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        deviceCode: z.string().min(1, 'Device code is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      const result = await connectionService.pollDeviceCodeAuth(
+        providerId,
+        body.deviceCode,
+      );
+
+      if (result.error) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * DELETE /providers/:providerId/connection
+   * Disconnect a provider
+   */
+  app.delete('/providers/:providerId/connection', async (request, reply) => {
+    const { providerId } = request.params as { providerId: string };
+
+    const success = await connectionService.disconnect(providerId);
+
+    if (!success) {
+      reply.code(404);
+      return {
+        success: false,
+        error: 'Provider not connected',
+        providerId,
+      };
+    }
+
+    return {
+      success: true,
+      providerId,
     };
   });
 };

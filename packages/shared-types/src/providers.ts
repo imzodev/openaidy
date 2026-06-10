@@ -11,9 +11,12 @@
  * Provider not found error
  */
 export class ProviderNotFoundError extends Error {
-  constructor(public readonly providerId: string) {
+  public readonly providerId: string;
+
+  constructor(providerId: string) {
     super(`Provider ${providerId} not found`);
     this.name = 'ProviderNotFoundError';
+    this.providerId = providerId;
   }
 }
 
@@ -21,13 +24,14 @@ export class ProviderNotFoundError extends Error {
  * Provider connection error
  */
 export class ProviderConnectionError extends Error {
-  constructor(
-    public readonly providerId: string,
-    message: string,
-    public readonly isRetryable = false,
-  ) {
+  public readonly providerId: string;
+  public readonly isRetryable: boolean;
+
+  constructor(providerId: string, message: string, isRetryable = false) {
     super(message);
     this.name = 'ProviderConnectionError';
+    this.providerId = providerId;
+    this.isRetryable = isRetryable;
   }
 }
 
@@ -35,13 +39,16 @@ export class ProviderConnectionError extends Error {
  * OAuth flow error
  */
 export class OAuthError extends Error {
-  constructor(
-    message: string,
-    public readonly providerId: string,
-    public readonly errorCode?: string,
-  ) {
+  public readonly providerId: string;
+  public readonly errorCode?: string;
+
+  constructor(message: string, providerId: string, errorCode?: string) {
     super(message);
     this.name = 'OAuthError';
+    this.providerId = providerId;
+    if (errorCode !== undefined) {
+      this.errorCode = errorCode;
+    }
   }
 }
 
