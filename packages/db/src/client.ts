@@ -10,6 +10,7 @@ import * as addonSchema from './schema/addons';
 import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
+import * as providerCredentialsSchema from './schema/provider-credentials';
 
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
@@ -40,6 +41,7 @@ const schema: DatabaseSchema = {
   ...pairingSchema,
   ...accessTokenSchema,
   ...addonSchema,
+  ...providerCredentialsSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {

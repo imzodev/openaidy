@@ -24,4 +24,6 @@ export * from './repositories/access-tokens';
 export * from './repositories/addons';
 export * from './repositories/memories';
 export * from './repositories/marketplace';
+export * from './repositories/provider-credentials';
+export * from './schema/provider-credentials';
 export * from './schema/marketplace';

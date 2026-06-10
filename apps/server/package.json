@@ -19,6 +19,7 @@
     "@openaidy/addon-scaffolding": "workspace:*",
     "@openaidy/config": "workspace:*",
     "@openaidy/db": "workspace:*",
+    "@openaidy/providers": "workspace:*",
     "@openaidy/runtime": "workspace:*",
     "@openaidy/shared-types": "workspace:*",
     "@whiskeysockets/baileys": "7.0.0-rc10",

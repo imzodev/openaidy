@@ -253,4 +253,96 @@ export class ProviderProfile {
   resolveModel(modelHint?: string): string | undefined {
     return modelHint ?? this.defaultModel;
   }
+
+  // ── Connection Methods ────────────────────────────────────────────────────
+
+  /**
+   * Return the available authentication methods for this provider.
+   * Override in subclass to define auth methods.
+   */
+  getAvailableAuthMethods(): import('@openaidy/shared-types').AuthMethod[] {
+    return [{ type: 'api_key', label: 'API Key' }];
+  }
+
+  /**
+   * Validate API key by making a health check call.
+   * Override in subclass for provider-specific validation.
+   */
+  async validateApiKey(
+    apiKey: string,
+  ): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/models`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+      return { valid: response.ok };
+    } catch (error) {
+      return { valid: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Return the OAuth authorization URL for this provider.
+   * Override in subclass to provide provider-specific OAuth URL.
+   */
+  getOAuthAuthorizationUrl(_scopes?: string[]): string | undefined {
+    return undefined;
+  }
+
+  /**
+   * Exchange authorization code for tokens.
+   * Override in subclass for provider-specific token exchange.
+   */
+  async exchangeOAuthCode(
+    _code: string,
+    _redirectUri: string,
+  ): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn?: number;
+    error?: string;
+  }> {
+    return { accessToken: '', error: 'OAuth not supported' };
+  }
+
+  /**
+   * Get device code info for CLI/desktop OAuth flows (RFC 8628).
+   * Return undefined if provider doesn't support device code flow.
+   */
+  getDeviceCodeInfo():
+    | import('@openaidy/shared-types').DeviceCodeResponse
+    | undefined {
+    return undefined;
+  }
+
+  /**
+   * Poll for device code authorization completion.
+   * Return { pending: true } while waiting, { accessToken } when complete,
+   * or { error } when failed.
+   */
+  async pollDeviceCodeAuth(_deviceCode: string): Promise<{
+    pending?: boolean;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: number;
+    error?: string;
+  }> {
+    return { error: 'Device code flow not supported' };
+  }
+
+  /**
+   * Get the signup/registration URL for this provider.
+   */
+  getSignupUrl(): string | undefined {
+    return this.signupUrl;
+  }
+
+  /**
+   * Get the icon identifier for this provider.
+   */
+  getIcon(): string {
+    return `bi-${this.id}`;
+  }
 }
