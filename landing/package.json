@@ -14,9 +14,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@studio-freight/lenis": "^1.0.42",
     "framer-motion": "^12.40.0",
-    "lenis": "^1.3.23",
     "lucide-react": "^0.511.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"

@@ -472,3 +472,20 @@ img { max-width: 100%; display: block; }
   .hero-actions { flex-direction: column; align-items: center; }
   .navbar-links { gap: 1rem; }
 }
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .gradient-text,
+  .cursor,
+  .marquee-content,
+  .hero-badge,
+  .hero-title,
+  .hero-subtitle,
+  .hero-actions,
+  .hero-banner {
+    animation: none !important;
+    transition: none !important;
+  }
+  .orbs-container { display: none; }
+}
