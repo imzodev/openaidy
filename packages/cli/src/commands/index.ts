@@ -554,7 +554,8 @@ registerGroup({
     },
     'tasks create': {
       description: 'Create a new task',
-      usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+      usage:
+        'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
       examples: [
         'pnpm openaidy tasks create "Fix login bug" --priority high',
         'pnpm openaidy tasks create --description "Implement the new API"',
@@ -562,7 +563,8 @@ registerGroup({
     },
     'tasks update': {
       description: 'Update a task (title, description, priority, status)',
-      usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+      usage:
+        'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
       examples: [
         'pnpm openaidy tasks update abc123 --priority high',
         'pnpm openaidy tasks update abc123 --status done',
@@ -637,7 +639,8 @@ registerCommand(
   },
   {
     description: 'Create a new task',
-    usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+    usage:
+      'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
   },
 );
 
@@ -650,7 +653,8 @@ registerCommand(
   },
   {
     description: 'Update a task (title, description, priority, status)',
-    usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+    usage:
+      'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
   },
 );
 
@@ -697,7 +701,8 @@ registerCommand(
 registerCommand(
   'subtasks complete',
   async (args: string[]) => {
-    const { subtasksCompleteHandler } = await import('./tasks/subtasks/complete.js');
+    const { subtasksCompleteHandler } =
+      await import('./tasks/subtasks/complete.js');
     return subtasksCompleteHandler(args);
   },
   {
@@ -716,6 +721,119 @@ registerCommand(
   {
     description: 'Mark a subtask as failed',
     usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+  },
+);
+
+// ============================================================================
+// Sessions Command Group
+// ============================================================================
+
+registerGroup({
+  name: 'sessions',
+  description: 'Manage chat sessions',
+  commands: {
+    'sessions list': {
+      description: 'List all sessions',
+      usage: 'openaidy sessions list [--limit <n>]',
+      examples: [
+        'pnpm openaidy sessions list',
+        'pnpm openaidy sessions list --limit 20',
+      ],
+    },
+    'sessions create': {
+      description: 'Create a new session',
+      usage: 'openaidy sessions create [title]',
+      examples: [
+        'pnpm openaidy sessions create',
+        'pnpm openaidy sessions create "My Chat"',
+      ],
+    },
+    'sessions get': {
+      description: 'Get session details by ID',
+      usage: 'openaidy sessions get <sessionId>',
+      examples: ['pnpm openaidy sessions get sess_abc123'],
+    },
+    'sessions messages': {
+      description: 'List all messages in a session',
+      usage: 'openaidy sessions messages <sessionId>',
+      examples: ['pnpm openaidy sessions messages sess_abc123'],
+    },
+    'sessions runs': {
+      description: 'List all runs for a session',
+      usage: 'openaidy sessions runs <sessionId>',
+      examples: ['pnpm openaidy sessions runs sess_abc123'],
+    },
+  },
+});
+
+registerCommand(
+  'sessions list',
+  async (args: string[]) => {
+    const { sessionsListHandler } = await import('./sessions/list.js');
+    return sessionsListHandler(args);
+  },
+  {
+    description: 'List all sessions',
+    usage: 'openaidy sessions list [--limit <n>]',
+    examples: [
+      'pnpm openaidy sessions list',
+      'pnpm openaidy sessions list --limit 20',
+    ],
+  },
+);
+
+registerCommand(
+  'sessions create',
+  async (args: string[]) => {
+    const { sessionsCreateHandler } = await import('./sessions/create.js');
+    return sessionsCreateHandler(args);
+  },
+  {
+    description: 'Create a new session',
+    usage: 'openaidy sessions create [title]',
+    examples: [
+      'pnpm openaidy sessions create',
+      'pnpm openaidy sessions create "My Chat"',
+    ],
+  },
+);
+
+registerCommand(
+  'sessions get',
+  async (args: string[]) => {
+    const { sessionsGetHandler } = await import('./sessions/get.js');
+    return sessionsGetHandler(args);
+  },
+  {
+    description: 'Get session details by ID',
+    usage: 'openaidy sessions get <sessionId>',
+    examples: ['pnpm openaidy sessions get sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions messages',
+  async (args: string[]) => {
+    const { sessionsMessagesHandler } = await import('./sessions/messages.js');
+    return sessionsMessagesHandler(args);
+  },
+  {
+    description: 'List all messages in a session',
+    usage: 'openaidy sessions messages <sessionId>',
+    examples: ['pnpm openaidy sessions messages sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions runs',
+  async (args: string[]) => {
+    const { sessionsRunsHandler } = await import('./sessions/runs.js');
+    return sessionsRunsHandler(args);
+  },
+  {
+    description: 'List all runs for a session',
+    usage: 'openaidy sessions runs <sessionId>',
+    examples: ['pnpm openaidy sessions runs sess_abc123'],
   },
 );
 
