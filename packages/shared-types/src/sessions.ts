@@ -84,8 +84,6 @@ export type SessionMessage = {
   role: MessageRole;
   content: string;
   toolCallId?: string;
-  /** ID of the run that produced this message (assistant messages only) */
-  runId?: string;
   sequence: number;
   createdAt: string;
   metadata?: Record<string, unknown>;
@@ -108,27 +106,6 @@ export type FinishReason = (typeof FINISH_REASON_VALUES)[number];
 /**
  * Session run
  */
-/**
- * Session search result — returned by GET /sessions/search
- * Includes BM25 relevance ranking for ordering results
- */
-export type SessionSearchResult = {
-  id: string;
-  title: string;
-  status: SessionStatus;
-  createdAt: string;
-  updatedAt?: string;
-  archivedAt?: string;
-  /** How the match was found: "title" = title field matched, "content" = message content matched */
-  matchType: 'title' | 'content';
-  /** BM25 relevance rank (lower = better match) */
-  rank: number;
-  /** For content matches: number of messages that matched the query */
-  matchCount?: number;
-  /** Preview of matching content (truncated to 200 chars), null for title matches */
-  snippet?: string;
-};
-
 export type SessionRun = {
   id: string;
   sessionId: SessionId;
@@ -145,7 +122,34 @@ export type SessionRun = {
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
-  /** ID of the first assistant message produced by this run */
-  firstMessageId?: string;
   metadata?: Record<string, unknown>;
+};
+
+// ========================================
+// CLI-specific session types
+// Lightweight summaries used by the CLI when calling REST API endpoints
+// ========================================
+
+/**
+ * Summary fields returned by GET /sessions (list)
+ */
+export type SessionSummary = Pick<Session, 'id' | 'title' | 'createdAt'>;
+
+/**
+ * Detail fields returned by GET /sessions/:id (get)
+ */
+export type SessionDetail = Pick<
+  Session,
+  'id' | 'title' | 'createdAt' | 'updatedAt'
+>;
+
+/**
+ * Summary fields returned by GET /sessions/:id/runs
+ */
+export type SessionRunSummary = Pick<
+  SessionRun,
+  'id' | 'status' | 'providerId' | 'modelId' | 'createdAt'
+> & {
+  /** Duration in ms — derived by the server when marking a run finished */
+  durationMs?: number;
 };
