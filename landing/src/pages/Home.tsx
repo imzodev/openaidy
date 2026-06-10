@@ -1,5 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
-import { motion, useScroll, useTransform, useInView } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  useInView,
+  useScroll,
+} from 'framer-motion';
 import {
   Bot,
   MessageSquare,
@@ -12,7 +18,16 @@ import {
   Github,
 } from 'lucide-react';
 
-// ── Floating background orbs ───────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────
+interface Feature {
+  icon: React.ReactNode;
+  color: string;
+  title: string;
+  description: string;
+  accent: string;
+}
+
+// ── Floating orbs (pure CSS) ──────────────────────────────────────────────
 function FloatingOrbs() {
   return (
     <div className="orbs-container" aria-hidden="true">
@@ -24,27 +39,19 @@ function FloatingOrbs() {
   );
 }
 
-// ── Typewriter headline ──────────────────────────────────────────────────────
-function TypewriterLine({ text, delay = 0 }: { text: string; delay?: number }) {
+// ── Typewriter ───────────────────────────────────────────────────────────
+function TypewriterText({ text, start }: { text: string; start: boolean }) {
   const [displayed, setDisplayed] = useState('');
-  const [started, setStarted] = useState(false);
-
   useEffect(() => {
-    const startTimeout = setTimeout(() => setStarted(true), delay * 1000);
-    return () => clearTimeout(startTimeout);
-  }, [delay]);
-
-  useEffect(() => {
-    if (!started) return;
+    if (!start) return;
     let i = 0;
-    const interval = setInterval(() => {
+    const t = setInterval(() => {
       setDisplayed(text.slice(0, i + 1));
       i++;
-      if (i >= text.length) clearInterval(interval);
-    }, 45);
-    return () => clearInterval(interval);
-  }, [started, text]);
-
+      if (i >= text.length) clearInterval(t);
+    }, 50);
+    return () => clearInterval(t);
+  }, [start, text]);
   return (
     <span>
       {displayed}
@@ -53,133 +60,245 @@ function TypewriterLine({ text, delay = 0 }: { text: string; delay?: number }) {
   );
 }
 
-// ── Animated feature card ───────────────────────────────────────────────────
-function FeatureCard({
-  icon,
-  color,
-  title,
-  description,
-  index,
+// ── Magnetic Button ──────────────────────────────────────────────────────
+function MagneticButton({
+  children,
+  href,
+  className,
 }: {
-  icon: React.ReactNode;
-  color: string;
-  title: string;
-  description: string;
-  index: number;
+  children: React.ReactNode;
+  href?: string;
+  className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    x.set((e.clientX - cx) * 0.25);
+    y.set((e.clientY - cy) * 0.25);
+  };
+
+  const handleMouseLeave = () => {
+    x.set(0);
+    y.set(0);
+  };
+
+  const inner = (
+    <motion.div
+      style={{ x, y }}
+      transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+    >
+      {children}
+    </motion.div>
+  );
+
+  if (href) {
+    return (
+      <motion.div
+        ref={ref}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        style={{ display: 'inline-block' }}
+      >
+        <a href={href} className={className}>
+          {inner}
+        </a>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ display: 'inline-block' }}
+    >
+      {inner}
+    </motion.div>
+  );
+}
+
+// ── Marquee ──────────────────────────────────────────────────────────────
+function Marquee({
+  children,
+  speed = 40,
+}: {
+  children: React.ReactNode;
+  speed?: number;
+}) {
+  return (
+    <div className="marquee-track">
+      <div
+        className="marquee-content"
+        style={{ animationDuration: `${speed}s` }}
+      >
+        {children}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Feature Card ─────────────────────────────────────────────────────────
+function FeatureCard({ f, index }: { f: Feature; index: number }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-80px' });
+  const inView = useInView(ref, { once: true, margin: '-60px' });
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateX = useTransform(y, [-0.5, 0.5], [5, -5]);
+  const rotateY = useTransform(x, [-0.5, 0.5], [-5, 5]);
+  const glowX = useTransform(x, [-0.5, 0.5], ['-30%', '30%']);
+  const glowY = useTransform(y, [-0.5, 0.5], ['-30%', '30%']);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    const rect = (ref.current as HTMLDivElement).getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    x.set((e.clientX - cx) / rect.width);
+    y.set((e.clientY - cy) / rect.height);
+  };
+  const handleMouseLeave = () => {
+    x.set(0);
+    y.set(0);
+  };
 
   return (
     <motion.div
       ref={ref}
       className="feature-card"
-      initial={{ opacity: 0, y: 60, scale: 0.95 }}
+      initial={{ opacity: 0, y: 50, scale: 0.95 }}
       animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
       transition={{
-        duration: 0.5,
-        delay: (index % 3) * 0.1,
+        duration: 0.55,
+        delay: (index % 3) * 0.12,
         ease: [0.16, 1, 0.3, 1],
       }}
-      whileHover={{ y: -6, scale: 1.02 }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      style={{ rotateX, rotateY, transformPerspective: 1000 }}
     >
+      {/* Glow follows cursor inside card */}
+      <motion.div
+        className="card-glow"
+        style={{
+          x: glowX,
+          y: glowY,
+          background: `radial-gradient(circle, ${f.accent} 0%, transparent 70%)`,
+        }}
+      />
       <motion.div
         className="feature-card-icon"
-        style={{ background: color }}
-        whileHover={{ rotate: [0, -5, 5, 0], scale: 1.1 }}
+        style={{ background: f.color }}
+        whileHover={{ scale: 1.15, rotate: [0, -8, 8, 0] }}
         transition={{ duration: 0.3 }}
       >
-        {icon}
+        {f.icon}
       </motion.div>
-      <h3>{title}</h3>
-      <p>{description}</p>
-      <div className="feature-card-arrow">
+      <h3>{f.title}</h3>
+      <p>{f.description}</p>
+      <motion.div
+        className="feature-card-arrow"
+        initial={{ opacity: 0, x: -10 }}
+        whileHover={{ opacity: 1, x: 0 }}
+      >
         <ArrowRight size={14} />
-      </div>
+      </motion.div>
     </motion.div>
   );
 }
 
-// ── Stats counter ─────────────────────────────────────────────────────────────
-function StatCounter({ value, label }: { value: string; label: string }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true });
-
-  return (
-    <motion.div
-      ref={ref}
-      className="stat-item"
-      initial={{ opacity: 0, y: 20 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-    >
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-    </motion.div>
-  );
-}
-
-// ── Main Home ────────────────────────────────────────────────────────────────
-const features = [
+// ── Hero content ─────────────────────────────────────────────────────────
+const features: Feature[] = [
   {
     icon: <Bot size={22} color="#6366f1" />,
-    color: 'rgba(99, 102, 241, 0.12)',
+    color: 'rgba(99,102,241,0.12)',
+    accent: 'rgba(99,102,241,0.15)',
     title: 'Agents',
     description:
       'Configure personality, system prompt, tools, and MCP server connections per agent.',
   },
   {
     icon: <MessageSquare size={22} color="#8b5cf6" />,
-    color: 'rgba(139, 92, 246, 0.12)',
+    color: 'rgba(139,92,246,0.12)',
+    accent: 'rgba(139,92,246,0.15)',
     title: 'Sessions',
     description:
       'Conversational memory per session. Pick up where you left off — history is preserved.',
   },
   {
     icon: <ListTodo size={22} color="#22c55e" />,
-    color: 'rgba(34, 197, 94, 0.12)',
+    color: 'rgba(34,197,94,0.12)',
+    accent: 'rgba(34,197,94,0.15)',
     title: 'Tasks',
     description:
       'Structured task pipeline with async runs, streaming output, and step-by-step visibility.',
   },
   {
     icon: <Plug size={22} color="#f59e0b" />,
-    color: 'rgba(245, 158, 11, 0.12)',
+    color: 'rgba(245,158,11,0.12)',
+    accent: 'rgba(245,158,11,0.15)',
     title: 'Channels',
     description:
       'Connect to Slack, Discord, Telegram, and more — bring AI to where your team works.',
   },
   {
     icon: <BookOpen size={22} color="#ec4899" />,
-    color: 'rgba(236, 72, 153, 0.12)',
+    color: 'rgba(236,72,153,0.12)',
+    accent: 'rgba(236,72,153,0.15)',
     title: 'Skills',
     description:
       'Reusable skill modules that extend agent capabilities — load from the registry or author your own.',
   },
   {
     icon: <Cpu size={22} color="#06b6d4" />,
-    color: 'rgba(6, 182, 212, 0.12)',
+    color: 'rgba(6,182,212,0.12)',
+    accent: 'rgba(6,182,212,0.15)',
     title: 'MCP Servers',
     description:
       'Model Context Protocol integration. Connect any MCP-compatible tool or data source.',
   },
 ];
 
-const stats = [
-  { value: '6+', label: 'Integrations' },
-  { value: '100%', label: 'Open Source' },
-  { value: 'Self-hosted', label: 'Deploy anywhere' },
+const integrations = [
+  'Slack',
+  'Discord',
+  'Telegram',
+  'GitHub',
+  'Linear',
+  'Notion',
+  'Slack',
+  'Discord',
+  'Telegram',
+  'GitHub',
+  'Linear',
+  'Notion',
 ];
 
 export default function Home() {
   const heroRef = useRef(null);
+  const [typeStarted, setTypeStarted] = useState(false);
+  const [bannerLoaded, setBannerLoaded] = useState(false);
+
   const { scrollYProgress } = useScroll({
     target: heroRef,
     offset: ['start start', 'end start'],
   });
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0]);
-  const heroScale = useTransform(scrollYProgress, [0, 0.6], [1, 0.95]);
-  const bannerY = useTransform(scrollYProgress, [0, 1], ['0%', '25%']);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.7], [1, 0.93]);
+  const bannerY = useTransform(scrollYProgress, [0, 1], ['0%', '28%']);
+
+  // Trigger typewriter after hero entrance
+  useEffect(() => {
+    const t = setTimeout(() => setTypeStarted(true), 1800);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <>
@@ -195,29 +314,29 @@ export default function Home() {
           className="hero-badge"
           initial={{ opacity: 0, y: -20, scale: 0.8 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.6, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
         >
-          <Zap size={12} />
-          <span>Open Source · Self-hosted · Extensible</span>
+          <Zap size={11} />
+          Open Source · Self-hosted · Extensible
         </motion.div>
 
         <motion.h1
           className="hero-title"
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 35 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
         >
           Build agents that{' '}
           <span className="gradient-text">
-            <TypewriterLine text="actually do the work" delay={0.7} />
+            <TypewriterText text="actually do the work" start={typeStarted} />
           </span>
         </motion.h1>
 
         <motion.p
           className="hero-subtitle"
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.2, ease: 'easeOut' }}
+          transition={{ duration: 0.6, delay: 0.7, ease: 'easeOut' }}
         >
           OpenAidy is an open-source AI agent platform with structured tasks,
           conversational memory, multi-channel integrations, and a plugin system
@@ -226,57 +345,52 @@ export default function Home() {
 
         <motion.div
           className="hero-actions"
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 25 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.5, ease: 'easeOut' }}
+          transition={{ duration: 0.6, delay: 0.9, ease: 'easeOut' }}
         >
-          <motion.a
-            href="#features"
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <button className="btn-primary">Explore features</button>
-          </motion.a>
-          <motion.a
-            href="/docs"
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.97 }}
-          >
-            <button className="btn-secondary">
-              <BookOpen size={15} />
-              Read the docs
-            </button>
-          </motion.a>
+          <MagneticButton href="#features" className="btn-primary">
+            Explore features
+          </MagneticButton>
+          <MagneticButton href="/docs" className="btn-secondary">
+            <BookOpen size={15} />
+            Read the docs
+          </MagneticButton>
         </motion.div>
 
         <motion.div
           className="hero-banner"
           style={{ y: bannerY }}
-          initial={{ opacity: 0, y: 60, scale: 0.96 }}
+          initial={{ opacity: 0, y: 70, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, delay: 1.8, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.9, delay: 1.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <img src="/banner.png" alt="OpenAidy platform banner" />
+          <img
+            src="/banner.png"
+            alt="OpenAidy platform"
+            onLoad={() => setBannerLoaded(true)}
+            style={{
+              opacity: bannerLoaded ? 1 : 0,
+              transition: 'opacity 0.4s',
+            }}
+          />
           <div className="banner-glow" />
         </motion.div>
       </motion.section>
 
-      {/* ── Stats ─────────────────────────────────────────────────────── */}
-      <motion.section
-        className="stats-section"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true, margin: '-50px' }}
-        transition={{ duration: 0.6 }}
-      >
-        <div className="stats-inner">
-          {stats.map((s) => (
-            <StatCounter key={s.label} value={s.value} label={s.label} />
+      {/* ── Marquee ──────────────────────────────────────────────────── */}
+      <section className="marquee-section">
+        <Marquee speed={35}>
+          {integrations.map((name, i) => (
+            <span key={i} className="marquee-item">
+              <span className="marquee-dot" />
+              {name}
+            </span>
           ))}
-        </div>
-      </motion.section>
+        </Marquee>
+      </section>
 
-      {/* ── Features ──────────────────────────────────────────────────── */}
+      {/* ── Features ─────────────────────────────────────────────────── */}
       <section id="features" className="features">
         <motion.div
           className="features-header"
@@ -293,12 +407,12 @@ export default function Home() {
 
         <div className="features-grid">
           {features.map((f, i) => (
-            <FeatureCard key={f.title} {...f} index={i} />
+            <FeatureCard key={f.title} f={f} index={i} />
           ))}
         </div>
       </section>
 
-      {/* ── CTA section ────────────────────────────────────────────────── */}
+      {/* ── CTA ──────────────────────────────────────────────────────── */}
       <motion.section
         className="cta-section"
         initial={{ opacity: 0, y: 60 }}
@@ -311,18 +425,13 @@ export default function Home() {
         <p>
           Clone the repo, run one command, and your AI agent platform is live.
         </p>
-        <motion.a
+        <MagneticButton
           href="https://github.com/imzodev/openaidy"
-          target="_blank"
-          rel="noopener noreferrer"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.97 }}
+          className="btn-primary btn-large"
         >
-          <button className="btn-primary btn-large">
-            <Github size={18} />
-            View on GitHub
-          </button>
-        </motion.a>
+          <Github size={18} />
+          View on GitHub
+        </MagneticButton>
       </motion.section>
     </>
   );
