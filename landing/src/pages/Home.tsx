@@ -24,10 +24,9 @@ interface Feature {
   color: string;
   title: string;
   description: string;
-  accent: string;
 }
 
-// ── Floating orbs (pure CSS) ──────────────────────────────────────────────
+// ── Floating orbs (pure CSS — no JS) ──────────────────────────────────────
 function FloatingOrbs() {
   return (
     <div className="orbs-container" aria-hidden="true">
@@ -79,38 +78,14 @@ function MagneticButton({
     const rect = ref.current.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    x.set((e.clientX - cx) * 0.25);
-    y.set((e.clientY - cy) * 0.25);
+    x.set((e.clientX - cx) * 0.2);
+    y.set((e.clientY - cy) * 0.2);
   };
 
   const handleMouseLeave = () => {
     x.set(0);
     y.set(0);
   };
-
-  const inner = (
-    <motion.div
-      style={{ x, y }}
-      transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-    >
-      {children}
-    </motion.div>
-  );
-
-  if (href) {
-    return (
-      <motion.div
-        ref={ref}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        style={{ display: 'inline-block' }}
-      >
-        <a href={href} className={className}>
-          {inner}
-        </a>
-      </motion.div>
-    );
-  }
 
   return (
     <motion.div
@@ -119,7 +94,23 @@ function MagneticButton({
       onMouseLeave={handleMouseLeave}
       style={{ display: 'inline-block' }}
     >
-      {inner}
+      {href ? (
+        <a href={href} className={className}>
+          <motion.span
+            style={{ x, y }}
+            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+          >
+            {children}
+          </motion.span>
+        </a>
+      ) : (
+        <motion.span
+          style={{ x, y }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        >
+          {children}
+        </motion.span>
+      )}
     </motion.div>
   );
 }
@@ -149,50 +140,19 @@ function Marquee({
 function FeatureCard({ f, index }: { f: Feature; index: number }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: '-60px' });
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const rotateX = useTransform(y, [-0.5, 0.5], [5, -5]);
-  const rotateY = useTransform(x, [-0.5, 0.5], [-5, 5]);
-  const glowX = useTransform(x, [-0.5, 0.5], ['-30%', '30%']);
-  const glowY = useTransform(y, [-0.5, 0.5], ['-30%', '30%']);
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!ref.current) return;
-    const rect = (ref.current as HTMLDivElement).getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    x.set((e.clientX - cx) / rect.width);
-    y.set((e.clientY - cy) / rect.height);
-  };
-  const handleMouseLeave = () => {
-    x.set(0);
-    y.set(0);
-  };
 
   return (
     <motion.div
       ref={ref}
       className="feature-card"
-      initial={{ opacity: 0, y: 50, scale: 0.95 }}
+      initial={{ opacity: 0, y: 40, scale: 0.95 }}
       animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
       transition={{
         duration: 0.55,
-        delay: (index % 3) * 0.12,
+        delay: (index % 3) * 0.1,
         ease: [0.16, 1, 0.3, 1],
       }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      style={{ rotateX, rotateY, transformPerspective: 1000 }}
     >
-      {/* Glow follows cursor inside card */}
-      <motion.div
-        className="card-glow"
-        style={{
-          x: glowX,
-          y: glowY,
-          background: `radial-gradient(circle, ${f.accent} 0%, transparent 70%)`,
-        }}
-      />
       <motion.div
         className="feature-card-icon"
         style={{ background: f.color }}
@@ -207,6 +167,7 @@ function FeatureCard({ f, index }: { f: Feature; index: number }) {
         className="feature-card-arrow"
         initial={{ opacity: 0, x: -10 }}
         whileHover={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.2 }}
       >
         <ArrowRight size={14} />
       </motion.div>
@@ -214,12 +175,11 @@ function FeatureCard({ f, index }: { f: Feature; index: number }) {
   );
 }
 
-// ── Hero content ─────────────────────────────────────────────────────────
+// ── Feature data ─────────────────────────────────────────────────────────
 const features: Feature[] = [
   {
     icon: <Bot size={22} color="#6366f1" />,
     color: 'rgba(99,102,241,0.12)',
-    accent: 'rgba(99,102,241,0.15)',
     title: 'Agents',
     description:
       'Configure personality, system prompt, tools, and MCP server connections per agent.',
@@ -227,7 +187,6 @@ const features: Feature[] = [
   {
     icon: <MessageSquare size={22} color="#8b5cf6" />,
     color: 'rgba(139,92,246,0.12)',
-    accent: 'rgba(139,92,246,0.15)',
     title: 'Sessions',
     description:
       'Conversational memory per session. Pick up where you left off — history is preserved.',
@@ -235,7 +194,6 @@ const features: Feature[] = [
   {
     icon: <ListTodo size={22} color="#22c55e" />,
     color: 'rgba(34,197,94,0.12)',
-    accent: 'rgba(34,197,94,0.15)',
     title: 'Tasks',
     description:
       'Structured task pipeline with async runs, streaming output, and step-by-step visibility.',
@@ -243,7 +201,6 @@ const features: Feature[] = [
   {
     icon: <Plug size={22} color="#f59e0b" />,
     color: 'rgba(245,158,11,0.12)',
-    accent: 'rgba(245,158,11,0.15)',
     title: 'Channels',
     description:
       'Connect to Slack, Discord, Telegram, and more — bring AI to where your team works.',
@@ -251,7 +208,6 @@ const features: Feature[] = [
   {
     icon: <BookOpen size={22} color="#ec4899" />,
     color: 'rgba(236,72,153,0.12)',
-    accent: 'rgba(236,72,153,0.15)',
     title: 'Skills',
     description:
       'Reusable skill modules that extend agent capabilities — load from the registry or author your own.',
@@ -259,7 +215,6 @@ const features: Feature[] = [
   {
     icon: <Cpu size={22} color="#06b6d4" />,
     color: 'rgba(6,182,212,0.12)',
-    accent: 'rgba(6,182,212,0.15)',
     title: 'MCP Servers',
     description:
       'Model Context Protocol integration. Connect any MCP-compatible tool or data source.',
@@ -294,7 +249,6 @@ export default function Home() {
   const heroScale = useTransform(scrollYProgress, [0, 0.7], [1, 0.93]);
   const bannerY = useTransform(scrollYProgress, [0, 1], ['0%', '28%']);
 
-  // Trigger typewriter after hero entrance
   useEffect(() => {
     const t = setTimeout(() => setTypeStarted(true), 1800);
     return () => clearTimeout(t);
