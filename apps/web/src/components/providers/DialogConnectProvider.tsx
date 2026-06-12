@@ -8,6 +8,13 @@
 import { createSignal, createEffect, Show } from 'solid-js';
 import { X, Loader, ExternalLink } from 'lucide-solid';
 import type { ProviderPreset } from '@openaidy/shared-types';
+import {
+  API_BASE,
+  connectProviderWithApiKey,
+  startProviderOAuth,
+  type ConnectProviderResponse,
+  type OAuthStartResponse,
+} from '../../lib/api';
 
 interface DialogConnectProviderProps {
   provider: ProviderPreset | null;
@@ -32,7 +39,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
     }
   });
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     const preset = props.provider;
     if (!preset) return;
 
@@ -43,17 +50,109 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
       }
       setIsConnecting(true);
       setError(null);
-      // Simulate connection - in real app this would call the API
-      setTimeout(() => {
+
+      try {
+        const result: ConnectProviderResponse = await connectProviderWithApiKey(
+          preset.id,
+          apiKey(),
+        );
+        if (result.success) {
+          props.onConnected?.(preset.id, 'api_key');
+          props.onClose();
+        } else {
+          setError(result.error || 'Failed to connect');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Connection failed');
+      } finally {
         setIsConnecting(false);
-        props.onConnected?.(preset.id, 'api_key');
-        props.onClose();
-      }, 500);
+      }
     } else if (authMethod() === 'oauth') {
-      // Open OAuth URL in new window
-      const oauthUrl = `${preset.baseUrl}/oauth/authorize?client_id=openaidy&redirect_uri=${encodeURIComponent(window.location.origin + '/auth/callback/' + preset.id)}`;
-      window.open(oauthUrl, '_blank', 'width=600,height=700');
-      setError('Please complete the OAuth authorization in the opened window');
+      setIsConnecting(true);
+      setError(null);
+
+      try {
+        // The popup is opened on the server's origin (localhost:3001),
+        // where the OAuth callback lives and returns a tiny HTML page
+        // that posts a message back to window.opener (us) and closes
+        // itself. The popup and dialog are cross-origin (Vite on 5173,
+        // Fastify on 3001), so we accept the postMessage from any
+        // origin and just validate the payload shape.
+        const apiBase = API_BASE || 'http://localhost:3001';
+        const redirectUri = `${apiBase}/api/providers/minimax/connect/oauth/callback`;
+
+        const result: OAuthStartResponse = await startProviderOAuth(preset.id, {
+          redirectUri,
+          region: 'global',
+        });
+
+        if (!result.success || !result.authorizationUrl) {
+          setError(result.error || 'Failed to start OAuth flow');
+          setIsConnecting(false);
+          return;
+        }
+
+        const popup = window.open(
+          result.authorizationUrl,
+          'oauth-minimax',
+          'width=600,height=700,scrollbars=yes',
+        );
+
+        if (!popup) {
+          setError(
+            'Popup blocked. Please allow popups for this site and try again.',
+          );
+          setIsConnecting(false);
+          return;
+        }
+
+        // Wait for the popup to post a message back, or close on its own.
+        // We do NOT check event.origin because the popup is on the
+        // server's origin (localhost:3001) while the dialog is on the
+        // Vite origin (localhost:5173). Instead we validate the payload
+        // shape and the provider field.
+        const handleMessage = (event: MessageEvent) => {
+          const data = event.data as
+            | {
+                type?: string;
+                provider?: string;
+                status?: 'ok' | 'error';
+                reason?: string;
+              }
+            | undefined;
+          if (!data || data.type !== 'oauth:complete') return;
+          if (data.provider !== 'minimax') return;
+
+          window.removeEventListener('message', handleMessage);
+          clearInterval(popupPollInterval);
+
+          if (data.status === 'ok') {
+            props.onConnected?.(preset.id, 'oauth');
+            props.onClose();
+          } else {
+            setError(data.reason || 'Authorization was cancelled');
+          }
+          setIsConnecting(false);
+        };
+
+        window.addEventListener('message', handleMessage);
+
+        // Fallback: poll for popup closure. If the user completes the
+        // flow in the popup and it auto-closes, we assume success and
+        // refresh state.
+        const popupPollInterval = window.setInterval(() => {
+          if (popup.closed) {
+            window.removeEventListener('message', handleMessage);
+            clearInterval(popupPollInterval);
+            props.onConnected?.(preset.id, 'oauth');
+            props.onClose();
+            setIsConnecting(false);
+          }
+        }, 500);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'OAuth failed');
+        setIsConnecting(false);
+      }
     }
   };
 

@@ -1101,3 +1101,71 @@ export async function disconnectChannel(id: string): Promise<void> {
   });
   if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
 }
+
+// ============================================================================
+// Provider API functions
+// ============================================================================
+
+export type ConnectProviderResponse =
+  | { success: true; providerId: string }
+  | { success: false; error: string };
+
+export type OAuthStartResponse = {
+  success: boolean;
+  authorizationUrl?: string;
+  error?: string;
+};
+
+/**
+ * Connect a provider using an API key.
+ */
+export async function connectProviderWithApiKey(
+  providerId: string,
+  apiKey: string,
+): Promise<ConnectProviderResponse> {
+  const res = await apiFetch(
+    `${API_BASE}/providers/${providerId}/connect/api-key`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Start OAuth flow for a provider.
+ *
+ * For MiniMax (the only OAuth-enabled provider in this phase): the
+ * server returns an authorizationUrl the frontend opens in a popup.
+ */
+export async function startProviderOAuth(
+  providerId: string,
+  options: { redirectUri: string; region?: 'global' | 'cn' },
+): Promise<OAuthStartResponse> {
+  const body: Record<string, string> = { redirectUri: options.redirectUri };
+  if (options.region) body.region = options.region;
+
+  const res = await apiFetch(
+    `${API_BASE}/providers/${providerId}/connect/oauth/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Disconnect a provider.
+ */
+export async function disconnectProvider(
+  providerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const res = await apiFetch(`${API_BASE}/providers/${providerId}/connection`, {
+    method: 'DELETE',
+  });
+  return res.json();
+}

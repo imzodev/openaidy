@@ -11,12 +11,15 @@ import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
 import * as providerCredentialsSchema from './schema/provider-credentials';
+import * as oauthFlowStateSchema from './schema/oauth-flow-state';
 
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
   typeof pairingSchema &
   typeof accessTokenSchema &
-  typeof addonSchema;
+  typeof addonSchema &
+  typeof providerCredentialsSchema &
+  typeof oauthFlowStateSchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -42,6 +45,7 @@ const schema: DatabaseSchema = {
   ...accessTokenSchema,
   ...addonSchema,
   ...providerCredentialsSchema,
+  ...oauthFlowStateSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -348,6 +352,42 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS memories_agent_id_idx  ON memories(agent_id);
     CREATE INDEX IF NOT EXISTS memories_importance_idx ON memories(importance);
     CREATE INDEX IF NOT EXISTS memories_created_at_idx ON memories(created_at);
+
+    -- ------------------------------------------------------------
+    -- OAuth flow state (Phase 1 of provider-byok-oauth):
+    -- Short-lived storage for in-flight PKCE flows between
+    -- /start and /callback. Rows are cleaned up by created_at TTL.
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS oauth_flow_state (
+      state          TEXT PRIMARY KEY,
+      provider_id    TEXT NOT NULL,
+      code_verifier  TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      region         TEXT,
+      redirect_uri   TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS oauth_flow_state_created_at_idx  ON oauth_flow_state(created_at);
+    CREATE INDEX IF NOT EXISTS oauth_flow_state_provider_id_idx ON oauth_flow_state(provider_id);
+
+    -- ------------------------------------------------------------
+    -- Provider credentials (storage for encrypted API keys + OAuth tokens)
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS provider_credentials (
+      id           TEXT PRIMARY KEY,
+      provider_id  TEXT NOT NULL,
+      auth_method  TEXT NOT NULL,
+      encrypted_credentials TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'connected',
+      last_used_at TEXT,
+      error_message TEXT,
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS provider_credentials_provider_id_idx ON provider_credentials(provider_id);
+    CREATE INDEX IF NOT EXISTS provider_credentials_status_idx ON provider_credentials(status);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       title,

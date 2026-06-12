@@ -25,5 +25,7 @@ export * from './repositories/addons';
 export * from './repositories/memories';
 export * from './repositories/marketplace';
 export * from './repositories/provider-credentials';
+export * from './repositories/oauth-flow-state';
 export * from './schema/provider-credentials';
+export * from './schema/oauth-flow-state';
 export * from './schema/marketplace';

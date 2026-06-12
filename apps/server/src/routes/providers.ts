@@ -8,6 +8,13 @@ import {
   type RegisteredProvider,
   ProviderConnectionService,
 } from '../providers';
+import {
+  exchangeMiniMaxCode,
+  startMiniMaxOAuth,
+  type MiniMaxRegion,
+} from '../providers/oauth/minimax';
+import { DbOAuthStateStore } from '../providers/oauth/state-store';
+import { env } from '../lib/env.js';
 import type { Message, ModelRequest } from '@openaidy/runtime';
 import type { DatabaseClient } from '@openaidy/db';
 import type {
@@ -145,6 +152,17 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
   // Create connection service only if database is available
   const connectionService = db ? new ProviderConnectionService(db) : null;
   // Selection is available via services.selection if needed for future routes
+
+  // OAuth state store — same DB in dev and prod. Required for the
+  // MiniMax OAuth flow (state → PKCE verifier between /start and /callback).
+  const oauthStateStore = db ? new DbOAuthStateStore(db) : null;
+
+  // The frontend URL the popup window should redirect to after a
+  // successful/failed OAuth exchange. Pulled from CORS_ORIGIN (which
+  // is the frontend's dev server URL) or defaults to localhost:5173.
+  // (Unused for MiniMax — the callback returns HTML directly — but kept
+  // for providers that may need it in future phases.)
+  const _frontendBaseUrl = env.CORS_ORIGIN || 'http://localhost:5173';
 
   /**
    * GET /providers
@@ -507,6 +525,153 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       return result;
     },
   );
+
+  /**
+   * POST /providers/minimax/connect/oauth/start
+   *
+   * Real MiniMax OAuth flow (PKCE, no client_id/secret).
+   * Returns the authorization URL the user should be redirected to.
+   *
+   * For web: the frontend opens this URL in a popup.
+   * For CLI: the CLI prints this URL and asks the user to open it.
+   */
+  if (oauthStateStore) {
+    app.post(
+      '/providers/minimax/connect/oauth/start',
+      async (request, reply) => {
+        const bodySchema = z.object({
+          region: z.enum(['global', 'cn']).default('global'),
+          redirectUri: z.string().url('Valid redirect URI is required'),
+        });
+
+        const parseResult = bodySchema.safeParse(request.body);
+        if (!parseResult.success) {
+          reply.code(400);
+          return {
+            success: false,
+            error: parseResult.error.issues
+              .map((i) => `${i.path.join('.')}: ${i.message}`)
+              .join('; '),
+          };
+        }
+
+        const { region, redirectUri } = parseResult.data;
+
+        try {
+          const result = await startMiniMaxOAuth({
+            stateStore: oauthStateStore,
+            region: region as MiniMaxRegion,
+            redirectUri,
+          });
+          return { success: true, ...result };
+        } catch (err) {
+          reply.code(500);
+          return {
+            success: false,
+            error:
+              err instanceof Error
+                ? err.message
+                : 'Failed to start MiniMax OAuth flow',
+          };
+        }
+      },
+    );
+
+    /**
+     * GET /providers/minimax/connect/oauth/callback
+     *
+     * Receives the redirect from MiniMax after the user authorizes.
+     * Exchanges the code for tokens, persists them, then returns a
+     * tiny HTML page that posts a message to window.opener and
+     * closes itself. The parent window (the dialog) listens for
+     * that message and updates its state.
+     *
+     * Returning HTML directly (instead of a redirect to the front)
+     * means the popup is self-contained — Vite proxy / CORS issues
+     * don't matter. The popup and the dialog share `window.opener`.
+     */
+    app.get(
+      '/providers/minimax/connect/oauth/callback',
+      async (request, reply) => {
+        const query = request.query as {
+          code?: string;
+          state?: string;
+          error?: string;
+          error_description?: string;
+        };
+
+        let status: 'ok' | 'error' = 'ok';
+        let reason: string | undefined;
+
+        if (query.error) {
+          status = 'error';
+          reason = query.error_description ?? query.error;
+        } else if (!query.code || !query.state) {
+          status = 'error';
+          reason = 'missing_code_or_state';
+        } else {
+          const result = await exchangeMiniMaxCode({
+            stateStore: oauthStateStore,
+            state: query.state,
+            code: query.code,
+            db,
+          });
+          if (!result.success) {
+            status = 'error';
+            reason = result.error;
+          }
+        }
+
+        // Self-contained HTML. Sets opener.postMessage then window.close.
+        // The dialog listens for this message and updates the UI.
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MiniMax Authorization</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+           display: flex; align-items: center; justify-content: center;
+           min-height: 100vh; margin: 0; background: #f5f5f5; }
+    .card { background: white; padding: 32px 48px; border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1); text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 18px; color: #111; }
+    p { margin: 0; color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${status === 'ok' ? 'Connected to MiniMax' : 'Authorization Failed'}</h1>
+    <p>This window will close automatically.</p>
+  </div>
+  <script>
+    (function() {
+      var payload = {
+        type: 'oauth:complete',
+        provider: 'minimax',
+        status: ${JSON.stringify(status)},
+        ${reason ? `reason: ${JSON.stringify(reason)},` : ''}
+      };
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, window.location.origin);
+        }
+      } catch (e) {
+        // opener may be gone (popup blocker, etc.)
+        console.error('postMessage failed', e);
+      }
+      // Close the popup after a short delay so the user sees the
+      // confirmation briefly.
+      setTimeout(function() { window.close(); }, 300);
+    })();
+  </script>
+</body>
+</html>`;
+
+        reply.code(200).type('text/html; charset=utf-8').send(html);
+      },
+    );
+  }
 
   /**
    * POST /providers/:providerId/connect/oauth/start

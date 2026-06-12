@@ -43,6 +43,11 @@ export class ProviderCredentialsRepository {
     }
 
     // Insert new
+    // Note: createdAt/updatedAt are set explicitly here to avoid
+    // the pgTable + SQLite `defaultNow()` → `now()` mismatch
+    // (SQLite has no `now()` function; the typed insert would emit
+    // `now()` and fail with "no such function: now").
+    const now = new Date();
     const [inserted] = await this.db
       .insert(providerCredentials)
       .values({
@@ -51,6 +56,8 @@ export class ProviderCredentialsRepository {
         authMethod,
         encryptedCredentials,
         status: 'connected',
+        createdAt: now,
+        updatedAt: now,
       })
       .returning();
     return inserted;
