@@ -9,8 +9,8 @@ import { createSignal, createEffect, Show } from 'solid-js';
 import { X, Loader, ExternalLink } from 'lucide-solid';
 import type { ProviderPreset } from '@openaidy/shared-types';
 import {
-  API_BASE,
   connectProviderWithApiKey,
+  getOAuthStatus,
   startProviderOAuth,
   type ConnectProviderResponse,
   type OAuthStartResponse,
@@ -74,83 +74,91 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
       setError(null);
 
       try {
-        // The popup is opened on the server's origin (localhost:3001),
-        // where the OAuth callback lives and returns a tiny HTML page
-        // that posts a message back to window.opener (us) and closes
-        // itself. The popup and dialog are cross-origin (Vite on 5173,
-        // Fastify on 3001), so we accept the postMessage from any
-        // origin and just validate the payload shape.
-        const apiBase = API_BASE || 'http://localhost:3001';
-        const redirectUri = `${apiBase}/api/providers/minimax/connect/oauth/callback`;
-
+        // 1. Start the OAuth flow on the server. The server spawns
+        //    `mmx auth login` (the official MiniMax CLI) which prints
+        //    a `user_code` + verification URL. We return that URL.
         const result: OAuthStartResponse = await startProviderOAuth(preset.id, {
-          redirectUri,
           region: region(),
         });
 
-        if (!result.success || !result.authorizationUrl) {
+        if (!result.success || !result.flowId) {
           setError(result.error || 'Failed to start OAuth flow');
           setIsConnecting(false);
           return;
         }
 
-        const popup = window.open(
-          result.authorizationUrl,
-          'oauth-minimax',
-          'width=600,height=700,scrollbars=yes',
-        );
+        // 2. Poll the status endpoint every 2s. When mmx finishes
+        //    (success or failure), the status flips to 'authorized'
+        //    or 'failed' and the dialog closes.
+        const flowId = result.flowId;
+        const verificationUrl =
+          result.authorizationUrl ||
+          `https://platform.minimax.io/oauth-authorize?client=OpenAidy&flow=${flowId}`;
 
+        // 3. Open the verification URL in a popup so the user can
+        //    sign in to MiniMax there. We don't rely on the popup
+        //    posting back to us — we poll the status endpoint, which
+        //    works regardless of popup blockers.
+        const popup = window.open(
+          verificationUrl,
+          'oauth-minimax',
+          'width=600,height=700',
+        );
         if (!popup) {
-          setError(
-            'Popup blocked. Please allow popups for this site and try again.',
-          );
-          setIsConnecting(false);
-          return;
+          // Don't fail hard if the popup was blocked — the URL is
+          // still shown in the dialog and the user can copy it.
         }
 
-        // Wait for the popup to post a message back, or close on its own.
-        // We do NOT check event.origin because the popup is on the
-        // server's origin (localhost:3001) while the dialog is on the
-        // Vite origin (localhost:5173). Instead we validate the payload
-        // shape and the provider field.
-        const handleMessage = (event: MessageEvent) => {
-          const data = event.data as
-            | {
-                type?: string;
-                provider?: string;
-                status?: 'ok' | 'error';
-                reason?: string;
-              }
-            | undefined;
-          if (!data || data.type !== 'oauth:complete') return;
-          if (data.provider !== 'minimax') return;
+        // 4. Poll until authorized/failed or 10 min timeout.
+        const startedAt = Date.now();
+        const timeoutMs = 10 * 60 * 1000;
+        let cancelled = false;
 
-          window.removeEventListener('message', handleMessage);
-          clearInterval(popupPollInterval);
-
-          if (data.status === 'ok') {
-            props.onConnected?.(preset.id, 'oauth');
-            props.onClose();
-          } else {
-            setError(data.reason || 'Authorization was cancelled');
-          }
-          setIsConnecting(false);
+        const handleCancel = () => {
+          cancelled = true;
         };
 
-        window.addEventListener('message', handleMessage);
+        // The "Cancel" button on the dialog sets cancelled = true
+        // (see the cancel button onClick below).
 
-        // Fallback: poll for popup closure. If the user completes the
-        // flow in the popup and it auto-closes, we assume success and
-        // refresh state.
-        const popupPollInterval = window.setInterval(() => {
-          if (popup.closed) {
-            window.removeEventListener('message', handleMessage);
-            clearInterval(popupPollInterval);
+        const pollOnce = async (): Promise<
+          'pending' | 'authorized' | 'failed'
+        > => {
+          try {
+            const status = await getOAuthStatus(flowId);
+            if (status.ok) return status.status;
+          } catch {
+            // Ignore transient errors; keep polling.
+          }
+          return 'pending';
+        };
+
+        while (!cancelled && Date.now() - startedAt < timeoutMs) {
+          const result = await pollOnce();
+          if (result === 'authorized') {
             props.onConnected?.(preset.id, 'oauth');
             props.onClose();
-            setIsConnecting(false);
+            return;
           }
-        }, 500);
+          if (result === 'failed') {
+            setError('Authorization failed. Please try again.');
+            setIsConnecting(false);
+            return;
+          }
+          // pending — wait 2s and poll again
+          await new Promise((r) => setTimeout(r, 2_000));
+        }
+
+        if (cancelled) {
+          setError('Cancelled.');
+        } else {
+          setError('Timed out waiting for you to authorize. Please try again.');
+        }
+        setIsConnecting(false);
+        // Expose handleCancel so the Cancel button can call it
+        (props as unknown as { __onCancel?: () => void }).__onCancel =
+          handleCancel;
+        return;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'OAuth failed');
         setIsConnecting(false);

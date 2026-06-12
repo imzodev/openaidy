@@ -1112,9 +1112,29 @@ export type ConnectProviderResponse =
 
 export type OAuthStartResponse = {
   success: boolean;
+  /** URL the user should open in a browser to complete OAuth. */
   authorizationUrl?: string;
+  /** Internal flow id, used to poll for completion. */
+  flowId?: string;
   error?: string;
 };
+
+/** Poll the server for the status of an in-flight OAuth flow. */
+export async function getOAuthStatus(flowId: string): Promise<
+  | {
+      ok: true;
+      status: 'pending' | 'authorized' | 'failed';
+      verificationUrl?: string;
+      userCode?: string;
+      error?: string;
+    }
+  | { ok: false; error: 'not_found' | 'expired' }
+> {
+  const res = await apiFetch(
+    `${API_BASE}/providers/minimax/connect/oauth/status?flowId=${encodeURIComponent(flowId)}`,
+  );
+  return res.json();
+}
 
 /**
  * Connect a provider using an API key.
@@ -1142,9 +1162,9 @@ export async function connectProviderWithApiKey(
  */
 export async function startProviderOAuth(
   providerId: string,
-  options: { redirectUri: string; region?: 'global' | 'cn' },
+  options: { region?: 'global' | 'cn' },
 ): Promise<OAuthStartResponse> {
-  const body: Record<string, string> = { redirectUri: options.redirectUri };
+  const body: Record<string, string> = {};
   if (options.region) body.region = options.region;
 
   const res = await apiFetch(

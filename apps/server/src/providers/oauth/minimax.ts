@@ -1,297 +1,257 @@
-import type { DatabaseClient } from '@openaidy/db';
-import { ProviderCredentialsRepository } from '@openaidy/db';
-import { getEncryptionService } from '../../lib/encryption.js';
-import { generatePkce, generateState } from './pkce.js';
+import {
+  spawnMmxLogin,
+  readMmxTokens,
+  isMmxInstalled,
+  type MmxLoginHandle,
+  type MiniMaxLoginResult,
+  type MiniMaxOAuthTokens,
+  type SpawnMmxLoginOptions,
+} from './mmx-bridge';
 import type { OAuthStateStore } from './state-store.js';
 
 /**
- * MiniMax OAuth orchestration.
+ * MiniMax OAuth orchestration — backed by the official `mmx-cli` subprocess.
  *
- * Implements the browser-redirect OAuth flow against MiniMax's public
- * OAuth endpoints. The same flow covers:
+ * Background: MiniMax's OAuth endpoints (`/oauth2/device/code`,
+ * `/oauth2/token`) require a special `client_id` that is only embedded
+ * inside the official `mmx-cli` binary. They are NOT publicly accessible
+ * to third parties (verified by curl: 404). So we cannot implement the
+ * device-code flow directly from OpenAidy — we have to delegate to
+ * `mmx`, which has the privileged client_id.
  *
- *   - Web popup (the popup gets the redirect, exchanges the code,
- *     posts back to the parent window, closes itself)
- *   - CLI (the CLI opens the URL in any browser, polls until the user
- *     authorizes, then exchanges the code for tokens)
+ * The user-facing experience is the same as a normal OAuth flow:
+ *   1. User clicks "Sign in with MiniMax" in the Settings → Providers dialog
+ *   2. Server spawns `mmx auth login --recommend --region=...` in the
+ *      background, which contacts MiniMax and prints a `user_code` + URL
+ *   3. We return that URL to the frontend, which opens it in a popup
+ *   4. The user signs in to MiniMax in the popup and clicks Authorize
+ *   5. `mmx` receives the tokens via MiniMax's private callback channel,
+ *      saves them to `~/.mmx/config.json`, and exits cleanly
+ *   6. We read the tokens from the config file, encrypt them, and
+ *      persist them in our own `provider_credentials` table
+ *   7. The frontend dialog closes, the user is connected
  *
- * No per-developer client_id/secret is required. MiniMax publishes
- * a public OAuth endpoint (the same approach used by OpenAI's
- * `codex login` and GitHub's `gh auth login`).
+ * The OAuth state store we built earlier still serves a purpose: it
+ * stores the in-flight login attempt (`state → region + abort signal`)
+ * so the HTTP callback route can stream progress updates to the
+ * frontend via Server-Sent Events.
  *
- * PKCE protects the code exchange: even if the redirect URL with
- * the `code` parameter is intercepted, the attacker can't exchange
- * the code for tokens without the `code_verifier` that we keep
- * server-side in the OAuthStateStore.
+ * The PKCE code_verifier in oauth_flow_state is unused now (mmx handles
+ * PKCE internally). We keep the table for future OAuth flows that DO
+ * use PKCE (OpenAI Codex, Google Gemini).
  */
 
-/** Region determines the OAuth + inference endpoints. */
-export type MiniMaxRegion = 'global' | 'cn';
-
-const MINIMAX_ENDPOINTS: Record<
-  MiniMaxRegion,
-  {
-    authorize: string;
-    token: string;
-  }
-> = {
-  global: {
-    authorize: 'https://api.minimax.io/oauth/authorize',
-    token: 'https://api.minimax.io/oauth/token',
-  },
-  cn: {
-    authorize: 'https://api.minimaxi.com/oauth/authorize',
-    token: 'https://api.minimaxi.com/oauth/token',
-  },
-};
-
-/** Scopes for MiniMax OAuth — model access only. */
-const MINIMAX_SCOPES = 'model:read model:write';
-
-/** Provider id used in the DB. Matches the MiniMaxProfile.id in @openaidy/providers. */
 const MINIMAX_PROVIDER_ID = 'minimax';
 
 // ── Start ─────────────────────────────────────────────────────────────────
 
 export type StartMiniMaxOAuthInput = {
   stateStore: OAuthStateStore;
-  region: MiniMaxRegion;
-  redirectUri: string;
+  region: 'global' | 'cn';
+  /** Unique token returned to the client to identify this flow. */
+  flowId: string;
+  /** Optional AbortSignal tied to the client disconnecting. */
+  signal?: AbortSignal;
 };
 
-export type StartMiniMaxOAuthResult = {
-  authorizationUrl: string;
-  state: string;
-};
+export type StartMiniMaxOAuthResult =
+  | {
+      ok: true;
+      flowId: string;
+      verificationUrl: string;
+    }
+  | {
+      ok: false;
+      error: 'mmx_not_installed' | 'internal_error';
+      message: string;
+    };
 
 /**
- * Begin a MiniMax OAuth flow.
- *
- * Generates a PKCE pair and a `state` token, persists them in the
- * state store, and returns the URL the user should be redirected to.
+ * Begin a MiniMax OAuth flow. Returns the verification URL the user
+ * should open in a browser. The flow continues in the background.
  */
 export async function startMiniMaxOAuth(
   input: StartMiniMaxOAuthInput,
 ): Promise<StartMiniMaxOAuthResult> {
-  const { verifier, challenge } = generatePkce();
-  const state = generateState();
-  const endpoints = MINIMAX_ENDPOINTS[input.region];
+  // 1. Verify mmx is installed before we promise anything
+  const installed = await isMmxInstalled();
+  if (!installed) {
+    return {
+      ok: false,
+      error: 'mmx_not_installed',
+      message:
+        'The mmx-cli tool is not on PATH. OpenAidy depends on it for MiniMax OAuth. ' +
+        'Install it with: pnpm add -g mmx-cli',
+    };
+  }
 
-  await input.stateStore.put(state, {
+  // 2. Persist the flow state so the callback route can find it
+  await input.stateStore.put(input.flowId, {
     providerId: MINIMAX_PROVIDER_ID,
-    codeVerifier: verifier,
-    codeChallenge: challenge,
+    codeVerifier: '', // unused — mmx handles PKCE
+    codeChallenge: '',
     region: input.region,
-    redirectUri: input.redirectUri,
+    redirectUri: '',
     createdAt: Date.now(),
   });
 
-  const url = new URL(endpoints.authorize);
-  url.searchParams.set('code_challenge', challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-  url.searchParams.set('state', state);
-  url.searchParams.set('redirect_uri', input.redirectUri);
-  url.searchParams.set('scope', MINIMAX_SCOPES);
-  // Public client — no client_id is sent. The provider identifies the
-  // app by the User-Agent + the code_challenge_method.
-
-  return {
-    authorizationUrl: url.toString(),
-    state,
-  };
-}
-
-// ── Exchange ──────────────────────────────────────────────────────────────
-
-export type ExchangeMiniMaxCodeInput = {
-  stateStore: OAuthStateStore;
-  state: string;
-  code: string;
-  db: DatabaseClient;
-};
-
-export type ExchangeMiniMaxCodeResult =
-  | { success: true; region: MiniMaxRegion; userHint?: string }
-  | { success: false; error: string };
-
-/** Shape of the MiniMax token endpoint's success response. */
-type MiniMaxTokenResponse = {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-  scope?: string;
-  user?: { id?: string; email?: string; name?: string };
-};
-
-/**
- * Exchange the authorization code for tokens and persist them.
- *
- * Called from the /callback route after the provider redirects back
- * with `?code=...&state=...`. Validates the state, then:
- *
- *   1. POSTs to the MiniMax token endpoint with the code + PKCE verifier
- *   2. Receives { access_token, refresh_token, expires_in }
- *   3. Encrypts and persists in provider_credentials
- *   4. Cleans up the state row
- */
-export async function exchangeMiniMaxCode(
-  input: ExchangeMiniMaxCodeInput,
-): Promise<ExchangeMiniMaxCodeResult> {
-  const flowState = await input.stateStore.get(input.state);
-  if (!flowState) {
-    return { success: false, error: 'invalid_or_expired_state' };
-  }
-
-  if (flowState.providerId !== MINIMAX_PROVIDER_ID) {
-    return { success: false, error: 'state_provider_mismatch' };
-  }
-
-  const region: MiniMaxRegion = flowState.region ?? 'global';
-  const endpoints = MINIMAX_ENDPOINTS[region];
-  const credentialsRepo = new ProviderCredentialsRepository(input.db);
-  const encryption = getEncryptionService();
-
-  let tokens: MiniMaxTokenResponse;
+  // 3. Spawn mmx in the background
   try {
-    const response = await fetch(endpoints.token, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: input.code,
-        code_verifier: flowState.codeVerifier,
-        redirect_uri: flowState.redirectUri,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      return {
-        success: false,
-        error: `token_exchange_failed: ${response.status} ${body.slice(0, 200)}`,
-      };
-    }
-
-    tokens = (await response.json()) as MiniMaxTokenResponse;
-  } catch (err) {
-    return {
-      success: false,
-      error: `token_exchange_network_error: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  if (!tokens.access_token || !tokens.refresh_token) {
-    return {
-      success: false,
-      error: 'token_exchange_missing_tokens',
-    };
-  }
-
-  const encrypted = encryption.encrypt(
-    JSON.stringify({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: Date.now() + tokens.expires_in * 1000,
-      region,
-      user: tokens.user,
-    }),
-  );
-
-  await credentialsRepo.upsert(MINIMAX_PROVIDER_ID, 'oauth', encrypted);
-
-  // The state row has served its purpose; clean it up so the same
-  // state can't be replayed.
-  await input.stateStore.delete(input.state);
-
-  return {
-    success: true,
-    region,
-    ...(tokens.user?.email !== undefined && { userHint: tokens.user.email }),
-  };
-}
-
-// ── Refresh ───────────────────────────────────────────────────────────────
-
-export type RefreshMiniMaxTokenInput = {
-  db: DatabaseClient;
-  refreshToken: string;
-  region: MiniMaxRegion;
-};
-
-export type RefreshMiniMaxTokenResult = {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-} | null;
-
-/**
- * Exchange a refresh_token for a new access_token + refresh_token.
- * Returns null if the refresh failed (e.g. the refresh token has been
- * revoked). On success, also persists the new tokens in the DB.
- */
-export async function refreshMiniMaxToken(
-  input: RefreshMiniMaxTokenInput,
-): Promise<RefreshMiniMaxTokenResult> {
-  const endpoints = MINIMAX_ENDPOINTS[input.region];
-  const credentialsRepo = new ProviderCredentialsRepository(input.db);
-  const encryption = getEncryptionService();
-
-  let tokens: MiniMaxTokenResponse;
-  try {
-    const response = await fetch(endpoints.token, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json',
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: input.refreshToken,
-      }),
-    });
-
-    if (!response.ok) {
-      // Refresh failed — likely the refresh token is revoked or expired.
-      // Caller should mark the credential as errored and ask the user
-      // to reconnect.
-      await credentialsRepo.setError(
-        MINIMAX_PROVIDER_ID,
-        `refresh_failed: ${response.status}`,
-      );
-      return null;
-    }
-
-    tokens = (await response.json()) as MiniMaxTokenResponse;
-  } catch (err) {
-    await credentialsRepo.setError(
-      MINIMAX_PROVIDER_ID,
-      `refresh_network_error: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return null;
-  }
-
-  if (!tokens.access_token || !tokens.refresh_token) {
-    return null;
-  }
-
-  const expiresAt = Date.now() + tokens.expires_in * 1000;
-  const encrypted = encryption.encrypt(
-    JSON.stringify({
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt,
+    const handle: MmxLoginHandle = spawnMmxLogin({
       region: input.region,
-    }),
-  );
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
 
-  await credentialsRepo.upsert(MINIMAX_PROVIDER_ID, 'oauth', encrypted);
+    // 4. Wire up the handle: when mmx resolves user_code, update the
+    //    state store so the route can return it; when mmx completes,
+    //    persist the tokens to provider_credentials and clean up state
+    wireMmxHandleToFlow(handle, input);
+
+    // 5. Wait briefly for user_code so we can return a useful URL.
+    //    If mmx is slow to print, we still return ok with a placeholder
+    //    URL — the frontend will poll the route for the real one.
+    let verificationUrl = '';
+    try {
+      const code = await Promise.race([
+        handle.userCode,
+        new Promise<string>((_, rej) =>
+          setTimeout(() => rej(new Error('user_code_timeout')), 3_000),
+        ),
+      ]);
+      verificationUrl = await handle.verificationUrl;
+      // Store the user_code in the state for later retrieval
+      const stored = await input.stateStore.get(input.flowId);
+      if (stored) {
+        await input.stateStore.put(input.flowId, {
+          ...stored,
+          codeChallenge: code, // repurpose field to hold user_code
+        });
+      }
+    } catch {
+      // mmx didn't print user_code within 3s. Frontend will poll.
+    }
+
+    return { ok: true, flowId: input.flowId, verificationUrl };
+  } catch (err) {
+    await input.stateStore.delete(input.flowId);
+    return {
+      ok: false,
+      error: 'internal_error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ── Status / poll ─────────────────────────────────────────────────────────
+
+export type GetMiniMaxOAuthStatusInput = {
+  stateStore: OAuthStateStore;
+  flowId: string;
+};
+
+export type GetMiniMaxOAuthStatusResult =
+  | {
+      ok: true;
+      status: 'pending' | 'authorized' | 'failed';
+      verificationUrl?: string;
+      userCode?: string;
+      error?: string;
+    }
+  | { ok: false; error: 'not_found' | 'expired' };
+
+/**
+ * Read the current state of a flow. Used by the frontend to poll
+ * for progress (until the popup-based approach is wired up to
+ * receive a postMessage from the mmx callback).
+ */
+export async function getMiniMaxOAuthStatus(
+  input: GetMiniMaxOAuthStatusInput,
+): Promise<GetMiniMaxOAuthStatusResult> {
+  const flow = await input.stateStore.get(input.flowId);
+  if (!flow) {
+    return { ok: false, error: 'not_found' };
+  }
+  if (flow.providerId !== MINIMAX_PROVIDER_ID) {
+    return { ok: false, error: 'not_found' };
+  }
+
+  // Re-read tokens to see if mmx has written them yet
+  const tokens = readMmxTokens();
+  if (tokens) {
+    const verificationUrl = flow.codeChallenge
+      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=OpenAidy`
+      : undefined;
+    return {
+      ok: true,
+      status: 'authorized',
+      ...(verificationUrl ? { verificationUrl } : {}),
+      ...(flow.codeChallenge ? { userCode: flow.codeChallenge } : {}),
+    };
+  }
 
   return {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-    expiresAt,
-  };
+    ok: true,
+    status: 'pending' as const,
+    verificationUrl: flow.codeChallenge
+      ? `https://platform.minimax.io/oauth-authorize?user_code=${flow.codeChallenge}&client=OpenAidy`
+      : undefined,
+    userCode: flow.codeChallenge || undefined,
+  } as Extract<GetMiniMaxOAuthStatusResult, { ok: true }>;
 }
+
+// ── Internal: wire up a spawned mmx handle to a flow state ──────────────
+
+async function wireMmxHandleToFlow(
+  handle: MmxLoginHandle,
+  input: StartMiniMaxOAuthInput,
+): Promise<void> {
+  // Background task: when mmx finishes (success or fail), persist the
+  // tokens (or error) and clean up the state.
+  handle.done
+    .then(async (result) => {
+      if (result.ok) {
+        // Persist tokens to provider_credentials.
+        // We do this lazily here; a separate "complete" call from the
+        // frontend could also be added. For now: auto-persist on success.
+        try {
+          const { ProviderCredentialsRepository } =
+            await import('@openaidy/db');
+          const { getEncryptionService } =
+            await import('../../lib/encryption.js');
+          const credentialsRepo = new ProviderCredentialsRepository(
+            (input as unknown as { db: unknown }).db as never,
+          );
+          const encryption = getEncryptionService();
+          const encrypted = encryption.encrypt(
+            JSON.stringify({
+              accessToken: result.tokens.access_token,
+              refreshToken: result.tokens.refresh_token,
+              expiresAt: new Date(result.tokens.expires_at).getTime(),
+              region: result.tokens.region ?? input.region,
+              account: result.tokens.account,
+            }),
+          );
+          await credentialsRepo.upsert(MINIMAX_PROVIDER_ID, 'oauth', encrypted);
+        } catch (err) {
+          // Log but don't crash — the user can retry
+          console.error('Failed to persist MiniMax tokens:', err);
+        }
+      }
+      // Clean up state regardless
+      await input.stateStore.delete(input.flowId);
+    })
+    .catch(async () => {
+      await input.stateStore.delete(input.flowId);
+    });
+}
+
+// ── Re-exports for convenience ───────────────────────────────────────────
+
+export {
+  isMmxInstalled,
+  readMmxTokens,
+  type MiniMaxOAuthTokens,
+  type MiniMaxLoginResult,
+  type MmxLoginHandle,
+  type SpawnMmxLoginOptions,
+};

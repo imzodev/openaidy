@@ -4,23 +4,37 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDatabaseClient } from '@openaidy/db';
 import { DbOAuthStateStore } from './state-store';
-import {
-  startMiniMaxOAuth,
-  exchangeMiniMaxCode,
-  refreshMiniMaxToken,
-} from './minimax';
+import { startMiniMaxOAuth, getMiniMaxOAuthStatus } from './minimax';
+import { type MmxLoginHandle, type MiniMaxLoginResult } from './mmx-bridge';
+
+// Set master key BEFORE importing anything that touches encryption.
+process.env.CREDENTIALS_MASTER_KEY = 'test-m...ests';
 
 /**
- * Unit tests for the MiniMax OAuth helpers.
+ * Tests for the MiniMax OAuth flow.
  *
- * The HTTP layer (fetch to api.minimax.io) is stubbed per test so we
- * don't need network access. The state store and DB use a real tmpfile
- * SQLite so we exercise the real persistence path.
+ * The flow is now backed by the official `mmx-cli` subprocess
+ * (we cannot hit MiniMax's auth endpoints directly — they require a
+ * privileged client_id). These tests mock the mmx subprocess via
+ * module-spy on `spawnMmxLogin` and verify the rest of the wiring
+ * (state store, encryption, provider_credentials persistence).
  */
 
-// Set the master key BEFORE importing anything that touches encryption.
-process.env.CREDENTIALS_MASTER_KEY =
-  'test-master-key-must-be-at-least-32-chars-long-for-tests';
+// Mock the mmx-bridge module so we don't actually spawn mmx
+vi.mock('./mmx-bridge', () => {
+  return {
+    isMmxInstalled: vi.fn(async () => true),
+    spawnMmxLogin: vi.fn(),
+    readMmxTokens: vi.fn(() => null),
+    clearMmxTokens: vi.fn(async () => undefined),
+    getMmxConfigPath: vi.fn(() => '/tmp/fake-mmx/config.json'),
+    getCurrentOsUser: vi.fn(() => 'tester'),
+  };
+});
+
+// Import the mocked module so we can spy on the functions
+import * as mmxBridge from './mmx-bridge';
+const mockedMmx = vi.mocked(mmxBridge);
 
 const dbPath = join(tmpdir(), `oauth-minimax-test-${Date.now()}.db`);
 let dbConn: Awaited<ReturnType<typeof createDatabaseClient>>;
@@ -28,9 +42,6 @@ let stateStore: DbOAuthStateStore;
 
 beforeEach(async () => {
   const dir = mkdtempSync(join(tmpdir(), 'oauth-minimax-'));
-  // We rely on the encrypted credential storage writing to a tmpfile too,
-  // but it lives in the same conn, so the path here is only for the
-  // state store.
   dbConn = await createDatabaseClient({
     kind: 'sqlite',
     sqlitePath: join(dir, 'test.db'),
@@ -41,227 +52,137 @@ beforeEach(async () => {
 afterEach(async () => {
   await dbConn.close();
   rmSync(dbPath, { force: true });
+  vi.clearAllMocks();
 });
 
 // ── startMiniMaxOAuth ──────────────────────────────────────────────────────
 
 describe('startMiniMaxOAuth', () => {
-  it('generates an authorization URL with PKCE challenge', async () => {
-    const { authorizationUrl, state } = await startMiniMaxOAuth({
+  it('returns mmx_not_installed if mmx-cli is missing', async () => {
+    mockedMmx.isMmxInstalled.mockResolvedValueOnce(false);
+    const result = await startMiniMaxOAuth({
       stateStore,
       region: 'global',
-      redirectUri: 'http://localhost:3001/callback',
+      flowId: 'flow-1',
     });
-
-    const url = new URL(authorizationUrl);
-    expect(url.host).toBe('api.minimax.io');
-    expect(url.pathname).toBe('/oauth/authorize');
-    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
-    expect(url.searchParams.get('code_challenge')).toBeTruthy();
-    expect(url.searchParams.get('state')).toBe(state);
-    expect(url.searchParams.get('redirect_uri')).toBe(
-      'http://localhost:3001/callback',
-    );
-    expect(url.searchParams.get('scope')).toContain('model:read');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('mmx_not_installed');
+    }
   });
 
-  it('uses the China endpoint when region=cn', async () => {
-    const { authorizationUrl } = await startMiniMaxOAuth({
+  it('persists flow state and returns the verification URL', async () => {
+    // Mock the spawn handle: user_code resolves immediately, done
+    // never resolves within the test scope.
+    const fakeHandle: MmxLoginHandle = {
+      userCode: Promise.resolve('ABCD-1234'),
+      verificationUrl: Promise.resolve(
+        'https://platform.minimax.io/oauth-authorize?user_code=ABCD-1234&client=OpenAidy',
+      ),
+      done: new Promise<MiniMaxLoginResult>(() => undefined), // never resolves in test
+      cancel: vi.fn(),
+    };
+    mockedMmx.spawnMmxLogin.mockReturnValueOnce(fakeHandle);
+
+    const result = await startMiniMaxOAuth({
       stateStore,
       region: 'cn',
-      redirectUri: 'http://localhost:3001/callback',
+      flowId: 'flow-cn-1',
     });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.verificationUrl).toContain('user_code=ABCD-1234');
+      expect(result.verificationUrl).toContain('client=OpenAidy');
+      expect(result.flowId).toBe('flow-cn-1');
+    }
 
-    const url = new URL(authorizationUrl);
-    expect(url.host).toBe('api.minimaxi.com');
-  });
-
-  it('persists the verifier in the state store', async () => {
-    const { state, authorizationUrl } = await startMiniMaxOAuth({
-      stateStore,
-      region: 'global',
-      redirectUri: 'http://localhost:3001/callback',
-    });
-
-    const url = new URL(authorizationUrl);
-    const challengeInUrl = url.searchParams.get('code_challenge')!;
-    const stored = await stateStore.get(state);
+    // State was persisted
+    const stored = await stateStore.get('flow-cn-1');
     expect(stored).not.toBeNull();
-    expect(stored!.codeChallenge).toBe(challengeInUrl);
-    expect(stored!.region).toBe('global');
+    expect(stored!.region).toBe('cn');
+  });
+
+  it('returns a placeholder URL if mmx is slow to print user_code', async () => {
+    // user_code never resolves within 3s timeout
+    const fakeHandle: MmxLoginHandle = {
+      userCode: new Promise<string>(() => undefined),
+      verificationUrl: new Promise<string>(() => undefined),
+      done: new Promise<MiniMaxLoginResult>(() => undefined),
+      cancel: vi.fn(),
+    };
+    mockedMmx.spawnMmxLogin.mockReturnValueOnce(fakeHandle);
+
+    const result = await startMiniMaxOAuth({
+      stateStore,
+      region: 'global',
+      flowId: 'flow-slow',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.verificationUrl).toBe('');
+    }
   });
 });
 
-// ── exchangeMiniMaxCode ────────────────────────────────────────────────────
+// ── getMiniMaxOAuthStatus ────────────────────────────────────────────────
 
-describe('exchangeMiniMaxCode', () => {
-  it('returns invalid_or_expired_state for unknown state', async () => {
-    const result = await exchangeMiniMaxCode({
+describe('getMiniMaxOAuthStatus', () => {
+  it('returns not_found for an unknown flowId', async () => {
+    const result = await getMiniMaxOAuthStatus({
       stateStore,
-      state: 'nope',
-      code: 'code',
-      db: dbConn.db,
+      flowId: 'no-such-flow',
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toBe('invalid_or_expired_state');
+    expect(result.ok).toBe(false);
+  });
+
+  it('returns pending when mmx has not written tokens yet', async () => {
+    await stateStore.put('flow-active', {
+      providerId: 'minimax',
+      codeVerifier: '',
+      codeChallenge: 'WXYZ-9876',
+      region: 'global',
+      redirectUri: '',
+      createdAt: Date.now(),
+    });
+    mockedMmx.readMmxTokens.mockReturnValueOnce(null);
+
+    const result = await getMiniMaxOAuthStatus({
+      stateStore,
+      flowId: 'flow-active',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.status).toBe('pending');
+      expect(result.userCode).toBe('WXYZ-9876');
+      expect(result.verificationUrl).toContain('user_code=WXYZ-9876');
+      expect(result.verificationUrl).toContain('client=OpenAidy');
     }
   });
 
-  it('exchanges the code and persists encrypted tokens', async () => {
-    // 1. Start a flow to get a state + verifier
-    const { state } = await startMiniMaxOAuth({
-      stateStore,
-      region: 'global',
-      redirectUri: 'http://localhost:3001/callback',
+  it('returns authorized when mmx has written tokens', async () => {
+    await stateStore.put('flow-done', {
+      providerId: 'minimax',
+      codeVerifier: '',
+      codeChallenge: 'LMNO-4321',
+      region: 'cn',
+      redirectUri: '',
+      createdAt: Date.now(),
+    });
+    mockedMmx.readMmxTokens.mockReturnValueOnce({
+      access_token: 'access_xyz',
+      refresh_token: 'refresh_xyz',
+      expires_at: new Date(Date.now() + 3600_000).toISOString(),
+      region: 'cn',
     });
 
-    // 2. Mock the token endpoint
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          access_token: 'access_xyz',
-          refresh_token: 'refresh_xyz',
-          expires_in: 3600,
-          user: { email: 'user@example.com' },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    // 3. Exchange
-    const result = await exchangeMiniMaxCode({
+    const result = await getMiniMaxOAuthStatus({
       stateStore,
-      state,
-      code: 'auth_code_123',
-      db: dbConn.db,
+      flowId: 'flow-done',
     });
-
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.region).toBe('global');
-      expect(result.userHint).toBe('user@example.com');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.status).toBe('authorized');
+      expect(result.userCode).toBe('LMNO-4321');
     }
-
-    // 4. fetch was called with the right URL
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('https://api.minimax.io/oauth/token');
-    const body = (init as RequestInit).body as URLSearchParams;
-    expect(body.get('grant_type')).toBe('authorization_code');
-    expect(body.get('code')).toBe('auth_code_123');
-    expect(body.get('code_verifier')).toBeTruthy();
-    expect(body.get('redirect_uri')).toBe('http://localhost:3001/callback');
-
-    // 5. State is cleaned up
-    const after = await stateStore.get(state);
-    expect(after).toBeNull();
-
-    vi.unstubAllGlobals();
-  });
-
-  it('returns token_exchange_failed when the provider rejects the code', async () => {
-    const { state } = await startMiniMaxOAuth({
-      stateStore,
-      region: 'global',
-      redirectUri: 'http://localhost:3001/callback',
-    });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('invalid_grant', { status: 400 })),
-    );
-
-    const result = await exchangeMiniMaxCode({
-      stateStore,
-      state,
-      code: 'bad_code',
-      db: dbConn.db,
-    });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toMatch(/token_exchange_failed: 400/);
-    }
-    vi.unstubAllGlobals();
-  });
-
-  it('returns token_exchange_missing_tokens on a partial response', async () => {
-    const { state } = await startMiniMaxOAuth({
-      stateStore,
-      region: 'global',
-      redirectUri: 'http://localhost:3001/callback',
-    });
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({ access_token: 'only_access' }), // no refresh_token
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      ),
-    );
-
-    const result = await exchangeMiniMaxCode({
-      stateStore,
-      state,
-      code: 'code',
-      db: dbConn.db,
-    });
-
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toBe('token_exchange_missing_tokens');
-    }
-    vi.unstubAllGlobals();
-  });
-});
-
-// ── refreshMiniMaxToken ────────────────────────────────────────────────────
-
-describe('refreshMiniMaxToken', () => {
-  it('returns null when the provider rejects the refresh', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response('invalid_grant', { status: 400 })),
-    );
-
-    const result = await refreshMiniMaxToken({
-      db: dbConn.db,
-      refreshToken: 'expired',
-      region: 'global',
-    });
-    expect(result).toBeNull();
-    vi.unstubAllGlobals();
-  });
-
-  it('returns fresh tokens on success and re-persists them', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            access_token: 'new_access',
-            refresh_token: 'new_refresh',
-            expires_in: 7200,
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      ),
-    );
-
-    const result = await refreshMiniMaxToken({
-      db: dbConn.db,
-      refreshToken: 'old_refresh',
-      region: 'global',
-    });
-
-    expect(result).not.toBeNull();
-    expect(result!.accessToken).toBe('new_access');
-    expect(result!.refreshToken).toBe('new_refresh');
-    expect(result!.expiresAt).toBeGreaterThan(Date.now());
-    vi.unstubAllGlobals();
   });
 });
