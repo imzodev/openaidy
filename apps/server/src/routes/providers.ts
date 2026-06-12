@@ -568,6 +568,7 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
             stateStore: oauthStateStore,
             region: region as 'global' | 'cn',
             flowId,
+            ...(db ? { db: db as DatabaseClient } : {}),
           });
           if (!result.ok) {
             reply.code(result.error === 'mmx_not_installed' ? 503 : 500);

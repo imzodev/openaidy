@@ -102,10 +102,13 @@ describe('startMiniMaxOAuth', () => {
     expect(stored!.region).toBe('cn');
   });
 
-  it('returns a placeholder URL if mmx is slow to print user_code', async () => {
-    // user_code never resolves within 3s timeout
+  it('returns an empty URL if mmx fails to print user_code within the timeout', async () => {
+    // user_code rejects immediately to keep the test fast
+    // (the test would otherwise wait the full 30s timeout).
     const fakeHandle: MmxLoginHandle = {
-      userCode: new Promise<string>(() => undefined),
+      userCode: new Promise<string>((_, rej) => {
+        setImmediate(() => rej(new Error('mmx_slow')));
+      }),
       verificationUrl: new Promise<string>(() => undefined),
       done: new Promise<MiniMaxLoginResult>(() => undefined),
       cancel: vi.fn(),
@@ -119,6 +122,11 @@ describe('startMiniMaxOAuth', () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
+      // Empty URL — the frontend should NOT open a popup. Instead
+      // it polls /status and waits for the user_code to appear
+      // there (mmx is still alive in the background and will
+      // print the code eventually, which the state-store updater
+      // picks up).
       expect(result.verificationUrl).toBe('');
     }
   });

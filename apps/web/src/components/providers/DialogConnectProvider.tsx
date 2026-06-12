@@ -90,24 +90,20 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
         // 2. Poll the status endpoint every 2s. When mmx finishes
         //    (success or failure), the status flips to 'authorized'
         //    or 'failed' and the dialog closes.
+        //
+        // We do NOT open a popup from here: the `mmx` CLI (spawned
+        // by the server inside a PTY) opens its own browser tab
+        // using `client=MiniMax+CLI` (the only client id MiniMax
+        // recognises for device-code OAuth). If we opened our own
+        // popup with `client=OpenAidy`, MiniMax would reject it
+        // ("Missing required parameter: user_code") because that
+        // client id is not registered with MiniMax.
+        //
+        // We do, however, show the URL and the user_code in the
+        // dialog so the user has a fallback if the popup was
+        // blocked or dismissed.
+        // mmx opens its own browser tab; we just poll for status.
         const flowId = result.flowId;
-        const verificationUrl =
-          result.authorizationUrl ||
-          `https://platform.minimax.io/oauth-authorize?client=OpenAidy&flow=${flowId}`;
-
-        // 3. Open the verification URL in a popup so the user can
-        //    sign in to MiniMax there. We don't rely on the popup
-        //    posting back to us — we poll the status endpoint, which
-        //    works regardless of popup blockers.
-        const popup = window.open(
-          verificationUrl,
-          'oauth-minimax',
-          'width=600,height=700',
-        );
-        if (!popup) {
-          // Don't fail hard if the popup was blocked — the URL is
-          // still shown in the dialog and the user can copy it.
-        }
 
         // 4. Poll until authorized/failed or 10 min timeout.
         const startedAt = Date.now();

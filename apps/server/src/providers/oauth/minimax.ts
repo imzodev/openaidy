@@ -6,9 +6,9 @@ import {
   type MiniMaxLoginResult,
   type MiniMaxOAuthTokens,
   type SpawnMmxLoginOptions,
-} from './mmx-bridge';
+} from './mmx-bridge.js';
 import type { OAuthStateStore } from './state-store.js';
-
+import type { DatabaseClient } from '@openaidy/db';
 /**
  * MiniMax OAuth orchestration — backed by the official `mmx-cli` subprocess.
  *
@@ -52,6 +52,8 @@ export type StartMiniMaxOAuthInput = {
   flowId: string;
   /** Optional AbortSignal tied to the client disconnecting. */
   signal?: AbortSignal;
+  /** Database client used to persist the encrypted tokens on success. */
+  db?: DatabaseClient;
 };
 
 export type StartMiniMaxOAuthResult =
@@ -102,20 +104,23 @@ export async function startMiniMaxOAuth(
       ...(input.signal ? { signal: input.signal } : {}),
     });
 
-    // 4. Wire up the handle: when mmx resolves user_code, update the
-    //    state store so the route can return it; when mmx completes,
-    //    persist the tokens to provider_credentials and clean up state
+    // 4. Wire up the handle: when mmx resolves user_code, update
+    //    the state store so the /status polling endpoint can return
+    //    it; when mmx completes successfully, persist the tokens
+    //    to provider_credentials and clean up state.
     wireMmxHandleToFlow(handle, input);
 
-    // 5. Wait briefly for user_code so we can return a useful URL.
-    //    If mmx is slow to print, we still return ok with a placeholder
-    //    URL — the frontend will poll the route for the real one.
+    // 5. Wait for the user_code so we can return a useful URL.
+    //    In practice mmx prints the user_code within ~1s of being
+    //    spawned with a PTY, but we wait up to 30s to cover any
+    //    cold-start latency (e.g. mmx fetching the device-code
+    //    from MiniMax on first run).
     let verificationUrl = '';
     try {
       const code = await Promise.race([
         handle.userCode,
         new Promise<string>((_, rej) =>
-          setTimeout(() => rej(new Error('user_code_timeout')), 3_000),
+          setTimeout(() => rej(new Error('user_code_timeout')), 30_000),
         ),
       ]);
       verificationUrl = await handle.verificationUrl;
@@ -126,9 +131,21 @@ export async function startMiniMaxOAuth(
           ...stored,
           codeChallenge: code, // repurpose field to hold user_code
         });
+      } else {
+        // Defensive: this shouldn't happen — we just put the state
+        // row at the start of this function. If it does, log it
+        // and continue (the verificationUrl is still useful).
+        console.warn(
+          `startMiniMaxOAuth: state row missing for flowId=${input.flowId}`,
+        );
       }
     } catch {
-      // mmx didn't print user_code within 3s. Frontend will poll.
+      // mmx didn't print user_code within 30s. Return an empty
+      // verificationUrl. The frontend polls /status and will
+      // pick up the user_code from the state store when mmx
+      // eventually prints it (wireMmxHandleToFlow stores it in
+      // the background). mmx's own browser tab is already open
+      // and waits for the user independently.
     }
 
     return { ok: true, flowId: input.flowId, verificationUrl };
@@ -219,7 +236,7 @@ async function wireMmxHandleToFlow(
           const { getEncryptionService } =
             await import('../../lib/encryption.js');
           const credentialsRepo = new ProviderCredentialsRepository(
-            (input as unknown as { db: unknown }).db as never,
+            input.db as never,
           );
           const encryption = getEncryptionService();
           const encrypted = encryption.encrypt(

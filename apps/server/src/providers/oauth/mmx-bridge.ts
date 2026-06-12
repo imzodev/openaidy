@@ -123,6 +123,32 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
   let child: ChildProcess | null = null;
   let cancelled = false;
 
+  // Strip any stale api_key from the persistent mmx config file
+  // before spawning. `mmx` reads `~/.mmx/config.json` at startup
+  // and re-injects any api_key it finds there into its env —
+  // which would force non-interactive mode (just like a real
+  // env var would). We delete the api_key from the config so
+  // mmx enters the interactive (browser) flow.
+  try {
+    const configPath = MMX_CONFIG_PATH;
+    if (existsSync(configPath)) {
+      const raw = readFileSync(configPath, 'utf-8');
+      const parsed = JSON.parse(raw) as { api_key?: unknown };
+      if (parsed.api_key) {
+        delete parsed.api_key;
+        writeFile(configPath, JSON.stringify(parsed, null, 2), 'utf-8');
+        chmod(configPath, 0o600).catch(() => undefined);
+      }
+    }
+  } catch (err) {
+    // non-fatal: if we can't scrub the api_key, mmx may still
+    // launch in non-interactive mode. Log the error so it shows
+    // up in server logs.
+    console.error(
+      `spawnMmxLogin: failed to scrub api_key from mmx config: ${(err as Error).message}`,
+    );
+  }
+
   const done = new Promise<MiniMaxLoginResult>((resolve) => {
     const finish = (r: MiniMaxLoginResult) => {
       if (child && !child.killed) {
@@ -145,30 +171,46 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
       });
     });
 
-    // Spawn mmx with a pseudo-TTY (so it prints the URL + waits cleanly)
+    // Spawn `mmx auth login` inside a pseudo-TTY so it enters the
+    // interactive (browser) flow. Without a TTY, `mmx` forces
+    // non-interactive mode and demands `--api-key`, which defeats
+    // the whole purpose of OAuth.
+    //
+    // We use `script(1)` (util-linux) to provide the PTY. Its
+    // `-qec` flags silence the bash intro and run the command
+    // in-place, exiting when the command exits.
+    //
+    // Env handling: we strip any MiniMax-related env vars (which
+    // would also force non-interactive mode) and pass the rest
+    // of process.env through.
+    //
+    // We deliberately do NOT pass `--output json`. With that flag,
+    // `mmx` forces non-interactive mode and requires `--api-key`.
+    // Without it, `mmx` uses the interactive/browser flow and
+    // prints the user_code + verification URL on stdout.
     try {
+      const childEnv: NodeJS.ProcessEnv = { ...process.env };
+      // Strip MiniMax-related env vars (defense in depth — mmx
+      // forces non-interactive mode if it sees an API key in env).
+      delete childEnv['MINIMAX_API_KEY'];
+      delete childEnv['MMX_API_KEY'];
+      delete childEnv['MMX_OAUTH_TOKEN'];
+      delete childEnv['MINIMAX_OAUTH_TOKEN'];
+      // Diagnostic flag so we can verify the parent env didn't have it
+      childEnv['OPENAIDY_HAD_MINIMAX_API_KEY'] = process.env['MINIMAX_API_KEY']
+        ? 'yes'
+        : 'no';
+      // mmx reads MMX_CONFIG_DIR to find its config file
+      childEnv['MMX_CONFIG_DIR'] = MMX_CONFIG_DIR;
       child = spawn(
-        'mmx',
+        'script',
         [
-          'auth',
-          'login',
-          '--recommend',
-          `--region=${options.region}`,
-          '--output',
-          'json',
+          '-qec',
+          `mmx auth login --recommend --region=${options.region}`,
+          '/dev/null',
         ],
         {
-          // Force a pty so mmx's progress UI works
-          // (Node 22+ has a `terminal` option in child_process)
-          // We use the env-based fallback to keep compatibility.
-          env: {
-            ...process.env,
-            // mmx reads this to find its config dir; we set it so we know
-            // exactly where to look for the persisted tokens
-            MMX_CONFIG_DIR: MMX_CONFIG_DIR,
-            // Force mmx to print the user_code to stdout (machine-readable)
-            MMX_OUTPUT: 'json',
-          },
+          env: childEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
         },
       );
@@ -198,30 +240,49 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
 
     let stderrBuf = '';
     let stdoutBuf = '';
+    let userCodeResolved = false;
+
+    // mmx (running inside a PTY) prints to STDOUT, but it may
+    // also write to STDERR. We apply the same parser to both
+    // streams so we don't miss the user_code regardless of where
+    // mmx sends it.
+    //
+    // Pattern: `Opened: <url>` (the URL has user_code as a query
+    // param) or `Code: <code>` (just the bare code, fallback).
+    const tryParseUserCode = () => {
+      if (userCodeResolved) return;
+      const combined = stdoutBuf + '\n' + stderrBuf;
+      const urlMatch = combined.match(/Opened:\s+(https?:\S+)/);
+      let code: string | null = null;
+      if (urlMatch) {
+        try {
+          code = new URL(urlMatch[1]!).searchParams.get('user_code');
+        } catch {
+          // fall through
+        }
+      }
+      if (!code) {
+        const codeMatch = combined.match(/(?:^|\n)\s*Code:\s*([A-Z0-9-]+)/i);
+        const m = codeMatch?.[1];
+        if (m) code = m;
+      }
+      if (urlMatch && code) {
+        userCodeResolved = true;
+        const finalCode: string = code;
+        resolveUserCode(finalCode);
+      }
+    };
 
     child.stdout?.on('data', (chunk) => {
-      stdoutBuf += chunk.toString();
+      const s = chunk.toString();
+      stdoutBuf += s;
+      tryParseUserCode();
     });
 
     child.stderr?.on('data', (chunk) => {
       const s = chunk.toString();
       stderrBuf += s;
-
-      // mmx prints: "Opened: <url>" or "Code: <code>"
-      const urlMatch = s.match(/Opened:\s+(https?:\S+)/);
-      if (urlMatch) {
-        try {
-          const url = new URL(urlMatch[1]!);
-          const code =
-            url.searchParams.get('user_code') ??
-            stderrBuf.match(/Code:\s+([A-Z0-9-]+)/)?.[1];
-          if (code) {
-            resolveUserCode(code);
-          }
-        } catch {
-          // ignore parse errors; user_code will stay pending
-        }
-      }
+      tryParseUserCode();
     });
 
     child.on('error', (err) => {
