@@ -417,11 +417,20 @@ export async function buildApp() {
     authMiddleware,
   });
 
-  // Pass shared services to provider routes
+  // Pass shared services to provider routes. provider routes may
+  // optionally use the DB (for OAuth state + provider credentials);
+  // when the adapter isn't available, pass undefined and the routes
+  // skip the OAuth/connection endpoints.
   await app.register(providerRoutes, {
     services: services.providers,
     authMiddleware,
-    db: dbAdapter as unknown as import('@openaidy/db').DatabaseClient,
+    // dbAdapter.client is the raw drizzle instance (the only thing
+    // with .insert/.select/.update). At this point in app.ts
+    // dbAdapter has been instantiated (we'd have exited earlier if
+    // the DB couldn't be created). The cast to DatabaseClient is
+    // safe at runtime because client is the drizzle db, not the
+    // adapter envelope (which only has .repositories/.close/.kind).
+    db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
   });
 
   // Register agent routes

@@ -7,7 +7,8 @@ export type ProviderPresetId =
   | 'anthropic'
   | 'google'
   | 'groq'
-  | 'deepseek';
+  | 'deepseek'
+  | 'minimax';
 
 export type ModelPreset = {
   id: string;
@@ -177,6 +178,36 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         name: 'DeepSeek V4 Flash',
         description: 'Fast and affordable',
         contextWindow: 640000,
+      },
+    ],
+  },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://api.minimax.io/v1',
+    websiteUrl: 'https://platform.minimax.io',
+    documentationUrl: 'https://platform.minimax.io/docs',
+    recommendedModel: 'MiniMax-M2.7',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'MiniMax-M3',
+        name: 'MiniMax M3',
+        description: 'Latest, strong reasoning',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'MiniMax-M2.7',
+        name: 'MiniMax M2.7',
+        description: 'Fast reasoning model',
+        contextWindow: 204800,
+      },
+      {
+        id: 'MiniMax-M2.7-highspeed',
+        name: 'MiniMax M2.7 Highspeed',
+        description: 'Same as M2.7, faster',
+        contextWindow: 204800,
       },
     ],
   },

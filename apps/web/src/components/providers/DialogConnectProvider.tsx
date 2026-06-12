@@ -26,6 +26,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
   const [authMethod, setAuthMethod] = createSignal<'api_key' | 'oauth'>(
     'api_key',
   );
+  const [region, setRegion] = createSignal<'global' | 'cn'>('global');
   const [apiKey, setApiKey] = createSignal('');
   const [isConnecting, setIsConnecting] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -34,6 +35,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
   createEffect(() => {
     if (props.provider) {
       setAuthMethod('api_key');
+      setRegion('global');
       setApiKey('');
       setError(null);
     }
@@ -83,7 +85,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
 
         const result: OAuthStartResponse = await startProviderOAuth(preset.id, {
           redirectUri,
-          region: 'global',
+          region: region(),
         });
 
         if (!result.success || !result.authorizationUrl) {
@@ -258,6 +260,70 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                   placeholder={`Enter ${props.provider!.name} API key`}
                   class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400"
                 />
+              </div>
+            </Show>
+
+            {/* Region selector — only shown for providers that have
+                region-specific endpoints (currently just MiniMax). */}
+            <Show
+              when={
+                authMethod() === 'oauth' && props.provider!.id === 'minimax'
+              }
+            >
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Region
+                </label>
+                <div class="grid grid-cols-2 gap-2">
+                  <label
+                    class={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      region() === 'global'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="region"
+                      value="global"
+                      checked={region() === 'global'}
+                      onChange={() => setRegion('global')}
+                      class="text-primary"
+                    />
+                    <div>
+                      <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Global
+                      </div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        minimax.io
+                      </div>
+                    </div>
+                  </label>
+                  <label
+                    class={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      region() === 'cn'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="region"
+                      value="cn"
+                      checked={region() === 'cn'}
+                      onChange={() => setRegion('cn')}
+                      class="text-primary"
+                    />
+                    <div>
+                      <div class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        China
+                      </div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        minimaxi.com
+                      </div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </Show>
 
