@@ -11,6 +11,20 @@
 
 import { ProviderProfile, type ProviderProfileInput } from './types';
 
+// Static imports for built-in providers
+// Each module calls registry.register() at module level when imported
+import { DeepSeekProfile } from './deepseek/index';
+import { GroqProfile } from './groq/index';
+import { MiniMaxProfile } from './minimax/index';
+import { OpenRouterProfile } from './openrouter/index';
+
+const builtInProfiles: ProviderProfile[] = [
+  new DeepSeekProfile(),
+  new GroqProfile(),
+  new MiniMaxProfile(),
+  new OpenRouterProfile(),
+];
+
 export class ProviderRegistry {
   private _profiles = new Map<string, ProviderProfile>();
   private _aliases = new Map<string, string>();
@@ -80,30 +94,16 @@ export class ProviderRegistry {
   /**
    * Discover and register all built-in provider profiles.
    *
-   * Each built-in provider module calls `registry.register(profile)` at
-   * module level, so importing it registers the profile automatically.
-   *
-   * Uses @vite-ignore to suppress Vite's "Unknown variable dynamic import"
-   * warning when provider directories don't exist yet (they're added later).
+   * Built-in providers are statically imported above and registered here.
+   * User plugins can override built-in profiles by registering before
+   * calling list() or get(), or by calling reset() and re-registering.
    */
   private _discover(): void {
     this._discovered = true;
 
-    const builtInProviders = [
-      'deepseek',
-      'minimax',
-      'groq',
-      'openrouter',
-    ] as const;
-
-    for (const name of builtInProviders) {
-      try {
-        // @vite-ignore suppresses "Unknown variable dynamic import" for optional providers
-         
-        void import(/* @vite-ignore */ `./${name}/index.js`);
-      } catch {
-        // Provider directory doesn't exist or has no index — skip silently
-      }
+    // Register all built-in profiles
+    for (const profile of builtInProfiles) {
+      this.register(profile);
     }
   }
 

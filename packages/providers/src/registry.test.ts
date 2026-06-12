@@ -18,101 +18,109 @@ function makeProfile(
 }
 
 describe('ProviderRegistry', () => {
-  let registry: ProviderRegistry;
+  let localRegistry: ProviderRegistry;
 
   beforeEach(() => {
-    registry = new ProviderRegistry();
+    localRegistry = new ProviderRegistry();
   });
 
   describe('register()', () => {
     it('should register a profile and return this for chaining', () => {
       const profile = makeProfile('test-1', 'Test 1');
-      const result = registry.register(profile);
-      expect(registry.has('test-1')).toBe(true);
-      expect(result).toBe(registry);
+      const result = localRegistry.register(profile);
+      expect(localRegistry.has('test-1')).toBe(true);
+      expect(result).toBe(localRegistry);
     });
 
     it('should accept plain data object and convert to ProviderProfile', () => {
-      registry.register({ id: 'test', name: 'Test' });
-      expect(registry.get('test')).toBeInstanceOf(ProviderProfile);
+      localRegistry.register({ id: 'test', name: 'Test' });
+      expect(localRegistry.get('test')).toBeInstanceOf(ProviderProfile);
     });
 
     it('should overwrite existing profile with same id (last-write-wins)', () => {
-      registry.register(makeProfile('test', 'First'));
-      registry.register(makeProfile('test', 'Second'));
-      expect(registry.get('test')!.name).toBe('Second');
+      localRegistry.register(makeProfile('test', 'First'));
+      localRegistry.register(makeProfile('test', 'Second'));
+      expect(localRegistry.get('test')!.name).toBe('Second');
     });
 
     it('should register aliases mapping to the same id', () => {
-      registry.register(
+      localRegistry.register(
         makeProfile('deepseek', 'DeepSeek', { aliases: ['deepseek-chat'] }),
       );
-      expect(registry.get('deepseek')!.id).toBe('deepseek');
-      expect(registry.get('deepseek-chat')!.id).toBe('deepseek');
+      expect(localRegistry.get('deepseek')!.id).toBe('deepseek');
+      expect(localRegistry.get('deepseek-chat')!.id).toBe('deepseek');
     });
   });
 
   describe('unregister()', () => {
     it('should remove the profile and return true', () => {
-      registry.register(makeProfile('test', 'Test'));
-      const result = registry.unregister('test');
+      localRegistry.register(makeProfile('test', 'Test'));
+      const result = localRegistry.unregister('test');
       expect(result).toBe(true);
-      expect(registry.has('test')).toBe(false);
+      expect(localRegistry.has('test')).toBe(false);
     });
 
     it('should return false when id not found', () => {
-      expect(registry.unregister('nonexistent')).toBe(false);
+      expect(localRegistry.unregister('nonexistent')).toBe(false);
     });
   });
 
   describe('get()', () => {
     it('should return the registered profile by id', () => {
       const profile = makeProfile('test', 'Test');
-      registry.register(profile);
-      expect(registry.get('test')).toBe(profile);
+      localRegistry.register(profile);
+      expect(localRegistry.get('test')).toBe(profile);
     });
 
     it('should return undefined for unknown id', () => {
-      expect(registry.get('nonexistent')).toBeUndefined();
+      expect(localRegistry.get('nonexistent')).toBeUndefined();
     });
 
     it('should resolve alias to canonical id', () => {
-      registry.register(
+      localRegistry.register(
         makeProfile('deepseek', 'DeepSeek', { aliases: ['deepseek-chat'] }),
       );
-      expect(registry.get('deepseek-chat')?.id).toBe('deepseek');
+      expect(localRegistry.get('deepseek-chat')?.id).toBe('deepseek');
     });
   });
 
   describe('list()', () => {
-    it('should return empty array when nothing registered', () => {
-      expect(registry.list()).toEqual([]);
+    it('should return built-in providers on fresh registry', () => {
+      // A fresh registry should discover and return built-in providers
+      const ids = localRegistry.list().map((p) => p.id);
+      expect(ids).toContain('deepseek');
+      expect(ids).toContain('groq');
+      expect(ids).toContain('minimax');
+      expect(ids).toContain('openrouter');
     });
 
     it('should return all registered profiles', () => {
-      registry.register(makeProfile('a', 'A'));
-      registry.register(makeProfile('b', 'B'));
-      const ids = registry.list().map((p) => p.id);
-      expect(ids).toContain('a');
-      expect(ids).toContain('b');
+      // Register custom profiles on fresh registry
+      localRegistry.register(makeProfile('custom-a', 'Custom A'));
+      localRegistry.register(makeProfile('custom-b', 'Custom B'));
+      const ids = localRegistry.list().map((p) => p.id);
+      // Should contain both custom and built-in providers
+      expect(ids).toContain('custom-a');
+      expect(ids).toContain('custom-b');
+      expect(ids).toContain('deepseek');
     });
   });
 
   describe('has()', () => {
     it('should return true for registered id', () => {
-      registry.register(makeProfile('test', 'Test'));
-      expect(registry.has('test')).toBe(true);
+      localRegistry.register(makeProfile('test', 'Test'));
+      expect(localRegistry.has('test')).toBe(true);
     });
 
     it('should return true for registered alias', () => {
-      registry.register(
+      localRegistry.register(
         makeProfile('deepseek', 'DeepSeek', { aliases: ['deepseek-chat'] }),
       );
-      expect(registry.has('deepseek-chat')).toBe(true);
+      expect(localRegistry.has('deepseek-chat')).toBe(true);
     });
 
     it('should return false for unknown id', () => {
-      expect(registry.has('nonexistent')).toBe(false);
+      expect(localRegistry.has('nonexistent')).toBe(false);
     });
   });
 
@@ -120,16 +128,16 @@ describe('ProviderRegistry', () => {
     it('should not import provider modules until first get() or list()', () => {
       // At this point built-in providers don't exist yet, so discovery
       // will silently skip them — this just verifies it doesn't throw
-      const profiles = registry.list();
+      const profiles = localRegistry.list();
       expect(Array.isArray(profiles)).toBe(true);
     });
   });
 
   describe('reset()', () => {
     it('should clear all profiles and reset discovery flag', () => {
-      registry.register(makeProfile('test', 'Test'));
-      registry.reset();
-      expect(registry.has('test')).toBe(false);
+      localRegistry.register(makeProfile('test', 'Test'));
+      localRegistry.reset();
+      expect(localRegistry.has('test')).toBe(false);
     });
   });
 });

@@ -2,6 +2,7 @@ import { createSignal, Show, For } from 'solid-js';
 import { Settings2, Sparkles, X } from 'lucide-solid';
 import { PresetProviderCard } from '../PresetProviderCard';
 import { PresetProviderModal } from '../PresetProviderModal';
+import { DialogConnectProvider } from '../../providers/DialogConnectProvider';
 import {
   DynamicConfigForm,
   getProvidersSectionSchemaWithModels,
@@ -25,6 +26,8 @@ export function ProvidersTab(props: ProvidersTabProps) {
   const [selectedPreset, setSelectedPreset] =
     createSignal<ProviderPreset | null>(null);
   const [showCustomModal, setShowCustomModal] = createSignal(false);
+  const [connectingProvider, setConnectingProvider] =
+    createSignal<ProviderPreset | null>(null);
 
   const getCustomProviders = (): ProviderConfig[] => {
     return (
@@ -75,17 +78,26 @@ export function ProvidersTab(props: ProvidersTabProps) {
           <Sparkles class="w-4 h-4 text-primary" />
           <h3 class="text-sm font-medium text-text-primary">Ready Providers</h3>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-2">
           <For each={PROVIDER_PRESETS as ProviderPreset[]}>
             {(preset) => {
               const isConfigured = () =>
                 props.config()?.providers?.some((p) => p.id === preset.id) ??
                 false;
+              const handleSelect = () => {
+                if (isConfigured()) {
+                  // If configured, show the config modal
+                  setSelectedPreset(preset);
+                } else {
+                  // If not configured, show connection dialog
+                  setConnectingProvider(preset);
+                }
+              };
               return (
                 <PresetProviderCard
                   preset={preset}
                   isConfigured={isConfigured()}
-                  onSelect={() => setSelectedPreset(preset)}
+                  onSelect={handleSelect}
                 />
               );
             }}
@@ -174,6 +186,20 @@ export function ProvidersTab(props: ProvidersTabProps) {
           isPending={props.isPending}
         />
       </Show>
+
+      {/* Connect Provider Dialog */}
+      <DialogConnectProvider
+        provider={connectingProvider()}
+        onClose={() => setConnectingProvider(null)}
+        onConnected={(providerId, _authMethod) => {
+          setConnectingProvider(null);
+          // Find the preset and open the preset modal to configure
+          const preset = PROVIDER_PRESETS.find((p) => p.id === providerId);
+          if (preset) {
+            setSelectedPreset(preset);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -2,40 +2,50 @@
  * Providers List Command Handler
  *
  * Implements `openaidy providers list` command.
- * Calls GET /providers/connection via the HTTP REST API.
+ * Uses GET /config API to list configured providers.
  */
 
 import * as p from '@clack/prompts';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
+import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
-interface ProviderInfo {
-  id: string;
-  displayName: string;
-  description?: string;
-  availableAuthMethods: Array<{ type: string; label: string }>;
-  isConnected: boolean;
+interface AppConfig {
+  version: number;
+  defaults: {
+    providerId?: string;
+    modelId?: string;
+  };
+  providers: ProviderConfig[];
+  agents: unknown[];
 }
 
-interface ProvidersResponse {
-  providers: ProviderInfo[];
+interface ProviderConfig {
+  id: string;
+  name: string;
+  vendorFamily: string;
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  models: unknown[];
 }
 
 /**
- * Fetch providers from the server
+ * Fetch current config from server
  */
-async function fetchProviders(
+async function fetchConfig(
   token: string,
   httpUrl: string,
-): Promise<ProvidersResponse> {
-  const response = await fetch(`${httpUrl}/providers/connection`, {
+): Promise<{ config: AppConfig }> {
+  const response = await fetch(`${httpUrl}/config`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
   if (!response.ok) {
-    throw new Error(`Failed to fetch providers: ${response.statusText}`);
+    throw new Error(`Failed to fetch config: ${response.statusText}`);
   }
   return response.json();
 }
@@ -47,7 +57,7 @@ export async function providersListHandler(
     p.note(
       `Usage: openaidy providers list [options]
 
-List all available providers.
+List all available providers and their connection status.
 
 Options:
   --connected    Show only connected providers
@@ -79,15 +89,45 @@ Exit Codes:
   s.start('Fetching providers...');
 
   try {
-    const data = await fetchProviders(token.token, config.httpUrl);
+    const { config: currentConfig } = await fetchConfig(
+      token.token,
+      config.httpUrl,
+    );
+
     s.stop('Providers fetched');
 
-    // Filter providers based on flags
-    let providers = data.providers;
+    // Build list of all known providers with their status
+    const allProviders = PROVIDER_PRESETS.map((preset) => {
+      const configured = currentConfig.providers?.find(
+        (pr) => pr.id === preset.id && pr.apiKeyEnv,
+      );
+      return {
+        id: preset.id,
+        name: preset.name,
+        isConnected: !!configured?.apiKeyEnv,
+        hasConfig: !!configured,
+        baseUrl: preset.baseUrl,
+      };
+    });
+
+    // Add any custom providers not in presets
+    const customProviders = (currentConfig.providers || [])
+      .filter((pr) => !PROVIDER_PRESETS.find((preset) => preset.id === pr.id))
+      .map((pr) => ({
+        id: pr.id,
+        name: pr.name,
+        isConnected: !!pr.apiKeyEnv,
+        hasConfig: true,
+        baseUrl: pr.baseUrl || 'N/A',
+      }));
+
+    let providers = [...allProviders, ...customProviders];
+
+    // Filter based on flags
     if (showConnected) {
-      providers = providers.filter((p) => p.isConnected);
+      providers = providers.filter((pr) => pr.isConnected);
     } else if (showDisconnected) {
-      providers = providers.filter((p) => !p.isConnected);
+      providers = providers.filter((pr) => !pr.isConnected);
     }
 
     if (providers.length === 0) {
@@ -99,18 +139,19 @@ Exit Codes:
     p.log.info('\nAvailable Providers:\n');
 
     const rows: string[] = [];
-    rows.push(['ID', 'Name', 'Auth Methods', 'Status'].join(' | '));
-    rows.push(['---', '---', '---', '---'].join(' | '));
+    rows.push(['ID', 'Name', 'Status'].join(' | '));
+    rows.push(['---', '---', '---'].join(' | '));
 
     for (const provider of providers) {
-      const authMethods =
-        provider.availableAuthMethods.map((m) => m.type).join(', ') || 'none';
-      const status = provider.isConnected ? '✓ Connected' : '○ Not connected';
+      const status = provider.isConnected
+        ? '✓ Connected'
+        : provider.hasConfig
+          ? '○ Configured (no key)'
+          : '○ Not configured';
       rows.push(
         [
           provider.id.substring(0, 12),
-          (provider.displayName || provider.id).substring(0, 18),
-          authMethods.substring(0, 15),
+          (provider.name || provider.id).substring(0, 18),
           status,
         ].join(' | '),
       );

@@ -46,7 +46,3 @@ export class GroqProfile extends ProviderProfile {
     });
   }
 }
-
-import { registry } from '../registry';
-
-registry.register(new GroqProfile());

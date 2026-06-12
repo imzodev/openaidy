@@ -156,9 +156,3 @@ function resolveEffortToBudget(effort: string): number {
       return 4096;
   }
 }
-
-// ── Register ───────────────────────────────────────────────────────────────────
-
-import { registry } from '../registry';
-
-registry.register(new DeepSeekProfile());

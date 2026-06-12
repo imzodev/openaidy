@@ -2,42 +2,79 @@
  * Providers Connect Command Handler
  *
  * Implements `openaidy providers connect` command.
- * Calls POST /providers/:id/connect/api-key via the HTTP REST API.
+ * Uses GET/PUT /config API to store provider API keys in app config.
  */
 
 import * as p from '@clack/prompts';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
+import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
-interface ConnectResponse {
-  success: boolean;
-  error?: string;
+interface AppConfig {
+  version: number;
+  defaults: {
+    providerId?: string;
+    modelId?: string;
+  };
+  providers: ProviderConfig[];
+  agents: unknown[];
+}
+
+interface ProviderConfig {
+  id: string;
+  name: string;
+  vendorFamily: string;
+  enabled?: boolean;
+  baseUrl?: string;
+  apiKeyEnv?: string;
+  defaultModel?: string;
+  models: unknown[];
+}
+
+/**
+ * Fetch current config from server
+ */
+async function fetchConfig(
+  token: string,
+  httpUrl: string,
+): Promise<{ config: AppConfig }> {
+  const response = await fetch(`${httpUrl}/config`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch config: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Update config on server
+ */
+async function updateConfig(
+  config: AppConfig,
+  token: string,
+  httpUrl: string,
+): Promise<{ config: AppConfig }> {
+  const response = await fetch(`${httpUrl}/config`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update config: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 /**
  * Connect to a provider with API key
  */
-async function connectProvider(
-  providerId: string,
-  apiKey: string,
-  token: string,
-  httpUrl: string,
-): Promise<ConnectResponse> {
-  const response = await fetch(
-    `${httpUrl}/providers/${providerId}/connect/api-key`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ apiKey }),
-    },
-  );
-  return response.json();
-}
-
 export async function providersConnectHandler(
   args: string[],
 ): Promise<CommandResult> {
@@ -48,7 +85,7 @@ export async function providersConnectHandler(
 Connect to a provider using an API key.
 
 Arguments:
-  provider-id    The provider to connect to (e.g., openai, anthropic, deepseek)
+  provider-id    The provider to connect to (e.g., openai, anthropic, groq, deepseek)
 
 Options:
   --api-key <key>  Your API key for the provider
@@ -75,6 +112,16 @@ Exit Codes:
     return { exitCode: 1, error: 'Provider ID is required' };
   }
 
+  // Validate provider ID against presets
+  const preset = PROVIDER_PRESETS.find((pr) => pr.id === providerId);
+  if (!preset) {
+    p.log.error(`Unknown provider: ${providerId}`);
+    p.log.info(
+      `Available providers: ${PROVIDER_PRESETS.map((pr) => pr.id).join(', ')}`,
+    );
+    return { exitCode: 1, error: `Unknown provider: ${providerId}` };
+  }
+
   // Get API key from --api-key argument
   const apiKeyIndex = args.indexOf('--api-key');
   let apiKey: string | undefined;
@@ -85,13 +132,13 @@ Exit Codes:
 
   // Try to get from environment variable
   if (!apiKey) {
-    apiKey = process.env.OPENAIFY_PROVIDER_API_KEY;
+    apiKey = process.env.OPENAIDY_PROVIDER_API_KEY;
   }
 
   if (!apiKey) {
     p.log.error('API key is required.');
     p.log.info(
-      'Provide it via --api-key argument or OPENAIFY_PROVIDER_API_KEY env var',
+      'Provide it via --api-key argument or OPENAIDY_PROVIDER_API_KEY env var',
     );
     return { exitCode: 1, error: 'API key is required' };
   }
@@ -107,22 +154,49 @@ Exit Codes:
   s.start(`Connecting to ${providerId}...`);
 
   try {
-    const result = await connectProvider(
-      providerId,
-      apiKey,
+    // Fetch current config
+    const { config: currentConfig } = await fetchConfig(
       token.token,
       config.httpUrl,
     );
 
-    if (result.success) {
-      s.stop(`Connected to ${providerId}`);
-      p.log.success(`✓ Successfully connected to ${providerId}`);
-      return { exitCode: 0 };
+    // Find or create provider entry
+    const providers = [...(currentConfig.providers || [])];
+    const existingIndex = providers.findIndex((pr) => pr.id === providerId);
+
+    const providerEntry: ProviderConfig = {
+      id: providerId,
+      name: preset.name,
+      vendorFamily: preset.vendorFamily,
+      enabled: true,
+      baseUrl: preset.baseUrl,
+      apiKeyEnv: apiKey, // Store API key directly (misnamed as apiKeyEnv)
+      defaultModel: preset.recommendedModel,
+      models: preset.models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        contextWindow: m.contextWindow,
+      })),
+    };
+
+    if (existingIndex !== -1) {
+      providers[existingIndex] = providerEntry;
     } else {
-      s.stop(`Failed to connect to ${providerId}`);
-      p.log.error(`✗ Failed to connect: ${result.error || 'Unknown error'}`);
-      return { exitCode: 1, error: result.error };
+      providers.push(providerEntry);
     }
+
+    // Update config
+    const updatedConfig: AppConfig = {
+      ...currentConfig,
+      providers,
+    };
+
+    await updateConfig(updatedConfig, token.token, config.httpUrl);
+
+    s.stop(`Connected to ${providerId}`);
+    p.log.success(`✓ Successfully connected to ${providerId}`);
+    return { exitCode: 0 };
   } catch (error) {
     s.stop(`Failed to connect to ${providerId}`);
     const message = error instanceof Error ? error.message : 'Unknown error';

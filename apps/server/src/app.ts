@@ -421,6 +421,7 @@ export async function buildApp() {
   await app.register(providerRoutes, {
     services: services.providers,
     authMiddleware,
+    db: dbAdapter as unknown as import('@openaidy/db').DatabaseClient,
   });
 
   // Register agent routes

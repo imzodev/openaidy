@@ -72,7 +72,3 @@ export class MiniMaxProfile extends ProviderProfile {
     return stripThinkingBlocks(text);
   }
 }
-
-import { registry } from '../registry';
-
-registry.register(new MiniMaxProfile());
