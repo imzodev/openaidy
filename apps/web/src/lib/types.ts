@@ -360,6 +360,26 @@ export type AppConfig = {
 };
 
 /**
+ * Per-agent notice shown when the agent's `model` field was
+ * rewritten to the project default because the provider it pointed
+ * at was disconnected. The notice stays visible until the user
+ * edits the agent or explicitly dismisses it, so the user always
+ * understands *why* the model value changed.
+ */
+export type RewiredAgentNotice = {
+  /** The agent whose `model` was auto-rewired. */
+  agentId: string;
+  /** The provider that was disconnected, for context in the UI. */
+  fromProviderId: string;
+  /** The model value the agent used before the rewire. */
+  fromModel: string;
+  /** The model value the agent was re-pointed to. */
+  toModel: string;
+  /** ISO timestamp of the rewire, for ordering / debugging. */
+  rewiredAt: string;
+};
+
+/**
  * Configuration issue
  */
 export type ConfigIssue = {

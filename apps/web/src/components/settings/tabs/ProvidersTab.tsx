@@ -7,8 +7,13 @@ import {
   DynamicConfigForm,
   getProvidersSectionSchemaWithModels,
 } from '../../../config';
-import { CollapsibleCard } from '../../ui';
-import type { AppConfig, ProviderConfig } from '../../../lib/api';
+import { CollapsibleCard, ConfirmDialog } from '../../ui';
+import {
+  disconnectProvider,
+  type AppConfig,
+  type ProviderConfig,
+  type RewiredAgentNotice,
+} from '../../../lib/api';
 import type { ProviderPreset, ProviderPresetId } from '@openaidy/shared-types';
 import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
@@ -20,6 +25,21 @@ interface ProvidersTabProps {
   onAddProvider: (provider: ProviderConfig) => void;
   onDeleteProvider: (providerId: string) => void;
   onUpdateProvider: (providerId: string, provider: ProviderConfig) => void;
+  /**
+   * Persist an arbitrary `AppConfig`. Used by the disconnect flow,
+   * which has to rewire affected agents in the same write so the
+   * server-side config schema (which rejects an agent that points
+   * at a non-existent provider) accepts the change.
+   */
+  onSaveConfig: (newConfig: AppConfig) => Promise<unknown>;
+  /**
+   * Called after a successful disconnect with one notice per
+   * agent that was auto-rewired to the project default model.
+   * The parent (SettingsView) surfaces these as per-agent banners
+   * in the Agents tab so the user can see *why* the model value
+   * changed.
+   */
+  onAgentsRewired: (notices: RewiredAgentNotice[]) => void;
 }
 
 export function ProvidersTab(props: ProvidersTabProps) {
@@ -28,6 +48,14 @@ export function ProvidersTab(props: ProvidersTabProps) {
   const [showCustomModal, setShowCustomModal] = createSignal(false);
   const [connectingProvider, setConnectingProvider] =
     createSignal<ProviderPreset | null>(null);
+  // When set, the ConfirmDialog is shown. The card icon and the
+  // modal footer link both flow into this single state.
+  const [disconnectTarget, setDisconnectTarget] =
+    createSignal<ProviderPreset | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = createSignal(false);
+  const [disconnectError, setDisconnectError] = createSignal<string | null>(
+    null,
+  );
 
   const getCustomProviders = (): ProviderConfig[] => {
     return (
@@ -51,6 +79,130 @@ export function ProvidersTab(props: ProvidersTabProps) {
       props.onAddProvider(provider);
     }
     setSelectedPreset(null);
+  };
+
+  // Request to disconnect — opens the confirmation dialog. Wired
+  // from both the inline card icon and the "Disconnect" link in
+  // the management modal's footer so there's one chokepoint.
+  const requestDisconnect = (preset: ProviderPreset) => {
+    setDisconnectError(null);
+    setDisconnectTarget(preset);
+    // Close the management modal if it's open, so the user isn't
+    // looking at a stale "configured" state behind the confirm.
+    setSelectedPreset(null);
+  };
+
+  // ── Disconnect impact analysis ─────────────────────────────────
+  //
+  // Removing a provider breaks every agent whose `model` field
+  // references it ("<providerId>/<modelId>"). The server-side
+  // config schema rejects such a state, so we have to rewire the
+  // affected agents in the same write that removes the provider.
+  // We also need to flag the cases where the user can't disconnect
+  // at all: when the target is the project default provider, or
+  // when it would leave the config with zero enabled providers.
+
+  type DisconnectImpact = {
+    /** Agents that need to be re-pointed at the project default. */
+    affectedAgents: { id: string; name: string }[];
+    /** True when this provider is the project default. */
+    isDefaultProvider: boolean;
+    /** True when removing this provider would leave no enabled providers. */
+    isLastEnabledProvider: boolean;
+  };
+
+  const computeDisconnectImpact = (targetId: string): DisconnectImpact => {
+    const cfg = props.config();
+    const affectedAgents =
+      cfg?.agents
+        .filter((a) => a.model.split('/')[0] === targetId)
+        .map((a) => ({ id: a.id, name: a.name })) ?? [];
+    const isDefaultProvider = cfg?.defaults.providerId === targetId;
+    const isLastEnabledProvider =
+      cfg?.providers.filter((p) => p.id !== targetId && p.enabled).length === 0;
+    return { affectedAgents, isDefaultProvider, isLastEnabledProvider };
+  };
+
+  // Build a new AppConfig with the target provider removed and all
+  // affected agents re-pointed at the project default. Returns
+  // `null` when the impact analysis says the user must change the
+  // default provider first (in which case `canDisconnect` is the
+  // source of truth for the UI).
+  const buildRewiredConfig = (targetId: string): AppConfig | null => {
+    const cfg = props.config();
+    if (!cfg) return null;
+    const impact = computeDisconnectImpact(targetId);
+    if (impact.isDefaultProvider || impact.isLastEnabledProvider) {
+      return null;
+    }
+    const fallbackModel = `${cfg.defaults.providerId}/${cfg.defaults.modelId}`;
+    return {
+      ...cfg,
+      providers: cfg.providers.filter((p) => p.id !== targetId),
+      agents: cfg.agents.map((a) =>
+        a.model.split('/')[0] === targetId ? { ...a, model: fallbackModel } : a,
+      ),
+    } as AppConfig;
+  };
+
+  // Can the user disconnect this provider at all? Drives the
+  // confirm button's disabled state.
+  const canDisconnect = (targetId: string): boolean => {
+    const impact = computeDisconnectImpact(targetId);
+    return !impact.isDefaultProvider && !impact.isLastEnabledProvider;
+  };
+
+  // Confirmed disconnect — order matters:
+  //   1. Persist the rewired config (with provider removed and
+  //      affected agents re-pointed at the project default) so the
+  //      server-side schema accepts the write.
+  //   2. Clear the encrypted credential server-side. The OpenAI-
+  //      compatible adapter's in-memory cache is invalidated by the
+  //      repository's `onChange` hook on the credential write.
+  //   3. Emit one RewiredAgentNotice per affected agent so the
+  //      Agents tab can flag the change for the user.
+  const confirmDisconnect = async () => {
+    const target = disconnectTarget();
+    if (!target) return;
+    if (!canDisconnect(target.id)) {
+      setDisconnectError(
+        'Set another provider as the project default before disconnecting this one.',
+      );
+      return;
+    }
+    const cfg = props.config();
+    const rewired = buildRewiredConfig(target.id);
+    if (!rewired || !cfg) return;
+
+    // Snapshot the pre-rewire model per agent before the new
+    // config is persisted, so the notice can say "this used to be
+    // X, now it's Y" instead of just "the model changed".
+    const fallbackModel = `${cfg.defaults.providerId}/${cfg.defaults.modelId}`;
+    const rewiredAgents = cfg.agents.filter(
+      (a) => a.model.split('/')[0] === target.id,
+    );
+    const notices: RewiredAgentNotice[] = rewiredAgents.map((a) => ({
+      agentId: a.id,
+      fromProviderId: target.id,
+      fromModel: a.model,
+      toModel: fallbackModel,
+      rewiredAt: new Date().toISOString(),
+    }));
+
+    setIsDisconnecting(true);
+    setDisconnectError(null);
+    try {
+      await props.onSaveConfig(rewired);
+      await disconnectProvider(target.id);
+      props.onAgentsRewired(notices);
+      setDisconnectTarget(null);
+    } catch (err) {
+      setDisconnectError(
+        err instanceof Error ? err.message : 'Failed to disconnect',
+      );
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   return (
@@ -84,6 +236,8 @@ export function ProvidersTab(props: ProvidersTabProps) {
               const isConfigured = () =>
                 props.config()?.providers?.some((p) => p.id === preset.id) ??
                 false;
+              const isThisDisconnecting = () =>
+                isDisconnecting() && disconnectTarget()?.id === preset.id;
               const handleSelect = () => {
                 if (isConfigured()) {
                   // If configured, show the config modal
@@ -98,6 +252,8 @@ export function ProvidersTab(props: ProvidersTabProps) {
                   preset={preset}
                   isConfigured={isConfigured()}
                   onSelect={handleSelect}
+                  onDisconnect={requestDisconnect}
+                  isDisconnectPending={isThisDisconnecting()}
                 />
               );
             }}
@@ -171,9 +327,91 @@ export function ProvidersTab(props: ProvidersTabProps) {
           }
           onClose={() => setSelectedPreset(null)}
           onSave={handleSavePreset}
+          onDisconnect={requestDisconnect}
           isPending={props.isPending}
         />
       </Show>
+
+      {/* Disconnect confirmation — single chokepoint for both the
+          card icon and the modal footer link. */}
+      <ConfirmDialog
+        isOpen={disconnectTarget() !== null}
+        title={
+          disconnectTarget()
+            ? `Disconnect from ${disconnectTarget()!.name}?`
+            : ''
+        }
+        tone="danger"
+        confirmLabel="Disconnect"
+        isPending={isDisconnecting()}
+        confirmDisabled={
+          !!disconnectTarget() && !canDisconnect(disconnectTarget()!.id)
+        }
+        onConfirm={confirmDisconnect}
+        onCancel={() => {
+          if (!isDisconnecting()) setDisconnectTarget(null);
+        }}
+        body={
+          <Show when={disconnectTarget()} keyed>
+            {(target) => {
+              const impact = computeDisconnectImpact(target.id);
+              return (
+                <div class="space-y-2">
+                  <p>
+                    This will sign you out of {target.name} and remove the
+                    provider from your configuration.
+                  </p>
+                  <Show when={impact.affectedAgents.length > 0}>
+                    <div class="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2 text-xs text-amber-800 dark:text-amber-200">
+                      <p class="font-medium">
+                        {impact.affectedAgents.length === 1
+                          ? '1 agent uses this provider'
+                          : `${impact.affectedAgents.length} agents use this provider`}
+                        :
+                      </p>
+                      <ul class="mt-1 list-disc list-inside">
+                        <For each={impact.affectedAgents}>
+                          {(a) => <li>{a.name}</li>}
+                        </For>
+                      </ul>
+                      <p class="mt-1">
+                        They will be re-pointed at the project default model (
+                        <code class="font-mono">
+                          {props.config()?.defaults.providerId}/
+                          {props.config()?.defaults.modelId}
+                        </code>
+                        ).
+                      </p>
+                    </div>
+                  </Show>
+                  <Show when={impact.isDefaultProvider}>
+                    <div class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
+                      This provider is your project default. Set another
+                      provider as default in the Configuration defaults before
+                      disconnecting.
+                    </div>
+                  </Show>
+                  <Show when={impact.isLastEnabledProvider}>
+                    <div class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
+                      This is the only enabled provider. Enable another provider
+                      first or the configuration would be left with no usable
+                      model.
+                    </div>
+                  </Show>
+                  <Show when={disconnectError()}>
+                    <p class="text-red-600 dark:text-red-400 text-xs">
+                      {disconnectError()}
+                    </p>
+                  </Show>
+                  <p class="text-xs text-text-tertiary">
+                    You can reconnect at any time.
+                  </p>
+                </div>
+              );
+            }}
+          </Show>
+        }
+      />
 
       {/* Custom Provider Modal */}
       <Show when={showCustomModal()}>

@@ -1,16 +1,9 @@
 import { createSignal, For, Show } from 'solid-js';
 import { X, Plus, Trash2 } from 'lucide-solid';
-import type { ProviderPreset, ModelPreset } from '@openaidy/shared-types';
+import type { ModelPreset } from '@openaidy/shared-types';
 import type { ProviderConfig } from '../../lib/api';
 import { ModelSelector } from './ModelSelector';
-
-interface PresetProviderModalProps {
-  preset: ProviderPreset;
-  existingProvider?: ProviderConfig;
-  onClose: () => void;
-  onSave: (provider: ProviderConfig) => void;
-  isPending: boolean;
-}
+import type { PresetProviderModalProps } from './PresetProviderModal.types';
 
 export function PresetProviderModal(props: PresetProviderModalProps) {
   const [selectedModelId, setSelectedModelId] = createSignal(
@@ -181,20 +174,32 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
           </Show>
         </div>
 
-        <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
-          <button
-            onClick={() => props.onClose()}
-            class="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={props.isPending}
-            class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            {props.isPending ? 'Saving...' : 'Save'}
-          </button>
+        <div class="flex items-center justify-between gap-3 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
+          <Show when={props.existingProvider && props.onDisconnect}>
+            <button
+              type="button"
+              onClick={() => props.onDisconnect?.(props.preset)}
+              disabled={props.isPending}
+              class="px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Disconnect
+            </button>
+          </Show>
+          <div class="flex items-center gap-3 ml-auto">
+            <button
+              onClick={() => props.onClose()}
+              class="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={props.isPending}
+              class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {props.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

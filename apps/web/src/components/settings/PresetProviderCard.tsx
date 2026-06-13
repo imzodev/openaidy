@@ -1,19 +1,31 @@
 import { Show } from 'solid-js';
-import { Check, Settings2 } from 'lucide-solid';
-import type { ProviderPreset } from '@openaidy/shared-types';
+import { Check, Settings2, Unplug } from 'lucide-solid';
 import 'bootstrap-icons/font/bootstrap-icons.css';
-
-interface PresetProviderCardProps {
-  preset: ProviderPreset;
-  isConfigured: boolean;
-  onSelect: (preset: ProviderPreset) => void;
-}
+import type { PresetProviderCardProps } from './PresetProviderCard.types';
 
 export function PresetProviderCard(props: PresetProviderCardProps) {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      props.onSelect(props.preset);
+    }
+  };
+
+  const handleDisconnectClick = (e: MouseEvent) => {
+    // Stop the parent button from also receiving the click and
+    // opening the management modal.
+    e.stopPropagation();
+    props.onDisconnect?.(props.preset);
+  };
+
   return (
-    <button
+    <div
+      role="button"
+      tabindex="0"
+      aria-label={`${props.isConfigured ? 'Manage' : 'Add'} ${props.preset.name}`}
       onClick={() => props.onSelect(props.preset)}
-      class={`group relative flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 ${
+      onKeyDown={handleKeyDown}
+      class={`group relative flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
         props.isConfigured
           ? 'border-primary/40 bg-primary/[0.03] dark:bg-primary/[0.05] hover:border-primary/60 hover:bg-primary/[0.06]'
           : 'border-gray-200 dark:border-gray-700 hover:border-primary/40 hover:bg-gray-50/50 dark:hover:bg-gray-800/30'
@@ -60,6 +72,22 @@ export function PresetProviderCard(props: PresetProviderCardProps) {
           <Settings2 class="w-3.5 h-3.5" />
         </Show>
       </div>
-    </button>
+
+      {/* Inline disconnect shortcut — only when configured AND a
+          callback is provided. Lives in the top-right corner so it
+          doesn't compete with the main click target. */}
+      <Show when={props.isConfigured && props.onDisconnect}>
+        <button
+          type="button"
+          onClick={handleDisconnectClick}
+          disabled={props.isDisconnectPending}
+          title="Disconnect"
+          aria-label={`Disconnect ${props.preset.name}`}
+          class="absolute top-1.5 right-1.5 p-1 rounded text-text-tertiary hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100 focus:opacity-100"
+        >
+          <Unplug class="w-3.5 h-3.5" />
+        </button>
+      </Show>
+    </div>
   );
 }

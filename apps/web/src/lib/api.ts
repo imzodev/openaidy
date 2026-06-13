@@ -34,6 +34,7 @@ export type {
   AppConfig,
   ConfigIssue,
   ConfigStatus,
+  RewiredAgentNotice,
   WorkspaceFileInfo,
   WorkspaceFileListResponse,
   WorkspaceFileContentResponse,
@@ -1180,12 +1181,16 @@ export async function startProviderOAuth(
 
 /**
  * Disconnect a provider.
+ *
+ * Clears the encrypted credential row server-side (DELETE
+ * /providers/:providerId/connection). Throws on non-2xx so callers
+ * can use a try/catch for the error path. Use `useQueryClient`'s
+ * `invalidateQueries({ queryKey: ['config'] })` afterwards to
+ * refresh any UI that reads `AppConfig.providers[]`.
  */
-export async function disconnectProvider(
-  providerId: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function disconnectProvider(providerId: string): Promise<void> {
   const res = await apiFetch(`${API_BASE}/providers/${providerId}/connection`, {
     method: 'DELETE',
   });
-  return res.json();
+  if (!res.ok) throw new Error(`disconnectProvider: ${res.status}`);
 }
