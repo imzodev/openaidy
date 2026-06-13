@@ -8,6 +8,8 @@
 
 import { z } from 'zod';
 
+import type { ProviderPreset } from '@openaidy/shared-types';
+
 import type {
   BuildRequestHook,
   OnStreamChunkHook,
@@ -96,6 +98,33 @@ export type ProviderProfileData = z.infer<typeof providerProfileSchema>;
 /** Input type — same as ProviderProfileData but all fields optional with schema defaults */
 export type ProviderProfileInput = z.input<typeof providerProfileSchema>;
 
+/**
+ * Profile-specific fields that aren't already on the shared
+ * `ProviderPreset` entry. Profile classes pass these alongside the
+ * preset to `ProviderProfile.fromPreset()` to build the final
+ * `ProviderProfileInput`. Keeps `PROVIDER_PRESETS` (in
+ * `@openaidy/shared-types`) as the single source of truth for
+ * provider identity, base URL, and model list, while letting each
+ * profile add its own auth-method quirks (e.g. Anthropic's
+ * `x-api-key` validation, custom `defaultHeaders`).
+ */
+export type ProviderProfileExtras = {
+  /**
+   * Override the `apiMode` derived from `preset.vendorFamily`.
+   * Defaults:
+   * - `'openai-compatible'` → `'openai-compatible'`
+   * - `'anthropic'`         → `'anthropic-messages'`
+   * - `'gemini'`            → `'gemini'`
+   */
+  apiMode?: 'openai-compatible' | 'anthropic-messages' | 'gemini' | 'custom';
+  /** Additional canonical-id aliases (e.g. `'gemini'` for `'google'`). */
+  aliases?: readonly string[];
+  /** Signup URL shown in connection dialogs. */
+  signupUrl?: string;
+  /** Default request headers merged into every outgoing chat call. */
+  defaultHeaders?: Record<string, string>;
+};
+
 // ── ProviderProfile class ─────────────────────────────────────────────────────
 
 /**
@@ -178,6 +207,62 @@ export class ProviderProfile {
 
   static create(data: ProviderProfileInput): ProviderProfile {
     return new ProviderProfile(data);
+  }
+
+  /**
+   * Build a `ProviderProfileInput` from a `ProviderPreset` entry plus
+   * profile-specific extras. The resulting object is ready to pass
+   * to `super(...)` in a `ProviderProfile` subclass. Every field
+   * that the preset already has (`id`, `name`, `baseUrl`, models,
+   * `defaultModel`) is taken from there — profile classes don't
+   * duplicate that data.
+   */
+  static fromPreset(
+    preset: ProviderPreset,
+    extras: ProviderProfileExtras = {},
+  ): ProviderProfileInput {
+    const apiMode =
+      extras.apiMode ??
+      (preset.vendorFamily === 'anthropic'
+        ? 'anthropic-messages'
+        : preset.vendorFamily === 'gemini'
+          ? 'gemini'
+          : 'openai-compatible');
+
+    return {
+      id: preset.id,
+      name: preset.name,
+      baseUrl: preset.baseUrl,
+      apiMode,
+      vendorFamily: preset.vendorFamily,
+      defaultModel: preset.recommendedModel,
+      displayName: preset.name,
+      description: `Provider preset for ${preset.name}`,
+      signupUrl: extras.signupUrl,
+      aliases: extras.aliases ? [...extras.aliases] : [],
+      defaultHeaders: extras.defaultHeaders ?? {},
+      models: preset.models.map((m) => {
+        const out: {
+          id: string;
+          name: string;
+          capabilities: (
+            | 'text_generation'
+            | 'streaming'
+            | 'tool_calls'
+            | 'vision'
+          )[];
+          contextWindow?: number;
+        } = {
+          id: m.id,
+          name: m.name,
+          capabilities: ['text_generation', 'streaming', 'tool_calls'],
+        };
+        if (m.contextWindow !== undefined) {
+          out.contextWindow = m.contextWindow;
+        }
+        return out;
+      }),
+    };
   }
 
   // ── Hook accessors ──────────────────────────────────────────────────────────

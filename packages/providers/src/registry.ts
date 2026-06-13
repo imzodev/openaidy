@@ -2,7 +2,8 @@
  * Provider Registry
  *
  * Manages ProviderProfile instances with lazy discovery of built-in
- * provider profiles from ./deepseek/, ./minimax/, ./groq/, ./openrouter/.
+ * provider profiles from ./deepseek/, ./minimax/, ./groq/, ./openrouter/,
+ * ./openai/, ./anthropic/, ./google/.
  *
  * User plugins can override built-in profiles by registering a profile
  * with the same id before the lazy discovery runs (or by calling reset()
@@ -13,15 +14,21 @@ import { ProviderProfile, type ProviderProfileInput } from './types';
 
 // Static imports for built-in providers
 // Each module calls registry.register() at module level when imported
+import { AnthropicProfile } from './anthropic/index';
 import { DeepSeekProfile } from './deepseek/index';
+import { GoogleProfile } from './google/index';
 import { GroqProfile } from './groq/index';
 import { MiniMaxProfile } from './minimax/index';
+import { OpenAIProfile } from './openai/index';
 import { OpenRouterProfile } from './openrouter/index';
 
 const builtInProfiles: ProviderProfile[] = [
+  new AnthropicProfile(),
   new DeepSeekProfile(),
+  new GoogleProfile(),
   new GroqProfile(),
   new MiniMaxProfile(),
+  new OpenAIProfile(),
   new OpenRouterProfile(),
 ];
 
