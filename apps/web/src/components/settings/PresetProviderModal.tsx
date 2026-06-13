@@ -2,7 +2,6 @@ import { createSignal, For, Show } from 'solid-js';
 import { X, Plus, Trash2 } from 'lucide-solid';
 import type { ProviderPreset, ModelPreset } from '@openaidy/shared-types';
 import type { ProviderConfig } from '../../lib/api';
-import { ApiKeyInput } from './ApiKeyInput';
 import { ModelSelector } from './ModelSelector';
 
 interface PresetProviderModalProps {
@@ -14,9 +13,6 @@ interface PresetProviderModalProps {
 }
 
 export function PresetProviderModal(props: PresetProviderModalProps) {
-  const [apiKey, setApiKey] = createSignal(
-    props.existingProvider?.apiKeyEnv || '',
-  );
   const [selectedModelId, setSelectedModelId] = createSignal(
     props.existingProvider?.models?.[0]?.id || props.preset.recommendedModel,
   );
@@ -58,8 +54,6 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
   };
 
   const handleSave = () => {
-    if (!apiKey()) return;
-
     const selectedPresetModel = props.preset.models.find(
       (m) => m.id === selectedModelId(),
     );
@@ -89,7 +83,7 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
       vendorFamily: props.preset.vendorFamily,
       enabled: true,
       baseUrl: props.preset.baseUrl,
-      apiKeyEnv: apiKey(),
+      apiKeyEnv: props.existingProvider?.apiKeyEnv,
       models,
     };
 
@@ -116,17 +110,6 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
         </div>
 
         <div class="p-4 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-text-primary mb-2">
-              API Key
-            </label>
-            <ApiKeyInput
-              value={apiKey()}
-              onInput={setApiKey}
-              placeholder={`${props.preset.name} API Key`}
-            />
-          </div>
-
           <div>
             <label class="block text-sm font-medium text-text-primary mb-2">
               Model
@@ -207,7 +190,7 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={props.isPending || !apiKey()}
+            disabled={props.isPending}
             class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
           >
             {props.isPending ? 'Saving...' : 'Save'}
