@@ -280,3 +280,11 @@ export type ProviderConnectionListItem = {
  * reach the upstream provider.
  */
 export type CredentialProvider = (providerId: string) => Promise<string | null>;
+
+/**
+ * Drops any cached credential for the given provider so the next
+ * request re-reads it from the source of truth. Called from the
+ * credential-write paths (API-key connect, OAuth completion,
+ * disconnect) so in-memory caches stay in sync with the DB.
+ */
+export type CredentialInvalidator = (providerId: string) => void;

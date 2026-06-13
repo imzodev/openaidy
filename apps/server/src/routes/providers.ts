@@ -124,6 +124,13 @@ type ProviderRoutesOptions = {
   services: ProviderServices;
   authMiddleware: AuthMiddleware;
   db?: DatabaseClient;
+  /**
+   * Called whenever a provider credential is written or its
+   * connection is torn down, so any in-memory credential cache
+   * (e.g. the OpenAI-compatible adapter's per-request resolver)
+   * re-reads from the DB on the next chat call.
+   */
+  invalidateCredential?: (providerId: string) => void;
 };
 
 /**
@@ -140,7 +147,7 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
   options,
 ) => {
   // Use injected services from app initialization
-  const { services, authMiddleware, db } = options;
+  const { services, authMiddleware, db, invalidateCredential } = options;
 
   app.addHook(
     'preHandler',
@@ -149,7 +156,9 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
   const { registry, invocation } = services;
 
   // Create connection service only if database is available
-  const connectionService = db ? new ProviderConnectionService(db) : null;
+  const connectionService = db
+    ? new ProviderConnectionService(db, invalidateCredential)
+    : null;
   // Selection is available via services.selection if needed for future routes
 
   // OAuth state store — same DB in dev and prod. Required for the
@@ -569,6 +578,9 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
             region: region as 'global' | 'cn',
             flowId,
             ...(db ? { db: db as DatabaseClient } : {}),
+            ...(invalidateCredential
+              ? { onCredentialPersisted: invalidateCredential }
+              : {}),
           });
           if (!result.ok) {
             reply.code(result.error === 'mmx_not_installed' ? 503 : 500);

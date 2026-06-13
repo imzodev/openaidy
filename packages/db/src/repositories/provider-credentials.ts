@@ -11,9 +11,24 @@ import {
  *
  * Handles database operations for provider credentials.
  * Credentials are stored globally (not per-workspace) in this version.
+ *
+ * Every mutating method (`upsert`, `setError`, `delete`) fires the
+ * optional `onChange` hook after the write commits, so any layer
+ * holding a derived view of these rows (e.g. an in-memory credential
+ * cache used by the OpenAI-compatible LLM adapter) can invalidate
+ * itself without each call site having to remember to do so. New
+ * OAuth providers that reuse this repository get cache invalidation
+ * for free; they don't have to wire up their own notification path.
  */
 export class ProviderCredentialsRepository {
-  constructor(private readonly db: DatabaseClient) {}
+  private readonly onChange: (providerId: string) => void;
+
+  constructor(
+    private readonly db: DatabaseClient,
+    options: { onChange?: (providerId: string) => void } = {},
+  ) {
+    this.onChange = options.onChange ?? (() => {});
+  }
 
   /**
    * Upsert credentials for a provider.
@@ -26,6 +41,7 @@ export class ProviderCredentialsRepository {
   ): Promise<ProviderCredential> {
     const existing = await this.findByProviderId(providerId);
 
+    let result: ProviderCredential;
     if (existing) {
       // Update existing
       const updated = await this.db
@@ -39,28 +55,30 @@ export class ProviderCredentialsRepository {
         })
         .where(eq(providerCredentials.providerId, providerId))
         .returning();
-      return updated[0];
+      result = updated[0];
+    } else {
+      // Insert new
+      // Note: createdAt/updatedAt are set explicitly here to avoid
+      // the pgTable + SQLite `defaultNow()` → `now()` mismatch
+      // (SQLite has no `now()` function; the typed insert would emit
+      // `now()` and fail with "no such function: now").
+      const now = new Date();
+      const [inserted] = await this.db
+        .insert(providerCredentials)
+        .values({
+          id: nanoid(),
+          providerId,
+          authMethod,
+          encryptedCredentials,
+          status: 'connected',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      result = inserted;
     }
-
-    // Insert new
-    // Note: createdAt/updatedAt are set explicitly here to avoid
-    // the pgTable + SQLite `defaultNow()` → `now()` mismatch
-    // (SQLite has no `now()` function; the typed insert would emit
-    // `now()` and fail with "no such function: now").
-    const now = new Date();
-    const [inserted] = await this.db
-      .insert(providerCredentials)
-      .values({
-        id: nanoid(),
-        providerId,
-        authMethod,
-        encryptedCredentials,
-        status: 'connected',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    return inserted;
+    this.onChange(providerId);
+    return result;
   }
 
   /**
@@ -112,6 +130,7 @@ export class ProviderCredentialsRepository {
         updatedAt: new Date(),
       })
       .where(eq(providerCredentials.providerId, providerId));
+    this.onChange(providerId);
   }
 
   /**
@@ -125,6 +144,7 @@ export class ProviderCredentialsRepository {
         updatedAt: new Date(),
       })
       .where(eq(providerCredentials.providerId, providerId));
+    this.onChange(providerId);
     return true;
   }
 

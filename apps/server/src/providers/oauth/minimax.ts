@@ -10,6 +10,7 @@ import {
 import { createLogger } from '../../lib/logger.js';
 import type { OAuthStateStore } from './state-store.js';
 import type { DatabaseClient } from '@openaidy/db';
+import type { CredentialInvalidator } from '@openaidy/shared-types';
 
 const log = createLogger('MiniMaxOAuth');
 /**
@@ -57,6 +58,13 @@ export type StartMiniMaxOAuthInput = {
   signal?: AbortSignal;
   /** Database client used to persist the encrypted tokens on success. */
   db?: DatabaseClient;
+  /**
+   * Called after tokens are written to `provider_credentials` so
+   * any in-memory credential cache (e.g. the OpenAI-compatible
+   * adapter's per-request resolver) picks up the new value on the
+   * next chat call without a server restart.
+   */
+  onCredentialPersisted?: CredentialInvalidator;
 };
 
 export type StartMiniMaxOAuthResult =
@@ -240,6 +248,9 @@ async function wireMmxHandleToFlow(
             await import('../../lib/encryption.js');
           const credentialsRepo = new ProviderCredentialsRepository(
             input.db as never,
+            input.onCredentialPersisted
+              ? { onChange: input.onCredentialPersisted }
+              : {},
           );
           const encryption = getEncryptionService();
           const encrypted = encryption.encrypt(

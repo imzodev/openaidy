@@ -15,7 +15,10 @@ import {
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { createLogger, registerHttpLogger } from './lib/logger';
-import { buildCredentialProvider } from './lib/credential-provider';
+import {
+  buildCredentialResolver,
+  noopInvalidator,
+} from './lib/credential-provider';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -168,16 +171,19 @@ export async function buildApp() {
   const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
   skillRegistry.load();
 
-  const credentialProvider = buildCredentialProvider(
+  const credentialResolver = buildCredentialResolver(
     dbAdapter ? (dbAdapter.client as never) : undefined,
   );
+  const invalidateCredential = credentialResolver
+    ? credentialResolver.invalidate
+    : noopInvalidator();
 
   const configService = createAppConfigService({
     configPath: env.APP_CONFIG_PATH,
     templatePath: env.APP_CONFIG_TEMPLATE_PATH,
     providers: providerServices,
     agents: agentRegistry,
-    ...(credentialProvider ? { credentialProvider } : {}),
+    ...(credentialResolver ? { credentialProvider: credentialResolver } : {}),
   });
   await configService.load();
 
@@ -437,6 +443,7 @@ export async function buildApp() {
     // safe at runtime because client is the drizzle db, not the
     // adapter envelope (which only has .repositories/.close/.kind).
     db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
+    invalidateCredential,
   });
 
   // Register agent routes

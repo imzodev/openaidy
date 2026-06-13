@@ -8,6 +8,7 @@ import type {
   DeviceCodeResponse,
   AuthMethod,
   ProviderConnectionStatus,
+  CredentialInvalidator,
 } from '@openaidy/shared-types';
 import { registry as providerRegistry } from '@openaidy/providers';
 import { ProviderCredentialsRepository } from '@openaidy/db';
@@ -26,8 +27,21 @@ export class ProviderConnectionService {
   private readonly credentialsRepo: ProviderCredentialsRepository;
   private readonly encryption = getEncryptionService();
 
-  constructor(db: DatabaseClient) {
-    this.credentialsRepo = new ProviderCredentialsRepository(db);
+  constructor(
+    db: DatabaseClient,
+    /**
+     * Forwarded to the underlying `ProviderCredentialsRepository` so
+     * every credential write (api_key connect, OAuth completion,
+     * disconnect, error state) invalidates the in-memory credential
+     * cache used by the OpenAI-compatible adapter. New OAuth
+     * providers that reuse this service pick up cache invalidation
+     * for free.
+     */
+    invalidateCredential: CredentialInvalidator = () => {},
+  ) {
+    this.credentialsRepo = new ProviderCredentialsRepository(db, {
+      onChange: invalidateCredential,
+    });
   }
 
   /**
