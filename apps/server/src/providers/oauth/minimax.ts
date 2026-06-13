@@ -7,8 +7,11 @@ import {
   type MiniMaxOAuthTokens,
   type SpawnMmxLoginOptions,
 } from './mmx-bridge.js';
+import { createLogger } from '../../lib/logger.js';
 import type { OAuthStateStore } from './state-store.js';
 import type { DatabaseClient } from '@openaidy/db';
+
+const log = createLogger('MiniMaxOAuth');
 /**
  * MiniMax OAuth orchestration — backed by the official `mmx-cli` subprocess.
  *
@@ -135,7 +138,7 @@ export async function startMiniMaxOAuth(
         // Defensive: this shouldn't happen — we just put the state
         // row at the start of this function. If it does, log it
         // and continue (the verificationUrl is still useful).
-        console.warn(
+        log.warn(
           `startMiniMaxOAuth: state row missing for flowId=${input.flowId}`,
         );
       }
@@ -249,9 +252,12 @@ async function wireMmxHandleToFlow(
             }),
           );
           await credentialsRepo.upsert(MINIMAX_PROVIDER_ID, 'oauth', encrypted);
+          log.info(
+            `[DIAG-LOG] wireMmxHandleToFlow: tokens persisted to provider_credentials for flowId=${input.flowId}, accessTokenLength=${result.tokens.access_token.length}, refreshTokenLength=${result.tokens.refresh_token.length}`,
+          );
         } catch (err) {
           // Log but don't crash — the user can retry
-          console.error('Failed to persist MiniMax tokens:', err);
+          log.error('Failed to persist MiniMax tokens:', err);
         }
       }
       // Clean up state regardless

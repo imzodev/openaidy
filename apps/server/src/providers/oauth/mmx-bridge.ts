@@ -3,6 +3,9 @@ import { readFile, writeFile, chmod } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { createLogger } from '../../lib/logger.js';
+
+const log = createLogger('MiniMaxOAuth');
 
 /**
  * Bridge to the official MiniMax CLI (`mmx-cli`).
@@ -143,8 +146,8 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
   } catch (err) {
     // non-fatal: if we can't scrub the api_key, mmx may still
     // launch in non-interactive mode. Log the error so it shows
-    // up in server logs.
-    console.error(
+    // up in the server logs page (/logs in the UI).
+    log.error(
       `spawnMmxLogin: failed to scrub api_key from mmx config: ${(err as Error).message}`,
     );
   }
@@ -276,12 +279,14 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
     child.stdout?.on('data', (chunk) => {
       const s = chunk.toString();
       stdoutBuf += s;
+      log.info(`mmx stdout chunk (${s.length} bytes): ${s.slice(0, 300)}`);
       tryParseUserCode();
     });
 
     child.stderr?.on('data', (chunk) => {
       const s = chunk.toString();
       stderrBuf += s;
+      log.info(`mmx stderr chunk (${s.length} bytes): ${s.slice(0, 300)}`);
       tryParseUserCode();
     });
 
@@ -300,8 +305,14 @@ export function spawnMmxLogin(options: SpawnMmxLoginOptions): MmxLoginHandle {
         // mmx exited cleanly. The config file should now have tokens.
         const tokens = readMmxTokens(configPath);
         if (tokens) {
+          log.info(
+            `spawnMmxLogin: mmx exited 0, tokens read from ${configPath}, region=${tokens.region}, expiresAt=${tokens.expires_at}, account=${tokens.account?.email ?? '(none)'}`,
+          );
           finish({ ok: true, tokens });
         } else {
+          log.warn(
+            `spawnMmxLogin: mmx exited 0 BUT no tokens found in ${configPath} (config file may be missing or empty)`,
+          );
           finish({
             ok: false,
             error: 'no_credentials',
