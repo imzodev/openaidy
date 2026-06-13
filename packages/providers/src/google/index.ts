@@ -5,6 +5,12 @@
  * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
  * source of truth. Handles Google Gemini API requests using the
  * gemini vendor family.
+ *
+ * The default `validateApiKey` would `GET ${baseUrl}/models` with
+ * `Authorization: Bearer <key>`, but the Gemini API rejects that
+ * and expects the key as either a `?key=` query parameter or an
+ * `x-goog-api-key` header. Override the method to match Google's
+ * auth scheme.
  */
 
 import { PROVIDER_PRESETS } from '@openaidy/shared-types';
@@ -25,5 +31,20 @@ export class GoogleProfile extends ProviderProfile {
         signupUrl: 'https://ai.google.dev/',
       }),
     );
+  }
+
+  override async validateApiKey(
+    apiKey: string,
+  ): Promise<{ valid: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${this.getBaseUrl()}/models`, {
+        headers: {
+          'x-goog-api-key': apiKey,
+        },
+      });
+      return { valid: response.ok };
+    } catch (error) {
+      return { valid: false, error: String(error) };
+    }
   }
 }
