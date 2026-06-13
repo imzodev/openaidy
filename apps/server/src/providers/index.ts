@@ -14,11 +14,13 @@ export { ModelInvocationService, createModelInvocation } from './invocation';
 export {
   IntegratedInvocationService,
   createIntegratedInvocation,
-  type IntegratedInvocationOptions,
-  type IntegratedLoadResult,
-  type IntegratedInvokeResult,
-  type SelectionWithConfigResult,
 } from './integrated-invocation';
+export type {
+  IntegratedInvocationOptions,
+  IntegratedLoadResult,
+  IntegratedInvokeResult,
+  SelectionWithConfigResult,
+} from './integrated-invocation.types';
 
 // Connection service
 export { ProviderConnectionService } from './connection-service';

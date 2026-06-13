@@ -15,6 +15,7 @@ import {
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { createLogger, registerHttpLogger } from './lib/logger';
+import { buildCredentialProvider } from './lib/credential-provider';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -167,11 +168,16 @@ export async function buildApp() {
   const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
   skillRegistry.load();
 
+  const credentialProvider = buildCredentialProvider(
+    dbAdapter ? (dbAdapter.client as never) : undefined,
+  );
+
   const configService = createAppConfigService({
     configPath: env.APP_CONFIG_PATH,
     templatePath: env.APP_CONFIG_TEMPLATE_PATH,
     providers: providerServices,
     agents: agentRegistry,
+    ...(credentialProvider ? { credentialProvider } : {}),
   });
   await configService.load();
 

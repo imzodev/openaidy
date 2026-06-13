@@ -118,6 +118,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
       organization: this.config.organizationId,
       defaultHeaders: this.config.headers,
       timeout: this.config.timeoutMs,
+      fetch: this.config.credentialProvider
+        ? this.wrapFetchWithCredentialLookup(
+            this.config.providerId ?? PROVIDER_ID,
+            this.config.credentialProvider,
+          )
+        : undefined,
     });
 
     // Build capabilities based on config
@@ -135,6 +141,57 @@ export class OpenAICompatibleProvider implements ModelProvider {
       description: `OpenAI-compatible provider at ${this.config.baseUrl}`,
       capabilities,
       vendorFamily: 'openai-compatible',
+    };
+  }
+
+  // =====================
+  // Fetch Wrapper
+  // =====================
+
+  /**
+   * Wraps the global `fetch` so that every outgoing request picks up
+   * the latest credential from the supplied `credentialProvider`
+   * callback. This is what allows a provider that was authenticated
+   * via OAuth (and persists its token in the DB after startup) to
+   * actually send a valid `Authorization` header on subsequent chat
+   * calls without restarting the server.
+   *
+   * The SDK normally sets `Authorization: Bearer ${this.apiKey}` at
+   * request time. If the credential provider yields a non-empty
+   * token, we override that header on the per-request `RequestInit`
+   * we hand to the underlying `fetch`. Otherwise the SDK's default
+   * header (possibly empty) is left untouched, which is the right
+   * behaviour for env-var-based API keys.
+   */
+  private wrapFetchWithCredentialLookup(
+    providerId: string,
+    credentialProvider: (providerId: string) => Promise<string | null>,
+  ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+    const baseFetch: typeof fetch | undefined =
+      typeof fetch !== 'undefined' ? fetch : undefined;
+
+    return async (input, init) => {
+      let token: string | null = null;
+      try {
+        token = await credentialProvider(providerId);
+      } catch (err) {
+        this.logger.warn(
+          `credentialProvider for "${providerId}" threw: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      const headers = new Headers(init?.headers);
+      if (token && token.length > 0) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+
+      const nextInit: RequestInit = { ...(init ?? {}), headers };
+      if (baseFetch) {
+        return baseFetch(input as Request | string | URL, nextInit);
+      }
+      throw new Error(
+        'No global fetch available for OpenAI-compatible adapter',
+      );
     };
   }
 

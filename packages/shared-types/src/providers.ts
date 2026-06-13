@@ -268,3 +268,15 @@ export type ProviderConnectionListItem = {
   lastUsedAt?: string;
   error?: string;
 };
+
+/**
+ * Resolves the current credential (e.g. an OAuth access token) for
+ * a given provider at request time. Returning `null` means "no
+ * override — fall back to the SDK default `Authorization` header".
+ *
+ * Used by the OpenAI-compatible adapter (minimax, etc.) to inject
+ * fresh tokens on every outgoing HTTP request, so credentials
+ * persisted to `provider_credentials` after server startup actually
+ * reach the upstream provider.
+ */
+export type CredentialProvider = (providerId: string) => Promise<string | null>;
