@@ -125,6 +125,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         description: 'Long context understanding',
         contextWindow: 2000000,
       },
+      {
+        id: 'gemini-3.5-flash',
+        name: 'Gemini 3.5 Flash',
+        description: 'Latest flash (preview)',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'gemini-3.1-flash-lite',
+        name: 'Gemini 3.1 Flash-Lite',
+        description: 'High-volume, low-cost flash (larger free-tier limits)',
+        contextWindow: 1048576,
+      },
     ],
   },
   {

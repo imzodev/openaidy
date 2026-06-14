@@ -111,7 +111,6 @@ Exit Codes:
     );
     return { exitCode: 1, error: 'Provider ID is required' };
   }
-
   // Validate provider ID against presets
   const preset = PROVIDER_PRESETS.find((pr) => pr.id === providerId);
   if (!preset) {

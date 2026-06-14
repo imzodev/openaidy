@@ -344,6 +344,7 @@ export class ProviderConfigService {
       timeoutMs?: number;
       providerId: string;
       providerName: string;
+      credentialProvider?: CredentialProvider;
     } = {
       apiKey: config.apiKey ?? '',
       providerId: config.id,
@@ -359,6 +360,9 @@ export class ProviderConfigService {
     }
     if (config.timeout?.requestMs !== undefined) {
       adapterConfig.timeoutMs = config.timeout.requestMs;
+    }
+    if (this.credentialProvider) {
+      adapterConfig.credentialProvider = this.credentialProvider;
     }
 
     return createGeminiProvider(adapterConfig);

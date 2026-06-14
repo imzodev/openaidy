@@ -819,7 +819,17 @@ export class SessionMessageService {
       }
       if (msgRole === 'assistant') {
         const storedToolCalls = msgMetadata?.['toolCalls'] as
-          | Array<{ id: string; name: string; arguments: string }>
+          | Array<{
+              id: string;
+              name: string;
+              arguments: string;
+              // Optional Gemini thought signature; the gemini
+              // request mapper consumes it when serializing the
+              // assistant turn for the next request. Stored
+              // alongside the rest of the toolCall fields in
+              // metadata (no separate column).
+              thoughtSignature?: string;
+            }>
           | undefined;
         const msgReasoningContent = m.reasoningContent ?? undefined;
         return {
@@ -937,6 +947,11 @@ export class SessionMessageService {
           id: string;
           name: string;
           arguments: Record<string, unknown>;
+          // Gemini-specific thought signature; captured from the
+          // model response and re-emitted on the next request so
+          // the Gemini API doesn't reject the functionCall parts
+          // — see https://ai.google.dev/gemini-api/docs/thought-signatures.
+          thoughtSignature?: string;
         }> = [];
         let hasError = false;
         let errorCode = '';
@@ -1025,6 +1040,15 @@ export class SessionMessageService {
             id: tc.id,
             name: tc.name,
             arguments: JSON.stringify(tc.arguments),
+            // Gemini-specific thought signature; the gemini
+            // request mapper reads it back when serializing the
+            // assistant turn for the next request. Required by
+            // the Gemini API on the first functionCall part of
+            // a multi-call turn — see
+            // https://ai.google.dev/gemini-api/docs/thought-signatures.
+            ...(tc.thoughtSignature
+              ? { thoughtSignature: tc.thoughtSignature }
+              : {}),
           }));
 
           // Extract consulted skills from workspace_read/workspace_list calls
@@ -1072,6 +1096,7 @@ export class SessionMessageService {
 
           for (const tc of toolCalls) {
             let toolContent: string | undefined;
+            let toolIsError = false;
             let absolutePathFromTool: string | undefined;
 
             // Route to builtin (native) tool only if it exists in the registry
@@ -1129,12 +1154,8 @@ export class SessionMessageService {
                 // Store the error message (not raw HTML) for failed tool calls
                 // This ensures all tool calls are persisted and shown in the UI
                 const errorMessage = `Error: ${builtinResult.error}`;
-                loopMessages.push({
-                  role: 'tool',
-                  content: errorMessage,
-                  toolCallId: tc.id,
-                } as Message);
                 toolContent = errorMessage; // Persist error message instead of raw content
+                toolIsError = true;
               } else {
                 toolContent = builtinResult.content;
                 // workspace_write returns absolutePath but the BuiltinTool type
@@ -1156,21 +1177,36 @@ export class SessionMessageService {
                   tc.name.split('::')[1] ?? tc.name,
                   tc.arguments,
                 )
-                .catch((e: unknown) => ({
-                  content: [
-                    {
-                      type: 'text',
-                      text: `Error: ${e instanceof Error ? e.message : String(e)}`,
-                    },
-                  ],
-                }));
-              toolContent = Array.isArray(
+                .catch((e: unknown) => {
+                  toolIsError = true;
+                  return {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                      },
+                    ],
+                  };
+                });
+              const mcpText = Array.isArray(
                 (mcpResult as { content?: unknown[] } | undefined)?.content,
               )
                 ? (mcpResult as { content: Array<{ text?: string }> }).content
                     .map((c) => c.text ?? '')
                     .join('')
                 : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
+              // MCP responses can also surface errors via `isError: true`
+              // on the result object itself (per MCP spec) — honor that
+              // so the gemini mapper wraps the content as an error.
+              if (
+                !toolIsError &&
+                mcpResult &&
+                typeof mcpResult === 'object' &&
+                (mcpResult as { isError?: unknown }).isError === true
+              ) {
+                toolIsError = true;
+              }
+              toolContent = mcpText;
               // Try to extract absolutePath from MCP result if present
               if (mcpResult && typeof mcpResult === 'object') {
                 const mcpResultObj = mcpResult as {
@@ -1188,6 +1224,7 @@ export class SessionMessageService {
               // Extract absolutePath from tool result if present (for workspace_write etc.)
               const toolMetadata: Record<string, unknown> = {
                 toolName: tc.name,
+                ...(toolIsError ? { isError: true } : {}),
               };
               if (absolutePathFromTool) {
                 toolMetadata.absolutePath = absolutePathFromTool;
@@ -1199,6 +1236,7 @@ export class SessionMessageService {
                 role: 'tool',
                 content: toolContent,
                 toolCallId: tc.id,
+                ...(toolIsError ? { isError: true } : {}),
                 metadata: toolMetadata,
               });
 
@@ -1206,6 +1244,7 @@ export class SessionMessageService {
                 role: 'tool',
                 content: toolContent,
                 toolCallId: tc.id,
+                ...(toolIsError ? { isError: true } : {}),
               } as Message);
 
               // If agent saved a personality file via workspace_write, stop onboarding
