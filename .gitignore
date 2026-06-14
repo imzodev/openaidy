@@ -15,6 +15,7 @@ apps/web/.solid
 apps/server/data/
 .openaidy/
 *.tsbuildinfo
+.opengraph/
 
 # Agents skills
 .agents/skills
