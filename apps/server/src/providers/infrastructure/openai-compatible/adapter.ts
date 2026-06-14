@@ -21,6 +21,12 @@ import {
 } from '@openaidy/runtime';
 import type { OpenAICompatibleAdapterConfig } from './types';
 import { createLogger } from '../../../lib/logger';
+import {
+  IdentityAdapterCodec,
+  DeepSeekAdapterCodec,
+  type ProviderAdapterCodec,
+  type ToolNameMapping,
+} from './provider-codec';
 
 // =====================
 // Default Configuration
@@ -31,6 +37,26 @@ const DEFAULT_MODEL = 'gpt-4o';
 const DEFAULT_TIMEOUT_MS = 60000;
 const PROVIDER_ID = 'openai-compatible';
 const PROVIDER_NAME = 'OpenAI-Compatible';
+
+// =====================
+// Provider-Specific Codec Selection
+// =====================
+
+/**
+ * Select the provider-specific codec for a given base URL.
+ * Centralised here so the adapter code path never branches on
+ * the provider identity — `mapTools`, `mapResponse`, and the
+ * streaming event handling all consult the codec returned by
+ * this function. Adding a new provider with quirks is a
+ * one-line addition here plus a new codec class in
+ * `provider-codec.ts`.
+ */
+function selectAdapterCodec(baseUrl: string): ProviderAdapterCodec {
+  if (baseUrl.includes('deepseek.com')) {
+    return new DeepSeekAdapterCodec();
+  }
+  return new IdentityAdapterCodec();
+}
 
 // =====================
 // Known Models
@@ -94,6 +120,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   > &
     OpenAICompatibleAdapterConfig;
   private readonly logger: ReturnType<typeof createLogger>;
+  private readonly codec: ProviderAdapterCodec;
 
   readonly descriptor: ProviderDescriptor;
 
@@ -110,6 +137,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     };
 
     this.logger = createLogger(this.config.providerId ?? PROVIDER_ID);
+    this.codec = selectAdapterCodec(this.config.baseUrl);
 
     // Initialize OpenAI SDK client
     this.client = new OpenAI({
@@ -311,10 +339,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
         `invoke: request.tools = ${JSON.stringify(request.tools?.map((t) => t.name))}`,
       );
       const messages = this.mapMessages(request.messages);
-      const tools =
+      const toolMapping =
         request.tools && request.tools.length > 0
           ? this.mapTools(request.tools)
           : null;
+      const tools = toolMapping?.wire ?? null;
 
       const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
         model: modelId,
@@ -336,7 +365,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       );
       const response = await this.client.chat.completions.create(requestParams);
 
-      return ok(this.mapResponse(response, modelId));
+      return ok(
+        this.mapResponse(response, modelId, toolMapping?.nameMap ?? new Map()),
+      );
     } catch (error) {
       return err(this.normalizeError(error));
     }
@@ -370,18 +401,22 @@ export class OpenAICompatibleProvider implements ModelProvider {
       { id: string; name: string; arguments: string }
     > = new Map();
 
-    // Accumulate reasoning content for DeepSeek thinking mode
+    // Accumulate reasoning content for providers that stream it
+    // (e.g. DeepSeek's thinking-mode models surface
+    // `reasoning_content` deltas). The codec decides whether
+    // any deltas are present; for the identity codec this
+    // accumulator stays empty.
     let reasoningContent = '';
-    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
 
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
       const messages = this.mapMessages(request.messages);
-      const tools =
+      const toolMapping =
         request.tools && request.tools.length > 0
           ? this.mapTools(request.tools)
           : null;
+      const tools = toolMapping?.wire ?? null;
 
       const requestParams: OpenAI.Chat.ChatCompletionCreateParams = {
         model: modelId,
@@ -416,15 +451,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
           });
         }
 
-        // Handle reasoning content delta (DeepSeek thinking mode)
-        if (
-          isDeepSeek &&
-          (choice.delta as { reasoning_content?: string })?.reasoning_content
-        ) {
-          const delta =
-            (choice.delta as { reasoning_content?: string })
-              .reasoning_content ?? '';
-          reasoningContent += delta;
+        // Handle reasoning content delta (DeepSeek thinking mode
+        // and any other provider that exposes it). The codec
+        // extracts the delta from the chunk; for the identity
+        // codec this returns null and the accumulator stays at
+        // its previous value.
+        const reasoningDelta = this.codec.extractReasoningDelta(chunk);
+        if (reasoningDelta) {
+          reasoningContent += reasoningDelta;
         }
 
         // Handle content delta
@@ -461,7 +495,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
         }
       }
 
-      // Emit completed tool calls before stream.finished
+      // Emit completed tool calls before stream.finished. The
+      // codec restores the original tool name (the identity
+      // codec returns the wire name unchanged).
       for (const tc of pendingToolCalls.values()) {
         yield ok({
           type: 'stream.tool_call',
@@ -470,7 +506,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
           toolCall: {
             id: tc.id,
             type: 'function',
-            name: isDeepSeek ? this.restoreToolName(tc.name) : tc.name,
+            name: this.codec.restoreName(
+              tc.name,
+              toolMapping?.nameMap ?? new Map(),
+            ),
             arguments: tc.arguments,
           },
         });
@@ -498,8 +537,6 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private mapMessages(
     messages: ModelRequest['messages'],
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
-    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
-
     return messages.map((msg) => {
       if (msg.role === 'system') {
         return { role: 'system', content: msg.content };
@@ -522,9 +559,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
             function: { name: tc.name, arguments: tc.arguments },
           }));
         }
-        // DeepSeek requires reasoning_content to be passed back in thinking mode
-        if (isDeepSeek && aMsg.reasoningContent) {
-          assistantMsg.reasoning_content = aMsg.reasoningContent;
+        // Round-trip the provider-specific reasoning content
+        // (DeepSeek's thinking mode surfaces this in
+        // `reasoning_content`; other providers ignore it).
+        const reasoning = this.codec.pickRequestReasoningContent(aMsg);
+        if (reasoning) {
+          assistantMsg.reasoning_content = reasoning;
         }
         return assistantMsg;
       }
@@ -543,34 +583,32 @@ export class OpenAICompatibleProvider implements ModelProvider {
     });
   }
 
-  private mapTools(
-    tools: NonNullable<ModelRequest['tools']>,
-  ): OpenAI.Chat.ChatCompletionTool[] {
-    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
-    return tools.map((tool) => ({
-      type: 'function' as const,
-      function: {
-        name: isDeepSeek ? this.sanitizeToolName(tool.name) : tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-      },
-    }));
-  }
-
-  private sanitizeToolName(name: string): string {
-    // DeepSeek only allows: ^[a-zA-Z0-9_-]+$
-    // Replace any character that is NOT a-z, A-Z, 0-9, _, or - with _
-    return name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  }
-
-  private restoreToolName(name: string): string {
-    // This is a best-effort restore - may not be perfect if original had multiple _ chars
-    return name.replace(/_/g, '.');
+  private mapTools(tools: NonNullable<ModelRequest['tools']>): {
+    wire: OpenAI.Chat.ChatCompletionTool[];
+    // Maps every wire-side (sanitized) name back to its
+    // original. Empty for the identity codec; populated only
+    // for codecs that need to translate names (e.g. DeepSeek's
+    // `^[a-zA-Z0-9_-]+$` allow-list).
+    nameMap: ToolNameMapping;
+  } {
+    const { wire, nameMap } = this.codec.prepareRequest(tools);
+    return {
+      wire: wire.map((t) => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters as Record<string, unknown>,
+        },
+      })),
+      nameMap,
+    };
   }
 
   private mapResponse(
     response: OpenAI.Chat.Completions.ChatCompletion,
     modelId: string,
+    nameMap: ToolNameMapping,
   ): ModelResponse {
     const choice = response.choices[0];
     if (!choice) {
@@ -578,12 +616,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
 
     const finishReason = choice.finish_reason ?? 'stop';
-    const isDeepSeek = this.config.baseUrl.includes('deepseek.com');
-
-    // Extract reasoning_content from DeepSeek responses (if present)
-    const reasoningContent = isDeepSeek
-      ? (choice.message as { reasoning_content?: string }).reasoning_content
-      : undefined;
+    const reasoningContent = this.codec.extractReasoningField(choice.message);
 
     const result: ModelResponse = {
       id: response.id,
@@ -606,17 +639,19 @@ export class OpenAICompatibleProvider implements ModelProvider {
       ...(reasoningContent ? { reasoningContent } : {}),
     };
 
-    // Only add toolCalls if there are tool calls
+    // Restore the original tool name via the per-request map
+    // for codecs that need it (e.g. DeepSeek's
+    // `^[a-zA-Z0-9_-]+$` allow-list). The identity codec
+    // returns the wire name unchanged.
     if (choice.message.tool_calls?.length) {
       return {
         ...result,
         toolCalls: choice.message.tool_calls.map((tc) => ({
           id: tc.id,
-          name: isDeepSeek
-            ? this.restoreToolName(
-                (tc as { function: { name: string } }).function.name,
-              )
-            : (tc as { function: { name: string } }).function.name,
+          name: this.codec.restoreName(
+            (tc as { function: { name: string } }).function.name,
+            nameMap,
+          ),
           arguments: (tc as { function: { arguments: string } }).function
             .arguments,
         })),
