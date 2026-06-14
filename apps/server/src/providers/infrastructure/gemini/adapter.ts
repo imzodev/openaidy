@@ -18,7 +18,8 @@ import {
   type ModelStreamEvent,
   type ProviderResult,
 } from '@openaidy/runtime';
-import { mapRequest, buildGeminiFunctionNameMap } from './request-mapper';
+import { mapRequest } from './request-mapper';
+import { buildGeminiFunctionNameMap } from './name-mapping';
 import {
   mapResponse,
   mapStreamChunk,
@@ -26,7 +27,8 @@ import {
 } from './response-mapper';
 import { normalizeError, isGeminiError } from './error-normalizer';
 import { createLogger } from '../../../lib/logger';
-import { takeSseEvents, type SseParserState } from './sse-parser';
+import { takeSseEvents } from './sse-parser';
+import type { SseParserState } from './sse-parser.types';
 import type {
   GeminiAdapterConfig,
   GeminiGenerateContentResponse,
@@ -70,12 +72,80 @@ function logGeminiInvocation(
     promptText.length <= 100
       ? promptText
       : `${promptText.slice(0, 50)} … ${promptText.slice(-50)}`;
-   
+
   console.log(
     `[gemini] ${new Date().toISOString()} ${kind} model=${request.model} ` +
       `msgs=${request.messages.length} lastRole=${lastRole} ` +
       `prompt=${JSON.stringify(promptPreview)}`,
   );
+}
+
+/**
+ * Mutable per-stream state shared between the live SSE read loop
+ * and the post-loop drain — `started` flips to true the first
+ * time we emit `stream.started` (so we don't double-emit), and
+ * `finishReason` is set by the LAST chunk with a `finishReason`
+ * (used to fill in `stream.finished`).
+ */
+type StreamProcessingState = {
+  started: boolean;
+  finishReason: Exclude<
+    import('@openaidy/runtime').FinishReason,
+    'error'
+  > | null;
+};
+
+/**
+ * Parse one SSE event's `data` payload and yield the
+ * corresponding `ModelStreamEvent` results. Emits `stream.started`
+ * exactly once (mutates `state.started`); tracks `finishReason`
+ * in `state`; yields `stream.content_delta` / `stream.tool_call`
+ * events via `mapStreamChunk`. Malformed JSON is silently
+ * skipped (matching the previous behaviour).
+ *
+ * Extracted from the previous inline copies in `invokeStream`
+ * so the live read loop and the post-loop drain share one
+ * implementation.
+ */
+function* processStreamEvent(
+  event: { data: string },
+  state: StreamProcessingState,
+  streamId: string,
+  model: string,
+  providerId: string,
+  nameMap: import('./name-mapping.types').GeminiFunctionNameMap,
+): Generator<ProviderResult<ModelStreamEvent>> {
+  if (!event.data) return;
+  let parsed: GeminiStreamChunk;
+  try {
+    parsed = JSON.parse(event.data) as GeminiStreamChunk;
+  } catch {
+    return;
+  }
+  const candidate = parsed.candidates[0];
+  if (!candidate) return;
+
+  if (!state.started) {
+    state.started = true;
+    yield ok({
+      type: 'stream.started',
+      timestamp: new Date().toISOString(),
+      id: streamId,
+      model,
+      providerId,
+    });
+  }
+
+  for (const mapped of mapStreamChunk(parsed, providerId, streamId, nameMap)) {
+    yield ok(mapped);
+  }
+
+  if (candidate.finishReason) {
+    const mapped = mapFinishReason(candidate.finishReason);
+    if (mapped !== 'error') {
+      state.finishReason = mapped;
+    }
+  }
 }
 
 // =====================
@@ -457,7 +527,6 @@ export class GeminiProvider implements ModelProvider {
     }
 
     const streamId = `stream_${Date.now()}`;
-    let started = false;
 
     try {
       const options: {
@@ -534,10 +603,10 @@ export class GeminiProvider implements ModelProvider {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       const sseState: SseParserState = { buffer: '' };
-      let finishReason: Exclude<
-        import('@openaidy/runtime').FinishReason,
-        'error'
-      > | null = null;
+      const streamState: StreamProcessingState = {
+        started: false,
+        finishReason: null,
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -545,95 +614,48 @@ export class GeminiProvider implements ModelProvider {
 
         const chunk = decoder.decode(value, { stream: true });
 
-        // Pull complete events out of the chunk; the parser keeps any
-        // trailing partial content in `sseState.buffer` for the next
-        // iteration. Using `takeSseEvents` (not bare `\n`-splitting)
-        // is what makes "data: { ... }" with embedded newlines, CRLF
-        // line endings, and `data:` without a trailing space all
-        // parse correctly per the SSE spec.
+        // Pull complete events out of the chunk; the parser keeps
+        // any trailing partial content in `sseState.buffer` for
+        // the next iteration. Using `takeSseEvents` (not bare
+        // `\n`-splitting) is what makes `data: { ... }` with
+        // embedded newlines, CRLF line endings, and `data:`
+        // without a trailing space all parse correctly per the
+        // SSE spec. The per-event processing is in
+        // `processStreamEvent` (shared with the post-loop drain
+        // below).
         for (const event of takeSseEvents(sseState, chunk)) {
-          if (!event.data) continue;
-
-          try {
-            const parsed = JSON.parse(event.data) as GeminiStreamChunk;
-            const candidate = parsed.candidates[0];
-            if (!candidate) continue;
-
-            // Emit stream.started on first chunk
-            if (!started) {
-              started = true;
-              yield ok({
-                type: 'stream.started',
-                timestamp: new Date().toISOString(),
-                id: streamId,
-                model: request.model,
-                providerId: this.descriptor.id,
-              });
-            }
-
-            // Map chunk events
-            for (const mapped of mapStreamChunk(
-              parsed,
-              this.descriptor.id,
-              streamId,
-              nameMap,
-            )) {
-              yield ok(mapped);
-            }
-
-            // Track finish reason (exclude 'error' as it's not valid for stream.finished)
-            if (candidate.finishReason) {
-              const mapped = mapFinishReason(candidate.finishReason);
-              if (mapped !== 'error') {
-                finishReason = mapped;
-              }
-            }
-          } catch {
-            // Skip malformed JSON
-            continue;
+          for (const result of processStreamEvent(
+            event,
+            streamState,
+            streamId,
+            request.model,
+            this.descriptor.id,
+            nameMap,
+          )) {
+            yield result;
           }
         }
       }
 
-      // Drain any final buffered bytes (events whose terminator never
-      // arrived because the stream ended). We force-emit the trailing
-      // buffer by feeding `\n\n` as a final chunk, which the parser
-      // treats as a blank line and therefore an event terminator.
-      // This is safe because Gemini streams end either with a
-      // `data: { ...finishReason: STOP }` event already followed by
-      // `\n\n` (in which case the buffer is empty) or, in the
-      // pathological case, with an unfinished event we couldn't
-      // parse anyway.
+      // Drain any final buffered bytes (events whose terminator
+      // never arrived because the stream ended). We force-emit
+      // the trailing buffer by feeding `\n\n` as a final chunk,
+      // which the parser treats as a blank line and therefore
+      // an event terminator. Safe because Gemini streams end
+      // either with a `data: { ...finishReason: STOP }` event
+      // already followed by `\n\n` (in which case the buffer
+      // is empty) or, in the pathological case, with an
+      // unfinished event we couldn't parse anyway.
       for (const event of takeSseEvents(sseState, '\n\n')) {
-        if (!event.data) continue;
-        try {
-          const parsed = JSON.parse(event.data) as GeminiStreamChunk;
-          const candidate = parsed.candidates[0];
-          if (!candidate) continue;
-          if (!started) {
-            started = true;
-            yield ok({
-              type: 'stream.started',
-              timestamp: new Date().toISOString(),
-              id: streamId,
-              model: request.model,
-              providerId: this.descriptor.id,
-            });
-          }
-          for (const mapped of mapStreamChunk(
-            parsed,
-            this.descriptor.id,
-            streamId,
-            nameMap,
-          )) {
-            yield ok(mapped);
-          }
-          if (candidate.finishReason) {
-            const mapped = mapFinishReason(candidate.finishReason);
-            if (mapped !== 'error') finishReason = mapped;
-          }
-        } catch {
-          continue;
+        for (const result of processStreamEvent(
+          event,
+          streamState,
+          streamId,
+          request.model,
+          this.descriptor.id,
+          nameMap,
+        )) {
+          yield result;
         }
       }
 
@@ -641,7 +663,7 @@ export class GeminiProvider implements ModelProvider {
         type: 'stream.finished',
         timestamp: new Date().toISOString(),
         id: streamId,
-        finishReason: finishReason ?? 'stop',
+        finishReason: streamState.finishReason ?? 'stop',
       });
     } catch (error) {
       yield err(

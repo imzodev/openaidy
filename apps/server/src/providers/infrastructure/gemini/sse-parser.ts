@@ -33,8 +33,6 @@
 
 import type { SseEvent, SseParserState } from './sse-parser.types';
 
-export type { SseEvent, SseParserState } from './sse-parser.types';
-
 /**
  * Append a chunk of decoded text to the parser state and return
  * any complete events that fit. The `state.buffer` is updated

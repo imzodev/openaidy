@@ -15,11 +15,6 @@ import type {
   GeminiSafetySetting,
 } from './types';
 import { sanitizeGeminiFunctionName } from './name-mapping';
-export {
-  buildGeminiFunctionNameMap,
-  restoreGeminiFunctionName,
-} from './name-mapping';
-export type { GeminiFunctionNameMap } from './name-mapping.types';
 
 // =====================
 // Message Mapping
@@ -104,30 +99,20 @@ export function mapMessage(message: Message): GeminiContent {
       // parallel function calls in the same turn are left
       // untouched per the docs.
       if (message.toolCalls && message.toolCalls.length > 0) {
-        // Probe the first toolCall up front. If it has no
-        // signature of its own, attach the documented dummy to
-        // it so the API's validator is skipped instead of
-        // rejecting the request. The dummy is only attached
-        // when the model genuinely did not emit a signature —
-        // any real signature always wins.
-        const first = message.toolCalls[0];
-        const firstHasRealSignature = !!first?.thoughtSignature;
         for (const [idx, toolCall] of message.toolCalls.entries()) {
           const part: GeminiPart = {
             functionCall: {
               name: toolCall.name,
               args: JSON.parse(toolCall.arguments),
             },
+            // Real signature always wins; the dummy fallback only
+            // kicks in on the FIRST functionCall part when no
+            // real signature is present (so the API doesn't 4xx
+            // the request — see `DUMMY_THOUGHT_SIGNATURE` above).
             ...(toolCall.thoughtSignature
               ? { thoughtSignature: toolCall.thoughtSignature }
-              : idx === 0 && !firstHasRealSignature
-                ? {
-                    // Dummy per Google docs; tells the API to
-                    // skip the validator instead of rejecting
-                    // the request. Used only when the model
-                    // didn't emit a signature of its own.
-                    thoughtSignature: 'skip_thought_signature_validator',
-                  }
+              : idx === 0
+                ? { thoughtSignature: DUMMY_THOUGHT_SIGNATURE }
                 : {}),
           };
           parts.push(part);
@@ -231,6 +216,21 @@ const UNSUPPORTED_JSON_SCHEMA_KEYS: readonly string[] = [
   '$comment',
   'examples',
 ];
+
+/**
+ * Sentinel `thought_signature` value that tells the Gemini API to
+ * skip the validator instead of rejecting a function-call turn
+ * whose real signature was lost (e.g. older models that don't
+ * emit one, or a field that was dropped somewhere on the way
+ * through the DB). Documented as a workaround in the FAQ at
+ * https://ai.google.dev/gemini-api/docs/thought-signatures:
+ *   "you can set the following dummy signatures of either
+ *    'context_engineering_is_the_way_to_go' or
+ *    'skip_thought_signature_validator' in the thought signature
+ *    field to skip validation."
+ * We use the shorter, more explicit of the two.
+ */
+const DUMMY_THOUGHT_SIGNATURE = 'skip_thought_signature_validator' as const;
 
 /**
  * Recursively strip JSON-Schema-specific fields that the Gemini

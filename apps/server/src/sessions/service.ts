@@ -8,6 +8,7 @@ import type {
   Message,
   ModelRequest,
   ModelResponse,
+  ToolCallRequest,
 } from '@openaidy/runtime';
 import {
   type SessionsStore,
@@ -818,18 +819,13 @@ export class SessionMessageService {
         };
       }
       if (msgRole === 'assistant') {
+        // The DB row's `metadata.toolCalls` is an untyped JSON blob;
+        // cast it to the canonical `readonly ToolCallRequest[]`
+        // shape. The `thoughtSignature` field (Gemini-specific)
+        // rides along on the same object and is consumed by the
+        // gemini request mapper when serializing the next turn.
         const storedToolCalls = msgMetadata?.['toolCalls'] as
-          | Array<{
-              id: string;
-              name: string;
-              arguments: string;
-              // Optional Gemini thought signature; the gemini
-              // request mapper consumes it when serializing the
-              // assistant turn for the next request. Stored
-              // alongside the rest of the toolCall fields in
-              // metadata (no separate column).
-              thoughtSignature?: string;
-            }>
+          | readonly ToolCallRequest[]
           | undefined;
         const msgReasoningContent = m.reasoningContent ?? undefined;
         return {
@@ -943,16 +939,20 @@ export class SessionMessageService {
           ...(allTools.length > 0 && { tools: allTools, toolChoice: 'auto' }),
         };
 
-        const toolCalls: Array<{
-          id: string;
-          name: string;
-          arguments: Record<string, unknown>;
-          // Gemini-specific thought signature; captured from the
-          // model response and re-emitted on the next request so
-          // the Gemini API doesn't reject the functionCall parts
-          // — see https://ai.google.dev/gemini-api/docs/thought-signatures.
-          thoughtSignature?: string;
-        }> = [];
+        // Local accumulator for the tool calls the model
+        // returned this turn. The shape is a `Pick` of the
+        // canonical `ToolCallRequest` so the `thoughtSignature`
+        // (Gemini-specific) and any other future fields ride
+        // along automatically — no inline duplication. Note
+        // that `arguments` here is an object (the JSON is
+        // stringified later by `mappedToolCalls`); we override
+        // the type to reflect the in-loop reality rather than
+        // the stringified `ToolCallRequest.arguments` shape.
+        type LocalToolCall = Pick<
+          ToolCallRequest,
+          'id' | 'name' | 'thoughtSignature'
+        > & { arguments: Record<string, unknown> };
+        const toolCalls: LocalToolCall[] = [];
         let hasError = false;
         let errorCode = '';
         let errorMessage = '';

@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { takeSseEvents, type SseParserState } from './sse-parser';
+import { takeSseEvents } from './sse-parser';
+import type { SseParserState } from './sse-parser.types';
 
 function fresh(): SseParserState {
   return { buffer: '' };
