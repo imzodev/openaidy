@@ -8,7 +8,9 @@ export type ProviderPresetId =
   | 'google'
   | 'groq'
   | 'deepseek'
-  | 'minimax';
+  | 'minimax'
+  | 'opencode-go'
+  | 'opencode-go-anthropic';
 
 export type ModelPreset = {
   id: string;
@@ -220,6 +222,100 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         name: 'MiniMax M2.7 Highspeed',
         description: 'Same as M2.7, faster',
         contextWindow: 204800,
+      },
+    ],
+  },
+  {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    websiteUrl: 'https://opencode.ai/auth',
+    documentationUrl: 'https://opencode.ai/docs/go',
+    recommendedModel: 'kimi-k2.7',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'glm-5',
+        name: 'GLM-5',
+        description: 'Open coding model',
+      },
+      {
+        id: 'kimi-k2.7',
+        name: 'Kimi K2.7 Code',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'kimi-k2.6',
+        name: 'Kimi K2.6',
+        description: 'Open coding model',
+      },
+      {
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        description: 'Fast and affordable',
+      },
+      {
+        id: 'mimo-v2.5',
+        name: 'MiMo V2.5',
+        description: 'High-volume open model',
+      },
+      {
+        id: 'mimo-v2.5-pro',
+        name: 'MiMo V2.5 Pro',
+        description: 'Reasoning open model',
+      },
+    ],
+  },
+  {
+    id: 'opencode-go-anthropic',
+    name: 'OpenCode Go (Anthropic)',
+    vendorFamily: 'anthropic',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    websiteUrl: 'https://opencode.ai/auth',
+    documentationUrl: 'https://opencode.ai/docs/go',
+    recommendedModel: 'minimax-m2.7',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'minimax-m3',
+        name: 'MiniMax M3',
+        description: 'Latest, strong reasoning',
+      },
+      {
+        id: 'minimax-m2.7',
+        name: 'MiniMax M2.7',
+        description: 'Fast reasoning model',
+      },
+      {
+        id: 'minimax-m2.5',
+        name: 'MiniMax M2.5',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'qwen3.7-max',
+        name: 'Qwen3.7 Max',
+        description: 'Strongest Qwen open model',
+      },
+      {
+        id: 'qwen3.7-plus',
+        name: 'Qwen3.7 Plus',
+        description: 'Balanced Qwen open model',
+      },
+      {
+        id: 'qwen3.6-plus',
+        name: 'Qwen3.6 Plus',
+        description: 'Previous-gen Qwen open model',
       },
     ],
   },

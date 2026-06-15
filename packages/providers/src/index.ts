@@ -32,3 +32,5 @@ export { GroqProfile } from './groq/index';
 export { MiniMaxProfile } from './minimax/index';
 export { OpenAIProfile } from './openai/index';
 export { OpenRouterProfile } from './openrouter/index';
+export { OpenCodeGoProfile } from './opencode-go/index';
+export { OpenCodeGoAnthropicProfile } from './opencode-go-anthropic/index';

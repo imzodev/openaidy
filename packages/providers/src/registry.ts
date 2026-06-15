@@ -3,7 +3,7 @@
  *
  * Manages ProviderProfile instances with lazy discovery of built-in
  * provider profiles from ./deepseek/, ./minimax/, ./groq/, ./openrouter/,
- * ./openai/, ./anthropic/, ./google/.
+ * ./openai/, ./anthropic/, ./google/, ./opencode-go/, ./opencode-go-anthropic/.
  *
  * User plugins can override built-in profiles by registering a profile
  * with the same id before the lazy discovery runs (or by calling reset()
@@ -21,6 +21,8 @@ import { GroqProfile } from './groq/index';
 import { MiniMaxProfile } from './minimax/index';
 import { OpenAIProfile } from './openai/index';
 import { OpenRouterProfile } from './openrouter/index';
+import { OpenCodeGoProfile } from './opencode-go/index';
+import { OpenCodeGoAnthropicProfile } from './opencode-go-anthropic/index';
 
 const builtInProfiles: ProviderProfile[] = [
   new AnthropicProfile(),
@@ -30,6 +32,8 @@ const builtInProfiles: ProviderProfile[] = [
   new MiniMaxProfile(),
   new OpenAIProfile(),
   new OpenRouterProfile(),
+  new OpenCodeGoProfile(),
+  new OpenCodeGoAnthropicProfile(),
 ];
 
 export class ProviderRegistry {

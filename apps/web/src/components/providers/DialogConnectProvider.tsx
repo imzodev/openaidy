@@ -230,24 +230,36 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                     </div>
                   </div>
                 </label>
-                <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  <input
-                    type="radio"
-                    name="authMethod"
-                    value="oauth"
-                    checked={authMethod() === 'oauth'}
-                    onChange={() => setAuthMethod('oauth')}
-                    class="text-primary"
-                  />
-                  <div>
-                    <div class="font-medium text-gray-900 dark:text-gray-100">
-                      OAuth 2.0
+                {/* OAuth is only shown for providers that actually
+                    support it. OpenCode Go (and the other API-key-only
+                    providers) must not surface this option — it would
+                    only confuse the user since the backend would reject
+                    the flow. */}
+                <Show
+                  when={
+                    props.provider!.id !== 'opencode-go' &&
+                    props.provider!.id !== 'opencode-go-anthropic'
+                  }
+                >
+                  <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <input
+                      type="radio"
+                      name="authMethod"
+                      value="oauth"
+                      checked={authMethod() === 'oauth'}
+                      onChange={() => setAuthMethod('oauth')}
+                      class="text-primary"
+                    />
+                    <div>
+                      <div class="font-medium text-gray-900 dark:text-gray-100">
+                        OAuth 2.0
+                      </div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        Authorize with your provider's OAuth flow
+                      </div>
                     </div>
-                    <div class="text-xs text-gray-500 dark:text-gray-400">
-                      Authorize with your provider's OAuth flow
-                    </div>
-                  </div>
-                </label>
+                  </label>
+                </Show>
               </div>
             </div>
 
