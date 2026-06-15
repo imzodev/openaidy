@@ -54,15 +54,37 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
       setError(null);
 
       try {
-        const result: ConnectProviderResponse = await connectProviderWithApiKey(
-          preset.id,
-          apiKey(),
-        );
-        if (result.success) {
+        // OpenCode Go is a single subscription that exposes two
+        // endpoints (/v1/chat/completions and /v1/messages) behind
+        // the same API key. We register the key against BOTH
+        // provider ids so the chat adapter can route to the right
+        // endpoint depending on which model the user picks. If the
+        // first connect succeeds and the second fails (e.g. the
+        // anthropic-compatible profile isn't enabled in the
+        // server), we surface the error but keep the first config
+        // — the openai-compatible models would still work.
+        const providerIds: string[] =
+          preset.id === 'opencode-go'
+            ? ['opencode-go', 'opencode-go-anthropic']
+            : [preset.id];
+
+        let lastError: string | null = null;
+        let firstSuccess = false;
+        for (const id of providerIds) {
+          const result: ConnectProviderResponse =
+            await connectProviderWithApiKey(id, apiKey());
+          if (result.success) {
+            firstSuccess = true;
+          } else {
+            lastError = result.error || `Failed to connect ${id}`;
+          }
+        }
+
+        if (firstSuccess) {
           props.onConnected?.(preset.id, 'api_key');
           props.onClose();
         } else {
-          setError(result.error || 'Failed to connect');
+          setError(lastError || 'Failed to connect');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Connection failed');

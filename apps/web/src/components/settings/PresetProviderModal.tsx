@@ -1,9 +1,36 @@
 import { createSignal, For, Show } from 'solid-js';
 import { X, Plus, Trash2 } from 'lucide-solid';
-import type { ModelPreset } from '@openaidy/shared-types';
+import {
+  type ModelPreset,
+  OPENCODE_GO_ANTHROPIC_MODEL_IDS,
+} from '@openaidy/shared-types';
 import type { ProviderConfig } from '../../lib/api';
 import { ModelSelector } from './ModelSelector';
 import type { PresetProviderModalProps } from './PresetProviderModal.types';
+
+/**
+ * For OpenCode Go we present all 13 models under a single
+ * "OpenCode Go" card. The 6 anthropic-format models (M3 / M2.7 /
+ * M2.5 and the Qwen family) must be routed to a *different*
+ * `providerId` (`opencode-go-anthropic`) so the chat adapter hits
+ * `/v1/messages` instead of `/v1/chat/completions` — the gateway
+ * explicitly rejects the latter for those models.
+ *
+ * The mapping is model-id-based, not model-name-based, so custom
+ * models added by the user aren't accidentally re-routed.
+ */
+function resolveOpenCodeGoProviderId(
+  presetId: string,
+  modelId: string,
+): string {
+  if (
+    presetId === 'opencode-go' &&
+    OPENCODE_GO_ANTHROPIC_MODEL_IDS.has(modelId)
+  ) {
+    return 'opencode-go-anthropic';
+  }
+  return presetId;
+}
 
 export function PresetProviderModal(props: PresetProviderModalProps) {
   const [selectedModelId, setSelectedModelId] = createSignal(
@@ -71,7 +98,7 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
     }
 
     const provider: ProviderConfig = {
-      id: props.preset.id,
+      id: resolveOpenCodeGoProviderId(props.preset.id, selectedModelId()),
       name: props.preset.name,
       vendorFamily: props.preset.vendorFamily,
       enabled: true,

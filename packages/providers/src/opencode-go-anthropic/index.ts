@@ -8,36 +8,37 @@
  *
  * The Go subscription splits its catalog across two endpoints based
  * on the upstream provider's native request format. This profile
- * covers the 5 models the OpenCode team routes through `/messages`:
+ * covers the 6 models the OpenCode team routes through `/messages`:
  *   - MiniMax M3, MiniMax M2.7, MiniMax M2.5
  *   - Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus
  *
  * Auth is identical to the OpenAI-compatible side: a single Bearer
  * API key from the same OpenCode Go subscription.
  *
- * Splitting the catalog into two profiles (rather than one
- * `apiMode: 'custom'` profile with a per-model router) lets
- * openaidy's existing adapter dispatch by `apiMode` with zero
- * special-casing.
+ * Visibility model: in the UI, all 13 models (this subset + the 8
+ * openai-compatible ones) surface under a single "OpenCode Go" card.
+ * The frontend re-maps the `providerId` to `opencode-go-anthropic`
+ * when the user picks one of the models in
+ * `OPENCODE_GO_ANTHROPIC_MODEL_IDS`. This profile is registered in
+ * the provider registry so the chat adapter can route those
+ * requests to `/messages` with the Anthropic request format.
  *
- * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` — the single source of truth.
+ * Model list is read from the hidden `OPENCODE_GO_ANTHROPIC_PRESET`
+ * (defined alongside `PROVIDER_PRESETS` in `@openaidy/shared-types`).
+ * It is deliberately excluded from the visible `PROVIDER_PRESETS`
+ * array so the UI doesn't render two separate "OpenCode Go" cards.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import {
+  OPENCODE_GO_ANTHROPIC_PRESET,
+  type AuthMethod,
+} from '@openaidy/shared-types';
 import { ProviderProfile } from '../types';
-
-const PRESET = PROVIDER_PRESETS.find((p) => p.id === 'opencode-go-anthropic');
-if (!PRESET) {
-  throw new Error(
-    "PROVIDER_PRESETS is missing the 'opencode-go-anthropic' entry — keep shared-types and providers in sync.",
-  );
-}
 
 export class OpenCodeGoAnthropicProfile extends ProviderProfile {
   constructor() {
     super(
-      ProviderProfile.fromPreset(PRESET!, {
+      ProviderProfile.fromPreset(OPENCODE_GO_ANTHROPIC_PRESET, {
         signupUrl: 'https://opencode.ai/auth',
         aliases: ['opencode-go-anthropic', 'oc-go-anthropic'],
       }),
@@ -50,7 +51,7 @@ export class OpenCodeGoAnthropicProfile extends ProviderProfile {
    * OpenCode, so we restrict the auth methods explicitly to keep the
    * UI honest.
    */
-  getAvailableAuthMethods(): import('@openaidy/shared-types').AuthMethod[] {
+  getAvailableAuthMethods(): AuthMethod[] {
     return [{ type: 'api_key', label: 'API Key' }];
   }
 }
