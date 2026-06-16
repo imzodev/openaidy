@@ -12,6 +12,7 @@ export default function Footer() {
     >
       <div className="footer-links">
         <Link to="/tutorials">Tutorials</Link>
+        <Link to="/blog">Blog</Link>
         <a href="/docs">Documentation</a>
         <a
           href="https://github.com/imzodev/openaidy"

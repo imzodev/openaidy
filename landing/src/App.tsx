@@ -3,6 +3,8 @@ import { AnimatePresence, motion, type Variants } from 'framer-motion';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import Tutorials from './pages/Tutorials';
+import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import Footer from './components/Footer';
 
 const pageVariants: Variants = {
@@ -51,6 +53,22 @@ function AppRoutes() {
           element={
             <AnimatedPage>
               <Tutorials />
+            </AnimatedPage>
+          }
+        />
+        <Route
+          path="/blog"
+          element={
+            <AnimatedPage>
+              <Blog />
+            </AnimatedPage>
+          }
+        />
+        <Route
+          path="/blog/:slug"
+          element={
+            <AnimatedPage>
+              <BlogPost />
             </AnimatedPage>
           }
         />

@@ -78,6 +78,14 @@ const PAGE_TEMPLATES = {
     eyebrow: 'Learn',
     accentLine: '#818cf8',
   },
+
+  blog: {
+    title: 'Blog',
+    subtitle:
+      'Product news, tutorials, engineering deep dives,\nand roadmap updates from the OpenAidy team.',
+    eyebrow: 'Articles',
+    accentLine: '#ec4899',
+  },
 };
 
 // ── Satori element tree ───────────────────────────────────────────────────────

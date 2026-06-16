@@ -19,6 +19,13 @@ function runOgGenerator() {
         cwd: __dirname,
       },
     );
+    execSync(
+      `node "${join(__dirname, 'scripts', 'generate-og.mjs')}" --page blog`,
+      {
+        stdio: 'inherit',
+        cwd: __dirname,
+      },
+    );
     console.log('[OG] Open Graph images ready.');
   } catch (err) {
     console.warn(

@@ -1,7 +1,14 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTheme } from 'next-themes';
-import { Github, BookOpen, BookMarked, Sun, Moon } from 'lucide-react';
+import {
+  Github,
+  BookOpen,
+  BookMarked,
+  Sun,
+  Moon,
+  BookText,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function Navbar() {
@@ -38,6 +45,17 @@ export default function Navbar() {
             }}
           />
           Tutorials
+        </Link>
+        <Link to="/blog" className="navbar-link">
+          <BookText
+            size={14}
+            style={{
+              display: 'inline',
+              marginRight: 4,
+              verticalAlign: 'middle',
+            }}
+          />
+          Blog
         </Link>
         <a href="/docs" className="navbar-link">
           <BookOpen
