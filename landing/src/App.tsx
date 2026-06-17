@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Tutorials from './pages/Tutorials';
 import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
+import Docs from './pages/Docs';
 import Footer from './components/Footer';
 
 const pageVariants: Variants = {
@@ -69,6 +70,14 @@ function AppRoutes() {
           element={
             <AnimatedPage>
               <BlogPost />
+            </AnimatedPage>
+          }
+        />
+        <Route
+          path="/docs/*"
+          element={
+            <AnimatedPage>
+              <Docs />
             </AnimatedPage>
           }
         />

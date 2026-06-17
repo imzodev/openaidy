@@ -16,6 +16,7 @@
   "dependencies": {
     "framer-motion": "^12.40.0",
     "lucide-react": "^0.511.0",
+    "marked": "^18.0.5",
     "next-themes": "^0.4.6",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -26,6 +27,7 @@
     "@eslint/js": "^10.0.1",
     "@fontsource/inter": "^5.2.8",
     "@resvg/resvg-js": "^2.6.2",
+    "@types/marked": "^5.0.2",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

@@ -57,7 +57,7 @@ export default function Navbar() {
           />
           Blog
         </Link>
-        <a href="/docs" className="navbar-link">
+        <Link to="/docs" className="navbar-link">
           <BookOpen
             size={14}
             style={{
@@ -67,7 +67,7 @@ export default function Navbar() {
             }}
           />
           Docs
-        </a>
+        </Link>
         <a
           href="https://github.com/imzodev/openaidy"
           target="_blank"
