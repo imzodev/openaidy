@@ -1,12 +1,17 @@
 import { Show, For, createMemo } from 'solid-js';
-import { Plus } from 'lucide-solid';
+import { Plus, Info, X } from 'lucide-solid';
 import {
   DynamicConfigForm,
   getAgentsSectionSchema,
   type FormSchema,
 } from '../../../config';
 import { CollapsibleCard } from '../../ui';
-import type { AppConfig, AgentConfig, ProviderConfig } from '../../../lib/api';
+import type {
+  AppConfig,
+  AgentConfig,
+  ProviderConfig,
+  RewiredAgentNotice,
+} from '../../../lib/api';
 
 interface AgentsTabProps {
   config: () => AppConfig | undefined;
@@ -15,6 +20,15 @@ interface AgentsTabProps {
   onAddAgent: () => void;
   onDeleteAgent: (agentId: string) => void;
   onUpdateAgent: (agentId: string, agent: AgentConfig) => void;
+  /**
+   * Per-agent notices for agents whose `model` was auto-rewired
+   * to the project default during a provider disconnect. The
+   * Agents tab renders a dismissible banner on each affected
+   * agent's card.
+   */
+  rewiredNotices: RewiredAgentNotice[];
+  /** Parent-owned dismissal so all the state lives in SettingsView. */
+  onDismissRewireNotice: (agentId: string) => void;
 }
 
 export function AgentsTab(props: AgentsTabProps) {
@@ -34,6 +48,13 @@ export function AgentsTab(props: AgentsTabProps) {
     const updatedAgent = newConfig.agents[0] as AgentConfig;
     props.onUpdateAgent(agentId, updatedAgent);
   };
+
+  // Index notices by agentId for O(1) lookup during render.
+  const noticesByAgent = createMemo(() => {
+    const map = new Map<string, RewiredAgentNotice>();
+    for (const n of props.rewiredNotices) map.set(n.agentId, n);
+    return map;
+  });
 
   return (
     <div class="p-6">
@@ -59,26 +80,72 @@ export function AgentsTab(props: AgentsTabProps) {
         }
       >
         <For each={props.config()?.agents}>
-          {(agent) => (
-            <CollapsibleCard
-              title={agent.name}
-              description={agent.description}
-              showEnabled={true}
-              enabled={agent.enabled}
-              onDelete={() => props.onDeleteAgent(agent.id)}
-              isPending={props.isPending}
-            >
-              <DynamicConfigForm
-                config={{ agents: [agent] } as Record<string, unknown>}
-                schema={agentsSchema()}
-                onChange={(newConfig) => handleAgentChange(agent.id, newConfig)}
-                errors={{}}
-                providers={props.providers}
-              />
-            </CollapsibleCard>
-          )}
+          {(agent) => {
+            const notice = () => noticesByAgent().get(agent.id);
+            return (
+              <CollapsibleCard
+                title={agent.name}
+                description={agent.description}
+                showEnabled={true}
+                enabled={agent.enabled}
+                onDelete={() => props.onDeleteAgent(agent.id)}
+                isPending={props.isPending}
+                notice={
+                  <Show when={notice()}>
+                    {(n) => (
+                      <RewiredAgentBanner
+                        notice={n()}
+                        onDismiss={() =>
+                          props.onDismissRewireNotice(n().agentId)
+                        }
+                      />
+                    )}
+                  </Show>
+                }
+              >
+                <DynamicConfigForm
+                  config={{ agents: [agent] } as Record<string, unknown>}
+                  schema={agentsSchema()}
+                  onChange={(newConfig) =>
+                    handleAgentChange(agent.id, newConfig)
+                  }
+                  errors={{}}
+                  providers={props.providers}
+                />
+              </CollapsibleCard>
+            );
+          }}
         </For>
       </Show>
+    </div>
+  );
+}
+
+function RewiredAgentBanner(props: {
+  notice: RewiredAgentNotice;
+  onDismiss: () => void;
+}) {
+  return (
+    <div class="mb-3 flex items-start gap-2 rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2 text-xs text-blue-800 dark:text-blue-200">
+      <Info class="w-4 h-4 mt-0.5 shrink-0" />
+      <div class="flex-1">
+        <p>
+          The model was changed from{' '}
+          <code class="font-mono">{props.notice.fromModel}</code> to{' '}
+          <code class="font-mono">{props.notice.toModel}</code> because{' '}
+          <strong>{props.notice.fromProviderId}</strong> was disconnected. Pick
+          a different model if you don't want the project default.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={props.onDismiss}
+        class="shrink-0 p-0.5 rounded text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors"
+        title="Dismiss"
+        aria-label="Dismiss notice"
+      >
+        <X class="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }

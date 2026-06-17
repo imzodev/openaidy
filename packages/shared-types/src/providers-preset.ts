@@ -7,7 +7,10 @@ export type ProviderPresetId =
   | 'anthropic'
   | 'google'
   | 'groq'
-  | 'deepseek';
+  | 'deepseek'
+  | 'minimax'
+  | 'opencode-go'
+  | 'opencode-go-anthropic';
 
 export type ModelPreset = {
   id: string;
@@ -124,6 +127,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         description: 'Long context understanding',
         contextWindow: 2000000,
       },
+      {
+        id: 'gemini-3.5-flash',
+        name: 'Gemini 3.5 Flash',
+        description: 'Latest flash (preview)',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'gemini-3.1-flash-lite',
+        name: 'Gemini 3.1 Flash-Lite',
+        description: 'High-volume, low-cost flash (larger free-tier limits)',
+        contextWindow: 1048576,
+      },
     ],
   },
   {
@@ -180,4 +195,203 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       },
     ],
   },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://api.minimax.io/v1',
+    websiteUrl: 'https://platform.minimax.io',
+    documentationUrl: 'https://platform.minimax.io/docs',
+    recommendedModel: 'MiniMax-M2.7',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'MiniMax-M3',
+        name: 'MiniMax M3',
+        description: 'Latest, strong reasoning',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'MiniMax-M2.7',
+        name: 'MiniMax M2.7',
+        description: 'Fast reasoning model',
+        contextWindow: 204800,
+      },
+      {
+        id: 'MiniMax-M2.7-highspeed',
+        name: 'MiniMax M2.7 Highspeed',
+        description: 'Same as M2.7, faster',
+        contextWindow: 204800,
+      },
+    ],
+  },
+  {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    websiteUrl: 'https://opencode.ai/auth',
+    documentationUrl: 'https://opencode.ai/docs/go',
+    recommendedModel: 'kimi-k2.7',
+    icon: 'bi-stars',
+    models: [
+      // OpenAI-compatible subset (8 models served via
+      // /v1/chat/completions).
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'glm-5',
+        name: 'GLM-5',
+        description: 'Open coding model',
+      },
+      {
+        id: 'kimi-k2.7',
+        name: 'Kimi K2.7 Code',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'kimi-k2.6',
+        name: 'Kimi K2.6',
+        description: 'Open coding model',
+      },
+      {
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        description: 'Fast and affordable',
+      },
+      {
+        id: 'mimo-v2.5',
+        name: 'MiMo V2.5',
+        description: 'High-volume open model',
+      },
+      {
+        id: 'mimo-v2.5-pro',
+        name: 'MiMo V2.5 Pro',
+        description: 'Reasoning open model',
+      },
+      // Anthropic-compatible subset (5 models served via
+      // /v1/messages). Surfaced under the same "OpenCode Go" card
+      // in the UI; the frontend re-maps the providerId to
+      // `opencode-go-anthropic` when the user picks one of these
+      // because the gateway explicitly rejects them on the OpenAI
+      // endpoint (verified empirically).
+      {
+        id: 'minimax-m3',
+        name: 'MiniMax M3',
+        description: 'Latest, strong reasoning',
+      },
+      {
+        id: 'minimax-m2.7',
+        name: 'MiniMax M2.7',
+        description: 'Fast reasoning model',
+      },
+      {
+        id: 'minimax-m2.5',
+        name: 'MiniMax M2.5',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'qwen3.7-max',
+        name: 'Qwen3.7 Max',
+        description: 'Strongest Qwen open model',
+      },
+      {
+        id: 'qwen3.7-plus',
+        name: 'Qwen3.7 Plus',
+        description: 'Balanced Qwen open model',
+      },
+      {
+        id: 'qwen3.6-plus',
+        name: 'Qwen3.6 Plus',
+        description: 'Previous-gen Qwen open model',
+      },
+    ],
+  },
 ];
+
+/**
+ * Model IDs that OpenCode Go serves via the Anthropic-compatible
+ * endpoint (`/v1/messages`) instead of the OpenAI-compatible one
+ * (`/v1/chat/completions`). Used by:
+ *
+ * - the frontend to re-map the `providerId` from `opencode-go` to
+ *   `opencode-go-anthropic` when the user picks one of these
+ *   models in a single-dropdown UI;
+ * - the `opencode-go-anthropic` provider profile to know which of
+ *   the 13 models in the unified preset belong to it.
+ *
+ * Source of truth: the Endpoints table at
+ * https://opencode.ai/docs/go, cross-checked with a live probe of
+ * the gateway (the `oa-compat` endpoint returns
+ * `Model <id> is not supported for format oa-compat` for these
+ * models).
+ */
+export const OPENCODE_GO_ANTHROPIC_MODEL_IDS: ReadonlySet<string> = new Set([
+  'minimax-m3',
+  'minimax-m2.7',
+  'minimax-m2.5',
+  'qwen3.7-max',
+  'qwen3.7-plus',
+  'qwen3.6-plus',
+]);
+
+/**
+ * Hidden preset for the Anthropic-compatible subset of OpenCode
+ * Go. Used by the `OpenCodeGoAnthropicProfile` class to register
+ * itself in the provider registry, but deliberately NOT included
+ * in `PROVIDER_PRESETS` so it doesn't show up as a separate card
+ * in the UI. The frontend surfaces all 13 models under the single
+ * "OpenCode Go" card and re-maps the `providerId` to
+ * `opencode-go-anthropic` when the chosen model is in
+ * `OPENCODE_GO_ANTHROPIC_MODEL_IDS`.
+ */
+export const OPENCODE_GO_ANTHROPIC_PRESET: ProviderPreset = {
+  id: 'opencode-go-anthropic',
+  name: 'OpenCode Go (Anthropic)',
+  vendorFamily: 'anthropic',
+  baseUrl: 'https://opencode.ai/zen/go/v1',
+  websiteUrl: 'https://opencode.ai/auth',
+  documentationUrl: 'https://opencode.ai/docs/go',
+  recommendedModel: 'minimax-m2.7',
+  icon: 'bi-stars',
+  models: [
+    {
+      id: 'minimax-m3',
+      name: 'MiniMax M3',
+      description: 'Latest, strong reasoning',
+    },
+    {
+      id: 'minimax-m2.7',
+      name: 'MiniMax M2.7',
+      description: 'Fast reasoning model',
+    },
+    {
+      id: 'minimax-m2.5',
+      name: 'MiniMax M2.5',
+      description: 'Reasoning model',
+    },
+    {
+      id: 'qwen3.7-max',
+      name: 'Qwen3.7 Max',
+      description: 'Strongest Qwen open model',
+    },
+    {
+      id: 'qwen3.7-plus',
+      name: 'Qwen3.7 Plus',
+      description: 'Balanced Qwen open model',
+    },
+    {
+      id: 'qwen3.6-plus',
+      name: 'Qwen3.6 Plus',
+      description: 'Previous-gen Qwen open model',
+    },
+  ],
+};

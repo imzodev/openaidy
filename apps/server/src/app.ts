@@ -15,6 +15,10 @@ import {
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { createLogger, registerHttpLogger } from './lib/logger';
+import {
+  buildCredentialResolver,
+  noopInvalidator,
+} from './lib/credential-provider';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
@@ -167,11 +171,19 @@ export async function buildApp() {
   const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
   skillRegistry.load();
 
+  const credentialResolver = buildCredentialResolver(
+    dbAdapter ? (dbAdapter.client as never) : undefined,
+  );
+  const invalidateCredential = credentialResolver
+    ? credentialResolver.invalidate
+    : noopInvalidator();
+
   const configService = createAppConfigService({
     configPath: env.APP_CONFIG_PATH,
     templatePath: env.APP_CONFIG_TEMPLATE_PATH,
     providers: providerServices,
     agents: agentRegistry,
+    ...(credentialResolver ? { credentialProvider: credentialResolver } : {}),
   });
   await configService.load();
 
@@ -417,10 +429,21 @@ export async function buildApp() {
     authMiddleware,
   });
 
-  // Pass shared services to provider routes
+  // Pass shared services to provider routes. provider routes may
+  // optionally use the DB (for OAuth state + provider credentials);
+  // when the adapter isn't available, pass undefined and the routes
+  // skip the OAuth/connection endpoints.
   await app.register(providerRoutes, {
     services: services.providers,
     authMiddleware,
+    // dbAdapter.client is the raw drizzle instance (the only thing
+    // with .insert/.select/.update). At this point in app.ts
+    // dbAdapter has been instantiated (we'd have exited earlier if
+    // the DB couldn't be created). The cast to DatabaseClient is
+    // safe at runtime because client is the drizzle db, not the
+    // adapter envelope (which only has .repositories/.close/.kind).
+    db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
+    invalidateCredential,
   });
 
   // Register agent routes

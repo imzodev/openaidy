@@ -26,14 +26,14 @@ describe('isTextPart', () => {
   });
 
   it('should return false for function call parts', () => {
-    expect(
-      isTextPart({ functionCall: { name: 'test', args: {} } })
-    ).toBe(false);
+    expect(isTextPart({ functionCall: { name: 'test', args: {} } })).toBe(
+      false,
+    );
   });
 
   it('should return false for function response parts', () => {
     expect(
-      isTextPart({ functionResponse: { name: 'test', response: {} } })
+      isTextPart({ functionResponse: { name: 'test', response: {} } }),
     ).toBe(false);
   });
 });
@@ -41,7 +41,9 @@ describe('isTextPart', () => {
 describe('isFunctionCallPart', () => {
   it('should return true for function call parts', () => {
     expect(
-      isFunctionCallPart({ functionCall: { name: 'test', args: { foo: 'bar' } } })
+      isFunctionCallPart({
+        functionCall: { name: 'test', args: { foo: 'bar' } },
+      }),
     ).toBe(true);
   });
 
@@ -110,16 +112,105 @@ describe('mapFinishReason', () => {
 
 describe('mapFunctionCall', () => {
   it('should map function call to tool call request', () => {
-    const functionCall = {
-      name: 'get_weather',
-      args: { city: 'Berlin' },
+    const part = {
+      functionCall: {
+        name: 'get_weather',
+        args: { city: 'Berlin' },
+      },
     };
 
-    const result = mapFunctionCall(functionCall);
+    const result = mapFunctionCall(part);
 
     expect(result.name).toBe('get_weather');
     expect(result.arguments).toBe('{"city":"Berlin"}');
     expect(result.id).toMatch(/^call_/);
+    expect(result.thoughtSignature).toBeUndefined();
+  });
+
+  it('should reverse-lookup the original MCP-style name via the nameMap', () => {
+    // The request mapper sanitized `github::create_or_update_file`
+    // to `github:create_or_update_file` before sending. The model
+    // echoes the sanitized name back. The response mapper must
+    // restore the original `::` form so the dispatch layer can
+    // find the right MCP tool.
+    const nameMap = new Map([
+      ['github:create_or_update_file', 'github::create_or_update_file'],
+    ]);
+    const part = {
+      functionCall: {
+        name: 'github:create_or_update_file',
+        args: { path: 'foo.txt' },
+      },
+    };
+
+    const result = mapFunctionCall(part, nameMap);
+
+    expect(result.name).toBe('github::create_or_update_file');
+  });
+
+  it('should round-trip the thought_signature when present on the part', () => {
+    // The Gemini API requires a `thought_signature` on at least
+    // the first functionCall part of a multi-function-call turn
+    // when that turn is replayed. The response mapper must
+    // capture the signature from the part and surface it on the
+    // `ToolCallRequest` so the request mapper can re-emit it on
+    // the next turn.
+    const part = {
+      functionCall: {
+        name: 'list_files',
+        args: { path: '/' },
+      },
+      thoughtSignature: 'sig_abc123',
+    };
+    const result = mapFunctionCall(part);
+    expect(result.thoughtSignature).toBe('sig_abc123');
+  });
+
+  it('should accept the snake_case `thought_signature` field', () => {
+    // Some Gemini models (notably `gemini-3.1-flash-lite`)
+    // serialise the field as `thought_signature` (snake_case)
+    // on the wire. The response mapper probes both field names
+    // and the request side uses the same key on the way out.
+    const part = {
+      functionCall: {
+        name: 'list_files',
+        args: { path: '/' },
+      },
+      thought_signature: 'sig_snake',
+    };
+    const result = mapFunctionCall(part);
+    expect(result.thoughtSignature).toBe('sig_snake');
+  });
+
+  it('should prefer the camelCase field when both are present', () => {
+    // Belt-and-braces: if the wire payload ever carries both,
+    // the camelCase value is the one the docs treat as
+    // canonical, so it wins.
+    const part = {
+      functionCall: { name: 'list_files', args: {} },
+      thoughtSignature: 'sig_camel',
+      thought_signature: 'sig_snake',
+    };
+    const result = mapFunctionCall(part);
+    expect(result.thoughtSignature).toBe('sig_camel');
+  });
+
+  it('should omit the thoughtSignature when empty or undefined', () => {
+    // exactOptionalPropertyTypes: a field explicitly set to
+    // `undefined` is *not* the same as an absent field. The
+    // mapper must drop the key entirely when no signature is
+    // present (e.g. older models that do not emit it).
+    const partEmpty = {
+      functionCall: { name: 'a', args: {} },
+      thoughtSignature: '',
+    };
+    const partMissing = {
+      functionCall: { name: 'b', args: {} },
+    };
+    expect(mapFunctionCall(partEmpty).thoughtSignature).toBeUndefined();
+    expect(mapFunctionCall(partMissing).thoughtSignature).toBeUndefined();
+    expect('thoughtSignature' in mapFunctionCall(partEmpty)).toBe(false);
+    expect('thoughtSignature' in mapFunctionCall(partMissing)).toBe(false);
   });
 });
 
@@ -139,10 +230,7 @@ describe('extractToolCalls', () => {
   });
 
   it('should return empty array for parts without function calls', () => {
-    const parts: GeminiPart[] = [
-      { text: 'Hello' },
-      { text: 'World' },
-    ];
+    const parts: GeminiPart[] = [{ text: 'Hello' }, { text: 'World' }];
 
     const result = extractToolCalls(parts);
 
@@ -164,9 +252,7 @@ describe('extractTextContent', () => {
   });
 
   it('should return empty string for parts without text', () => {
-    const parts: GeminiPart[] = [
-      { functionCall: { name: 'test', args: {} } },
-    ];
+    const parts: GeminiPart[] = [{ functionCall: { name: 'test', args: {} } }];
 
     const result = extractTextContent(parts);
 
@@ -210,7 +296,9 @@ describe('mapResponse', () => {
           content: {
             role: 'model',
             parts: [
-              { functionCall: { name: 'get_weather', args: { city: 'Berlin' } } },
+              {
+                functionCall: { name: 'get_weather', args: { city: 'Berlin' } },
+              },
             ],
           },
           finishReason: 'TOOL_CALLS',
@@ -256,7 +344,9 @@ describe('mapResponse', () => {
             role: 'model',
             parts: [
               { text: 'Let me check that for you.' },
-              { functionCall: { name: 'get_weather', args: { city: 'Berlin' } } },
+              {
+                functionCall: { name: 'get_weather', args: { city: 'Berlin' } },
+              },
             ],
           },
           finishReason: 'TOOL_CALLS',
@@ -307,7 +397,9 @@ describe('mapStreamChunk', () => {
           content: {
             role: 'model',
             parts: [
-              { functionCall: { name: 'get_weather', args: { city: 'Berlin' } } },
+              {
+                functionCall: { name: 'get_weather', args: { city: 'Berlin' } },
+              },
             ],
           },
         },

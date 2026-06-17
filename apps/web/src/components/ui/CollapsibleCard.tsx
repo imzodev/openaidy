@@ -1,20 +1,6 @@
 import { createSignal, Show } from 'solid-js';
 import { ChevronDown, ChevronRight, Trash2 } from 'lucide-solid';
-import type { JSX } from 'solid-js';
-
-interface CollapsibleCardProps {
-  title: string;
-  index?: number;
-  badge?: string;
-  badgeVariant?: 'default' | 'success' | 'info' | 'warning' | 'error';
-  description?: string;
-  showEnabled?: boolean;
-  enabled?: boolean;
-  onDelete?: () => void;
-  children: JSX.Element;
-  isPending?: boolean;
-  initiallyCollapsed?: boolean;
-}
+import type { CollapsibleCardProps } from './CollapsibleCard.types';
 
 const badgeStyles = {
   default: 'bg-gray-100 dark:bg-gray-700 text-text-secondary',
@@ -87,7 +73,10 @@ export function CollapsibleCard(props: CollapsibleCardProps) {
         </div>
       </div>
       <Show when={!isCollapsed()}>
-        <div class="p-4">{props.children}</div>
+        <div class="p-4">
+          <Show when={props.notice}>{props.notice}</Show>
+          {props.children}
+        </div>
       </Show>
     </div>
   );

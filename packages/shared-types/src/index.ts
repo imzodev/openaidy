@@ -11,6 +11,7 @@ export * from './agents.js';
 export * from './personality.js';
 export * from './channels.js';
 export * from './providers-preset.js';
+export * from './providers.js';
 export * from './choices.js';
 export * from './memory.js';
 export * from './pulses.js';

@@ -46,7 +46,3 @@ export class OpenRouterProfile extends ProviderProfile {
     });
   }
 }
-
-import { registry } from '../registry';
-
-registry.register(new OpenRouterProfile());

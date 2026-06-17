@@ -20,30 +20,19 @@ import type { AgentRegistry } from '../agents';
 import type { Agent } from '../agents';
 import type { ProviderServices } from '../providers';
 import { createProviderConfigService } from '../providers/config-service';
-
-export type AppConfigIssue = {
-  scope: 'provider';
-  id: string;
-  code: string;
-  message: string;
-};
-
-export type AppConfigStatus = {
-  issues: AppConfigIssue[];
-};
-
-export type AppConfigServiceOptions = {
-  configPath: string;
-  templatePath: string;
-  providers: ProviderServices;
-  agents: AgentRegistry;
-};
+import type {
+  AppConfigIssue,
+  AppConfigServiceOptions,
+  AppConfigStatus,
+} from './types';
+import type { CredentialProvider } from '@openaidy/shared-types';
 
 export class AppConfigService {
   private readonly configPath: string;
   private readonly templatePath: string;
   private readonly providers: ProviderServices;
   private readonly agents: AgentRegistry;
+  private readonly credentialProvider: CredentialProvider | undefined;
   private currentConfig: OpenAidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
 
@@ -52,6 +41,7 @@ export class AppConfigService {
     this.templatePath = options.templatePath;
     this.providers = options.providers;
     this.agents = options.agents;
+    this.credentialProvider = options.credentialProvider;
   }
 
   getConfig(): OpenAidyAppConfig {
@@ -149,7 +139,11 @@ export class AppConfigService {
     this.providers.registry.clear();
     this.issues = [];
 
-    const configService = createProviderConfigService();
+    const configService = createProviderConfigService(
+      this.credentialProvider
+        ? { credentialProvider: this.credentialProvider }
+        : {},
+    );
 
     for (const provider of config.providers) {
       if (!provider.enabled) {

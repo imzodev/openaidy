@@ -34,6 +34,7 @@ export type {
   AppConfig,
   ConfigIssue,
   ConfigStatus,
+  RewiredAgentNotice,
   WorkspaceFileInfo,
   WorkspaceFileListResponse,
   WorkspaceFileContentResponse,
@@ -1100,4 +1101,96 @@ export async function disconnectChannel(id: string): Promise<void> {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
+}
+
+// ============================================================================
+// Provider API functions
+// ============================================================================
+
+export type ConnectProviderResponse =
+  | { success: true; providerId: string }
+  | { success: false; error: string };
+
+export type OAuthStartResponse = {
+  success: boolean;
+  /** URL the user should open in a browser to complete OAuth. */
+  authorizationUrl?: string;
+  /** Internal flow id, used to poll for completion. */
+  flowId?: string;
+  error?: string;
+};
+
+/** Poll the server for the status of an in-flight OAuth flow. */
+export async function getOAuthStatus(flowId: string): Promise<
+  | {
+      ok: true;
+      status: 'pending' | 'authorized' | 'failed';
+      verificationUrl?: string;
+      userCode?: string;
+      error?: string;
+    }
+  | { ok: false; error: 'not_found' | 'expired' }
+> {
+  const res = await apiFetch(
+    `${API_BASE}/providers/minimax/connect/oauth/status?flowId=${encodeURIComponent(flowId)}`,
+  );
+  return res.json();
+}
+
+/**
+ * Connect a provider using an API key.
+ */
+export async function connectProviderWithApiKey(
+  providerId: string,
+  apiKey: string,
+): Promise<ConnectProviderResponse> {
+  const res = await apiFetch(
+    `${API_BASE}/providers/${providerId}/connect/api-key`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Start OAuth flow for a provider.
+ *
+ * For MiniMax (the only OAuth-enabled provider in this phase): the
+ * server returns an authorizationUrl the frontend opens in a popup.
+ */
+export async function startProviderOAuth(
+  providerId: string,
+  options: { region?: 'global' | 'cn' },
+): Promise<OAuthStartResponse> {
+  const body: Record<string, string> = {};
+  if (options.region) body.region = options.region;
+
+  const res = await apiFetch(
+    `${API_BASE}/providers/${providerId}/connect/oauth/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Disconnect a provider.
+ *
+ * Clears the encrypted credential row server-side (DELETE
+ * /providers/:providerId/connection). Throws on non-2xx so callers
+ * can use a try/catch for the error path. Use `useQueryClient`'s
+ * `invalidateQueries({ queryKey: ['config'] })` afterwards to
+ * refresh any UI that reads `AppConfig.providers[]`.
+ */
+export async function disconnectProvider(providerId: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE}/providers/${providerId}/connection`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`disconnectProvider: ${res.status}`);
 }
