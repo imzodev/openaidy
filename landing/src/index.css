@@ -5,7 +5,9 @@
 :root,
 [data-theme="dark"] {
   --bg-primary: #08080d;
+  --bg: #08080d;
   --bg-card: #111119;
+  --bg-secondary: #111119;
   --text-primary: #eeeef5;
   --text-secondary: #8888a0;
   --accent: #6366f1;
@@ -30,7 +32,9 @@
 /* Light theme */
 [data-theme="light"] {
   --bg-primary: #f4f4fa;
+  --bg: #f8f8fc;
   --bg-card: #ffffff;
+  --bg-secondary: #f0f0f8;
   --text-primary: #111119;
   --text-secondary: #6b6b82;
   --accent: #4f46e5;
@@ -1184,17 +1188,13 @@ img { max-width: 100%; display: block; }
   color: var(--text-secondary);
 }
 
-/* Light theme adjustments */
+/* Light theme adjustments — kept for non-variable elements */
 [data-theme="light"] .blog-card {
-  background: #ffffff;
+  background: var(--bg-card);
 }
 
 [data-theme="light"] .related-card-body {
-  background: #ffffff;
-}
-
-[data-theme="light"] .post-body code {
-  background: #f0f0f8;
+  background: var(--bg-card);
 }
 
 @media (max-width: 640px) {
@@ -1627,16 +1627,8 @@ img { max-width: 100%; display: block; }
 
 /* ── Light theme ────────────────────────────────────────────────────────── */
 
-[data-theme="light"] .docs-sidebar {
-  background: #f8f8fc;
-}
-
 [data-theme="light"] .docs-sidebar-link--active {
   background: rgba(99, 102, 241, 0.08);
-}
-
-[data-theme="light"] .doc-body pre {
-  background: #f0f0f8;
 }
 
 [data-theme="light"] .doc-body blockquote {
