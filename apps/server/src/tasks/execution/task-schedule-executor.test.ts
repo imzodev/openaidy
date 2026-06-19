@@ -110,6 +110,7 @@ type ExecutorMocks = {
   };
   subtasksRepo: {
     listByTask: ReturnType<typeof vi.fn>;
+    resetByTask?: ReturnType<typeof vi.fn>;
     deleteByTask?: ReturnType<typeof vi.fn>;
   };
   taskAgentsRepo: {
@@ -180,6 +181,7 @@ function makeHarness(
   };
   const subtasksRepo: ExecutorMocks['subtasksRepo'] = {
     listByTask: vi.fn().mockResolvedValue(subtasks),
+    resetByTask: vi.fn().mockResolvedValue(subtasks),
     deleteByTask: vi.fn().mockResolvedValue(undefined),
   };
   const taskAgentsRepo = {
@@ -394,7 +396,7 @@ describe('TaskScheduleExecutor.execute', () => {
     );
   });
 
-  it('with replanPolicy=never: skips planning, reuses subtasks, does NOT delete them', async () => {
+  it('with replanPolicy=never: skips planning, resets subtasks, and reuses the plan', async () => {
     const { executor, mocks } = harness;
     const subtask = makeSubtask();
     mocks.subtasksRepo.listByTask.mockResolvedValue([subtask]);
@@ -407,7 +409,8 @@ describe('TaskScheduleExecutor.execute', () => {
     await executor.execute('sched-1', payloadFor({ schedule }));
     // No planning call
     expect(mocks.planningService).toBeUndefined();
-    // No subtask delete
+    // Subtasks are reset (not deleted) so the existing plan runs again.
+    expect(mocks.subtasksRepo.resetByTask).toHaveBeenCalledWith('task-1');
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
     // Subtasks were executed (the existing plan was reused) and the
     // session created by the executor was passed through so we don't
@@ -418,6 +421,54 @@ describe('TaskScheduleExecutor.execute', () => {
     );
     // executeTask is NOT called because work was submitted (startedCount > 0)
     expect(mocks.taskService.executeTask).not.toHaveBeenCalled();
+  });
+
+  it('resets completed subtasks on the second recurrent run so the session is not empty', async () => {
+    // Regression: on run #2 all subtasks from run #1 are completed. Without
+    // a reset, executeSubtasks finds nothing pending and the executor falls
+    // through to executeTask, which also sees subtasks and submits no work —
+    // leaving the newly created session empty.
+    const completedSubtask = makeSubtask({
+      status: 'completed',
+      result: 'done',
+    });
+    const schedule = makeSchedule({
+      executionCount: 1,
+      replanPolicy: 'never',
+    });
+    const { executor, mocks } = makeHarness({
+      schedule,
+      subtasks: [completedSubtask],
+    });
+
+    // Simulate resetByTask flipping the in-memory subtask back to pending.
+    mocks.subtasksRepo.resetByTask = vi.fn().mockImplementation(() => {
+      completedSubtask.status = 'pending';
+      completedSubtask.result = null;
+      completedSubtask.sessionId = null;
+      return Promise.resolve([completedSubtask]);
+    });
+    mocks.subtasksRepo.listByTask.mockResolvedValue([completedSubtask]);
+    mocks.taskService.executeSubtasks.mockResolvedValue({
+      ok: true,
+      data: { startedCount: 1 },
+    });
+
+    const result = await executor.execute('sched-1', payloadFor({ schedule }));
+
+    expect(result.ok).toBe(true);
+    expect(mocks.subtasksRepo.resetByTask).toHaveBeenCalledWith('task-1');
+    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ sessionId: expect.any(String) }),
+    );
+    // executeTask must NOT be called: the reset made subtasks pending, so
+    // real work was submitted.
+    expect(mocks.taskService.executeTask).not.toHaveBeenCalled();
+    expect(mocks.sessionService.createSession).toHaveBeenCalledWith(
+      'Task: Daily summary (run #2)',
+      'task',
+    );
   });
 
   it('with replanPolicy=always: re-invokes the planning agent and deletes subtasks first', async () => {
@@ -468,6 +519,8 @@ describe('TaskScheduleExecutor.execute', () => {
       payloadFor({ schedule, currentDescriptionHash: currentHash }),
     );
     expect(mocks.planningService!.planTask).not.toHaveBeenCalled();
+    // Plan is reused: subtasks are reset, not deleted.
+    expect(mocks.subtasksRepo.resetByTask).toHaveBeenCalledWith('task-1');
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
   });
 
