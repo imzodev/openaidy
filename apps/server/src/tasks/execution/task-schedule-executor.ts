@@ -393,7 +393,7 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
     const newCount = schedule.executionCount + 1;
     const now = new Date();
 
-    let nextStatus: 'active' | 'paused' | 'expired' = 'active';
+    let nextStatus: 'active' | 'expired' = 'active';
     let nextRunAt: Date | null = null;
 
     if (schedule.cronExpression) {
@@ -432,6 +432,8 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
       nextRunAt = null;
     }
 
+    // Restore the schedule to active (or terminal). The claim flipped it
+    // to `running`, so we must always transition it out of that state.
     await this.deps.taskSchedulesRepo.update(id, {
       // null would break NOT NULL on the column; use now() for expired rows
       // so the constraint is satisfied even when we're not rescheduling.

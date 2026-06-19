@@ -103,10 +103,37 @@ export class RecurringTasksService {
    * The polling loop itself is now driven by the central
    * `SchedulerService` after this service registers the executor as
    * a `ScheduledRunnable`. We no longer start a `setInterval` here.
+   *
+   * On startup we also recover any schedules that were left in `running`
+   * (e.g. the server crashed while a run was in flight). Without this
+   * they would never be claimed again.
    */
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+
+    // Recover schedules left in `running` after a crash. Fire-and-forget:
+    // it must not block startup, and any error is logged, not thrown.
+    const stuckThreshold = new Date(this.now().getTime() - 5 * 60 * 1000);
+    this.taskSchedulesRepo
+      .recoverStuckSchedules(stuckThreshold)
+      .then((recovered) => {
+        if (recovered.length > 0) {
+          this.logger.info(
+            {
+              count: recovered.length,
+              scheduleIds: recovered.map((s) => s.id),
+            },
+            'Recovered stuck schedules on startup',
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.error(
+          { err: String(err) },
+          'Failed to recover stuck schedules on startup',
+        );
+      });
 
     // Subscribe to run events to finalise history rows.
     if (this.runEvents) {

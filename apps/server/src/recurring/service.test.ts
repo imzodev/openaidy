@@ -64,6 +64,7 @@ type Harness = {
   };
   taskSchedulesRepo: {
     claimNextDue: ReturnType<typeof vi.fn>;
+    recoverStuckSchedules: ReturnType<typeof vi.fn>;
   };
   taskExecutionHistoryRepo: {
     findBySessionId: ReturnType<typeof vi.fn>;
@@ -115,6 +116,7 @@ function makeHarness(
       .mockResolvedValue(
         schedule ? { id: schedule.id, payload: { schedule } } : null,
       ),
+    recoverStuckSchedules: vi.fn().mockResolvedValue([]),
   };
   const taskExecutionHistoryRepo = {
     findBySessionId: vi.fn(),
@@ -128,22 +130,20 @@ function makeHarness(
   const markCompletedSpy = taskExecutionHistoryRepo.markCompleted;
   const markFailedSpy = taskExecutionHistoryRepo.markFailed;
   const executor = {
-    claimNextDue: vi
-      .fn()
-      .mockResolvedValue(
-        schedule
-          ? {
-              id: schedule.id,
-              payload: {
-                schedule,
-                taskTitle: 'T',
-                taskDescription: 'D',
-                taskAssignedAgents: [],
-                currentDescriptionHash: 'h',
-              },
-            }
-          : null,
-      ),
+    claimNextDue: vi.fn().mockResolvedValue(
+      schedule
+        ? {
+            id: schedule.id,
+            payload: {
+              schedule,
+              taskTitle: 'T',
+              taskDescription: 'D',
+              taskAssignedAgents: [],
+              currentDescriptionHash: 'h',
+            },
+          }
+        : null,
+    ),
     execute: options.executorError
       ? vi.fn().mockRejectedValue(options.executorError)
       : vi.fn().mockResolvedValue(executorResult),
@@ -204,6 +204,24 @@ describe('RecurringTasksService', () => {
       h.service.start();
       h.service.start();
       expect(h.runEvents.subscribeAll).toHaveBeenCalledOnce();
+    });
+
+    it('recovers stuck schedules on start', async () => {
+      const h = makeHarness();
+      h.service.start();
+      // Wait for the fire-and-forget recovery promise.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(h.taskSchedulesRepo.recoverStuckSchedules).toHaveBeenCalledOnce();
+    });
+
+    it('logs recovery errors without throwing', async () => {
+      const h = makeHarness();
+      h.taskSchedulesRepo.recoverStuckSchedules.mockRejectedValue(
+        new Error('db down'),
+      );
+      expect(() => h.service.start()).not.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(h.log.error).toHaveBeenCalled();
     });
 
     it('stop is idempotent', async () => {

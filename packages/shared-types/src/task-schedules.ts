@@ -38,7 +38,7 @@ export type ReplanPolicy = 'never' | 'on-description-change' | 'always';
  * - `expired`: terminal — schedule reached `maxExecutions` or finished
  *              a one-shot. The executor transitions to this state.
  */
-export type TaskScheduleStatus = 'active' | 'paused' | 'expired';
+export type TaskScheduleStatus = 'active' | 'running' | 'paused' | 'expired';
 
 /**
  * Status of a single execution history row.

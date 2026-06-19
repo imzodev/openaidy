@@ -643,9 +643,17 @@ export async function createDatabaseClient(
     ),
     'utf-8',
   );
+  const runningStatusMigrationSql = readFileSync(
+    resolve(
+      fileURLToPath(import.meta.url),
+      '../../drizzle/0010_add_running_status.sql',
+    ),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
+    await client.query(runningStatusMigrationSql);
   } finally {
     client.release();
   }

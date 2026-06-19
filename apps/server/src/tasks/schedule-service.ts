@@ -4,6 +4,7 @@ import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   TaskExecutionHistoryStatus,
+  TaskScheduleStatus,
 } from '@openaidy/shared-types';
 import { parseScheduleInput } from '../pulses/utils';
 import { taskScheduleToDto, taskExecutionHistoryToDto } from './schedule-dto';
@@ -151,7 +152,7 @@ export class TaskScheduleService {
     const updates: {
       nextRunAt?: Date;
       lastRunAt?: Date | null;
-      status?: 'active' | 'paused' | 'expired';
+      status?: TaskScheduleStatus;
       replanPolicy?: 'never' | 'on-description-change' | 'always';
       maxExecutions?: number;
       descriptionHash?: string | null;

@@ -211,6 +211,7 @@ export type TaskExecutionHistoryStatus =
  */
 export const taskScheduleStatusEnum = pgEnum('task_schedule_status', [
   'active',
+  'running',
   'paused',
   'expired',
 ]);
