@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { useTheme } from 'next-themes';
+import { useTheme } from './ThemeProvider';
 import {
   Github,
   BookOpen,
@@ -9,15 +9,9 @@ import {
   Moon,
   BookText,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
 export default function Navbar() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -85,15 +79,13 @@ export default function Navbar() {
           GitHub
         </a>
 
-        {mounted && (
-          <button
-            onClick={toggleTheme}
-            className="navbar-theme-btn"
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-          >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-        )}
+        <button
+          onClick={toggleTheme}
+          className="navbar-theme-btn"
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+        >
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
       </div>
     </motion.nav>
   );
