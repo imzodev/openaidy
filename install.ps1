@@ -191,13 +191,7 @@ function Install-Pnpm {
         return $true
     }
 
-    $tmpBatch = New-TempFile
-    $tmpBatch = $tmpBatch + ".bat"
-
     try {
-        $batchContent = "@`n`tcd /d `%~dp0`n`tcall ..\node\node.exe ..\node\node_modules\npm\bin\npm-cli.js %*"
-        [System.IO.File]::WriteAllText($tmpBatch, $batchContent)
-
         # Use npm to install pnpm globally
         $env:PNPM_HOME = $pnpmHome
         New-Item -ItemType Directory -Path $pnpmHome -Force | Out-Null
