@@ -120,7 +120,7 @@ describe('Recurring tasks repositories (integration)', () => {
       expect(found).toBeNull();
     });
 
-    test('claimNextDue returns the earliest due active schedule', async () => {
+    test('claimNextDue returns the earliest due active schedule and flips it to running', async () => {
       const t1 = await tasksRepo!.create({ title: 'T1', description: 'D' });
       const t2 = await tasksRepo!.create({ title: 'T2', description: 'D' });
 
@@ -146,6 +146,30 @@ describe('Recurring tasks repositories (integration)', () => {
       const claimed = await schedulesRepo!.claimNextDue(new Date());
       expect(claimed).not.toBeNull();
       expect(claimed!.payload.schedule.taskId).toBe(t1.id);
+      // The claim must flip the row to running so the next tick cannot
+      // grab it again until reschedule() restores it.
+      expect(claimed!.payload.schedule.status).toBe('running');
+
+      const after = await schedulesRepo!.findById(claimed!.id);
+      expect(after?.status).toBe('running');
+    });
+
+    test('claimNextDue does not reclaim a running schedule', async () => {
+      const task = await tasksRepo!.create({ title: 'T', description: 'D' });
+      await schedulesRepo!.create({
+        taskId: task.id,
+        cronExpression: null,
+        preset: '15m',
+        scheduleDate: null,
+        nextRunAt: new Date(Date.now() - 60_000),
+      });
+
+      const first = await schedulesRepo!.claimNextDue(new Date());
+      expect(first).not.toBeNull();
+      expect(first!.payload.schedule.status).toBe('running');
+
+      const second = await schedulesRepo!.claimNextDue(new Date());
+      expect(second).toBeNull();
     });
 
     test('claimNextDue returns null when nothing is due', async () => {
@@ -161,43 +185,76 @@ describe('Recurring tasks repositories (integration)', () => {
       expect(claimed).toBeNull();
     });
 
-    test('claimNextDue skips paused and expired schedules', async () => {
+    test('claimNextDue skips paused, expired and running schedules', async () => {
       const t1 = await tasksRepo!.create({ title: 'T1', description: 'D' });
       const t2 = await tasksRepo!.create({ title: 'T2', description: 'D' });
       const t3 = await tasksRepo!.create({ title: 'T3', description: 'D' });
       const past = new Date(Date.now() - 60_000);
 
-      const _a = await schedulesRepo!.create({
+      const active = await schedulesRepo!.create({
         taskId: t1.id,
         cronExpression: null,
         preset: '15m',
         scheduleDate: null,
         nextRunAt: past,
       });
-      const p = await schedulesRepo!.create({
+      const paused = await schedulesRepo!.create({
         taskId: t2.id,
         cronExpression: null,
         preset: '15m',
         scheduleDate: null,
         nextRunAt: past,
       });
-      const e = await schedulesRepo!.create({
+      const expired = await schedulesRepo!.create({
         taskId: t3.id,
         cronExpression: null,
         preset: '15m',
         scheduleDate: null,
         nextRunAt: past,
       });
-      await schedulesRepo!.pause(p.id);
+      await schedulesRepo!.pause(paused.id);
       // expire via direct update (no public method to "expire" without going
       // through the reschedule flow, which is Phase 2's job)
-      await schedulesRepo!.update(e.id, { status: 'expired' });
+      await schedulesRepo!.update(expired.id, { status: 'expired' });
 
       const claimed = await schedulesRepo!.claimNextDue(new Date());
       expect(claimed).not.toBeNull();
-      expect(claimed!.payload.schedule.taskId).toBe(t1.id);
-      // a is still active
-      expect(claimed!.payload.schedule.status).toBe('active');
+      expect(claimed!.id).toBe(active.id);
+      expect(claimed!.payload.schedule.status).toBe('running');
+    });
+
+    test('recoverStuckSchedules restores running schedules older than the threshold', async () => {
+      const task = await tasksRepo!.create({ title: 'T', description: 'D' });
+      const schedule = await schedulesRepo!.create({
+        taskId: task.id,
+        cronExpression: null,
+        preset: '15m',
+        scheduleDate: null,
+        nextRunAt: new Date(Date.now() - 60_000),
+      });
+      await schedulesRepo!.update(schedule.id, { status: 'running' });
+
+      const threshold = new Date(Date.now() - 1_000);
+      const recovered = await schedulesRepo!.recoverStuckSchedules(threshold);
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]!.id).toBe(schedule.id);
+      expect(recovered[0]!.status).toBe('active');
+
+      const recent = await schedulesRepo!.create({
+        taskId: (await tasksRepo!.create({ title: 'T2', description: 'D' })).id,
+        cronExpression: null,
+        preset: '15m',
+        scheduleDate: null,
+        nextRunAt: new Date(Date.now() - 60_000),
+      });
+      await schedulesRepo!.update(recent.id, { status: 'running' });
+
+      // Threshold in the past excludes the recent running schedule.
+      const recovered2 = await schedulesRepo!.recoverStuckSchedules(
+        new Date(Date.now() + 1_000),
+      );
+      expect(recovered2).toHaveLength(1);
+      expect(recovered2[0]!.id).toBe(recent.id);
     });
 
     test('update mutates fields and stamps updatedAt', async () => {

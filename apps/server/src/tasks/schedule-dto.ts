@@ -3,6 +3,7 @@ import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   ScheduleInput,
+  ExecutionSubtaskSummary,
 } from '@openaidy/shared-types';
 import { describeCronExpression } from '../scheduler/cron-utils';
 
@@ -80,6 +81,16 @@ export function taskExecutionHistoryToDto(
     row.finishedAt && row.startedAt
       ? row.finishedAt.getTime() - row.startedAt.getTime()
       : null;
+  let subtaskSummary: ExecutionSubtaskSummary | null = null;
+  if (row.subtaskSummary) {
+    try {
+      subtaskSummary = JSON.parse(
+        row.subtaskSummary,
+      ) as ExecutionSubtaskSummary;
+    } catch {
+      // Corrupt JSON — leave as null
+    }
+  }
   return {
     id: row.id,
     taskId: row.taskId,
@@ -95,6 +106,7 @@ export function taskExecutionHistoryToDto(
     taskDescription: row.taskDescription,
     errorCode: row.errorCode,
     errorMessage: row.errorMessage,
+    subtaskSummary,
     createdAt: row.createdAt.toISOString(),
   };
 }

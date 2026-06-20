@@ -7,7 +7,10 @@
 
 import { createResource, createSignal, For, Show } from 'solid-js';
 import { listTaskExecutions, getTaskSchedule } from '../../lib/api-tasks';
-import type { TaskExecutionHistoryStatus } from '../../lib/types';
+import type {
+  TaskExecutionHistoryStatus,
+  ExecutionSubtaskSummary,
+} from '../../lib/types';
 import { ScheduleDisplay } from '../common/ScheduleDisplay';
 import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-solid';
 
@@ -160,6 +163,9 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                   Run #
                 </th>
                 <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
+                  Subtasks
+                </th>
+                <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
                   Session
                 </th>
                 <th class="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-400">
@@ -193,6 +199,23 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                     </td>
                     <td class="px-4 py-3 text-gray-500 dark:text-gray-500 font-mono">
                       #{ex.attemptNumber}
+                    </td>
+                    <td class="px-4 py-3">
+                      <Show
+                        when={ex.subtaskSummary}
+                        fallback={
+                          <span class="text-gray-400 dark:text-gray-600 text-xs">
+                            —
+                          </span>
+                        }
+                      >
+                        {(summary) => (
+                          <SubtaskBadge
+                            summary={summary()}
+                            onOpenSession={props.onOpenSession}
+                          />
+                        )}
+                      </Show>
                     </td>
                     <td class="px-4 py-3">
                       <Show
@@ -270,6 +293,90 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
           <div class="text-gray-500 dark:text-gray-400">
             Loading executions...
           </div>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+/**
+ * SubtaskBadge — compact subtask status summary for an execution row.
+ *
+ * Shows a badge like "3✓ 1✗" (completed/failed out of total) and an
+ * expandable list of each subtask with its status and a link to its
+ * session (if the subtask has one).
+ */
+function SubtaskBadge(props: {
+  summary: ExecutionSubtaskSummary;
+  onOpenSession: (sessionId: string) => void;
+}) {
+  const [expanded, setExpanded] = createSignal(false);
+  const s = props.summary;
+
+  const badgeClass = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300';
+      case 'failed':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300';
+      case 'in_progress':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300';
+      default:
+        return 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
+    }
+  };
+
+  return (
+    <div class="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded())}
+        class="inline-flex items-center gap-1.5 text-xs hover:underline"
+        title="Click to toggle subtask details"
+      >
+        <span class="text-gray-600 dark:text-gray-400">
+          {s.completed}/{s.total} done
+        </span>
+        <Show when={s.failed > 0}>
+          <span class="text-red-500 dark:text-red-400">{s.failed} failed</span>
+        </Show>
+        <Show when={s.inProgress > 0}>
+          <span class="text-yellow-600 dark:text-yellow-400">
+            {s.inProgress} running
+          </span>
+        </Show>
+        <span class="text-gray-400 dark:text-gray-600">
+          {expanded() ? '▾' : '▸'}
+        </span>
+      </button>
+      <Show when={expanded()}>
+        <div class="space-y-1 pl-2 border-l border-gray-200 dark:border-gray-700">
+          <For each={s.items}>
+            {(item) => (
+              <div class="flex items-center gap-2 text-xs">
+                <span
+                  class={`px-1.5 py-0.5 rounded ${badgeClass(item.status)}`}
+                >
+                  {item.status}
+                </span>
+                <span class="text-gray-600 dark:text-gray-400 truncate max-w-[200px]">
+                  {item.title}
+                </span>
+                <Show when={item.sessionId}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      item.sessionId && props.onOpenSession(item.sessionId)
+                    }
+                    class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                    title="View subtask session"
+                  >
+                    <ExternalLink class="w-3 h-3" />
+                  </button>
+                </Show>
+              </div>
+            )}
+          </For>
         </div>
       </Show>
     </div>

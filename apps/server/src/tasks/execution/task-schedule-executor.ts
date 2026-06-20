@@ -255,12 +255,19 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
         schedule.replanPolicy === 'always' ||
         (schedule.replanPolicy === 'on-description-change' && hashChanged);
 
-      // 3. Cleanup previous run. Subtasks are deleted ONLY when we're
-      //    about to replan (otherwise the new session will execute the
-      //    existing ones — the cheap path). The session reference is
-      //    always reset so the new run starts fresh.
+      // 3. Cleanup previous run.
+      //    - When replanning: delete the old subtasks so the planning agent
+      //      can create a fresh plan.
+      //    - When reusing the plan: reset every subtask back to `pending`
+      //      (clearing results/session links) so the recurring run actually
+      //      has work to execute. Without this, the second run finds every
+      //      subtask already completed and creates an empty session.
+      //    The task's session reference is always reset so the new run starts
+      //    fresh.
       if (willReplan) {
         await this.deps.subtasksRepo.deleteByTask?.(taskId);
+      } else {
+        await this.deps.subtasksRepo.resetByTask?.(taskId);
       }
       await this.deps.tasksRepo.update(taskId, { sessionId: null });
       await this.deps.tasksRepo.updateStatus?.(taskId, 'todo');
@@ -386,7 +393,7 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
     const newCount = schedule.executionCount + 1;
     const now = new Date();
 
-    let nextStatus: 'active' | 'paused' | 'expired' = 'active';
+    let nextStatus: 'active' | 'expired' = 'active';
     let nextRunAt: Date | null = null;
 
     if (schedule.cronExpression) {
@@ -425,6 +432,8 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
       nextRunAt = null;
     }
 
+    // Restore the schedule to active (or terminal). The claim flipped it
+    // to `running`, so we must always transition it out of that state.
     await this.deps.taskSchedulesRepo.update(id, {
       // null would break NOT NULL on the column; use now() for expired rows
       // so the constraint is satisfied even when we're not rescheduling.

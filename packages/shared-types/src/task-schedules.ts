@@ -38,7 +38,7 @@ export type ReplanPolicy = 'never' | 'on-description-change' | 'always';
  * - `expired`: terminal — schedule reached `maxExecutions` or finished
  *              a one-shot. The executor transitions to this state.
  */
-export type TaskScheduleStatus = 'active' | 'paused' | 'expired';
+export type TaskScheduleStatus = 'active' | 'running' | 'paused' | 'expired';
 
 /**
  * Status of a single execution history row.
@@ -92,6 +92,32 @@ export type TaskScheduleDto = {
 };
 
 /**
+ * Snapshot of a single subtask's status at the time a run completed.
+ * Used in {@link ExecutionSubtaskSummary}.
+ */
+export type ExecutionSubtaskSummaryItem = {
+  id: string;
+  title: string;
+  status: string;
+  sessionId: string | null;
+};
+
+/**
+ * JSON snapshot of all subtask statuses when a recurring run
+ * completed. Stored in `task_execution_history.subtask_summary`
+ * because subtasks are reset between runs — without this snapshot,
+ * historical runs would have no subtask data.
+ */
+export type ExecutionSubtaskSummary = {
+  total: number;
+  completed: number;
+  failed: number;
+  inProgress: number;
+  pending: number;
+  items: ExecutionSubtaskSummaryItem[];
+};
+
+/**
  * A single execution history row as returned by the API.
  */
 export type TaskExecutionHistoryDto = {
@@ -109,6 +135,8 @@ export type TaskExecutionHistoryDto = {
   taskDescription: string;
   errorCode: string | null;
   errorMessage: string | null;
+  /** JSON snapshot of subtask statuses when the run completed, or null. */
+  subtaskSummary: ExecutionSubtaskSummary | null;
   createdAt: string;
 };
 

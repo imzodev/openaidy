@@ -37,6 +37,8 @@ export type {
   TaskScheduleDto,
   TaskExecutionHistoryStatus,
   TaskExecutionHistoryDto,
+  ExecutionSubtaskSummary,
+  ExecutionSubtaskSummaryItem,
   CreateTaskScheduleInput,
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,

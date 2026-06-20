@@ -273,6 +273,7 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       error_code TEXT,
       error_message TEXT,
       attempt_number INTEGER NOT NULL DEFAULT 1,
+      subtask_summary TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -604,6 +605,19 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   if (!hasFirstMessageId) {
     sqlite.exec(`ALTER TABLE session_runs ADD COLUMN first_message_id TEXT`);
   }
+
+  // Migration: Add subtask_summary to task_execution_history if not exists
+  const historyInfo = sqlite.pragma(
+    'table_info(task_execution_history)',
+  ) as Array<{ name: string }>;
+  const hasSubtaskSummary = historyInfo.some(
+    (col) => col.name === 'subtask_summary',
+  );
+  if (!hasSubtaskSummary) {
+    sqlite.exec(
+      `ALTER TABLE task_execution_history ADD COLUMN subtask_summary TEXT`,
+    );
+  }
 }
 
 export async function createDatabaseClient(
@@ -643,9 +657,17 @@ export async function createDatabaseClient(
     ),
     'utf-8',
   );
+  const runningStatusMigrationSql = readFileSync(
+    resolve(
+      fileURLToPath(import.meta.url),
+      '../../drizzle/0010_add_running_status.sql',
+    ),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
+    await client.query(runningStatusMigrationSql);
   } finally {
     client.release();
   }
