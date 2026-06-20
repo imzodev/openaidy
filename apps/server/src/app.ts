@@ -528,6 +528,7 @@ export async function buildApp() {
       subtasksRepo: dbAdapter.repositories.subtasks,
       taskAgentsRepo: dbAdapter.repositories.taskAgents,
       deliverablesRepo: dbAdapter.repositories.deliverables,
+      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
       agents: services.agents,
       sessionService: services.sessions,
       planningService,

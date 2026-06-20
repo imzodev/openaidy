@@ -118,6 +118,7 @@ export class TaskExecutionHistoryRepository {
       durationMs?: number | null;
       errorCode?: string | null;
       errorMessage?: string | null;
+      subtaskSummary?: string | null;
     },
   ): Promise<schema.TaskExecutionHistoryRow | null> {
     const rows = await this.db

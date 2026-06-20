@@ -72,6 +72,7 @@ export class TaskService {
       options.sessionService,
       options.runEvents,
       options.workspaceBaseDir,
+      options.taskExecutionHistoryRepo,
     );
   }
 

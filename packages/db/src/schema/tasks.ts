@@ -343,6 +343,11 @@ export const taskExecutionHistory = pgTable(
     // just fire again at the next cron tick — but the field is here for
     // forward compatibility with one-off retry logic.
     attemptNumber: integer('attempt_number').notNull().default(1),
+    // Snapshot of subtask statuses when the run completed. JSON string
+    // (SubtaskSummary). Null for tasks without planning or runs that
+    // haven't finished yet. Because subtasks are reset between runs,
+    // without this snapshot historical runs would have no subtask data.
+    subtaskSummary: text('subtask_summary'),
     // Audit
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

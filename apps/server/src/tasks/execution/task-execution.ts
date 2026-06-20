@@ -3,6 +3,7 @@ import type {
   SubtasksRepository,
   TaskAgentsRepository,
   DeliverablesRepository,
+  TaskExecutionHistoryRepository,
   Subtask,
   SessionMessage,
 } from '@openaidy/db';
@@ -10,7 +11,10 @@ import type { AgentRegistry } from '../../agents';
 import type { SessionMessageService } from '../../sessions/service';
 import type { SubmitMessageStreamingInput } from '../../sessions/types';
 import type { RunEventEmitter } from '../../dispatch/events';
-import type { SessionType } from '@openaidy/shared-types';
+import type {
+  SessionType,
+  ExecutionSubtaskSummary,
+} from '@openaidy/shared-types';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
 import type { SessionMessageRecord, ServiceResult } from '../../types';
@@ -31,6 +35,9 @@ export class TaskExecution {
     private readonly sessionService: SessionMessageService | undefined,
     private readonly runEvents: RunEventEmitter | undefined,
     private readonly workspaceBaseDir: string | undefined,
+    private readonly taskExecutionHistoryRepo:
+      | TaskExecutionHistoryRepository
+      | undefined,
   ) {
     this.logger = createLogger('TaskExecution');
 
@@ -87,6 +94,7 @@ export class TaskExecution {
           await this.completeSubtask(
             pendingSubtask.id,
             pendingSubtask.pendingVerificationResult!,
+            event.sessionId,
           );
         }
         return;
@@ -514,6 +522,7 @@ export class TaskExecution {
   async completeSubtask(
     subtaskId: string,
     result: string,
+    taskSessionId?: string,
   ): Promise<ServiceResult<Subtask>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) {
@@ -533,7 +542,7 @@ export class TaskExecution {
       taskId: subtask.taskId,
     });
 
-    await this.checkTaskCompletion(subtask.taskId);
+    await this.checkTaskCompletion(subtask.taskId, taskSessionId);
 
     const executeResult = await this.executeSubtasks(subtask.taskId);
     if (executeResult.ok && executeResult.data.startedCount > 0) {
@@ -817,7 +826,11 @@ export class TaskExecution {
     });
 
     if (isComplete) {
-      await this.completeSubtask(subtaskId, originalResult);
+      await this.completeSubtask(
+        subtaskId,
+        originalResult,
+        verificationSessionId,
+      );
     } else {
       // Guard against false-INCOMPLETE verdicts: a verifier LLM can
       // wrongly mark work as incomplete (e.g. because a tool name is
@@ -831,7 +844,11 @@ export class TaskExecution {
           'Verifier said INCOMPLETE but executor response contains concrete success artifacts; overriding to COMPLETED to avoid duplicate side effects',
           { subtaskId, verdict: parsedVerdict },
         );
-        await this.completeSubtask(subtaskId, originalResult);
+        await this.completeSubtask(
+          subtaskId,
+          originalResult,
+          verificationSessionId,
+        );
       } else {
         this.logger.info('Verification says incomplete, triggering retry', {
           subtaskId,
@@ -845,10 +862,24 @@ export class TaskExecution {
   // Internal helpers
   // ========================================
 
-  private async checkTaskCompletion(taskId: string): Promise<void> {
+  private async checkTaskCompletion(
+    taskId: string,
+    taskSessionId?: string,
+  ): Promise<void> {
     const subtasks = await this.subtasksRepo.listByTask(taskId);
     const allComplete =
       subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
+
+    // Snapshot subtask statuses into the execution history row when
+    // all subtasks have reached a terminal state (completed or failed).
+    // Because subtasks are reset between recurring runs, without this
+    // snapshot historical runs would have no subtask data in the UI.
+    const allTerminal =
+      subtasks.length > 0 &&
+      subtasks.every((s) => s.status === 'completed' || s.status === 'failed');
+    if (allTerminal) {
+      await this.snapshotSubtaskSummary(taskId, subtasks, taskSessionId);
+    }
 
     if (allComplete) {
       await this.tasksRepo.updateStatus(taskId, 'review');
@@ -861,6 +892,62 @@ export class TaskExecution {
       // Trigger deliverable verification when all subtasks are complete
       await this.verifyDeliverables(taskId);
     }
+  }
+
+  /**
+   * Write a JSON snapshot of the current subtask statuses into the
+   * `task_execution_history` row for the task's current run.
+   *
+   * The history row is found by its `sessionId`. The caller MUST pass
+   * `taskSessionId` from the verification flow — the task session that
+   * performed the verification. This is critical for recurring tasks:
+   * the next run's executor can change `task.sessionId` BEFORE the
+   * current run's last verification completes, which would cause the
+   * snapshot to be written to the wrong history row (or lost entirely).
+   * When `taskSessionId` is unavailable (e.g. the fallback auto-complete
+   * path with no task session), we fall back to `task.sessionId`.
+   */
+  private async snapshotSubtaskSummary(
+    taskId: string,
+    subtasks: Subtask[],
+    taskSessionId?: string,
+  ): Promise<void> {
+    if (!this.taskExecutionHistoryRepo) return;
+
+    const sessionId =
+      taskSessionId ?? (await this.tasksRepo.findById(taskId))?.sessionId;
+    if (!sessionId) return;
+
+    const history =
+      await this.taskExecutionHistoryRepo.findBySessionId(sessionId);
+    if (!history) return;
+
+    const summary: ExecutionSubtaskSummary = {
+      total: subtasks.length,
+      completed: subtasks.filter((s) => s.status === 'completed').length,
+      failed: subtasks.filter((s) => s.status === 'failed').length,
+      inProgress: subtasks.filter((s) => s.status === 'in_progress').length,
+      pending: subtasks.filter(
+        (s) => s.status === 'pending' || s.status === 'assigned',
+      ).length,
+      items: subtasks.map((s) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        sessionId: s.sessionId ?? null,
+      })),
+    };
+
+    await this.taskExecutionHistoryRepo.update(history.id, {
+      subtaskSummary: JSON.stringify(summary),
+    });
+    this.logger.info('Subtask summary snapshotted to history row', {
+      taskId,
+      historyId: history.id,
+      total: summary.total,
+      completed: summary.completed,
+      failed: summary.failed,
+    });
   }
 
   // ========================================
