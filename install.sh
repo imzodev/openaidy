@@ -44,6 +44,9 @@ SKIP_BUILD=false
 BRANCH="main"
 NON_INTERACTIVE=false
 
+# State
+NODE_PROVISIONED=false
+
 # Detect interactive terminal
 if [ -t 0 ]; then
     IS_INTERACTIVE=true
@@ -315,6 +318,7 @@ install_node() {
     local installed_ver
     installed_ver=$("$INSTALL_DIR/node/bin/node" --version 2>/dev/null)
     log_success "Node.js $installed_ver installed to $INSTALL_DIR/node/"
+    NODE_PROVISIONED=true
 }
 
 check_node() {
@@ -494,11 +498,18 @@ WRAPPER_EOF
 
     chmod +x "$wrapper"
 
-    local node_link_dir
-    node_link_dir="$(get_node_link_dir)"
-    if [ -d "$INSTALL_DIR/node" ]; then
-        ln -sf "$INSTALL_DIR/node/bin/node" "$node_link_dir/node" 2>/dev/null || true
-        ln -sf "$INSTALL_DIR/node/bin/npm"  "$node_link_dir/npm"  2>/dev/null || true
+    if [ "$NODE_PROVISIONED" = true ]; then
+        local node_link_dir
+        node_link_dir="$(get_node_link_dir)"
+        for tool in node npm npx; do
+            local target="$INSTALL_DIR/node/bin/$tool"
+            local link="$node_link_dir/$tool"
+            # Only create if missing or broken — never overwrite existing symlinks
+            # (e.g. user-managed nvm/fnm setup).
+            if [ ! -e "$link" ]; then
+                ln -sf "$target" "$link"
+            fi
+        done
     fi
 
     log_success "CLI installed to $wrapper"
