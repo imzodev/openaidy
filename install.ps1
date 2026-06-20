@@ -27,10 +27,10 @@ try {
 # Helpers
 # ============================================================================
 
-function Log-Info    { Write-Host "[openaidy] $($args[0])" -ForegroundColor Cyan }
-function Log-Success { Write-Host "[openaidy] ✓ $($args[0])" -ForegroundColor Green }
-function Log-Warn    { Write-Host "[openaidy] ⚠ $($args[0])" -ForegroundColor Yellow }
-function Log-Error   { Write-Host "[openaidy] ✗ $($args[0])" -ForegroundColor Red }
+function Log-Info    { param([string]$Message) Write-Host "[openaidy] $Message" -ForegroundColor Cyan }
+function Log-Success { param([string]$Message) Write-Host "[openaidy] ✓ $Message" -ForegroundColor Green }
+function Log-Warn    { param([string]$Message) Write-Host "[openaidy] ⚠ $Message" -ForegroundColor Yellow }
+function Log-Error   { param([string]$Message) Write-Host "[openaidy] ✗ $Message" -ForegroundColor Red }
 
 function New-TempFile {
     $tmp = [System.IO.Path]::GetTempPath()
