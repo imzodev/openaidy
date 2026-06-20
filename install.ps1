@@ -181,7 +181,7 @@ function Install-Pnpm {
     $pnpmBin = Join-Path $pnpmHome "pnpm.exe"
     $pnpmFallback = Join-Path $pnpmHome "bin\pnpm.exe"
 
-    if (Test-Path $pnpmBin -or Test-Path $pnpmFallback) {
+    if ((Test-Path $pnpmBin) -or (Test-Path $pnpmFallback)) {
         $ver = & $pnpmBin --version 2>$null
         Log-Success "pnpm $ver found"
         $env:PNPM_HOME = $pnpmHome
@@ -217,6 +217,7 @@ function Install-Pnpm {
         New-Item -ItemType Directory -Path $pnpmHome -Force | Out-Null
         Invoke-WebRequest -Uri "https://get.pnpm.io/install.ps1" -OutFile $installScript -UserAgent "OpenAidy/1.0" -TimeoutSec 30
         $env:PNPM_HOME = $pnpmHome
+        $env:PATH = "$pnpmHome;$env:PATH"
         Invoke-Expression "powershell -ExecutionPolicy Bypass -File $installScript"
         Remove-Item $installScript -ErrorAction SilentlyContinue
 
