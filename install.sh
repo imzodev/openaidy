@@ -462,8 +462,6 @@ export PATH="$OPENAIDY_HOME/node/bin:$OPENAIDY_HOME/pnpm:$PATH"
 
 if [ -f "$OPENAIDY_HOME/packages/cli/bin/openaidy.ts" ]; then
     exec node --import tsx "$OPENAIDY_HOME/packages/cli/bin/openaidy.ts" "$@"
-elif [ -f "$OPENAIDY_HOME/apps/server/dist/index.js" ]; then
-    exec node "$OPENAIDY_HOME/apps/server/dist/index.js" "$@"
 else
     echo "OpenAidy not found at $OPENAIDY_HOME" >&2
     echo "Re-run the installer: curl -fsSL https://openaidy.dev/install.sh | bash" >&2
