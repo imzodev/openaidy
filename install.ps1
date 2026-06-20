@@ -13,9 +13,7 @@
 param(
     [string]$Branch = "main",
     [string]$InstallDir = "$env:LOCALAPPDATA\openaidy",
-    [switch]$SkipBuild,
-    [switch]$SkipSetup,
-    [switch]$NonInteractive
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -297,10 +295,22 @@ function Build-Project {
     $env:PATH = "$pnpmHome;$env:PATH"
 
     Log-Info "Installing dependencies..."
-    pnpm install --frozen-lockfile 2>$null 2>&1 | Out-Null
+    pnpm install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) {
+        Log-Info "Frozen lockfile failed — retrying with regular install..."
+        pnpm install
+        if ($LASTEXITCODE -ne 0) {
+            Log-Error "Dependency installation failed"
+            exit 1
+        }
+    }
 
     Log-Info "Building project..."
-    pnpm build 2>&1 | Out-Null
+    pnpm build
+    if ($LASTEXITCODE -ne 0) {
+        Log-Error "Build failed"
+        exit 1
+    }
 
     Log-Success "Build complete"
     return $true
