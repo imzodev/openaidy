@@ -403,19 +403,18 @@ clone_or_update_repo() {
         log_info "Cloning repository..."
         mkdir -p "$(dirname "$INSTALL_DIR")"
 
-        local use_ssh=false
-        if command -v git >/dev/null 2>&1 && git ls-remote --exit-code --heads "$REPO_URL_HTTPS" main >/dev/null 2>&1; then
-            use_ssh=false
-        elif command -v git >/dev/null 2>&1 && git ls-remote --exit-code --heads "$REPO_URL_SSH" main >/dev/null 2>&1 2>/dev/null; then
-            use_ssh=true
-        fi
-
-        local repo_url
-        if [ "$use_ssh" = true ]; then
-            repo_url="$REPO_URL_SSH"
-            log_info "Using SSH (no credentials needed)"
+        local repo_url="$REPO_URL_HTTPS"
+        if ! git ls-remote --exit-code --heads "$repo_url" HEAD >/dev/null 2>&1; then
+            log_warn "HTTPS unreachable, trying SSH..."
+            if git ls-remote --exit-code --heads "$REPO_URL_SSH" HEAD >/dev/null 2>&1; then
+                repo_url="$REPO_URL_SSH"
+                log_info "Using SSH"
+            else
+                log_error "Repository unreachable via HTTPS and SSH"
+                log_info "Check your network connection and SSH key configuration"
+                exit 1
+            fi
         else
-            repo_url="$REPO_URL_HTTPS"
             log_info "Using HTTPS"
         fi
 
