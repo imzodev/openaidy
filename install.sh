@@ -179,7 +179,6 @@ install_git() {
                     waited=$((waited + 5))
                 done
             fi
-            return 1
             ;;
         linux)
             local sudo_cmd=""
@@ -202,26 +201,8 @@ install_git() {
                     ;;
             esac
             command -v git >/dev/null 2>&1 && return 0
-            return 1
             ;;
     esac
-    return 1
-}
-
-check_git() {
-    log_info "Checking Git..."
-    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
-        GIT_VERSION=$(git --version | awk '{print $3}')
-        log_success "Git $GIT_VERSION found"
-        return 0
-    fi
-
-    log_warn "Git not found"
-    if install_git; then
-        GIT_VERSION=$(git --version | awk '{print $3}')
-        log_success "Git $GIT_VERSION installed"
-        return 0
-    fi
 
     log_error "Could not install Git automatically. Please install it manually."
     case "$OS" in
@@ -236,6 +217,21 @@ check_git() {
         macos) log_info "  xcode-select --install  or  brew install git" ;;
     esac
     exit 1
+}
+
+check_git() {
+    log_info "Checking Git..."
+
+    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
+        GIT_VERSION=$(git --version | awk '{print $3}')
+        log_success "Git $GIT_VERSION found"
+        return 0
+    fi
+
+    log_warn "Git not found"
+    install_git
+    GIT_VERSION=$(git --version | awk '{print $3}')
+    log_success "Git $GIT_VERSION installed"
 }
 
 # ============================================================================
