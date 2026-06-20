@@ -131,27 +131,6 @@ log_success() { echo -e "${GREEN}[openaidy]${NC} ✓ $*"; }
 log_warn()    { echo -e "${YELLOW}[openaidy]${NC} ⚠ $*"; }
 log_error()   { echo -e "${RED}[openaidy]${NC} ✗ $*"; }
 
-prompt_yes_no() {
-    local question="$1"
-    local default="${2:-no}"
-    if [ "$IS_INTERACTIVE" = false ]; then
-        return 0
-    fi
-    if [ "$NON_INTERACTIVE" = true ]; then
-        return 0
-    fi
-    local yn="[y/N]"
-    if [ "$default" = "yes" ]; then
-        yn="[Y/n]"
-    fi
-    echo -n -e "${BOLD}${question} ${yn}: ${NC}"
-    read -r answer
-    case "$answer" in
-        [yY]|yes) return 0 ;;
-        *)        return 1 ;;
-    esac
-}
-
 # ============================================================================
 # Git Provisioning
 # ============================================================================
