@@ -36,7 +36,7 @@ REPO_URL_SSH="git@github.com:imzodev/openaidy.git"
 REPO_URL_HTTPS="https://github.com/imzodev/openaidy.git"
 OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
 INSTALL_DIR_EXPLICIT=false
-NODE_VERSION="22"
+NODE_VERSION="22.12.0"
 
 # Options
 RUN_SETUP=true
@@ -275,40 +275,20 @@ install_node() {
         exit 1
     fi
 
-    local index_url="https://nodejs.org/dist/latest-v${NODE_VERSION}.x/"
-    local tarball_name
-    tarball_name=$(curl -fsSL "$index_url" \
-        | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.xz" \
-        | head -1)
-
-    if [ -z "$tarball_name" ]; then
-        tarball_name=$(curl -fsSL "$index_url" \
-            | grep -oE "node-v${NODE_VERSION}\.[0-9]+\.[0-9]+-${node_os}-${node_arch}\.tar\.gz" \
-            | head -1)
-    fi
-
-    if [ -z "$tarball_name" ]; then
-        log_error "Could not find Node.js $NODE_VERSION binary for $node_os-$node_arch"
-        exit 1
-    fi
-
-    local download_url="${index_url}${tarball_name}"
+    local download_url="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${node_os}-${node_arch}.tar.xz"
+    local tarball_name="$(basename "$download_url")"
     local tmp_dir=$(mktemp -d)
 
-    log_info "Downloading $tarball_name..."
+    log_info "Downloading Node.js $NODE_VERSION ($node_os-$node_arch)..."
     if ! curl -fsSL "$download_url" -o "$tmp_dir/$tarball_name"; then
-        log_error "Download failed"
+        log_error "Download failed (URL: $download_url)"
         rm -rf "$tmp_dir"
         exit 1
     fi
 
     log_info "Extracting to $INSTALL_DIR/node/..."
     mkdir -p "$INSTALL_DIR"
-    if [[ "$tarball_name" == *.tar.xz ]]; then
-        tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir"
-    else
-        tar xzf "$tmp_dir/$tarball_name" -C "$tmp_dir"
-    fi
+    tar xf "$tmp_dir/$tarball_name" -C "$tmp_dir"
 
     local extracted_dir
     extracted_dir=$(ls -d "$tmp_dir"/node-v* 2>/dev/null | head -1)
