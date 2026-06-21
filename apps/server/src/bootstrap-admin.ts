@@ -2,14 +2,7 @@ import { mkdir, readFile, rename, writeFile, chmod } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
-
-export type BootstrapAdminRecord = {
-  clientId: string;
-  token: string;
-  scopes: string[];
-  createdAt: string;
-  expiresAt: string;
-};
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminEnsureResult = {
   record: BootstrapAdminRecord;

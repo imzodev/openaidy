@@ -4,6 +4,12 @@
  * Resolves CLI-related settings from environment variables with sensible defaults.
  * These mirror the server's env vars so the CLI and server can share the same
  * .env file during development.
+ *
+ * PR1 (installation-onboarding) NDQ-5: when `OPENAIDY_HOME` is set, the
+ * bootstrap-admin token path is computed relative to it (mirrors the
+ * server's `apps/server/src/lib/env.ts:27` resolution). This lets the
+ * installer use a single source of truth for the install root while
+ * `pnpm dev` keeps the legacy repo-local default.
  */
 
 import { resolve } from 'node:path';
@@ -28,7 +34,7 @@ export type CLIConfig = {
  * Resolve CLI configuration from environment variables.
  *
  * Resolution order for each value:
- * 1. Explicit env var override (e.g., OPENAIDY_WS_URL)
+ * 1. Explicit env var override (e.g., OPENAIDY_WS_URL, OPENAIDY_HOME)
  * 2. Server-compatible env var (e.g., WS_PORT + WS_PATH)
  * 3. Hardcoded default
  */
@@ -44,10 +50,16 @@ export function resolveCLIConfig(
   const httpUrl =
     env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.PORT ?? '3001'}`;
 
-  // Token path resolution
+  // Token path resolution (NDQ-5):
+  // 1. Explicit BOOTSTRAP_ADMIN_TOKEN_PATH wins always
+  // 2. OPENAIDY_HOME → resolve(OPENAIDY_HOME, 'credentials', 'bootstrap-admin.json')
+  // 3. Repo-local default (.openaidy/credentials/bootstrap-admin.json) — preserves
+  //    the `pnpm dev` workflow.
   const tokenPath =
     env.BOOTSTRAP_ADMIN_TOKEN_PATH ??
-    resolve('.openaidy/credentials/bootstrap-admin.json');
+    (env.OPENAIDY_HOME
+      ? resolve(env.OPENAIDY_HOME, 'credentials', 'bootstrap-admin.json')
+      : resolve('.openaidy/credentials/bootstrap-admin.json'));
 
   // JWT secret (must match server)
   const jwtSecret = env.WS_TOKEN_SECRET ?? 'change-me-in-production';

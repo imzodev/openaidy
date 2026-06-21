@@ -304,6 +304,26 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Init Command (PR1)
+// ============================================================================
+
+registerCommand(
+  'init',
+  async (args: string[]) => {
+    const { initHandler } = await import('./init.js');
+    return initHandler(args);
+  },
+  {
+    description: 'Generate or refresh the bootstrap-admin token',
+    usage: 'openaidy init',
+    examples: [
+      'WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init',
+      'openaidy init',
+    ],
+  },
+);
+
 registerCommand(
   'tokens create',
   async (args: string[]) => {
@@ -331,6 +351,49 @@ registerCommand(
     description: 'Revoke an access token by ID',
     usage: 'openaidy tokens revoke <id>',
     examples: ['pnpm openaidy tokens revoke abc123'],
+  },
+);
+
+// ============================================================================
+// Server Lifecycle Commands (PR2)
+// ============================================================================
+
+registerCommand(
+  'start',
+  async (args: string[]) => {
+    const { startHandler } = await import('./start.js');
+    return startHandler(args);
+  },
+  {
+    description: 'Start the OpenAidy server as a background process',
+    usage: 'openaidy start',
+    examples: ['openaidy start'],
+  },
+);
+
+registerCommand(
+  'stop',
+  async (args: string[]) => {
+    const { stopHandler } = await import('./stop.js');
+    return stopHandler(args);
+  },
+  {
+    description: 'Stop the OpenAidy server',
+    usage: 'openaidy stop',
+    examples: ['openaidy stop'],
+  },
+);
+
+registerCommand(
+  'status',
+  async (args: string[]) => {
+    const { statusHandler } = await import('./status.js');
+    return statusHandler(args);
+  },
+  {
+    description: 'Show the current server status',
+    usage: 'openaidy status',
+    examples: ['openaidy status'],
   },
 );
 

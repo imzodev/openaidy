@@ -127,7 +127,9 @@ export class ChannelHandler {
         const event = createWSMessage('channel.qr', { channelId, qr });
         this.sendToConnection(connectionId, event);
       };
-      channel.onQrUpdate(onQr);
+      if ('onQrUpdate' in channel && typeof channel.onQrUpdate === 'function') {
+        channel.onQrUpdate(onQr);
+      }
     }
   }
 

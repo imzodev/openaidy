@@ -5,6 +5,7 @@ This guide explains how to manage the bootstrap-admin token used for OpenAidy ad
 ## What is Bootstrap Admin?
 
 Bootstrap admin is a special administrative token that provides elevated privileges for:
+
 - Approving/denying device pairing requests
 - Managing system configuration
 - Performing administrative operations
@@ -14,6 +15,7 @@ The bootstrap-admin token is **local-first** - it's generated and stored on the 
 ## Token Location
 
 **Default Path:**
+
 ```
 .openaidy/credentials/bootstrap-admin.json
 ```
@@ -21,15 +23,30 @@ The bootstrap-admin token is **local-first** - it's generated and stored on the 
 This path is relative to the working directory where the OpenAidy server runs.
 
 **View the path:**
+
 ```bash
 pnpm openaidy admin token path
 ```
 
 ## Token Generation
 
-### Automatic Generation
+### Automatic Generation (Install Path)
 
-The bootstrap-admin token is automatically generated when the OpenAidy server starts for the first time:
+The canonical entry point is the install script, which calls `openaidy init`:
+
+```bash
+# Unix / macOS / WSL2
+curl -fsSL https://openaidy.dev/install.sh | bash
+
+# Or invoke init directly with a real JWT secret
+WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+```
+
+The installer generates a JWT signing secret at `$OPENAIDY_HOME/state/install.json` and runs `openaidy init` to mint a fresh token (or reuse a valid existing one). See the [Installation Guide](./installation.md) for the full flow.
+
+### Server-Side Generation (Legacy)
+
+The bootstrap-admin token can also be generated when the OpenAidy server starts for the first time (this remains the fallback when `openaidy init` hasn't been run):
 
 ```bash
 # Start the server (generates token if missing)
@@ -39,6 +56,7 @@ pnpm --filter @openaidy/server start
 ### Token Contents
 
 The token file contains a JSON Web Token (JWT) with:
+
 - `clientId` - Unique identifier for the admin client
 - `token` - The JWT token string
 - `created` - Token creation timestamp
@@ -46,6 +64,7 @@ The token file contains a JSON Web Token (JWT) with:
 - `scopes` - Granted permission scopes
 
 **Example:**
+
 ```json
 {
   "clientId": "admin_abc123",
@@ -60,14 +79,14 @@ The token file contains a JSON Web Token (JWT) with:
 
 The token can be in one of several states:
 
-| Status | Description |
-|--------|-------------|
-| `valid` | Token is active and usable |
-| `expired` | Token has passed its expiration time |
-| `missing` | Token file does not exist |
-| `malformed` | Token file is not valid JSON |
-| `invalid` | Token signature verification failed |
-| `disabled` | Token has been explicitly disabled |
+| Status      | Description                          |
+| ----------- | ------------------------------------ |
+| `valid`     | Token is active and usable           |
+| `expired`   | Token has passed its expiration time |
+| `missing`   | Token file does not exist            |
+| `malformed` | Token file is not valid JSON         |
+| `invalid`   | Token signature verification failed  |
+| `disabled`  | Token has been explicitly disabled   |
 
 ### Checking Token Status
 
@@ -103,11 +122,13 @@ chmod 600 .openaidy/credentials/bootstrap-admin.json
 Currently, token rotation is manual:
 
 1. **Stop the server:**
+
    ```bash
    # Stop the running server
    ```
 
 2. **Delete the old token:**
+
    ```bash
    rm .openaidy/credentials/bootstrap-admin.json
    ```
@@ -131,6 +152,7 @@ pnpm openaidy admin token show
 ```
 
 Output:
+
 ```
 Bootstrap Admin Token
 ========================
@@ -153,6 +175,7 @@ pnpm openaidy admin token validate
 ```
 
 This command checks:
+
 - Token file exists
 - JSON is valid
 - Signature is valid
@@ -165,6 +188,7 @@ pnpm openaidy admin token path
 ```
 
 Output:
+
 ```
 .openaidy/credentials/bootstrap-admin.json
 ```
@@ -178,6 +202,7 @@ Output:
 **Cause:** Server has not been started, or token file was deleted.
 
 **Solution:** Start the server to generate a new token:
+
 ```bash
 pnpm --filter @openaidy/server start
 ```
@@ -189,6 +214,7 @@ pnpm --filter @openaidy/server start
 **Cause:** Token has passed its expiration time.
 
 **Solution:** Generate a new token:
+
 ```bash
 rm .openaidy/credentials/bootstrap-admin.json
 pnpm --filter @openaidy/server start
@@ -201,6 +227,7 @@ pnpm --filter @openaidy/server start
 **Cause:** Token file is corrupted or not valid JSON.
 
 **Solution:** Regenerate the token:
+
 ```bash
 rm .openaidy/credentials/bootstrap-admin.json
 pnpm --filter @openaidy/server start
@@ -213,6 +240,7 @@ pnpm --filter @openaidy/server start
 **Cause:** Token signature verification failed (file may have been tampered with).
 
 **Solution:** Delete and regenerate:
+
 ```bash
 rm .openaidy/credentials/bootstrap-admin.json
 pnpm --filter @openaidy/server start
@@ -230,10 +258,10 @@ pnpm --filter @openaidy/server start
 
 Token behavior can be configured through environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAIDY_BOOTSTRAP_TOKEN_PATH` | Custom token file path | `.openaidy/credentials/bootstrap-admin.json` |
-| `OPENAIDY_BOOTSTRAP_TOKEN_EXPIRY` | Token expiration time | `24h` |
+| Variable                          | Description            | Default                                      |
+| --------------------------------- | ---------------------- | -------------------------------------------- |
+| `OPENAIDY_BOOTSTRAP_TOKEN_PATH`   | Custom token file path | `.openaidy/credentials/bootstrap-admin.json` |
+| `OPENAIDY_BOOTSTRAP_TOKEN_EXPIRY` | Token expiration time  | `24h`                                        |
 
 > **Note:** Configuration options may vary. Check server documentation for current options.
 

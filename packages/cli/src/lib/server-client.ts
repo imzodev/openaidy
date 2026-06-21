@@ -7,6 +7,8 @@
  */
 
 import { WebSocketClient } from '@openaidy/sdk';
+import { readFile } from 'node:fs/promises';
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 import { readAdminToken } from './admin-token.js';
 import { resolveCLIConfig, type CLIConfig } from './config.js';
 

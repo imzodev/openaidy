@@ -115,7 +115,10 @@ export function parseEnv(source: NodeJS.ProcessEnv): AppEnv {
   if (parsed.DB_KIND === 'sqlite' && !parsed.SQLITE_PATH) {
     return {
       ...parsed,
-      SQLITE_PATH: './data/openaidy.db',
+      SQLITE_PATH: resolveOpenAidyPath(
+        parsed.OPENAIDY_HOME,
+        'data/openaidy.db',
+      ),
     };
   }
 

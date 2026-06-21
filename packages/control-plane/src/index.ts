@@ -1,10 +1,10 @@
 /**
  * @openaidy/control-plane
- * 
+ *
  * Shared control-plane application layer for admin workflows.
  * This package provides workflow-oriented interfaces that sit between
  * the CLI and low-level server/domain modules.
- * 
+ *
  * Design Goals:
  * - CLI remains thin - just routing and rendering
  * - Future admin surfaces (web UI, remote API) can reuse these workflows
@@ -34,6 +34,7 @@ export {
   BootstrapAdminWorkflow,
   createBootstrapAdminWorkflow,
   type BootstrapAdminContext,
+  type BootstrapAdminEnsureResult,
   type WorkflowLogger as BootstrapAdminLogger,
 } from './workflows/bootstrap-admin.js';
 

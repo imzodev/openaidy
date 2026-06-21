@@ -8,6 +8,7 @@ import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 type TokenRecord = {
   id: string;
@@ -18,10 +19,6 @@ type TokenRecord = {
   lastUsedAt: string | null;
   expiresAt: string | null;
   revoked: boolean;
-};
-
-type BootstrapAdminRecord = {
-  token: string;
 };
 
 async function readAdminToken(tokenPath: string): Promise<string | null> {

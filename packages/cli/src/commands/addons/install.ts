@@ -11,8 +11,7 @@ import type {
   InstallOptions,
   InstallResult,
 } from '../../types.js';
-
-type BootstrapAdminRecord = { token: string };
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 async function readAdminToken(tokenPath: string): Promise<string | null> {
   try {

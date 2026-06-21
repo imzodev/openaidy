@@ -431,8 +431,8 @@ describe('PlanningService', () => {
         '[{"title": "A", "description": "B", "dependencies": []}]';
       const result = service.parsePlanningResponse(content);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.title).toBe('A');
+      expect(result.subtasks).toHaveLength(1);
+      expect(result.subtasks[0]!.title).toBe('A');
     });
 
     it('extracts JSON from markdown code blocks', () => {
@@ -440,8 +440,8 @@ describe('PlanningService', () => {
         'Here are the subtasks:\n```json\n[{"title": "A", "description": "B"}]\n```';
       const result = service.parsePlanningResponse(content);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]!.title).toBe('A');
+      expect(result.subtasks).toHaveLength(1);
+      expect(result.subtasks[0]!.title).toBe('A');
     });
 
     it('respects maxSubtasks limit', () => {
@@ -475,8 +475,8 @@ describe('PlanningService', () => {
       const content = '[{"title": null, "description": null}]';
       const result = service.parsePlanningResponse(content);
 
-      expect(result[0]!.title).toBe('Subtask 1');
-      expect(result[0]!.description).toBe('');
+      expect(result.subtasks[0]?.title).toBe('Subtask 1');
+      expect(result.subtasks[0]?.description).toBe('');
     });
   });
 
