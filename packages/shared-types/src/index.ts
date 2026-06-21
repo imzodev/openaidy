@@ -15,3 +15,4 @@ export * from './choices.js';
 export * from './memory.js';
 export * from './pulses.js';
 export * from './task-schedules.js';
+export * from './bootstrap-admin.js';

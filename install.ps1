@@ -352,6 +352,94 @@ function Install-Cli {
 }
 
 # ============================================================================
+# Bootstrap Admin Token (PR1)
+# ============================================================================
+
+# Generate a 32-byte hex JWT secret. Persisted at $env:LOCALAPPDATA\openaidy\state\install.json
+# so subsequent installs reuse it (idempotency per CC-7).
+function New-JwtSecret {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return ([BitConverter]::ToString($bytes) -replace '-', '').ToLower()
+}
+
+function Get-JwtSecret {
+    $stateDir = Join-Path $InstallDir "state"
+    $manifestPath = Join-Path $stateDir "install.json"
+
+    if (Test-Path $manifestPath) {
+        try {
+            $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            if ($existing.wsTokenSecret) {
+                return $existing.wsTokenSecret
+            }
+        } catch {
+            # Manifest unreadable — fall through to regenerate
+        }
+    }
+
+    # Generate and persist
+    if (-not (Test-Path $stateDir)) {
+        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+    }
+    $newSecret = New-JwtSecret
+    $obj = [PSCustomObject]@{
+        wsTokenSecret = $newSecret
+        generatedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    }
+    $obj | ConvertTo-Json | Set-Content -Path $manifestPath -Encoding UTF8
+    # Tighten ACL on the manifest (Windows best-effort)
+    try {
+        icacls $manifestPath /inheritance:r /grant:r "$env:USERNAME:(R,W)" 2>$null | Out-Null
+    } catch { }
+
+    return $newSecret
+}
+
+function Invoke-Init {
+    Log-Info "Generating bootstrap admin token..."
+    $binDir = Join-Path $env:LOCALAPPDATA "openaidy\bin"
+    $cliPath = Join-Path $binDir "openaidy.cmd"
+
+    # Call the wrapper. Output capture requires cmd's stdout, so use Process.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $cliPath
+    $psi.Arguments = "init"
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.EnvironmentVariables["OPENAIDY_HOME"] = $InstallDir
+    $psi.EnvironmentVariables["WS_TOKEN_SECRET"] = $script:JwtSecret
+    $psi.EnvironmentVariables["PATH"] = "$InstallDir\node;$InstallDir\pnpm;$env:PATH"
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd()
+    $stderr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+
+    if ($proc.ExitCode -ne 0) {
+        Log-Error "openaidy init failed (exit $($proc.ExitCode))"
+        if ($stderr) { Write-Host $stderr }
+        exit 1
+    }
+
+    # Parse `Bootstrap admin token: <jwt>` from stdout
+    $match = [regex]::Match($stdout, '(?m)^Bootstrap admin token:\s+(.+?)\s*$')
+    if (-not $match.Success) {
+        Log-Error "openaidy init succeeded but no token line was printed"
+        Write-Host $stdout
+        exit 1
+    }
+    return $match.Groups[1].Value
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -398,6 +486,21 @@ if (-not (Build-Project)) {
 # CLI
 Install-Cli
 
+# PR1: ensure JWT secret + generate bootstrap-admin token (idempotent).
+$script:JwtSecret = Get-JwtSecret
+$env:WS_TOKEN_SECRET = $script:JwtSecret
+$env:OPENAIDY_HOME = $InstallDir
+$BootstrapToken = Invoke-Init
+
 Write-Host ""
-Log-Success "OpenAidy is installed!"
+Log-Success "OpenAidy is installed."
+Write-Host ""
+Write-Host "Bootstrap admin token: $BootstrapToken"
+Write-Host ""
+Write-Host "Next steps:"
+Write-Host "  Re-run the installer to bring the server online, OR"
+Write-Host "  cd $InstallDir"
+Write-Host "  pnpm --filter @openaidy/server dev"
+Write-Host ""
+Write-Host "(Server startup is delivered in the next release.)"
 Write-Host ""

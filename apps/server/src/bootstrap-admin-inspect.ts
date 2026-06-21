@@ -8,7 +8,7 @@
 import { readFile, access } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
-import type { BootstrapAdminRecord } from './bootstrap-admin';
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminInspectStatus =
   | 'disabled'

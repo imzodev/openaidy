@@ -8,19 +8,8 @@
 
 import { WebSocketClient } from '@openaidy/sdk';
 import { readFile } from 'node:fs/promises';
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 import { resolveCLIConfig, type CLIConfig } from './config.js';
-
-/**
- * Bootstrap admin token file shape.
- * Must match {@link import('@openaidy/server').BootstrapAdminRecord}
- */
-type BootstrapAdminRecord = {
-  clientId: string;
-  token: string;
-  scopes: string[];
-  createdAt: string;
-  expiresAt: string;
-};
 
 /**
  * Successful connection result

@@ -304,6 +304,26 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Init Command (PR1)
+// ============================================================================
+
+registerCommand(
+  'init',
+  async (args: string[]) => {
+    const { initHandler } = await import('./init.js');
+    return initHandler(args);
+  },
+  {
+    description: 'Generate or refresh the bootstrap-admin token',
+    usage: 'openaidy init',
+    examples: [
+      'WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init',
+      'openaidy init',
+    ],
+  },
+);
+
 registerCommand(
   'tokens create',
   async (args: string[]) => {

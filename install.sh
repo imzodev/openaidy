@@ -490,6 +490,79 @@ WRAPPER_EOF
 }
 
 # ============================================================================
+# Bootstrap Admin Token (PR1)
+# ============================================================================
+
+# Generate a 32-byte hex JWT secret. Persisted at $OPENAIDY_HOME/state/install.json
+# so subsequent installs reuse it (idempotency per CC-7).
+generate_jwt_secret() {
+    # Prefer openssl (always available on macOS / most Linux); fall back to /dev/urandom
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 32
+    else
+        # Portable fallback: 32 random bytes → hex via od
+        od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+    fi
+}
+
+load_jwt_secret() {
+    # If $OPENAIDY_HOME/state/install.json already exists, reuse the secret.
+    local manifest="$OPENAIDY_HOME/state/install.json"
+    if [ -f "$manifest" ]; then
+        # Extract wsTokenSecret via grep + sed (avoid jq dependency).
+        local existing
+        existing=$(grep -E '"wsTokenSecret"\s*:' "$manifest" | sed -E 's/.*"wsTokenSecret"\s*:\s*"([^"]+)".*/\1/')
+        if [ -n "$existing" ]; then
+            printf '%s' "$existing"
+            return 0
+        fi
+    fi
+    # Otherwise generate a new one and persist it.
+    mkdir -p "$OPENAIDY_HOME/state"
+    local new_secret
+    new_secret=$(generate_jwt_secret)
+    # Atomic write to avoid partial files on crash.
+    local tmp_manifest="$OPENAIDY_HOME/state/install.json.tmp"
+    cat > "$tmp_manifest" <<EOF
+{
+  "wsTokenSecret": "$new_secret",
+  "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
+    mv "$tmp_manifest" "$manifest"
+    chmod 600 "$manifest"
+    printf '%s' "$new_secret"
+}
+
+run_init() {
+    # Run `openaidy init` and capture the token from stdout. Per PR1 R-4 the
+    # init command prints exactly one parseable line:
+    #   Bootstrap admin token: <jwt>
+    log_info "Generating bootstrap admin token..."
+    local init_output
+    if ! init_output=$("$link_dir_global/openaidy" init 2>&1); then
+        log_error "openaidy init failed"
+        echo "$init_output" >&2
+        exit 1
+    fi
+
+    local token
+    token=$(printf '%s\n' "$init_output" | grep '^Bootstrap admin token: ' | sed 's/^Bootstrap admin token: //' | head -1)
+
+    if [ -z "$token" ]; then
+        log_error "openaidy init succeeded but no token line was printed"
+        echo "$init_output" >&2
+        exit 1
+    fi
+
+    printf '%s' "$token"
+}
+
+# Capture the wrapper path now so run_init can invoke it (create_cli_wrapper
+# hasn't run yet when main invokes run_init).
+link_dir_global="$(get_node_link_dir)"
+
+# ============================================================================
 # Main
 # ============================================================================
 
@@ -510,9 +583,22 @@ main() {
     build_project
     create_cli_wrapper
 
+    # PR1: ensure JWT secret + generate bootstrap-admin token (idempotent).
+    export WS_TOKEN_SECRET
+    WS_TOKEN_SECRET=$(load_jwt_secret)
+    export OPENAIDY_HOME="$INSTALL_DIR"
+    BOOTSTRAP_TOKEN=$(run_init)
+
     echo ""
-    log_success "OpenAidy is installed!"
-    log_info "Get started: openaidy --help"
+    log_success "OpenAidy is installed."
+    echo ""
+    echo "Bootstrap admin token: $BOOTSTRAP_TOKEN"
+    echo ""
+    echo "Next steps:"
+    echo "  Re-run the installer to bring the server online, OR"
+    echo "  cd $INSTALL_DIR && pnpm --filter @openaidy/server dev"
+    echo ""
+    echo "(Server startup is delivered in the next release.)"
     echo ""
 }
 
