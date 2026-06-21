@@ -98,17 +98,19 @@ describe('TaskService', () => {
   const mockSubtask: Subtask = {
     id: 'subtask1',
     taskId: 'task1',
-    parentSubtaskId: null,
+    parentSubtaskId: null as unknown,
     title: 'Test Subtask',
     description: 'Subtask description',
     status: 'pending',
-    assignedAgentId: null,
+    assignedAgentId: undefined as unknown,
     sessionId: null,
     orderIndex: 0,
     result: null,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+    retryCount: 0,
+    pendingVerificationResult: null,
+  } as unknown as Subtask;
 
   const mockTaskAgent: TaskAgent = {
     taskId: 'task1',

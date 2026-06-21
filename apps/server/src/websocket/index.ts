@@ -257,31 +257,76 @@ function createGateway(
   );
 
   // Register channel handlers with the message router
-  registerChannelHandlers(messageRouter, channelHandler);
+  registerChannelHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    channelHandler,
+  );
 
   // Register session handlers with the message router
-  registerSessionHandlers(messageRouter, sessionHandler);
+  registerSessionHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    sessionHandler,
+  );
 
   // Register agent handlers with the message router
-  registerAgentHandlers(messageRouter, agentHandler);
+  registerAgentHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    agentHandler,
+  );
 
   // Register provider handlers with the message router
-  registerProviderHandlers(messageRouter, providerHandler);
+  registerProviderHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    providerHandler,
+  );
 
   // Register node handlers with the message router
-  registerNodeHandlers(messageRouter, nodeHandler);
+  registerNodeHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    nodeHandler,
+  );
 
   // Register pairing handlers with the message router
-  registerPairingHandlers(messageRouter, pairingHandler);
+  registerPairingHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    pairingHandler,
+  );
 
   // Register config handlers with the message router
-  registerConfigHandlers(messageRouter, configHandler);
+  registerConfigHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    configHandler,
+  );
 
   // Register presence handlers with the message router
-  registerPresenceHandlers(messageRouter, presenceHandler);
+  registerPresenceHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    presenceHandler,
+  );
 
   // Register logs handlers with the message router
-  registerLogsHandlers(messageRouter, logsHandler);
+  registerLogsHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    logsHandler,
+  );
 
   // Wire up log buffer to broadcast to subscribers
   // getLogBuffer from lib/logger, getLogSubscriptionManager from handlers/logs
@@ -802,7 +847,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
         handlerContext,
       );
 
-      // Send response if any
+      // Send response if unknown
       if (response) {
         socket.send(JSON.stringify(response));
       }

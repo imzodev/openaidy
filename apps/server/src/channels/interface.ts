@@ -37,7 +37,12 @@ export interface IChannel {
   /** Register a callback invoked each time the connection status changes */
   onStatusChange(cb: (status: ChannelStatus) => void): void;
   /** Remove a registered status change callback */
-  removeListener(event: string, cb: (...args: unknown[]) => void): this;
+  removeListener(event: 'status', cb: (status: ChannelStatus) => void): this;
+
+  /** Optional QR code getter for channels that support QR (e.g., WhatsApp) */
+  getQr?: () => string | null;
+  /** Optional QR code update callback registration */
+  onQrUpdate?: (cb: (qr: string) => void) => void;
 }
 
 /**
