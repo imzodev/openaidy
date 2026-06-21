@@ -54,6 +54,16 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
     this.on('status', cb);
   }
 
+  /** Remove a registered status change callback */
+  removeListener(event: 'status', cb: (status: ChannelStatus) => void): this {
+    return super.removeListener(event, cb);
+  }
+
+  /** Remove a registered QR code callback */
+  removeQrListener(cb: (qr: string) => void): this {
+    return super.removeListener('qr', cb);
+  }
+
   async connect(): Promise<void> {
     if (this.socket) {
       this.deps.logger.warn(
@@ -149,7 +159,10 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
 
         const participant = msg.key.participant?.replace('@s.whatsapp.net', '');
         const remoteJid = msg.key.remoteJid?.replace('@s.whatsapp.net', '');
-        const remoteJidAlt = msg.key.remoteJidAlt?.replace('@s.whatsapp.net', '');
+        const remoteJidAlt = msg.key.remoteJidAlt?.replace(
+          '@s.whatsapp.net',
+          '',
+        );
 
         let waId = participant || remoteJid || remoteJidAlt || '';
         if (remoteJid?.includes('@lid')) {

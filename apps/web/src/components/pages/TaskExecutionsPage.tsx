@@ -26,7 +26,7 @@ const STATUS_COLORS: Record<TaskExecutionHistoryStatus, string> = {
 export type TaskExecutionsPageProps = {
   taskId: string;
   onBack: () => void;
-  onOpenSession: (sessionId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
 };
 
 const PAGE_SIZE = 20;
@@ -206,7 +206,7 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                         <button
                           type="button"
                           onClick={() =>
-                            ex.sessionId && props.onOpenSession(ex.sessionId)
+                            ex.sessionId && props.onOpenSession?.(ex.sessionId)
                           }
                           class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-xs"
                           title="View session"
