@@ -492,15 +492,41 @@ $env:WS_TOKEN_SECRET = $script:JwtSecret
 $env:OPENAIDY_HOME = $InstallDir
 $BootstrapToken = Invoke-Init
 
+# PR2: start the server and open the browser
+Write-Host ""
+Log-Info "Starting the server (this may take up to 30 seconds)..."
+$StartOutput = & "$WrapperDir\openaidy" start 2>&1
+$StartExit = $LASTEXITCODE
+$StartUrl = ""
+if ($StartExit -eq 0) {
+    $StartUrl = [regex]::Match($StartOutput, 'http://localhost:\d+').Value
+    Log-Info "Server is ready."
+} else {
+    Log-Warning "Server did not start (will be available after re-login)."
+}
+
 Write-Host ""
 Log-Success "OpenAidy is installed."
 Write-Host ""
 Write-Host "Bootstrap admin token: $BootstrapToken"
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  Re-run the installer to bring the server online, OR"
-Write-Host "  cd $InstallDir"
-Write-Host "  pnpm --filter @openaidy/server dev"
-Write-Host ""
-Write-Host "(Server startup is delivered in the next release.)"
+
+if ($StartUrl) {
+    Write-Host "Server is running at: $StartUrl"
+    Write-Host ""
+    # Auto-open browser (best-effort per NDQ-4)
+    try {
+        Start-Process $StartUrl
+    } catch {
+        Write-Host "Open $StartUrl in your browser."
+    }
+    Write-Host ""
+    Write-Host "Use 'openaidy stop' to stop the server."
+} else {
+    Write-Host "Run 'openaidy start' to bring the server online."
+    Write-Host ""
+    Write-Host "Next steps:"
+    Write-Host "  cd $InstallDir"
+    Write-Host "  pnpm --filter @openaidy/server dev"
+}
 Write-Host ""

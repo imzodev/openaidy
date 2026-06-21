@@ -558,6 +558,12 @@ run_init() {
     printf '%s' "$token"
 }
 
+run_start() {
+    # Run `openaidy start` and capture the output.
+    log_info "Starting the server (this may take up to 30 seconds)..."
+    "$link_dir_global/openaidy" start 2>&1
+}
+
 # Capture the wrapper path now so run_init can invoke it (create_cli_wrapper
 # hasn't run yet when main invokes run_init).
 link_dir_global="$(get_node_link_dir)"
@@ -589,16 +595,51 @@ main() {
     export OPENAIDY_HOME="$INSTALL_DIR"
     BOOTSTRAP_TOKEN=$(run_init)
 
+    # PR2: start the server and open the browser.
+    echo ""
+    log "Starting the server..."
+    START_URL=""
+    if START_OUTPUT=$(run_start 2>&1); then
+        START_URL=$(echo "$START_OUTPUT" | grep -oP 'http://localhost:\d+' | head -1)
+        log "Server is ready."
+    else
+        log "Warning: server did not start (will be available after re-login)."
+    fi
+
     echo ""
     log_success "OpenAidy is installed."
     echo ""
     echo "Bootstrap admin token: $BOOTSTRAP_TOKEN"
     echo ""
-    echo "Next steps:"
-    echo "  Re-run the installer to bring the server online, OR"
-    echo "  cd $INSTALL_DIR && pnpm --filter @openaidy/server dev"
-    echo ""
-    echo "(Server startup is delivered in the next release.)"
+
+    if [ -n "$START_URL" ]; then
+        echo "Server is running at: $START_URL"
+        echo ""
+
+        # Auto-open browser (best-effort per NDQ-4)
+        case "$(uname -s)" in
+            Linux*|WSL*)
+                if command -v xdg-open >/dev/null 2>&1; then
+                    xdg-open "$START_URL" 2>/dev/null || echo "Open $START_URL in your browser."
+                else
+                    echo "Open $START_URL in your browser."
+                fi
+                ;;
+            Darwin*)
+                open "$START_URL" 2>/dev/null || echo "Open $START_URL in your browser."
+                ;;
+            *)
+                echo "Open $START_URL in your browser."
+                ;;
+        esac
+        echo ""
+        echo "Use 'openaidy stop' to stop the server."
+    else
+        echo "Run 'openaidy start' to bring the server online."
+        echo ""
+        echo "Next steps:"
+        echo "  cd $INSTALL_DIR && pnpm --filter @openaidy/server dev"
+    fi
     echo ""
 }
 

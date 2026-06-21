@@ -74,4 +74,37 @@ describe('Command registry: init', () => {
       expect(group.commands['init']).toBeUndefined();
     }
   });
+
+  // ── PR2: Server lifecycle commands ─────────────────────────────────────────
+
+  describe('Command registry: server lifecycle', () => {
+    it('registers the `start` command', () => {
+      expect(hasCommand('start')).toBe(true);
+      expect(getCommand('start')).toBeTypeOf('function');
+    });
+
+    it('registers the `stop` command', () => {
+      expect(hasCommand('stop')).toBe(true);
+      expect(getCommand('stop')).toBeTypeOf('function');
+    });
+
+    it('registers the `status` command', () => {
+      expect(hasCommand('status')).toBe(true);
+      expect(getCommand('status')).toBeTypeOf('function');
+    });
+
+    it('exposes metadata for `start`', () => {
+      const meta = commandMeta['start'];
+      expect(meta).toBeDefined();
+      expect(meta?.description).toMatch(/server/i);
+    });
+
+    it('start command returns CommandResult on --help', async () => {
+      const handler = commands['start'];
+      expect(handler).toBeDefined();
+      const result = await handler!(['--help']);
+      expect(result).toBeDefined();
+      expect(typeof result?.exitCode).toBe('number');
+    });
+  });
 });
