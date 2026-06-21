@@ -114,16 +114,20 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  // Resolve server entry point
-  const serverEntry = resolve(openaidyHome, 'apps/server/dist/server.js');
+  // Resolve server entry point (source .ts — tsx handles ESM resolution)
+  const serverEntry = resolve(openaidyHome, 'apps/server/src/server.ts');
   try {
     await import('node:fs/promises').then((fs) => fs.access(serverEntry));
   } catch {
     return {
       exitCode: 1,
-      output: `Error: Server entry not found at ${serverEntry}. Has the server been built?`,
+      output: `Error: Server entry not found at ${serverEntry}. Has the repo been cloned and built?`,
     };
   }
+
+  // Use node --import tsx to enable ESM extensionless resolution
+  // This is more reliable cross-platform than spawning tsx directly
+  const nodeBin = process.execPath;
 
   // Probe free port
   let port: number;
@@ -146,10 +150,11 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     fs.mkdir(resolve(openaidyHome, 'logs'), { recursive: true }),
   );
 
-  // Spawn detached child
-  const child = spawn('node', [serverEntry], {
+  // Spawn detached child via node --import tsx (handles ESM + extensionless imports)
+  const child = spawn(nodeBin, ['--import', 'tsx', serverEntry], {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       PORT: String(port),
