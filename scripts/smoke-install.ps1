@@ -40,7 +40,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $SmokeHome = Join-Path $env:TEMP "openaidy-smoke-$(Get-Random)"
+$SmokeRepo = Join-Path $env:TEMP "openaidy-smoke-repo-$(Get-Random)"
 $OldHome = $env:OPENAIDY_HOME
+$OldRepo = $env:OPENAIDY_REPO
 $OldSecret = $env:WS_TOKEN_SECRET
 
 function Log($msg) { Write-Host "[smoke] $msg" }
@@ -48,13 +50,21 @@ function Fail($msg) { Write-Host "[smoke] FAIL: $msg" -ForegroundColor Red; exit
 
 # Cleanup handler
 try {
-    # Create temp home
+    # Create temp home (data) and temp repo (code) — separated per fix-openaidy-home
     New-Item -ItemType Directory -Path $SmokeHome -Force | Out-Null
+    New-Item -ItemType Directory -Path $SmokeRepo -Force | Out-Null
     $env:OPENAIDY_HOME = $SmokeHome
+    $env:OPENAIDY_REPO = $SmokeRepo
     $env:WS_TOKEN_SECRET = -join ((48..57) + (97..102) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
     $env:CI = "1"
 
     Log "Using OPENAIDY_HOME=$SmokeHome"
+    Log "Using OPENAIDY_REPO=$SmokeRepo"
+
+    # Validate paths are separated
+    if ($SmokeHome -eq $SmokeRepo) {
+        Fail "OPENAIDY_HOME and OPENAIDY_REPO must differ"
+    }
 
     # Determine CLI
     if ($LocalRepo) {
@@ -161,8 +171,12 @@ try {
 } finally {
     # Cleanup
     $env:OPENAIDY_HOME = $OldHome
+    $env:OPENAIDY_REPO = $OldRepo
     $env:WS_TOKEN_SECRET = $OldSecret
     if (-not $NoCleanup -and (Test-Path $SmokeHome)) {
         Remove-Item -Recurse -Force $SmokeHome -ErrorAction SilentlyContinue
+    }
+    if (-not $NoCleanup -and (Test-Path $SmokeRepo)) {
+        Remove-Item -Recurse -Force $SmokeRepo -ErrorAction SilentlyContinue
     }
 }

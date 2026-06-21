@@ -41,6 +41,7 @@ describe('openaidy start', () => {
 
   it('exits 1 when OPENAIDY_HOME is not set', async () => {
     delete process.env.OPENAIDY_HOME;
+    delete process.env.OPENAIDY_REPO;
     const result = await startHandler([]);
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('OPENAIDY_HOME');
@@ -50,11 +51,51 @@ describe('openaidy start', () => {
     const emptyHome = join(tmpdir(), `openaidy-start-missing-${randomUUID()}`);
     await mkdir(emptyHome, { recursive: true });
     process.env.OPENAIDY_HOME = emptyHome;
+    delete process.env.OPENAIDY_REPO;
 
     const result = await startHandler([]);
     expect(result.exitCode).toBe(1);
     expect(result.output).toContain('not found');
   });
+
+  it('uses OPENAIDY_REPO for entry when set', async () => {
+    const repoHome = join(tmpdir(), `openaidy-start-repo-${randomUUID()}`);
+    const srcDir = join(repoHome, 'apps/server/src');
+    await mkdir(srcDir, { recursive: true });
+
+    // Stub server: listens on PORT from env, responds 200 to /health.
+    // Keeps the test fast (no 30s health-poll timeout) and exercises the
+    // full spawn path so we know entry resolution succeeded end-to-end.
+    const stubSource = [
+      "import { createServer } from 'node:http';",
+      'const port = Number(process.env.PORT ?? 0);',
+      'const server = createServer((req, res) => {',
+      "  if (req.url === '/health') { res.writeHead(200); res.end('ok'); }",
+      '  else { res.writeHead(404); res.end(); }',
+      '});',
+      "server.listen(port, '127.0.0.1', () => {});",
+      "process.on('SIGTERM', () => { server.close(() => process.exit(0)); });",
+    ].join('\n');
+    await writeFile(join(srcDir, 'server.ts'), stubSource);
+
+    const dataHome = join(tmpdir(), `openaidy-start-data-${randomUUID()}`);
+    await mkdir(dataHome, { recursive: true });
+
+    process.env.OPENAIDY_REPO = repoHome;
+    process.env.OPENAIDY_HOME = dataHome;
+
+    try {
+      const result = await startHandler([]);
+      // Before fix: entry is resolved from OPENAIDY_HOME (dataHome) which has
+      // no server.ts → "Server entry not found at <dataHome>/...".
+      // After fix: entry is resolved from OPENAIDY_REPO (repoHome) which has
+      // the stub → spawn succeeds, /health returns 200, exitCode 0.
+      expect(result.output).not.toContain('Server entry not found');
+      expect(result.exitCode).toBe(0);
+    } finally {
+      delete process.env.OPENAIDY_REPO;
+    }
+  }, 60_000);
 
   it('probeFreePort returns a valid port', async () => {
     const { probeFreePort } = await import('../lib/process-manager.js');

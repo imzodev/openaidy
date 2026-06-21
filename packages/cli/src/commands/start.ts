@@ -114,8 +114,12 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  // Resolve server entry point (source .ts — tsx handles ESM resolution)
-  const serverEntry = resolve(openaidyHome, 'apps/server/src/server.ts');
+  // Resolve server entry point (source .ts — tsx handles ESM resolution).
+  // OPENAIDY_REPO points at the cloned repo (code root). When unset — e.g. an
+  // older Windows wrapper that only exported OPENAIDY_HOME — fall back to
+  // OPENAIDY_HOME so existing installs keep working.
+  const repoRoot = process.env.OPENAIDY_REPO ?? openaidyHome;
+  const serverEntry = resolve(repoRoot, 'apps/server/src/server.ts');
   try {
     await import('node:fs/promises').then((fs) => fs.access(serverEntry));
   } catch {

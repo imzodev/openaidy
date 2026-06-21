@@ -329,13 +329,17 @@ function Install-Cli {
 
     $cliPath = Join-Path $binDir "openaidy.cmd"
 
+    # OPENAIDY_HOME = data root (tokens, PID, logs) in user's home dir.
+    # OPENAIDY_REPO = code root (repo clone) used by `start` to resolve server entry.
+    $dataDir = "$env:USERPROFILE\.openaidy"
     $cliContent = "@echo off`r`n" +
-        "set OPENAIDY_HOME=$InstallDir`r`n" +
-        "set PATH=%OPENAIDY_HOME%\node;%OPENAIDY_HOME%\pnpm;%PATH%`r`n" +
-        "if exist `"%OPENAIDY_HOME%\packages\cli\bin\openaidy.ts`" (`r`n" +
-        "  node --import tsx `"%OPENAIDY_HOME%\packages\cli\bin\openaidy.ts`" %*`r`n" +
+        "set OPENAIDY_HOME=$dataDir`r`n" +
+        "set OPENAIDY_REPO=$InstallDir`r`n" +
+        "set PATH=%OPENAIDY_REPO%\node;%OPENAIDY_REPO%\pnpm;%PATH%`r`n" +
+        "if exist `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" (`r`n" +
+        "  node --import tsx `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" %*`r`n" +
         ") else (`r`n" +
-        "  echo OpenAidy not found at %OPENAIDY_HOME%`r`n" +
+        "  echo OpenAidy not found at %OPENAIDY_REPO%`r`n" +
         "  exit /b 1`r`n" +
         ")"
 
@@ -414,7 +418,8 @@ function Invoke-Init {
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
-    $psi.EnvironmentVariables["OPENAIDY_HOME"] = $InstallDir
+    $psi.EnvironmentVariables["OPENAIDY_HOME"] = "$env:USERPROFILE\.openaidy"
+    $psi.EnvironmentVariables["OPENAIDY_REPO"] = $InstallDir
     $psi.EnvironmentVariables["WS_TOKEN_SECRET"] = $script:JwtSecret
     $psi.EnvironmentVariables["PATH"] = "$InstallDir\node;$InstallDir\pnpm;$env:PATH"
 
@@ -488,8 +493,9 @@ Install-Cli
 
 # PR1: ensure JWT secret + generate bootstrap-admin token (idempotent).
 $script:JwtSecret = Get-JwtSecret
+$env:OPENAIDY_HOME = "$env:USERPROFILE\.openaidy"
+$env:OPENAIDY_REPO = $InstallDir
 $env:WS_TOKEN_SECRET = $script:JwtSecret
-$env:OPENAIDY_HOME = $InstallDir
 $BootstrapToken = Invoke-Init
 
 # PR2: start the server and open the browser

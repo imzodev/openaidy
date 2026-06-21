@@ -458,12 +458,16 @@ create_cli_wrapper() {
 # DO NOT EDIT — re-run install.sh to update.
 
 OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
-export PATH="$OPENAIDY_HOME/node/bin:$OPENAIDY_HOME/pnpm:$PATH"
+# OPENAIDY_REPO = code root (used by `start` to resolve server entry).
+# On Unix, repo and data share the same dir; the var exists for cross-platform
+# parity with the Windows installer where they differ.
+OPENAIDY_REPO="${OPENAIDY_REPO:-$HOME/.openaidy}"
+export PATH="$OPENAIDY_REPO/node/bin:$OPENAIDY_REPO/pnpm:$PATH"
 
-if [ -f "$OPENAIDY_HOME/packages/cli/bin/openaidy.ts" ]; then
-    exec node --import tsx "$OPENAIDY_HOME/packages/cli/bin/openaidy.ts" "$@"
+if [ -f "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" ]; then
+    exec node --import tsx "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" "$@"
 else
-    echo "OpenAidy not found at $OPENAIDY_HOME" >&2
+    echo "OpenAidy not found at $OPENAIDY_REPO" >&2
     echo "Re-run the installer: curl -fsSL https://openaidy.dev/install.sh | bash" >&2
     exit 1
 fi

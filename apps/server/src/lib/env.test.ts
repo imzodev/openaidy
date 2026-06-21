@@ -14,7 +14,9 @@ describe('parseEnv', () => {
     const parsed = parseEnv({});
 
     expect(parsed.DB_KIND).toBe('sqlite');
-    expect(parsed.SQLITE_PATH).toBe('./data/openaidy.db');
+    expect(parsed.SQLITE_PATH).toBe(
+      resolve(workspaceRoot, '.openaidy/data/openaidy.db'),
+    );
     expect(parsed.OPENAIDY_HOME).toBe(resolve(workspaceRoot, '.openaidy'));
     expect(parsed.APP_CONFIG_PATH).toBe(
       resolve(workspaceRoot, '.openaidy/openaidy.json'),
