@@ -27,6 +27,18 @@ export type ServerPidRecord = {
   logFile: string; // absolute path
 };
 
+/**
+ * PID record for the web frontend (Vite dev server). Same shape as the
+ * server record but without a port (Vite picks its own) and with a `url`
+ * field for convenience.
+ */
+export type WebPidRecord = {
+  pid: number;
+  startedAt: string; // ISO 8601
+  url: string; // e.g. http://localhost:5173
+  logFile: string; // absolute path
+};
+
 // ============================================================================
 // PID file helpers
 // ============================================================================
@@ -66,6 +78,48 @@ export async function writePidFile(
   rec: ServerPidRecord,
 ): Promise<void> {
   // Ensure parent directory exists
+  await mkdir(dirname(path), { recursive: true });
+
+  const tmp = `${path}.tmp.${process.pid}`;
+  const content = JSON.stringify(rec, null, 2);
+
+  await writeFile(tmp, content, 'utf-8');
+  await rename(tmp, path);
+}
+
+/**
+ * Read and parse a WebPidRecord from a JSON file.
+ * Returns null if the file doesn't exist or is unparseable.
+ */
+export async function readWebPidFile(
+  path: string,
+): Promise<WebPidRecord | null> {
+  try {
+    const raw = await readFile(path, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    if (
+      typeof parsed.pid !== 'number' ||
+      typeof parsed.startedAt !== 'string' ||
+      typeof parsed.url !== 'string' ||
+      typeof parsed.logFile !== 'string'
+    ) {
+      return null;
+    }
+
+    return parsed as WebPidRecord;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Atomically write a WebPidRecord to a JSON file.
+ */
+export async function writeWebPidFile(
+  path: string,
+  rec: WebPidRecord,
+): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
 
   const tmp = `${path}.tmp.${process.pid}`;

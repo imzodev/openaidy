@@ -19,7 +19,11 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { CommandResult } from '../types.js';
-import { isProcessAlive, readPidFile } from '../lib/process-manager.js';
+import {
+  isProcessAlive,
+  readPidFile,
+  readWebPidFile,
+} from '../lib/process-manager.js';
 
 // ============================================================================
 // Help text
@@ -28,12 +32,13 @@ import { isProcessAlive, readPidFile } from '../lib/process-manager.js';
 const HELP_TEXT = `
 Usage: openaidy status [options]
 
-Show the current status of the OpenAidy server.
+Show the current status of the OpenAidy server and web frontend.
 
 Displays:
   - Server state: running or stopped
   - URL and port (when running)
   - Server PID and log path (when running)
+  - Web frontend state, URL, PID, and log path
   - Bootstrap admin token status (value masked: ****<last4>)
 
 Options:
@@ -81,9 +86,11 @@ export async function statusHandler(
   const env = envOverride ?? process.env;
   const home = env.OPENAIDY_HOME ?? process.cwd();
   const pidPath = resolve(home, 'state', 'server.pid');
+  const webPidPath = resolve(home, 'state', 'web.pid');
 
-  // Read PID file
+  // Read PID files
   const rec = await readPidFile(pidPath);
+  const webRec = await readWebPidFile(webPidPath);
 
   // Read token for status output
   let tokenValue = '';
@@ -115,21 +122,37 @@ export async function statusHandler(
 
   // Determine process state
   const isRunning = rec !== null && isProcessAlive(rec.pid);
+  const isWebRunning = webRec !== null && isProcessAlive(webRec.pid);
 
   let output: string;
 
   if (isRunning && rec) {
-    output = [
-      `State: running`,
-      `URL: http://localhost:${rec.port}`,
-      `PID: ${rec.pid}`,
-      `Log file: ${rec.logFile}`,
+    const lines = [
+      `Server:`,
+      `  State: running`,
+      `  URL:   http://localhost:${rec.port}`,
+      `  PID:   ${rec.pid}`,
+      `  Log:   ${rec.logFile}`,
+    ];
+    if (isWebRunning && webRec) {
+      lines.push(
+        `Web:`,
+        `  State: running`,
+        `  URL:   ${webRec.url}`,
+        `  PID:   ${webRec.pid}`,
+        `  Log:   ${webRec.logFile}`,
+      );
+    } else {
+      lines.push(`Web: stopped (run \`openaidy start\` to start it)`);
+    }
+    lines.push(
       `Token: ${tokenStatus} (value masked: ${tokenValue ? maskToken(tokenValue) : 'N/A'})`,
-    ].join('\n');
+    );
+    output = lines.join('\n');
   } else {
     // Stopped: report state + token info only
     output = [
-      `State: stopped`,
+      `Server: stopped`,
       `Token: ${tokenStatus}${tokenValue ? ` (value masked: ${maskToken(tokenValue)})` : ''}`,
     ].join('\n');
   }

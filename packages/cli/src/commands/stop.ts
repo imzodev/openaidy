@@ -1,5 +1,5 @@
 /**
- * openaidy stop — Stop the OpenAidy server (PR2 T2.3)
+ * openaidy stop — Stop the OpenAidy server and web frontend (PR2 T2.3)
  *
  * Behavior (per spec R-8):
  *  1. Read PID JSON from $OPENAIDY_HOME/state/server.pid
@@ -8,6 +8,7 @@
  *  4. Poll every 500ms for up to 10s for process exit
  *  5. SIGKILL escalation if process doesn't stop
  *  6. Remove PID file on success
+ *  7. Also stops the web frontend (Vite) unless --server-only
  *
  * Uses createCLIError / formatCLIError from errors.ts (CC-3).
  * Returns CommandResult per types.ts contract.
@@ -17,7 +18,11 @@ import { execFile } from 'node:child_process';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { CommandResult } from '../types.js';
-import { readPidFile, isProcessAlive } from '../lib/process-manager.js';
+import {
+  readPidFile,
+  readWebPidFile,
+  isProcessAlive,
+} from '../lib/process-manager.js';
 
 // ============================================================================
 // Constants
@@ -29,19 +34,20 @@ const STOP_MAX_POLLS = 20; // 10 seconds
 const HELP_TEXT = `
 Usage: openaidy stop [options]
 
-Stop the OpenAidy server.
+Stop the OpenAidy server and web frontend.
 
-Gracefully shuts down the server by:
-  - Reading the PID file
+Gracefully shuts down processes by:
+  - Reading PID files
   - Sending SIGTERM (Unix) or taskkill (Windows)
   - Waiting up to 10 seconds for clean shutdown
   - Escalating to SIGKILL if needed
 
 Options:
   -h, --help          Show this help message
+  --server-only       Stop only the server, leave the web frontend running
 
 Exit Codes:
-  0  Server stopped or was not running
+  0  Processes stopped or were not running
   1  Failed to stop
 `;
 
@@ -105,42 +111,93 @@ export async function stopHandler(args: string[]): Promise<CommandResult> {
     return { exitCode: 0, output: HELP_TEXT.trim() };
   }
 
+  // --server-only: stop only the server, leave the web frontend running
+  const serverOnly = args.includes('--server-only');
+
   const openaidyHome = process.env.OPENAIDY_HOME;
   if (!openaidyHome) {
     return { exitCode: 0, output: 'Server is not running.' };
   }
 
+  const lines: string[] = [];
+  let hadError = false;
+
+  // Stop the server
+  const serverResult = await stopServer(openaidyHome);
+  lines.push(serverResult.message);
+  if (serverResult.error) hadError = true;
+
+  // Stop the web frontend (unless --server-only)
+  if (!serverOnly) {
+    const webResult = await stopWeb(openaidyHome);
+    lines.push(webResult.message);
+    if (webResult.error) hadError = true;
+  }
+
+  return {
+    exitCode: hadError ? 1 : 0,
+    output: lines.join('\n'),
+  };
+}
+
+async function stopServer(
+  openaidyHome: string,
+): Promise<{ message: string; error: boolean }> {
   const pidFilePath = resolve(openaidyHome, 'state/server.pid');
   const rec = await readPidFile(pidFilePath);
 
   if (!rec) {
-    return { exitCode: 0, output: 'Server is not running.' };
+    return { message: 'Server is not running.', error: false };
   }
 
-  // Check if the process is stale (already dead)
   if (!isProcessAlive(rec.pid)) {
     await unlink(pidFilePath).catch(() => {});
     return {
-      exitCode: 0,
-      output: `Server was not running. Removed stale PID file.`,
+      message: 'Server was not running. Removed stale PID file.',
+      error: false,
     };
   }
 
-  // Kill the process
   try {
     await killProcess(rec.pid);
   } catch (err) {
     return {
-      exitCode: 1,
-      output: `Error: Failed to stop server: ${(err as Error).message}`,
+      message: `Error: Failed to stop server: ${(err as Error).message}`,
+      error: true,
     };
   }
 
-  // Remove PID file
   await unlink(pidFilePath).catch(() => {});
+  return { message: 'Server stopped.', error: false };
+}
 
-  return {
-    exitCode: 0,
-    output: `Server stopped.`,
-  };
+async function stopWeb(
+  openaidyHome: string,
+): Promise<{ message: string; error: boolean }> {
+  const webPidPath = resolve(openaidyHome, 'state/web.pid');
+  const rec = await readWebPidFile(webPidPath);
+
+  if (!rec) {
+    return { message: 'Web is not running.', error: false };
+  }
+
+  if (!isProcessAlive(rec.pid)) {
+    await unlink(webPidPath).catch(() => {});
+    return {
+      message: 'Web was not running. Removed stale PID file.',
+      error: false,
+    };
+  }
+
+  try {
+    await killProcess(rec.pid);
+  } catch (err) {
+    return {
+      message: `Error: Failed to stop web: ${(err as Error).message}`,
+      error: true,
+    };
+  }
+
+  await unlink(webPidPath).catch(() => {});
+  return { message: 'Web stopped.', error: false };
 }

@@ -85,11 +85,12 @@ describe('openaidy start', () => {
     process.env.OPENAIDY_HOME = dataHome;
 
     try {
-      const result = await startHandler([]);
+      const result = await startHandler(['--server-only']);
       // Before fix: entry is resolved from OPENAIDY_HOME (dataHome) which has
       // no server.ts → "Server entry not found at <dataHome>/...".
       // After fix: entry is resolved from OPENAIDY_REPO (repoHome) which has
       // the stub → spawn succeeds, /health returns 200, exitCode 0.
+      // --server-only skips web spawn (this test stub has no apps/web).
       expect(result.output).not.toContain('Server entry not found');
       expect(result.exitCode).toBe(0);
     } finally {

@@ -1,14 +1,16 @@
 /**
- * openaidy start — Start the OpenAidy server (PR2 T2.2)
+ * openaidy start — Start the OpenAidy server and web frontend (PR2 T2.2)
  *
  * Behavior (per spec R-7):
  *  1. Probe free port in 3000–3009 range
- *  2. Resolve apps/server/dist/server.js from OPENAIDY_HOME
+ *  2. Resolve apps/server/dist/server.js from OPENAIDY_REPO
  *  3. Spawn detached child with chosen PORT
  *  4. Write PID JSON envelope to $OPENAIDY_HOME/state/server.pid
  *  5. Poll GET http://localhost:<port>/health every 500ms (max 30s)
  *  6. Install SIGINT/SIGTERM trap that forwards to child
  *  7. Print "Server running on http://localhost:<port>"
+ *  8. Unless --server-only: spawn Vite dev server for apps/web
+ *     and write $OPENAIDY_HOME/state/web.pid
  *
  * Design per R-D2: process spawning tested on Unix/macOS only.
  * Windows covered by scripts/smoke-install.ps1 (manual).
@@ -21,7 +23,11 @@ import { resolve } from 'node:path';
 import { unlink } from 'node:fs/promises';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
-import { probeFreePort, writePidFile } from '../lib/process-manager.js';
+import {
+  probeFreePort,
+  writePidFile,
+  writeWebPidFile,
+} from '../lib/process-manager.js';
 
 // ============================================================================
 // Constants
@@ -31,23 +37,28 @@ const PORT_START = 3000;
 const PORT_TRIES = 10;
 const HEALTH_POLL_MS = 500;
 const HEALTH_MAX_POLLS = 60; // 30 seconds
+const WEB_DEFAULT_URL = 'http://localhost:5173';
+const WEB_READY_POLL_MS = 500;
+const WEB_READY_MAX_POLLS = 30; // 15 seconds
 
 const HELP_TEXT = `
 Usage: openaidy start [options]
 
-Start the OpenAidy server as a background process.
+Start the OpenAidy server and web frontend as background processes.
 
 Automatically:
-  - Finds a free port (3000–3009)
+  - Finds a free port (3000–3009) for the server
   - Spawns the server as a detached child
   - Polls /health until ready
+  - Spawns the web frontend (Vite) unless --server-only
   - Installs signal handlers for graceful shutdown
 
 Options:
   -h, --help          Show this help message
+  --server-only       Start only the server, skip the web frontend
 
 Exit Codes:
-  0  Server started and healthy
+  0  Server started and healthy (and web started unless --server-only)
   1  Port range exhausted, server entry missing, or health check timed out
 `;
 
@@ -103,6 +114,9 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('--help') || args.includes('-h')) {
     return { exitCode: 0, output: HELP_TEXT.trim() };
   }
+
+  // --server-only: skip web frontend
+  const serverOnly = args.includes('--server-only');
 
   // Resolve OPENAIDY_HOME
   const openaidyHome = process.env.OPENAIDY_HOME;
@@ -208,18 +222,197 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
+  // ==========================================================================
+  // Web frontend (Vite dev server)
+  // ==========================================================================
+
+  // Unless --server-only was passed, also start the web frontend so users
+  // get a fully running openaidy instance from a single command. The web
+  // process is spawned detached and tracked via its own PID file so
+  // `openaidy stop` can shut both down.
+  const webInfo = serverOnly ? null : await startWeb(repoRoot, openaidyHome);
+
+  if (serverOnly) {
+    return {
+      exitCode: 0,
+      output: [
+        '',
+        'Server running on http://localhost:' + port,
+        '',
+        '  PID:  ' + child.pid,
+        '  Log:  ' + logFile,
+        '',
+        'Open http://localhost:' + port + ' in your browser to get started.',
+        'Use "openaidy stop" to stop the server.',
+        'Pass --server-only=false (or omit the flag) to also start the web frontend.',
+        '',
+      ].join('\n'),
+    };
+  }
+
+  if (!webInfo) {
+    // Web failed to start — server is up, surface the failure but don't
+    // tear down the server. The user can still hit the API + WS.
+    return {
+      exitCode: 1,
+      output: [
+        '',
+        'Server running on http://localhost:' + port,
+        '  PID:  ' + child.pid,
+        '  Log:  ' + logFile,
+        '',
+        'Warning: Web frontend failed to start. Check apps/web/ exists',
+        'and pnpm is installed. The server is still running.',
+        '',
+      ].join('\n'),
+    };
+  }
+
   return {
     exitCode: 0,
     output: [
       '',
       'Server running on http://localhost:' + port,
-      '',
       '  PID:  ' + child.pid,
       '  Log:  ' + logFile,
       '',
-      'Open http://localhost:' + port + ' in your browser to get started.',
-      'Use "openaidy stop" to stop the server.',
+      'Web running on    ' + webInfo.url,
+      '  PID:  ' + webInfo.pid,
+      '  Log:  ' + webInfo.logFile,
+      '',
+      'Open ' + webInfo.url + ' in your browser to get started.',
+      'Use "openaidy stop" to stop both server and web.',
+      'Use "openaidy stop --server-only" to stop only the server.',
       '',
     ].join('\n'),
   };
+}
+
+// ============================================================================
+// Web frontend (Vite dev server)
+// ============================================================================
+
+/**
+ * Start the Vite dev server for apps/web as a detached child process.
+ * Writes the PID to $OPENAIDY_HOME/state/web.pid so `openaidy stop` can
+ * terminate it. Polls the web URL until it responds 200 (max ~15s) so
+ * we don't return success while Vite is still bundling.
+ *
+ * Returns the web PID record on success, null on failure.
+ */
+async function startWeb(
+  repoRoot: string,
+  openaidyHome: string,
+): Promise<{
+  pid: number;
+  url: string;
+  logFile: string;
+} | null> {
+  const webDir = resolve(repoRoot, 'apps/web');
+  // Verify the web app exists
+  try {
+    await import('node:fs/promises').then((fs) =>
+      fs.access(resolve(webDir, 'package.json')),
+    );
+  } catch {
+    return null;
+  }
+
+  // Ensure logs dir exists (server already created it, but be safe).
+  const logsDir = resolve(openaidyHome, 'logs');
+  await import('node:fs/promises').then((fs) =>
+    fs.mkdir(logsDir, { recursive: true }),
+  );
+  const webLogFile = resolve(logsDir, 'web.log');
+  const webPidPath = resolve(openaidyHome, 'state', 'web.pid');
+
+  // Spawn Vite detached. Use `pnpm dev` so the dev script from
+  // apps/web/package.json runs unchanged.
+  const child = spawn('pnpm', ['dev'], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    shell: process.platform === 'win32',
+    cwd: webDir,
+    env: {
+      ...process.env,
+      OPENAIDY_HOME: openaidyHome,
+      OPENAIDY_REPO: repoRoot,
+    },
+  });
+
+  // Pipe web output to its own log file.
+  const webLogStream = await import('node:fs').then((fs) =>
+    fs.createWriteStream(webLogFile, { flags: 'a' }),
+  );
+  if (child.stdout) child.stdout.pipe(webLogStream);
+  if (child.stderr) child.stderr.pipe(webLogStream);
+
+  child.unref();
+
+  // Wait for Vite to bind to its port by polling the URL.
+  const ready = await pollWebReady(WEB_DEFAULT_URL, WEB_READY_MAX_POLLS);
+  if (!ready) {
+    // Vite didn't come up — kill the process and clean up the PID file.
+    try {
+      process.kill(child.pid!, 'SIGTERM');
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  const rec = {
+    pid: child.pid!,
+    startedAt: new Date().toISOString(),
+    url: WEB_DEFAULT_URL,
+    logFile: webLogFile,
+  };
+  await writeWebPidFile(webPidPath, rec);
+
+  return rec;
+}
+
+/**
+ * Poll a URL until it responds 200. Resolves true on success, false on timeout.
+ */
+function pollWebReady(url: string, maxPolls: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const parsed = new URL(url);
+
+    const poll = () => {
+      attempts++;
+      const req = request(
+        {
+          hostname: parsed.hostname,
+          port: parsed.port,
+          path: parsed.pathname,
+          method: 'GET',
+          timeout: 2000,
+        },
+        (res) => {
+          // Vite serves 200 on / even when bundling; any HTTP response means it's up.
+          if (res.statusCode && res.statusCode < 500) {
+            resolve(true);
+          } else if (attempts >= maxPolls) {
+            resolve(false);
+          } else {
+            setTimeout(poll, WEB_READY_POLL_MS);
+          }
+        },
+      );
+
+      req.on('error', () => {
+        if (attempts >= maxPolls) {
+          resolve(false);
+        } else {
+          setTimeout(poll, WEB_READY_POLL_MS);
+        }
+      });
+
+      req.end();
+    };
+
+    poll();
+  });
 }
