@@ -280,6 +280,7 @@ export type SessionRunsResponse = WSMessage<
       errorCode?: string;
       errorMessage?: string;
       createdAt: string;
+      firstMessageId?: string;
     }>;
     total: number;
   }

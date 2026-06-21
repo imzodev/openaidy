@@ -25,13 +25,17 @@ export class SessionsRepository {
   /**
    * Create a new session
    */
-  async create(input: { title: string }): Promise<schema.Session> {
+  async create(input: {
+    title: string;
+    type?: 'chat' | 'task' | 'subtask';
+  }): Promise<schema.Session> {
     const now = new Date();
     const [session] = await this.db
       .insert(schema.sessions)
       .values({
         id: nanoid(),
         title: input.title,
+        type: input.type ?? 'chat',
         status: 'active',
         createdAt: now,
         updatedAt: now,

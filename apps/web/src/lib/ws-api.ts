@@ -343,6 +343,7 @@ export async function listRuns(
             errorCode?: string;
             errorMessage?: string;
             createdAt: string;
+            firstMessageId?: string;
           }) => ({
             id: run.id,
             sessionId: run.sessionId,
@@ -354,6 +355,9 @@ export async function listRuns(
             ...(run.finishReason ? { finishReason: run.finishReason } : {}),
             ...(run.errorCode ? { errorCode: run.errorCode } : {}),
             ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
+            ...(run.firstMessageId
+              ? { firstMessageId: run.firstMessageId }
+              : {}),
           }),
         ),
       };

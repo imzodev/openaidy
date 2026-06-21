@@ -6,8 +6,20 @@ import {
   type ProviderServices,
   type ProviderRegistryService,
   type RegisteredProvider,
+  ProviderConnectionService,
 } from '../providers';
+import {
+  startMiniMaxOAuth,
+  getMiniMaxOAuthStatus,
+} from '../providers/oauth/minimax';
+import { DbOAuthStateStore } from '../providers/oauth/state-store';
+import { env } from '../lib/env.js';
 import type { Message, ModelRequest } from '@openaidy/runtime';
+import type { DatabaseClient } from '@openaidy/db';
+import type {
+  ProviderInfo as ConnectionProviderInfo,
+  ConnectProviderResponse,
+} from '@openaidy/shared-types';
 
 /**
  * Schema for test-invoke request
@@ -111,6 +123,14 @@ type TestInvokeResponse = {
 type ProviderRoutesOptions = {
   services: ProviderServices;
   authMiddleware: AuthMiddleware;
+  db?: DatabaseClient;
+  /**
+   * Called whenever a provider credential is written or its
+   * connection is torn down, so any in-memory credential cache
+   * (e.g. the OpenAI-compatible adapter's per-request resolver)
+   * re-reads from the DB on the next chat call.
+   */
+  invalidateCredential?: (providerId: string) => void;
 };
 
 /**
@@ -127,14 +147,30 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
   options,
 ) => {
   // Use injected services from app initialization
-  const { services, authMiddleware } = options;
+  const { services, authMiddleware, db, invalidateCredential } = options;
 
   app.addHook(
     'preHandler',
     requireAuth({ authMiddleware, requiredScope: 'providers.read' }),
   );
   const { registry, invocation } = services;
+
+  // Create connection service only if database is available
+  const connectionService = db
+    ? new ProviderConnectionService(db, invalidateCredential)
+    : null;
   // Selection is available via services.selection if needed for future routes
+
+  // OAuth state store — same DB in dev and prod. Required for the
+  // MiniMax OAuth flow (state → PKCE verifier between /start and /callback).
+  const oauthStateStore = db ? new DbOAuthStateStore(db) : null;
+
+  // The frontend URL the popup window should redirect to after a
+  // successful/failed OAuth exchange. Pulled from CORS_ORIGIN (which
+  // is the frontend's dev server URL) or defaults to localhost:5173.
+  // (Unused for MiniMax — the callback returns HTML directly — but kept
+  // for providers that may need it in future phases.)
+  const _frontendBaseUrl = env.CORS_ORIGIN || 'http://localhost:5173';
 
   /**
    * GET /providers
@@ -415,6 +451,362 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       }),
       ...(entry.config !== undefined && { config: entry.config }),
       registeredAt: entry.registeredAt.toISOString(),
+    };
+  });
+
+  // =========================================================================
+  // Provider Connection Routes (only if database is available)
+  // =========================================================================
+
+  if (!connectionService) {
+    // Database not available - skip connection routes
+    return;
+  }
+
+  /**
+   * GET /providers/connection
+   * List available providers with their connection status
+   */
+  app.get(
+    '/providers/connection',
+    async (): Promise<{
+      providers: ConnectionProviderInfo[];
+    }> => {
+      const providers = connectionService.listAvailableProviders();
+      return { providers };
+    },
+  );
+
+  /**
+   * GET /providers/:providerId/auth-methods
+   * Get available authentication methods for a provider
+   */
+  app.get('/providers/:providerId/auth-methods', async (request, reply) => {
+    const { providerId } = request.params as { providerId: string };
+
+    try {
+      const authMethods = connectionService.getAuthMethods(providerId);
+      return { providerId, authMethods };
+    } catch (_error) {
+      reply.code(404);
+      return {
+        error: 'Provider not found',
+        providerId,
+      };
+    }
+  });
+
+  /**
+   * POST /providers/:providerId/connect/api-key
+   * Connect a provider using an API key
+   */
+  app.post(
+    '/providers/:providerId/connect/api-key',
+    async (request, reply): Promise<ConnectProviderResponse> => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        apiKey: z.string().min(1, 'API key is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      const result = await connectionService.connectWithApiKey(
+        providerId,
+        body.apiKey,
+      );
+
+      if (!result.success) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * POST /providers/minimax/connect/oauth/start
+   *
+   * Begins a MiniMax OAuth flow. Backed by the official `mmx-cli`
+   * subprocess (we cannot implement the device-code flow directly —
+   * MiniMax's OAuth endpoints require a privileged client_id that
+   * only `mmx-cli` ships with).
+   *
+   * Returns a flowId and the verification URL the user should open
+   * in a browser. The frontend opens this URL in a popup. While
+   * the user authorizes, we poll `~/.mmx/config.json` (written by
+   * `mmx` when it receives the tokens) and persist them to
+   * provider_credentials as soon as they appear.
+   */
+  if (oauthStateStore) {
+    app.post(
+      '/providers/minimax/connect/oauth/start',
+      async (request, reply) => {
+        const bodySchema = z.object({
+          region: z.enum(['global', 'cn']).default('global'),
+        });
+
+        const parseResult = bodySchema.safeParse(request.body);
+        if (!parseResult.success) {
+          reply.code(400);
+          return {
+            success: false,
+            error: parseResult.error.issues
+              .map((i) => `${i.path.join('.')}: ${i.message}`)
+              .join('; '),
+          };
+        }
+
+        const { region } = parseResult.data;
+        const flowId = `minimax-oauth-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 10)}`;
+
+        try {
+          const result = await startMiniMaxOAuth({
+            stateStore: oauthStateStore,
+            region: region as 'global' | 'cn',
+            flowId,
+            ...(db ? { db: db as DatabaseClient } : {}),
+            ...(invalidateCredential
+              ? { onCredentialPersisted: invalidateCredential }
+              : {}),
+          });
+          if (!result.ok) {
+            reply.code(result.error === 'mmx_not_installed' ? 503 : 500);
+            return { success: false, error: result.message };
+          }
+          return {
+            success: true,
+            flowId: result.flowId,
+            verificationUrl: result.verificationUrl,
+          };
+        } catch (err) {
+          reply.code(500);
+          return {
+            success: false,
+            error:
+              err instanceof Error
+                ? err.message
+                : 'Failed to start MiniMax OAuth flow',
+          };
+        }
+      },
+    );
+
+    /**
+     * GET /providers/minimax/connect/oauth/status?flowId=...
+     *
+     * Polled by the frontend to know when mmx has written the
+     * tokens. Returns one of:
+     *   - { status: 'pending' } — mmx is still waiting for the user
+     *   - { status: 'authorized' } — tokens are persisted, user is connected
+     *   - { status: 'failed' } — mmx exited with an error
+     */
+    app.get(
+      '/providers/minimax/connect/oauth/status',
+      async (request, reply) => {
+        const query = request.query as { flowId?: string };
+        if (!query.flowId) {
+          reply.code(400);
+          return { error: 'flowId is required' };
+        }
+        const result = await getMiniMaxOAuthStatus({
+          stateStore: oauthStateStore,
+          flowId: query.flowId,
+        });
+        if (!result.ok) {
+          reply.code(result.error === 'expired' ? 410 : 404);
+          return { error: result.error };
+        }
+        return result;
+      },
+    );
+  }
+
+  /**
+   * POST /providers/:providerId/connect/oauth/start
+   * Start OAuth flow for a provider
+   */
+  app.post(
+    '/providers/:providerId/connect/oauth/start',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        redirectUri: z.string().url('Valid redirect URI is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      try {
+        const result = await connectionService.startOAuthFlow(
+          providerId,
+          body.redirectUri,
+        );
+        return result;
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to start OAuth flow',
+        };
+      }
+    },
+  );
+
+  /**
+   * GET /providers/:providerId/connect/oauth/callback
+   * OAuth callback handler (redirect-based)
+   */
+  app.get(
+    '/providers/:providerId/connect/oauth/callback',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+      const query = request.query as {
+        code?: string;
+        state?: string;
+        error?: string;
+      };
+
+      if (query.error) {
+        reply.code(400);
+        return {
+          success: false,
+          providerId,
+          error: query.error,
+        };
+      }
+
+      if (!query.code) {
+        reply.code(400);
+        return {
+          success: false,
+          providerId,
+          error: 'Authorization code missing',
+        };
+      }
+
+      const result = await connectionService.completeOAuthFlow(
+        providerId,
+        query.code,
+        '', // redirectUri not available in GET request
+      );
+
+      if (!result.success) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * POST /providers/:providerId/connect/device-code/start
+   * Start device code flow for CLI/Desktop apps
+   */
+  app.post(
+    '/providers/:providerId/connect/device-code/start',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      try {
+        const result = await connectionService.startDeviceCodeFlow(providerId);
+        return result;
+      } catch (error) {
+        reply.code(400);
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Failed to start device code flow',
+        };
+      }
+    },
+  );
+
+  /**
+   * POST /providers/:providerId/connect/device-code/poll
+   * Poll for device code authorization completion
+   */
+  app.post(
+    '/providers/:providerId/connect/device-code/poll',
+    async (request, reply) => {
+      const { providerId } = request.params as { providerId: string };
+
+      const bodySchema = z.object({
+        deviceCode: z.string().min(1, 'Device code is required'),
+      });
+
+      let body;
+      try {
+        body = bodySchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          error:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      const result = await connectionService.pollDeviceCodeAuth(
+        providerId,
+        body.deviceCode,
+      );
+
+      if (result.error) {
+        reply.code(400);
+      }
+
+      return result;
+    },
+  );
+
+  /**
+   * DELETE /providers/:providerId/connection
+   * Disconnect a provider
+   */
+  app.delete('/providers/:providerId/connection', async (request, reply) => {
+    const { providerId } = request.params as { providerId: string };
+
+    const success = await connectionService.disconnect(providerId);
+
+    if (!success) {
+      reply.code(404);
+      return {
+        success: false,
+        error: 'Provider not connected',
+        providerId,
+      };
+    }
+
+    return {
+      success: true,
+      providerId,
     };
   });
 };

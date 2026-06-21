@@ -23,6 +23,7 @@ openspec/
 .windsurf/
 .gga
 AGENTS.md
+.opengraph/
 
 # Agents skills
 .agents/skills

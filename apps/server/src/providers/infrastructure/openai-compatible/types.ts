@@ -68,7 +68,11 @@ export type OpenAIChatCompletionRequest = {
   model: string;
   messages: OpenAIMessage[];
   tools?: OpenAIToolDefinition[];
-  tool_choice?: 'auto' | 'required' | 'none' | { type: 'function'; function: { name: string } };
+  tool_choice?:
+    | 'auto'
+    | 'required'
+    | 'none'
+    | { type: 'function'; function: { name: string } };
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -191,4 +195,13 @@ export type OpenAICompatibleAdapterConfig = {
   providerId?: string;
   /** Provider name override */
   providerName?: string;
+  /**
+   * Optional callback that returns the current credential (e.g. an
+   * OAuth access token) for the provider. When supplied, this is
+   * consulted on every outgoing request so freshly-persisted
+   * credentials are picked up without restarting the server. The
+   * returned value overrides the `apiKey` field for the
+   * `Authorization: Bearer …` header.
+   */
+  credentialProvider?: (providerId: string) => Promise<string | null>;
 };

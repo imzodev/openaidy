@@ -92,30 +92,68 @@ export class TaskSchedulesRepository {
    * "Due" means: `status = 'active'` AND `nextRunAt <= now`. This returns
    * the earliest-due row, ordered by `nextRunAt` ascending.
    *
-   * Concurrency: in the current single-server model (the OpenAidy server
-   * runs as a single process per instance), this is safe. For a
-   * multi-server deployment, Phase 7 swaps this for a transactional
-   * `UPDATE ... WHERE nextRunAt <= now AND status = 'active' RETURNING`
-   * with `FOR UPDATE SKIP LOCKED` semantics.
+   * The claim is atomic: the selected row's status is flipped to `running`
+   * in the same statement, so no other tick can claim it again until
+   * `reschedule()` restores it to `active` (or terminal). This prevents
+   * the duplicate-session bug where a slow or failing run left `nextRunAt`
+   * stale and every subsequent scheduler tick created a new session.
    */
   async claimNextDue(now: Date = new Date()): Promise<{
     id: string;
     payload: { schedule: schema.TaskSchedule };
   } | null> {
     const rows = await this.db
-      .select()
-      .from(schema.taskSchedules)
+      .update(schema.taskSchedules)
+      .set({
+        status: 'running',
+        updatedAt: now,
+      })
       .where(
         and(
           eq(schema.taskSchedules.status, 'active'),
-          lte(schema.taskSchedules.nextRunAt, now),
+          eq(
+            schema.taskSchedules.id,
+            sql`(
+              SELECT ${schema.taskSchedules.id}
+              FROM ${schema.taskSchedules}
+              WHERE ${schema.taskSchedules.status} = 'active'
+                AND ${schema.taskSchedules.nextRunAt} <= ${now.toISOString()}
+              ORDER BY ${schema.taskSchedules.nextRunAt} ASC
+              LIMIT 1
+            )`,
+          ),
         ),
       )
-      .orderBy(asc(schema.taskSchedules.nextRunAt))
-      .limit(1);
+      .returning();
     const schedule = rows[0];
     if (!schedule) return null;
     return { id: schedule.id, payload: { schedule } };
+  }
+
+  /**
+   * Recover schedules that were left in `running` (e.g. after a crash).
+   *
+   * A schedule is considered stuck if it has been in `running` since before
+   * the provided threshold. Restores it to `active` so the scheduler can
+   * claim it again. This is called on service startup.
+   */
+  async recoverStuckSchedules(
+    stuckThreshold: Date,
+  ): Promise<schema.TaskSchedule[]> {
+    const rows = await this.db
+      .update(schema.taskSchedules)
+      .set({
+        status: 'active',
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.taskSchedules.status, 'running'),
+          lte(schema.taskSchedules.updatedAt, stuckThreshold),
+        ),
+      )
+      .returning();
+    return rows;
   }
 
   /**
@@ -232,6 +270,7 @@ export class TaskSchedulesRepository {
     const counts: Record<schema.TaskScheduleStatus, number> = {
       active: 0,
       paused: 0,
+      running: 0,
       expired: 0,
     };
     for (const row of rows as Array<{

@@ -70,6 +70,7 @@ const makeExecution = (
   taskDescription: 'D',
   errorCode: null,
   errorMessage: null,
+  subtaskSummary: null,
   createdAt: '2026-06-01T09:00:00.000Z',
   ...overrides,
 });

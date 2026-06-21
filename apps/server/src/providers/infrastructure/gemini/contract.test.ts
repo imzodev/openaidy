@@ -25,84 +25,89 @@ afterEach(() => {
 
 // Set up mock responses for contract tests
 function setupMockResponses() {
-  mockFetch.mockImplementation(async (url: string, _options?: { body?: string }) => {
-    // Mock listModels
-    if (url.includes('/models?key=')) {
-      return {
-        ok: true,
-        json: async () => ({
-          models: [
-            { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' },
-          ],
-        }),
-      };
-    }
-
-    // Mock getModel
-    if (url.includes('/models/') && !url.includes(':generateContent')) {
-      const urlParts = url.split('/models/');
-      const modelId = urlParts[1]?.split('?')[0];
-      if (modelId === 'test-model') {
+  mockFetch.mockImplementation(
+    async (url: string, _options?: { body?: string }) => {
+      // Mock listModels
+      if (url.includes('/models?key=')) {
         return {
           ok: true,
           json: async () => ({
-            name: `models/${modelId}`,
-            displayName: 'Test Model',
+            models: [
+              {
+                name: 'models/gemini-2.0-flash',
+                displayName: 'Gemini 2.0 Flash',
+              },
+            ],
           }),
         };
       }
-      return {
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: new Headers(),
-      };
-    }
 
-    // Mock generateContent
-    if (url.includes(':generateContent')) {
-      // Check if model is invalid (contract test for invalid model)
-      const urlModel = url.split('/models/')[1]?.split(':')[0];
-      if (urlModel && urlModel.includes('invalid')) {
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: 404,
-              message: `Model '${urlModel}' not found`,
-              status: 'NOT_FOUND',
-            },
-          }),
-          {
-            status: 404,
-            statusText: 'Not Found',
-            headers: { 'Content-Type': 'application/json' },
-          }
-        );
+      // Mock getModel
+      if (url.includes('/models/') && !url.includes(':generateContent')) {
+        const urlParts = url.split('/models/');
+        const modelId = urlParts[1]?.split('?')[0];
+        if (modelId === 'test-model') {
+          return {
+            ok: true,
+            json: async () => ({
+              name: `models/${modelId}`,
+              displayName: 'Test Model',
+            }),
+          };
+        }
+        return {
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          headers: new Headers(),
+        };
       }
 
-      return {
-        ok: true,
-        json: async () => ({
-          candidates: [
-            {
-              content: {
-                role: 'model',
-                parts: [{ text: 'Hello, World!' }],
+      // Mock generateContent
+      if (url.includes(':generateContent')) {
+        // Check if model is invalid (contract test for invalid model)
+        const urlModel = url.split('/models/')[1]?.split(':')[0];
+        if (urlModel && urlModel.includes('invalid')) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: 404,
+                message: `Model '${urlModel}' not found`,
+                status: 'NOT_FOUND',
               },
-              finishReason: 'STOP',
+            }),
+            {
+              status: 404,
+              statusText: 'Not Found',
+              headers: { 'Content-Type': 'application/json' },
             },
-          ],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 5,
-            totalTokenCount: 15,
-          },
-        }),
-      };
-    }
+          );
+        }
 
-    return { ok: false, status: 404 };
-  });
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  role: 'model',
+                  parts: [{ text: 'Hello, World!' }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+            },
+          }),
+        };
+      }
+
+      return { ok: false, status: 404 };
+    },
+  );
 }
 
 // Run the adapter contract tests with mocking
@@ -119,7 +124,13 @@ describe('Gemini Adapter Contract', () => {
         providerId: 'test-gemini',
         providerName: 'Test Gemini',
       }),
-    supportedCapabilities: ['text_generation', 'streaming', 'tool_calls', 'vision', 'audio_input'],
+    supportedCapabilities: [
+      'text_generation',
+      'streaming',
+      'tool_calls',
+      'vision',
+      'audio_input',
+    ],
     defaultModelId: 'gemini-2.0-flash',
     skipTests: [
       // Skip streaming tests that require actual SSE handling
@@ -207,5 +218,81 @@ describe('Adapter Contract Validation', () => {
     expect(provider.hasCapability('audio_input')).toBe(false);
     // text_generation should always be supported
     expect(provider.hasCapability('text_generation')).toBe(true);
+  });
+
+  it('should fetch the credential from credentialProvider on every request (OAuth/API-key-after-startup path)', async () => {
+    // Regression test: without credentialProvider, the URL goes out
+    // with `?key=` (empty) because `config.apiKey` was '' at
+    // construction time, and Gemini rejects it with
+    // "Method doesn't allow unregistered callers". With
+    // credentialProvider wired, the adapter should consult it on
+    // every request and rewrite the URL with the fresh key.
+    mockFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: { role: 'model', parts: [{ text: 'ok' }] },
+              finishReason: 'STOP',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const lookup = vi
+      .fn<(id: string) => Promise<string | null>>()
+      .mockResolvedValue('freshly-persisted-key');
+
+    const provider = createGeminiProvider({
+      // The static apiKey is intentionally empty — simulates an
+      // adapter that was constructed before the user authenticated
+      // via the connect dialog.
+      apiKey: '',
+      providerId: 'google',
+      credentialProvider: lookup,
+    });
+
+    await provider.invoke({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(lookup).toHaveBeenCalledWith('google');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const calledUrl = String(mockFetch.mock.calls[0]?.[0]);
+    expect(calledUrl).toContain('key=freshly-persisted-key');
+    expect(calledUrl).not.toContain('key=&');
+  });
+
+  it('should fall back to the constructor-time apiKey when credentialProvider returns null', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: { role: 'model', parts: [{ text: 'ok' }] },
+              finishReason: 'STOP',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const provider = createGeminiProvider({
+      apiKey: 'env-var-key',
+      providerId: 'google',
+      credentialProvider: async () => null,
+    });
+
+    await provider.invoke({
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    const calledUrl = String(mockFetch.mock.calls[0]?.[0]);
+    expect(calledUrl).toContain('key=env-var-key');
   });
 });

@@ -1,22 +1,38 @@
 import { createSignal, For, Show } from 'solid-js';
 import { X, Plus, Trash2 } from 'lucide-solid';
-import type { ProviderPreset, ModelPreset } from '@openaidy/shared-types';
+import {
+  type ModelPreset,
+  OPENCODE_GO_ANTHROPIC_MODEL_IDS,
+} from '@openaidy/shared-types';
 import type { ProviderConfig } from '../../lib/api';
-import { ApiKeyInput } from './ApiKeyInput';
 import { ModelSelector } from './ModelSelector';
+import type { PresetProviderModalProps } from './PresetProviderModal.types';
 
-interface PresetProviderModalProps {
-  preset: ProviderPreset;
-  existingProvider?: ProviderConfig;
-  onClose: () => void;
-  onSave: (provider: ProviderConfig) => void;
-  isPending: boolean;
+/**
+ * For OpenCode Go we present all 13 models under a single
+ * "OpenCode Go" card. The 6 anthropic-format models (M3 / M2.7 /
+ * M2.5 and the Qwen family) must be routed to a *different*
+ * `providerId` (`opencode-go-anthropic`) so the chat adapter hits
+ * `/v1/messages` instead of `/v1/chat/completions` — the gateway
+ * explicitly rejects the latter for those models.
+ *
+ * The mapping is model-id-based, not model-name-based, so custom
+ * models added by the user aren't accidentally re-routed.
+ */
+function resolveOpenCodeGoProviderId(
+  presetId: string,
+  modelId: string,
+): string {
+  if (
+    presetId === 'opencode-go' &&
+    OPENCODE_GO_ANTHROPIC_MODEL_IDS.has(modelId)
+  ) {
+    return 'opencode-go-anthropic';
+  }
+  return presetId;
 }
 
 export function PresetProviderModal(props: PresetProviderModalProps) {
-  const [apiKey, setApiKey] = createSignal(
-    props.existingProvider?.apiKeyEnv || '',
-  );
   const [selectedModelId, setSelectedModelId] = createSignal(
     props.existingProvider?.models?.[0]?.id || props.preset.recommendedModel,
   );
@@ -58,8 +74,6 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
   };
 
   const handleSave = () => {
-    if (!apiKey()) return;
-
     const selectedPresetModel = props.preset.models.find(
       (m) => m.id === selectedModelId(),
     );
@@ -84,12 +98,12 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
     }
 
     const provider: ProviderConfig = {
-      id: props.preset.id,
+      id: resolveOpenCodeGoProviderId(props.preset.id, selectedModelId()),
       name: props.preset.name,
       vendorFamily: props.preset.vendorFamily,
       enabled: true,
       baseUrl: props.preset.baseUrl,
-      apiKeyEnv: apiKey(),
+      apiKeyEnv: props.existingProvider?.apiKeyEnv,
       models,
     };
 
@@ -116,17 +130,6 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
         </div>
 
         <div class="p-4 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-text-primary mb-2">
-              API Key
-            </label>
-            <ApiKeyInput
-              value={apiKey()}
-              onInput={setApiKey}
-              placeholder={`${props.preset.name} API Key`}
-            />
-          </div>
-
           <div>
             <label class="block text-sm font-medium text-text-primary mb-2">
               Model
@@ -198,20 +201,32 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
           </Show>
         </div>
 
-        <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
-          <button
-            onClick={() => props.onClose()}
-            class="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={props.isPending || !apiKey()}
-            class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            {props.isPending ? 'Saving...' : 'Save'}
-          </button>
+        <div class="flex items-center justify-between gap-3 p-4 border-t border-gray-200 dark:border-gray-700 sticky bottom-0 bg-white dark:bg-gray-800">
+          <Show when={props.existingProvider && props.onDisconnect}>
+            <button
+              type="button"
+              onClick={() => props.onDisconnect?.(props.preset)}
+              disabled={props.isPending}
+              class="px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Disconnect
+            </button>
+          </Show>
+          <div class="flex items-center gap-3 ml-auto">
+            <button
+              onClick={() => props.onClose()}
+              class="px-4 py-2 text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={props.isPending}
+              class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {props.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

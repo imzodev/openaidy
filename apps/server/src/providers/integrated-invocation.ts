@@ -20,8 +20,6 @@ import {
   type ModelRequest,
   type ModelResponse,
   type ModelStreamEvent,
-  type ProviderError,
-  type ModelProvider,
 } from '@openaidy/runtime';
 import {
   type ProviderConfig,
@@ -29,53 +27,24 @@ import {
   type ResolvedProviderConfig,
   createDefaultSecretProvider,
 } from '@openaidy/config';
-import { ProviderConfigService, createProviderConfigService } from './config-service';
+import {
+  ProviderConfigService,
+  createProviderConfigService,
+} from './config-service';
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 import { ProviderSelectionService, createProviderSelection } from './selection';
-import { ModelInvocationService, createModelInvocation, type InvocationOptions } from './invocation';
+import {
+  ModelInvocationService,
+  createModelInvocation,
+  type InvocationOptions,
+} from './invocation';
 import type { ProviderSelectionRequest } from './types';
-
-// =====================
-// Types
-// =====================
-
-/**
- * Options for the IntegratedInvocationService
- */
-export type IntegratedInvocationOptions = {
-  /** Secret provider to use for resolving secrets */
-  secretProvider?: SecretProvider;
-  /** Pre-registered providers to add to the registry */
-  preRegisteredProviders?: Array<{
-    provider: ModelProvider;
-    options?: {
-      enabled?: boolean;
-      priority?: number;
-      defaultModel?: string;
-    };
-  }>;
-};
-
-/**
- * Result of loading a provider through the integrated service
- */
-export type IntegratedLoadResult =
-  | { readonly ok: true; readonly provider: ModelProvider; readonly config: ResolvedProviderConfig }
-  | { readonly ok: false; readonly error: ProviderError };
-
-/**
- * Result of invoking a model through the integrated service
- */
-export type IntegratedInvokeResult<T = ModelResponse> =
-  | { readonly ok: true; readonly response: T }
-  | { readonly ok: false; readonly error: ProviderError };
-
-/**
- * Result of selection with optional config
- */
-export type SelectionWithConfigResult =
-  | { readonly ok: true; readonly provider: ModelProvider; readonly modelId: string; readonly config?: ResolvedProviderConfig }
-  | { readonly ok: false; readonly error: ProviderError };
+import type {
+  IntegratedInvocationOptions,
+  IntegratedLoadResult,
+  IntegratedInvokeResult,
+  SelectionWithConfigResult,
+} from './integrated-invocation.types';
 
 // =====================
 // Integrated Invocation Service
@@ -101,18 +70,31 @@ export class IntegratedInvocationService {
 
   constructor(options?: IntegratedInvocationOptions) {
     // Initialize the secret provider
-    const secretProvider = options?.secretProvider ?? createDefaultSecretProvider();
+    const secretProvider =
+      options?.secretProvider ?? createDefaultSecretProvider();
 
     // Initialize services
-    this.configService = createProviderConfigService({ secretProvider });
+    this.configService = createProviderConfigService({
+      secretProvider,
+      ...(options?.credentialProvider
+        ? { credentialProvider: options.credentialProvider }
+        : {}),
+    });
     this.registry = createProviderRegistry();
     this.selection = createProviderSelection(this.registry);
     this.invocation = createModelInvocation(this.registry, this.selection);
 
     // Register pre-registered providers
     if (options?.preRegisteredProviders) {
-      for (const { provider, options: regOptions } of options.preRegisteredProviders) {
-        const registrationOptions: { enabled?: boolean; priority?: number; defaultModel?: string } = {};
+      for (const {
+        provider,
+        options: regOptions,
+      } of options.preRegisteredProviders) {
+        const registrationOptions: {
+          enabled?: boolean;
+          priority?: number;
+          defaultModel?: string;
+        } = {};
         if (regOptions?.enabled !== undefined) {
           registrationOptions.enabled = regOptions.enabled;
         }
@@ -158,7 +140,11 @@ export class IntegratedInvocationService {
     }
 
     // Register the loaded provider in the registry
-    const registrationOptions: { enabled?: boolean; priority?: number; defaultModel?: string } = {};
+    const registrationOptions: {
+      enabled?: boolean;
+      priority?: number;
+      defaultModel?: string;
+    } = {};
     if (result.config.enabled !== undefined) {
       registrationOptions.enabled = result.config.enabled;
     }
@@ -183,7 +169,9 @@ export class IntegratedInvocationService {
   /**
    * Load all pending provider configurations
    */
-  async loadAllPending(): Promise<Array<{ id: string; result: IntegratedLoadResult }>> {
+  async loadAllPending(): Promise<
+    Array<{ id: string; result: IntegratedLoadResult }>
+  > {
     const results: Array<{ id: string; result: IntegratedLoadResult }> = [];
     const configsToLoad = Array.from(this.pendingConfigs.values());
 
@@ -214,7 +202,8 @@ export class IntegratedInvocationService {
       const config: ResolvedProviderConfig = resolvedConfig ?? {
         id: providerId,
         name: existingProvider.descriptor.name,
-        vendorFamily: existingProvider.descriptor.vendorFamily as ResolvedProviderConfig['vendorFamily'],
+        vendorFamily: existingProvider.descriptor
+          .vendorFamily as ResolvedProviderConfig['vendorFamily'],
         enabled: true,
         priority: 50,
       };
@@ -237,7 +226,7 @@ export class IntegratedInvocationService {
       error: createProviderError(
         'provider.unavailable',
         `Provider "${providerId}" is not registered and no configuration was found`,
-        { providerId }
+        { providerId },
       ),
     };
   }
@@ -245,7 +234,9 @@ export class IntegratedInvocationService {
   /**
    * Select a provider, loading from config if necessary
    */
-  async selectWithConfig(request: ProviderSelectionRequest): Promise<SelectionWithConfigResult> {
+  async selectWithConfig(
+    request: ProviderSelectionRequest,
+  ): Promise<SelectionWithConfigResult> {
     // If explicit provider is specified, try to load it
     if (request.providerId) {
       const loadResult = await this.getOrLoadProvider(request.providerId);
@@ -258,10 +249,21 @@ export class IntegratedInvocationService {
     const selectionResult = this.selection.select(request);
 
     if (selectionResult.ok) {
-      const config = this.configService.getResolvedConfig(selectionResult.provider.descriptor.id);
+      const config = this.configService.getResolvedConfig(
+        selectionResult.provider.descriptor.id,
+      );
       return config
-        ? { ok: true, provider: selectionResult.provider, modelId: selectionResult.modelId, config }
-        : { ok: true, provider: selectionResult.provider, modelId: selectionResult.modelId };
+        ? {
+            ok: true,
+            provider: selectionResult.provider,
+            modelId: selectionResult.modelId,
+            config,
+          }
+        : {
+            ok: true,
+            provider: selectionResult.provider,
+            modelId: selectionResult.modelId,
+          };
     }
 
     // If no explicit provider and selection failed, try to load any pending provider
@@ -270,10 +272,21 @@ export class IntegratedInvocationService {
       await this.loadAllPending();
       const retryResult = this.selection.select(request);
       if (retryResult.ok) {
-        const config = this.configService.getResolvedConfig(retryResult.provider.descriptor.id);
+        const config = this.configService.getResolvedConfig(
+          retryResult.provider.descriptor.id,
+        );
         return config
-          ? { ok: true, provider: retryResult.provider, modelId: retryResult.modelId, config }
-          : { ok: true, provider: retryResult.provider, modelId: retryResult.modelId };
+          ? {
+              ok: true,
+              provider: retryResult.provider,
+              modelId: retryResult.modelId,
+              config,
+            }
+          : {
+              ok: true,
+              provider: retryResult.provider,
+              modelId: retryResult.modelId,
+            };
       }
     }
 
@@ -294,10 +307,12 @@ export class IntegratedInvocationService {
    */
   async invokeWithConfig(
     request: ModelRequest,
-    options?: InvocationOptions
+    options?: InvocationOptions,
   ): Promise<IntegratedInvokeResult<ModelResponse>> {
     // Determine provider ID from options or request metadata
-    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
+    const providerId =
+      options?.providerId ??
+      (request.metadata?.providerId as string | undefined);
 
     // Ensure provider is loaded
     if (providerId) {
@@ -332,10 +347,12 @@ export class IntegratedInvocationService {
    */
   async *invokeStreamWithConfig(
     request: ModelRequest,
-    options?: InvocationOptions
+    options?: InvocationOptions,
   ): AsyncIterable<IntegratedInvokeResult<ModelStreamEvent>> {
     // Determine provider ID from options or request metadata
-    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
+    const providerId =
+      options?.providerId ??
+      (request.metadata?.providerId as string | undefined);
 
     // Ensure provider is loaded
     if (providerId) {
@@ -413,7 +430,7 @@ export class IntegratedInvocationService {
  * Create an integrated invocation service
  */
 export function createIntegratedInvocation(
-  options?: IntegratedInvocationOptions
+  options?: IntegratedInvocationOptions,
 ): IntegratedInvocationService {
   return new IntegratedInvocationService(options);
 }
