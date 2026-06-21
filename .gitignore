@@ -15,6 +15,14 @@ apps/web/.solid
 apps/server/data/
 .openaidy/
 *.tsbuildinfo
+# gentle-ai
+.codeium/
+.config/
+.atl/
+openspec/
+.windsurf/
+.gga
+AGENTS.md
 
 # Agents skills
 .agents/skills
