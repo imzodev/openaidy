@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import type { FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
+import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import {
   type DatabaseAdapter,
@@ -77,6 +78,7 @@ import { createChannelRegistry } from './channels/index.js';
 import { PulseService } from './pulses/service.js';
 import { channelRoutes } from './routes/channels.js';
 import path from 'node:path';
+import { access } from 'node:fs/promises';
 import type { AppServices } from './types';
 
 /**
@@ -696,6 +698,81 @@ export async function buildApp() {
     authMiddleware,
   });
 
+  // ==========================================================================
+  // Web bundle (same-origin: server serves the built web UI)
+  // ==========================================================================
+  //
+  // Resolve the web dist path from OPENAIDY_WEB_DIST, falling back to
+  // ${OPENAIDY_REPO}/apps/web/dist. Web serving is opt-in: when neither
+  // var is set the server only exposes the API + WS — this is what lets
+  // the existing test suite boot the app without a built bundle. When a
+  // path IS resolved we validate index.html exists and fail loud (rather
+  // than silently serving from a wrong directory).
+  //
+  // CLI's `openaidy start --integrated` builds the web bundle first and
+  // passes OPENAIDY_WEB_DIST explicitly; for direct server startups
+  // OPENAIDY_REPO is set by install scripts.
+  const webDistPath = resolveWebDistPath(
+    process.env.OPENAIDY_WEB_DIST,
+    process.env.OPENAIDY_REPO,
+  );
+  if (webDistPath) {
+    try {
+      await access(path.join(webDistPath, 'index.html'));
+    } catch {
+      throw new Error(
+        `Web bundle not found at ${webDistPath} (missing index.html). ` +
+          'Run `pnpm --filter web build` to produce it, or point ' +
+          'OPENAIDY_WEB_DIST at an existing dist directory.',
+      );
+    }
+    log.info(`Serving web bundle from ${webDistPath}`);
+
+    await app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+      // We attach cache headers ourselves per-asset (immutable for hashed
+      // Vite assets, no-cache for index.html). Disabling the plugin's own
+      // cache-control avoids double-setting the header.
+      cacheControl: false,
+      // Don't auto-resolve index.html for unmatched paths — we handle SPA
+      // fallback via setNotFoundHandler below so /api/* keeps returning JSON.
+      wildcard: false,
+      decorateReply: true,
+    });
+
+    // Vite emits content-addressed assets under /assets/<hash>.<ext>.
+    // Their filenames change whenever their content changes, so the
+    // immutable flag is safe and lets CDNs cache them for a year.
+    app.addHook('onSend', async (request, reply) => {
+      if (request.url.startsWith('/assets/')) {
+        void reply.header(
+          'cache-control',
+          'public, max-age=31536000, immutable',
+        );
+      }
+    });
+
+    // SPA fallback — serve index.html for client-side routes (e.g.
+    // /sessions/abc) while preserving JSON 404 semantics for /api/* paths
+    // so API clients never receive the HTML shell. index.html always
+    // revalidates so deploys are picked up immediately.
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api/')) {
+        void reply.code(404).send({ error: 'Not found', path: request.url });
+        return;
+      }
+      void reply.header('cache-control', 'no-cache, must-revalidate');
+      return reply.sendFile('index.html');
+    });
+  } else {
+    log.info(
+      'Web bundle not configured (OPENAIDY_WEB_DIST and OPENAIDY_REPO both ' +
+        'unset). Server exposes API + WS only. Pass --integrated to `openaidy ' +
+        'start`, or set OPENAIDY_WEB_DIST, to serve the web UI.',
+    );
+  }
+
   // Start scheduler after server is ready
   let stuckSubtaskInterval: ReturnType<typeof setInterval> | undefined;
   app.addHook('onReady', async () => {
@@ -753,6 +830,26 @@ export async function buildApp() {
   });
 
   return app;
+}
+
+/**
+ * Resolve the absolute path to the web bundle (apps/web/dist) the server
+ * should serve. Uses OPENAIDY_WEB_DIST when set, otherwise falls back to
+ * `${OPENAIDY_REPO}/apps/web/dist`. Returns undefined when neither source
+ * is configured — callers must treat that as a startup error rather than
+ * guessing a random directory.
+ */
+function resolveWebDistPath(
+  webDistEnv: string | undefined,
+  repoRootEnv: string | undefined,
+): string | undefined {
+  if (webDistEnv && webDistEnv.length > 0) {
+    return path.resolve(webDistEnv);
+  }
+  if (repoRootEnv && repoRootEnv.length > 0) {
+    return path.resolve(repoRootEnv, 'apps', 'web', 'dist');
+  }
+  return undefined;
 }
 
 // Extend Fastify type for services decoration and request timing

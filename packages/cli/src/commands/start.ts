@@ -12,13 +12,17 @@
  *  8. Unless --server-only: spawn Vite dev server for apps/web
  *     and write $OPENAIDY_HOME/state/web.pid
  *
+ * With --integrated: build the web bundle first, then start only the
+ * server. The server reads OPENAIDY_WEB_DIST and serves the built bundle
+ * itself (same-origin). This is the recommended production mode.
+ *
  * Design per R-D2: process spawning tested on Unix/macOS only.
  * Windows covered by scripts/smoke-install.ps1 (manual).
  * Uses createCLIError / formatCLIError from errors.ts (CC-3).
  * Returns CommandResult per types.ts contract.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { unlink } from 'node:fs/promises';
 import { request } from 'node:http';
@@ -47,16 +51,20 @@ gateway rides on the same port (same-origin architecture).
 Automatically:
   - Spawns the server as a detached child on OPENAIDY_PORT
   - Polls /health until ready
-  - Spawns the web frontend (Vite) unless --server-only
+  - Spawns the web frontend (Vite) unless --server-only or --integrated
   - Installs signal handlers for graceful shutdown
 
 Options:
   -h, --help          Show this help message
   --server-only       Start only the server, skip the web frontend
+  --integrated        Build the web bundle first and have the server
+                      serve it directly (same-origin). The Vite dev
+                      server is NOT spawned. Requires pnpm.
 
 Exit Codes:
   0  Server started and healthy (and web started unless --server-only)
-  1  OPENAIDY_PORT missing/invalid, server entry missing, or health check timed out
+  1  OPENAIDY_PORT missing/invalid, server entry missing, web build
+     failed (--integrated), or health check timed out
 `;
 
 // ============================================================================
@@ -114,6 +122,16 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
 
   // --server-only: skip web frontend
   const serverOnly = args.includes('--server-only');
+
+  // --integrated: build the web bundle and have the server serve it
+  // directly (same-origin). Implies --server-only (Vite is not spawned).
+  const integrated = args.includes('--integrated');
+  if (serverOnly && integrated) {
+    return {
+      exitCode: 1,
+      output: 'Error: --server-only and --integrated are mutually exclusive.',
+    };
+  }
 
   // Resolve OPENAIDY_HOME
   const openaidyHome = process.env.OPENAIDY_HOME;
@@ -176,22 +194,68 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     fs.mkdir(resolve(openaidyHome, 'logs'), { recursive: true }),
   );
 
+  // ==========================================================================
+  // --integrated: build web bundle before spawning server
+  // ==========================================================================
+  //
+  // In integrated mode the server serves the built web bundle directly via
+  // @fastify/static. We must produce apps/web/dist before starting the
+  // server, otherwise the server will refuse to start (missing index.html).
+  // Build synchronously so a failure aborts startup with a clear error
+  // before we leave a half-running server behind.
+  let webDistPath: string | undefined;
+  if (integrated) {
+    webDistPath = resolve(repoRoot, 'apps', 'web', 'dist');
+    const buildResult = spawnSync('pnpm', ['--filter', 'web', 'build'], {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+      env: {
+        ...process.env,
+        OPENAIDY_HOME: openaidyHome,
+        OPENAIDY_REPO: repoRoot,
+      },
+    });
+    if (buildResult.error) {
+      return {
+        exitCode: 1,
+        output:
+          `Error: failed to spawn \`pnpm --filter web build\`: ${buildResult.error.message}. ` +
+          'Is pnpm installed and on PATH?',
+      };
+    }
+    if (buildResult.status !== 0) {
+      return {
+        exitCode: 1,
+        output:
+          `Error: web bundle build failed (exit ${buildResult.status ?? 'unknown'}). ` +
+          'Fix the build errors above and retry. The server was NOT started.',
+      };
+    }
+  }
+
   // Spawn detached child via node --import tsx (handles ESM + extensionless imports).
   // Pass OPENAIDY_PORT through explicitly so the server's zod env schema finds it.
   // Also pass WS_PORT = OPENAIDY_PORT so the websocket gateway's separate
   // env schema (apps/server/src/websocket/types.ts wsEnvSchema) reads the
   // same value; the gateway shares the HTTP listener in this architecture.
+  // In --integrated mode, also pass OPENAIDY_WEB_DIST so the server's
+  // static plugin can locate the bundle we just built.
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    OPENAIDY_PORT: String(port),
+    PORT: String(port),
+    WS_PORT: String(port),
+    OPENAIDY_HOME: openaidyHome,
+  };
+  if (webDistPath) {
+    childEnv['OPENAIDY_WEB_DIST'] = webDistPath;
+  }
   const child = spawn(nodeBin, ['--import', 'tsx', serverEntry], {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
-    env: {
-      ...process.env,
-      OPENAIDY_PORT: String(port),
-      PORT: String(port),
-      WS_PORT: String(port),
-      OPENAIDY_HOME: openaidyHome,
-    },
+    env: childEnv,
   });
 
   // Capture stdout/stderr to log file
@@ -237,13 +301,30 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   }
 
   // ==========================================================================
-  // Web frontend (Vite dev server)
+  // Web frontend
   // ==========================================================================
+  //
+  // In --integrated mode the server serves the built web bundle itself, so
+  // there's no separate Vite process to start. Otherwise (the default),
+  // spawn a Vite dev server unless --server-only was passed.
 
-  // Unless --server-only was passed, also start the web frontend so users
-  // get a fully running openaidy instance from a single command. The web
-  // process is spawned detached and tracked via its own PID file so
-  // `openaidy stop` can shut both down.
+  if (integrated) {
+    return {
+      exitCode: 0,
+      output: [
+        '',
+        'Server running on http://localhost:' + port,
+        '  PID:  ' + child.pid,
+        '  Log:  ' + logFile,
+        '  Web:  served from ' + webDistPath,
+        '',
+        'Open http://localhost:' + port + ' in your browser to get started.',
+        'Use "openaidy stop" to stop the server.',
+        '',
+      ].join('\n'),
+    };
+  }
+
   const webInfo = serverOnly ? null : await startWeb(repoRoot, openaidyHome);
 
   if (serverOnly) {
@@ -259,6 +340,7 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
         'Open http://localhost:' + port + ' in your browser to get started.',
         'Use "openaidy stop" to stop the server.',
         'Pass --server-only=false (or omit the flag) to also start the web frontend.',
+        'Pass --integrated to have the server serve the built web bundle itself.',
         '',
       ].join('\n'),
     };

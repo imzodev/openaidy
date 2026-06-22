@@ -42,8 +42,8 @@ describe('websocket types', () => {
       expect(result.path).toBe('/ws');
     });
 
-    it('should apply defaults for missing fields', () => {
-      const config = {};
+    it('should apply defaults for missing fields (except port, which is now required per port-config-refactor)', () => {
+      const config = { port: 3001 };
       const result = webSocketConfigSchema.parse(config);
 
       expect(result.enabled).toBe(true);
@@ -53,6 +53,11 @@ describe('websocket types', () => {
       expect(result.heartbeatInterval).toBe(30000);
       expect(result.auth.required).toBe(true);
       expect(result.rateLimit.max).toBe(100);
+    });
+
+    it('should reject when port is missing (no silent 3001 fallback)', () => {
+      const config = {};
+      expect(() => webSocketConfigSchema.parse(config)).toThrow();
     });
 
     it('should reject invalid port', () => {
@@ -129,7 +134,10 @@ describe('websocket types', () => {
         autoApproveCapabilities: ['sessions.read', 'sessions.write'],
       };
       const result = pairingConfigSchema.parse(config);
-      expect(result.autoApproveCapabilities).toEqual(['sessions.read', 'sessions.write']);
+      expect(result.autoApproveCapabilities).toEqual([
+        'sessions.read',
+        'sessions.write',
+      ]);
     });
   });
 
@@ -154,14 +162,19 @@ describe('websocket types', () => {
       expect(result.WS_PATH).toBe('/ws');
     });
 
-    it('should apply defaults for missing env vars', () => {
-      const env = {};
+    it('should apply defaults for missing env vars (except WS_PORT, which is now required per port-config-refactor)', () => {
+      const env = { WS_PORT: '3001' };
       const result = wsEnvSchema.parse(env);
 
       expect(result.WS_ENABLED).toBe(true);
       expect(result.WS_PORT).toBe(3001);
       expect(result.WS_PATH).toBe('/ws');
       expect(result.WS_MAX_CONNECTIONS).toBe(1000);
+    });
+
+    it('should reject when WS_PORT is missing (no silent 3001 fallback)', () => {
+      const env = {};
+      expect(() => wsEnvSchema.parse(env)).toThrow();
     });
 
     it('should parse "false" string as boolean false', () => {
@@ -401,7 +414,7 @@ describe('websocket types', () => {
     });
 
     it('should correctly infer WSEnv type', () => {
-      const env: WSEnv = wsEnvSchema.parse({});
+      const env: WSEnv = wsEnvSchema.parse({ WS_PORT: '3001' });
       expect(env.WS_ENABLED).toBeDefined();
       expect(env.WS_PORT).toBeDefined();
       expect(env.WS_PATH).toBeDefined();
@@ -435,8 +448,12 @@ describe('websocket types', () => {
 
     it('should handle zero values correctly', () => {
       // Zero should be rejected for positive numbers
-      expect(() => webSocketConfigSchema.parse({ maxConnections: 0 })).toThrow();
-      expect(() => webSocketConfigSchema.parse({ heartbeatInterval: 0 })).toThrow();
+      expect(() =>
+        webSocketConfigSchema.parse({ maxConnections: 0 }),
+      ).toThrow();
+      expect(() =>
+        webSocketConfigSchema.parse({ heartbeatInterval: 0 }),
+      ).toThrow();
     });
   });
 });

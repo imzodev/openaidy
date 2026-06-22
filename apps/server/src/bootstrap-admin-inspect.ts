@@ -125,10 +125,25 @@ export async function inspectBootstrapAdminToken(
     };
   }
 
-  // Create auth middleware for token validation
+  // Create auth middleware for token validation. The port here is only
+  // used internally for AuthMiddleware's config shape — token validation
+  // itself doesn't depend on the listening port. We read OPENAIDY_PORT
+  // (required by the server env schema) so this script fails loud rather
+  // than silently picking a port that doesn't match the running server.
+  const openAidyPort = parseInt(process.env.OPENAIDY_PORT ?? '', 10);
+  if (!Number.isInteger(openAidyPort) || openAidyPort <= 0) {
+    return {
+      status: 'malformed',
+      tokenPath,
+      enabled,
+      error:
+        'OPENAIDY_PORT is not set or is not a positive integer. ' +
+        'Set it in the environment (e.g. OPENAIDY_PORT=3001) before running `openaidy inspect`.',
+    };
+  }
   const authMiddleware = new AuthMiddleware({
     enabled: true,
-    port: parseInt(process.env.WS_PORT || '3001', 10),
+    port: openAidyPort,
     path: '/ws',
     maxConnections: 1,
     heartbeatInterval: 0,

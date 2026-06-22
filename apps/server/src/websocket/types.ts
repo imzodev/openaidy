@@ -65,8 +65,10 @@ export type WSRateLimitConfig = z.infer<typeof wsRateLimitConfigSchema>;
 export const webSocketConfigSchema = z.object({
   /** Whether WebSocket is enabled */
   enabled: z.boolean().default(true),
-  /** Port to listen on (defaults to HTTP server port) */
-  port: z.number().int().positive().default(3001),
+  /** Port to listen on. Required — no silent 3001 fallback (per
+   * port-config-refactor). In the same-origin architecture this is the
+   * HTTP server's port (OPENAIDY_PORT); callers must pass it explicitly. */
+  port: z.number().int().positive(),
   /** WebSocket endpoint path */
   path: z.string().default('/ws'),
   /** Maximum concurrent connections */
@@ -127,7 +129,12 @@ export const wsEnvSchema = z.object({
     .string()
     .transform((val) => val === 'true')
     .default('true'),
-  WS_PORT: z.coerce.number().int().positive().default(3001),
+  // WS_PORT is the WebSocket gateway's listen port. The gateway shares the
+  // HTTP listener (same-origin architecture) so this is the same port as
+  // OPENAIDY_PORT. Required (no default) — the server's main env schema
+  // enforces OPENAIDY_PORT and aliases WS_PORT from it, and the CLI's
+  // `openaidy start` sets it explicitly when spawning the child process.
+  WS_PORT: z.coerce.number().int().positive(),
   WS_PATH: z.string().default('/ws'),
   WS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
   WS_HEARTBEAT_INTERVAL: z.coerce.number().positive().default(30000),
