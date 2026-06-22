@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { createDatabaseClient } from '@openaidy/db';
 import { DbOAuthStateStore } from './state-store';
 import { startMiniMaxOAuth, getMiniMaxOAuthStatus } from './minimax';
-import { type MmxLoginHandle, type MiniMaxLoginResult } from './mmx-bridge';
+import { type MmxLoginHandle } from './mmx-bridge';
+import { type CliOAuthResult } from './cli-bridge';
 
 // Set master key BEFORE importing anything that touches encryption.
 process.env.CREDENTIALS_MASTER_KEY = 'test-m...ests';
@@ -79,7 +80,7 @@ describe('startMiniMaxOAuth', () => {
       verificationUrl: Promise.resolve(
         'https://platform.minimax.io/oauth-authorize?user_code=ABCD-1234&client=OpenAidy',
       ),
-      done: new Promise<MiniMaxLoginResult>(() => undefined), // never resolves in test
+      done: new Promise<CliOAuthResult>(() => undefined), // never resolves in test
       cancel: vi.fn(),
     };
     mockedMmx.spawnMmxLogin.mockReturnValueOnce(fakeHandle);
@@ -110,7 +111,7 @@ describe('startMiniMaxOAuth', () => {
         setImmediate(() => rej(new Error('mmx_slow')));
       }),
       verificationUrl: new Promise<string>(() => undefined),
-      done: new Promise<MiniMaxLoginResult>(() => undefined),
+      done: new Promise<CliOAuthResult>(() => undefined),
       cancel: vi.fn(),
     };
     mockedMmx.spawnMmxLogin.mockReturnValueOnce(fakeHandle);

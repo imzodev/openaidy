@@ -119,6 +119,7 @@ export type SessionRun = {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  firstMessageId?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
@@ -152,4 +153,31 @@ export type SessionRunSummary = Pick<
 > & {
   /** Duration in ms — derived by the server when marking a run finished */
   durationMs?: number;
+};
+
+// ========================================
+// Session Search Result (wire format)
+// ========================================
+// Mirrors the Zod schema in `packages/db/src/types/index.ts` (sessionSearchResultSchema).
+// Dates are serialized as ISO 8601 strings on the wire.
+
+/**
+ * Match type for session search results
+ */
+export type SessionSearchMatchType = 'title' | 'content';
+
+/**
+ * Single result from GET /sessions/search — wire format (dates as strings).
+ */
+export type SessionSearchResult = {
+  id: string;
+  title: string;
+  status: SessionStatus;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+  matchType: SessionSearchMatchType;
+  rank: number;
+  matchCount?: number;
+  snippet: string | null;
 };

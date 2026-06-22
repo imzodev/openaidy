@@ -46,6 +46,7 @@ const makeHistory = (
   errorCode: null,
   errorMessage: null,
   attemptNumber: 1,
+  subtaskSummary: null,
   createdAt: new Date(),
   ...overrides,
 });

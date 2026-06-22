@@ -56,6 +56,7 @@ const makeHistoryRow = (
   errorCode: null,
   errorMessage: null,
   attemptNumber: 1,
+  subtaskSummary: null,
   createdAt: new Date('2026-06-05T09:00:00Z'),
   ...overrides,
 });

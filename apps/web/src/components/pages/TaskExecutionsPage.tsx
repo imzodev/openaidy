@@ -308,7 +308,7 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
  */
 function SubtaskBadge(props: {
   summary: ExecutionSubtaskSummary;
-  onOpenSession: (sessionId: string) => void;
+  onOpenSession?: (sessionId: string) => void;
 }) {
   const [expanded, setExpanded] = createSignal(false);
   const s = props.summary;
@@ -366,7 +366,7 @@ function SubtaskBadge(props: {
                   <button
                     type="button"
                     onClick={() =>
-                      item.sessionId && props.onOpenSession(item.sessionId)
+                      item.sessionId && props.onOpenSession?.(item.sessionId)
                     }
                     class="inline-flex items-center gap-0.5 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                     title="View subtask session"

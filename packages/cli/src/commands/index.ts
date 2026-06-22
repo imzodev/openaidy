@@ -990,29 +990,3 @@ registerCommand(
     examples: ['pnpm openaidy providers disconnect openai'],
   },
 );
-
-registerCommand(
-  'providers status',
-  async (args: string[]) => {
-    const { providersStatusHandler } = await import('./providers/status.js');
-    return providersStatusHandler(args);
-  },
-  {
-    description: 'Show connection status of all providers',
-    usage: 'openaidy providers status',
-    examples: ['pnpm openaidy providers status'],
-  },
-);
-
-registerCommand(
-  'providers auth',
-  async (args: string[]) => {
-    const { providersAuthHandler } = await import('./providers/auth.js');
-    return providersAuthHandler(args);
-  },
-  {
-    description: 'Show authentication methods for a provider',
-    usage: 'openaidy providers auth <provider-id>',
-    examples: ['pnpm openaidy providers auth openai'],
-  },
-);
