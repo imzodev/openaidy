@@ -15,9 +15,15 @@ export class MobileAdapter implements ClientAdapter<MobileAdapterOptions> {
   readonly clientType = 'mobile' as const;
 
   createClient(options: MobileAdapterOptions): WebSocketClient {
+    // No hardcoded default. The caller must supply either `url` or `baseUrl`.
     const url =
       options.url ??
-      this.resolveUrl(options.baseUrl ?? 'ws://localhost:3000/ws');
+      (options.baseUrl ? this.resolveUrl(options.baseUrl) : undefined);
+    if (!url) {
+      throw new Error(
+        'MobileAdapter requires either `url` or `baseUrl` to be provided.',
+      );
+    }
 
     return createWebSocketClient({
       url,

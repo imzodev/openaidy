@@ -2,9 +2,9 @@
  * openaidy start — Start the OpenAidy server and web frontend (PR2 T2.2)
  *
  * Behavior (per spec R-7):
- *  1. Probe free port in 3000–3009 range
+ *  1. Read OPENAIDY_PORT from the environment (fail fast if missing or invalid)
  *  2. Resolve apps/server/dist/server.js from OPENAIDY_REPO
- *  3. Spawn detached child with chosen PORT
+ *  3. Spawn detached child with OPENAIDY_PORT propagated to its env
  *  4. Write PID JSON envelope to $OPENAIDY_HOME/state/server.pid
  *  5. Poll GET http://localhost:<port>/health every 500ms (max 30s)
  *  6. Install SIGINT/SIGTERM trap that forwards to child
@@ -23,18 +23,12 @@ import { resolve } from 'node:path';
 import { unlink } from 'node:fs/promises';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
-import {
-  probeFreePort,
-  writePidFile,
-  writeWebPidFile,
-} from '../lib/process-manager.js';
+import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const PORT_START = 3000;
-const PORT_TRIES = 10;
 const HEALTH_POLL_MS = 500;
 const HEALTH_MAX_POLLS = 60; // 30 seconds
 const WEB_DEFAULT_URL = 'http://localhost:5173';
@@ -46,9 +40,12 @@ Usage: openaidy start [options]
 
 Start the OpenAidy server and web frontend as background processes.
 
+Requires OPENAIDY_PORT to be set in the environment (or in
+$OPENAIDY_HOME/.env). The server binds to this port; the WebSocket
+gateway rides on the same port (same-origin architecture).
+
 Automatically:
-  - Finds a free port (3000–3009) for the server
-  - Spawns the server as a detached child
+  - Spawns the server as a detached child on OPENAIDY_PORT
   - Polls /health until ready
   - Spawns the web frontend (Vite) unless --server-only
   - Installs signal handlers for graceful shutdown
@@ -59,7 +56,7 @@ Options:
 
 Exit Codes:
   0  Server started and healthy (and web started unless --server-only)
-  1  Port range exhausted, server entry missing, or health check timed out
+  1  OPENAIDY_PORT missing/invalid, server entry missing, or health check timed out
 `;
 
 // ============================================================================
@@ -147,14 +144,25 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   // This is more reliable cross-platform than spawning tsx directly
   const nodeBin = process.execPath;
 
-  // Probe free port
-  let port: number;
-  try {
-    port = await probeFreePort(PORT_START, PORT_TRIES);
-  } catch {
+  // Read OPENAIDY_PORT from the environment. Per port-config-refactor: no
+  // port probing — the user declares the port explicitly so the server and
+  // the web client agree on the same origin. Fail fast with a clear error
+  // if the var is missing or invalid.
+  const portEnv = process.env.OPENAIDY_PORT;
+  if (!portEnv) {
     return {
       exitCode: 1,
-      output: `Error: No free port found in range ${PORT_START}-${PORT_START + PORT_TRIES - 1}. Stop any existing server or specify a different port range.`,
+      output:
+        'Error: OPENAIDY_PORT is not set. Set it in your environment or ' +
+        'in $OPENAIDY_HOME/.env (e.g. OPENAIDY_PORT=3001) before running ' +
+        '`openaidy start`.',
+    };
+  }
+  const port = Number(portEnv);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    return {
+      exitCode: 1,
+      output: `Error: OPENAIDY_PORT must be a positive integer (1-65535). Got "${portEnv}".`,
     };
   }
 
@@ -168,14 +176,20 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     fs.mkdir(resolve(openaidyHome, 'logs'), { recursive: true }),
   );
 
-  // Spawn detached child via node --import tsx (handles ESM + extensionless imports)
+  // Spawn detached child via node --import tsx (handles ESM + extensionless imports).
+  // Pass OPENAIDY_PORT through explicitly so the server's zod env schema finds it.
+  // Also pass WS_PORT = OPENAIDY_PORT so the websocket gateway's separate
+  // env schema (apps/server/src/websocket/types.ts wsEnvSchema) reads the
+  // same value; the gateway shares the HTTP listener in this architecture.
   const child = spawn(nodeBin, ['--import', 'tsx', serverEntry], {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
     env: {
       ...process.env,
+      OPENAIDY_PORT: String(port),
       PORT: String(port),
+      WS_PORT: String(port),
       OPENAIDY_HOME: openaidyHome,
     },
   });

@@ -116,28 +116,21 @@ import type {
 /**
  * Get the API base URL
  *
- * Priority:
- * 1. VITE_SERVER_URL environment variable
- * 2. In development: http://localhost:3001 (server default port)
- * 3. In production: throw error if not configured
+ * Resolved once from OPENAIDY_VITE_SERVER_URL. There is no hardcoded
+ * fallback — if the env var is not set, the web app fails to start
+ * with a clear error message. The Vite dev proxy (see vite.config.ts)
+ * forwards same-origin `/api` requests to the backend, so leaving this
+ * empty (or unset + same-origin in dev) is the recommended value.
  */
 function getApiBase(): string {
-  const envUrl = import.meta.env.VITE_SERVER_URL;
-
-  if (envUrl) {
-    return envUrl;
+  const envUrl = import.meta.env.OPENAIDY_VITE_SERVER_URL;
+  if (envUrl === undefined) {
+    throw new Error(
+      'OPENAIDY_VITE_SERVER_URL is required. ' +
+        'Set it in your .env file before building or running the web app.',
+    );
   }
-
-  // Check if we're in development mode
-  if (import.meta.env.DEV) {
-    return 'http://localhost:3001';
-  }
-
-  // Production without VITE_SERVER_URL - throw clear error
-  throw new Error(
-    'VITE_SERVER_URL environment variable is required in production. ' +
-      'Set it in your .env file or build environment.',
-  );
+  return envUrl;
 }
 
 /**

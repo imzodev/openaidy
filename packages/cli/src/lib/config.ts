@@ -33,22 +33,34 @@ export type CLIConfig = {
 /**
  * Resolve CLI configuration from environment variables.
  *
- * Resolution order for each value:
- * 1. Explicit env var override (e.g., OPENAIDY_WS_URL, OPENAIDY_HOME)
- * 2. Server-compatible env var (e.g., WS_PORT + WS_PATH)
- * 3. Hardcoded default
+ * No hardcoded port/path defaults. `OPENAIDY_PORT` and `WS_PATH` are required;
+ * callers that don't need server URLs (e.g. `openaidy init`) should not call
+ * this function. The server enforces the same contract in its zod schema.
  */
 export function resolveCLIConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): CLIConfig {
-  // WebSocket URL resolution
-  const wsUrl =
-    env.OPENAIDY_WS_URL ??
-    `ws://localhost:${env.WS_PORT ?? '3001'}${env.WS_PATH ?? '/ws'}`;
+  if (!env.OPENAIDY_PORT) {
+    throw new Error(
+      'OPENAIDY_PORT is required to construct server URLs. ' +
+        'Set it in $OPENAIDY_HOME/.env or as an environment variable.',
+    );
+  }
+  if (!env.WS_PATH) {
+    throw new Error(
+      'WS_PATH is required to construct the WebSocket URL. ' +
+        'Set it in $OPENAIDY_HOME/.env (e.g. WS_PATH=/ws).',
+    );
+  }
 
-  // HTTP REST API URL resolution
+  // WebSocket URL: explicit OPENAIDY_WS_URL wins; otherwise build from
+  // OPENAIDY_PORT + WS_PATH. Both required, no fallbacks.
+  const wsUrl =
+    env.OPENAIDY_WS_URL ?? `ws://localhost:${env.OPENAIDY_PORT}${env.WS_PATH}`;
+
+  // HTTP URL: explicit OPENAIDY_SERVER_URL wins; otherwise build from OPENAIDY_PORT.
   const httpUrl =
-    env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.PORT ?? '3001'}`;
+    env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.OPENAIDY_PORT}`;
 
   // Token path resolution (NDQ-5):
   // 1. Explicit BOOTSTRAP_ADMIN_TOKEN_PATH wins always

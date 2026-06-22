@@ -38,24 +38,19 @@ type WebSocketContextValue = {
 const WebSocketContext = createContext<WebSocketContextValue>();
 
 function resolveBaseUrl(): string {
-  // Priority 1: Single server URL via env var (for local dev or custom deployments)
-  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
-  if (serverUrl) {
-    return serverUrl;
+  // Single source of truth for the WS endpoint. No silent fallback — if
+  // the env var is not set, the web app fails to start with a clear error.
+  // The Vite dev proxy (see vite.config.ts) forwards same-origin `/ws`
+  // upgrades to the backend, so leaving this empty (or set to a relative
+  // path) is the recommended value.
+  const wsUrl = import.meta.env.OPENAIDY_VITE_WS_URL;
+  if (wsUrl === undefined) {
+    throw new Error(
+      'OPENAIDY_VITE_WS_URL is required. ' +
+        'Set it in your .env file before building or running the web app.',
+    );
   }
-
-  // Priority 2: In development, connect to the backend server (3001)
-  if (import.meta.env.DEV) {
-    return 'http://localhost:3001';
-  }
-
-  // Priority 3: In production, use the frontend origin (handles custom domains)
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  // Fallback for development
-  return 'http://localhost:3001';
+  return wsUrl;
 }
 
 export const WebSocketProvider: ParentComponent = (props) => {

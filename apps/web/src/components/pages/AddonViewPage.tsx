@@ -21,7 +21,13 @@ import type { AddonRecord } from '../../lib/api';
 import { refreshAddonToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
-const SERVER_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL;
+if (!SERVER_BASE) {
+  throw new Error(
+    'OPENAIDY_VITE_SERVER_URL is required for AddonViewPage. ' +
+      'Set it in your .env file before building or running the web app.',
+  );
+}
 
 type Props = {
   addon: AddonRecord;
