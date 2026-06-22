@@ -336,6 +336,7 @@ function Install-Cli {
         "set OPENAIDY_HOME=$dataDir`r`n" +
         "set OPENAIDY_REPO=$InstallDir`r`n" +
         "set PATH=%OPENAIDY_REPO%\node;%OPENAIDY_REPO%\pnpm;%PATH%`r`n" +
+        "cd /d `"%OPENAIDY_REPO%`"`r`n" +
         "if exist `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" (`r`n" +
         "  node --import tsx `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" %*`r`n" +
         ") else (`r`n" +
