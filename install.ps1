@@ -502,7 +502,7 @@ $BootstrapToken = Invoke-Init
 # PR2: start the server and open the browser
 Write-Host ""
 Log-Info "Starting the server (this may take up to 30 seconds)..."
-$StartOutput = & "$WrapperDir\openaidy" start 2>&1
+$StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start 2>&1
 $StartExit = $LASTEXITCODE
 $StartUrl = ""
 if ($StartExit -eq 0) {
