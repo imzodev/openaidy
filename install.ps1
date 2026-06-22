@@ -256,9 +256,9 @@ function Clone-Repo {
     if (Test-Path (Join-Path $InstallDir ".git")) {
         Log-Info "Repository exists — updating..."
         Set-Location $InstallDir
-        git fetch origin $Branch 2>$null
-        git checkout $Branch 2>$null
-        git reset --hard "origin/$Branch" 2>$null
+        git fetch origin $Branch 2>&1 | Out-Null
+        git checkout $Branch 2>&1 | Out-Null
+        git reset --hard "origin/$Branch" 2>&1 | Out-Null
     } else {
         $parent = Split-Path $InstallDir
         if ($parent -and -not (Test-Path $parent)) {
@@ -267,7 +267,7 @@ function Clone-Repo {
 
         $repoUrl = "https://github.com/imzodev/openaidy.git"
         Log-Info "Cloning from $repoUrl..."
-        git clone --branch $Branch --depth 1 $repoUrl $InstallDir 2>$null
+        git clone --branch $Branch --depth 1 --quiet $repoUrl $InstallDir 2>&1 | Out-Null
     }
 
     if (Test-Path (Join-Path $InstallDir "package.json")) {
