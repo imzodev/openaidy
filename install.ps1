@@ -509,7 +509,7 @@ if ($StartExit -eq 0) {
     $StartUrl = [regex]::Match($StartOutput, 'http://localhost:\d+').Value
     Log-Info "Server is ready."
 } else {
-    Log-Warning "Server did not start (will be available after re-login)."
+    Log-Warn "Server did not start (will be available after re-login)."
 }
 
 Write-Host ""
