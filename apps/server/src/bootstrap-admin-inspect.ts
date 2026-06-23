@@ -8,6 +8,7 @@
 import { readFile, access } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminInspectStatus =
@@ -127,20 +128,14 @@ export async function inspectBootstrapAdminToken(
 
   // Create auth middleware for token validation. The port here is only
   // used internally for AuthMiddleware's config shape — token validation
-  // itself doesn't depend on the listening port. We read OPENAIDY_PORT
-  // (required by the server env schema) so this script fails loud rather
-  // than silently picking a port that doesn't match the running server.
-  const openAidyPort = parseInt(process.env.OPENAIDY_PORT ?? '', 10);
-  if (!Number.isInteger(openAidyPort) || openAidyPort <= 0) {
-    return {
-      status: 'malformed',
-      tokenPath,
-      enabled,
-      error:
-        'OPENAIDY_PORT is not set or is not a positive integer. ' +
-        'Set it in the environment (e.g. OPENAIDY_PORT=3001) before running `openaidy inspect`.',
-    };
-  }
+  // itself does not depend on the listening port. We read OPENAIDY_PORT
+  // from the environment so the middleware's internal port matches the
+  // running server; falls back to DEFAULT_SERVER_PORT so the script works
+  // out of the box for the standard install.
+  const openAidyPort = parseInt(
+    process.env.OPENAIDY_PORT ?? String(DEFAULT_SERVER_PORT),
+    10,
+  );
   const authMiddleware = new AuthMiddleware({
     enabled: true,
     port: openAidyPort,
