@@ -218,4 +218,34 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
     const runs = await sessionService.listRuns(sessionId);
     return { items: runs };
   });
+
+  /**
+   * DELETE /sessions/:sessionId
+   * Delete a session and its messages/runs (cascaded by the DB).
+   *
+   * Requires the `sessions.delete` capability. The bootstrap admin token
+   * has `*` and is permitted; per-session tokens must be granted
+   * `sessions.delete` explicitly.
+   */
+  app.delete<{
+    Params: { sessionId: string };
+  }>(
+    '/sessions/:sessionId',
+    {
+      preHandler: requireAuth({
+        authMiddleware,
+        requiredScope: 'sessions.delete',
+      }),
+    },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      const deleted = await sessionService.deleteSession(sessionId);
+      if (!deleted) {
+        return reply.code(404).send({ error: 'Session not found', sessionId });
+      }
+
+      return reply.code(204).send();
+    },
+  );
 };

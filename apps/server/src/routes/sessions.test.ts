@@ -220,6 +220,40 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     });
   });
 
+  describe('DELETE /sessions/:sessionId', () => {
+    it('should delete an existing session and return 204', async () => {
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/sessions',
+        payload: { title: 'Session to delete' },
+      });
+      const session = createResponse.json();
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/sessions/${session.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(204);
+
+      // Confirm it's gone on subsequent GET
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/sessions/${session.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+    });
+
+    it('should return 404 when deleting a non-existent session', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/sessions/does-not-exist',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe('POST /sessions/:sessionId/messages', () => {
     it('should submit a message and return assistant response', async () => {
       // Create a session
