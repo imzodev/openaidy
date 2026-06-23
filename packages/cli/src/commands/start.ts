@@ -28,7 +28,16 @@ import { unlink } from 'node:fs/promises';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
 import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
-import { DEFAULT_SERVER_PORT } from '@openaidy/config';
+
+/**
+ * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
+ * packages/config/src/env.ts and FALLBACK_BACKEND_PORT in
+ * apps/web/vite.config.ts. Hardcoded here because Node ESM cannot
+ * resolve @openaidy/config without .js extensions on its internal
+ * relative imports (see packages/cli/src/lib/config.ts for the same
+ * explanation).
+ */
+const DEFAULT_SERVER_PORT = 3001;
 
 // ============================================================================
 // Constants
@@ -362,7 +371,9 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  const webInfo = serverOnly ? null : await startWeb(repoRoot, openaidyHome);
+  const webInfo = serverOnly
+    ? null
+    : await startWeb(repoRoot, openaidyHome, port);
 
   if (serverOnly) {
     return {
@@ -436,6 +447,7 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
 async function startWeb(
   repoRoot: string,
   openaidyHome: string,
+  port: number,
 ): Promise<{
   pid: number;
   url: string;

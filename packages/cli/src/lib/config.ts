@@ -11,9 +11,20 @@
  * installer use a single source of truth for the install root while
  * `pnpm dev` keeps the legacy repo-local default.
  */
-
 import { resolve } from 'node:path';
-import { DEFAULT_SERVER_PORT } from '@openaidy/config';
+
+/**
+ * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
+ * packages/config/src/env.ts and the FALLBACK_BACKEND_PORT in
+ * apps/web/vite.config.ts. Importing the constant from
+ * @openaidy/config at runtime fails because that package's internal
+ * relative imports are not ESM-compatible (Node ESM requires explicit
+ * .js extensions on relative imports, and a proper fix would require
+ * updating ~20 files in packages/config/src to add .js extensions).
+ * For the out-of-the-box install goal, the duplicated constant is the
+ * pragmatic trade-off.
+ */
+const DEFAULT_SERVER_PORT = 3001;
 
 /**
  * CLI configuration resolved from environment
