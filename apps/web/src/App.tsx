@@ -44,9 +44,10 @@ import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
-import { listAddons, type AddonRecord } from './lib/api';
+import { listAddons, deleteSession, type AddonRecord } from './lib/api';
 import type { ChoicesEvent } from '@openaidy/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import './index.css';
 
 // Create a client
@@ -113,6 +114,10 @@ function AppContent(props: AppContentProps) {
   const [scrollToMessageId, setScrollToMessageId] = createSignal<
     string | undefined
   >(undefined);
+  const [sessionToDelete, setSessionToDelete] = createSignal<Session | null>(
+    null,
+  );
+  const [isDeletingSession, setIsDeletingSession] = createSignal(false);
 
   // Subscribe to streaming events when a session is selected
   createEffect(() => {
@@ -263,6 +268,29 @@ function AppContent(props: AppContentProps) {
     setSelectedAgentId(agentId);
     const title = `Session ${new Date().toISOString()}`;
     await createSessionMutation.mutateAsync(title);
+  };
+
+  const handleDeleteSession = (id: string) => {
+    const session = sessionsQuery.data?.items.find((s) => s.id === id) ?? null;
+    setSessionToDelete(session);
+  };
+
+  const handleConfirmDelete = async () => {
+    const session = sessionToDelete();
+    if (!session) return;
+    setIsDeletingSession(true);
+    try {
+      await deleteSession(session.id);
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      if (selectedSessionId() === session.id) {
+        setSelectedSessionId(undefined);
+      }
+      setSessionToDelete(null);
+    } catch {
+      // non-fatal — modal stays open so user can retry
+    } finally {
+      setIsDeletingSession(false);
+    }
   };
 
   const handleSubmit = async (content: string, agentId?: string) => {
@@ -497,6 +525,7 @@ function AppContent(props: AppContentProps) {
               navigate('chat');
             }}
             onCreateSession={handleCreateSession}
+            onDeleteSession={handleDeleteSession}
             isLoading={sessionsQuery.isLoading}
           />
         </Show>
@@ -634,6 +663,23 @@ function AppContent(props: AppContentProps) {
           </Show>
         </Show>
       </main>
+
+      <ConfirmDialog
+        isOpen={sessionToDelete() !== null}
+        title="Delete session?"
+        body={
+          <p>
+            This will permanently delete{' '}
+            <strong>{sessionToDelete()?.title ?? 'this session'}</strong> and
+            all of its messages. This action cannot be undone.
+          </p>
+        }
+        tone="danger"
+        confirmLabel="Delete"
+        isPending={isDeletingSession()}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setSessionToDelete(null)}
+      />
     </div>
   );
 }
