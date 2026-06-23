@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -19,12 +20,17 @@ const resolveOpenAidyPath = (
 const envSchema = z
   .object({
     HOST: z.string().default('0.0.0.0'),
-    // Required: the port the HTTP server binds to. Same-origin architecture:
-    // the WebSocket gateway rides on this same port (see WS_PORT alias below).
-    OPENAIDY_PORT: z.coerce.number().int().positive(),
-    // Required: the CORS origin the server permits. No fallback — an unset
-    // origin is a misconfiguration that must surface as a startup failure.
-    OPENAIDY_CORS_ORIGIN: z.string().min(1),
+    // Default port the HTTP server binds to. Same-origin architecture:
+    // the WebSocket gateway rides on this same port (see WS_PORT alias
+    // below). Override via OPENAIDY_PORT to use a different port.
+    OPENAIDY_PORT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_SERVER_PORT),
+    // Default CORS origin permits the local Vite dev server (apps/web).
+    // Override for production or remote dev.
+    OPENAIDY_CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),

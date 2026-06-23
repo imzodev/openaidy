@@ -29,6 +29,28 @@ describe('parseEnv', () => {
     );
   });
 
+  it('defaults OPENAIDY_PORT to DEFAULT_SERVER_PORT (3001) when unset', () => {
+    const parsed = parseEnv({});
+    expect(parsed.OPENAIDY_PORT).toBe(3001);
+  });
+
+  it('honors an explicit OPENAIDY_PORT override', () => {
+    const parsed = parseEnv({ OPENAIDY_PORT: '8080' });
+    expect(parsed.OPENAIDY_PORT).toBe(8080);
+  });
+
+  it('defaults OPENAIDY_CORS_ORIGIN to the local Vite dev origin', () => {
+    const parsed = parseEnv({});
+    expect(parsed.OPENAIDY_CORS_ORIGIN).toBe('http://localhost:5173');
+  });
+
+  it('honors an explicit OPENAIDY_CORS_ORIGIN override', () => {
+    const parsed = parseEnv({
+      OPENAIDY_CORS_ORIGIN: 'https://openaidy.example.com',
+    });
+    expect(parsed.OPENAIDY_CORS_ORIGIN).toBe('https://openaidy.example.com');
+  });
+
   it('derives openaidy paths from OPENAIDY_HOME', () => {
     const parsed = parseEnv({
       OPENAIDY_HOME: '/tmp/custom-openaidy',
