@@ -184,6 +184,11 @@ export type Subtask = typeof subtasks.$inferSelect;
 export type NewSubtask = typeof subtasks.$inferInsert;
 export type TaskAgent = typeof taskAgents.$inferSelect;
 export type NewTaskAgent = typeof taskAgents.$inferInsert;
+export type TaskSchedule = typeof taskSchedules.$inferSelect;
+export type NewTaskSchedule = typeof taskSchedules.$inferInsert;
+export type TaskExecutionHistoryRow = typeof taskExecutionHistory.$inferSelect;
+export type NewTaskExecutionHistoryRow =
+  typeof taskExecutionHistory.$inferInsert;
 
 // Enum type exports
 export type TaskStatus = (typeof taskStatusEnum.enumValues)[number];
@@ -191,3 +196,167 @@ export type TaskPriority = (typeof taskPriorityEnum.enumValues)[number];
 export type PlanningStatus = (typeof planningStatusEnum.enumValues)[number];
 export type SubtaskStatus = (typeof subtaskStatusEnum.enumValues)[number];
 export type AgentRole = (typeof agentRoleEnum.enumValues)[number];
+export type TaskScheduleStatus =
+  (typeof taskScheduleStatusEnum.enumValues)[number];
+export type ReplanPolicy =
+  (typeof taskScheduleReplanPolicyEnum.enumValues)[number];
+export type TaskExecutionHistoryStatus =
+  (typeof taskExecutionHistoryStatusEnum.enumValues)[number];
+
+/**
+ * Task schedule status enum
+ * - active:   schedule is firing on its cron/preset
+ * - paused:   user paused the schedule, do not fire
+ * - expired:  schedule reached maxExecutions or finished a one-shot; terminal
+ */
+export const taskScheduleStatusEnum = pgEnum('task_schedule_status', [
+  'active',
+  'paused',
+  'expired',
+]);
+
+/**
+ * Replan policy enum (recurring-tasks)
+ * - never:                  default; reuse existing subtasks across runs (cheap)
+ * - on-description-change:  re-invoke planning agent only when description hash differs
+ * - always:                 re-invoke planning agent on every run (expensive, opt-in)
+ */
+export const taskScheduleReplanPolicyEnum = pgEnum(
+  'task_schedule_replan_policy',
+  ['never', 'on-description-change', 'always'],
+);
+
+/**
+ * Task execution history status enum
+ * - planned:    history row created at the start of a run, before session exists
+ * - planning:   planning agent is running (only set when replan policy triggers)
+ * - executing:  agents are running on subtasks or the description
+ * - verifying:  work was submitted, waiting on RunEventEmitter to confirm
+ * - completed:  run finished successfully
+ * - failed:     run finished with an error
+ */
+export const taskExecutionHistoryStatusEnum = pgEnum(
+  'task_execution_history_status',
+  ['planned', 'planning', 'executing', 'verifying', 'completed', 'failed'],
+);
+
+/**
+ * Task schedules table
+ *
+ * 1-to-1 with `tasks`. Stores the schedule definition and polling state
+ * for recurring tasks. The scheduler polls `nextRunAt` like `scheduled_jobs`,
+ * but the executor (Phase 2) implements the `ScheduledRunnable` interface
+ * to claim and execute these rows.
+ */
+export const taskSchedules = pgTable(
+  'task_schedules',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .unique()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    // The schedule definition. Exactly one of (cronExpression, preset,
+    // scheduleDate) is set. The parser (parseScheduleInput) is responsible
+    // for normalising whichever form the user provided.
+    cronExpression: text('cron_expression'),
+    preset: text('preset'), // '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' | NULL
+    scheduleDate: timestamp('schedule_date', { withTimezone: true }),
+    // Polling state
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    status: taskScheduleStatusEnum('status').notNull().default('active'),
+    // Execution behaviour
+    replanPolicy: taskScheduleReplanPolicyEnum('replan_policy')
+      .notNull()
+      .default('never'),
+    // maxExecutions is ALWAYS finite — there is no "infinite" option.
+    // Default 9999: most users will never hit it.
+    maxExecutions: integer('max_executions').notNull().default(9999),
+    executionCount: integer('execution_count').notNull().default(0),
+    // SHA-256 of the task's description from the most recent run. Used by
+    // the 'on-description-change' policy to decide whether to replan. NULL
+    // until the first run completes (the executor sets it in reschedule).
+    descriptionHash: text('description_hash'),
+    // Audit
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    nextRunAtIdx: index('task_schedules_next_run_at_idx').on(table.nextRunAt),
+    statusIdx: index('task_schedules_status_idx').on(table.status),
+    taskIdIdx: index('task_schedules_task_id_idx').on(table.taskId),
+  }),
+);
+
+/**
+ * Task execution history table
+ *
+ * One row per run of a recurring task. The executor (Phase 2) writes
+ * a row at the start of each run and updates its status as the run
+ * progresses. Rows are append-only — the schedule row holds the
+ * aggregate state (lastRunAt, executionCount, descriptionHash).
+ */
+export const taskExecutionHistory = pgTable(
+  'task_execution_history',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    scheduleId: text('schedule_id')
+      .notNull()
+      .references(() => taskSchedules.id, { onDelete: 'cascade' }),
+    // Lifecycle
+    status: taskExecutionHistoryStatusEnum('status')
+      .notNull()
+      .default('planned'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    durationMs: integer('duration_ms'),
+    // The session created for this run (set during execute, not at create time)
+    sessionId: text('session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    // Snapshot of the task at run time. Useful for history even if the
+    // task title/description changes later.
+    taskTitle: text('task_title').notNull(),
+    taskDescription: text('task_description').notNull(),
+    // Whether this run invoked the planning agent (replan happened)
+    didReplan: boolean('did_replan').notNull().default(false),
+    // Error info (set on status='failed')
+    errorCode: text('error_code'),
+    errorMessage: text('error_message'),
+    // Attempt number within this run (1 for the initial run, 2+ for retries).
+    // Recurring tasks don't auto-retry on failure — the schedule will
+    // just fire again at the next cron tick — but the field is here for
+    // forward compatibility with one-off retry logic.
+    attemptNumber: integer('attempt_number').notNull().default(1),
+    // Audit
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    taskIdIdx: index('task_execution_history_task_id_idx').on(table.taskId),
+    scheduleIdIdx: index('task_execution_history_schedule_id_idx').on(
+      table.scheduleId,
+    ),
+    sessionIdIdx: index('task_execution_history_session_id_idx').on(
+      table.sessionId,
+    ),
+    startedAtIdx: index('task_execution_history_started_at_idx').on(
+      table.startedAt,
+    ),
+  }),
+);
