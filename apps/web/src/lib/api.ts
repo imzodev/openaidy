@@ -207,6 +207,22 @@ export async function getSession(id: string): Promise<Session | ApiError> {
 }
 
 /**
+ * Delete a session.
+ *
+ * Cascades to messages and runs on the server. The caller (typically
+ * a confirmation modal) is responsible for the UX — this just fires
+ * the request and throws on a non-2xx response.
+ */
+export async function deleteSession(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/sessions/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete session: ${response.statusText}`);
+  }
+}
+
+/**
  * List messages for a session
  */
 export async function listMessages(
