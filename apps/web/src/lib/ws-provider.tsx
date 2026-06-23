@@ -38,24 +38,14 @@ type WebSocketContextValue = {
 const WebSocketContext = createContext<WebSocketContextValue>();
 
 function resolveBaseUrl(): string {
-  // Priority 1: Single server URL via env var (for local dev or custom deployments)
-  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
-  if (serverUrl) {
-    return serverUrl;
-  }
-
-  // Priority 2: In development, connect to the backend server (3001)
-  if (import.meta.env.DEV) {
-    return 'http://localhost:3001';
-  }
-
-  // Priority 3: In production, use the frontend origin (handles custom domains)
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  // Fallback for development
-  return 'http://localhost:3001';
+  // Single source of truth for the WS endpoint. Empty/unset means
+  // same-origin in dev mode (Vite proxies /ws) or --integrated mode
+  // (server serves the built bundle same-origin). The browser requires
+  // an absolute WebSocket URL, so we construct one from window.location.
+  const wsUrl = import.meta.env.OPENAIDY_VITE_WS_URL;
+  if (wsUrl) return wsUrl;
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws`;
 }
 
 export const WebSocketProvider: ParentComponent = (props) => {

@@ -51,10 +51,16 @@ export type WebSocketClientOptions = {
 
 /**
  * Default client options
+ *
+ * `url` has no default — callers MUST supply it (per port-config-refactor:
+ * no hardcoded port fallbacks in business code). The remaining fields are
+ * protocol-level tunables (reconnect, heartbeat, timeout) which are stable
+ * across deployments.
  */
 export const defaultWebSocketClientOptions: Required<
   Omit<
     WebSocketClientOptions,
+    | 'url'
     | 'token'
     | 'logger'
     | 'clientId'
@@ -63,7 +69,6 @@ export const defaultWebSocketClientOptions: Required<
     | 'clientMeta'
   >
 > = {
-  url: 'ws://localhost:3000/ws',
   autoReconnect: true,
   reconnectInterval: 1000,
   maxReconnectAttempts: 10,

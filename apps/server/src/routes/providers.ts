@@ -167,10 +167,11 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
 
   // The frontend URL the popup window should redirect to after a
   // successful/failed OAuth exchange. Pulled from CORS_ORIGIN (which
-  // is the frontend's dev server URL) or defaults to localhost:5173.
+  // is the frontend's dev server URL). OPENAIDY_CORS_ORIGIN is required
+  // by env validation, so env.CORS_ORIGIN is always defined — no fallback.
   // (Unused for MiniMax — the callback returns HTML directly — but kept
   // for providers that may need it in future phases.)
-  const _frontendBaseUrl = env.CORS_ORIGIN || 'http://localhost:5173';
+  const _frontendBaseUrl = env.CORS_ORIGIN;
 
   /**
    * GET /providers

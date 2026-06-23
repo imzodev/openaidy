@@ -13,9 +13,16 @@ export class WebUIAdapter implements ClientAdapter<WebUIAdapterOptions> {
   readonly clientType = 'web' as const;
 
   createClient(options: WebUIAdapterOptions): WebSocketClient {
+    // No hardcoded default. The caller must supply either a fully-qualified
+    // `url` or a `baseUrl` to resolve against the WS scheme + /ws path.
     const url =
       options.url ??
-      this.resolveUrl(options.baseUrl ?? this.getDefaultBaseUrl());
+      (options.baseUrl ? this.resolveUrl(options.baseUrl) : undefined);
+    if (!url) {
+      throw new Error(
+        'WebUIAdapter requires either `url` or `baseUrl` to be provided.',
+      );
+    }
 
     return createWebSocketClient({
       url,
@@ -69,14 +76,6 @@ export class WebUIAdapter implements ClientAdapter<WebUIAdapterOptions> {
   async onConnect(_client: WebSocketClient): Promise<void> {}
 
   async onDisconnect(_client: WebSocketClient): Promise<void> {}
-
-  private getDefaultBaseUrl(): string {
-    if (typeof window !== 'undefined' && window.location?.origin) {
-      return window.location.origin;
-    }
-
-    return 'http://localhost:3000';
-  }
 }
 
 export function createWebUIAdapter(): WebUIAdapter {

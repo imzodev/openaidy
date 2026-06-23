@@ -68,3 +68,43 @@ describe('resolveCLIConfig() - tokenPath resolution (PR1 NDQ-5)', () => {
     expect(cfg.bootstrapAdminEnabled).toBe(false);
   });
 });
+
+describe('resolveCLIConfig() - port and path defaults (out-of-box install)', () => {
+  it('defaults httpUrl to http://localhost:3001 when OPENAIDY_PORT is unset', () => {
+    const cfg = resolveCLIConfig({});
+    expect(cfg.httpUrl).toBe('http://localhost:3001');
+  });
+
+  it('defaults wsUrl to ws://localhost:3001/ws when OPENAIDY_PORT and WS_PATH are unset', () => {
+    const cfg = resolveCLIConfig({});
+    expect(cfg.wsUrl).toBe('ws://localhost:3001/ws');
+  });
+
+  it('honors an explicit OPENAIDY_PORT override', () => {
+    const cfg = resolveCLIConfig({ OPENAIDY_PORT: '8080' });
+    expect(cfg.httpUrl).toBe('http://localhost:8080');
+    expect(cfg.wsUrl).toBe('ws://localhost:8080/ws');
+  });
+
+  it('honors an explicit WS_PATH override', () => {
+    const cfg = resolveCLIConfig({
+      OPENAIDY_PORT: '3001',
+      WS_PATH: '/custom/ws',
+    });
+    expect(cfg.wsUrl).toBe('ws://localhost:3001/custom/ws');
+  });
+
+  it('honors an explicit OPENAIDY_WS_URL override', () => {
+    const cfg = resolveCLIConfig({
+      OPENAIDY_WS_URL: 'wss://example.com/ws',
+    });
+    expect(cfg.wsUrl).toBe('wss://example.com/ws');
+  });
+
+  it('honors an explicit OPENAIDY_SERVER_URL override', () => {
+    const cfg = resolveCLIConfig({
+      OPENAIDY_SERVER_URL: 'https://api.example.com',
+    });
+    expect(cfg.httpUrl).toBe('https://api.example.com');
+  });
+});

@@ -11,8 +11,20 @@
  * installer use a single source of truth for the install root while
  * `pnpm dev` keeps the legacy repo-local default.
  */
-
 import { resolve } from 'node:path';
+
+/**
+ * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
+ * packages/config/src/env.ts and the FALLBACK_BACKEND_PORT in
+ * apps/web/vite.config.ts. Importing the constant from
+ * @openaidy/config at runtime fails because that package's internal
+ * relative imports are not ESM-compatible (Node ESM requires explicit
+ * .js extensions on relative imports, and a proper fix would require
+ * updating ~20 files in packages/config/src to add .js extensions).
+ * For the out-of-the-box install goal, the duplicated constant is the
+ * pragmatic trade-off.
+ */
+const DEFAULT_SERVER_PORT = 3001;
 
 /**
  * CLI configuration resolved from environment
@@ -33,22 +45,20 @@ export type CLIConfig = {
 /**
  * Resolve CLI configuration from environment variables.
  *
- * Resolution order for each value:
- * 1. Explicit env var override (e.g., OPENAIDY_WS_URL, OPENAIDY_HOME)
- * 2. Server-compatible env var (e.g., WS_PORT + WS_PATH)
- * 3. Hardcoded default
+ * `OPENAIDY_PORT` and `WS_PATH` are optional with sensible defaults
+ * (3001 and /ws, matching the server's defaults), so the CLI works
+ * out of the box without env config. Override via env or
+ * `OPENAIDY_WS_URL` / `OPENAIDY_SERVER_URL` for non-standard deployments.
  */
 export function resolveCLIConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): CLIConfig {
-  // WebSocket URL resolution
-  const wsUrl =
-    env.OPENAIDY_WS_URL ??
-    `ws://localhost:${env.WS_PORT ?? '3001'}${env.WS_PATH ?? '/ws'}`;
+  const port = env.OPENAIDY_PORT ?? String(DEFAULT_SERVER_PORT);
+  const wsPath = env.WS_PATH ?? '/ws';
 
-  // HTTP REST API URL resolution
-  const httpUrl =
-    env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.PORT ?? '3001'}`;
+  const wsUrl = env.OPENAIDY_WS_URL ?? `ws://localhost:${port}${wsPath}`;
+
+  const httpUrl = env.OPENAIDY_SERVER_URL ?? `http://localhost:${port}`;
 
   // Token path resolution (NDQ-5):
   // 1. Explicit BOOTSTRAP_ADMIN_TOKEN_PATH wins always

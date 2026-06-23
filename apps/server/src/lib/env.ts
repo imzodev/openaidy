@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -19,8 +20,17 @@ const resolveOpenAidyPath = (
 const envSchema = z
   .object({
     HOST: z.string().default('0.0.0.0'),
-    PORT: z.coerce.number().int().positive().default(3001),
-    CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    // Default port the HTTP server binds to. Same-origin architecture:
+    // the WebSocket gateway rides on this same port (see WS_PORT alias
+    // below). Override via OPENAIDY_PORT to use a different port.
+    OPENAIDY_PORT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_SERVER_PORT),
+    // Default CORS origin permits the local Vite dev server (apps/web).
+    // Override for production or remote dev.
+    OPENAIDY_CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),
@@ -33,7 +43,6 @@ const envSchema = z
       .string()
       .transform((val) => val === 'true')
       .default('true'),
-    WS_PORT: z.coerce.number().int().positive().default(3001),
     WS_PATH: z.string().default('/ws'),
     WS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
     WS_HEARTBEAT_INTERVAL: z.coerce.number().positive().default(30000),
@@ -93,6 +102,13 @@ const envSchema = z
     const openAidyHome = value.OPENAIDY_HOME;
     return {
       ...value,
+      // Internal aliases — `PORT`, `CORS_ORIGIN`, and `WS_PORT` are kept as
+      // names consumers (app.ts, websocket gateway, tests) can read without
+      // caring which source-of-truth env var produced them. `WS_PORT` rides
+      // on `OPENAIDY_PORT` because the WS gateway shares the same listener.
+      PORT: value.OPENAIDY_PORT,
+      CORS_ORIGIN: value.OPENAIDY_CORS_ORIGIN,
+      WS_PORT: value.OPENAIDY_PORT,
       APP_CONFIG_PATH:
         value.APP_CONFIG_PATH ??
         resolveOpenAidyPath(openAidyHome, 'openaidy.json'),

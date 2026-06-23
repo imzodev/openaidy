@@ -114,30 +114,17 @@ import type {
 } from './types';
 
 /**
- * Get the API base URL
+ * Get the API base URL.
  *
- * Priority:
- * 1. VITE_SERVER_URL environment variable
- * 2. In development: http://localhost:3001 (server default port)
- * 3. In production: throw error if not configured
+ * Resolved once from OPENAIDY_VITE_SERVER_URL. Empty string (the default
+ * when the env var is unset) means same-origin — the browser resolves
+ * relative URLs against the current host. The Vite dev proxy (see
+ * vite.config.ts) forwards same-origin `/api` and `/ws` requests to the
+ * backend, and `--integrated` mode serves the built bundle from the
+ * server on the same origin.
  */
 function getApiBase(): string {
-  const envUrl = import.meta.env.VITE_SERVER_URL;
-
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // Check if we're in development mode
-  if (import.meta.env.DEV) {
-    return 'http://localhost:3001';
-  }
-
-  // Production without VITE_SERVER_URL - throw clear error
-  throw new Error(
-    'VITE_SERVER_URL environment variable is required in production. ' +
-      'Set it in your .env file or build environment.',
-  );
+  return import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 }
 
 /**
