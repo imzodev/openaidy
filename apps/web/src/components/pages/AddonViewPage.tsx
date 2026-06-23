@@ -21,13 +21,10 @@ import type { AddonRecord } from '../../lib/api';
 import { refreshAddonToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
-const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL;
-if (!SERVER_BASE) {
-  throw new Error(
-    'OPENAIDY_VITE_SERVER_URL is required for AddonViewPage. ' +
-      'Set it in your .env file before building or running the web app.',
-  );
-}
+// Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
+// and the server's static handler (--integrated mode) both serve addons
+// on the same origin the browser is already on, so a relative URL works.
+const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 
 type Props = {
   addon: AddonRecord;
