@@ -2,7 +2,7 @@
  * openaidy start — Start the OpenAidy server and web frontend (PR2 T2.2)
  *
  * Behavior (per spec R-7):
- *  1. Read OPENAIDY_PORT from the environment (fail fast if missing or invalid)
+ *  1. Resolve the listen port (--port flag > OPENAIDY_PORT env > 3001)
  *  2. Resolve apps/server/dist/server.js from OPENAIDY_REPO
  *  3. Spawn detached child with OPENAIDY_PORT propagated to its env
  *  4. Write PID JSON envelope to $OPENAIDY_HOME/state/server.pid
@@ -28,6 +28,7 @@ import { unlink } from 'node:fs/promises';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
 import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 // ============================================================================
 // Constants
@@ -44,18 +45,23 @@ Usage: openaidy start [options]
 
 Start the OpenAidy server and web frontend as background processes.
 
-Requires OPENAIDY_PORT to be set in the environment (or in
-$OPENAIDY_HOME/.env). The server binds to this port; the WebSocket
-gateway rides on the same port (same-origin architecture).
+The server binds to a port resolved in this order:
+  1. --port <N> flag (highest priority)
+  2. OPENAIDY_PORT environment variable
+  3. Default: ${DEFAULT_SERVER_PORT}
+
+The WebSocket gateway rides on the same port (same-origin architecture).
 
 Automatically:
-  - Spawns the server as a detached child on OPENAIDY_PORT
+  - Spawns the server as a detached child on the resolved port
   - Polls /health until ready
   - Spawns the web frontend (Vite) unless --server-only or --integrated
   - Installs signal handlers for graceful shutdown
 
 Options:
   -h, --help          Show this help message
+  --port <N>          Listen port (default: ${DEFAULT_SERVER_PORT};
+                      env OPENAIDY_PORT wins if set)
   --server-only       Start only the server, skip the web frontend
   --integrated        Build the web bundle first and have the server
                       serve it directly (same-origin). The Vite dev
@@ -63,9 +69,53 @@ Options:
 
 Exit Codes:
   0  Server started and healthy (and web started unless --server-only)
-  1  OPENAIDY_PORT missing/invalid, server entry missing, web build
+  1  --port or OPENAIDY_PORT invalid, server entry missing, web build
      failed (--integrated), or health check timed out
 `;
+
+// ============================================================================
+// Port resolution
+// ============================================================================
+
+/**
+ * Resolve the listen port from CLI args and env.
+ *
+ * Precedence: --port flag > OPENAIDY_PORT env > DEFAULT_SERVER_PORT.
+ * Exported for testing.
+ */
+export function resolveStartPort(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): { ok: true; port: number } | { ok: false; error: string } {
+  const portIdx = args.indexOf('--port');
+  if (portIdx !== -1) {
+    const portVal = args[portIdx + 1];
+    const parsed = Number(portVal);
+    if (
+      portVal === undefined ||
+      !Number.isInteger(parsed) ||
+      parsed <= 0 ||
+      parsed > 65535
+    ) {
+      return {
+        ok: false,
+        error: `Error: --port must be a positive integer (1-65535). Got "${portVal ?? ''}".`,
+      };
+    }
+    return { ok: true, port: parsed };
+  }
+  if (env.OPENAIDY_PORT) {
+    const parsed = Number(env.OPENAIDY_PORT);
+    if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+      return {
+        ok: false,
+        error: `Error: OPENAIDY_PORT must be a positive integer (1-65535). Got "${env.OPENAIDY_PORT}".`,
+      };
+    }
+    return { ok: true, port: parsed };
+  }
+  return { ok: true, port: DEFAULT_SERVER_PORT };
+}
 
 // ============================================================================
 // Health check
@@ -162,27 +212,14 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   // This is more reliable cross-platform than spawning tsx directly
   const nodeBin = process.execPath;
 
-  // Read OPENAIDY_PORT from the environment. Per port-config-refactor: no
-  // port probing — the user declares the port explicitly so the server and
-  // the web client agree on the same origin. Fail fast with a clear error
-  // if the var is missing or invalid.
-  const portEnv = process.env.OPENAIDY_PORT;
-  if (!portEnv) {
-    return {
-      exitCode: 1,
-      output:
-        'Error: OPENAIDY_PORT is not set. Set it in your environment or ' +
-        'in $OPENAIDY_HOME/.env (e.g. OPENAIDY_PORT=3001) before running ' +
-        '`openaidy start`.',
-    };
+  // Resolve the listen port. CLI flag wins, then env, then default. We
+  // never probe a free port — the user declares the port so the server
+  // and the web client agree on the same origin.
+  const portResult = resolveStartPort(args, process.env);
+  if (!portResult.ok) {
+    return { exitCode: 1, output: portResult.error };
   }
-  const port = Number(portEnv);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    return {
-      exitCode: 1,
-      output: `Error: OPENAIDY_PORT must be a positive integer (1-65535). Got "${portEnv}".`,
-    };
-  }
+  const port = portResult.port;
 
   // Ensure state directory and build paths
   const stateDir = resolve(openaidyHome, 'state');
@@ -423,7 +460,9 @@ async function startWeb(
   const webPidPath = resolve(openaidyHome, 'state', 'web.pid');
 
   // Spawn Vite detached. Use `pnpm dev` so the dev script from
-  // apps/web/package.json runs unchanged.
+  // apps/web/package.json runs unchanged. Propagate OPENAIDY_PORT so
+  // vite.config.ts can configure the dev proxy without requiring the
+  // user to set it in a .env file.
   const child = spawn('pnpm', ['dev'], {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -433,6 +472,7 @@ async function startWeb(
       ...process.env,
       OPENAIDY_HOME: openaidyHome,
       OPENAIDY_REPO: repoRoot,
+      OPENAIDY_PORT: String(port),
     },
   });
 

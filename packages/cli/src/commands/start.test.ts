@@ -10,7 +10,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { startHandler } from './start.js';
+import { resolveStartPort, startHandler } from './start.js';
 
 // Helper to create a home dir with a stub server entry
 async function setupHome(): Promise<string> {
@@ -31,6 +31,7 @@ describe('openaidy start', () => {
 
   afterEach(() => {
     delete process.env.OPENAIDY_HOME;
+    delete process.env.OPENAIDY_PORT;
   });
 
   it('shows help with --help flag', async () => {
@@ -117,5 +118,47 @@ describe('openaidy start', () => {
       // In test isolation, we verify the handler at least validates correctly.
       expect(result).toBeDefined();
     });
+  });
+});
+
+describe('resolveStartPort()', () => {
+  it('uses DEFAULT_SERVER_PORT (3001) when no flag or env', () => {
+    const result = resolveStartPort([], {});
+    expect(result).toEqual({ ok: true, port: 3001 });
+  });
+
+  it('--port flag wins over env', () => {
+    const result = resolveStartPort(['--port', '8080'], {
+      OPENAIDY_PORT: '4000',
+    });
+    expect(result).toEqual({ ok: true, port: 8080 });
+  });
+
+  it('falls back to OPENAIDY_PORT when --port is absent', () => {
+    const result = resolveStartPort([], { OPENAIDY_PORT: '4000' });
+    expect(result).toEqual({ ok: true, port: 4000 });
+  });
+
+  it('rejects --port that is not a positive integer', () => {
+    const result = resolveStartPort(['--port', 'abc'], {});
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('--port');
+  });
+
+  it('rejects --port that is zero or negative', () => {
+    expect(resolveStartPort(['--port', '0'], {}).ok).toBe(false);
+    expect(resolveStartPort(['--port', '-1'], {}).ok).toBe(false);
+    expect(resolveStartPort(['--port', '65536'], {}).ok).toBe(false);
+  });
+
+  it('rejects --port with no value', () => {
+    const result = resolveStartPort(['--port'], {});
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects invalid OPENAIDY_PORT', () => {
+    const result = resolveStartPort([], { OPENAIDY_PORT: 'not-a-number' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('OPENAIDY_PORT');
   });
 });
