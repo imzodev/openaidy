@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -19,7 +20,7 @@ const resolveOpenAidyPath = (
 const envSchema = z
   .object({
     HOST: z.string().default('0.0.0.0'),
-    PORT: z.coerce.number().int().positive().default(3001),
+    PORT: z.coerce.number().int().positive().default(DEFAULT_SERVER_PORT),
     CORS_ORIGIN: z.string().default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
@@ -33,7 +34,7 @@ const envSchema = z
       .string()
       .transform((val) => val === 'true')
       .default('true'),
-    WS_PORT: z.coerce.number().int().positive().default(3001),
+    WS_PORT: z.coerce.number().int().positive().default(DEFAULT_SERVER_PORT),
     WS_PATH: z.string().default('/ws'),
     WS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
     WS_HEARTBEAT_INTERVAL: z.coerce.number().positive().default(30000),

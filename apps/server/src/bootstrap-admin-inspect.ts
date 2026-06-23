@@ -9,6 +9,7 @@ import { readFile, access } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
 import type { BootstrapAdminRecord } from './bootstrap-admin';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 export type BootstrapAdminInspectStatus =
   | 'disabled'
@@ -128,7 +129,7 @@ export async function inspectBootstrapAdminToken(
   // Create auth middleware for token validation
   const authMiddleware = new AuthMiddleware({
     enabled: true,
-    port: parseInt(process.env.WS_PORT || '3001', 10),
+    port: parseInt(process.env.WS_PORT || String(DEFAULT_SERVER_PORT), 10),
     path: '/ws',
     maxConnections: 1,
     heartbeatInterval: 0,

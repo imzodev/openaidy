@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import type { ClientType } from '@openaidy/shared-types';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 // ============================================================================
 // WebSocket Configuration Schema
@@ -66,7 +67,7 @@ export const webSocketConfigSchema = z.object({
   /** Whether WebSocket is enabled */
   enabled: z.boolean().default(true),
   /** Port to listen on (defaults to HTTP server port) */
-  port: z.number().int().positive().default(3001),
+  port: z.number().int().positive().default(DEFAULT_SERVER_PORT),
   /** WebSocket endpoint path */
   path: z.string().default('/ws'),
   /** Maximum concurrent connections */
@@ -127,7 +128,7 @@ export const wsEnvSchema = z.object({
     .string()
     .transform((val) => val === 'true')
     .default('true'),
-  WS_PORT: z.coerce.number().int().positive().default(3001),
+  WS_PORT: z.coerce.number().int().positive().default(DEFAULT_SERVER_PORT),
   WS_PATH: z.string().default('/ws'),
   WS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
   WS_HEARTBEAT_INTERVAL: z.coerce.number().positive().default(30000),
@@ -259,7 +260,7 @@ export function isValidPairingConfig(config: unknown): config is PairingConfig {
  */
 export const defaultWebSocketConfig: WebSocketConfig = {
   enabled: true,
-  port: 3001,
+  port: DEFAULT_SERVER_PORT,
   path: '/ws',
   maxConnections: 1000,
   heartbeatInterval: 30000,

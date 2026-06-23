@@ -7,6 +7,7 @@
  */
 
 import { resolve } from 'node:path';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
 
 /**
  * CLI configuration resolved from environment
@@ -38,11 +39,12 @@ export function resolveCLIConfig(
   // WebSocket URL resolution
   const wsUrl =
     env.OPENAIDY_WS_URL ??
-    `ws://localhost:${env.WS_PORT ?? '3001'}${env.WS_PATH ?? '/ws'}`;
+    `ws://localhost:${env.WS_PORT ?? String(DEFAULT_SERVER_PORT)}${env.WS_PATH ?? '/ws'}`;
 
   // HTTP REST API URL resolution
   const httpUrl =
-    env.OPENAIDY_SERVER_URL ?? `http://localhost:${env.PORT ?? '3001'}`;
+    env.OPENAIDY_SERVER_URL ??
+    `http://localhost:${env.PORT ?? String(DEFAULT_SERVER_PORT)}`;
 
   // Token path resolution
   const tokenPath =
