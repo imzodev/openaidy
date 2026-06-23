@@ -42,8 +42,8 @@ describe('websocket types', () => {
       expect(result.path).toBe('/ws');
     });
 
-    it('should apply defaults for missing fields (except port, which is now required per port-config-refactor)', () => {
-      const config = { port: 3001 };
+    it('should apply defaults for missing fields, including port (DEFAULT_SERVER_PORT)', () => {
+      const config = {};
       const result = webSocketConfigSchema.parse(config);
 
       expect(result.enabled).toBe(true);
@@ -53,11 +53,6 @@ describe('websocket types', () => {
       expect(result.heartbeatInterval).toBe(30000);
       expect(result.auth.required).toBe(true);
       expect(result.rateLimit.max).toBe(100);
-    });
-
-    it('should reject when port is missing (no silent 3001 fallback)', () => {
-      const config = {};
-      expect(() => webSocketConfigSchema.parse(config)).toThrow();
     });
 
     it('should reject invalid port', () => {
@@ -162,8 +157,8 @@ describe('websocket types', () => {
       expect(result.WS_PATH).toBe('/ws');
     });
 
-    it('should apply defaults for missing env vars (except WS_PORT, which is now required per port-config-refactor)', () => {
-      const env = { WS_PORT: '3001' };
+    it('should apply defaults for missing env vars, including WS_PORT (DEFAULT_SERVER_PORT)', () => {
+      const env = {};
       const result = wsEnvSchema.parse(env);
 
       expect(result.WS_ENABLED).toBe(true);
@@ -172,9 +167,10 @@ describe('websocket types', () => {
       expect(result.WS_MAX_CONNECTIONS).toBe(1000);
     });
 
-    it('should reject when WS_PORT is missing (no silent 3001 fallback)', () => {
-      const env = {};
-      expect(() => wsEnvSchema.parse(env)).toThrow();
+    it('should honor an explicit WS_PORT override', () => {
+      const env = { WS_PORT: '8080' };
+      const result = wsEnvSchema.parse(env);
+      expect(result.WS_PORT).toBe(8080);
     });
 
     it('should parse "false" string as boolean false', () => {
