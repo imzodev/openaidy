@@ -38,19 +38,14 @@ type WebSocketContextValue = {
 const WebSocketContext = createContext<WebSocketContextValue>();
 
 function resolveBaseUrl(): string {
-  // Single source of truth for the WS endpoint. No silent fallback — if
-  // the env var is not set, the web app fails to start with a clear error.
-  // The Vite dev proxy (see vite.config.ts) forwards same-origin `/ws`
-  // upgrades to the backend, so leaving this empty (or set to a relative
-  // path) is the recommended value.
+  // Single source of truth for the WS endpoint. Empty/unset means
+  // same-origin in dev mode (Vite proxies /ws) or --integrated mode
+  // (server serves the built bundle same-origin). The browser requires
+  // an absolute WebSocket URL, so we construct one from window.location.
   const wsUrl = import.meta.env.OPENAIDY_VITE_WS_URL;
-  if (wsUrl === undefined) {
-    throw new Error(
-      'OPENAIDY_VITE_WS_URL is required. ' +
-        'Set it in your .env file before building or running the web app.',
-    );
-  }
-  return wsUrl;
+  if (wsUrl) return wsUrl;
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/ws`;
 }
 
 export const WebSocketProvider: ParentComponent = (props) => {

@@ -19,7 +19,7 @@ describe('API Configuration', () => {
     beforeEach(() => {
       vi.restoreAllMocks();
       // Reset mock to default
-      mockGetApiBaseFn = () => 'http://localhost:3001';
+      mockGetApiBaseFn = () => '';
     });
 
     it('should return VITE_SERVER_URL when set', () => {
@@ -27,25 +27,9 @@ describe('API Configuration', () => {
       expect(getApiBase()).toBe('https://api.example.com');
     });
 
-    it('should return localhost:3001 in dev mode when VITE_SERVER_URL not set', () => {
-      mockGetApiBaseFn = () => 'http://localhost:3001';
-      expect(getApiBase()).toBe('http://localhost:3001');
-    });
-
-    it('should throw error in production when VITE_SERVER_URL not set', () => {
-      mockGetApiBaseFn = () => {
-        throw new Error(
-          'VITE_SERVER_URL environment variable is required in production. Set it in your .env file or build environment.',
-        );
-      };
-      expect(() => getApiBase()).toThrow(
-        'VITE_SERVER_URL environment variable is required in production',
-      );
-    });
-
-    it('should use VITE_SERVER_URL over dev default', () => {
-      mockGetApiBaseFn = () => 'https://custom.api.com';
-      expect(getApiBase()).toBe('https://custom.api.com');
+    it('should return empty string (same-origin) when VITE_SERVER_URL is unset', () => {
+      mockGetApiBaseFn = () => '';
+      expect(getApiBase()).toBe('');
     });
 
     it('should support custom port in VITE_SERVER_URL', () => {
@@ -60,16 +44,10 @@ describe('API Configuration', () => {
   });
 
   describe('Dev default port alignment', () => {
-    it('should use port 3001 (matching server default)', () => {
-      mockGetApiBaseFn = () => 'http://localhost:3001';
+    it('should default to same-origin (empty string) instead of an arbitrary host', () => {
+      mockGetApiBaseFn = () => '';
       const url = getApiBase();
-      expect(url).toContain(':3001');
-    });
-
-    it('should NOT use port 3000 (old incorrect default)', () => {
-      mockGetApiBaseFn = () => 'http://localhost:3001';
-      const url = getApiBase();
-      expect(url).not.toContain(':3000');
+      expect(url).toBe('');
     });
   });
 });

@@ -114,23 +114,17 @@ import type {
 } from './types';
 
 /**
- * Get the API base URL
+ * Get the API base URL.
  *
- * Resolved once from OPENAIDY_VITE_SERVER_URL. There is no hardcoded
- * fallback — if the env var is not set, the web app fails to start
- * with a clear error message. The Vite dev proxy (see vite.config.ts)
- * forwards same-origin `/api` requests to the backend, so leaving this
- * empty (or unset + same-origin in dev) is the recommended value.
+ * Resolved once from OPENAIDY_VITE_SERVER_URL. Empty string (the default
+ * when the env var is unset) means same-origin — the browser resolves
+ * relative URLs against the current host. The Vite dev proxy (see
+ * vite.config.ts) forwards same-origin `/api` and `/ws` requests to the
+ * backend, and `--integrated` mode serves the built bundle from the
+ * server on the same origin.
  */
 function getApiBase(): string {
-  const envUrl = import.meta.env.OPENAIDY_VITE_SERVER_URL;
-  if (envUrl === undefined) {
-    throw new Error(
-      'OPENAIDY_VITE_SERVER_URL is required. ' +
-        'Set it in your .env file before building or running the web app.',
-    );
-  }
-  return envUrl;
+  return import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 }
 
 /**

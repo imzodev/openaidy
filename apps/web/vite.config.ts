@@ -2,25 +2,25 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import solid from 'vite-plugin-solid';
 
+// Vite loads this config via Node ESM (not via tsx/Vite's resolver), so
+// relative imports from workspace packages cannot use bundler-style bare
+// specifiers. We keep the default port constant inline here; the CLI's
+// `openaidy start` propagates the resolved port to the Vite spawn env so
+// production overrides still flow through. Keep this in sync with
+// DEFAULT_SERVER_PORT in packages/config/src/env.ts.
+const FALLBACK_BACKEND_PORT = '3001';
+
 // Vite's config file runs BEFORE Vite reads .env files automatically. We
 // load the .env explicitly here so the dev proxy and the runtime client
-// code agree on the same backend port. The install script (Phase 3) is
-// responsible for generating $OPENAIDY_HOME/.env with sensible defaults.
+// code agree on the same backend port.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   // OPENAIDY_PORT is the single source of truth for the backend's listen
   // port. Vite reads it at config time so the dev proxy can forward /api
-  // and /ws to the correct backend target. No fallback — unset must fail
-  // loudly so we don't silently proxy to a wrong port.
-  const backendPort = env.OPENAIDY_PORT;
-  if (!backendPort) {
-    throw new Error(
-      'OPENAIDY_PORT environment variable is required to build or serve the web app. ' +
-        'Set it in your .env file (e.g. OPENAIDY_PORT=3001). ' +
-        'The install script generates this file at $OPENAIDY_HOME/.env.',
-    );
-  }
+  // and /ws to the correct backend target. Falls back to FALLBACK_BACKEND_PORT
+  // so `vite dev` and `vite build` work without any env config.
+  const backendPort = env.OPENAIDY_PORT ?? FALLBACK_BACKEND_PORT;
   const backendTarget = `http://localhost:${backendPort}`;
 
   return {
@@ -53,14 +53,14 @@ export default defineConfig(({ mode }) => {
     define: {
       // Vite only auto-exposes env vars prefixed with `VITE_` to client code.
       // The OpenAidy naming convention uses `OPENAIDY_VITE_*` (project-scoped
-      // while still starting with `VITE_`), so we expose them explicitly here
-      // — `JSON.stringify(undefined)` resolves to `undefined` when unset, which
-      // the runtime check in api.ts/ws-provider.tsx surfaces as a clear error.
+      // while still starting with `VITE_`), so we expose them explicitly here.
+      // Empty string means "same origin" — api.ts and ws-provider.tsx treat
+      // it as a relative URL the browser resolves against the current host.
       'import.meta.env.OPENAIDY_VITE_SERVER_URL': JSON.stringify(
-        env.OPENAIDY_VITE_SERVER_URL,
+        env.OPENAIDY_VITE_SERVER_URL ?? '',
       ),
       'import.meta.env.OPENAIDY_VITE_WS_URL': JSON.stringify(
-        env.OPENAIDY_VITE_WS_URL,
+        env.OPENAIDY_VITE_WS_URL ?? '',
       ),
     },
   };
