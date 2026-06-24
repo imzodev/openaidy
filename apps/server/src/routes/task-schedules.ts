@@ -153,7 +153,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // exists is a 409. The body shape is the same as the optional
   // `schedule` field on POST /api/tasks.
   // -------------------------------------------------------------
-  app.post('/api/tasks/:taskId/schedule', async (request, reply) => {
+  app.post('/tasks/:taskId/schedule', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
 
     let parsed: z.infer<typeof createScheduleSchema>;
@@ -196,7 +196,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // client handles it) would log noise in the browser console.
   // The resource being "absent" is a normal, expected state — not
   // an error. Other failure modes still return 4xx/5xx.
-  app.get('/api/tasks/:taskId/schedule', async (request, reply) => {
+  app.get('/tasks/:taskId/schedule', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.getScheduleForTask(taskId);
     if (result.ok) return { schedule: result.data };
@@ -215,7 +215,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // resuming sets status='active'. An expired schedule is terminal
   // — use the create endpoint to make a new one.
   // -------------------------------------------------------------
-  app.patch('/api/tasks/:taskId/schedule', async (request, reply) => {
+  app.patch('/tasks/:taskId/schedule', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
 
     let parsed: z.infer<typeof updateScheduleSchema>;
@@ -259,7 +259,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // dedicated routes makes the UI's intent explicit and lets us add
   // audit logging later.
   // -------------------------------------------------------------
-  app.post('/api/tasks/:taskId/schedule/pause', async (request, reply) => {
+  app.post('/tasks/:taskId/schedule/pause', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.pauseSchedule(taskId);
     if (result.ok) return { schedule: result.data };
@@ -267,7 +267,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
     return { error: result.error.code, message: result.error.message };
   });
 
-  app.post('/api/tasks/:taskId/schedule/resume', async (request, reply) => {
+  app.post('/tasks/:taskId/schedule/resume', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.resumeSchedule(taskId);
     if (result.ok) return { schedule: result.data };
@@ -278,7 +278,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // -------------------------------------------------------------
   // DELETE /api/tasks/:taskId/schedule
   // -------------------------------------------------------------
-  app.delete('/api/tasks/:taskId/schedule', async (request, reply) => {
+  app.delete('/tasks/:taskId/schedule', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.removeSchedule(taskId);
     if (result.ok) {
@@ -296,7 +296,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // executionCount. Returns the new history row's ID so the caller
   // can poll its status.
   // -------------------------------------------------------------
-  app.post('/api/tasks/:taskId/schedule/trigger', async (request, reply) => {
+  app.post('/tasks/:taskId/schedule/trigger', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
     const result = await taskScheduleService.triggerNow(taskId);
     if (result.ok) {
@@ -313,7 +313,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
   // List execution history for the task's schedule, newest first.
   // Supports optional ?status= and pagination.
   // -------------------------------------------------------------
-  app.get('/api/tasks/:taskId/schedule/executions', async (request, reply) => {
+  app.get('/tasks/:taskId/schedule/executions', async (request, reply) => {
     const { taskId } = request.params as { taskId: string };
 
     let parsed: z.infer<typeof listExecutionsSchema>;

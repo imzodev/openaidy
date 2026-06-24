@@ -144,7 +144,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   );
 
   // POST /api/pulses
-  app.post('/api/pulses', async (request, reply) => {
+  app.post('/pulses', async (request, reply) => {
     let parsed;
     try {
       parsed = createPulseSchema.parse(request.body);
@@ -183,7 +183,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses
-  app.get('/api/pulses', async (request, reply) => {
+  app.get('/pulses', async (request, reply) => {
     let parsed;
     try {
       parsed = listPulsesSchema.parse(request.query);
@@ -214,7 +214,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses/:id
-  app.get('/api/pulses/:id', async (request, reply) => {
+  app.get('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -228,7 +228,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // PATCH /api/pulses/:id
-  app.patch('/api/pulses/:id', async (request, reply) => {
+  app.patch('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;
@@ -263,7 +263,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // DELETE /api/pulses/:id
-  app.delete('/api/pulses/:id', async (request, reply) => {
+  app.delete('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -278,7 +278,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // POST /api/pulses/:id/trigger
-  app.post('/api/pulses/:id/trigger', async (request, reply) => {
+  app.post('/pulses/:id/trigger', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -303,7 +303,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses/:id/history
-  app.get('/api/pulses/:id/history', async (request, reply) => {
+  app.get('/pulses/:id/history', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;

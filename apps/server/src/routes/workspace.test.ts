@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -42,12 +42,17 @@ describe('workspace routes', () => {
 
     // Create Fastify app
     app = Fastify();
-    await app.register(workspaceRoutes, {
-      agentRegistry: registry,
-      workspaceService,
-      workspaceBaseDir: testBaseDir,
-      authMiddleware: mockAuthMiddleware,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(workspaceRoutes, {
+          agentRegistry: registry,
+          workspaceService,
+          workspaceBaseDir: testBaseDir,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -74,7 +79,7 @@ describe('workspace routes', () => {
     it('should return 401 without X-Agent-Id header', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/test-agent/files',
+        url: '/api/workspace/test-agent/files',
       });
 
       expect(response.statusCode).toBe(401);
@@ -87,7 +92,7 @@ describe('workspace routes', () => {
     it('should return 403 when source agent not found', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/test-agent/files',
+        url: '/api/workspace/test-agent/files',
         headers: { 'X-Agent-Id': 'unknown-agent' },
       });
 
@@ -115,7 +120,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files',
+        url: '/api/workspace/agent-1/files',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -146,7 +151,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files/test.txt',
+        url: '/api/workspace/agent-1/files/test.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -191,7 +196,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files/secret.txt',
+        url: '/api/workspace/agent-1/files/secret.txt',
         headers: { 'X-Agent-Id': 'agent-2' },
       });
 
@@ -223,7 +228,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/new-file.txt',
+        url: '/api/workspace/agent-1/files/new-file.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'new content' },
       });
@@ -253,7 +258,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/',
+        url: '/api/workspace/agent-1/files/',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -278,7 +283,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/unauthorized.txt',
+        url: '/api/workspace/agent-1/files/unauthorized.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -313,7 +318,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/existing.txt',
+        url: '/api/workspace/agent-1/files/existing.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'updated' },
       });
@@ -345,7 +350,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/nonexistent.txt',
+        url: '/api/workspace/agent-1/files/nonexistent.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -383,7 +388,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/binary.bin',
+        url: '/api/workspace/agent-1/files/binary.bin',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'attempted text overwrite' },
       });
@@ -421,7 +426,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/to-delete.txt',
+        url: '/api/workspace/agent-1/files/to-delete.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -458,7 +463,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/protected.txt',
+        url: '/api/workspace/agent-1/files/protected.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -488,7 +493,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/nonexistent.txt',
+        url: '/api/workspace/agent-1/files/nonexistent.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 

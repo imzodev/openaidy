@@ -93,13 +93,16 @@ async function buildApp(
   await app.register(cors, { origin: '*' });
   await app.register(sensible);
   await app.register(websocket);
-  await app.register(async (instance) => {
-    await registerMcpRoutes(instance, {
-      mcpService,
-      configService,
-      authMiddleware,
-    });
-  });
+  await app.register(
+    async (instance: FastifyInstance) => {
+      await registerMcpRoutes(instance, {
+        mcpService,
+        configService,
+        authMiddleware,
+      });
+    },
+    { prefix: '/api' },
+  );
   return app;
 }
 
@@ -129,14 +132,14 @@ describe('MCP Routes', () => {
     });
 
     it('returns 200 with all configured servers', async () => {
-      const res = await app.inject({ method: 'GET', url: '/mcp/servers' });
+      const res = await app.inject({ method: 'GET', url: '/api/mcp/servers' });
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.servers).toHaveLength(2);
     });
 
     it('reflects live connection status', async () => {
-      const res = await app.inject({ method: 'GET', url: '/mcp/servers' });
+      const res = await app.inject({ method: 'GET', url: '/api/mcp/servers' });
       const body = res.json();
       const a = body.servers.find((s: { id: string }) => s.id === 'srv-a');
       const b = body.servers.find((s: { id: string }) => s.id === 'srv-b');
@@ -145,7 +148,7 @@ describe('MCP Routes', () => {
     });
 
     it('includes toolCount for connected servers', async () => {
-      const res = await app.inject({ method: 'GET', url: '/mcp/servers' });
+      const res = await app.inject({ method: 'GET', url: '/api/mcp/servers' });
       const body = res.json();
       const a = body.servers.find((s: { id: string }) => s.id === 'srv-a');
       expect(a.toolCount).toBe(1);
@@ -159,7 +162,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'GET',
-        url: '/mcp/servers',
+        url: '/api/mcp/servers',
       });
       expect(res.statusCode).toBe(200);
       await unauthApp.close();
@@ -178,7 +181,7 @@ describe('MCP Routes', () => {
     it('returns 200 with server record', async () => {
       const res = await app.inject({
         method: 'GET',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -189,7 +192,7 @@ describe('MCP Routes', () => {
     it('returns 404 for unknown id', async () => {
       const res = await app.inject({
         method: 'GET',
-        url: '/mcp/servers/ghost',
+        url: '/api/mcp/servers/ghost',
       });
       expect(res.statusCode).toBe(404);
       const body = res.json();
@@ -204,7 +207,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'GET',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
       });
       expect(res.statusCode).toBe(200);
       await unauthApp.close();
@@ -226,7 +229,7 @@ describe('MCP Routes', () => {
     it('returns 200 with tools for a connected server', async () => {
       const res = await app.inject({
         method: 'GET',
-        url: '/mcp/servers/connected-srv/tools',
+        url: '/api/mcp/servers/connected-srv/tools',
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -238,7 +241,7 @@ describe('MCP Routes', () => {
     it('returns 503 (not 409) when server is not connected', async () => {
       const res = await app.inject({
         method: 'GET',
-        url: '/mcp/servers/disconnected-srv/tools',
+        url: '/api/mcp/servers/disconnected-srv/tools',
       });
       expect(res.statusCode).toBe(503);
       const body = res.json();
@@ -257,7 +260,7 @@ describe('MCP Routes', () => {
     it('returns 201 and creates a new server', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers',
+        url: '/api/mcp/servers',
         headers: { 'content-type': 'application/json' },
         payload: {
           config: { id: 'new-srv', transport: 'stdio', command: 'npx' },
@@ -274,7 +277,7 @@ describe('MCP Routes', () => {
 
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers',
+        url: '/api/mcp/servers',
         headers: { 'content-type': 'application/json' },
         payload: { config: { id: 'existing', transport: 'stdio' } },
       });
@@ -286,7 +289,7 @@ describe('MCP Routes', () => {
     it('persists the new server config via configService.save', async () => {
       await app.inject({
         method: 'POST',
-        url: '/mcp/servers',
+        url: '/api/mcp/servers',
         headers: { 'content-type': 'application/json' },
         payload: {
           config: { id: 'saved-srv', transport: 'stdio', command: 'echo' },
@@ -303,7 +306,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'POST',
-        url: '/mcp/servers',
+        url: '/api/mcp/servers',
         headers: { 'content-type': 'application/json' },
         payload: { config: { id: 'new-srv', transport: 'stdio' } },
       });
@@ -325,7 +328,7 @@ describe('MCP Routes', () => {
     it('returns 200 with updated server', async () => {
       const res = await app.inject({
         method: 'PATCH',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
         headers: { 'content-type': 'application/json' },
         payload: { name: 'New Name' },
       });
@@ -337,7 +340,7 @@ describe('MCP Routes', () => {
     it('returns 404 for unknown server', async () => {
       const res = await app.inject({
         method: 'PATCH',
-        url: '/mcp/servers/ghost',
+        url: '/api/mcp/servers/ghost',
         headers: { 'content-type': 'application/json' },
         payload: { name: 'New Name' },
       });
@@ -347,7 +350,7 @@ describe('MCP Routes', () => {
     it('persists the update via configService.save', async () => {
       await app.inject({
         method: 'PATCH',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
         headers: { 'content-type': 'application/json' },
         payload: { name: 'Updated' },
       });
@@ -362,7 +365,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'PATCH',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
         headers: { 'content-type': 'application/json' },
         payload: { name: 'X' },
       });
@@ -385,26 +388,26 @@ describe('MCP Routes', () => {
     it('returns 204 and removes the server', async () => {
       const res = await app.inject({
         method: 'DELETE',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
       });
       expect(res.statusCode).toBe(204);
     });
 
     it('disconnects the server if connected', async () => {
-      await app.inject({ method: 'DELETE', url: '/mcp/servers/srv-a' });
+      await app.inject({ method: 'DELETE', url: '/api/mcp/servers/srv-a' });
       expect(mcpService.disconnect).toHaveBeenCalledWith('srv-a');
     });
 
     it('returns 404 for unknown server', async () => {
       const res = await app.inject({
         method: 'DELETE',
-        url: '/mcp/servers/ghost',
+        url: '/api/mcp/servers/ghost',
       });
       expect(res.statusCode).toBe(404);
     });
 
     it('persists removal via configService.save', async () => {
-      await app.inject({ method: 'DELETE', url: '/mcp/servers/srv-a' });
+      await app.inject({ method: 'DELETE', url: '/api/mcp/servers/srv-a' });
       expect(configService.save).toHaveBeenCalled();
     });
 
@@ -416,7 +419,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'DELETE',
-        url: '/mcp/servers/srv-a',
+        url: '/api/mcp/servers/srv-a',
       });
       expect(res.statusCode).toBe(401);
       await unauthApp.close();
@@ -434,7 +437,7 @@ describe('MCP Routes', () => {
     it('returns 200 and connects successfully', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers/srv-a/connect',
+        url: '/api/mcp/servers/srv-a/connect',
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -452,7 +455,7 @@ describe('MCP Routes', () => {
 
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers/srv-a/connect',
+        url: '/api/mcp/servers/srv-a/connect',
       });
       expect(res.statusCode).toBe(200);
       expect(mcpService.connect).not.toHaveBeenCalled();
@@ -461,7 +464,7 @@ describe('MCP Routes', () => {
     it('returns 404 for unknown server', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers/ghost/connect',
+        url: '/api/mcp/servers/ghost/connect',
       });
       expect(res.statusCode).toBe(404);
     });
@@ -474,7 +477,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'POST',
-        url: '/mcp/servers/srv-a/connect',
+        url: '/api/mcp/servers/srv-a/connect',
       });
       expect(res.statusCode).toBe(401);
       await unauthApp.close();
@@ -495,7 +498,7 @@ describe('MCP Routes', () => {
     it('returns 200 and disconnects', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers/srv-a/disconnect',
+        url: '/api/mcp/servers/srv-a/disconnect',
       });
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -506,7 +509,7 @@ describe('MCP Routes', () => {
     it('returns 404 for unknown server', async () => {
       const res = await app.inject({
         method: 'POST',
-        url: '/mcp/servers/ghost/disconnect',
+        url: '/api/mcp/servers/ghost/disconnect',
       });
       expect(res.statusCode).toBe(404);
     });
@@ -519,7 +522,7 @@ describe('MCP Routes', () => {
       );
       const res = await unauthApp.inject({
         method: 'POST',
-        url: '/mcp/servers/srv-a/disconnect',
+        url: '/api/mcp/servers/srv-a/disconnect',
       });
       expect(res.statusCode).toBe(401);
       await unauthApp.close();

@@ -201,7 +201,7 @@ type ApiResult<T> = ApiSuccess<T> | ApiError;
  * Fetch Kanban board (tasks grouped by status)
  */
 export async function fetchTasksKanban(): Promise<KanbanBoard> {
-  const response = await apiFetch(`${API_BASE}/tasks/kanban`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/kanban`);
   if (!response.ok) {
     throw new Error(`Failed to fetch kanban board: ${response.statusText}`);
   }
@@ -215,8 +215,8 @@ export async function listTasks(
   status?: TaskStatus,
 ): Promise<{ items: Task[] }> {
   const url = status
-    ? `${API_BASE}/tasks?status=${status}`
-    : `${API_BASE}/tasks`;
+    ? `${API_BASE}/api/tasks?status=${status}`
+    : `${API_BASE}/api/tasks`;
   const response = await apiFetch(url);
   if (!response.ok) {
     throw new Error(`Failed to list tasks: ${response.statusText}`);
@@ -228,7 +228,7 @@ export async function listTasks(
  * Get a task by ID with details
  */
 export async function getTask(id: string): Promise<ApiResult<TaskWithDetails>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`);
   return response.json();
 }
 
@@ -238,7 +238,7 @@ export async function getTask(id: string): Promise<ApiResult<TaskWithDetails>> {
 export async function createTask(
   input: CreateTaskInput,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -253,7 +253,7 @@ export async function updateTask(
   id: string,
   input: UpdateTaskInput,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -268,7 +268,7 @@ export async function updateTaskStatus(
   id: string,
   status: TaskStatus,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}/status`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -280,7 +280,7 @@ export async function updateTaskStatus(
  * Delete a task
  */
 export async function deleteTask(id: string): Promise<ApiResult<true>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`, {
     method: 'DELETE',
   });
   return response.json();
@@ -293,7 +293,7 @@ export async function assignAgents(
   taskId: string,
   agents: Array<{ agentId: string; role?: AgentRole }>,
 ): Promise<ApiResult<TaskAgent[]>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/agents`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agents }),
@@ -309,7 +309,7 @@ export async function removeAgent(
   agentId: string,
 ): Promise<ApiResult<true>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${taskId}/agents/${agentId}`,
+    `${API_BASE}/api/tasks/${taskId}/agents/${agentId}`,
     {
       method: 'DELETE',
     },
@@ -329,7 +329,7 @@ export async function getTaskProgress(taskId: string): Promise<
     pending: number;
   }>
 > {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/progress`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/progress`);
   return response.json();
 }
 
@@ -339,7 +339,7 @@ export async function getTaskProgress(taskId: string): Promise<
 export async function listSubtasks(
   taskId: string,
 ): Promise<{ items: Subtask[] }> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/subtasks`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/subtasks`);
   if (!response.ok) {
     throw new Error(`Failed to list subtasks: ${response.statusText}`);
   }
@@ -354,7 +354,7 @@ export async function createSubtask(
   input: CreateSubtaskInput,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${input.taskId}/subtasks`,
+    `${API_BASE}/api/tasks/${input.taskId}/subtasks`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -371,7 +371,7 @@ export async function updateSubtaskStatus(
   id: string,
   status: SubtaskStatus,
 ): Promise<ApiResult<Subtask>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${id}/status`, {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -385,7 +385,7 @@ export async function updateSubtaskStatus(
 export async function executeTask(
   taskId: string,
 ): Promise<ApiResult<{ sessionId: string }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/execute`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/execute`, {
     method: 'POST',
   });
   return response.json();
@@ -397,9 +397,12 @@ export async function executeTask(
 export async function executeSubtask(
   subtaskId: string,
 ): Promise<ApiResult<{ sessionId: string }>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${subtaskId}/execute`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/execute`,
+    {
+      method: 'POST',
+    },
+  );
   return response.json();
 }
 
@@ -409,7 +412,7 @@ export async function executeSubtask(
 export async function getTaskSession(
   taskId: string,
 ): Promise<ApiResult<{ sessionId: string | null }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/session`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/session`);
   return response.json();
 }
 
@@ -421,7 +424,7 @@ export async function completeSubtask(
   result?: string,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(
-    `${API_BASE}/subtasks/${subtaskId}/complete`,
+    `${API_BASE}/api/subtasks/${subtaskId}/complete`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -437,7 +440,9 @@ export async function completeSubtask(
 export async function getSubtaskSession(
   subtaskId: string,
 ): Promise<ApiResult<{ sessionId: string | null }>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${subtaskId}/session`);
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/session`,
+  );
   return response.json();
 }
 
@@ -448,7 +453,7 @@ export async function getSubtaskSession(
 export async function planTask(
   taskId: string,
 ): Promise<ApiResult<{ subtasks: Subtask[] }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/plan`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/plan`, {
     method: 'POST',
   });
   return response.json();
@@ -658,7 +663,9 @@ export type Deliverable = {
 export async function listDeliverables(
   taskId: string,
 ): Promise<ApiResult<{ items: Deliverable[] }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/deliverables`);
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/deliverables`,
+  );
   return response.json();
 }
 
@@ -680,7 +687,7 @@ export async function updateDeliverable(
   }>,
 ): Promise<ApiResult<Deliverable>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${taskId}/deliverables/${id}`,
+    `${API_BASE}/api/tasks/${taskId}/deliverables/${id}`,
     {
       method: 'PATCH',
       body: JSON.stringify(input),

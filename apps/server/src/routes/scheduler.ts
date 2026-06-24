@@ -100,7 +100,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * POST /api/jobs
    * Create a new scheduled job
    */
-  app.post('/api/jobs', async (request, reply) => {
+  app.post('/jobs', async (request, reply) => {
     let parsed;
     try {
       parsed = createJobSchema.parse(request.body);
@@ -208,7 +208,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * GET /api/jobs
    * List jobs with optional filters
    */
-  app.get('/api/jobs', async (request, reply) => {
+  app.get('/jobs', async (request, reply) => {
     let parsed;
     try {
       parsed = listJobsSchema.parse(request.query);
@@ -263,7 +263,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * GET /api/jobs/:id
    * Get job details
    */
-  app.get('/api/jobs/:id', async (request, reply) => {
+  app.get('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const job = await jobsRepo.findById(id);
@@ -282,7 +282,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * PATCH /api/jobs/:id
    * Update job (pause/resume, update metadata)
    */
-  app.patch('/api/jobs/:id', async (request, reply) => {
+  app.patch('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;
@@ -328,7 +328,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * DELETE /api/jobs/:id
    * Delete job (cascade deletes runs)
    */
-  app.delete('/api/jobs/:id', async (request, reply) => {
+  app.delete('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     // Check job exists
@@ -349,7 +349,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * GET /api/jobs/:id/runs
    * List job runs (execution history)
    */
-  app.get('/api/jobs/:id/runs', async (request, reply) => {
+  app.get('/jobs/:id/runs', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;

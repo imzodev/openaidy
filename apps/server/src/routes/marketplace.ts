@@ -78,14 +78,14 @@ export const marketplaceRoutes: FastifyPluginAsync<
   const marketplaceService = new MarketplaceService(opts.marketplaceRepository);
 
   // GET /api/marketplace/categories - Get all categories
-  app.get('/api/marketplace/categories', async () => {
+  app.get('/marketplace/categories', async () => {
     const categories = await marketplaceService.getCategories();
     return { categories };
   });
 
   // GET /api/marketplace/addons - Search marketplace addons
   app.get<{ Querystring: SearchQuery }>(
-    '/api/marketplace/addons',
+    '/marketplace/addons',
     async (request) => {
       const {
         q,
@@ -135,14 +135,14 @@ export const marketplaceRoutes: FastifyPluginAsync<
   );
 
   // GET /api/marketplace/addons/featured - Get featured addons
-  app.get('/api/marketplace/addons/featured', async () => {
+  app.get('/marketplace/addons/featured', async () => {
     const addons = await marketplaceService.getFeatured();
     return { addons };
   });
 
   // GET /api/marketplace/addons/:id - Get addon details
   app.get<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id',
+    '/marketplace/addons/:id',
     async (request) => {
       const addon = await marketplaceService.getAddon(request.params.id);
       if (!addon) {
@@ -154,7 +154,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // GET /api/marketplace/addons/:id/versions - Get addon versions
   app.get<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/versions',
+    '/marketplace/addons/:id/versions',
     async (request) => {
       const versions = await marketplaceService.getVersions(request.params.id);
       return { versions };
@@ -163,7 +163,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // GET /api/marketplace/addons/:id/reviews - Get addon reviews
   app.get<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/reviews',
+    '/marketplace/addons/:id/reviews',
     async (request) => {
       const result = await marketplaceService.getReviews(request.params.id);
       return result;
@@ -172,7 +172,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // POST /api/marketplace/reviews - Add a review
   app.post<{ Body: AddReviewBody }>(
-    '/api/marketplace/reviews',
+    '/marketplace/reviews',
     {
       preHandler: async (_request, _reply) => {
         // In real implementation, require auth here
@@ -202,7 +202,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // POST /api/marketplace/addons - Publish new addon
   app.post<{ Body: PublishAddonBody }>(
-    '/api/marketplace/addons',
+    '/marketplace/addons',
     {
       preHandler: async (_request, _reply) => {
         // In real implementation, require auth here
@@ -224,7 +224,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // POST /api/marketplace/addons/:id/download - Record download
   app.post<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/download',
+    '/marketplace/addons/:id/download',
     async (request, reply) => {
       const addon = await marketplaceService.getAddon(request.params.id);
       if (!addon) {
@@ -251,14 +251,14 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
       return {
         success: true,
-        downloadUrl: `/api/marketplace/addons/${addon.addonId}/files/${addon.currentVersion}`,
+        downloadUrl: `/marketplace/addons/${addon.addonId}/files/${addon.currentVersion}`,
       };
     },
   );
 
   // GET /api/marketplace/addons/:id/analytics - Get addon analytics
   app.get<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/analytics',
+    '/marketplace/addons/:id/analytics',
     async (request) => {
       const stats = await marketplaceService.getDownloadStats(
         request.params.id,
@@ -268,7 +268,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
   );
 
   // GET /api/marketplace/analytics - Get marketplace analytics
-  app.get('/api/marketplace/analytics', async () => {
+  app.get('/marketplace/analytics', async () => {
     // In real implementation, aggregate stats from database
     return {
       totalAddons: 0,
@@ -280,7 +280,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // POST /api/marketplace/addons/:id/favorite - Add to favorites
   app.post<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/favorite',
+    '/marketplace/addons/:id/favorite',
     async (request) => {
       // In real implementation, get user from auth
       const userId = 'anonymous';
@@ -291,7 +291,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // DELETE /api/marketplace/addons/:id/favorite - Remove from favorites
   app.delete<{ Params: { id: string } }>(
-    '/api/marketplace/addons/:id/favorite',
+    '/marketplace/addons/:id/favorite',
     async (request) => {
       // In real implementation, get user from auth
       const userId = 'anonymous';
@@ -302,7 +302,7 @@ export const marketplaceRoutes: FastifyPluginAsync<
 
   // GET /api/marketplace/users/:id/favorites - Get user favorites
   app.get<{ Params: { id: string } }>(
-    '/api/marketplace/users/:id/favorites',
+    '/marketplace/users/:id/favorites',
     async (request) => {
       const favorites = await marketplaceService.getUserFavorites(
         request.params.id,

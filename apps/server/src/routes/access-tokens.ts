@@ -26,34 +26,30 @@ export const accessTokenRoutes: FastifyPluginAsync<
   app.post<{
     Body: CreateAccessTokenRequest;
     Reply: CreateAccessTokenResponse;
-  }>(
-    '/api/access-tokens',
-    { preHandler: adminAuth },
-    async (request, reply) => {
-      const { name, scopes, expiresAt } = request.body;
+  }>('/access-tokens', { preHandler: adminAuth }, async (request, reply) => {
+    const { name, scopes, expiresAt } = request.body;
 
-      if (!name || typeof name !== 'string' || !name.trim()) {
-        return reply.code(400).send({ error: 'name is required' } as never);
-      }
-      if (!Array.isArray(scopes) || scopes.length === 0) {
-        return reply
-          .code(400)
-          .send({ error: 'scopes must be a non-empty array' } as never);
-      }
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return reply.code(400).send({ error: 'name is required' } as never);
+    }
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+      return reply
+        .code(400)
+        .send({ error: 'scopes must be a non-empty array' } as never);
+    }
 
-      const { record, rawToken } = await opts.accessTokenService.create({
-        name: name.trim(),
-        scopes,
-        createdBy: 'admin',
-        ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
-      });
+    const { record, rawToken } = await opts.accessTokenService.create({
+      name: name.trim(),
+      scopes,
+      createdBy: 'admin',
+      ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
+    });
 
-      return reply.code(201).send({ key: record, rawKey: rawToken });
-    },
-  );
+    return reply.code(201).send({ key: record, rawKey: rawToken });
+  });
 
   app.get<{ Reply: { keys: AccessTokenRecord[] } }>(
-    '/api/access-tokens',
+    '/access-tokens',
     { preHandler: adminAuth },
     async (_, reply) => {
       const keys = await opts.accessTokenService.list();
@@ -65,7 +61,7 @@ export const accessTokenRoutes: FastifyPluginAsync<
     Params: { id: string };
     Reply: { key: AccessTokenRecord } | { error: string };
   }>(
-    '/api/access-tokens/:id',
+    '/access-tokens/:id',
     { preHandler: adminAuth },
     async (request, reply) => {
       const revoked = await opts.accessTokenService.revoke(request.params.id);

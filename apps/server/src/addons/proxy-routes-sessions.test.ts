@@ -86,12 +86,17 @@ async function buildProxyApp(opts: {
   );
 
   const app = Fastify({ logger: false });
-  await app.register(addonProxyRoutes, {
-    addonService: addonSvc,
-    authMiddleware: null as never,
-    internalApiBaseUrl: '',
-    ...(opts.sessionService ? { sessionService: opts.sessionService } : {}),
-  });
+  await app.register(
+    async (api: FastifyInstance) => {
+      await api.register(addonProxyRoutes, {
+        addonService: addonSvc,
+        authMiddleware: null as never,
+        internalApiBaseUrl: '',
+        ...(opts.sessionService ? { sessionService: opts.sessionService } : {}),
+      });
+    },
+    { prefix: '/api' },
+  );
 
   return { app, token };
 }

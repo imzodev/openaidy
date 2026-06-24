@@ -59,7 +59,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
     Params: { agentId: string };
     Body: InvokeAgentBody;
   }>(
-    '/api/addon-proxy/agents/:agentId/invoke',
+    '/addon-proxy/agents/:agentId/invoke',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const { agentId } = request.params;
@@ -134,7 +134,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
   // GET /api/addon-proxy/agents
   app.get(
-    '/api/addon-proxy/agents',
+    '/addon-proxy/agents',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const addon = await opts.addonService.getAddon(request.addonId!);
@@ -164,7 +164,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
   // GET /api/addon-proxy/sessions
   app.get(
-    '/api/addon-proxy/sessions',
+    '/addon-proxy/sessions',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const addon = await opts.addonService.getAddon(request.addonId!);
@@ -198,7 +198,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
     Params: { sessionId: string };
     Body: { content: string; agentId: string };
   }>(
-    '/api/addon-proxy/sessions/:sessionId/messages',
+    '/addon-proxy/sessions/:sessionId/messages',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const addon = await opts.addonService.getAddon(request.addonId!);
@@ -262,7 +262,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
 
   // GET /api/addon-proxy/config/:namespace
   app.get<{ Params: { namespace: string } }>(
-    '/api/addon-proxy/config/:namespace',
+    '/addon-proxy/config/:namespace',
     { preHandler: validateAddonToken },
     async (request, reply) => {
       const { namespace } = request.params;
@@ -292,7 +292,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
   );
 
   // Health check
-  app.get('/api/addon-proxy/health', async (_, reply) => {
+  app.get('/addon-proxy/health', async (_, reply) => {
     return reply.send({ status: 'ok' });
   });
 };

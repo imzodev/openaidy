@@ -409,294 +409,314 @@ export async function buildApp() {
   const authMiddleware = new AuthMiddleware(wsConfig);
 
   await app.register(healthRoutes);
-  await app.register(authRoutes, {
-    authMiddleware,
-    ...(services.accessTokensRepo
-      ? {
+
+  // All REST routes share the `/api` prefix. Wrapping them in a Fastify
+  // scope with `prefix: '/api'` means each route file can use bare paths
+  // (`/sessions`, `/tasks`, `/channels`, ...) and the prefix is applied
+  // once at registration time — no per-route duplication, no risk of a
+  // new route forgetting the prefix. `healthRoutes` and `fastifyStatic`
+  // stay outside this scope because they're not part of the API surface.
+  await app.register(
+    async (api) => {
+      await api.register(authRoutes, {
+        authMiddleware,
+        ...(services.accessTokensRepo
+          ? {
+              accessTokenService: createAccessTokenService(
+                services.accessTokensRepo,
+              ),
+            }
+          : {}),
+      });
+
+      await api.register(configRoutes, {
+        configService: services.config,
+        authMiddleware,
+      });
+
+      // Pass shared services to session routes
+      await api.register(sessionRoutes, {
+        sessionService: services.sessions,
+        authMiddleware,
+      });
+
+      // Pass shared services to provider routes. provider routes may
+      // optionally use the DB (for OAuth state + provider credentials);
+      // when the adapter isn't available, pass undefined and the routes
+      // skip the OAuth/connection endpoints.
+      await api.register(providerRoutes, {
+        services: services.providers,
+        authMiddleware,
+        // dbAdapter.client is the raw drizzle instance (the only thing
+        // with .insert/.select/.update). At this point in app.ts
+        // dbAdapter has been instantiated (we'd have exited earlier if
+        // the DB couldn't be created). The cast to DatabaseClient is
+        // safe at runtime because client is the drizzle db, not the
+        // adapter envelope (which only has .repositories/.close/.kind).
+        db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
+        invalidateCredential,
+      });
+
+      // Register agent routes
+      await api.register(agentRoutes, {
+        agentRegistry: services.agents,
+        personalityService: services.personality,
+        authMiddleware,
+      });
+
+      // Register skill routes
+      await api.register(skillRoutes, {
+        skillRegistry: services.skills,
+        agentRegistry: services.agents,
+        authMiddleware,
+        workspace: services.workspace,
+        skillsDir: env.SKILLS_DIR,
+      });
+
+      // Register builtin tool routes
+      await api.register(toolRoutes, {
+        builtinTools: builtinToolRegistry,
+        authMiddleware,
+      });
+
+      // Register run stream routes (SSE)
+      await api.register(runStreamRoutes, {
+        runEvents: services.runEvents,
+        authMiddleware,
+      });
+
+      // Register scheduler routes (if database is available)
+      if (services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
+        await api.register(schedulerRoutes, {
+          jobsRepo: services.jobsRepo,
+          jobRunsRepo: services.jobRunsRepo,
+          sessionsRepo: services.sessionsRepo,
+          authMiddleware,
+        });
+      }
+
+      // Register pulse routes (if database is available)
+      if (
+        services.sessions &&
+        services.jobsRepo &&
+        services.jobRunsRepo &&
+        services.sessionsRepo
+      ) {
+        await api.register(pulseRoutes, {
+          jobsRepo: services.jobsRepo,
+          jobRunsRepo: services.jobRunsRepo,
+          sessionsRepo: services.sessionsRepo,
+          sessionMessageService: services.sessions,
+          authMiddleware,
+        });
+      }
+
+      // Register workspace routes
+      await api.register(workspaceRoutes, {
+        agentRegistry: services.agents,
+        workspaceService: services.workspace,
+        workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+        authMiddleware,
+      });
+
+      // Register log routes
+      await api.register(logRoutes);
+
+      // Register task routes (requires DB)
+      if (dbAdapter) {
+        planningService = createPlanningService({
+          providers: providerServices,
+          tasksRepo: dbAdapter.repositories.tasks,
+          subtasksRepo: dbAdapter.repositories.subtasks,
+          taskAgentsRepo: dbAdapter.repositories.taskAgents,
+          deliverablesRepo: dbAdapter.repositories.deliverables,
+          agents: services.agents,
+          getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+        });
+
+        taskService = createTaskService({
+          tasksRepo: dbAdapter.repositories.tasks,
+          subtasksRepo: dbAdapter.repositories.subtasks,
+          taskAgentsRepo: dbAdapter.repositories.taskAgents,
+          deliverablesRepo: dbAdapter.repositories.deliverables,
+          taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          agents: services.agents,
+          sessionService: services.sessions,
+          planningService,
+          runEvents: services.runEvents,
+          workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+        });
+        await api.register(taskRoutes, {
+          taskService,
+          planningService,
+          deliverablesRepo: dbAdapter.repositories.deliverables,
+          authMiddleware,
+        });
+
+        // Duck-typed adapter: SessionMessageService is structurally compatible
+        // with the executor's narrower ExecutorSessionService, but TS's
+        // exactOptionalPropertyTypes on onStreamEvent makes the subtype
+        // check fail. The cast is safe because the executor never sets
+        // onStreamEvent (it would be a no-op).
+        const sessionServiceForExecutor =
+          services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
+        const executorDeps: TaskScheduleExecutorDeps = {
+          tasksRepo: dbAdapter.repositories.tasks,
+          subtasksRepo: dbAdapter.repositories.subtasks,
+          taskAgentsRepo: dbAdapter.repositories.taskAgents,
+          taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+          taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          taskService: {
+            executeTask: (taskId, options) =>
+              taskService!.executeTask(taskId, options),
+            executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+          },
+          sessionService: sessionServiceForExecutor,
+          defaultAgentIdProvider: () =>
+            configService.getConfig().defaults.agentId,
+          calculateNextRun: (cron, now) => calculateNextRun(cron, now),
+          logger: log as unknown as TaskScheduleExecutorDeps['logger'],
+          // planningService is omitted when planning isn't configured; the
+          // executor falls back to a warning + the description-execution
+          // path. The optional key works with exactOptionalPropertyTypes
+          // because we only add the field when it has a real value.
+          ...(planningService
+            ? {
+                planningService: {
+                  planTask: (taskId: string) =>
+                    planningService!.planTask(taskId),
+                },
+              }
+            : {}),
+        };
+        const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
+
+        // Note: `taskScheduleService` is declared in the outer scope (a `let`
+        // with `| undefined`) so that the schedule routes can be wired
+        // up here without depending on the feature flag. The service
+        // is only instantiated when RECURRING_TASKS_ENABLED is on; the
+        // routes only get registered if the service is set.
+        taskScheduleService = new TaskScheduleService({
+          tasksRepo: dbAdapter.repositories.tasks,
+          taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+          taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          taskScheduleExecutor,
+        });
+        services.taskSchedules = taskScheduleService;
+
+        // Schedule endpoints (Phase 4) — nested under /api/tasks/:taskId/schedule.
+        // These give the UI a dedicated surface for CRUD + pause/resume +
+        // trigger + history. The `schedule` field on POST /api/tasks is
+        // still supported as a convenience for creating a task with a
+        // schedule in one call.
+        await api.register(taskScheduleRoutes, {
+          taskScheduleService,
+          authMiddleware,
+        });
+
+        // Wire the schedule service into the TaskService so that
+        // createTask and getTaskWithDetails can attach schedules.
+        taskService!.setTaskSchedulesService(taskScheduleService);
+
+        // The recurring service logger is the same pino instance — the
+        // GenericLogger mismatch is only in method signature shape.
+        // We also wire the run-event subscription so history rows are
+        // finalised (planned -> verifying -> completed/failed) when the
+        // task session the executor created finishes its run.
+        recurringTasksService = createRecurringTasksService({
+          taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
+          taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          executor: taskScheduleExecutor,
+          runEvents: services.runEvents,
+          // Pull the session type from the SessionsStore (or fall through
+          // to a type field if it's on the record). This filters out
+          // subtask and chat sessions so we only finalise history rows
+          // for the top-level task runs the executor created.
+          getSessionType: async (sessionId) => {
+            const session =
+              await dbAdapter!.repositories.sessions.findById(sessionId);
+            return session && 'type' in session
+              ? (session as { type?: string }).type
+              : null;
+          },
+          logger: log as unknown as Parameters<
+            typeof createRecurringTasksService
+          >[0] extends infer T
+            ? T extends { logger?: infer L }
+              ? L
+              : never
+            : never,
+        });
+        // Phase 7: register the executor as a ScheduledRunnable on the
+        // central scheduler. The scheduler's tick now drives the
+        // recurring-tasks claim → execute → reschedule cycle alongside
+        // (or interleaved with) the legacy Pulse path. The recurring
+        // tasks service is purely an event listener + delegator now.
+        if (scheduler) {
+          scheduler.registerRunnable(taskScheduleExecutor);
+          // Start the run-event subscription so history rows transition
+          // to their terminal state when the executor's runs complete.
+          recurringTasksService.start();
+          log.info(
+            `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
+          );
+        } else {
+          // Should never happen — the recurring-tasks feature flag is
+          // gated on the database being available, and so is the
+          // scheduler. This branch exists only to keep the type-narrower
+          // happy; if it ever runs, we have a wiring bug.
+          log.error(
+            'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
+          );
+          recurringTasksService.start();
+        }
+      }
+
+      // Register access token routes (requires DB, admin auth enforced)
+      if (services.accessTokensRepo) {
+        await api.register(accessTokenRoutes, {
           accessTokenService: createAccessTokenService(
             services.accessTokensRepo,
           ),
-        }
-      : {}),
-  });
+          authMiddleware,
+        });
+      }
 
-  await app.register(configRoutes, {
-    configService: services.config,
-    authMiddleware,
-  });
+      // Register addon routes (requires DB). `addonRoutes` is outside the /api
+      // scope because the addon SDK lives at `/sdk/openaidy-sdk.js` (a static
+      // asset path embedded in addon HTML templates, not an API endpoint).
+      // `addonProxyRoutes` stays inside the scope so the wrapper supplies
+      // its `/api` prefix automatically.
+      if (dbAdapter && addonService) {
+        await app.register(addonRoutes, {
+          addonsRepository: dbAdapter.repositories.addons,
+          authMiddleware,
+          jwtSecret: env.WS_TOKEN_SECRET,
+          openAidyVersion,
+          manifestValidator: addonManifestValidator,
+        });
+        await api.register(addonProxyRoutes, {
+          addonService,
+          authMiddleware,
+          internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
+          sessionService,
+          agentRegistry,
+        });
+      }
 
-  // Pass shared services to session routes
-  await app.register(sessionRoutes, {
-    sessionService: services.sessions,
-    authMiddleware,
-  });
-
-  // Pass shared services to provider routes. provider routes may
-  // optionally use the DB (for OAuth state + provider credentials);
-  // when the adapter isn't available, pass undefined and the routes
-  // skip the OAuth/connection endpoints.
-  await app.register(providerRoutes, {
-    services: services.providers,
-    authMiddleware,
-    // dbAdapter.client is the raw drizzle instance (the only thing
-    // with .insert/.select/.update). At this point in app.ts
-    // dbAdapter has been instantiated (we'd have exited earlier if
-    // the DB couldn't be created). The cast to DatabaseClient is
-    // safe at runtime because client is the drizzle db, not the
-    // adapter envelope (which only has .repositories/.close/.kind).
-    db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
-    invalidateCredential,
-  });
-
-  // Register agent routes
-  await app.register(agentRoutes, {
-    agentRegistry: services.agents,
-    personalityService: services.personality,
-    authMiddleware,
-  });
-
-  // Register skill routes
-  await app.register(skillRoutes, {
-    skillRegistry: services.skills,
-    agentRegistry: services.agents,
-    authMiddleware,
-    workspace: services.workspace,
-    skillsDir: env.SKILLS_DIR,
-  });
-
-  // Register builtin tool routes
-  await app.register(toolRoutes, {
-    builtinTools: builtinToolRegistry,
-    authMiddleware,
-  });
-
-  // Register run stream routes (SSE)
-  await app.register(runStreamRoutes, {
-    runEvents: services.runEvents,
-    authMiddleware,
-  });
-
-  // Register scheduler routes (if database is available)
-  if (services.jobsRepo && services.jobRunsRepo && services.sessionsRepo) {
-    await app.register(schedulerRoutes, {
-      jobsRepo: services.jobsRepo,
-      jobRunsRepo: services.jobRunsRepo,
-      sessionsRepo: services.sessionsRepo,
-      authMiddleware,
-    });
-  }
-
-  // Register pulse routes (if database is available)
-  if (
-    services.sessions &&
-    services.jobsRepo &&
-    services.jobRunsRepo &&
-    services.sessionsRepo
-  ) {
-    await app.register(pulseRoutes, {
-      jobsRepo: services.jobsRepo,
-      jobRunsRepo: services.jobRunsRepo,
-      sessionsRepo: services.sessionsRepo,
-      sessionMessageService: services.sessions,
-      authMiddleware,
-    });
-  }
-
-  // Register workspace routes
-  await app.register(workspaceRoutes, {
-    agentRegistry: services.agents,
-    workspaceService: services.workspace,
-    workspaceBaseDir: env.WORKSPACE_BASE_DIR,
-    authMiddleware,
-  });
-
-  // Register log routes
-  await app.register(logRoutes);
-
-  // Register task routes (requires DB)
-  if (dbAdapter) {
-    planningService = createPlanningService({
-      providers: providerServices,
-      tasksRepo: dbAdapter.repositories.tasks,
-      subtasksRepo: dbAdapter.repositories.subtasks,
-      taskAgentsRepo: dbAdapter.repositories.taskAgents,
-      deliverablesRepo: dbAdapter.repositories.deliverables,
-      agents: services.agents,
-      getDefaultAgentId: () => configService.getConfig().defaults.agentId,
-    });
-
-    taskService = createTaskService({
-      tasksRepo: dbAdapter.repositories.tasks,
-      subtasksRepo: dbAdapter.repositories.subtasks,
-      taskAgentsRepo: dbAdapter.repositories.taskAgents,
-      deliverablesRepo: dbAdapter.repositories.deliverables,
-      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-      agents: services.agents,
-      sessionService: services.sessions,
-      planningService,
-      runEvents: services.runEvents,
-      workspaceBaseDir: env.WORKSPACE_BASE_DIR,
-    });
-    await app.register(taskRoutes, {
-      taskService,
-      planningService,
-      deliverablesRepo: dbAdapter.repositories.deliverables,
-      authMiddleware,
-    });
-
-    // Duck-typed adapter: SessionMessageService is structurally compatible
-    // with the executor's narrower ExecutorSessionService, but TS's
-    // exactOptionalPropertyTypes on onStreamEvent makes the subtype
-    // check fail. The cast is safe because the executor never sets
-    // onStreamEvent (it would be a no-op).
-    const sessionServiceForExecutor =
-      services.sessions as unknown as import('./tasks/execution/task-schedule-executor').ExecutorSessionService;
-    const executorDeps: TaskScheduleExecutorDeps = {
-      tasksRepo: dbAdapter.repositories.tasks,
-      subtasksRepo: dbAdapter.repositories.subtasks,
-      taskAgentsRepo: dbAdapter.repositories.taskAgents,
-      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-      taskService: {
-        executeTask: (taskId, options) =>
-          taskService!.executeTask(taskId, options),
-        executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
-      },
-      sessionService: sessionServiceForExecutor,
-      defaultAgentIdProvider: () => configService.getConfig().defaults.agentId,
-      calculateNextRun: (cron, now) => calculateNextRun(cron, now),
-      logger: log as unknown as TaskScheduleExecutorDeps['logger'],
-      // planningService is omitted when planning isn't configured; the
-      // executor falls back to a warning + the description-execution
-      // path. The optional key works with exactOptionalPropertyTypes
-      // because we only add the field when it has a real value.
-      ...(planningService
-        ? {
-            planningService: {
-              planTask: (taskId: string) => planningService!.planTask(taskId),
-            },
-          }
-        : {}),
-    };
-    const taskScheduleExecutor = new TaskScheduleExecutor(executorDeps);
-
-    // Note: `taskScheduleService` is declared in the outer scope (a `let`
-    // with `| undefined`) so that the schedule routes can be wired
-    // up here without depending on the feature flag. The service
-    // is only instantiated when RECURRING_TASKS_ENABLED is on; the
-    // routes only get registered if the service is set.
-    taskScheduleService = new TaskScheduleService({
-      tasksRepo: dbAdapter.repositories.tasks,
-      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-      taskScheduleExecutor,
-    });
-    services.taskSchedules = taskScheduleService;
-
-    // Schedule endpoints (Phase 4) — nested under /api/tasks/:taskId/schedule.
-    // These give the UI a dedicated surface for CRUD + pause/resume +
-    // trigger + history. The `schedule` field on POST /api/tasks is
-    // still supported as a convenience for creating a task with a
-    // schedule in one call.
-    await app.register(taskScheduleRoutes, {
-      taskScheduleService,
-      authMiddleware,
-    });
-
-    // Wire the schedule service into the TaskService so that
-    // createTask and getTaskWithDetails can attach schedules.
-    taskService!.setTaskSchedulesService(taskScheduleService);
-
-    // The recurring service logger is the same pino instance — the
-    // GenericLogger mismatch is only in method signature shape.
-    // We also wire the run-event subscription so history rows are
-    // finalised (planned -> verifying -> completed/failed) when the
-    // task session the executor created finishes its run.
-    recurringTasksService = createRecurringTasksService({
-      taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
-      taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
-      executor: taskScheduleExecutor,
-      runEvents: services.runEvents,
-      // Pull the session type from the SessionsStore (or fall through
-      // to a type field if it's on the record). This filters out
-      // subtask and chat sessions so we only finalise history rows
-      // for the top-level task runs the executor created.
-      getSessionType: async (sessionId) => {
-        const session =
-          await dbAdapter!.repositories.sessions.findById(sessionId);
-        return session && 'type' in session
-          ? (session as { type?: string }).type
-          : null;
-      },
-      logger: log as unknown as Parameters<
-        typeof createRecurringTasksService
-      >[0] extends infer T
-        ? T extends { logger?: infer L }
-          ? L
-          : never
-        : never,
-    });
-    // Phase 7: register the executor as a ScheduledRunnable on the
-    // central scheduler. The scheduler's tick now drives the
-    // recurring-tasks claim → execute → reschedule cycle alongside
-    // (or interleaved with) the legacy Pulse path. The recurring
-    // tasks service is purely an event listener + delegator now.
-    if (scheduler) {
-      scheduler.registerRunnable(taskScheduleExecutor);
-      // Start the run-event subscription so history rows transition
-      // to their terminal state when the executor's runs complete.
-      recurringTasksService.start();
-      log.info(
-        `Recurring tasks feature enabled and running (runnables: ${scheduler.getRunnableKinds().join(', ')})`,
+      // Register MCP routes (config CRUD + runtime connect/disconnect)
+      await api.register(
+        createMcpRoutesPlugin({ mcpService, configService, authMiddleware }),
       );
-    } else {
-      // Should never happen — the recurring-tasks feature flag is
-      // gated on the database being available, and so is the
-      // scheduler. This branch exists only to keep the type-narrower
-      // happy; if it ever runs, we have a wiring bug.
-      log.error(
-        'Recurring tasks feature enabled but scheduler is not initialised — skipping runnable registration',
-      );
-      recurringTasksService.start();
-    }
-  }
 
-  // Register access token routes (requires DB, admin auth enforced)
-  if (services.accessTokensRepo) {
-    await app.register(accessTokenRoutes, {
-      accessTokenService: createAccessTokenService(services.accessTokensRepo),
-      authMiddleware,
-    });
-  }
-
-  // Register addon routes (requires DB)
-  if (dbAdapter && addonService) {
-    await app.register(addonRoutes, {
-      addonsRepository: dbAdapter.repositories.addons,
-      authMiddleware,
-      jwtSecret: env.WS_TOKEN_SECRET,
-      openAidyVersion,
-      manifestValidator: addonManifestValidator,
-    });
-    await app.register(addonProxyRoutes, {
-      addonService,
-      authMiddleware,
-      internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
-      sessionService,
-      agentRegistry,
-    });
-  }
-
-  // Register MCP routes (config CRUD + runtime connect/disconnect)
-  await app.register(
-    createMcpRoutesPlugin({ mcpService, configService, authMiddleware }),
+      // Register channel routes
+      await api.register(channelRoutes, {
+        channelRegistry: services.channels,
+        authMiddleware,
+      });
+    },
+    { prefix: '/api' },
   );
-
-  // Register channel routes
-  await app.register(channelRoutes, {
-    channelRegistry: services.channels,
-    authMiddleware,
-  });
 
   // ==========================================================================
   // Web bundle (same-origin: server serves the built web UI)

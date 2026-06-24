@@ -157,14 +157,14 @@ describe('taskScheduleRoutes', () => {
   describe('route registration', () => {
     it('registers the 8 schedule endpoints', () => {
       const urls = app._routes.map((r) => `${r.method} ${r.url}`);
-      expect(urls).toContain('POST /api/tasks/:taskId/schedule');
-      expect(urls).toContain('GET /api/tasks/:taskId/schedule');
-      expect(urls).toContain('PATCH /api/tasks/:taskId/schedule');
-      expect(urls).toContain('DELETE /api/tasks/:taskId/schedule');
-      expect(urls).toContain('POST /api/tasks/:taskId/schedule/pause');
-      expect(urls).toContain('POST /api/tasks/:taskId/schedule/resume');
-      expect(urls).toContain('POST /api/tasks/:taskId/schedule/trigger');
-      expect(urls).toContain('GET /api/tasks/:taskId/schedule/executions');
+      expect(urls).toContain('POST /tasks/:taskId/schedule');
+      expect(urls).toContain('GET /tasks/:taskId/schedule');
+      expect(urls).toContain('PATCH /tasks/:taskId/schedule');
+      expect(urls).toContain('DELETE /tasks/:taskId/schedule');
+      expect(urls).toContain('POST /tasks/:taskId/schedule/pause');
+      expect(urls).toContain('POST /tasks/:taskId/schedule/resume');
+      expect(urls).toContain('POST /tasks/:taskId/schedule/trigger');
+      expect(urls).toContain('GET /tasks/:taskId/schedule/executions');
     });
 
     it('attaches an auth preHandler hook', () => {
@@ -184,7 +184,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: mockSchedule,
       });
-      const handler = findRoute(app, 'POST', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         { params: { taskId: 'task-1' }, body: { schedule: { every: '1d' } } },
@@ -202,7 +202,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: mockSchedule,
       });
-      const handler = findRoute(app, 'POST', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule');
       await handler(
         {
           params: { taskId: 'task-1' },
@@ -224,7 +224,7 @@ describe('taskScheduleRoutes', () => {
     });
 
     it('returns 400 on validation error', async () => {
-      const handler = findRoute(app, 'POST', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         {
@@ -242,7 +242,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'schedule.already_exists', message: 'already has one' },
       });
-      const handler = findRoute(app, 'POST', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         { params: { taskId: 'task-1' }, body: { schedule: { every: '1h' } } },
@@ -257,7 +257,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'task.not_found', message: 'no task' },
       });
-      const handler = findRoute(app, 'POST', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'nope' }, body: { schedule: { every: '1h' } } },
@@ -276,7 +276,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: mockSchedule,
       });
-      const handler = findRoute(app, 'GET', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'GET', '/tasks/:taskId/schedule');
       const result = await handler({ params: { taskId: 'task-1' } }, {
         code: vi.fn().mockReturnThis(),
       } as unknown as {
@@ -290,7 +290,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'schedule.not_found', message: 'no schedule' },
       });
-      const handler = findRoute(app, 'GET', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'GET', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         { params: { taskId: 'task-1' } },
@@ -305,7 +305,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'task.not_found', message: 'task does not exist' },
       });
-      const handler = findRoute(app, 'GET', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'GET', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' } },
@@ -326,7 +326,7 @@ describe('taskScheduleRoutes', () => {
         maxExecutions: 50,
       };
       mockService.updateSchedule.mockResolvedValue({ ok: true, data: updated });
-      const handler = findRoute(app, 'PATCH', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'PATCH', '/tasks/:taskId/schedule');
       const result = await handler(
         {
           params: { taskId: 'task-1' },
@@ -344,7 +344,7 @@ describe('taskScheduleRoutes', () => {
     });
 
     it('rejects an empty body with 400', async () => {
-      const handler = findRoute(app, 'PATCH', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'PATCH', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         { params: { taskId: 'task-1' }, body: {} },
@@ -355,7 +355,7 @@ describe('taskScheduleRoutes', () => {
     });
 
     it('rejects maxExecutions <= 0 with 400', async () => {
-      const handler = findRoute(app, 'PATCH', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'PATCH', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         {
@@ -373,7 +373,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'schedule.expired', message: 'terminal' },
       });
-      const handler = findRoute(app, 'PATCH', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'PATCH', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' }, body: { status: 'active' } },
@@ -390,11 +390,7 @@ describe('taskScheduleRoutes', () => {
     it('delegates to pauseSchedule', async () => {
       const paused = { ...mockSchedule, status: 'paused' as const };
       mockService.pauseSchedule.mockResolvedValue({ ok: true, data: paused });
-      const handler = findRoute(
-        app,
-        'POST',
-        '/api/tasks/:taskId/schedule/pause',
-      );
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule/pause');
       const result = await handler({ params: { taskId: 'task-1' } }, {
         code: vi.fn().mockReturnThis(),
       } as unknown as {
@@ -412,11 +408,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: resumed,
       });
-      const handler = findRoute(
-        app,
-        'POST',
-        '/api/tasks/:taskId/schedule/resume',
-      );
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule/resume');
       const result = await handler({ params: { taskId: 'task-1' } }, {
         code: vi.fn().mockReturnThis(),
       } as unknown as {
@@ -436,7 +428,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: true,
       });
-      const handler = findRoute(app, 'DELETE', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'DELETE', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' } },
@@ -451,7 +443,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'schedule.not_found', message: 'no' },
       });
-      const handler = findRoute(app, 'DELETE', '/api/tasks/:taskId/schedule');
+      const handler = findRoute(app, 'DELETE', '/tasks/:taskId/schedule');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' } },
@@ -470,11 +462,7 @@ describe('taskScheduleRoutes', () => {
         ok: true,
         data: { historyId: 'history-123' },
       });
-      const handler = findRoute(
-        app,
-        'POST',
-        '/api/tasks/:taskId/schedule/trigger',
-      );
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule/trigger');
       const reply = { code: vi.fn().mockReturnThis() };
       const result = await handler(
         { params: { taskId: 'task-1' } },
@@ -489,11 +477,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'schedule.not_found', message: 'no' },
       });
-      const handler = findRoute(
-        app,
-        'POST',
-        '/api/tasks/:taskId/schedule/trigger',
-      );
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule/trigger');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' } },
@@ -507,11 +491,7 @@ describe('taskScheduleRoutes', () => {
         ok: false,
         error: { code: 'execution.failed', message: 'boom' },
       });
-      const handler = findRoute(
-        app,
-        'POST',
-        '/api/tasks/:taskId/schedule/trigger',
-      );
+      const handler = findRoute(app, 'POST', '/tasks/:taskId/schedule/trigger');
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
         { params: { taskId: 'task-1' } },
@@ -538,7 +518,7 @@ describe('taskScheduleRoutes', () => {
       const handler = findRoute(
         app,
         'GET',
-        '/api/tasks/:taskId/schedule/executions',
+        '/tasks/:taskId/schedule/executions',
       );
       const result = await handler(
         { params: { taskId: 'task-1' }, query: {} },
@@ -566,7 +546,7 @@ describe('taskScheduleRoutes', () => {
       const handler = findRoute(
         app,
         'GET',
-        '/api/tasks/:taskId/schedule/executions',
+        '/tasks/:taskId/schedule/executions',
       );
       await handler(
         {
@@ -588,7 +568,7 @@ describe('taskScheduleRoutes', () => {
       const handler = findRoute(
         app,
         'GET',
-        '/api/tasks/:taskId/schedule/executions',
+        '/tasks/:taskId/schedule/executions',
       );
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(
@@ -603,7 +583,7 @@ describe('taskScheduleRoutes', () => {
       const handler = findRoute(
         app,
         'GET',
-        '/api/tasks/:taskId/schedule/executions',
+        '/tasks/:taskId/schedule/executions',
       );
       const reply = { code: vi.fn().mockReturnThis() };
       await handler(

@@ -156,7 +156,7 @@ function apiFetch(input: string, init?: RequestInit): Promise<Response> {
  * List sessions
  */
 export async function listSessions(): Promise<{ items: Session[] }> {
-  const response = await apiFetch(`${API_BASE}/sessions`);
+  const response = await apiFetch(`${API_BASE}/api/sessions`);
   if (!response.ok) {
     throw new Error(`Failed to list sessions: ${response.statusText}`);
   }
@@ -176,7 +176,7 @@ export async function searchSessions(
   if (options?.currentSessionId)
     params.set('currentSessionId', options.currentSessionId);
 
-  const response = await apiFetch(`${API_BASE}/sessions/search?${params}`);
+  const response = await apiFetch(`${API_BASE}/api/sessions/search?${params}`);
   if (!response.ok) {
     throw new Error(`Failed to search sessions: ${response.statusText}`);
   }
@@ -187,7 +187,7 @@ export async function searchSessions(
  * Create a new session
  */
 export async function createSession(title: string): Promise<Session> {
-  const response = await apiFetch(`${API_BASE}/sessions`, {
+  const response = await apiFetch(`${API_BASE}/api/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -202,7 +202,7 @@ export async function createSession(title: string): Promise<Session> {
  * Get a session by ID
  */
 export async function getSession(id: string): Promise<Session | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/sessions/${id}`);
   return response.json();
 }
 
@@ -214,7 +214,7 @@ export async function getSession(id: string): Promise<Session | ApiError> {
  * the request and throws on a non-2xx response.
  */
 export async function deleteSession(id: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/sessions/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/sessions/${id}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -228,7 +228,9 @@ export async function deleteSession(id: string): Promise<void> {
 export async function listMessages(
   sessionId: string,
 ): Promise<{ items: SessionMessage[] } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/messages`);
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/messages`,
+  );
   return response.json();
 }
 
@@ -238,7 +240,7 @@ export async function listMessages(
 export async function listRuns(
   sessionId: string,
 ): Promise<{ items: SessionRun[] } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/runs`);
+  const response = await apiFetch(`${API_BASE}/api/sessions/${sessionId}/runs`);
   return response.json();
 }
 
@@ -248,7 +250,7 @@ export async function listRuns(
 export async function listBuiltinTools(): Promise<{
   items: BuiltinToolInfo[];
 }> {
-  const response = await apiFetch(`${API_BASE}/tools`);
+  const response = await apiFetch(`${API_BASE}/api/tools`);
   if (!response.ok) {
     throw new Error(`Failed to list builtin tools: ${response.statusText}`);
   }
@@ -262,7 +264,7 @@ export async function updateAgentTools(
   agentId: string,
   tools: string[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/tools`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/tools`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tools }),
@@ -279,7 +281,7 @@ export async function updateAgentTools(
 export async function listAgentMcpServers(
   agentId: string,
 ): Promise<{ mcpServers: McpServerRef[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}`);
   if (!response.ok) {
     throw new Error(`Failed to get agent: ${response.statusText}`);
   }
@@ -294,11 +296,14 @@ export async function updateAgentMcpServers(
   agentId: string,
   mcpServers: McpServerRef[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/mcp-servers`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mcpServers }),
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/agents/${agentId}/mcp-servers`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mcpServers }),
+    },
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to update agent MCP servers: ${response.statusText}`,
@@ -311,7 +316,7 @@ export async function updateAgentMcpServers(
  * List all available skills registered on the server
  */
 export async function listSkills(): Promise<{ items: SkillInfo[] }> {
-  const response = await apiFetch(`${API_BASE}/skills`);
+  const response = await apiFetch(`${API_BASE}/api/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list skills: ${response.statusText}`);
   }
@@ -324,7 +329,7 @@ export async function listSkills(): Promise<{ items: SkillInfo[] }> {
 export async function listAgentSkills(
   agentId: string,
 ): Promise<{ items: SkillInfo[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list agent skills: ${response.statusText}`);
   }
@@ -338,7 +343,7 @@ export async function updateAgentSkills(
   agentId: string,
   skills: string[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/skills`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skills }),
@@ -353,7 +358,7 @@ export async function updateAgentSkills(
  * List all agents
  */
 export async function listAgents(): Promise<{ items: Agent[] }> {
-  const response = await apiFetch(`${API_BASE}/agents`);
+  const response = await apiFetch(`${API_BASE}/api/agents`);
   if (!response.ok) {
     throw new Error(`Failed to list agents: ${response.statusText}`);
   }
@@ -364,7 +369,7 @@ export async function listAgents(): Promise<{ items: Agent[] }> {
  * Get an agent by ID
  */
 export async function getAgent(id: string): Promise<Agent | ApiError> {
-  const response = await apiFetch(`${API_BASE}/agents/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${id}`);
   return response.json();
 }
 
@@ -372,7 +377,7 @@ export async function getAgent(id: string): Promise<Agent | ApiError> {
  * Create a new agent
  */
 export async function createAgent(input: CreateAgentInput): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents`, {
+  const response = await apiFetch(`${API_BASE}/api/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -391,7 +396,7 @@ export async function createAgent(input: CreateAgentInput): Promise<Agent> {
  * Delete an agent by ID (also removes its workspace on the server)
  */
 export async function deleteAgent(agentId: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -409,7 +414,9 @@ export async function deleteAgent(agentId: string): Promise<void> {
 export async function listPersonalityFiles(
   agentId: string,
 ): Promise<{ files: PersonalityFileMeta[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/personality`);
+  const response = await apiFetch(
+    `${API_BASE}/api/agents/${agentId}/personality`,
+  );
   if (!response.ok) {
     throw new Error(`Failed to list personality files: ${response.statusText}`);
   }
@@ -424,7 +431,7 @@ export async function getPersonalityFile(
   fileId: PersonalityFileId,
 ): Promise<PersonalityFile> {
   const response = await apiFetch(
-    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+    `${API_BASE}/api/agents/${agentId}/personality/${fileId}`,
   );
   if (!response.ok) {
     throw new Error(`Failed to get personality file: ${response.statusText}`);
@@ -441,7 +448,7 @@ export async function updatePersonalityFile(
   content: string,
 ): Promise<{ ok: boolean }> {
   const response = await apiFetch(
-    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+    `${API_BASE}/api/agents/${agentId}/personality/${fileId}`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -464,7 +471,7 @@ export async function submitMessage(
   input: SubmitMessageInput,
 ): Promise<SubmitMessageResult> {
   const response = await apiFetch(
-    `${API_BASE}/sessions/${sessionId}/messages`,
+    `${API_BASE}/api/sessions/${sessionId}/messages`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -480,7 +487,7 @@ export async function submitMessage(
 export async function getConfig(): Promise<
   { config: AppConfig; status: ConfigStatus } | ApiError
 > {
-  const response = await apiFetch(`${API_BASE}/config`);
+  const response = await apiFetch(`${API_BASE}/api/config`);
   return response.json();
 }
 
@@ -490,7 +497,7 @@ export async function getConfig(): Promise<
 export async function updateConfig(
   config: AppConfig,
 ): Promise<{ config: AppConfig; status: ConfigStatus } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/config`, {
+  const response = await apiFetch(`${API_BASE}/api/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -517,8 +524,8 @@ export async function listWorkspaceFiles(
   path?: string,
 ): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
   const url = path
-    ? `${API_BASE}/workspace/${agentId}/files/${path}`
-    : `${API_BASE}/workspace/${agentId}/files`;
+    ? `${API_BASE}/api/workspace/${agentId}/files/${path}`
+    : `${API_BASE}/api/workspace/${agentId}/files`;
   const response = await apiFetch(url, {
     headers: { 'X-Agent-Id': requestingAgentId },
   });
@@ -534,7 +541,7 @@ export async function readWorkspaceFile(
   requestingAgentId: string,
 ): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       headers: { 'X-Agent-Id': requestingAgentId },
     },
@@ -552,7 +559,7 @@ export async function writeWorkspaceFile(
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'POST',
       headers: {
@@ -574,14 +581,17 @@ export async function renameWorkspaceFile(
   destinationPath: string,
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await apiFetch(`${API_BASE}/workspace/${agentId}/rename`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Id': requestingAgentId,
+  const response = await apiFetch(
+    `${API_BASE}/api/workspace/${agentId}/rename`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Id': requestingAgentId,
+      },
+      body: JSON.stringify({ sourcePath, destinationPath }),
     },
-    body: JSON.stringify({ sourcePath, destinationPath }),
-  });
+  );
   return response.json();
 }
 
@@ -596,7 +606,7 @@ export async function updateWorkspaceFile(
   expectedModifiedAt?: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'PUT',
       headers: {
@@ -618,7 +628,7 @@ export async function deleteWorkspaceFile(
   requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'DELETE',
       headers: { 'X-Agent-Id': requestingAgentId },
@@ -644,7 +654,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
   if (filter.limit !== undefined) params.set('limit', String(filter.limit));
   if (filter.offset !== undefined) params.set('offset', String(filter.offset));
 
-  const response = await apiFetch(`${API_BASE}/logs?${params.toString()}`);
+  const response = await apiFetch(`${API_BASE}/api/logs?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to query logs: ${response.statusText}`);
   }
@@ -655,7 +665,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
  * Get log statistics
  */
 export async function getLogStats(): Promise<LogStats> {
-  const response = await apiFetch(`${API_BASE}/logs/stats`);
+  const response = await apiFetch(`${API_BASE}/api/logs/stats`);
   if (!response.ok) {
     throw new Error(`Failed to get log stats: ${response.statusText}`);
   }
@@ -669,7 +679,7 @@ export async function clearLogs(): Promise<{
   success: boolean;
   cleared: boolean;
 }> {
-  const response = await apiFetch(`${API_BASE}/logs`, {
+  const response = await apiFetch(`${API_BASE}/api/logs`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -685,7 +695,7 @@ export async function clearLogs(): Promise<{
 export async function listMcpServers(): Promise<{
   servers: McpServerRecord[];
 }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers`);
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers`);
   if (!response.ok) {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
   }
@@ -698,7 +708,7 @@ export async function listMcpServers(): Promise<{
 export async function createMcpServer(
   config: CreateMcpServerRequest,
 ): Promise<{ server: McpServerRecord }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config }),
@@ -717,7 +727,7 @@ export async function updateMcpServer(
   id: string,
   patch: UpdateMcpServerRequest,
 ): Promise<{ server: McpServerRecord }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -733,7 +743,7 @@ export async function updateMcpServer(
  * Delete an MCP server config and disconnect it if connected.
  */
 export async function deleteMcpServer(id: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}`, {
     method: 'DELETE',
   });
   if (!response.ok && response.status !== 204) {
@@ -748,7 +758,7 @@ export async function deleteMcpServer(id: string): Promise<void> {
 export async function connectMcpServer(
   id: string,
 ): Promise<{ serverId: string; connected: boolean }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/connect`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}/connect`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -764,9 +774,12 @@ export async function connectMcpServer(
 export async function disconnectMcpServer(
   id: string,
 ): Promise<{ serverId: string; disconnected: boolean }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/disconnect`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/servers/${id}/disconnect`,
+    {
+      method: 'POST',
+    },
+  );
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ApiError;
     throw new ApiRequestError(response.status, body);
@@ -780,7 +793,7 @@ export async function disconnectMcpServer(
 export async function getMcpServerTools(
   id: string,
 ): Promise<{ tools: McpToolWithSchema[] }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/tools`);
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}/tools`);
   if (!response.ok) {
     throw new Error(`Failed to get MCP server tools: ${response.statusText}`);
   }
@@ -1070,7 +1083,7 @@ export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
  * List all channels with their current connection status.
  */
 export async function listChannels(): Promise<ChannelStatusResponse[]> {
-  const res = await apiFetch(`${API_BASE}/channels`);
+  const res = await apiFetch(`${API_BASE}/api/channels`);
   if (!res.ok) throw new Error(`listChannels: ${res.status}`);
   return res.json();
 }
@@ -1081,7 +1094,7 @@ export async function listChannels(): Promise<ChannelStatusResponse[]> {
 export async function getChannelStatus(
   id: string,
 ): Promise<ChannelStatusResponse> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/status`);
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/status`);
   if (!res.ok) throw new Error(`getChannelStatus: ${res.status}`);
   return res.json();
 }
@@ -1090,7 +1103,7 @@ export async function getChannelStatus(
  * Trigger a channel connection (initiates QR flow for WhatsApp).
  */
 export async function connectChannel(id: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/connect`, {
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/connect`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`connectChannel: ${res.status}`);
@@ -1100,7 +1113,7 @@ export async function connectChannel(id: string): Promise<void> {
  * Disconnect a channel.
  */
 export async function disconnectChannel(id: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/disconnect`, {
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/disconnect`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
@@ -1135,7 +1148,7 @@ export async function getOAuthStatus(flowId: string): Promise<
   | { ok: false; error: 'not_found' | 'expired' }
 > {
   const res = await apiFetch(
-    `${API_BASE}/providers/minimax/connect/oauth/status?flowId=${encodeURIComponent(flowId)}`,
+    `${API_BASE}/api/providers/minimax/connect/oauth/status?flowId=${encodeURIComponent(flowId)}`,
   );
   return res.json();
 }
@@ -1148,7 +1161,7 @@ export async function connectProviderWithApiKey(
   apiKey: string,
 ): Promise<ConnectProviderResponse> {
   const res = await apiFetch(
-    `${API_BASE}/providers/${providerId}/connect/api-key`,
+    `${API_BASE}/api/providers/${providerId}/connect/api-key`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1172,7 +1185,7 @@ export async function startProviderOAuth(
   if (options.region) body.region = options.region;
 
   const res = await apiFetch(
-    `${API_BASE}/providers/${providerId}/connect/oauth/start`,
+    `${API_BASE}/api/providers/${providerId}/connect/oauth/start`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1192,8 +1205,11 @@ export async function startProviderOAuth(
  * refresh any UI that reads `AppConfig.providers[]`.
  */
 export async function disconnectProvider(providerId: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/providers/${providerId}/connection`, {
-    method: 'DELETE',
-  });
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/${providerId}/connection`,
+    {
+      method: 'DELETE',
+    },
+  );
   if (!res.ok) throw new Error(`disconnectProvider: ${res.status}`);
 }

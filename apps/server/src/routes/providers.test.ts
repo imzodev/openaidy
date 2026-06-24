@@ -90,7 +90,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return providers from config template', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
@@ -102,7 +102,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return providers list with enabled filter', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=true',
+        url: '/api/providers?enabled=true',
       });
 
       expect(response.statusCode).toBe(200);
@@ -115,7 +115,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return health status', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
@@ -129,7 +129,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return health status from config template providers', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
@@ -142,7 +142,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid request payload', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           // Missing required 'messages' field
           providerId: 'test-provider',
@@ -155,7 +155,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject empty messages array', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [],
         },
@@ -167,7 +167,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid message role', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [
             {
@@ -184,7 +184,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid temperature', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [
             {
@@ -202,7 +202,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return error when provider not configured', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'unconfigured-provider',
           messages: [
@@ -223,7 +223,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return error for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-provider',
           messages: [
@@ -245,7 +245,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should accept valid request with all optional fields', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'test-provider',
           modelId: 'test-model',
@@ -277,7 +277,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/non-existent-provider',
+        url: '/api/providers/non-existent-provider',
       });
 
       expect(response.statusCode).toBe(404);
@@ -291,7 +291,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/non-existent-provider/enable',
+        url: '/api/providers/non-existent-provider/enable',
       });
 
       expect(response.statusCode).toBe(404);
@@ -302,7 +302,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/non-existent-provider/disable',
+        url: '/api/providers/non-existent-provider/disable',
       });
 
       expect(response.statusCode).toBe(404);
@@ -313,7 +313,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 501 not implemented', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/register',
+        url: '/api/providers/register',
         payload: {},
       });
 
@@ -341,7 +341,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
       // First, we need to test the error response format
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'disabled-provider',
           messages: [
@@ -365,7 +365,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return normalized error for capability mismatch', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'test-provider',
           messages: [
@@ -389,7 +389,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return providers in correct format', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
@@ -414,7 +414,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return health in correct format', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
@@ -458,7 +458,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid system message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'system', content: 'You are helpful' }],
@@ -472,7 +472,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid assistant message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [
@@ -490,7 +490,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid tool message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [
@@ -506,7 +506,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject negative maxTokens', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           maxTokens: -10,
@@ -519,7 +519,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject zero maxTokens', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           maxTokens: 0,
@@ -532,7 +532,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject negative temperature', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           temperature: -0.5,
@@ -545,7 +545,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept temperature at boundary (0)', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'user', content: 'Hi' }],
@@ -560,7 +560,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept temperature at boundary (2)', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'user', content: 'Hi' }],
@@ -575,7 +575,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject non-boolean stream', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           stream: 'yes',
@@ -588,7 +588,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject non-string content', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 123 }],
         },
@@ -600,7 +600,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject missing content', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user' }],
         },
@@ -612,7 +612,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject missing role', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ content: 'Hello' }],
         },
@@ -626,7 +626,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept enabled=true', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=true',
+        url: '/api/providers?enabled=true',
       });
 
       expect(response.statusCode).toBe(200);
@@ -635,7 +635,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept enabled=false', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=false',
+        url: '/api/providers?enabled=false',
       });
 
       expect(response.statusCode).toBe(200);
@@ -644,7 +644,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should work without query params', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
