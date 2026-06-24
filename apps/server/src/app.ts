@@ -796,18 +796,26 @@ export async function buildApp() {
       log.info('Stuck subtask checker started (every 5 minutes)');
     }
 
-    // Auto-connect MCP servers from config
+    // Auto-connect MCP servers from config — non-blocking. These are
+    // spawned via npx, which may need to download the package on first
+    // run and can take far longer than Fastify's onReady budget
+    // (default 10s). Awaiting here would stall the hook and crash
+    // startup with FST_ERR_HOOK_TIMEOUT. Connect in the background and
+    // log the outcome; a slow or unavailable MCP server must not take
+    // down the HTTP API (routes already tolerate unconnected servers).
     const mcpServers = configService.getMcpServers();
     for (const serverConfig of mcpServers) {
-      try {
-        await mcpService.connect(serverConfig);
-        log.info('MCP server connected', { serverId: serverConfig.id });
-      } catch (err) {
-        log.warn('Failed to connect MCP server on startup', {
-          serverId: serverConfig.id,
-          err,
-        });
-      }
+      void (async () => {
+        try {
+          await mcpService.connect(serverConfig);
+          log.info('MCP server connected', { serverId: serverConfig.id });
+        } catch (err) {
+          log.warn('Failed to connect MCP server on startup', {
+            serverId: serverConfig.id,
+            err,
+          });
+        }
+      })();
     }
   });
 

@@ -7,7 +7,6 @@
  * @see https://modelcontextprotocol.io
  */
 
-import { spawn, ChildProcess } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -53,7 +52,6 @@ export type McpToolResult = {
 type McpConnection = {
   client: Client;
   transport: StdioClientTransport | StreamableHTTPClientTransport | null;
-  process: ChildProcess | null;
   tools: McpToolDefinition[];
   config: McpServerConfig; // Store original config for reconnection
   manuallyDisconnected: boolean; // Track if disconnect was intentional
@@ -155,6 +153,12 @@ export class McpClientService {
 
   /**
    * Connect to a stdio-based MCP server
+   *
+   * The {@link StdioClientTransport} owns the spawned child process — it
+   * resolves the right launcher on each platform (e.g. `npx.cmd` on Windows)
+   * and terminates the child on `close()`. Spawning a second process here
+   * previously produced misleading `MCP process error` logs and a redundant
+   * process that was never wired to the protocol.
    */
   private async connectStdio(serverConfig: McpServerConfig): Promise<void> {
     const { id, command, args, env } = serverConfig;
@@ -171,24 +175,32 @@ export class McpClientService {
       'Connecting to MCP server via stdio',
     );
 
-    // Spawn the MCP server process (note: env is not logged to prevent sensitive data exposure)
-    const childProcess = spawn(command, args || [], {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+    // Create the stdio transport. `stderr: 'pipe'` yields a PassThrough
+    // available immediately (before start()), so we can attach a listener
+    // and never miss early stderr from the child. env is not logged to
+    // avoid leaking sensitive values.
+    const transport = new StdioClientTransport({
+      command,
+      args: args ?? [],
+      ...(env ? { env } : {}),
+      stderr: 'pipe',
     });
-    childProcess.unref();
 
-    childProcess.on('error', (error) => {
-      this.logger?.error(
-        { serverId: id, error: error.message },
-        'MCP process error',
+    // Surface the server's stderr for debugging. onData is buffered by the
+    // PassThrough, so this is safe to attach post-construction.
+    const stderrStream = transport.stderr;
+    stderrStream?.on('data', (data: Buffer) => {
+      this.logger?.warn(
+        { serverId: id, stderr: data.toString() },
+        'MCP server stderr',
       );
-      this.cleanup(id);
     });
 
-    childProcess.on('exit', (code, signal) => {
-      this.logger?.info({ serverId: id, code, signal }, 'MCP process exited');
-      // Attempt reconnection if not manually disconnected
+    // Trigger reconnection when the child exits unexpectedly. The Client
+    // preserves a transport.onclose set before connect(), so install it
+    // here — it fires once the transport observes process 'close'.
+    transport.onclose = () => {
+      this.logger?.info({ serverId: id }, 'MCP process exited');
       this.attemptReconnection(id).catch((error) => {
         this.logger?.error(
           { serverId: id, error: error.message },
@@ -196,29 +208,7 @@ export class McpClientService {
         );
         this.cleanup(id);
       });
-    });
-
-    // Capture stderr from MCP server for debugging
-    childProcess.stderr?.on('data', (data) => {
-      this.logger?.warn(
-        { serverId: id, stderr: data.toString() },
-        'MCP server stderr',
-      );
-    });
-
-    // Create the stdio transport - use a partial type to avoid strict optional issues
-    const transportOptions: {
-      command: string;
-      args?: string[];
-      env?: Record<string, string>;
-    } = {
-      command,
-      args: args || [],
     };
-    if (env) {
-      transportOptions.env = env as Record<string, string>;
-    }
-    const transport = new StdioClientTransport(transportOptions);
 
     // Create the MCP client
     const client = new Client(
@@ -232,14 +222,14 @@ export class McpClientService {
       this.logger?.error({ serverId: id, error }, 'MCP client error');
     };
 
-    // Connect the client
+    // Connect the client. This spawns the child via cross-spawn (which
+    // handles Windows .cmd/.bat launchers), so failures surface here.
     await client.connect(transport);
 
     // Store the connection with config for reconnection
     this.connections.set(id, {
       client,
       transport,
-      process: childProcess,
       tools: [],
       config: serverConfig,
       manuallyDisconnected: false,
@@ -297,11 +287,10 @@ export class McpClientService {
       // Connect the client
       await client.connect(transport as Transport);
 
-      // Store the connection (no process for HTTP)
+      // Store the connection (no child process for HTTP transport)
       this.connections.set(id, {
         client,
         transport: transport,
-        process: null,
         tools: [],
         config: serverConfig,
         manuallyDisconnected: false,
@@ -515,6 +504,8 @@ export class McpClientService {
     connection.manuallyDisconnected = true;
 
     try {
+      // client.close() propagates to transport.close(), which terminates
+      // the child process (SIGTERM → SIGKILL) when present.
       await connection.client.close();
     } catch (error) {
       this.logger?.warn(
@@ -524,10 +515,6 @@ export class McpClientService {
         },
         'Error closing MCP client',
       );
-    }
-
-    if (connection.process) {
-      connection.process.kill();
     }
 
     this.connections.delete(serverId);
@@ -545,14 +532,6 @@ export class McpClientService {
    * Clean up connection state
    */
   private cleanup(serverId: string): void {
-    const connection = this.connections.get(serverId);
-    if (connection?.process) {
-      try {
-        connection.process.kill();
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
     this.connections.delete(serverId);
   }
 }
