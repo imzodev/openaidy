@@ -97,7 +97,13 @@ function MagneticButton({
       {href ? (
         <a href={href} className={className}>
           <motion.span
-            style={{ x, y }}
+            style={{
+              x,
+              y,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+            }}
             transition={{ type: 'spring', stiffness: 200, damping: 20 }}
           >
             {children}
