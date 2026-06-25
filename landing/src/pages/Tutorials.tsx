@@ -1,3 +1,4 @@
+import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import {
   MessageSquare,
@@ -65,6 +66,32 @@ const levelColors: Record<string, string> = {
 export default function Tutorials() {
   return (
     <div className="tutorials-page">
+      <Helmet>
+        <title>Tutorials — OpenAidy</title>
+        <meta
+          name="description"
+          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+        />
+        <meta property="og:title" content="Tutorials — OpenAidy" />
+        <meta
+          property="og:description"
+          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+        />
+        <meta
+          property="og:image"
+          content="https://openaidy.com/og-tutorials.png"
+        />
+        <meta name="twitter:title" content="Tutorials — OpenAidy" />
+        <meta
+          name="twitter:description"
+          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+        />
+        <meta
+          name="twitter:image"
+          content="https://openaidy.com/og-tutorials.png"
+        />
+      </Helmet>
+
       {/* Hero */}
       <section className="tutorials-hero">
         <div className="orbs-container" aria-hidden="true">
