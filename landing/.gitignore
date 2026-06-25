@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+install.sh
+install.ps1
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
