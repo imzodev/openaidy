@@ -25,7 +25,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@fontsource/inter": "^5.2.8",
-    "@resvg/resvg-js": "^2.6.2",
     "@types/marked": "^5.0.2",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
@@ -35,7 +34,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
-    "satori": "^0.26.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
