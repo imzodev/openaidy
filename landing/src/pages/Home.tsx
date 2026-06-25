@@ -14,8 +14,9 @@ import {
   BookOpen,
   Cpu,
   ArrowRight,
-  Zap,
   Github,
+  Terminal,
+  Check,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -246,6 +247,8 @@ export default function Home() {
   const heroRef = useRef(null);
   const [typeStarted, setTypeStarted] = useState(false);
   const [bannerLoaded, setBannerLoaded] = useState(false);
+  const [installTab, setInstallTab] = useState<'windows' | 'unix'>('windows');
+  const [copied, setCopied] = useState(false);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -260,6 +263,18 @@ export default function Home() {
     return () => clearTimeout(t);
   }, []);
 
+  const installCommands = {
+    windows: 'iex (irm https://openaidy.dev/install.ps1)',
+    unix: 'curl -fsSL https://openaidy.dev/install.sh | bash',
+  };
+
+  const handleCopy = async () => {
+    const cmd = installCommands[installTab];
+    await navigator.clipboard.writeText(cmd);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <>
       <FloatingOrbs />
@@ -270,16 +285,6 @@ export default function Home() {
         className="hero"
         style={{ opacity: heroOpacity, scale: heroScale }}
       >
-        <motion.div
-          className="hero-badge"
-          initial={{ opacity: 0, y: -20, scale: 0.8 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <Zap size={11} />
-          Open Source · Self-hosted · Extensible
-        </motion.div>
-
         <motion.h1
           className="hero-title"
           initial={{ opacity: 0, y: 35 }}
@@ -298,11 +303,46 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.7, ease: 'easeOut' }}
         >
-          OpenAidy is an open-source AI agent platform with structured tasks,
-          conversational memory, multi-channel integrations, and a plugin system
-          that grows with you.
+          Build AI agents that remember, connect everywhere, and extend with
+          plugins. Self-hosted and open-source.
         </motion.p>
 
+        {/* ── Install command ─────────────────────────────────────────── */}
+        <motion.div
+          className="hero-install"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 1.1, ease: 'easeOut' }}
+        >
+          <div className="hero-install-tabs">
+            <button
+              className={`hero-install-tab ${installTab === 'windows' ? 'hero-install-tab--active' : ''}`}
+              onClick={() => setInstallTab('windows')}
+            >
+              Windows
+            </button>
+            <button
+              className={`hero-install-tab ${installTab === 'unix' ? 'hero-install-tab--active' : ''}`}
+              onClick={() => setInstallTab('unix')}
+            >
+              macOS / Linux
+            </button>
+          </div>
+          <div className="hero-install-code">
+            <Terminal size={14} className="hero-install-icon" />
+            <code>{installCommands[installTab]}</code>
+            <button
+              className="hero-install-copy"
+              onClick={handleCopy}
+              aria-label="Copy to clipboard"
+            >
+              {copied ? <Check size={14} /> : 'Copy'}
+            </button>
+          </div>
+          <p className="hero-install-note">
+            Installs Git, Node.js, pnpm, and builds the project automatically.
+          </p>
+        </motion.div>
         <motion.div
           className="hero-actions"
           initial={{ opacity: 0, y: 25 }}
