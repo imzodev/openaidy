@@ -24,9 +24,9 @@ export default function Navbar() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="navbar-logo">
+      <Link to="/" className="navbar-logo">
         Open<span>Aidy</span>
-      </div>
+      </Link>
 
       <div className="navbar-links">
         <Link to="/tutorials" className="navbar-link">
