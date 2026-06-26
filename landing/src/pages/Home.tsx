@@ -412,6 +412,238 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Product Showcase ──────────────────────────────────────────── */}
+      <section className="showcase">
+        <motion.div
+          className="showcase-header"
+          initial={{ opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-50px' }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+        >
+          <h2>Built for real workflows</h2>
+          <p>
+            From task management to multi-agent orchestration — see OpenAidy in
+            action.
+          </p>
+        </motion.div>
+
+        <div className="showcase-grid">
+          {/* Kanban Board */}
+          <motion.div
+            className="showcase-card"
+            initial={{ opacity: 0, y: 60, rotateX: 8 }}
+            whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.7, delay: 0, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="showcase-screen">
+              <div className="mock-window">
+                <div className="mock-titlebar">
+                  <div className="mock-dots">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <span className="mock-title">Tasks — Kanban</span>
+                </div>
+                <div className="mock-body mock-kanban">
+                  <div className="kanban-col">
+                    <div className="kanban-col-header">Backlog</div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '70%' }} />
+                      <div className="kanban-bar" style={{ width: '45%' }} />
+                    </div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '55%' }} />
+                      <div className="kanban-bar" style={{ width: '80%' }} />
+                    </div>
+                  </div>
+                  <div className="kanban-col">
+                    <div className="kanban-col-header">In Progress</div>
+                    <div className="kanban-card kanban-card--active">
+                      <div className="kanban-bar" style={{ width: '65%' }} />
+                      <div className="kanban-bar" style={{ width: '40%' }} />
+                      <div className="kanban-tag">agent-1</div>
+                    </div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '50%' }} />
+                    </div>
+                  </div>
+                  <div className="kanban-col">
+                    <div className="kanban-col-header">Review</div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '60%' }} />
+                      <div className="kanban-bar" style={{ width: '35%' }} />
+                    </div>
+                  </div>
+                  <div className="kanban-col">
+                    <div className="kanban-col-header">Done</div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '75%' }} />
+                      <div className="kanban-bar" style={{ width: '30%' }} />
+                    </div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '55%' }} />
+                    </div>
+                    <div className="kanban-card" style={{ opacity: 0.5 }}>
+                      <div className="kanban-bar" style={{ width: '65%' }} />
+                      <div className="kanban-bar" style={{ width: '40%' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="showcase-glow showcase-glow--green" />
+            </div>
+            <div className="showcase-label">
+              <h3>Task Pipeline</h3>
+              <p>
+                Structured kanban with async runs and step-by-step visibility.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Agents */}
+          <motion.div
+            className="showcase-card"
+            initial={{ opacity: 0, y: 60, rotateX: 8 }}
+            whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.7, delay: 0.12, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="showcase-screen">
+              <div className="mock-window">
+                <div className="mock-titlebar">
+                  <div className="mock-dots">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <span className="mock-title">Agents</span>
+                </div>
+                <div className="mock-body mock-agents">
+                  <div className="agent-row">
+                    <div className="agent-avatar agent-avatar--blue">A</div>
+                    <div className="agent-info">
+                      <div className="agent-name">Coder</div>
+                      <div className="agent-meta">
+                        gpt-4o · 3 tools · active
+                      </div>
+                    </div>
+                    <div className="agent-status agent-status--active" />
+                  </div>
+                  <div className="agent-row">
+                    <div className="agent-avatar agent-avatar--purple">B</div>
+                    <div className="agent-info">
+                      <div className="agent-name">Reviewer</div>
+                      <div className="agent-meta">
+                        claude-4 · 2 tools · idle
+                      </div>
+                    </div>
+                    <div className="agent-status agent-status--idle" />
+                  </div>
+                  <div className="agent-row">
+                    <div className="agent-avatar agent-avatar--pink">C</div>
+                    <div className="agent-info">
+                      <div className="agent-name">DevOps</div>
+                      <div className="agent-meta">
+                        gpt-4o · 5 tools · active
+                      </div>
+                    </div>
+                    <div className="agent-status agent-status--active" />
+                  </div>
+                  <div className="agent-row">
+                    <div className="agent-avatar agent-avatar--cyan">D</div>
+                    <div className="agent-info">
+                      <div className="agent-name">Researcher</div>
+                      <div className="agent-meta">
+                        claude-4 · 4 tools · idle
+                      </div>
+                    </div>
+                    <div className="agent-status agent-status--idle" />
+                  </div>
+                </div>
+              </div>
+              <div className="showcase-glow showcase-glow--purple" />
+            </div>
+            <div className="showcase-label">
+              <h3>Agent Management</h3>
+              <p>
+                Configure personality, tools, and MCP connections per agent.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Sessions */}
+          <motion.div
+            className="showcase-card"
+            initial={{ opacity: 0, y: 60, rotateX: 8 }}
+            whileInView={{ opacity: 1, y: 0, rotateX: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.7, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="showcase-screen">
+              <div className="mock-window">
+                <div className="mock-titlebar">
+                  <div className="mock-dots">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <span className="mock-title">Sessions</span>
+                </div>
+                <div className="mock-body mock-sessions">
+                  <div className="session-item session-item--active">
+                    <div className="session-dot session-dot--active" />
+                    <div className="session-info">
+                      <div className="session-name">
+                        Fix auth middleware bug
+                      </div>
+                      <div className="session-time">
+                        2 min ago · 14 messages
+                      </div>
+                    </div>
+                  </div>
+                  <div className="session-item">
+                    <div className="session-dot" />
+                    <div className="session-info">
+                      <div className="session-name">Refactor user service</div>
+                      <div className="session-time">
+                        1 hour ago · 8 messages
+                      </div>
+                    </div>
+                  </div>
+                  <div className="session-item">
+                    <div className="session-dot" />
+                    <div className="session-info">
+                      <div className="session-name">Deploy to staging</div>
+                      <div className="session-time">
+                        3 hours ago · 22 messages
+                      </div>
+                    </div>
+                  </div>
+                  <div className="session-item">
+                    <div className="session-dot" />
+                    <div className="session-info">
+                      <div className="session-name">Write API docs</div>
+                      <div className="session-time">Yesterday · 5 messages</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="showcase-glow showcase-glow--pink" />
+            </div>
+            <div className="showcase-label">
+              <h3>Session Memory</h3>
+              <p>
+                Conversational context preserved per session. Pick up where you
+                left off.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* ── CTA ──────────────────────────────────────────────────────── */}
       <motion.section
         className="cta-section"
