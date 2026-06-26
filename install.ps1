@@ -3,7 +3,7 @@
 # ============================================================================
 #
 # Usage:
-#   iex (irm https://openaidy.dev/install.ps1)
+#   iex (irm https://openaidy.com/install.ps1)
 #
 # Or download and run with options:
 #   .\install.ps1 -Branch feat/x -SkipBuild

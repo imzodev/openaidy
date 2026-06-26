@@ -36,7 +36,7 @@ The canonical entry point is the install script, which calls `openaidy init`:
 
 ```bash
 # Unix / macOS / WSL2
-curl -fsSL https://openaidy.dev/install.sh | bash
+curl -fsSL https://openaidy.com/install.sh | bash
 
 # Or invoke init directly with a real JWT secret
 WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init

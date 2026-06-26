@@ -52,7 +52,7 @@ $OPENAIDY_HOME/credentials/bootstrap-admin.json
 
 ```bash
 # Re-run the installer (Unix/WSL/macOS)
-curl -fsSL https://openaidy.dev/install.sh | bash
+curl -fsSL https://openaidy.com/install.sh | bash
 
 # Or run the CLI's init command directly (idempotent)
 WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init

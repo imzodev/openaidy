@@ -5,7 +5,7 @@
 # Installs OpenAidy on Linux, macOS, and WSL2.
 #
 # Usage:
-#   curl -fsSL https://openaidy.dev/install.sh | bash
+#   curl -fsSL https://openaidy.com/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --dir /path/to/install --branch feat/x
@@ -79,7 +79,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-Help)
-            echo "Usage: curl -fsSL https://openaidy.dev/install.sh | bash [options]"
+            echo "Usage: curl -fsSL https://openaidy.com/install.sh | bash [options]"
             echo ""
             echo "Options:"
             echo "  --dir <path>       Install to custom directory (default: ~/.openaidy)"
@@ -468,7 +468,7 @@ if [ -f "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" ]; then
     exec node --import tsx "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" "$@"
 else
     echo "OpenAidy not found at $OPENAIDY_REPO" >&2
-    echo "Re-run the installer: curl -fsSL https://openaidy.dev/install.sh | bash" >&2
+    echo "Re-run the installer: curl -fsSL https://openaidy.com/install.sh | bash" >&2
     exit 1
 fi
 WRAPPER_EOF

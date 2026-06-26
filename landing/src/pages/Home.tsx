@@ -264,8 +264,8 @@ export default function Home() {
   }, []);
 
   const installCommands = {
-    windows: 'iex (irm https://openaidy.dev/install.ps1)',
-    unix: 'curl -fsSL https://openaidy.dev/install.sh | bash',
+    windows: 'iex (irm https://openaidy.com/install.ps1)',
+    unix: 'curl -fsSL https://openaidy.com/install.sh | bash',
   };
 
   const handleCopy = async () => {

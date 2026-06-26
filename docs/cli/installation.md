@@ -5,7 +5,7 @@ This guide explains how to install and run the OpenAidy CLI.
 ## One-Command Install (Unix / macOS / WSL2)
 
 ```bash
-curl -fsSL https://openaidy.dev/install.sh | bash
+curl -fsSL https://openaidy.com/install.sh | bash
 ```
 
 What the installer does:
@@ -35,7 +35,7 @@ Next steps:
 ## One-Command Install (Windows / PowerShell 5.1+)
 
 ```powershell
-iex (irm https://openaidy.dev/install.ps1)
+iex (irm https://openaidy.com/install.ps1)
 ```
 
 What the installer does (Windows mirror of the Unix flow):
@@ -63,13 +63,13 @@ Re-running the installer is safe:
 
 ```bash
 # Custom install directory (default: ~/.openaidy)
-curl -fsSL https://openaidy.dev/install.sh | bash -s -- --dir /opt/openaidy
+curl -fsSL https://openaidy.com/install.sh | bash -s -- --dir /opt/openaidy
 
 # Install a specific branch
-curl -fsSL https://openaidy.dev/install.sh | bash -s -- --branch feat/foo
+curl -fsSL https://openaidy.com/install.sh | bash -s -- --branch feat/foo
 
 # Skip the build step (e.g. CI on already-built artifacts)
-curl -fsSL https://openaidy.dev/install.sh | bash -s -- --skip-build
+curl -fsSL https://openaidy.com/install.sh | bash -s -- --skip-build
 ```
 
 ### Windows / PowerShell
