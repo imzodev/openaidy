@@ -484,91 +484,6 @@ img { max-width: 100%; display: block; }
   flex-shrink: 0;
 }
 
-/* ── Features ────────────────────────────────────────────────────────── */
-.features {
-  position: relative;
-  z-index: 1;
-  padding: 7rem 2rem;
-  max-width: 1150px;
-  margin: 0 auto;
-}
-
-.features-header {
-  text-align: center;
-  margin-bottom: 4rem;
-}
-.features-header h2 {
-  font-size: clamp(2rem, 4.5vw, 3rem);
-  font-weight: 800;
-  letter-spacing: -0.035em;
-  margin-bottom: 0.75rem;
-  line-height: 1.15;
-}
-.features-header p {
-  color: var(--text-secondary);
-  font-size: 1.05rem;
-}
-
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-  gap: 1.25rem;
-}
-
-.feature-card {
-  position: relative;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1.85rem;
-  overflow: hidden;
-  transition:
-    border-color 0.3s,
-    box-shadow 0.3s,
-    transform 0.25s,
-    background 0.3s;
-}
-.feature-card:hover {
-  border-color: rgba(99,102,241,0.4);
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-4px);
-}
-
-.feature-card-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1.3rem;
-}
-
-.feature-card h3 {
-  font-size: 1.05rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.01em;
-}
-.feature-card p {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  line-height: 1.65;
-}
-.feature-card-arrow {
-  position: absolute;
-  bottom: 1.6rem;
-  right: 1.6rem;
-  color: var(--accent);
-  opacity: 0;
-  transform: translateX(-8px);
-  transition: opacity 0.2s, transform 0.2s;
-}
-.feature-card:hover .feature-card-arrow {
-  opacity: 1;
-  transform: translateX(0);
-}
-
 /* ── Story (sticky scroll storytelling) ─────────────────────────── */
 .story {
   position: relative;
@@ -806,6 +721,15 @@ img { max-width: 100%; display: block; }
   line-height: 1.55;
 }
 
+.chat-text code {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.78em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+
 .chat-status {
   display: inline-flex;
   align-items: center;
@@ -814,6 +738,19 @@ img { max-width: 100%; display: block; }
   color: #22c55e;
   margin-top: 0.35rem;
   font-weight: 500;
+}
+.chat-status em {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 600;
+}
+.chat-status code {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.95em;
+  background: rgba(99, 102, 241, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
 }
 .chat-status--live {
   color: rgba(255, 255, 255, 0.85);
@@ -999,6 +936,260 @@ img { max-width: 100%; display: block; }
 .ed-attr { color: #38bdf8; }
 .ed-op  { color: rgba(255, 255, 255, 0.5); }
 .ed-fn  { color: #818cf8; }
+
+/* ── Agents list (workspace tab 1) ────────────────────────────── */
+.mock-agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.agent-row--active {
+  background: rgba(139, 92, 246, 0.06);
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+.agent-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.agent-avatar--blue { background: rgba(99, 102, 241, 0.25); color: #818cf8; }
+.agent-avatar--purple { background: rgba(139, 92, 246, 0.25); color: #a78bfa; }
+.agent-avatar--pink { background: rgba(236, 72, 153, 0.25); color: #f472b6; }
+.agent-avatar--cyan { background: rgba(6, 182, 212, 0.25); color: #22d3ee; }
+
+.agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.agent-meta {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+.agent-status {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.agent-status--active {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.agent-status--idle {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Channels (workspace tab 2) ──────────────────────────────── */
+.mock-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.channel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.channel-row--connected {
+  border-color: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.channel-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.channel-icon--slack    { background: rgba(74, 21, 75, 0.5);   color: #ecb22e; }
+.channel-icon--discord  { background: rgba(88, 101, 242, 0.3);  color: #b6c1ff; }
+.channel-icon--telegram { background: rgba(0, 136, 204, 0.3);   color: #6ec9f0; }
+.channel-icon--whatsapp { background: rgba(37, 211, 102, 0.18); color: #4ad77a; }
+
+.channel-info {
+  flex: 1;
+  min-width: 0;
+}
+.channel-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+.channel-meta {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+.channel-state {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.channel-state--on {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.channel-state--off {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+}
+
+/* ── Skills (workspace tab 3) ────────────────────────────────── */
+.mock-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.skill-row--active {
+  border-color: rgba(34, 197, 94, 0.18);
+  background: rgba(34, 197, 94, 0.04);
+}
+
+.skill-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+.skill-icon--green {
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
+}
+.skill-icon--add {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+}
+
+.skill-info { flex: 1; min-width: 0; }
+.skill-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+.skill-meta {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+/* ── Kanban mini (workspace tab 4) ──────────────────────────── */
+.mock-kanban-mini {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.mini-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.mini-col-header {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mini-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mini-card--active {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.mini-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mini-card--active .mini-bar {
+  background: rgba(99, 102, 241, 0.3);
+}
+
+.mini-tag {
+  font-size: 0.55rem;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+  align-self: flex-start;
+}
 
 /* ── Story Responsive ───────────────────────────────────────────── */
 @media (max-width: 900px) {

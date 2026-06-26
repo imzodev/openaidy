@@ -1,31 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  motion,
-  useMotionValue,
-  useTransform,
-  useInView,
-  useScroll,
-} from 'framer-motion';
-import {
-  Bot,
-  MessageSquare,
-  ListTodo,
-  Plug,
-  BookOpen,
-  Cpu,
-  ArrowRight,
-  Github,
-  Terminal,
-  Check,
-} from 'lucide-react';
+import { motion, useMotionValue, useTransform, useScroll } from 'framer-motion';
+import { BookOpen, Github, Terminal, Check } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
-interface Feature {
-  icon: React.ReactNode;
-  color: string;
-  title: string;
-  description: string;
-}
 
 // ── Floating orbs (pure CSS — no JS) ──────────────────────────────────────
 function FloatingOrbs() {
@@ -143,91 +120,7 @@ function Marquee({
   );
 }
 
-// ── Feature Card ─────────────────────────────────────────────────────────
-function FeatureCard({ f, index }: { f: Feature; index: number }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-60px' });
-
-  return (
-    <motion.div
-      ref={ref}
-      className="feature-card"
-      initial={{ opacity: 0, y: 40, scale: 0.95 }}
-      animate={inView ? { opacity: 1, y: 0, scale: 1 } : {}}
-      transition={{
-        duration: 0.55,
-        delay: (index % 3) * 0.1,
-        ease: [0.16, 1, 0.3, 1],
-      }}
-    >
-      <motion.div
-        className="feature-card-icon"
-        style={{ background: f.color }}
-        whileHover={{ scale: 1.15, rotate: [0, -8, 8, 0] }}
-        transition={{ duration: 0.3 }}
-      >
-        {f.icon}
-      </motion.div>
-      <h3>{f.title}</h3>
-      <p>{f.description}</p>
-      <motion.div
-        className="feature-card-arrow"
-        initial={{ opacity: 0, x: -10 }}
-        whileHover={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.2 }}
-      >
-        <ArrowRight size={14} />
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ── Feature data ─────────────────────────────────────────────────────────
-const features: Feature[] = [
-  {
-    icon: <Bot size={22} color="#6366f1" />,
-    color: 'rgba(99,102,241,0.12)',
-    title: 'Agents',
-    description:
-      'Configure personality, system prompt, tools, and MCP server connections per agent.',
-  },
-  {
-    icon: <MessageSquare size={22} color="#8b5cf6" />,
-    color: 'rgba(139,92,246,0.12)',
-    title: 'Sessions',
-    description:
-      'Conversational memory per session. Pick up where you left off — history is preserved.',
-  },
-  {
-    icon: <ListTodo size={22} color="#22c55e" />,
-    color: 'rgba(34,197,94,0.12)',
-    title: 'Tasks',
-    description:
-      'Structured task pipeline with async runs, streaming output, and step-by-step visibility.',
-  },
-  {
-    icon: <Plug size={22} color="#f59e0b" />,
-    color: 'rgba(245,158,11,0.12)',
-    title: 'Channels',
-    description:
-      'Connect to Slack, Discord, Telegram, and more — bring AI to where your team works.',
-  },
-  {
-    icon: <BookOpen size={22} color="#ec4899" />,
-    color: 'rgba(236,72,153,0.12)',
-    title: 'Skills',
-    description:
-      'Reusable skill modules that extend agent capabilities — load from the registry or author your own.',
-  },
-  {
-    icon: <Cpu size={22} color="#06b6d4" />,
-    color: 'rgba(6,182,212,0.12)',
-    title: 'MCP Servers',
-    description:
-      'Model Context Protocol integration. Connect any MCP-compatible tool or data source.',
-  },
-];
-
+// ── Integrations (marquee) ─────────────────────────────────────────────────
 const integrations = [
   'Slack',
   'Discord',
@@ -409,28 +302,6 @@ export default function Home() {
         </Marquee>
       </section>
 
-      {/* ── Features ─────────────────────────────────────────────────── */}
-      <section id="features" className="features">
-        <motion.div
-          className="features-header"
-          initial={{ opacity: 0, y: 40 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-50px' }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
-        >
-          <h2>Everything you need to ship AI agents</h2>
-          <p>
-            Built for developers who want control without reinventing the wheel.
-          </p>
-        </motion.div>
-
-        <div className="features-grid">
-          {features.map((f, i) => (
-            <FeatureCard key={f.title} f={f} index={i} />
-          ))}
-        </div>
-      </section>
-
       {/* ── Sticky Scroll Story ──────────────────────────────────────────── */}
       <section className="story">
         <div className="story-header">
@@ -459,11 +330,12 @@ export default function Home() {
               animate={{ opacity: activeChapter === 0 ? 1 : 0.3 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="story-step">Step 01</span>
-              <h3>Set up your next task</h3>
+              <span className="story-step">Agents</span>
+              <h3>Configure your agents</h3>
               <p>
-                Drop a task into the kanban. OpenAidy picks it up, plans the
-                work, and routes it to the right agent.
+                Define personality, system prompts, and the tools each agent can
+                reach. One agent for code review, another for ops, another for
+                research — each tuned for its job.
               </p>
             </motion.div>
 
@@ -472,11 +344,11 @@ export default function Home() {
               animate={{ opacity: activeChapter === 1 ? 1 : 0.3 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="story-step">Step 02</span>
-              <h3>Plan and delegate</h3>
+              <span className="story-step">Channels</span>
+              <h3>Connect every channel</h3>
               <p>
-                The planner breaks work into steps, selects tools, and shows you
-                the approach before executing.
+                Bring agents into Slack, Discord, Telegram, and WhatsApp. Same
+                agent, every surface — no rebuilding per channel.
               </p>
             </motion.div>
 
@@ -485,11 +357,12 @@ export default function Home() {
               animate={{ opacity: activeChapter === 2 ? 1 : 0.3 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="story-step">Step 03</span>
-              <h3>Run in a real shell</h3>
+              <span className="story-step">Skills & MCP</span>
+              <h3>Extend with skills & MCP</h3>
               <p>
-                Agents execute commands in an isolated shell. Watch the terminal
-                stream live, step by step.
+                Pull reusable skill modules from the registry or author your
+                own. Wire up any MCP-compatible tool or data source — no custom
+                glue code.
               </p>
             </motion.div>
 
@@ -498,11 +371,11 @@ export default function Home() {
               animate={{ opacity: activeChapter === 3 ? 1 : 0.3 }}
               transition={{ duration: 0.5 }}
             >
-              <span className="story-step">Step 04</span>
-              <h3>Review and iterate</h3>
+              <span className="story-step">Tasks</span>
+              <h3>Track work, ship faster</h3>
               <p>
-                Session memory preserves full context. Continue the
-                conversation, refine, ship.
+                Tasks flow through a kanban pipeline. Sessions preserve context
+                across every conversation — pick up where you left off.
               </p>
             </motion.div>
           </div>
@@ -511,44 +384,176 @@ export default function Home() {
           <div className="story-sticky">
             <div className="story-panel story-panel--chat">
               <div className="story-panel-header">
-                <span>Set up Next.js repo</span>
+                <span>
+                  {activeChapter === 0 && 'Agents'}
+                  {activeChapter === 1 && 'Channels'}
+                  {activeChapter === 2 && 'Skills & MCP'}
+                  {activeChapter === 3 && 'Tasks'}
+                </span>
               </div>
               <div className="story-panel-body">
-                <div className="chat-msg chat-msg--user">
-                  <span className="chat-avatar chat-avatar--user">Y</span>
-                  <div>
-                    <div className="chat-meta">You · 5:05 PM</div>
-                    <div className="chat-text">
-                      Can you start by setting up the Next.js repo, building the
-                      project, and running an example?
+                {/* Chapter 0 — Agents */}
+                {activeChapter === 0 && (
+                  <>
+                    <div className="chat-msg chat-msg--user">
+                      <span className="chat-avatar chat-avatar--user">L</span>
+                      <div>
+                        <div className="chat-meta">@lina · 9:02 AM</div>
+                        <div className="chat-text">
+                          Need an agent that only knows about billing —
+                          shouldn't touch deploy or DB schema.
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="chat-msg chat-msg--agent">
-                  <span className="chat-avatar chat-avatar--agent">A</span>
-                  <div>
-                    <div className="chat-meta">Agent · 5:05 PM</div>
-                    <div className="chat-text">
-                      Absolutely! I'll get started on that right away and keep
-                      you updated on my progress.
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">A</span>
+                      <div>
+                        <div className="chat-meta">admin · 9:02 AM</div>
+                        <div className="chat-text">
+                          Created <code>billing-bot</code> — scoped tools,
+                          isolated skills, no MCP.
+                        </div>
+                        <div className="chat-status">
+                          <span className="chat-check">✓</span> Agent
+                          registered, scope verified
+                        </div>
+                      </div>
                     </div>
-                    <div className="chat-status">
-                      <span className="chat-check">✓</span> Cloned repo from
-                      GitHub.
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">A</span>
+                      <div>
+                        <div className="chat-status chat-status--live">
+                          <span className="chat-dot" /> Assigning billing-bot to
+                          #billing
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="chat-msg chat-msg--agent">
-                  <span className="chat-avatar chat-avatar--agent">A</span>
-                  <div>
-                    <div className="chat-status chat-status--live">
-                      <span className="chat-dot" /> Agent is setting up the
-                      Next.js repo
+                  </>
+                )}
+
+                {/* Chapter 1 — Channels */}
+                {activeChapter === 1 && (
+                  <>
+                    <div className="chat-msg chat-msg--user">
+                      <span className="chat-avatar chat-avatar--user">K</span>
+                      <div>
+                        <div className="chat-meta">@kira · 11:30 AM</div>
+                        <div className="chat-text">
+                          /connect telegram @openaidy_bot
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">O</span>
+                      <div>
+                        <div className="chat-meta">openaidy · 11:30 AM</div>
+                        <div className="chat-text">
+                          Connecting Telegram… exchange complete. Bot authorized
+                          for DMs and group mentions.
+                        </div>
+                        <div className="chat-status">
+                          <span className="chat-check">✓</span> 3 channels
+                          active · 0 errors
+                        </div>
+                      </div>
+                    </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">O</span>
+                      <div>
+                        <div className="chat-status chat-status--live">
+                          <span className="chat-dot" /> Syncing conversation
+                          history with first session
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Chapter 2 — Skills & MCP */}
+                {activeChapter === 2 && (
+                  <>
+                    <div className="chat-msg chat-msg--user">
+                      <span className="chat-avatar chat-avatar--user">D</span>
+                      <div>
+                        <div className="chat-meta">@dario · 4:18 PM</div>
+                        <div className="chat-text">
+                          Support needs to query our internal docs. Can the kb
+                          MCP be wired in?
+                        </div>
+                      </div>
+                    </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">S</span>
+                      <div>
+                        <div className="chat-meta">support · 4:18 PM</div>
+                        <div className="chat-text">
+                          Added <code>kb-mcp</code> server and loaded the{' '}
+                          <code>faq</code> skill. Ready to answer.
+                        </div>
+                        <div className="chat-status">
+                          <span className="chat-check">✓</span> MCP connected ·
+                          42 docs indexed
+                        </div>
+                      </div>
+                    </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">S</span>
+                      <div>
+                        <div className="chat-status chat-status--live">
+                          <span className="chat-dot" /> Running skill:{' '}
+                          <em>faq</em>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Chapter 3 — Tasks & Sessions */}
+                {activeChapter === 3 && (
+                  <>
+                    <div className="chat-msg chat-msg--user">
+                      <span className="chat-avatar chat-avatar--user">M</span>
+                      <div>
+                        <div className="chat-meta">@marco · 2:14 PM</div>
+                        <div className="chat-text">
+                          Same auth bug from yesterday — push it back to the
+                          coder agent and keep the session.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">C</span>
+                      <div>
+                        <div className="chat-meta">coder · 2:14 PM</div>
+                        <div className="chat-text">
+                          Resuming session <code>#auth-fix-42</code>. I remember
+                          the rate-limit context from earlier.
+                        </div>
+                        <div className="chat-status">
+                          <span className="chat-check">✓</span> Task moved In
+                          progress · context loaded
+                        </div>
+                      </div>
+                    </div>
+                    <div className="chat-msg chat-msg--agent">
+                      <span className="chat-avatar chat-avatar--agent">C</span>
+                      <div>
+                        <div className="chat-status chat-status--live">
+                          <span className="chat-dot" /> Streaming step-by-step
+                          output
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <div className="chat-input">
-                  <span>Give the agent a task to work on…</span>
+                  <span>
+                    {activeChapter === 0 && 'Send to admin…'}
+                    {activeChapter === 1 && 'Send to openaidy…'}
+                    {activeChapter === 2 && 'Send to support…'}
+                    {activeChapter === 3 && 'Send to coder…'}
+                  </span>
                   <span className="chat-input-arrow">→</span>
                 </div>
               </div>
@@ -556,160 +561,199 @@ export default function Home() {
 
             <div className="story-panel story-panel--workspace">
               <div className="story-panel-header">
-                <span>Agent's Workspace</span>
+                <span>
+                  {activeChapter === 0 && 'Agent Registry'}
+                  {activeChapter === 1 && 'Channels'}
+                  {activeChapter === 2 && 'Skills Registry'}
+                  {activeChapter === 3 && 'Task Pipeline'}
+                </span>
               </div>
               <div className="story-tabs">
                 <span
-                  className={`story-tab ${activeChapter >= 1 ? 'story-tab--active' : ''}`}
+                  className={`story-tab ${activeChapter === 0 ? 'story-tab--active' : ''}`}
                 >
-                  ✦ Planner
+                  ⚙ Agents
+                </span>
+                <span
+                  className={`story-tab ${activeChapter === 1 ? 'story-tab--active' : ''}`}
+                >
+                  ⌁ Channels
                 </span>
                 <span
                   className={`story-tab ${activeChapter === 2 ? 'story-tab--active' : ''}`}
                 >
-                  ⌨ Shell
+                  ✦ Skills
                 </span>
                 <span
                   className={`story-tab ${activeChapter === 3 ? 'story-tab--active' : ''}`}
                 >
-                  ✎ Editor
+                  ▤ Tasks
                 </span>
-                <span className="story-tab">⌁ Browser</span>
               </div>
               <div className="story-panel-body">
                 {activeChapter === 0 && (
-                  <div className="story-panel-empty">Waiting for task…</div>
+                  <div className="mock-agents-list">
+                    <div className="agent-row">
+                      <div className="agent-avatar agent-avatar--blue">C</div>
+                      <div className="agent-info">
+                        <div className="agent-name">coder</div>
+                        <div className="agent-meta">
+                          gpt-4o · 4 tools · 2 MCP
+                        </div>
+                      </div>
+                      <div className="agent-status agent-status--active" />
+                    </div>
+                    <div className="agent-row agent-row--active">
+                      <div className="agent-avatar agent-avatar--purple">R</div>
+                      <div className="agent-info">
+                        <div className="agent-name">reviewer</div>
+                        <div className="agent-meta">
+                          claude-4 · 3 tools · skill: code-review
+                        </div>
+                      </div>
+                      <div className="agent-status agent-status--active" />
+                    </div>
+                    <div className="agent-row">
+                      <div className="agent-avatar agent-avatar--pink">O</div>
+                      <div className="agent-info">
+                        <div className="agent-name">ops</div>
+                        <div className="agent-meta">
+                          gpt-4o · 6 tools · shell + kubectl
+                        </div>
+                      </div>
+                      <div className="agent-status agent-status--idle" />
+                    </div>
+                    <div className="agent-row">
+                      <div className="agent-avatar agent-avatar--cyan">S</div>
+                      <div className="agent-info">
+                        <div className="agent-name">support</div>
+                        <div className="agent-meta">
+                          claude-4 · 2 tools · kb MCP
+                        </div>
+                      </div>
+                      <div className="agent-status agent-status--idle" />
+                    </div>
+                  </div>
                 )}
                 {activeChapter === 1 && (
-                  <div className="mock-planner">
-                    <div className="planner-task">
-                      <div className="planner-task-name">
-                        Initialize project structure
+                  <div className="mock-channels">
+                    <div className="channel-row channel-row--connected">
+                      <div className="channel-icon channel-icon--slack">#</div>
+                      <div className="channel-info">
+                        <div className="channel-name">Slack · #dev</div>
+                        <div className="channel-meta">
+                          Connected · mentions trigger reviewer
+                        </div>
                       </div>
-                      <div className="planner-task-status planner-task-status--done">
-                        ✓
-                      </div>
+                      <div className="channel-state channel-state--on" />
                     </div>
-                    <div className="planner-task">
-                      <div className="planner-task-name">
-                        Install dependencies
+                    <div className="channel-row channel-row--connected">
+                      <div className="channel-icon channel-icon--discord">
+                        D
                       </div>
-                      <div className="planner-task-status planner-task-status--done">
-                        ✓
+                      <div className="channel-info">
+                        <div className="channel-name">Discord · /commands</div>
+                        <div className="channel-meta">
+                          Connected · slash commands
+                        </div>
                       </div>
+                      <div className="channel-state channel-state--on" />
                     </div>
-                    <div className="planner-task planner-task--active">
-                      <div className="planner-task-name">
-                        Configure TypeScript & ESLint
+                    <div className="channel-row channel-row--connected">
+                      <div className="channel-icon channel-icon--telegram">
+                        T
                       </div>
-                      <div className="planner-task-status planner-task-status--active">
-                        ●
+                      <div className="channel-info">
+                        <div className="channel-name">
+                          Telegram · @openaidy_bot
+                        </div>
+                        <div className="channel-meta">
+                          Connected · DMs + groups
+                        </div>
                       </div>
+                      <div className="channel-state channel-state--on" />
                     </div>
-                    <div className="planner-task">
-                      <div className="planner-task-name">
-                        Set up routing structure
+                    <div className="channel-row">
+                      <div className="channel-icon channel-icon--whatsapp">
+                        W
                       </div>
-                      <div className="planner-task-status">○</div>
-                    </div>
-                    <div className="planner-task">
-                      <div className="planner-task-name">
-                        Add base components
+                      <div className="channel-info">
+                        <div className="channel-name">
+                          WhatsApp · not connected
+                        </div>
+                        <div className="channel-meta">Tap to connect</div>
                       </div>
-                      <div className="planner-task-status">○</div>
+                      <div className="channel-state channel-state--off" />
                     </div>
                   </div>
                 )}
                 {activeChapter === 2 && (
-                  <div className="mock-shell">
-                    <div className="shell-line">
-                      <span className="shell-prompt">$</span>{' '}
-                      <span className="shell-cmd">
-                        git clone https://github.com/vercel/next.js.git
-                      </span>
+                  <div className="mock-skills">
+                    <div className="skill-row skill-row--active">
+                      <div className="skill-icon skill-icon--green">✓</div>
+                      <div className="skill-info">
+                        <div className="skill-name">code-review</div>
+                        <div className="skill-meta">
+                          v2.1.0 · openaidy · loaded on reviewer
+                        </div>
+                      </div>
                     </div>
-                    <div className="shell-line shell-out">
-                      Cloning into 'next.js'…
+                    <div className="skill-row skill-row--active">
+                      <div className="skill-icon skill-icon--green">✓</div>
+                      <div className="skill-info">
+                        <div className="skill-name">github-pr</div>
+                        <div className="skill-meta">
+                          v1.4.2 · openaidy · MCP
+                        </div>
+                      </div>
                     </div>
-                    <div className="shell-line shell-out">
-                      remote: Enumerating objects: 465785, done.
+                    <div className="skill-row skill-row--active">
+                      <div className="skill-icon skill-icon--green">✓</div>
+                      <div className="skill-info">
+                        <div className="skill-name">kubectl-ops</div>
+                        <div className="skill-meta">
+                          v0.9.0 · community · loaded on ops
+                        </div>
+                      </div>
                     </div>
-                    <div className="shell-line shell-out">
-                      remote: Counting objects: 100% (1887/1887), done.
-                    </div>
-                    <div className="shell-line shell-out">
-                      remote: Compressing objects: 100% (943/943), done.
-                    </div>
-                    <div className="shell-line shell-out">
-                      Receiving objects: 100% (465785/465785), 1.96 GiB
-                    </div>
-                    <div className="shell-line shell-out">
-                      Resolving deltas: 100% (321456/321456), done.
-                    </div>
-                    <div className="shell-line">
-                      <span className="shell-prompt">$</span>{' '}
-                      <span className="shell-cursor" />
-                    </div>
-                    <div className="shell-progress">
-                      <div className="shell-progress-bar" />
+                    <div className="skill-row">
+                      <div className="skill-icon skill-icon--add">+</div>
+                      <div className="skill-info">
+                        <div className="skill-name">Add from registry</div>
+                        <div className="skill-meta">42 skills available</div>
+                      </div>
                     </div>
                   </div>
                 )}
                 {activeChapter === 3 && (
-                  <div className="mock-editor">
-                    <div className="editor-line">
-                      <span className="editor-ln">1</span>
-                      <span>
-                        <span className="ed-kw">import</span>{' '}
-                        <span className="ed-var">rateLimit</span>{' '}
-                        <span className="ed-kw">from</span>{' '}
-                        <span className="ed-str">'express-rate-limit'</span>
-                      </span>
+                  <div className="mock-kanban-mini">
+                    <div className="mini-col">
+                      <div className="mini-col-header">Backlog</div>
+                      <div className="mini-card">
+                        <div className="mini-bar" style={{ width: '70%' }} />
+                      </div>
+                      <div className="mini-card">
+                        <div className="mini-bar" style={{ width: '55%' }} />
+                      </div>
                     </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">2</span>
-                      <span>&nbsp;</span>
+                    <div className="mini-col">
+                      <div className="mini-col-header">In progress</div>
+                      <div className="mini-card mini-card--active">
+                        <div className="mini-bar" style={{ width: '85%' }} />
+                        <div className="mini-tag">reviewer</div>
+                      </div>
                     </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">3</span>
-                      <span>
-                        <span className="ed-kw">const</span>{' '}
-                        <span className="ed-var">limiter</span>{' '}
-                        <span className="ed-op">=</span>{' '}
-                        <span className="ed-fn">rateLimit</span>(
-                      </span>
-                    </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">4</span>
-                      <span>
-                        {'  '}
-                        <span className="ed-attr">windowMs</span>:{' '}
-                        <span className="ed-num">15 * 60 * 1000</span>,
-                      </span>
-                    </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">5</span>
-                      <span>
-                        {'  '}
-                        <span className="ed-attr">max</span>:{' '}
-                        <span className="ed-num">100</span>,
-                      </span>
-                    </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">6</span>
-                      <span>)</span>
-                    </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">7</span>
-                      <span>&nbsp;</span>
-                    </div>
-                    <div className="editor-line">
-                      <span className="editor-ln">8</span>
-                      <span>
-                        <span className="ed-kw">export</span>{' '}
-                        <span className="ed-kw">default</span>{' '}
-                        <span className="ed-var">limiter</span>
-                      </span>
+                    <div className="mini-col">
+                      <div className="mini-col-header">Done</div>
+                      <div className="mini-card">
+                        <div className="mini-bar" style={{ width: '60%' }} />
+                      </div>
+                      <div className="mini-card">
+                        <div className="mini-bar" style={{ width: '75%' }} />
+                      </div>
+                      <div className="mini-card">
+                        <div className="mini-bar" style={{ width: '50%' }} />
+                      </div>
                     </div>
                   </div>
                 )}
