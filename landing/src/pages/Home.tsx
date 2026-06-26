@@ -245,10 +245,12 @@ const integrations = [
 
 export default function Home() {
   const heroRef = useRef(null);
+  const storyRef = useRef<HTMLDivElement>(null);
   const [typeStarted, setTypeStarted] = useState(false);
   const [bannerLoaded, setBannerLoaded] = useState(false);
   const [installTab, setInstallTab] = useState<'windows' | 'unix'>('windows');
   const [copied, setCopied] = useState(false);
+  const [activeChapter, setActiveChapter] = useState(0);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -257,6 +259,23 @@ export default function Home() {
   const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0]);
   const heroScale = useTransform(scrollYProgress, [0, 0.7], [1, 0.93]);
   const bannerY = useTransform(scrollYProgress, [0, 1], ['0%', '28%']);
+
+  const storyProgress = useScroll({
+    target: storyRef,
+    offset: ['start start', 'end end'],
+  }).scrollYProgress;
+
+  const chapterIndex = useTransform(
+    storyProgress,
+    [0, 0.25, 0.5, 0.75, 1],
+    [0, 1, 2, 3, 3],
+  );
+
+  useEffect(() => {
+    return chapterIndex.on('change', (v) => {
+      setActiveChapter(Math.round(v));
+    });
+  }, [chapterIndex]);
 
   useEffect(() => {
     const t = setTimeout(() => setTypeStarted(true), 1800);
@@ -409,6 +428,294 @@ export default function Home() {
           {features.map((f, i) => (
             <FeatureCard key={f.title} f={f} index={i} />
           ))}
+        </div>
+      </section>
+
+      {/* ── Sticky Scroll Story ──────────────────────────────────────────── */}
+      <section className="story">
+        <div className="story-header">
+          <h2>Built to collaborate with you</h2>
+          <p>
+            From task to delivery — every step of an agent's workflow, in one
+            workspace.
+          </p>
+        </div>
+
+        <div ref={storyRef} className="story-container">
+          <div className="story-text">
+            {/* Vertical step indicator */}
+            <div className="story-stepper" aria-hidden="true">
+              <div className="story-step-line" />
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className={`story-step-dot ${activeChapter >= i ? 'story-step-dot--filled' : ''} ${activeChapter === i ? 'story-step-dot--active' : ''}`}
+                />
+              ))}
+            </div>
+
+            <motion.div
+              className={`story-chapter ${activeChapter === 0 ? 'story-chapter--active' : ''}`}
+              animate={{ opacity: activeChapter === 0 ? 1 : 0.3 }}
+              transition={{ duration: 0.5 }}
+            >
+              <span className="story-step">Step 01</span>
+              <h3>Set up your next task</h3>
+              <p>
+                Drop a task into the kanban. OpenAidy picks it up, plans the
+                work, and routes it to the right agent.
+              </p>
+            </motion.div>
+
+            <motion.div
+              className={`story-chapter ${activeChapter === 1 ? 'story-chapter--active' : ''}`}
+              animate={{ opacity: activeChapter === 1 ? 1 : 0.3 }}
+              transition={{ duration: 0.5 }}
+            >
+              <span className="story-step">Step 02</span>
+              <h3>Plan and delegate</h3>
+              <p>
+                The planner breaks work into steps, selects tools, and shows you
+                the approach before executing.
+              </p>
+            </motion.div>
+
+            <motion.div
+              className={`story-chapter ${activeChapter === 2 ? 'story-chapter--active' : ''}`}
+              animate={{ opacity: activeChapter === 2 ? 1 : 0.3 }}
+              transition={{ duration: 0.5 }}
+            >
+              <span className="story-step">Step 03</span>
+              <h3>Run in a real shell</h3>
+              <p>
+                Agents execute commands in an isolated shell. Watch the terminal
+                stream live, step by step.
+              </p>
+            </motion.div>
+
+            <motion.div
+              className={`story-chapter ${activeChapter === 3 ? 'story-chapter--active' : ''}`}
+              animate={{ opacity: activeChapter === 3 ? 1 : 0.3 }}
+              transition={{ duration: 0.5 }}
+            >
+              <span className="story-step">Step 04</span>
+              <h3>Review and iterate</h3>
+              <p>
+                Session memory preserves full context. Continue the
+                conversation, refine, ship.
+              </p>
+            </motion.div>
+          </div>
+
+          {/* TWO sticky panels side-by-side, no transforms */}
+          <div className="story-sticky">
+            <div className="story-panel story-panel--chat">
+              <div className="story-panel-header">
+                <span>Set up Next.js repo</span>
+              </div>
+              <div className="story-panel-body">
+                <div className="chat-msg chat-msg--user">
+                  <span className="chat-avatar chat-avatar--user">Y</span>
+                  <div>
+                    <div className="chat-meta">You · 5:05 PM</div>
+                    <div className="chat-text">
+                      Can you start by setting up the Next.js repo, building the
+                      project, and running an example?
+                    </div>
+                  </div>
+                </div>
+                <div className="chat-msg chat-msg--agent">
+                  <span className="chat-avatar chat-avatar--agent">A</span>
+                  <div>
+                    <div className="chat-meta">Agent · 5:05 PM</div>
+                    <div className="chat-text">
+                      Absolutely! I'll get started on that right away and keep
+                      you updated on my progress.
+                    </div>
+                    <div className="chat-status">
+                      <span className="chat-check">✓</span> Cloned repo from
+                      GitHub.
+                    </div>
+                  </div>
+                </div>
+                <div className="chat-msg chat-msg--agent">
+                  <span className="chat-avatar chat-avatar--agent">A</span>
+                  <div>
+                    <div className="chat-status chat-status--live">
+                      <span className="chat-dot" /> Agent is setting up the
+                      Next.js repo
+                    </div>
+                  </div>
+                </div>
+                <div className="chat-input">
+                  <span>Give the agent a task to work on…</span>
+                  <span className="chat-input-arrow">→</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="story-panel story-panel--workspace">
+              <div className="story-panel-header">
+                <span>Agent's Workspace</span>
+              </div>
+              <div className="story-tabs">
+                <span
+                  className={`story-tab ${activeChapter >= 1 ? 'story-tab--active' : ''}`}
+                >
+                  ✦ Planner
+                </span>
+                <span
+                  className={`story-tab ${activeChapter === 2 ? 'story-tab--active' : ''}`}
+                >
+                  ⌨ Shell
+                </span>
+                <span
+                  className={`story-tab ${activeChapter === 3 ? 'story-tab--active' : ''}`}
+                >
+                  ✎ Editor
+                </span>
+                <span className="story-tab">⌁ Browser</span>
+              </div>
+              <div className="story-panel-body">
+                {activeChapter === 0 && (
+                  <div className="story-panel-empty">Waiting for task…</div>
+                )}
+                {activeChapter === 1 && (
+                  <div className="mock-planner">
+                    <div className="planner-task">
+                      <div className="planner-task-name">
+                        Initialize project structure
+                      </div>
+                      <div className="planner-task-status planner-task-status--done">
+                        ✓
+                      </div>
+                    </div>
+                    <div className="planner-task">
+                      <div className="planner-task-name">
+                        Install dependencies
+                      </div>
+                      <div className="planner-task-status planner-task-status--done">
+                        ✓
+                      </div>
+                    </div>
+                    <div className="planner-task planner-task--active">
+                      <div className="planner-task-name">
+                        Configure TypeScript & ESLint
+                      </div>
+                      <div className="planner-task-status planner-task-status--active">
+                        ●
+                      </div>
+                    </div>
+                    <div className="planner-task">
+                      <div className="planner-task-name">
+                        Set up routing structure
+                      </div>
+                      <div className="planner-task-status">○</div>
+                    </div>
+                    <div className="planner-task">
+                      <div className="planner-task-name">
+                        Add base components
+                      </div>
+                      <div className="planner-task-status">○</div>
+                    </div>
+                  </div>
+                )}
+                {activeChapter === 2 && (
+                  <div className="mock-shell">
+                    <div className="shell-line">
+                      <span className="shell-prompt">$</span>{' '}
+                      <span className="shell-cmd">
+                        git clone https://github.com/vercel/next.js.git
+                      </span>
+                    </div>
+                    <div className="shell-line shell-out">
+                      Cloning into 'next.js'…
+                    </div>
+                    <div className="shell-line shell-out">
+                      remote: Enumerating objects: 465785, done.
+                    </div>
+                    <div className="shell-line shell-out">
+                      remote: Counting objects: 100% (1887/1887), done.
+                    </div>
+                    <div className="shell-line shell-out">
+                      remote: Compressing objects: 100% (943/943), done.
+                    </div>
+                    <div className="shell-line shell-out">
+                      Receiving objects: 100% (465785/465785), 1.96 GiB
+                    </div>
+                    <div className="shell-line shell-out">
+                      Resolving deltas: 100% (321456/321456), done.
+                    </div>
+                    <div className="shell-line">
+                      <span className="shell-prompt">$</span>{' '}
+                      <span className="shell-cursor" />
+                    </div>
+                    <div className="shell-progress">
+                      <div className="shell-progress-bar" />
+                    </div>
+                  </div>
+                )}
+                {activeChapter === 3 && (
+                  <div className="mock-editor">
+                    <div className="editor-line">
+                      <span className="editor-ln">1</span>
+                      <span>
+                        <span className="ed-kw">import</span>{' '}
+                        <span className="ed-var">rateLimit</span>{' '}
+                        <span className="ed-kw">from</span>{' '}
+                        <span className="ed-str">'express-rate-limit'</span>
+                      </span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">2</span>
+                      <span>&nbsp;</span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">3</span>
+                      <span>
+                        <span className="ed-kw">const</span>{' '}
+                        <span className="ed-var">limiter</span>{' '}
+                        <span className="ed-op">=</span>{' '}
+                        <span className="ed-fn">rateLimit</span>(
+                      </span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">4</span>
+                      <span>
+                        {'  '}
+                        <span className="ed-attr">windowMs</span>:{' '}
+                        <span className="ed-num">15 * 60 * 1000</span>,
+                      </span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">5</span>
+                      <span>
+                        {'  '}
+                        <span className="ed-attr">max</span>:{' '}
+                        <span className="ed-num">100</span>,
+                      </span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">6</span>
+                      <span>)</span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">7</span>
+                      <span>&nbsp;</span>
+                    </div>
+                    <div className="editor-line">
+                      <span className="editor-ln">8</span>
+                      <span>
+                        <span className="ed-kw">export</span>{' '}
+                        <span className="ed-kw">default</span>{' '}
+                        <span className="ed-var">limiter</span>
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
