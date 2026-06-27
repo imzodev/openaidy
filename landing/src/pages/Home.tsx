@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useMotionValue, useTransform, useScroll } from 'framer-motion';
+import {
+  motion,
+  AnimatePresence,
+  useMotionValue,
+  useTransform,
+  useScroll,
+} from 'framer-motion';
 import { BookOpen, Github, Terminal, Check } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -136,6 +142,33 @@ const integrations = [
   'Notion',
 ];
 
+const chapterData = [
+  {
+    tag: 'Agents',
+    title: 'Configure your agents',
+    description:
+      'Define personality, system prompts, and the tools each agent can reach. One agent for code review, another for ops, another for research — each tuned for its job.',
+  },
+  {
+    tag: 'Channels',
+    title: 'Connect every channel',
+    description:
+      'Bring agents into Slack, Discord, Telegram, and WhatsApp. Same agent, every surface — no rebuilding per channel.',
+  },
+  {
+    tag: 'Skills & MCP',
+    title: 'Extend with skills & MCP',
+    description:
+      'Pull reusable skill modules from the registry or author your own. Wire up any MCP-compatible tool or data source — no custom glue code.',
+  },
+  {
+    tag: 'Tasks',
+    title: 'Track work, ship faster',
+    description:
+      'Tasks flow through a kanban pipeline. Sessions preserve context across every conversation — pick up where you left off.',
+  },
+];
+
 export default function Home() {
   const heroRef = useRef(null);
   const storyRef = useRef<HTMLDivElement>(null);
@@ -144,6 +177,15 @@ export default function Home() {
   const [installTab, setInstallTab] = useState<'windows' | 'unix'>('windows');
   const [copied, setCopied] = useState(false);
   const [activeChapter, setActiveChapter] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -314,70 +356,53 @@ export default function Home() {
 
         <div ref={storyRef} className="story-container">
           <div className="story-text">
-            {/* Vertical step indicator */}
-            <div className="story-stepper" aria-hidden="true">
-              <div className="story-step-line" />
-              {[0, 1, 2, 3].map((i) => (
-                <div
+            {/* Vertical step indicator (desktop only) */}
+            {!isMobile && (
+              <div className="story-stepper" aria-hidden="true">
+                <div className="story-step-line" />
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className={`story-step-dot ${activeChapter >= i ? 'story-step-dot--filled' : ''} ${activeChapter === i ? 'story-step-dot--active' : ''}`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Desktop: render all 4 chapters stacked (each fades in/out) */}
+            {!isMobile &&
+              chapterData.map((ch, i) => (
+                <motion.div
                   key={i}
-                  className={`story-step-dot ${activeChapter >= i ? 'story-step-dot--filled' : ''} ${activeChapter === i ? 'story-step-dot--active' : ''}`}
-                />
+                  className={`story-chapter ${activeChapter === i ? 'story-chapter--active' : ''}`}
+                  animate={{ opacity: activeChapter === i ? 1 : 0.3 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <span className="story-step">{ch.tag}</span>
+                  <h3>{ch.title}</h3>
+                  <p>{ch.description}</p>
+                </motion.div>
               ))}
-            </div>
 
-            <motion.div
-              className={`story-chapter ${activeChapter === 0 ? 'story-chapter--active' : ''}`}
-              animate={{ opacity: activeChapter === 0 ? 1 : 0.3 }}
-              transition={{ duration: 0.5 }}
-            >
-              <span className="story-step">Agents</span>
-              <h3>Configure your agents</h3>
-              <p>
-                Define personality, system prompts, and the tools each agent can
-                reach. One agent for code review, another for ops, another for
-                research — each tuned for its job.
-              </p>
-            </motion.div>
-
-            <motion.div
-              className={`story-chapter ${activeChapter === 1 ? 'story-chapter--active' : ''}`}
-              animate={{ opacity: activeChapter === 1 ? 1 : 0.3 }}
-              transition={{ duration: 0.5 }}
-            >
-              <span className="story-step">Channels</span>
-              <h3>Connect every channel</h3>
-              <p>
-                Bring agents into Slack, Discord, Telegram, and WhatsApp. Same
-                agent, every surface — no rebuilding per channel.
-              </p>
-            </motion.div>
-
-            <motion.div
-              className={`story-chapter ${activeChapter === 2 ? 'story-chapter--active' : ''}`}
-              animate={{ opacity: activeChapter === 2 ? 1 : 0.3 }}
-              transition={{ duration: 0.5 }}
-            >
-              <span className="story-step">Skills & MCP</span>
-              <h3>Extend with skills & MCP</h3>
-              <p>
-                Pull reusable skill modules from the registry or author your
-                own. Wire up any MCP-compatible tool or data source — no custom
-                glue code.
-              </p>
-            </motion.div>
-
-            <motion.div
-              className={`story-chapter ${activeChapter === 3 ? 'story-chapter--active' : ''}`}
-              animate={{ opacity: activeChapter === 3 ? 1 : 0.3 }}
-              transition={{ duration: 0.5 }}
-            >
-              <span className="story-step">Tasks</span>
-              <h3>Track work, ship faster</h3>
-              <p>
-                Tasks flow through a kanban pipeline. Sessions preserve context
-                across every conversation — pick up where you left off.
-              </p>
-            </motion.div>
+            {/* Mobile: render only the active chapter (sticky in same spot) */}
+            {isMobile && (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeChapter}
+                  className="story-chapter story-chapter--active"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <span className="story-step">
+                    {chapterData[activeChapter].tag}
+                  </span>
+                  <h3>{chapterData[activeChapter].title}</h3>
+                  <p>{chapterData[activeChapter].description}</p>
+                </motion.div>
+              </AnimatePresence>
+            )}
           </div>
 
           {/* TWO sticky panels side-by-side, no transforms */}
