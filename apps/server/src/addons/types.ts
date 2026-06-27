@@ -142,6 +142,18 @@ export interface UpdateAddonConfigRequest {
 }
 
 /**
+ * Update addon request — replaces the stored manifest (name, version,
+ * permissions, etc.) of an already-installed addon. Used by the
+ * `addon_update` tool to keep the DB record in sync with on-disk addon.json
+ * edits.
+ */
+export interface UpdateAddonRequest {
+  addonId: string;
+  manifest: AddonManifest;
+  updatedBy: string;
+}
+
+/**
  * List addons filters
  */
 export interface ListAddonsFilters {

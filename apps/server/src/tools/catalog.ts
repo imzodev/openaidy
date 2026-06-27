@@ -211,6 +211,15 @@ export const addonCreateMeta: ToolMeta = {
     'The addon appears in the sidebar immediately — no restart needed.',
 };
 
+export const addonUpdateMeta: ToolMeta = {
+  name: 'addon_update',
+  category: 'Addons',
+  description:
+    'Modify an existing OpenAidy addon: overwrite/add/delete its UI files and/or ' +
+    'change manifest fields (name, description, version, permissions, externalDomains). ' +
+    'Keeps the on-disk addon.json and the database record in sync.',
+};
+
 // ── UI ────────────────────────────────────────────────────────────────────────
 
 export const presentChoicesMeta: ToolMeta = {
@@ -440,6 +449,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   skillCreateMeta,
   webFetchMeta,
   addonCreateMeta,
+  addonUpdateMeta,
   presentChoicesMeta,
   memorySaveMeta,
   memorySearchMeta,
