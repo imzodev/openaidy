@@ -273,6 +273,17 @@
   color: var(--accent);
 }
 .post-body strong { font-weight: 700; color: var(--text-primary); }
+.post-body .post-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.85;
+}
 
 .post-footer {
   margin-top: 56px;

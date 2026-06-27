@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, useTransform, useScroll } from 'framer-motion';
-import { BookOpen, Terminal, Check } from 'lucide-react';
-import { TypewriterText, MagneticButton } from '../ui';
+import { Terminal, Check } from 'lucide-react';
+import { TypewriterText } from '../ui';
 
 const INSTALL_COMMANDS = {
   windows: 'iex (irm https://openaidy.com/install.ps1)',
   unix: 'curl -fsSL https://openaidy.com/install.sh | bash',
 } as const;
+
+const TITLE_PHRASES = [
+  'do the work',
+  'remember everything',
+  'connect anywhere',
+  'extend themselves',
+  'run on your terms',
+];
 
 export function Hero() {
   const heroRef = useRef(null);
@@ -40,15 +48,28 @@ export function Hero() {
       className="hero"
       style={{ opacity: heroOpacity, scale: heroScale }}
     >
+      <motion.p
+        className="hero-eyebrow"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.15, ease: 'easeOut' }}
+      >
+        OpenAidy · Open AI · Do-It-Yourself
+      </motion.p>
+
       <motion.h1
         className="hero-title"
         initial={{ opacity: 0, y: 35 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.35, ease: [0.16, 1, 0.3, 1] }}
       >
-        Build agents that{' '}
-        <span className="gradient-text">
-          <TypewriterText text="actually do the work" start={typeStarted} />
+        <span className="hero-title-line">Build agents that actually</span>
+        <span className="hero-title-line hero-title-anim">
+          <TypewriterText
+            phrases={TITLE_PHRASES}
+            start={typeStarted}
+            className="gradient-text"
+          />
         </span>
       </motion.h1>
 
@@ -96,21 +117,6 @@ export function Hero() {
         <p className="hero-install-note">
           Installs Git, Node.js, pnpm, and builds the project automatically.
         </p>
-      </motion.div>
-
-      <motion.div
-        className="hero-actions"
-        initial={{ opacity: 0, y: 25 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.9, ease: 'easeOut' }}
-      >
-        <MagneticButton href="#features" className="btn-primary">
-          Explore features
-        </MagneticButton>
-        <MagneticButton href="/docs" className="btn-secondary">
-          <BookOpen size={15} />
-          Read the docs
-        </MagneticButton>
       </motion.div>
 
       <motion.div

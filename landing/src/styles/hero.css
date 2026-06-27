@@ -25,13 +25,44 @@
   font-weight: 500;
 }
 
+.hero-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  margin-bottom: 1.4rem;
+}
+
 .hero-title {
-  font-size: clamp(3rem, 7.5vw, 5.2rem);
+  font-size: clamp(2rem, 6vw, 4.5rem);
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1.08;
   margin-bottom: 1.5rem;
-  max-width: 840px;
+  max-width: 1000px;
+}
+.hero-title-line {
+  display: block;
+}
+.hero-title-anim {
+  position: relative;
+  min-height: 1.08em;
+}
+
+.typewriter {
+  position: relative;
+  display: inline-block;
+}
+.typewriter-ghost {
+  visibility: hidden;
+  white-space: nowrap;
+}
+.typewriter-live {
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
 }
 
 .gradient-text {
@@ -69,14 +100,6 @@
   max-width: 560px;
   margin-bottom: 2.8rem;
   line-height: 1.8;
-}
-
-.hero-actions {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-bottom: 2rem;
 }
 
 .hero-install {
@@ -172,6 +195,5 @@
 
 @media (max-width: 640px) {
   .hero { padding: 6rem 1.5rem 3rem; }
-  .hero-actions { flex-direction: column; align-items: center; }
   .hero-install-code { font-size: 0.75rem; padding: 0.55rem 0.8rem; }
 }
