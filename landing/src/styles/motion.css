@@ -1,0 +1,15 @@
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .gradient-text,
+  .cursor,
+  .marquee-content,
+  .hero-badge,
+  .hero-title,
+  .hero-subtitle,
+  .hero-actions,
+  .hero-banner {
+    animation: none !important;
+    transition: none !important;
+  }
+  .orbs-container { display: none; }
+}

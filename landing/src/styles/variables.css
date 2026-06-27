@@ -1,0 +1,69 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root,
+[data-theme="dark"] {
+  --bg-primary: #08080d;
+  --bg: #08080d;
+  --bg-card: #111119;
+  --bg-secondary: #111119;
+  --text-primary: #eeeef5;
+  --text-secondary: #8888a0;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --border: #1a1a28;
+  --navbar-bg: rgba(8,8,13,0.82);
+  --orb-1: rgba(99,102,241,0.4);
+  --orb-2: rgba(168,85,247,0.35);
+  --orb-3: rgba(236,72,153,0.25);
+  --grid-dot: rgba(99,102,241,0.07);
+  --card-hover-bg: #16161f;
+  --card-glow: rgba(99,102,241,0.12);
+  --card-glow-strong: rgba(99,102,241,0.15);
+  --shadow-card: 0 0 0 1px rgba(99,102,241,0.12), 0 16px 50px rgba(0,0,0,0.5), 0 0 40px rgba(99,102,241,0.1);
+  --shadow-card-hover: 0 0 0 1px rgba(99,102,241,0.2), 0 16px 50px rgba(0,0,0,0.6), 0 0 60px rgba(99,102,241,0.18);
+  --shadow-banner: 0 0 0 1px rgba(99,102,241,0.08), 0 24px 90px rgba(99,102,241,0.22), 0 8px 40px rgba(0,0,0,0.6);
+  --btn-glow: rgba(99,102,241,0.35);
+  --btn-glow-hover: rgba(99,102,241,0.55);
+  --text-on-accent: #fff;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f4f4fa;
+  --bg: #f8f8fc;
+  --bg-card: #ffffff;
+  --bg-secondary: #f0f0f8;
+  --text-primary: #111119;
+  --text-secondary: #6b6b82;
+  --accent: #4f46e5;
+  --accent-hover: #6366f1;
+  --border: #e0e0f0;
+  --navbar-bg: rgba(244,244,250,0.82);
+  --orb-1: rgba(99,102,241,0.18);
+  --orb-2: rgba(168,85,247,0.12);
+  --orb-3: rgba(236,72,153,0.08);
+  --grid-dot: rgba(99,102,241,0.05);
+  --card-hover-bg: #f0f0fa;
+  --card-glow: rgba(99,102,241,0.08);
+  --card-glow-strong: rgba(99,102,241,0.12);
+  --shadow-card: 0 0 0 1px rgba(99,102,241,0.08), 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-card-hover: 0 0 0 1px rgba(99,102,241,0.15), 0 16px 48px rgba(99,102,241,0.12), 0 0 40px rgba(99,102,241,0.08);
+  --shadow-banner: 0 0 0 1px rgba(99,102,241,0.08), 0 24px 80px rgba(99,102,241,0.12), 0 8px 32px rgba(0,0,0,0.1);
+  --btn-glow: rgba(79,70,229,0.25);
+  --btn-glow-hover: rgba(79,70,229,0.4);
+  --text-on-accent: #fff;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }

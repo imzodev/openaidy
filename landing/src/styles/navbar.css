@@ -1,0 +1,107 @@
+.navbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 2.2rem;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.navbar-logo {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+.navbar-logo span { color: var(--accent); }
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 2.2rem;
+}
+.navbar-links a {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+.navbar-links a:hover { color: var(--text-primary); }
+
+.navbar-theme-btn,
+.navbar-hamburger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  flex-shrink: 0;
+}
+.navbar-theme-btn:hover,
+.navbar-hamburger:hover {
+  color: var(--accent);
+  border-color: rgba(99,102,241,0.4);
+  background: var(--card-glow);
+}
+
+.navbar-hamburger { display: none; }
+
+.mobile-menu {
+  position: fixed;
+  top: 64px;
+  left: 1rem;
+  right: 1rem;
+  z-index: 99;
+  display: none;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.mobile-link {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+.mobile-link:hover {
+  background: var(--card-hover-bg);
+  color: var(--accent);
+}
+.mobile-link svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.mobile-link:hover svg { color: var(--accent); }
+
+@media (max-width: 768px) {
+  .navbar { padding: 0.9rem 1.2rem; }
+  .navbar-links > a { display: none; }
+  .navbar-hamburger { display: flex; }
+  .mobile-menu { display: flex; }
+}
+
+@media (max-width: 640px) {
+  .navbar-links { gap: 1rem; }
+}

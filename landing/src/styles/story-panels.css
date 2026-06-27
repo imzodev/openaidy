@@ -1,0 +1,278 @@
+/* ── Chat (left panel) ───────────────────────────────────────────── */
+.chat-msg {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+.chat-msg--user .chat-avatar--user {
+  background: rgba(99, 102, 241, 0.25);
+  color: #818cf8;
+}
+.chat-msg--agent .chat-avatar--agent {
+  background: rgba(34, 197, 94, 0.22);
+  color: #22c55e;
+}
+.chat-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.chat-msg > div { flex: 1; min-width: 0; }
+.chat-meta {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+.chat-text {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.55;
+}
+.chat-text code {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.78em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+.chat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #22c55e;
+  margin-top: 0.35rem;
+  font-weight: 500;
+}
+.chat-status em {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 600;
+}
+.chat-status code {
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.95em;
+  background: rgba(99, 102, 241, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--accent);
+}
+.chat-status--live {
+  color: rgba(255, 255, 255, 0.85);
+  font-style: italic;
+}
+.chat-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.22);
+  color: #22c55e;
+  font-size: 0.65rem;
+}
+.chat-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+.chat-input {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.9rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.chat-input-arrow {
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+/* ── Workspace: shared list/row patterns ────────────────────────── */
+.mock-agents-list,
+.mock-channels,
+.mock-skills {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agent-row,
+.channel-row,
+.skill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.agent-row--active,
+.channel-row--connected,
+.skill-row--active {
+  background: rgba(34, 197, 94, 0.04);
+  border-color: rgba(34, 197, 94, 0.18);
+}
+.channel-row--connected { background: rgba(34, 197, 94, 0.04); }
+.agent-row--active {
+  background: rgba(139, 92, 246, 0.06);
+  border-color: rgba(139, 92, 246, 0.18);
+}
+
+.agent-avatar,
+.channel-icon,
+.skill-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.agent-avatar--blue { background: rgba(99, 102, 241, 0.25); color: #818cf8; }
+.agent-avatar--purple { background: rgba(139, 92, 246, 0.25); color: #a78bfa; }
+.agent-avatar--pink { background: rgba(236, 72, 153, 0.25); color: #f472b6; }
+.agent-avatar--cyan { background: rgba(6, 182, 212, 0.25); color: #22d3ee; }
+
+.channel-icon--slack { background: rgba(74, 21, 75, 0.5); color: #ecb22e; }
+.channel-icon--discord { background: rgba(88, 101, 242, 0.3); color: #b6c1ff; }
+.channel-icon--telegram { background: rgba(0, 136, 204, 0.3); color: #6ec9f0; }
+.channel-icon--whatsapp { background: rgba(37, 211, 102, 0.18); color: #4ad77a; }
+
+.channel-icon { font-size: 0.85rem; }
+
+.skill-icon {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.4);
+}
+.skill-icon--green {
+  background: rgba(34, 197, 94, 0.18);
+  color: #22c55e;
+}
+.skill-icon--add {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+}
+.skill-icon { font-size: 0.85rem; }
+
+.agent-info,
+.channel-info,
+.skill-info {
+  flex: 1;
+  min-width: 0;
+}
+.agent-name,
+.channel-name,
+.skill-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+.agent-meta,
+.channel-meta,
+.skill-meta {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 1px;
+}
+
+.agent-status,
+.channel-state {
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+.agent-status { width: 7px; height: 7px; }
+.channel-state { width: 8px; height: 8px; }
+
+.agent-status--active,
+.channel-state--on {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+.agent-status--idle {
+  background: rgba(255, 255, 255, 0.15);
+}
+.channel-state--off {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+}
+
+/* ── Kanban mini ──────────────────────────────────────────── */
+.mock-kanban-mini {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem;
+  flex: 1;
+}
+.mini-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.mini-col-header {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.mini-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.mini-card--active {
+  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.08);
+}
+.mini-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.mini-card--active .mini-bar { background: rgba(99, 102, 241, 0.3); }
+.mini-tag {
+  font-size: 0.55rem;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+  align-self: flex-start;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(139, 92, 246, 0); }
+}
