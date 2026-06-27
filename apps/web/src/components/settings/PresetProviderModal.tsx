@@ -1,11 +1,11 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { X, Plus, Trash2 } from 'lucide-solid';
 import {
   type ModelPreset,
   OPENCODE_GO_ANTHROPIC_MODEL_IDS,
 } from '@openaidy/shared-types';
 import type { ProviderConfig } from '../../lib/api';
-import { ModelSelector } from './ModelSelector';
+import { ModelMultiSelect } from './ModelMultiSelect';
 import type { PresetProviderModalProps } from './PresetProviderModal.types';
 
 /**
@@ -32,10 +32,35 @@ function resolveOpenCodeGoProviderId(
   return presetId;
 }
 
-export function PresetProviderModal(props: PresetProviderModalProps) {
-  const [selectedModelId, setSelectedModelId] = createSignal(
-    props.existingProvider?.models?.[0]?.id || props.preset.recommendedModel,
+/**
+ * All preset models are checked by default. Existing custom
+ * models added in a previous session keep their `enabled` flag
+ * so re-opening the modal doesn't silently re-enable models the
+ * user had disabled.
+ */
+function buildInitialSelectedIds(
+  preset: ModelPreset[],
+  existingProvider: ProviderConfig | undefined,
+  customModels: { id: string }[],
+): Set<string> {
+  const existing = new Map(
+    (existingProvider?.models ?? []).map((m) => [m.id, m.enabled !== false]),
   );
+  const ids = new Set<string>();
+  for (const m of preset) {
+    ids.add(m.id);
+  }
+  for (const m of customModels) {
+    ids.add(m.id);
+  }
+  // Re-apply the prior `enabled` flag where we have it.
+  for (const [id, enabled] of existing) {
+    if (!enabled) ids.delete(id);
+  }
+  return ids;
+}
+
+export function PresetProviderModal(props: PresetProviderModalProps) {
   const [customModels, setCustomModels] = createSignal<
     { id: string; name: string }[]
   >(
@@ -43,71 +68,94 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
       ?.filter((m) => !props.preset.models.some((pm) => pm.id === m.id))
       .map((m) => ({ id: m.id, name: m.name })) || [],
   );
+  const [selectedIds, setSelectedIds] = createSignal<ReadonlySet<string>>(
+    buildInitialSelectedIds(
+      props.preset.models,
+      props.existingProvider,
+      customModels(),
+    ),
+  );
   const [newModelId, setNewModelId] = createSignal('');
   const [newModelName, setNewModelName] = createSignal('');
 
-  const allModels = () => [
+  const allModels = createMemo<ModelPreset[]>(() => [
     ...props.preset.models,
     ...customModels().map((cm) => ({
       id: cm.id,
       name: cm.name,
       custom: true as const,
     })),
-  ];
+  ]);
+
+  const toggle = (modelId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  };
 
   const addCustomModel = () => {
-    if (!newModelId() || !newModelName()) return;
-    if (customModels().some((m) => m.id === newModelId())) return;
-    setCustomModels([
-      ...customModels(),
-      { id: newModelId(), name: newModelName() },
-    ]);
+    const id = newModelId();
+    const name = newModelName();
+    if (!id || !name) return;
+    if (allModels().some((m) => m.id === id)) return;
+    setCustomModels([...customModels(), { id, name }]);
+    setSelectedIds((prev) => new Set(prev).add(id));
     setNewModelId('');
     setNewModelName('');
   };
 
   const removeCustomModel = (id: string) => {
     setCustomModels(customModels().filter((m) => m.id !== id));
-    if (selectedModelId() === id) {
-      setSelectedModelId(props.preset.recommendedModel);
-    }
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
-  const handleSave = () => {
-    const selectedPresetModel = props.preset.models.find(
-      (m) => m.id === selectedModelId(),
-    );
-    const selectedCustomModel = customModels().find(
-      (m) => m.id === selectedModelId(),
-    );
+  /**
+   * Build one ProviderConfig per `providerId` that has at least
+   * one enabled model. Non-OpenCode-Go presets always collapse
+   * to a single provider; OpenCode Go may emit two when both the
+   * chat-completions and the messages-format models are enabled.
+   */
+  const buildProviders = (): ProviderConfig[] => {
+    const enabled = allModels().filter((m) => selectedIds().has(m.id));
+    if (enabled.length === 0) return [];
 
-    const models: ProviderConfig['models'] = [];
-
-    if (selectedPresetModel) {
-      models.push({
-        id: selectedPresetModel.id,
-        name: selectedPresetModel.name,
-        enabled: true,
-      });
-    } else if (selectedCustomModel) {
-      models.push({
-        id: selectedCustomModel.id,
-        name: selectedCustomModel.name,
-        enabled: true,
-      });
+    const groups = new Map<string, ModelPreset[]>();
+    for (const model of enabled) {
+      const providerId = resolveOpenCodeGoProviderId(props.preset.id, model.id);
+      const bucket = groups.get(providerId) ?? [];
+      bucket.push(model);
+      groups.set(providerId, bucket);
     }
 
-    const provider: ProviderConfig = {
-      id: resolveOpenCodeGoProviderId(props.preset.id, selectedModelId()),
+    return Array.from(groups.entries()).map(([providerId, models]) => ({
+      id: providerId,
       name: props.preset.name,
       vendorFamily: props.preset.vendorFamily,
       enabled: true,
       baseUrl: props.preset.baseUrl,
       apiKeyEnv: props.existingProvider?.apiKeyEnv,
-      models,
-    };
+      models: models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        enabled: true,
+      })),
+    }));
+  };
 
-    props.onSave(provider);
+  const handleSave = () => {
+    const providers = buildProviders();
+    if (providers.length === 0) return;
+    props.onSave(providers);
   };
 
   return (
@@ -131,13 +179,16 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
 
         <div class="p-4 space-y-4">
           <div>
-            <label class="block text-sm font-medium text-text-primary mb-2">
-              Model
+            <label class="block text-sm font-medium text-text-primary mb-1">
+              Available Models
             </label>
-            <ModelSelector
-              models={allModels() as ModelPreset[]}
-              selectedModelId={selectedModelId()}
-              onSelect={setSelectedModelId}
+            <p class="text-xs text-text-tertiary mb-2">
+              Uncheck models you don't want to expose to agents.
+            </p>
+            <ModelMultiSelect
+              models={allModels()}
+              selectedIds={selectedIds()}
+              onToggle={toggle}
             />
           </div>
 
@@ -221,7 +272,7 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
             </button>
             <button
               onClick={handleSave}
-              disabled={props.isPending}
+              disabled={props.isPending || selectedIds().size === 0}
               class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover disabled:bg-primary-disabled disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               {props.isPending ? 'Saving...' : 'Save'}

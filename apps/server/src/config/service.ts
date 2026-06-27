@@ -178,7 +178,9 @@ export class AppConfigService {
       }
 
       const routeConfig: Record<string, unknown> = {
-        modelIds: provider.models.map((model) => model.id),
+        modelIds: provider.models
+          .filter((model) => model.enabled !== false)
+          .map((model) => model.id),
       };
       if (provider.baseUrl !== undefined) {
         routeConfig.baseUrl = provider.baseUrl;

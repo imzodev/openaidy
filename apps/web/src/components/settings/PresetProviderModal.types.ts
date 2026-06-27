@@ -13,7 +13,13 @@ export type PresetProviderModalProps = {
   preset: ProviderPreset;
   existingProvider?: ProviderConfig;
   onClose: () => void;
-  onSave: (provider: ProviderConfig) => void;
+  /**
+   * Receives the providers to persist. Usually one, but OpenCode
+   * Go splits enabled models across `opencode-go` and
+   * `opencode-go-anthropic` so the modal can return two when both
+   * families have enabled models.
+   */
+  onSave: (providers: ProviderConfig[]) => void;
   /**
    * Fires when the user clicks the "Disconnect" link in the
    * footer. Only present when `existingProvider` is set (i.e. the

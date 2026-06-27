@@ -501,3 +501,108 @@ describe('appConfigSchema defaults model validation', () => {
     }
   });
 });
+
+describe('appConfigSchema disabled model validation', () => {
+  const base = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [
+          { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: false },
+          { id: 'gpt-4o', name: 'GPT-4o', enabled: true },
+        ],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('should reject defaults.modelId pointing to a disabled model', () => {
+    const result = appConfigSchema.safeParse(base);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('modelId') &&
+            i.message.includes(
+              'Default model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject agent model pointing to a disabled model', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      agents: [{ ...base.agents[0], model: 'openai/gpt-4o-mini' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('model') &&
+            i.message.includes(
+              'Model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject provider defaultModel pointing to a disabled model', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      providers: [
+        {
+          ...base.providers[0],
+          defaultModel: 'gpt-4o-mini',
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('defaultModel') &&
+            i.message.includes(
+              'Default model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should accept config when disabled models are not referenced', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      agents: [{ ...base.agents[0], model: 'openai/gpt-4o' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+});

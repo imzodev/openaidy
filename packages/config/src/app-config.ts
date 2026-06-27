@@ -269,6 +269,7 @@ export const appConfigSchema = z
     const providerIds = new Set<string>();
     const enabledProviderIds = new Set<string>();
     const providerModels = new Map<string, Set<string>>();
+    const providerEnabledModels = new Map<string, Set<string>>();
 
     config.providers.forEach((provider, providerIndex) => {
       if (providerIds.has(provider.id)) {
@@ -284,6 +285,7 @@ export const appConfigSchema = z
       }
 
       const modelIds = new Set<string>();
+      const enabledModelIds = new Set<string>();
       provider.models.forEach((model, modelIndex) => {
         if (modelIds.has(model.id)) {
           ctx.addIssue({
@@ -293,14 +295,27 @@ export const appConfigSchema = z
           });
         }
         modelIds.add(model.id);
+        if (model.enabled !== false) {
+          enabledModelIds.add(model.id);
+        }
       });
       providerModels.set(provider.id, modelIds);
+      providerEnabledModels.set(provider.id, enabledModelIds);
 
       if (provider.defaultModel && !modelIds.has(provider.defaultModel)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['providers', providerIndex, 'defaultModel'],
           message: `Default model "${provider.defaultModel}" is not defined in provider "${provider.id}"`,
+        });
+      } else if (
+        provider.defaultModel &&
+        !enabledModelIds.has(provider.defaultModel)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['providers', providerIndex, 'defaultModel'],
+          message: `Default model "${provider.defaultModel}" is disabled in provider "${provider.id}"`,
         });
       }
     });
@@ -346,6 +361,12 @@ export const appConfigSchema = z
               path: ['agents', agentIndex, 'model'],
               message: `Unknown model "${modelId}" for provider "${providerId}"`,
             });
+          } else if (!providerEnabledModels.get(providerId)?.has(modelId)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['agents', agentIndex, 'model'],
+              message: `Model "${modelId}" is disabled in provider "${providerId}"`,
+            });
           }
         }
       }
@@ -365,6 +386,16 @@ export const appConfigSchema = z
         code: z.ZodIssueCode.custom,
         path: ['defaults', 'modelId'],
         message: `Unknown default model "${config.defaults.modelId}" for provider "${config.defaults.providerId}"`,
+      });
+    } else if (
+      !providerEnabledModels
+        .get(config.defaults.providerId)
+        ?.has(config.defaults.modelId)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['defaults', 'modelId'],
+        message: `Default model "${config.defaults.modelId}" is disabled in provider "${config.defaults.providerId}"`,
       });
     }
 

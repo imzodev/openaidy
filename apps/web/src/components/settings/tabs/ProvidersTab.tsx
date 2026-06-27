@@ -69,14 +69,16 @@ export function ProvidersTab(props: ProvidersTabProps) {
 
   const hasCustomProviders = () => getCustomProviders().length > 0;
 
-  const handleSavePreset = (provider: ProviderConfig) => {
-    const existing = props
-      .config()
-      ?.providers?.find((p) => p.id === provider.id);
-    if (existing) {
-      props.onUpdateProvider(provider.id, provider);
-    } else {
-      props.onAddProvider(provider);
+  const handleSavePreset = (providers: ProviderConfig[]) => {
+    for (const provider of providers) {
+      const existing = props
+        .config()
+        ?.providers?.find((p) => p.id === provider.id);
+      if (existing) {
+        props.onUpdateProvider(provider.id, provider);
+      } else {
+        props.onAddProvider(provider);
+      }
     }
     setSelectedPreset(null);
   };

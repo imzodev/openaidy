@@ -278,6 +278,15 @@ const modelItemSchema: FieldSchema = {
   key: 'model',
   label: 'Model',
   properties: {
+    enabled: {
+      type: 'boolean',
+      key: 'enabled',
+      label: 'Available for agent assignment',
+      defaultValue: true,
+      description: 'Whether this model can be assigned to agents',
+      helpText:
+        'Disabled models stay configured but are hidden from the agent and default model pickers.',
+    },
     id: {
       type: 'string',
       key: 'id',
@@ -294,13 +303,6 @@ const modelItemSchema: FieldSchema = {
       required: true,
       description: 'Human-readable name for this model',
       placeholder: 'e.g., GPT-4o Mini',
-    },
-    enabled: {
-      type: 'boolean',
-      key: 'enabled',
-      label: 'Enabled',
-      defaultValue: true,
-      description: 'Enable or disable this model',
     },
     contextWindow: {
       type: 'number',
@@ -386,15 +388,17 @@ export function getProvidersSectionSchema(): SectionSchema {
 /**
  * Build a providers section schema with defaultModel options derived from the
  * provider's own models array.  Pass the current provider object so the select
- * is pre-populated with the model IDs that are actually defined.
+ * is pre-populated with the model IDs that are actually defined and enabled.
  */
 export function getProvidersSectionSchemaWithModels(provider: {
-  models?: { id: string; name?: string }[];
+  models?: { id: string; name?: string; enabled?: boolean }[];
 }): SectionSchema {
-  const modelOptions = (provider.models ?? []).map((m) => ({
-    value: m.id,
-    label: m.name ?? m.id,
-  }));
+  const modelOptions = (provider.models ?? [])
+    .filter((m) => m.enabled !== false)
+    .map((m) => ({
+      value: m.id,
+      label: m.name ?? m.id,
+    }));
 
   const providerSchemaWithModels: FieldSchema = {
     ...providerSchema,
