@@ -364,6 +364,97 @@ check_pnpm() {
 }
 
 # ============================================================================
+# ripgrep Provisioning
+# ============================================================================
+# Required by code_search / code_glob tools (the agent's primary search/glob
+# primitives). Without ripgrep those tools fail at runtime with a clear
+# install hint — the server itself boots fine.
+# ============================================================================
+
+install_ripgrep() {
+    log_info "Installing ripgrep..."
+
+    case "$OS" in
+        macos)
+            if command -v brew >/dev/null 2>&1; then
+                log_info "Installing ripgrep via Homebrew..."
+                brew install ripgrep >/dev/null 2>&1 || true
+                command -v rg >/dev/null 2>&1 && return 0
+            fi
+            log_warn "Could not install ripgrep via Homebrew"
+            ;;
+        linux|linux-wsl)
+            local sudo_cmd=""
+            if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
+                command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
+            fi
+            case "$DISTRO" in
+                ubuntu|debian)
+                    log_info "Installing ripgrep via apt..."
+                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ripgrep >/dev/null 2>&1 || true
+                    ;;
+                fedora)
+                    log_info "Installing ripgrep via dnf..."
+                    $sudo_cmd dnf install -y ripgrep >/dev/null 2>&1 || true
+                    ;;
+                arch)
+                    log_info "Installing ripgrep via pacman..."
+                    $sudo_cmd pacman -S --noconfirm ripgrep >/dev/null 2>&1 || true
+                    ;;
+            esac
+            command -v rg >/dev/null 2>&1 && return 0
+            log_warn "Could not install ripgrep via system package manager"
+            ;;
+    esac
+
+    # Last resort: download a static binary from GitHub releases and
+    # drop it into $INSTALL_DIR/bin. Works on every distro without
+    # needing root or a package manager.
+    local arch
+    case "$(uname -m)" in
+        x86_64)        arch="x86_64-unknown-linux-musl" ;;
+        aarch64|arm64) arch="aarch64-unknown-linux-musl" ;;
+        *)             log_error "Unsupported architecture for ripgrep fallback: $(uname -m)"; return 1 ;;
+    esac
+    local url="https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-${arch}.tar.gz"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    log_info "Downloading ripgrep static binary..."
+    if curl -fsSL "$url" -o "$tmp_dir/ripgrep.tar.gz" \
+        && tar xzf "$tmp_dir/ripgrep.tar.gz" -C "$tmp_dir" \
+        && mkdir -p "$INSTALL_DIR/bin" \
+        && mv "$tmp_dir"/ripgrep-*/rg "$INSTALL_DIR/bin/rg" \
+        && chmod +x "$INSTALL_DIR/bin/rg"; then
+        rm -rf "$tmp_dir"
+        export PATH="$INSTALL_DIR/bin:$PATH"
+        return 0
+    fi
+    rm -rf "$tmp_dir"
+    log_error "Failed to install ripgrep"
+    return 1
+}
+
+check_ripgrep() {
+    log_info "Checking ripgrep..."
+
+    # Honor OpenAidy-managed install from a previous run.
+    if [ -x "$INSTALL_DIR/bin/rg" ]; then
+        export PATH="$INSTALL_DIR/bin:$PATH"
+    fi
+
+    if command -v rg >/dev/null 2>&1; then
+        local ver=$(rg --version 2>/dev/null | head -1 | awk '{print $2}')
+        log_success "ripgrep $ver found"
+        return 0
+    fi
+
+    log_warn "ripgrep not found — required by code_search / code_glob"
+    install_ripgrep
+    local ver=$(rg --version 2>/dev/null | head -1 | awk '{print $2}')
+    log_success "ripgrep $ver installed"
+}
+
+# ============================================================================
 # Repository
 # ============================================================================
 
@@ -462,7 +553,9 @@ OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
 # On Unix, repo and data share the same dir; the var exists for cross-platform
 # parity with the Windows installer where they differ.
 OPENAIDY_REPO="${OPENAIDY_REPO:-$HOME/.openaidy}"
-export PATH="$OPENAIDY_REPO/node/bin:$OPENAIDY_REPO/pnpm:$PATH"
+# `bin` holds the OpenAidy-managed ripgrep fallback; prepending it
+# means code_search / code_glob work even when the system has no rg.
+export PATH="$OPENAIDY_REPO/bin:$OPENAIDY_REPO/node/bin:$OPENAIDY_REPO/pnpm:$PATH"
 
 if [ -f "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" ]; then
     exec node --import tsx "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" "$@"
@@ -589,6 +682,7 @@ main() {
     check_git
     check_node
     check_pnpm
+    check_ripgrep
     clone_or_update_repo
     build_project
     create_cli_wrapper

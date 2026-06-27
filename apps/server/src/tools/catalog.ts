@@ -127,6 +127,57 @@ export const execRunMeta: ToolMeta = {
     'Times out after 30 seconds. The working directory is always confined to the agent workspace.',
 };
 
+// ── Code ──────────────────────────────────────────────────────────────────────
+//
+// Code-specific tools — separate from `workspace_*` (which is generic file
+// ops). Use these when editing source code; they're optimized for token
+// efficiency (line numbers, surgical edits, targeted search).
+
+export const codeReadMeta: ToolMeta = {
+  name: 'code_read',
+  category: 'Code',
+  description:
+    'Read a source file with line numbers (cat -n style: "<n>\\t<content>"). ' +
+    'Use start_line/end_line to read a slice instead of the whole file. ' +
+    'Output is capped at max_lines (default 500) with a truncation notice when exceeded. ' +
+    'Prefer this over workspace_read when you need to reference specific lines in a later code_edit call.',
+};
+
+export const codeEditMeta: ToolMeta = {
+  name: 'code_edit',
+  category: 'Code',
+  description:
+    'Apply one or more surgical edits to a single file in one read/write cycle. ' +
+    'Pass `edits: [{old_text, new_text, global_replace?}, ...]`; edits apply in order so later ones can target text from earlier ones. ' +
+    'By default each edit fails when old_text is ambiguous (matches multiple places) — the response shows 2 lines of context around each match so you can pick more surrounding text. ' +
+    'Set global_replace: true on a specific edit to opt into mass-rewriting that occurrence. ' +
+    'Response shows a unified-diff-style block (- old / + new) for every successful edit so you can verify the change without re-reading the file. ' +
+    'Whitespace and line endings in old_text must match the file exactly.',
+};
+
+export const codeSearchMeta: ToolMeta = {
+  name: 'code_search',
+  category: 'Code',
+  description:
+    'Recursive regex search across the workspace, backed by ripgrep (rg --json). ' +
+    'Output is "path:line:content" for matches and "path-line:content" for context — same shape as rg itself. ' +
+    'Use include/exclude globs to scope the search (ripgrep -g syntax, e.g. "**/*.ts"). ' +
+    'Returns up to max_results matches (default 100). By default excludes node_modules, .git, dist, build, .next. ' +
+    'Pattern is a ripgrep / Rust regex; prefix with (?i) for case-insensitive. ' +
+    'Requires ripgrep on PATH (installed by setup scripts).',
+};
+
+export const codeGlobMeta: ToolMeta = {
+  name: 'code_glob',
+  category: 'Code',
+  description:
+    'Find files via ripgrep glob matching (rg --files). Much faster than recursive readdir + JS glob matching on large trees. ' +
+    'Pattern is a ripgrep glob: "*.ts", "**/*.test.ts", "src/**/index.*". ' +
+    'Returns paths relative to the workspace root, one per line. ' +
+    'By default excludes node_modules, .git, dist, build, .next. ' +
+    'Requires ripgrep on PATH (installed by setup scripts).',
+};
+
 // ── Skills ────────────────────────────────────────────────────────────────────
 
 export const skillCreateMeta: ToolMeta = {
@@ -381,6 +432,10 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workspaceWriteMeta,
   workspaceListMeta,
   workspaceDeleteMeta,
+  codeReadMeta,
+  codeEditMeta,
+  codeSearchMeta,
+  codeGlobMeta,
   execRunMeta,
   skillCreateMeta,
   webFetchMeta,

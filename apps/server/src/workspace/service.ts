@@ -315,6 +315,50 @@ export class WorkspaceService {
   }
 
   /**
+   * Options for walkFiles. Default `excludeDirs` matches the
+   * typical noise in a JS/TS workspace: dependencies, build
+   * output, and VCS metadata.
+   */
+  async walkFiles(
+    agentId: string,
+    path: string = '.',
+    options: { excludeDirs?: string[]; maxFiles?: number } = {},
+  ): Promise<string[]> {
+    const rootPath = this.validatePath(agentId, path);
+    const workspaceRoot = this.getWorkspacePath(agentId);
+    const excludeDirs = new Set(
+      options.excludeDirs ?? ['node_modules', '.git', 'dist', 'build', '.next'],
+    );
+    const maxFiles = options.maxFiles ?? 10_000;
+
+    const results: string[] = [];
+    const stack: string[] = [rootPath];
+
+    while (stack.length > 0) {
+      if (results.length >= maxFiles) break;
+      const current = stack.pop()!;
+      let entries;
+      try {
+        entries = await readdir(current, { withFileTypes: true });
+      } catch {
+        // Directory gone, permission denied, etc. — skip silently.
+        continue;
+      }
+      for (const entry of entries) {
+        if (results.length >= maxFiles) break;
+        if (entry.isDirectory()) {
+          if (excludeDirs.has(entry.name)) continue;
+          stack.push(join(current, entry.name));
+        } else if (entry.isFile()) {
+          results.push(relative(workspaceRoot, join(current, entry.name)));
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Read a file from the workspace
    */
   async readFile(agentId: string, filePath: string): Promise<string> {

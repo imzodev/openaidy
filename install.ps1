@@ -245,6 +245,117 @@ function Test-Pnpm {
 }
 
 # ============================================================================
+# ripgrep provisioning
+# ============================================================================
+# Required by code_search / code_glob tools. Without it those tools fail at
+# runtime with a clear install hint; the server itself boots fine.
+
+function Install-Ripgrep {
+    Log-Info "Installing ripgrep..."
+
+    # Try winget first
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Log-Info "Installing ripgrep via winget..."
+        winget install --id BurntSushi.ripgrep -e --silent --accept-package-agreements --accept-source-agreements 2>$null
+        if (Get-Command rg -ErrorAction SilentlyContinue) {
+            Log-Success "ripgrep installed via winget"
+            return $true
+        }
+    }
+
+    # Then Chocolatey
+    $choco = Get-Command choco -ErrorAction SilentlyContinue
+    if ($choco) {
+        Log-Info "Installing ripgrep via Chocolatey..."
+        choco install ripgrep -y --no-progress 2>$null
+        if (Get-Command rg -ErrorAction SilentlyContinue) {
+            Log-Success "ripgrep installed via Chocolatey"
+            return $true
+        }
+    }
+
+    # Then Scoop
+    $scoop = Get-Command scoop -ErrorAction SilentlyContinue
+    if ($scoop) {
+        Log-Info "Installing ripgrep via Scoop..."
+        scoop install ripgrep 2>$null
+        if (Get-Command rg -ErrorAction SilentlyContinue) {
+            Log-Success "ripgrep installed via Scoop"
+            return $true
+        }
+    }
+
+    # Last resort: download the official zip from GitHub releases and
+    # drop rg.exe into $InstallDir\bin. No package manager required.
+    $arch = $env:PROCESSOR_ARCHITECTURE
+    $rgArch = if ($arch -eq "ARM64") { "aarch64-pc-windows-msvc" } else { "x86_64-pc-windows-msvc" }
+    $url = "https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-$rgArch.zip"
+    $zipPath = New-TempFile
+    $binDir = Join-Path $InstallDir "bin"
+    $rgExe = Join-Path $binDir "rg.exe"
+
+    try {
+        Log-Info "Downloading ripgrep from $url ..."
+        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "OpenAidy/1.0" -TimeoutSec 90
+
+        if (-not (Test-Path $binDir)) {
+            New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+        }
+
+        # The zip ships as ripgrep-<ver>-<arch>/rg.exe — expand into a
+        # throwaway dir then move the binary into $binDir.
+        $expandDir = Join-Path ([System.IO.Path]::GetTempPath()) ("openaidy-rg-" + [Guid]::NewGuid().ToString("N"))
+        New-Item -ItemType Directory -Path $expandDir -Force | Out-Null
+        Expand-Archive -Path $zipPath -DestinationPath $expandDir -Force
+
+        $rgSource = Get-ChildItem -Path $expandDir -Recurse -Filter "rg.exe" | Select-Object -First 1
+        if ($rgSource) {
+            Move-Item -Path $rgSource.FullName -Destination $rgExe -Force
+            Remove-Item -Path $expandDir -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path $zipPath -ErrorAction SilentlyContinue
+
+            # Surface the OpenAidy-managed binary on PATH for subsequent steps.
+            $env:PATH = "$binDir;$env:PATH"
+            Log-Success "ripgrep installed to $rgExe"
+            return $true
+        }
+
+        Log-Error "rg.exe not found inside downloaded archive"
+    } catch {
+        Log-Error "ripgrep download failed: $_"
+    }
+
+    Remove-Item -Path $zipPath -ErrorAction SilentlyContinue
+    Remove-Item -Path $expandDir -Recurse -Force -ErrorAction SilentlyContinue
+    return $false
+}
+
+function Test-Ripgrep {
+    # Honor a previously-installed OpenAidy-managed binary.
+    $binDir = Join-Path $InstallDir "bin"
+    $rgExe = Join-Path $binDir "rg.exe"
+    if (Test-Path $rgExe) {
+        $env:PATH = "$binDir;$env:PATH"
+    }
+
+    try {
+        $v = rg --version 2>$null
+        if ($v) {
+            Log-Success "ripgrep found"
+            return $true
+        }
+    } catch { }
+
+    Log-Warn "ripgrep not found — required by code_search / code_glob"
+    if (-not (Install-Ripgrep)) {
+        Log-Error "Could not install ripgrep. Install manually from https://github.com/BurntSushi/ripgrep"
+        return $false
+    }
+    return $true
+}
+
+# ============================================================================
 # Repository
 # ============================================================================
 
@@ -335,7 +446,7 @@ function Install-Cli {
     $cliContent = "@echo off`r`n" +
         "set OPENAIDY_HOME=$dataDir`r`n" +
         "set OPENAIDY_REPO=$InstallDir`r`n" +
-        "set PATH=%OPENAIDY_REPO%\node;%OPENAIDY_REPO%\pnpm;%PATH%`r`n" +
+        "set PATH=%OPENAIDY_REPO%\bin;%OPENAIDY_REPO%\node;%OPENAIDY_REPO%\pnpm;%PATH%`r`n" +
         "cd /d `"%OPENAIDY_REPO%`"`r`n" +
         "if exist `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" (`r`n" +
         "  node --import tsx `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" %*`r`n" +
@@ -476,6 +587,11 @@ if (-not (Test-Node)) {
 # pnpm
 if (-not (Test-Pnpm)) {
     Install-Pnpm
+}
+
+# ripgrep
+if (-not (Test-Ripgrep)) {
+    exit 1
 }
 
 # Repo

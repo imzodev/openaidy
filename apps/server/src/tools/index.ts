@@ -22,6 +22,7 @@
 
 import { BuiltinToolRegistry } from './registry';
 import { createWorkspaceTools } from './workspace';
+import { createCodeTools } from './code';
 import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
 import { createAddonTools } from './addons';
@@ -46,6 +47,7 @@ import type { TaskScheduleService } from '../tasks/schedule-service.js';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
+export { createCodeTools } from './code';
 export { createExecTools } from './exec';
 export { createSkillTools } from './skills';
 export { createAddonTools } from './addons';
@@ -97,6 +99,10 @@ export function createBuiltinToolRegistry(
   const registry = new BuiltinToolRegistry();
 
   for (const tool of createWorkspaceTools(deps.workspace)) {
+    registry.register(tool);
+  }
+
+  for (const tool of createCodeTools(deps.workspace)) {
     registry.register(tool);
   }
 
