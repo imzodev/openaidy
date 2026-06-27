@@ -25,6 +25,12 @@
   --btn-glow: rgba(99,102,241,0.35);
   --btn-glow-hover: rgba(99,102,241,0.55);
   --text-on-accent: #fff;
+  --panel-row-bg: rgba(255, 255, 255, 0.03);
+  --panel-row-border: rgba(255, 255, 255, 0.05);
+  --panel-bar: rgba(255, 255, 255, 0.1);
+  --panel-code-bg: rgba(255, 255, 255, 0.08);
+  --panel-divider: rgba(255, 255, 255, 0.06);
+  --panel-dot-idle: rgba(255, 255, 255, 0.15);
 }
 
 [data-theme="light"] {
@@ -51,6 +57,12 @@
   --btn-glow: rgba(79,70,229,0.25);
   --btn-glow-hover: rgba(79,70,229,0.4);
   --text-on-accent: #fff;
+  --panel-row-bg: rgba(0, 0, 0, 0.03);
+  --panel-row-border: rgba(0, 0, 0, 0.08);
+  --panel-bar: rgba(0, 0, 0, 0.08);
+  --panel-code-bg: rgba(0, 0, 0, 0.05);
+  --panel-divider: rgba(0, 0, 0, 0.08);
+  --panel-dot-idle: rgba(0, 0, 0, 0.15);
 }
 
 html { scroll-behavior: smooth; }

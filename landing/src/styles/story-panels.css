@@ -32,13 +32,13 @@
 }
 .chat-text {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--text-primary);
   line-height: 1.55;
 }
 .chat-text code {
   font-family: 'SF Mono', Consolas, monospace;
   font-size: 0.78em;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--panel-code-bg);
   padding: 1px 5px;
   border-radius: 3px;
   color: var(--accent);
@@ -66,7 +66,7 @@
   color: var(--accent);
 }
 .chat-status--live {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
   font-style: italic;
 }
 .chat-check {
@@ -122,8 +122,8 @@
   align-items: center;
   gap: 0.7rem;
   padding: 0.55rem 0.65rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--panel-row-bg);
+  border: 1px solid var(--panel-row-border);
   border-radius: 10px;
 }
 
@@ -167,8 +167,8 @@
 .channel-icon { font-size: 0.85rem; }
 
 .skill-icon {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.4);
+  background: var(--panel-row-bg);
+  color: var(--text-secondary);
 }
 .skill-icon--green {
   background: rgba(34, 197, 94, 0.18);
@@ -192,13 +192,13 @@
 .skill-name {
   font-size: 0.78rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--text-primary);
 }
 .agent-meta,
 .channel-meta,
 .skill-meta {
   font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-secondary);
   margin-top: 1px;
 }
 
@@ -216,11 +216,11 @@
   box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
 }
 .agent-status--idle {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--panel-dot-idle);
 }
 .channel-state--off {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px dashed rgba(255, 255, 255, 0.25);
+  background: var(--panel-dot-idle);
+  border: 1px dashed var(--panel-row-border);
 }
 
 /* ── Kanban mini ──────────────────────────────────────────── */
@@ -238,15 +238,15 @@
 .mini-col-header {
   font-size: 0.6rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding-bottom: 0.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--panel-divider);
 }
 .mini-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--panel-row-bg);
+  border: 1px solid var(--panel-row-border);
   border-radius: 6px;
   padding: 0.4rem 0.5rem;
   display: flex;
@@ -260,7 +260,7 @@
 .mini-bar {
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--panel-bar);
 }
 .mini-card--active .mini-bar { background: rgba(99, 102, 241, 0.3); }
 .mini-tag {
