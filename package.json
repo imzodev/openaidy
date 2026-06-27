@@ -18,7 +18,7 @@
     "vitest": "^3.2.4"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter ./apps/server --filter ./apps/web dev",
+    "dev": "node scripts/dev.mjs",
     "dev:landing": "pnpm --filter ./landing dev",
     "dev:server": "pnpm --filter ./apps/server dev",
     "dev:web": "pnpm --filter ./apps/web dev",
