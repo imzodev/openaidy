@@ -390,7 +390,13 @@ export async function buildApp() {
   app.decorate('services', services);
 
   await app.register(cors, {
-    origin: env.CORS_ORIGIN,
+    // Allow the configured dev origin AND `null` — sandboxed iframes
+    // (addon UI uses `sandbox="allow-scripts allow-forms"` without
+    // `allow-same-origin`) send Origin: null and would otherwise be
+    // rejected. The /api routes still require a valid auth token, so
+    // allowing null origin here doesn't open CSRF holes for state-
+    // changing endpoints.
+    origin: [env.CORS_ORIGIN, 'null'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   });
   await app.register(sensible);
@@ -682,28 +688,6 @@ export async function buildApp() {
         });
       }
 
-      // Register addon routes (requires DB). `addonRoutes` is outside the /api
-      // scope because the addon SDK lives at `/sdk/openaidy-sdk.js` (a static
-      // asset path embedded in addon HTML templates, not an API endpoint).
-      // `addonProxyRoutes` stays inside the scope so the wrapper supplies
-      // its `/api` prefix automatically.
-      if (dbAdapter && addonService) {
-        await app.register(addonRoutes, {
-          addonsRepository: dbAdapter.repositories.addons,
-          authMiddleware,
-          jwtSecret: env.WS_TOKEN_SECRET,
-          openAidyVersion,
-          manifestValidator: addonManifestValidator,
-        });
-        await api.register(addonProxyRoutes, {
-          addonService,
-          authMiddleware,
-          internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
-          sessionService,
-          agentRegistry,
-        });
-      }
-
       // Register MCP routes (config CRUD + runtime connect/disconnect)
       await api.register(
         createMcpRoutesPlugin({ mcpService, configService, authMiddleware }),
@@ -714,6 +698,18 @@ export async function buildApp() {
         channelRegistry: services.channels,
         authMiddleware,
       });
+
+      // Register addon proxy routes inside the /api scope (their paths
+      // are relative — `/addon-proxy/...` — and rely on the prefix).
+      if (addonService) {
+        await api.register(addonProxyRoutes, {
+          addonService,
+          authMiddleware,
+          internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
+          sessionService,
+          agentRegistry,
+        });
+      }
     },
     { prefix: '/api' },
   );
@@ -722,6 +718,28 @@ export async function buildApp() {
   // Web bundle (same-origin: server serves the built web UI)
   // ==========================================================================
   //
+  // Register addon routes (requires DB) at the outer app level — not
+  // inside the /api scope callback. Fastify's encapsulation model means
+  // `app.register()` from within a child plugin's context has ordering
+  // quirks that can leave routes registered AFTER a certain point
+  // invisible on the outer app. By registering `addonRoutes` as a
+  // sibling of the /api scope, every route in the plugin (the /api/*
+  // CRUD endpoints, the /sdk static asset, AND the /addons/:addonId/*
+  // static file handler) is exposed correctly. The plugin uses absolute
+  // paths so it doesn't need to live under /api.
+  //
+  // `addonProxyRoutes` stays inside the /api scope because its paths
+  // are relative (`/addon-proxy/...`) and rely on the prefix.
+  if (dbAdapter && addonService) {
+    await app.register(addonRoutes, {
+      addonsRepository: dbAdapter.repositories.addons,
+      authMiddleware,
+      jwtSecret: env.WS_TOKEN_SECRET,
+      openAidyVersion,
+      manifestValidator: addonManifestValidator,
+    });
+  }
+
   // Resolve the web dist path from OPENAIDY_WEB_DIST, falling back to
   // ${OPENAIDY_REPO}/apps/web/dist. Web serving is opt-in: when neither
   // var is set the server only exposes the API + WS — this is what lets

@@ -388,25 +388,61 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         ...normalizeHosts(externalImageDomains),
       ].join(' ');
 
+      // The addon HTML is loaded inside a sandboxed iframe WITHOUT
+      // allow-same-origin, which gives the document an opaque origin.
+      // CSP 'self' does NOT match any URL against an opaque origin, so
+      // script-src 'self' silently blocks every <script> tag.  We must
+      // use the actual request origin (scheme + host + port) instead.
+      // `request.headers.host` reflects the browser-facing origin — in
+      // dev mode it's "localhost:5173" (Vite proxy), in production it's
+      // whatever the client actually hits.  We also include the backend
+      // direct origin as a fallback.
+      const requestHost = request.headers.host;
+      const scriptSrcOrigins = [
+        "'unsafe-inline'",
+        ...(requestHost ? [`http://${requestHost}`] : []),
+        `http://localhost:${env.PORT}`,
+      ];
+      const scriptSrc = scriptSrcOrigins.join(' ');
+
+      const csp = [
+        "default-src 'none'",
+        `script-src ${scriptSrc}`,
+        "style-src 'self' 'unsafe-inline'",
+        `img-src ${imgSrc}`,
+        "font-src 'self'",
+        `connect-src ${connectSrc}`,
+        "frame-src 'none'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; ');
+
+      // The addon iframe is sandboxed WITHOUT `allow-same-origin`, so its
+      // document has an opaque origin and EVERY subresource request counts
+      // as cross-site. A classic `<script src>` tag is fetched in `no-cors`
+      // mode by default, and strict dev servers reject cross-origin no-cors
+      // script loads with 403 (Vite's rejectNoCorsRequestMiddleware —
+      // GHSA-4v9v-hfq4-rm2v). To let the addon's scripts (and the SDK) load,
+      // we rewrite `<script src>` tags to request in CORS mode by adding
+      // `crossorigin="anonymous"`. The responses already carry
+      // `Access-Control-Allow-Origin: *`, so the CORS check passes. This is
+      // a no-op in production (the static handler still sends ACAO: *).
+      let payload: string | Buffer = fs.readFileSync(resolved);
+      if (ext === '.html') {
+        payload = payload
+          .toString('utf-8')
+          .replace(
+            /<script(?![^>]*\bcrossorigin\b)([^>]*\bsrc=)/gi,
+            '<script crossorigin="anonymous"$1',
+          );
+      }
+
       return reply
         .header('Content-Type', contentType)
         .header('Access-Control-Allow-Origin', '*')
-        .header(
-          'Content-Security-Policy',
-          [
-            "default-src 'none'",
-            "script-src 'self' 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline'",
-            `img-src ${imgSrc}`,
-            "font-src 'self'",
-            `connect-src ${connectSrc}`,
-            "frame-src 'none'",
-            "object-src 'none'",
-            "base-uri 'none'",
-            "form-action 'none'",
-          ].join('; '),
-        )
-        .send(fs.readFileSync(resolved));
+        .header('Content-Security-Policy', csp)
+        .send(payload);
     },
   );
 

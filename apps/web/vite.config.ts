@@ -48,6 +48,32 @@ export default defineConfig(({ mode }) => {
           ws: true,
           changeOrigin: false,
         },
+        // Serve addon static files from the backend so the iframe in
+        // AddonViewPage can load them same-origin. Without this proxy
+        // an empty OPENAIDY_VITE_SERVER_URL makes the iframe point at
+        // the Vite dev server itself, which falls back to the web app's
+        // index.html for unknown paths — the iframe then renders the
+        // web app sandboxed inside itself, triggering CORS / sandbox
+        // errors that look like an addon bug.
+        '/addons': {
+          target: backendTarget,
+          changeOrigin: false,
+          // Bare addon URLs (e.g. /addons/pokedex-addon) are the SPA
+          // parent page — let Vite serve index.html so the client router
+          // renders AddonViewPage. Paths WITH an entry (e.g.
+          // /addons/pokedex-addon/app/index.html) are the iframe contents
+          // and must be proxied to the backend.
+          bypass(req) {
+            if (/^\/addons\/[^/]+\/?$/.test(req.url ?? '')) {
+              return '/index.html';
+            }
+            return undefined;
+          },
+        },
+        '/sdk': {
+          target: backendTarget,
+          changeOrigin: false,
+        },
       },
     },
     define: {
