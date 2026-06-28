@@ -22,6 +22,7 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
   Trash2,
 } from 'lucide-solid';
 import {
@@ -86,6 +87,7 @@ export function AgentsPage(props: AgentsPageProps) {
   const [providers, setProviders] = createSignal<ProviderConfig[]>([]);
   const [showCreateModal, setShowCreateModal] = createSignal(false);
   const [isDeleting, setIsDeleting] = createSignal(false);
+  const [mobileShowDetail, setMobileShowDetail] = createSignal(false);
 
   const selectedAgent = () => agents().find((a) => a.id === selectedAgentId());
 
@@ -117,6 +119,7 @@ export function AgentsPage(props: AgentsPageProps) {
 
   const handleAgentSelection = (agentId: string) => {
     if (selectedAgentId() === agentId) {
+      setMobileShowDetail(true);
       return;
     }
 
@@ -127,6 +130,7 @@ export function AgentsPage(props: AgentsPageProps) {
     setSelectedAgentId(agentId);
     setSelectedWorkspaceFile(null);
     setHasUnsavedWorkspaceChanges(false);
+    setMobileShowDetail(true);
   };
 
   // Personality tab state
@@ -497,9 +501,11 @@ export function AgentsPage(props: AgentsPageProps) {
 
       {/* Main Content - Split View */}
       <Show when={!isLoading() && agents().length > 0}>
-        <div class="flex h-[calc(100vh-200px)] gap-4">
-          {/* Agent List - Left Panel */}
-          <div class="w-80 flex-shrink-0 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex flex-col">
+        <div class="flex flex-col lg:flex-row lg:h-[calc(100vh-200px)] gap-4">
+          {/* Agent List - Left Panel (hidden on mobile when detail is open) */}
+          <div
+            class={`${mobileShowDetail() ? 'hidden lg:flex' : 'flex'} lg:w-72 xl:w-80 w-full flex-shrink-0 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex-col`}
+          >
             <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Agents
@@ -527,7 +533,7 @@ export function AgentsPage(props: AgentsPageProps) {
                   >
                     <div class="flex items-center gap-3">
                       <div
-                        class={`p-2 rounded-lg ${agent.enabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}
+                        class={`p-2 rounded-lg flex-shrink-0 ${agent.enabled ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}
                       >
                         <Bot
                           class={`w-4 h-4 ${agent.enabled ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}
@@ -541,6 +547,7 @@ export function AgentsPage(props: AgentsPageProps) {
                           {getModelDisplay(agent.model)}
                         </div>
                       </div>
+                      <ChevronLeft class="w-4 h-4 text-gray-400 rotate-180 flex-shrink-0 lg:hidden" />
                     </div>
 
                     {/* Workspace indicator */}
@@ -556,49 +563,38 @@ export function AgentsPage(props: AgentsPageProps) {
             </div>
           </div>
 
-          {/* Agent Detail - Right Panel */}
-          <div class="flex-1 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex flex-col">
+          {/* Agent Detail - Right Panel (full width on mobile) */}
+          <div
+            class={`${!mobileShowDetail() ? 'hidden lg:flex' : 'flex'} flex-1 bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden flex-col min-w-0`}
+          >
             <Show when={selectedAgent()}>
               {/* Header */}
-              <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-                <div class="flex items-start justify-between">
-                  <div>
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <div class="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+                {/* Mobile back button */}
+                <button
+                  class="lg:hidden flex items-center gap-1.5 text-sm text-primary mb-3 hover:text-primary/80 transition-colors"
+                  onClick={() => setMobileShowDetail(false)}
+                >
+                  <ChevronLeft class="w-4 h-4" />
+                  All Agents
+                </button>
+
+                <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:justify-between">
+                  <div class="min-w-0">
+                    <h2 class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
                       {selectedAgent()!.name}
                     </h2>
                     <Show when={selectedAgent()!.description}>
-                      <p class="mt-1 text-gray-600 dark:text-gray-400">
+                      <p class="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                         {selectedAgent()!.description}
                       </p>
                     </Show>
                   </div>
 
-                  <div class="flex items-center gap-3 flex-shrink-0">
-                    {/* Start Chat button */}
-                    <Show when={props.onStartChat && selectedAgent()!.enabled}>
-                      <button
-                        onClick={() => props.onStartChat!(selectedAgent()!.id)}
-                        class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
-                      >
-                        <MessageSquare class="w-4 h-4" />
-                        Start Chat
-                      </button>
-                    </Show>
-
-                    {/* Delete Agent button */}
-                    <button
-                      onClick={handleDeleteAgent}
-                      disabled={isDeleting()}
-                      class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      title="Delete agent"
-                    >
-                      <Trash2 class="w-4 h-4" />
-                      {isDeleting() ? 'Deleting…' : 'Delete'}
-                    </button>
-
+                  <div class="flex items-center gap-2 flex-shrink-0 flex-wrap">
                     {/* Status Badge */}
                     <div
-                      class={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                      class={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                         selectedAgent()!.enabled
                           ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                           : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
@@ -608,114 +604,128 @@ export function AgentsPage(props: AgentsPageProps) {
                         when={selectedAgent()!.enabled}
                         fallback={
                           <>
-                            <PowerOff class="w-4 h-4" />
+                            <PowerOff class="w-3.5 h-3.5" />
                             <span>Disabled</span>
                           </>
                         }
                       >
-                        <Power class="w-4 h-4" />
+                        <Power class="w-3.5 h-3.5" />
                         <span>Active</span>
                       </Show>
                     </div>
+
+                    {/* Start Chat button */}
+                    <Show when={props.onStartChat && selectedAgent()!.enabled}>
+                      <button
+                        onClick={() => props.onStartChat!(selectedAgent()!.id)}
+                        class="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+                      >
+                        <MessageSquare class="w-3.5 h-3.5" />
+                        <span class="hidden xs:inline">Start Chat</span>
+                        <span class="xs:hidden">Chat</span>
+                      </button>
+                    </Show>
+
+                    {/* Delete Agent button */}
+                    <button
+                      onClick={handleDeleteAgent}
+                      disabled={isDeleting()}
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-red-600 dark:text-red-400 border border-red-300 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Delete agent"
+                    >
+                      <Trash2 class="w-3.5 h-3.5" />
+                      {isDeleting() ? 'Deleting…' : 'Delete'}
+                    </button>
                   </div>
                 </div>
 
                 {/* Model info */}
-                <div class="mt-4 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <div class="mt-3 flex items-center gap-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                   <span class="font-medium">Model:</span>
-                  <code class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
+                  <code class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs truncate max-w-[200px] sm:max-w-none">
                     {selectedAgent()!.model}
                   </code>
                 </div>
               </div>
 
-              {/* Tabs */}
+              {/* Tabs — horizontally scrollable on small screens */}
               <div class="border-b border-gray-200 dark:border-gray-700">
-                <nav class="flex gap-1 px-4" aria-label="Tabs">
+                <nav
+                  class="flex gap-0.5 px-2 sm:px-4 overflow-x-auto scrollbar-none"
+                  aria-label="Tabs"
+                >
                   <button
-                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab() === 'overview'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                     onClick={() => handleTabChange('overview')}
                   >
-                    <span class="flex items-center gap-2">
-                      <FileText class="w-4 h-4" />
-                      Overview
-                    </span>
+                    <FileText class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    Overview
                   </button>
 
                   <Show when={selectedAgent()!.workspace?.enabled}>
                     <button
-                      class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                         activeTab() === 'workspace'
                           ? 'border-primary text-primary'
                           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                       }`}
                       onClick={() => handleTabChange('workspace')}
                     >
-                      <span class="flex items-center gap-2">
-                        <Folder class="w-4 h-4" />
-                        Workspace
-                      </span>
+                      <Folder class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                      Workspace
                     </button>
                   </Show>
 
                   <button
-                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab() === 'tools'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                     onClick={() => handleTabChange('tools')}
                   >
-                    <span class="flex items-center gap-2">
-                      <Wrench class="w-4 h-4" />
-                      Tools
-                    </span>
+                    <Wrench class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    Tools
                   </button>
 
                   <button
-                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab() === 'skills'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                     onClick={() => handleTabChange('skills')}
                   >
-                    <span class="flex items-center gap-2">
-                      <Lightbulb class="w-4 h-4" />
-                      Skills
-                    </span>
+                    <Lightbulb class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    Skills
                   </button>
 
                   <button
-                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab() === 'mcp'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                     onClick={() => handleTabChange('mcp')}
                   >
-                    <span class="flex items-center gap-2">
-                      <Server class="w-4 h-4" />
-                      MCP Servers
-                    </span>
+                    <Server class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    MCP
                   </button>
 
                   <button
-                    class={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                    class={`flex-shrink-0 flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab() === 'personality'
                         ? 'border-primary text-primary'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
                     onClick={() => handleTabChange('personality')}
                   >
-                    <span class="flex items-center gap-2">
-                      <UserCircle class="w-4 h-4" />
-                      Personality
-                    </span>
+                    <UserCircle class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    Personality
                   </button>
                 </nav>
               </div>
@@ -898,7 +908,7 @@ export function AgentsPage(props: AgentsPageProps) {
                               onFileSelect={handleWorkspaceFileSelect}
                               onFileDelete={handleWorkspaceFileDelete}
                               onFileRename={handleWorkspaceFileRename}
-                              class="h-[32rem]"
+                              class="h-48 sm:h-64 lg:h-[32rem]"
                             />
                           </div>
                           <div class="lg:col-span-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -908,7 +918,7 @@ export function AgentsPage(props: AgentsPageProps) {
                               selectedFile={selectedWorkspaceFile()}
                               canWrite={workspaceCanWrite()}
                               onDirtyChange={setHasUnsavedWorkspaceChanges}
-                              class="h-[32rem]"
+                              class="h-64 sm:h-80 lg:h-[32rem]"
                             />
                           </div>
                         </div>
@@ -1259,8 +1269,9 @@ export function AgentsPage(props: AgentsPageProps) {
             </Show>
 
             <Show when={!selectedAgent()}>
-              <div class="flex-1 flex items-center justify-center">
-                <p class="text-text-tertiary">
+              <div class="flex-1 flex flex-col items-center justify-center gap-3 p-8">
+                <Bot class="w-10 h-10 text-text-tertiary" />
+                <p class="text-text-tertiary text-sm">
                   Select an agent to view details
                 </p>
               </div>

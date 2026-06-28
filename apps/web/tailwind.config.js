@@ -1,5 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 import typography from '@tailwindcss/typography';
+import plugin from 'tailwindcss/plugin';
+
+const scrollbarNone = plugin(({ addUtilities }) => {
+  addUtilities({
+    '.scrollbar-none': {
+      '-ms-overflow-style': 'none',
+      'scrollbar-width': 'none',
+      '&::-webkit-scrollbar': { display: 'none' },
+    },
+  });
+});
 
 export default {
   darkMode: 'class',
@@ -23,5 +34,5 @@ export default {
       },
     },
   },
-  plugins: [typography],
+  plugins: [typography, scrollbarNone],
 };
