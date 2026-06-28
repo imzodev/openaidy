@@ -1,10 +1,11 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from '../lib/env';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
+import { signAssetToken, verifyAssetToken } from '../lib/asset-token';
 import { createAddonService } from '../addons/service';
 import type { AddonsRepository } from '@openaidy/db';
 import type { ManifestValidator } from '../addons/manifest-validator';
@@ -12,6 +13,50 @@ import type { ManifestValidator } from '../addons/manifest-validator';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ADMIN_SCOPE = '*';
+
+// Asset tokens are short-lived; the addon's static assets all load within
+// seconds of the iframe navigation, so a small window is plenty.
+const ASSET_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Append an asset token to a same-origin subresource URL. External, absolute,
+ * protocol-relative, and special-scheme URLs are left untouched.
+ */
+function appendAssetToken(url: string, token: string): string {
+  if (
+    /^(https?:)?\/\//i.test(url) ||
+    /^(data:|blob:|mailto:|tel:|javascript:|#)/i.test(url)
+  ) {
+    return url;
+  }
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}at=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Rewrite an addon HTML document so the sandboxed iframe can load its
+ * subresources: propagate the asset token onto every local `src`/`href`, and
+ * mark scripts `crossorigin="anonymous"` (CORS mode) so strict dev servers
+ * don't reject the cross-origin no-cors loads.
+ */
+function rewriteAddonHtml(html: string, token: string): string {
+  const withTokens = html.replace(
+    /\b(src|href)=("|')(.*?)\2/gi,
+    (_match, attr: string, quote: string, url: string) =>
+      `${attr}=${quote}${appendAssetToken(url, token)}${quote}`,
+  );
+  return withTokens.replace(
+    /<script(?![^>]*\bcrossorigin\b)([^>]*\bsrc=)/gi,
+    '<script crossorigin="anonymous"$1',
+  );
+}
+
+/** Extract the `at` asset-token query param from a request. */
+function getAssetToken(request: FastifyRequest): string | null {
+  const query = request.query as Record<string, unknown> | undefined;
+  const at = query?.['at'];
+  return typeof at === 'string' && at.length > 0 ? at : null;
+}
 
 /**
  * Addon routes options
@@ -302,8 +347,47 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     },
   );
 
-  // GET /sdk/openaidy-sdk.js - Serve the addon SDK
-  app.get('/sdk/openaidy-sdk.js', async (_request, reply) => {
+  // GET /api/addons/:addonId/asset-token - Mint a short-lived token the web
+  // client puts on the iframe URL so the sandboxed addon (opaque origin, no
+  // header/cookie possible) can authenticate its static asset loads.
+  app.get<{ Params: { addonId: string } }>(
+    '/api/addons/:addonId/asset-token',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      const token = signAssetToken(
+        request.params.addonId,
+        opts.jwtSecret,
+        ASSET_TOKEN_TTL_MS,
+      );
+      return reply.send({ token, expiresIn: ASSET_TOKEN_TTL_MS });
+    },
+  );
+
+  /** Reject the request unless it carries a valid asset token. */
+  const requireAssetToken = (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    addonId?: string,
+  ): boolean => {
+    const token = getAssetToken(request);
+    if (
+      !token ||
+      !verifyAssetToken(token, opts.jwtSecret, addonId ? { addonId } : {})
+    ) {
+      reply.code(401).send({
+        error: 'UNAUTHORIZED',
+        message: 'Missing or invalid asset token',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  // GET /sdk/openaidy-sdk.js - Serve the addon SDK (asset-token gated)
+  app.get('/sdk/openaidy-sdk.js', async (request, reply) => {
+    // SDK is shared across addons, so the token need not be addon-bound.
+    if (!requireAssetToken(request, reply)) return reply;
+
     const sdkPath = path.join(__dirname, '../sdk/openaidy-sdk.js');
     if (!fs.existsSync(sdkPath)) {
       return reply.code(404).send({ error: 'SDK not found' });
@@ -320,6 +404,10 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     '/addons/:addonId/*',
     async (request, reply) => {
       const { addonId } = request.params;
+
+      // Asset token must be present, valid, and bound to this addon.
+      if (!requireAssetToken(request, reply, addonId)) return reply;
+
       const filePath = request.params['*'] || 'index.html';
       const addonsDir = path.join(env.OPENAIDY_HOME, 'addons');
       const fullPath = path.join(addonsDir, addonId, filePath);
@@ -430,12 +518,10 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       // a no-op in production (the static handler still sends ACAO: *).
       let payload: string | Buffer = fs.readFileSync(resolved);
       if (ext === '.html') {
-        payload = payload
-          .toString('utf-8')
-          .replace(
-            /<script(?![^>]*\bcrossorigin\b)([^>]*\bsrc=)/gi,
-            '<script crossorigin="anonymous"$1',
-          );
+        // Propagate the (validated) asset token onto every local subresource
+        // URL so the iframe's scripts/styles/SDK authenticate too.
+        const token = getAssetToken(request) ?? '';
+        payload = rewriteAddonHtml(payload.toString('utf-8'), token);
       }
 
       return reply

@@ -18,7 +18,7 @@ import {
   Globe,
 } from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
-import { refreshAddonToken } from '../../lib/api';
+import { refreshAddonToken, getAddonAssetToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
 // Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
@@ -39,8 +39,12 @@ export function AddonViewPage(props: Props) {
 
   const entry = () =>
     (manifest().entry as string | undefined) ?? 'app/index.html';
+  // Asset token authenticates the sandboxed iframe's static asset loads.
+  const [assetToken, setAssetToken] = createSignal<string | null>(null);
   const iframeSrc = () =>
-    `${SERVER_BASE}/addons/${props.addon.addonId}/${entry()}`;
+    `${SERVER_BASE}/addons/${props.addon.addonId}/${entry()}?at=${encodeURIComponent(
+      assetToken() ?? '',
+    )}`;
 
   const [loadError, setLoadError] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
@@ -56,8 +60,21 @@ export function AddonViewPage(props: Props) {
   // Crypto nonce for secure iframe communication (replaces origin check)
   const nonce = crypto.randomUUID();
 
+  // Fetch the short-lived asset token that authenticates the iframe's static
+  // asset loads. The iframe only renders once it's available.
+  const loadAssetToken = async () => {
+    try {
+      const result = await getAddonAssetToken(props.addon.addonId);
+      setAssetToken(result.token);
+    } catch {
+      setLoadError(true);
+    }
+  };
+
   // Auto-fetch addon token if missing (e.g. addon was enabled by CLI, not the UI)
   onMount(async () => {
+    void loadAssetToken();
+
     const key = `openaidy_addon_token:${props.addon.addonId}`;
     if (!localStorage.getItem(key)) {
       try {
@@ -74,6 +91,8 @@ export function AddonViewPage(props: Props) {
   const handleReload = () => {
     setLoadError(false);
     setReloading(true);
+    // The asset token may have expired since the last load — refresh it.
+    void loadAssetToken();
     setTimeout(() => setReloading(false), 50);
   };
 
@@ -426,8 +445,9 @@ export function AddonViewPage(props: Props) {
         </div>
       </Show>
 
-      {/* Addon iframe — sandbox blocks localStorage/cookie access from addon */}
-      <Show when={!loadError() && !reloading()}>
+      {/* Addon iframe — sandbox blocks localStorage/cookie access from addon.
+          Gated on the asset token so the iframe URL always carries it. */}
+      <Show when={!loadError() && !reloading() && assetToken()}>
         <iframe
           ref={iframeRef}
           src={iframeSrc()}

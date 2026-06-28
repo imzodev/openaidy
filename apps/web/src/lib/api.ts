@@ -897,6 +897,27 @@ export async function refreshAddonToken(
   return response.json() as Promise<{ accessToken: string }>;
 }
 
+/**
+ * Mint a short-lived, addon-scoped asset token. The sandboxed addon iframe
+ * loads its static assets at an opaque origin (no Authorization header or
+ * cookie possible), so this token is placed on the iframe/asset URLs (`?at=`)
+ * to authenticate those loads.
+ */
+export async function getAddonAssetToken(
+  addonId: string,
+): Promise<{ token: string; expiresIn: number }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/addons/${addonId}/asset-token`,
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ token: string; expiresIn: number }>;
+}
+
 export async function disableAddon(
   token: string,
   addonId: string,
