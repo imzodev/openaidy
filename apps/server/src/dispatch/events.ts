@@ -8,6 +8,7 @@ export type RunEventType =
   | 'run.queued'
   | 'run.started'
   | 'run.delta'
+  | 'run.tool_call'
   | 'run.completed'
   | 'run.failed'
   | 'session.run.choices';
@@ -174,7 +175,7 @@ export class RunEventEmitter {
     toolCall: { id: string; name: string; arguments: Record<string, unknown> };
   }): void {
     this.emit({
-      type: 'run.delta',
+      type: 'run.tool_call',
       runId: params.runId,
       sessionId: params.sessionId,
       agentId: params.agentId,

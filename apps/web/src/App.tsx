@@ -104,6 +104,9 @@ function AppContent(props: AppContentProps) {
   >(undefined);
   const [streamingContent, setStreamingContent] = createSignal('');
   const [isStreaming, setIsStreaming] = createSignal(false);
+  const [streamingToolCalls, setStreamingToolCalls] = createSignal<
+    Array<{ id: string; name: string; input: Record<string, unknown> }>
+  >([]);
   const [pendingUserMessage, setPendingUserMessage] = createSignal<
     SessionMessage | undefined
   >(undefined);
@@ -130,15 +133,33 @@ function AppContent(props: AppContentProps) {
     const handleStreamStart = () => {
       setIsStreaming(true);
       setStreamingContent('');
+      setStreamingToolCalls([]);
     };
 
     const handleStreamDelta = (event: { payload: { content: string } }) => {
       setStreamingContent((prev) => prev + event.payload.content);
     };
 
+    const handleStreamToolCall = (event: {
+      payload: {
+        toolCall: {
+          id: string;
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+      };
+    }) => {
+      const tc = event.payload.toolCall;
+      setStreamingToolCalls((prev) => [
+        ...prev,
+        { id: tc.id, name: tc.name, input: tc.arguments },
+      ]);
+    };
+
     const handleStreamEnd = () => {
       setIsStreaming(false);
       setStreamingContent('');
+      setStreamingToolCalls([]);
       setPendingUserMessage(undefined);
       // Refresh messages to show the completed response
       queryClient.invalidateQueries({
@@ -157,6 +178,7 @@ function AppContent(props: AppContentProps) {
       setSubmitError(event.payload.error.message);
       setIsStreaming(false);
       setStreamingContent('');
+      setStreamingToolCalls([]);
       setPendingUserMessage(undefined);
     };
 
@@ -173,6 +195,10 @@ function AppContent(props: AppContentProps) {
 
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
     const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
+    const unsubToolCall = wsClient.on(
+      'session.stream.tool_call',
+      handleStreamToolCall,
+    );
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
     const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
@@ -187,6 +213,7 @@ function AppContent(props: AppContentProps) {
     onCleanup(() => {
       unsubStart();
       unsubDelta();
+      unsubToolCall();
       unsubEnd();
       unsubError();
       unsubUpdated();
@@ -304,6 +331,7 @@ function AppContent(props: AppContentProps) {
     setCurrentChoices(null);
     setIsStreaming(true);
     setStreamingContent('');
+    setStreamingToolCalls([]);
     setPendingUserMessage({
       id: `pending-${Date.now()}`,
       sessionId,
@@ -618,6 +646,9 @@ function AppContent(props: AppContentProps) {
               error={messagesQuery.error?.message}
               isStreaming={isStreaming()}
               streamingContent={isStreaming() ? streamingContent() : undefined}
+              streamingToolCalls={
+                isStreaming() ? streamingToolCalls() : undefined
+              }
               scrollToMessageId={scrollToMessageId()}
             />
             <Show when={currentChoices()}>

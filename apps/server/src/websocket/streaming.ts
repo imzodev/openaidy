@@ -82,6 +82,23 @@ export function mapRunEventToStreamEvent(
       }) as SessionStreamDelta;
     }
 
+    case 'run.tool_call': {
+      const tc = event.data.toolCall as {
+        id: string;
+        name: string;
+        arguments: Record<string, unknown>;
+      };
+      return createWSMessage('session.stream.tool_call', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCall: {
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+        },
+      }) as SessionStreamToolCall;
+    }
+
     case 'run.completed': {
       return createWSMessage('session.stream.end', {
         sessionId: event.sessionId,

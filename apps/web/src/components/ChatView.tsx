@@ -4,7 +4,13 @@ import type { SessionMessage } from '../lib/api';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
-import { ToolResultBlock } from './ToolBlocks';
+import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
+
+type StreamingToolCall = {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
 
 type ChatViewProps = {
   messages: SessionMessage[];
@@ -12,6 +18,7 @@ type ChatViewProps = {
   error?: string;
   streamingContent?: string;
   isStreaming?: boolean;
+  streamingToolCalls?: StreamingToolCall[];
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
 };
@@ -209,18 +216,40 @@ export function ChatView(props: ChatViewProps) {
                 <span class="inline-flex items-center gap-1.5">
                   <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                   <span class="text-xs text-text-tertiary">
-                    {props.streamingContent ? 'Streaming...' : 'Thinking...'}
+                    {props.streamingContent
+                      ? 'Streaming...'
+                      : (props.streamingToolCalls?.length ?? 0) > 0
+                        ? 'Using tools...'
+                        : 'Thinking...'}
                   </span>
                 </span>
               </div>
-              <Show
-                when={props.streamingContent}
-                fallback={<TypingIndicator />}
-              >
-                <div class="text-text-secondary">
+              <Show when={props.streamingContent}>
+                <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />
                   <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
                 </div>
+              </Show>
+              <Show when={(props.streamingToolCalls?.length ?? 0) > 0}>
+                <div class="space-y-1">
+                  <For each={props.streamingToolCalls}>
+                    {(tc) => (
+                      <ToolCallBlock
+                        name={tc.name}
+                        input={tc.input}
+                        isActive={true}
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show
+                when={
+                  !props.streamingContent &&
+                  (props.streamingToolCalls?.length ?? 0) === 0
+                }
+              >
+                <TypingIndicator />
               </Show>
             </div>
           </div>
