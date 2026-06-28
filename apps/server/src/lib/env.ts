@@ -19,6 +19,9 @@ const resolveOpenAidyPath = (
 
 const envSchema = z
   .object({
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
     HOST: z.string().default('0.0.0.0'),
     // Default port the HTTP server binds to. Same-origin architecture:
     // the WebSocket gateway rides on this same port (see WS_PORT alias
@@ -76,6 +79,12 @@ const envSchema = z
       .number()
       .positive()
       .default(31536000000),
+    // Optional override for the master key used to encrypt provider
+    // credentials at rest (AES-256-GCM). When unset, a unique random key is
+    // generated and persisted per install (see lib/encryption.ts), so the app
+    // stays zero-config. Set this for containerized/rotated/shared-key deploys.
+    // Must be >= 32 chars when provided.
+    CREDENTIALS_MASTER_KEY: z.string().optional(),
     // Workspace configuration
     WORKSPACE_BASE_DIR: z.string().optional(),
     // Skills configuration

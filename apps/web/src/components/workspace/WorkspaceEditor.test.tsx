@@ -47,13 +47,7 @@ describe('WorkspaceEditor', () => {
   });
 
   it('shows empty state when no file is selected', () => {
-    render(() => (
-      <WorkspaceEditor
-        agentId="default"
-        requestingAgentId="default"
-        selectedFile={null}
-      />
-    ));
+    render(() => <WorkspaceEditor agentId="default" selectedFile={null} />);
 
     expect(
       screen.getByText('Select a file from the browser to preview or edit it.'),
@@ -71,20 +65,10 @@ describe('WorkspaceEditor', () => {
       isTooLarge: false,
     });
 
-    render(() => (
-      <WorkspaceEditor
-        agentId="default"
-        requestingAgentId="default"
-        selectedFile={file}
-      />
-    ));
+    render(() => <WorkspaceEditor agentId="default" selectedFile={file} />);
 
     await screen.findByDisplayValue('hello world');
-    expect(api.readWorkspaceFile).toHaveBeenCalledWith(
-      'default',
-      'test.txt',
-      'default',
-    );
+    expect(api.readWorkspaceFile).toHaveBeenCalledWith('default', 'test.txt');
   });
 
   it('tracks dirty state and saves edited content', async () => {
@@ -107,7 +91,6 @@ describe('WorkspaceEditor', () => {
     render(() => (
       <WorkspaceEditor
         agentId="default"
-        requestingAgentId="default"
         selectedFile={file}
         canWrite={true}
         onDirtyChange={onDirtyChange}
@@ -128,7 +111,6 @@ describe('WorkspaceEditor', () => {
         'default',
         'test.txt',
         'updated',
-        'default',
         '2026-04-05T10:00:00Z',
       );
     });
@@ -148,12 +130,7 @@ describe('WorkspaceEditor', () => {
     });
 
     render(() => (
-      <WorkspaceEditor
-        agentId="default"
-        requestingAgentId="default"
-        selectedFile={file}
-        canWrite={false}
-      />
+      <WorkspaceEditor agentId="default" selectedFile={file} canWrite={false} />
     ));
 
     const textarea = await screen.findByDisplayValue('readonly');
@@ -173,12 +150,7 @@ describe('WorkspaceEditor', () => {
     });
 
     render(() => (
-      <WorkspaceEditor
-        agentId="default"
-        requestingAgentId="default"
-        selectedFile={file}
-        canWrite={true}
-      />
+      <WorkspaceEditor agentId="default" selectedFile={file} canWrite={true} />
     ));
 
     await screen.findByText('Preview only');

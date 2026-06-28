@@ -867,7 +867,6 @@ export function AgentsPage(props: AgentsPageProps) {
                         <div class="lg:col-span-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                           <FileExplorer
                             agentId={selectedAgent()!.id}
-                            requestingAgentId={selectedAgent()!.id}
                             canWrite={workspaceCanWrite()}
                             selectedFilePath={
                               selectedWorkspaceFile()?.path ?? null
@@ -881,7 +880,6 @@ export function AgentsPage(props: AgentsPageProps) {
                         <div class="lg:col-span-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                           <WorkspaceEditor
                             agentId={selectedAgent()!.id}
-                            requestingAgentId={selectedAgent()!.id}
                             selectedFile={selectedWorkspaceFile()}
                             canWrite={workspaceCanWrite()}
                             onDirtyChange={setHasUnsavedWorkspaceChanges}

@@ -81,28 +81,22 @@ export const workspaceRoutes: FastifyPluginAsync<
   const MAX_EDITABLE_FILE_BYTES = 1_000_000;
 
   /**
-   * Get requesting agent ID from header
-   */
-  const getRequestingAgent = (
-    headers: Record<string, string | undefined>,
-  ): string | null => {
-    const agentId = headers['x-agent-id'];
-    if (typeof agentId !== 'string' || !agentId) {
-      return null;
-    }
-    return agentId;
-  };
-
-  /**
-   * Validate access and return error response if denied
+   * Validate access and return error response if denied.
+   *
+   * SECURITY: the requesting identity is NOT taken from any client-supplied
+   * value (e.g. the old `X-Agent-Id` header, which was trivially spoofable to
+   * impersonate another agent and pivot through its workspace permissions).
+   * These routes are gated by the authenticated `sessions.list` scope and act
+   * on behalf of the operator managing the target agent, so access is
+   * evaluated as the target agent's own (self) workspace permissions —
+   * `workspace.enabled` plus the effective read/write/delete/list rights.
    */
   const validateAccess = (
-    requestingAgentId: string,
     targetAgentId: string,
     mode: PermissionMode,
   ): { allowed: boolean; error?: WorkspaceErrorResponse } => {
     const result = validateWorkspaceAccess(
-      requestingAgentId,
+      targetAgentId,
       targetAgentId,
       mode,
       agentRegistry,
@@ -123,18 +117,10 @@ export const workspaceRoutes: FastifyPluginAsync<
   app.get(
     '/workspace/:agentId/files',
     async (request: FastifyRequest<{ Params: { agentId: string } }>, reply) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId } = request.params;
 
       // Validate list permission
-      const access = validateAccess(requestingAgentId, targetAgentId, 'list');
+      const access = validateAccess(targetAgentId, 'list');
       if (!access.allowed) {
         reply.code(403);
         return access.error;
@@ -171,21 +157,13 @@ export const workspaceRoutes: FastifyPluginAsync<
       request: FastifyRequest<{ Params: { agentId: string; '*': string } }>,
       reply,
     ) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId, '*': filePath } = request.params;
       const fullPath = filePath || '';
 
       // Check if it's a file or directory by trying to read as file first
       try {
         // Try reading as file
-        const access = validateAccess(requestingAgentId, targetAgentId, 'read');
+        const access = validateAccess(targetAgentId, 'read');
         if (!access.allowed) {
           reply.code(403);
           return access.error;
@@ -211,7 +189,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         return response;
       } catch {
         // If read fails, try listing as directory
-        const access = validateAccess(requestingAgentId, targetAgentId, 'list');
+        const access = validateAccess(targetAgentId, 'list');
         if (!access.allowed) {
           reply.code(403);
           return access.error;
@@ -252,14 +230,6 @@ export const workspaceRoutes: FastifyPluginAsync<
       }>,
       reply,
     ) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId, '*': filePath } = request.params;
       const { content } = request.body as FileWriteBody;
 
@@ -273,7 +243,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         return { error: 'Content must be a string', code: 'BAD_REQUEST' };
       }
 
-      const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+      const access = validateAccess(targetAgentId, 'write');
       if (!access.allowed) {
         reply.code(403);
         return access.error;
@@ -309,14 +279,6 @@ export const workspaceRoutes: FastifyPluginAsync<
       }>,
       reply,
     ) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId, '*': filePath } = request.params;
       const { content, expectedModifiedAt } = request.body as FileWriteBody;
 
@@ -330,7 +292,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         return { error: 'Content must be a string', code: 'BAD_REQUEST' };
       }
 
-      const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+      const access = validateAccess(targetAgentId, 'write');
       if (!access.allowed) {
         reply.code(403);
         return access.error;
@@ -398,14 +360,6 @@ export const workspaceRoutes: FastifyPluginAsync<
       request: FastifyRequest<{ Params: { agentId: string; '*': string } }>,
       reply,
     ) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId, '*': filePath } = request.params;
 
       if (!filePath) {
@@ -413,7 +367,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         return { error: 'File path is required', code: 'BAD_REQUEST' };
       }
 
-      const access = validateAccess(requestingAgentId, targetAgentId, 'delete');
+      const access = validateAccess(targetAgentId, 'delete');
       if (!access.allowed) {
         reply.code(403);
         return access.error;
@@ -447,14 +401,6 @@ export const workspaceRoutes: FastifyPluginAsync<
       }>,
       reply,
     ) => {
-      const requestingAgentId = getRequestingAgent(
-        request.headers as Record<string, string | undefined>,
-      );
-      if (!requestingAgentId) {
-        reply.code(401);
-        return { error: 'Missing X-Agent-Id header', code: 'UNAUTHORIZED' };
-      }
-
       const { agentId: targetAgentId } = request.params;
       const { sourcePath, destinationPath } = request.body as FileRenameBody;
 
@@ -466,7 +412,7 @@ export const workspaceRoutes: FastifyPluginAsync<
         };
       }
 
-      const access = validateAccess(requestingAgentId, targetAgentId, 'write');
+      const access = validateAccess(targetAgentId, 'write');
       if (!access.allowed) {
         reply.code(403);
         return access.error;

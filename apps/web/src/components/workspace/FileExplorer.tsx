@@ -22,8 +22,6 @@ import {
 type FileExplorerProps = {
   /** The agent whose workspace to explore */
   agentId: string;
-  /** The agent making the request (for permission check) */
-  requestingAgentId: string;
   /** Optional controlled selected file path */
   selectedFilePath?: string | null;
   /** Whether write operations are allowed */
@@ -71,7 +69,6 @@ export function FileExplorer(props: FileExplorerProps) {
     try {
       const response = await listWorkspaceFiles(
         props.agentId,
-        props.requestingAgentId,
         path || undefined,
       );
 
@@ -96,7 +93,7 @@ export function FileExplorer(props: FileExplorerProps) {
   // Initial load
   createEffect(
     on(
-      () => [props.agentId, props.requestingAgentId],
+      () => props.agentId,
       () => {
         setCurrentPath('');
         setSelectedFile(null);
@@ -159,12 +156,7 @@ export function FileExplorer(props: FileExplorerProps) {
     }
 
     setError(null);
-    const response = await writeWorkspaceFile(
-      props.agentId,
-      filePath,
-      '',
-      props.requestingAgentId,
-    );
+    const response = await writeWorkspaceFile(props.agentId, filePath, '');
 
     if (isErrorResponse(response)) {
       setError(response.error);
@@ -195,7 +187,6 @@ export function FileExplorer(props: FileExplorerProps) {
       props.agentId,
       item.path,
       destinationPath,
-      props.requestingAgentId,
     );
 
     if (isErrorResponse(response)) {
@@ -222,11 +213,7 @@ export function FileExplorer(props: FileExplorerProps) {
     }
 
     setError(null);
-    const response = await deleteWorkspaceFile(
-      props.agentId,
-      item.path,
-      props.requestingAgentId,
-    );
+    const response = await deleteWorkspaceFile(props.agentId, item.path);
 
     if (isErrorResponse(response)) {
       setError(response.error);

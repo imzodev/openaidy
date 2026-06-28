@@ -4,6 +4,12 @@ import {
   randomBytes,
   createHash,
 } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { env } from './env';
+import { createLogger } from './logger';
+
+const log = createLogger('encryption');
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -81,20 +87,53 @@ export class EncryptionService {
   }
 }
 
+/**
+ * Resolve the master key used to encrypt credentials at rest.
+ *
+ * Resolution order (zero-config but never a shared hardcoded secret):
+ *   1. CREDENTIALS_MASTER_KEY env var — explicit operator override for
+ *      containerized/rotated/shared-key deployments.
+ *   2. A unique random key persisted per install under OPENAIDY_HOME. On
+ *      first run it is generated and written (0600) next to the data it
+ *      protects, so the app works out of the box with no configuration.
+ *   3. Tests use an ephemeral in-memory key and never touch disk.
+ */
+function resolveMasterKey(): string {
+  const override = env.CREDENTIALS_MASTER_KEY;
+  if (override) {
+    return override;
+  }
+
+  if (env.NODE_ENV === 'test') {
+    return randomBytes(KEY_LENGTH).toString('hex');
+  }
+
+  const keyPath = resolve(env.OPENAIDY_HOME, 'credentials/master.key');
+
+  if (existsSync(keyPath)) {
+    const existing = readFileSync(keyPath, 'utf8').trim();
+    if (existing.length >= 32) {
+      return existing;
+    }
+    log.warn(
+      `Master key file at ${keyPath} is malformed; generating a new one`,
+    );
+  }
+
+  const generated = randomBytes(KEY_LENGTH).toString('hex');
+  mkdirSync(dirname(keyPath), { recursive: true });
+  // Owner read/write only — best effort (mode is largely ignored on Windows).
+  writeFileSync(keyPath, generated, { mode: 0o600 });
+  log.info(`Generated a new credential-encryption key at ${keyPath}`);
+  return generated;
+}
+
 // Singleton instance
 let encryptionService: EncryptionService | null = null;
 
 export function getEncryptionService(): EncryptionService {
   if (!encryptionService) {
-    let masterKey = process.env.CREDENTIALS_MASTER_KEY;
-    if (!masterKey) {
-      // Fallback for development - use a default key (NOT SECURE FOR PRODUCTION)
-      console.warn(
-        'WARNING: CREDENTIALS_MASTER_KEY not set, using development key',
-      );
-      masterKey = 'dev-master-key-do-not-use-in-production!!';
-    }
-    encryptionService = new EncryptionService(masterKey);
+    encryptionService = new EncryptionService(resolveMasterKey());
   }
   return encryptionService;
 }

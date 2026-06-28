@@ -304,11 +304,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
             ? pathParts.slice(workspaceIndex + 2).join('/')
             : d.path;
 
-        const response = await readWorkspaceFile(
-          agentId,
-          relativePath,
-          agentId, // requestingAgentId - using same agent for simplicity
-        );
+        const response = await readWorkspaceFile(agentId, relativePath);
 
         if ('error' in response) {
           setError(`Failed to read file: ${response.error}`);

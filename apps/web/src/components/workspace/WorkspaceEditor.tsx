@@ -28,7 +28,6 @@ import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 type WorkspaceEditorProps = {
   agentId: string;
-  requestingAgentId: string;
   selectedFile: WorkspaceFileInfo | null;
   canWrite?: boolean;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -110,11 +109,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
     setError(null);
 
     try {
-      const response = await readWorkspaceFile(
-        props.agentId,
-        filePath,
-        props.requestingAgentId,
-      );
+      const response = await readWorkspaceFile(props.agentId, filePath);
 
       if (isWorkspaceError(response)) {
         setError(response.error);
@@ -164,7 +159,6 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         props.agentId,
         filePath,
         content(),
-        props.requestingAgentId,
         lastKnownModifiedAt() ?? undefined,
       );
 
@@ -195,8 +189,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
 
   createEffect(
     on(
-      () => [props.agentId, props.requestingAgentId, currentPath()],
-      ([, , filePath]) => {
+      () => [props.agentId, currentPath()],
+      ([, filePath]) => {
         if (!filePath) {
           resetEditor();
           return;

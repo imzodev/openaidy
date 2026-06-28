@@ -520,15 +520,12 @@ export async function updateConfig(
  */
 export async function listWorkspaceFiles(
   agentId: string,
-  requestingAgentId: string,
   path?: string,
 ): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
   const url = path
     ? `${API_BASE}/api/workspace/${agentId}/files/${path}`
     : `${API_BASE}/api/workspace/${agentId}/files`;
-  const response = await apiFetch(url, {
-    headers: { 'X-Agent-Id': requestingAgentId },
-  });
+  const response = await apiFetch(url);
   return response.json();
 }
 
@@ -538,13 +535,9 @@ export async function listWorkspaceFiles(
 export async function readWorkspaceFile(
   agentId: string,
   filePath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
     `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
-    {
-      headers: { 'X-Agent-Id': requestingAgentId },
-    },
   );
   return response.json();
 }
@@ -556,7 +549,6 @@ export async function writeWorkspaceFile(
   agentId: string,
   filePath: string,
   content: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
     `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
@@ -564,7 +556,6 @@ export async function writeWorkspaceFile(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Agent-Id': requestingAgentId,
       },
       body: JSON.stringify({ content }),
     },
@@ -579,7 +570,6 @@ export async function renameWorkspaceFile(
   agentId: string,
   sourcePath: string,
   destinationPath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
     `${API_BASE}/api/workspace/${agentId}/rename`,
@@ -587,7 +577,6 @@ export async function renameWorkspaceFile(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Agent-Id': requestingAgentId,
       },
       body: JSON.stringify({ sourcePath, destinationPath }),
     },
@@ -602,7 +591,6 @@ export async function updateWorkspaceFile(
   agentId: string,
   filePath: string,
   content: string,
-  requestingAgentId: string,
   expectedModifiedAt?: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
@@ -611,7 +599,6 @@ export async function updateWorkspaceFile(
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Agent-Id': requestingAgentId,
       },
       body: JSON.stringify({ content, expectedModifiedAt }),
     },
@@ -625,13 +612,11 @@ export async function updateWorkspaceFile(
 export async function deleteWorkspaceFile(
   agentId: string,
   filePath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
     `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'DELETE',
-      headers: { 'X-Agent-Id': requestingAgentId },
     },
   );
   return response.json();

@@ -76,24 +76,37 @@ describe('workspace routes', () => {
   }
 
   describe('GET /workspace/:agentId/files', () => {
-    it('should return 401 without X-Agent-Id header', async () => {
+    it('does not require an X-Agent-Id header (identity is server-derived)', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'a.txt', 'hi');
+
+      // No X-Agent-Id header at all — access is evaluated as the target
+      // agent's own (self) workspace permissions.
       const response = await app.inject({
         method: 'GET',
-        url: '/api/workspace/test-agent/files',
+        url: '/api/workspace/agent-1/files',
       });
 
-      expect(response.statusCode).toBe(401);
-      expect(response.json()).toEqual({
-        error: 'Missing X-Agent-Id header',
-        code: 'UNAUTHORIZED',
-      });
+      expect(response.statusCode).toBe(200);
     });
 
-    it('should return 403 when source agent not found', async () => {
+    it('should return 403 when target agent not found', async () => {
       const response = await app.inject({
         method: 'GET',
         url: '/api/workspace/test-agent/files',
-        headers: { 'X-Agent-Id': 'unknown-agent' },
       });
 
       expect(response.statusCode).toBe(403);
@@ -165,7 +178,8 @@ describe('workspace routes', () => {
       });
     });
 
-    it('should return 403 for unauthorized access', async () => {
+    it('ignores a spoofed X-Agent-Id and cannot escalate beyond the target agent permissions', async () => {
+      // Target agent-1 has read/list only (fallback — no write).
       const agent1: Agent = {
         id: 'agent-1',
         name: 'Agent 1',
@@ -178,6 +192,7 @@ describe('workspace routes', () => {
           workspaces: [{ path: '/project' }],
         },
       };
+      // Attacker-controlled agent-2 has full write/delete permissions.
       const agent2: Agent = {
         id: 'agent-2',
         name: 'Agent 2',
@@ -187,17 +202,26 @@ describe('workspace routes', () => {
         version: 1,
         workspace: {
           enabled: true,
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: true,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
       addAgents([agent1, agent2]);
       await workspaceService.ensureWorkspace('agent-1');
-      await workspaceService.writeFile('agent-1', 'secret.txt', 'secret');
 
+      // Attempt to WRITE into agent-1's workspace while claiming, via the
+      // spoofable header, to be the privileged agent-2. The header must be
+      // ignored: identity is the target (agent-1), which lacks write.
       const response = await app.inject({
-        method: 'GET',
-        url: '/api/workspace/agent-1/files/secret.txt',
+        method: 'POST',
+        url: '/api/workspace/agent-1/files/evil.txt',
         headers: { 'X-Agent-Id': 'agent-2' },
+        payload: { content: 'pwned' },
       });
 
       expect(response.statusCode).toBe(403);
