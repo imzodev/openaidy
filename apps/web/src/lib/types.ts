@@ -123,9 +123,22 @@ export type SessionRun = Omit<
 export type BuiltinToolInfo = {
   name: string;
   description: string;
+  category?: string;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
+/** A single item that can be toggled on/off in a ToolToggleGrid. */
+export type ToggleItem = {
+  id: string;
+  label: string;
+  description?: string;
+  category?: string;
+  badge?: string;
+  badgeVariant?: 'success' | 'neutral' | 'warning';
+  disabled?: boolean;
+  disabledReason?: string;
+};
 
 /**
  * Skill info returned by GET /skills

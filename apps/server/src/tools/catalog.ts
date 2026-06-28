@@ -472,3 +472,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   taskSchedulesTriggerMeta,
   taskSchedulesListExecutionsMeta,
 ];
+
+/** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */
+export const TOOL_CATEGORY_MAP: Record<string, string> = Object.fromEntries(
+  ALL_TOOL_METAS.map((m) => [m.name, m.category]),
+);

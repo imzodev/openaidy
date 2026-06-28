@@ -3,6 +3,7 @@ import {
   For,
   Show,
   createEffect,
+  createMemo,
   createSignal,
   onCleanup,
   onMount,
@@ -53,6 +54,7 @@ import {
   WorkspaceEditor,
   type WorkspaceFileInfo,
 } from '../workspace';
+import { ToolToggleGrid, type ToggleItem } from '../common/ToolToggleGrid';
 
 type AgentsPageProps = {
   onStartChat?: (agentId: string) => void;
@@ -929,146 +931,70 @@ export function AgentsPage(props: AgentsPageProps) {
 
                 {/* Tools Tab */}
                 <Show when={activeTab() === 'tools'}>
-                  <div class="space-y-4">
-                    <Show when={allBuiltinTools().length === 0}>
-                      <div class="flex items-center justify-center h-32">
-                        <p class="text-text-tertiary">
-                          No builtin tools available
-                        </p>
-                      </div>
-                    </Show>
-                    <Show when={allBuiltinTools().length > 0}>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <For each={allBuiltinTools()}>
-                          {(tool) => {
-                            const isEnabled = () =>
-                              selectedAgent()!.tools?.includes(tool.name) ??
-                              false;
-                            const isUpdating = () =>
-                              toolsUpdating().has(tool.name);
-                            return (
-                              <button
-                                onClick={() => handleToggleTool(tool.name)}
-                                disabled={isUpdating()}
-                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
-                                  isEnabled()
-                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
-                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                } ${isUpdating() ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
-                              >
-                                <div class="mt-0.5 flex-shrink-0">
-                                  <Wrench
-                                    class={`w-4 h-4 ${
-                                      isEnabled()
-                                        ? 'text-primary'
-                                        : 'text-gray-400 dark:text-gray-500'
-                                    }`}
-                                  />
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                  <div class="flex items-center justify-between gap-2">
-                                    <span class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
-                                      {tool.name}
-                                    </span>
-                                    {/* Toggle switch */}
-                                    <div
-                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                                        isEnabled()
-                                          ? 'bg-primary'
-                                          : 'bg-gray-200 dark:bg-gray-600'
-                                      }`}
-                                    >
-                                      <span
-                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                          isEnabled()
-                                            ? 'translate-x-4'
-                                            : 'translate-x-0'
-                                        }`}
-                                      />
-                                    </div>
-                                  </div>
-                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                                    {tool.description}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          }}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
+                  <ToolToggleGrid
+                    items={createMemo(() =>
+                      allBuiltinTools().map(
+                        (t): ToggleItem => ({
+                          id: t.name,
+                          label: t.name,
+                          description: t.description,
+                          category: t.category,
+                        }),
+                      ),
+                    )()}
+                    enabledIds={createMemo(
+                      () => new Set(selectedAgent()?.tools ?? []),
+                    )()}
+                    updatingIds={toolsUpdating()}
+                    onToggle={handleToggleTool}
+                    icon={(enabled) => (
+                      <Wrench
+                        class={`w-3.5 h-3.5 ${enabled ? 'text-primary' : 'text-gray-400 dark:text-gray-500'}`}
+                      />
+                    )}
+                    categoryOrder={[
+                      'Agents',
+                      'Sessions',
+                      'Memory',
+                      'Tasks',
+                      'Workspace',
+                      'Code',
+                      'Execution',
+                      'Skills',
+                      'Pulses',
+                      'Web',
+                      'Addons',
+                      'UI',
+                    ]}
+                    emptyMessage="No builtin tools available"
+                  />
                 </Show>
 
                 {/* Skills Tab */}
                 <Show when={activeTab() === 'skills'}>
-                  <div class="space-y-4">
-                    <Show when={allSkills().length === 0}>
-                      <div class="flex items-center justify-center h-32">
-                        <p class="text-text-tertiary">No skills available</p>
-                      </div>
-                    </Show>
-                    <Show when={allSkills().length > 0}>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <For each={allSkills()}>
-                          {(skill) => {
-                            const isEnabled = () =>
-                              selectedAgent()!.skills?.includes(skill.id) ??
-                              false;
-                            const isUpdating = () =>
-                              skillsUpdating().has(skill.id);
-                            return (
-                              <button
-                                onClick={() => handleToggleSkill(skill.id)}
-                                disabled={isUpdating()}
-                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
-                                  isEnabled()
-                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
-                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                } ${isUpdating() ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
-                              >
-                                <div class="mt-0.5 flex-shrink-0">
-                                  <Lightbulb
-                                    class={`w-4 h-4 ${
-                                      isEnabled()
-                                        ? 'text-primary'
-                                        : 'text-gray-400 dark:text-gray-500'
-                                    }`}
-                                  />
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                  <div class="flex items-center justify-between gap-2">
-                                    <span class="font-medium text-sm text-gray-900 dark:text-gray-100">
-                                      {skill.name}
-                                    </span>
-                                    {/* Toggle switch */}
-                                    <div
-                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                                        isEnabled()
-                                          ? 'bg-primary'
-                                          : 'bg-gray-200 dark:bg-gray-600'
-                                      }`}
-                                    >
-                                      <span
-                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                          isEnabled()
-                                            ? 'translate-x-4'
-                                            : 'translate-x-0'
-                                        }`}
-                                      />
-                                    </div>
-                                  </div>
-                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                                    {skill.description}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          }}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
+                  <ToolToggleGrid
+                    items={createMemo(() =>
+                      allSkills().map(
+                        (s): ToggleItem => ({
+                          id: s.id,
+                          label: s.name,
+                          description: s.description,
+                          category: s.source ?? 'General',
+                        }),
+                      ),
+                    )()}
+                    enabledIds={createMemo(
+                      () => new Set(selectedAgent()?.skills ?? []),
+                    )()}
+                    updatingIds={skillsUpdating()}
+                    onToggle={handleToggleSkill}
+                    icon={(enabled) => (
+                      <Lightbulb
+                        class={`w-3.5 h-3.5 ${enabled ? 'text-primary' : 'text-gray-400 dark:text-gray-500'}`}
+                      />
+                    )}
+                    emptyMessage="No skills available"
+                  />
                 </Show>
                 {/* Personality Tab */}
                 <Show when={activeTab() === 'personality'}>
@@ -1168,101 +1094,42 @@ export function AgentsPage(props: AgentsPageProps) {
 
                 {/* MCP Servers Tab */}
                 <Show when={activeTab() === 'mcp'}>
-                  <div class="space-y-4">
+                  <div class="space-y-3">
                     <p class="text-xs text-gray-500 dark:text-gray-400">
                       Enable MCP servers to give this agent access to their
                       tools. Servers must be configured and connected globally
                       first.
                     </p>
-                    <Show when={allMcpServers().length === 0}>
-                      <div class="flex items-center justify-center h-32">
-                        <p class="text-text-tertiary">
-                          No MCP servers configured
-                        </p>
-                      </div>
-                    </Show>
-                    <Show when={allMcpServers().length > 0}>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <For each={allMcpServers()}>
-                          {(server) => {
-                            const isEnabled = () =>
-                              selectedAgent()!.mcpServers?.some(
-                                (r) => r.id === server.id,
-                              ) ?? false;
-                            const isUpdating = () =>
-                              mcpUpdating().has(server.id);
-                            return (
-                              <button
-                                onClick={() => handleToggleMcpServer(server.id)}
-                                disabled={isUpdating() || !server.connected}
-                                class={`w-full text-left p-3 border rounded-lg flex items-start gap-3 transition-colors ${
-                                  isEnabled()
-                                    ? 'border-primary/50 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 dark:hover:bg-primary/15'
-                                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                } ${
-                                  isUpdating()
-                                    ? 'opacity-60 cursor-wait'
-                                    : !server.connected
-                                      ? 'opacity-50 cursor-not-allowed'
-                                      : 'cursor-pointer'
-                                }`}
-                              >
-                                <div class="mt-0.5 flex-shrink-0">
-                                  <Server
-                                    class={`w-4 h-4 ${
-                                      isEnabled()
-                                        ? 'text-primary'
-                                        : 'text-gray-400 dark:text-gray-500'
-                                    }`}
-                                  />
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                  <div class="flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                      <span class="font-mono text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                        {server.name ?? server.id}
-                                      </span>
-                                      <span
-                                        class={`flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full ${
-                                          server.connected
-                                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                                        }`}
-                                      >
-                                        {server.connected
-                                          ? 'connected'
-                                          : 'disconnected'}
-                                      </span>
-                                    </div>
-                                    {/* Toggle switch */}
-                                    <div
-                                      class={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                                        isEnabled()
-                                          ? 'bg-primary'
-                                          : 'bg-gray-200 dark:bg-gray-600'
-                                      }`}
-                                    >
-                                      <span
-                                        class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                                          isEnabled()
-                                            ? 'translate-x-4'
-                                            : 'translate-x-0'
-                                        }`}
-                                      />
-                                    </div>
-                                  </div>
-                                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                    {server.toolCount} tool
-                                    {server.toolCount === 1 ? '' : 's'} ·{' '}
-                                    {server.transport}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          }}
-                        </For>
-                      </div>
-                    </Show>
+                    <ToolToggleGrid
+                      items={createMemo(() =>
+                        allMcpServers().map(
+                          (s): ToggleItem => ({
+                            id: s.id,
+                            label: s.name ?? s.id,
+                            description: `${s.toolCount} tool${s.toolCount === 1 ? '' : 's'} · ${s.transport}`,
+                            category: s.transport ?? 'MCP',
+                            badge: s.connected ? 'connected' : 'disconnected',
+                            badgeVariant: s.connected ? 'success' : 'neutral',
+                            disabled: !s.connected,
+                            disabledReason: 'Server is not connected',
+                          }),
+                        ),
+                      )()}
+                      enabledIds={createMemo(
+                        () =>
+                          new Set(
+                            selectedAgent()?.mcpServers?.map((r) => r.id) ?? [],
+                          ),
+                      )()}
+                      updatingIds={mcpUpdating()}
+                      onToggle={handleToggleMcpServer}
+                      icon={(enabled) => (
+                        <Server
+                          class={`w-3.5 h-3.5 ${enabled ? 'text-primary' : 'text-gray-400 dark:text-gray-500'}`}
+                        />
+                      )}
+                      emptyMessage="No MCP servers configured"
+                    />
                   </div>
                 </Show>
               </div>
