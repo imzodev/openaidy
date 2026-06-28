@@ -119,6 +119,32 @@ describe('WorkspaceService', () => {
         service.validatePath('test-agent', '..\\..\\..\\etc\\passwd');
       }).toThrow(WorkspaceError);
     });
+
+    it('should block access through a symlink that escapes the workspace', async () => {
+      const agentId = 'symlink-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      // A directory outside the workspace the attacker wants to reach.
+      const outside = join(testBaseDir, 'outside-secret');
+      await mkdir(outside, { recursive: true });
+      await fsWriteFile(join(outside, 'secret.txt'), 'top secret');
+
+      // Create a symlink INSIDE the workspace pointing at it (as exec_run
+      // could). Skip if the platform/account can't create symlinks.
+      const { symlink } = await import('node:fs/promises');
+      try {
+        await symlink(outside, join(workspacePath, 'escape'), 'dir');
+      } catch {
+        return; // e.g. Windows without symlink privilege — nothing to assert
+      }
+
+      // The lexical path "escape/secret.txt" looks contained, but the real
+      // path resolves outside the workspace and must be rejected.
+      expect(() => {
+        service.validatePath(agentId, 'escape/secret.txt');
+      }).toThrow(WorkspaceError);
+    });
   });
 
   describe('listFiles', () => {

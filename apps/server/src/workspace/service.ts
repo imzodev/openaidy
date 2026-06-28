@@ -8,7 +8,8 @@ import {
   rename,
   open,
 } from 'node:fs/promises';
-import { join, resolve, relative, dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { join, resolve, relative, dirname, isAbsolute } from 'node:path';
 import { createLogger } from '../lib/logger';
 import type { Agent } from '../agents/schema';
 
@@ -251,9 +252,7 @@ export class WorkspaceService {
     const workspacePath = this.getWorkspacePath(agentId);
     const absolutePath = resolve(workspacePath, requestedPath);
 
-    // Check if the resolved path is within the workspace
-    const relativePath = relative(workspacePath, absolutePath);
-    if (relativePath.startsWith('..') || relativePath.startsWith('/')) {
+    const blocked = () => {
       log.warn('Path traversal attempt blocked:', {
         agentId,
         requestedPath,
@@ -264,9 +263,51 @@ export class WorkspaceService {
         'Path traversal attempt blocked: path escapes workspace',
         'PATH_TRAVERSAL_BLOCKED',
       );
+    };
+
+    // 1. Lexical check — fast, catches `../` and absolute-path escapes.
+    const relativePath = relative(workspacePath, absolutePath);
+    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+      blocked();
+    }
+
+    // 2. Symlink-aware check — the lexical check can't see through a symlink
+    // *inside* the workspace that points elsewhere (e.g. one created via
+    // exec_run: `ln -s /etc link`). Resolve the real path of the deepest
+    // existing ancestor and confirm it is still within the real workspace
+    // root. Skipped when the workspace dir doesn't exist yet (no symlinks
+    // can exist, so the lexical check is sufficient).
+    let realWorkspaceRoot: string;
+    try {
+      realWorkspaceRoot = realpathSync(workspacePath);
+    } catch {
+      return absolutePath;
+    }
+    const realTarget = this.realpathExistingAncestor(absolutePath);
+    const realRelative = relative(realWorkspaceRoot, realTarget);
+    if (realRelative.startsWith('..') || isAbsolute(realRelative)) {
+      blocked();
     }
 
     return absolutePath;
+  }
+
+  /**
+   * Resolve the real (symlink-followed) path of the deepest ancestor of `p`
+   * that exists on disk. Used so containment checks work even when the target
+   * file doesn't exist yet (e.g. a create) but a parent symlink might escape.
+   */
+  private realpathExistingAncestor(p: string): string {
+    let current = p;
+    for (;;) {
+      try {
+        return realpathSync(current);
+      } catch {
+        const parent = dirname(current);
+        if (parent === current) return current;
+        current = parent;
+      }
+    }
   }
 
   /**

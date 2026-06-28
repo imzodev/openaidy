@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createLogger } from '../lib/logger';
+import { buildScrubbedEnv } from './env';
 
 const log = createLogger('exec');
 
@@ -8,6 +9,12 @@ export interface ExecServiceOptions {
   timeoutMs?: number;
   /** Maximum bytes captured from stdout + stderr. Default: 1 MB */
   maxOutputBytes?: number;
+  /**
+   * Extra environment variable names to expose to spawned commands, on top of
+   * the non-secret baseline allowlist. Use sparingly — anything added here is
+   * readable by every command the agent runs.
+   */
+  envAllowlist?: string[];
 }
 
 export interface ExecResult {
@@ -61,10 +68,13 @@ const SHELL_FLAG = IS_WINDOWS ? '/c' : '-c';
 export class ExecService {
   private readonly timeoutMs: number;
   private readonly maxOutputBytes: number;
+  /** Scrubbed environment handed to every spawned command (no secrets). */
+  private readonly env: NodeJS.ProcessEnv;
 
   constructor(options: ExecServiceOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    this.env = buildScrubbedEnv(process.env, options.envAllowlist ?? []);
   }
 
   /**
@@ -101,7 +111,9 @@ export class ExecService {
 
       const child = spawn(SHELL, [SHELL_FLAG, command], {
         cwd,
-        env: process.env,
+        // Scrubbed env — never the server's full process.env (which holds
+        // DB creds, JWT secret, credential master key, provider API keys).
+        env: this.env,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
