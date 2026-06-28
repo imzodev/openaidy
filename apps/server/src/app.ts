@@ -526,7 +526,7 @@ export async function buildApp() {
       });
 
       // Register log routes
-      await api.register(logRoutes);
+      await api.register(logRoutes, { authMiddleware });
 
       // Register task routes (requires DB)
       if (dbAdapter) {

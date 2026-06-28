@@ -80,6 +80,8 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'session.list': [WS_CAPABILITIES.SESSIONS_READ],
   'session.delete': [WS_CAPABILITIES.SESSIONS_DELETE],
   'session.message': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.messages': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.runs': [WS_CAPABILITIES.SESSIONS_READ],
   'session.subscribe': [WS_CAPABILITIES.SESSIONS_READ],
   'session.unsubscribe': [WS_CAPABILITIES.SESSIONS_READ],
   'agent.list': [WS_CAPABILITIES.AGENTS_READ],
@@ -105,8 +107,39 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'presence.unsubscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
 };
 
+/**
+ * Authenticated-only message types: permitted for any authenticated connection
+ * with no specific capability. These are infrastructure (keepalive, node RPC
+ * responses from paired nodes) and admin/diagnostic surfaces that don't yet
+ * have a dedicated capability in WS_CAPABILITIES. Listing them explicitly is
+ * what keeps the authorization model default-deny — a newly registered handler
+ * is rejected until it is intentionally added here or to MESSAGE_CAPABILITIES.
+ *
+ * TODO: give logs / mcp / channels first-class capabilities and move them into
+ * MESSAGE_CAPABILITIES so they can be granted to non-admin tokens granularly.
+ */
+const AUTHENTICATED_ONLY_MESSAGE_TYPES = new Set<string>([
+  'ping',
+  'node.rpc.response',
+  'node.rpc.error',
+  'log.query',
+  'log.stats',
+  'log.subscribe',
+  'log.unsubscribe',
+  'mcp.list',
+  'mcp.connect',
+  'mcp.disconnect',
+  'mcp.call',
+  'channel.subscribe',
+  'channel.unsubscribe',
+]);
+
 function isPublicMessageType(type: string): boolean {
   return PUBLIC_MESSAGE_TYPES.has(type);
+}
+
+function isAuthenticatedOnlyMessageType(type: string): boolean {
+  return AUTHENTICATED_ONLY_MESSAGE_TYPES.has(type);
 }
 
 function getRequiredCapabilities(type: string): string[] {
@@ -812,17 +845,31 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
         return;
       }
 
-      const requiredCapabilities = getRequiredCapabilities(message.type);
-      if (requiredCapabilities.length > 0) {
-        const hasAllCapabilities = requiredCapabilities.every((capability) =>
-          gateway.connectionManager.hasCapability(connectionId, capability),
-        );
+      // Authorization gate — default-deny. Public types are open; mapped types
+      // require their capabilities; an explicit allowlist needs only
+      // authentication; everything else is rejected, so a newly registered
+      // handler can never be silently exposed without an explicit policy.
+      if (!isPublicMessageType(message.type)) {
+        const requiredCapabilities = getRequiredCapabilities(message.type);
+        if (requiredCapabilities.length > 0) {
+          const hasAllCapabilities = requiredCapabilities.every((capability) =>
+            gateway.connectionManager.hasCapability(connectionId, capability),
+          );
 
-        if (!hasAllCapabilities) {
+          if (!hasAllCapabilities) {
+            const errorMsg = createErrorResponse(
+              message.id,
+              WS_ERROR_CODES.FORBIDDEN,
+              `Missing required capabilities: ${requiredCapabilities.join(', ')}`,
+            );
+            socket.send(JSON.stringify(errorMsg));
+            return;
+          }
+        } else if (!isAuthenticatedOnlyMessageType(message.type)) {
           const errorMsg = createErrorResponse(
             message.id,
             WS_ERROR_CODES.FORBIDDEN,
-            `Missing required capabilities: ${requiredCapabilities.join(', ')}`,
+            `Message type not permitted: ${message.type}`,
           );
           socket.send(JSON.stringify(errorMsg));
           return;
