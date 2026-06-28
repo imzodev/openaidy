@@ -11,6 +11,7 @@ export type ToolParameterSchema = {
   readonly items?: ToolParameterSchema;
   readonly enum?: readonly string[];
   readonly default?: unknown;
+  readonly additionalProperties?: ToolParameterSchema | boolean;
 };
 
 /**

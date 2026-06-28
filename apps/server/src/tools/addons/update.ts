@@ -105,6 +105,7 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           description:
             'Map of relative path → string content. Creates or overwrites each file. ' +
             'Do not include "addon.json". Paths must be relative with no ".." segments.',
+          additionalProperties: { type: 'string' },
         },
         deleteFiles: {
           type: 'array',

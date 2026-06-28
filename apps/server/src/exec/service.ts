@@ -47,12 +47,16 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   },
 ];
 
+const IS_WINDOWS = process.platform === 'win32';
+const SHELL = IS_WINDOWS ? 'cmd.exe' : '/bin/sh';
+const SHELL_FLAG = IS_WINDOWS ? '/c' : '-c';
+
 /**
  * ExecService
  *
  * Runs a shell command in a subprocess and returns captured output.
- * Commands are spawned via /bin/sh -c to support pipes and redirects,
- * but callers are responsible for only exposing this to trusted agents.
+ * On Unix, commands are spawned via /bin/sh -c; on Windows via cmd.exe /c.
+ * Callers are responsible for only exposing this to trusted agents.
  */
 export class ExecService {
   private readonly timeoutMs: number;
@@ -95,7 +99,7 @@ export class ExecService {
 
       log.debug('exec: spawning command', { command, cwd });
 
-      const child = spawn('/bin/sh', ['-c', command], {
+      const child = spawn(SHELL, [SHELL_FLAG, command], {
         cwd,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],

@@ -123,7 +123,7 @@ export const execRunMeta: ToolMeta = {
   category: 'Execution',
   description:
     'Run a shell command inside the agent workspace and return its stdout, stderr, and exit code. ' +
-    'Supports pipes and redirects (executed via /bin/sh -c). ' +
+    'On Unix, executed via /bin/sh -c; on Windows via cmd.exe /c. ' +
     'Times out after 30 seconds. The working directory is always confined to the agent workspace.',
 };
 

@@ -217,6 +217,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'Required. Must contain at minimum "app/index.html" and "app/index.js". ' +
             '"app/index.html" must end with <script src="index.js"></script> just before </body>. ' +
             'Paths must be relative with no ".." segments. Do not include "addon.json".',
+          additionalProperties: { type: 'string' },
         },
       },
       required: ['id', 'name', 'description', 'permissions', 'files'],
