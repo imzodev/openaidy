@@ -1,10 +1,12 @@
 import { Show, For, createEffect } from 'solid-js';
 import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
+import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
+import { QueuedMessageCard } from './QueuedMessageCard';
 
 type StreamingToolCall = {
   id: string;
@@ -19,6 +21,10 @@ type ChatViewProps = {
   streamingContent?: string;
   isStreaming?: boolean;
   streamingToolCalls?: StreamingToolCall[];
+  /** Messages queued while the agent is responding; sent when it finishes. */
+  queuedMessages?: QueuedMessage[];
+  onEditQueued?: (id: string, content: string) => void;
+  onRemoveQueued?: (id: string) => void;
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
 };
@@ -38,6 +44,7 @@ export function ChatView(props: ChatViewProps) {
   createEffect(() => {
     void props.messages.length;
     void props.streamingContent;
+    void props.queuedMessages?.length;
     if (!isUserScrolledUp) {
       bottomRef?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -253,6 +260,22 @@ export function ChatView(props: ChatViewProps) {
               </Show>
             </div>
           </div>
+        </div>
+      </Show>
+
+      {/* Queued messages — awaiting send after the current run completes */}
+      <Show when={(props.queuedMessages?.length ?? 0) > 0}>
+        <div class="space-y-2" aria-label="Queued messages">
+          <For each={props.queuedMessages}>
+            {(queued, index) => (
+              <QueuedMessageCard
+                message={queued}
+                position={index() + 1}
+                onEdit={(id, content) => props.onEditQueued?.(id, content)}
+                onRemove={(id) => props.onRemoveQueued?.(id)}
+              />
+            )}
+          </For>
         </div>
       </Show>
 

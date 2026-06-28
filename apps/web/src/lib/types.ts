@@ -165,6 +165,21 @@ export type CreateAgentInput = {
 };
 
 /**
+ * A user message held in the client-side send queue while the agent is
+ * responding. Queued messages are sent automatically, one at a time, once
+ * the active run completes. Owned/managed by the useMessageQueue hook and
+ * rendered by the QueuedMessageCard component.
+ */
+export type QueuedMessage = {
+  /** Stable client-generated id, used as the list key and for edit/remove. */
+  id: string;
+  /** The message body to send when this item is dequeued. */
+  content: string;
+  /** Agent selected at enqueue time, sent with the message. */
+  agentId?: string;
+};
+
+/**
  * Submit message input
  */
 export type SubmitMessageInput = {

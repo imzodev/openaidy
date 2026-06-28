@@ -42,6 +42,7 @@ import { AddonsPage } from './components/pages/AddonsPage';
 import { AddonViewPage } from './components/pages/AddonViewPage';
 import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
+import { useMessageQueue } from './lib/use-message-queue';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
 import { listAddons, deleteSession, type AddonRecord } from './lib/api';
@@ -107,6 +108,8 @@ function AppContent(props: AppContentProps) {
   const [streamingToolCalls, setStreamingToolCalls] = createSignal<
     Array<{ id: string; name: string; input: Record<string, unknown> }>
   >([]);
+  // Client-side queue of messages typed while the agent is responding.
+  const messageQueue = useMessageQueue();
   const [pendingUserMessage, setPendingUserMessage] = createSignal<
     SessionMessage | undefined
   >(undefined);
@@ -168,6 +171,8 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({
         queryKey: ['runs', sessionId],
       });
+      // Drain the next queued message, if any, now that the run is idle.
+      processQueue();
       // Focus the chat input after streaming completes
       setTimeout(() => focusChatInput()?.(), 50);
     };
@@ -320,7 +325,33 @@ function AppContent(props: AppContentProps) {
     }
   };
 
+  // Queue-aware entry point used by the composer and the choices card.
+  // While a run is in flight the message is queued; otherwise it is sent now.
   const handleSubmit = async (content: string, agentId?: string) => {
+    if (!selectedSessionId()) {
+      setSubmitError('No session selected');
+      return;
+    }
+    if (isStreaming()) {
+      messageQueue.enqueue(content, agentId);
+      return;
+    }
+    await sendMessage(content, agentId);
+  };
+
+  // Drain the next queued message once the run is idle and the user is not
+  // being asked to answer a choices prompt (pause-on-interruption). No-op
+  // otherwise, so it is safe to call opportunistically.
+  const processQueue = () => {
+    if (isStreaming() || currentChoices()) return;
+    const next = messageQueue.dequeue();
+    if (next) {
+      void sendMessage(next.content, next.agentId);
+    }
+  };
+
+  // Actually dispatch a message and begin a streaming run.
+  const sendMessage = async (content: string, agentId?: string) => {
     const sessionId = selectedSessionId();
     if (!sessionId) {
       setSubmitError('No session selected');
@@ -649,6 +680,9 @@ function AppContent(props: AppContentProps) {
               streamingToolCalls={
                 isStreaming() ? streamingToolCalls() : undefined
               }
+              queuedMessages={messageQueue.items()}
+              onEditQueued={messageQueue.edit}
+              onRemoveQueued={messageQueue.remove}
               scrollToMessageId={scrollToMessageId()}
             />
             <Show when={currentChoices()}>
@@ -662,6 +696,8 @@ function AppContent(props: AppContentProps) {
                   }}
                   onDismiss={() => {
                     setCurrentChoices(null);
+                    // Resume draining the queue now that the prompt is gone.
+                    processQueue();
                     setTimeout(() => focusChatInput()?.(), 50);
                   }}
                 />
@@ -679,7 +715,7 @@ function AppContent(props: AppContentProps) {
             />
             <ChatComposer
               onSend={handleSubmit}
-              disabled={isStreaming()}
+              isStreaming={isStreaming()}
               placeholder="Type your message..."
               agents={agents()}
               selectedAgentId={effectiveAgentId()}

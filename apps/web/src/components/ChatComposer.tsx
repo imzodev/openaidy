@@ -1,11 +1,17 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { Send } from 'lucide-solid';
+import { Send, ListPlus } from 'lucide-solid';
 import { AgentPicker } from './AgentPicker';
 import type { Agent } from '../lib/api';
 
 type ChatComposerProps = {
   onSend: (content: string, agentId?: string) => Promise<void>;
+  /** Hard-disable the composer (e.g. no session / disconnected). */
   disabled?: boolean;
+  /**
+   * The agent is currently responding. The composer stays usable; submitting
+   * queues the message instead of sending it immediately.
+   */
+  isStreaming?: boolean;
   placeholder?: string;
   agents: Agent[];
   selectedAgentId?: string;
@@ -18,6 +24,9 @@ export function ChatComposer(props: ChatComposerProps) {
   const [input, setInput] = createSignal('');
   const [isSending, setIsSending] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
+
+  // Queue mode: usable composer, but submitting enqueues for later send.
+  const isQueueing = () => !!props.isStreaming && !props.disabled;
 
   // Expose focus function to parent via callback when textarea is mounted
   onMount(() => {
@@ -42,6 +51,11 @@ export function ChatComposer(props: ChatComposerProps) {
       setIsSending(false);
     }
   };
+
+  const placeholder = () =>
+    isQueueing()
+      ? 'Queue a follow-up message…'
+      : props.placeholder || 'Type a message...';
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -76,29 +90,41 @@ export function ChatComposer(props: ChatComposerProps) {
             onInput={(e) => setInput(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
             disabled={props.disabled || isSending()}
-            placeholder={props.placeholder || 'Type a message...'}
+            placeholder={placeholder()}
             rows={1}
             class="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed min-h-10 max-h-32 overflow-y-auto mt-1"
           />
         </div>
 
-        {/* Send button */}
+        {/* Send / queue button */}
         <button
           type="submit"
           disabled={props.disabled || isSending() || !input().trim()}
           class="flex-shrink-0 w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
-          aria-label="Send message"
+          aria-label={isQueueing() ? 'Queue message' : 'Send message'}
+          title={
+            isQueueing()
+              ? 'Agent is responding — your message will be queued'
+              : 'Send message'
+          }
         >
           <Show when={isSending()}>
             <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           </Show>
           <Show when={!isSending()}>
-            <Send class="w-4 h-4" />
+            <Show when={isQueueing()} fallback={<Send class="w-4 h-4" />}>
+              <ListPlus class="w-4 h-4" />
+            </Show>
           </Show>
         </button>
       </div>
       <p class="mt-2 text-xs text-text-tertiary">
-        Press Enter to send, Shift+Enter for new line
+        <Show
+          when={isQueueing()}
+          fallback="Press Enter to send, Shift+Enter for new line"
+        >
+          Agent is responding — Enter queues your message, sent when it finishes
+        </Show>
       </p>
     </form>
   );
