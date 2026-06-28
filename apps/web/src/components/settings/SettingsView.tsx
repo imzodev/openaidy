@@ -267,7 +267,18 @@ export function SettingsView() {
                 onAddProvider={handleAddProvider}
                 onDeleteProvider={handleDeleteProvider}
                 onUpdateProvider={handleUpdateProvider}
-                onSaveConfig={updateConfigData}
+                onSaveConfig={async (cfg) => {
+                  // `updateConfigData` only persists to the server
+                  // and invalidates the query — it does NOT touch
+                  // `localConfig`. The disconnect flow uses
+                  // `onSaveConfig` (not `handleDeleteProvider`), so
+                  // without this sync the UI keeps showing the
+                  // just-removed provider as configured until a
+                  // full reload. Mirror the saved config into local
+                  // state on success.
+                  await updateConfigData(cfg);
+                  setLocalConfig(cfg);
+                }}
                 onAgentsRewired={(notices) => {
                   addRewiredNotices(notices);
                   setSaveMessage({
