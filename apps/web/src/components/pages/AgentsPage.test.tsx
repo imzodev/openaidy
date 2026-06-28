@@ -17,6 +17,8 @@ vi.mock('lucide-solid', () => ({
   Save: () => <span data-testid="save-icon">SA</span>,
   ChevronDown: () => <span data-testid="chevron-down">VD</span>,
   ChevronUp: () => <span data-testid="chevron-up">VU</span>,
+  ChevronLeft: () => <span data-testid="chevron-left">VL</span>,
+  ChevronRight: () => <span data-testid="chevron-right">VR</span>,
   Trash2: () => <span data-testid="trash-icon">X</span>,
   MessageSquare: () => <span data-testid="message-icon">M</span>,
 }));

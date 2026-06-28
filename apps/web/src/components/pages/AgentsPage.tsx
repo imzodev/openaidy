@@ -60,6 +60,18 @@ type AgentsPageProps = {
   onStartChat?: (agentId: string) => void;
 };
 
+/** Workspace permission keys rendered as compact single-letter chips. */
+const WORKSPACE_PERMISSION_KEYS = ['read', 'write', 'delete', 'list'] as const;
+const WORKSPACE_PERMISSION_LABELS: Record<
+  (typeof WORKSPACE_PERMISSION_KEYS)[number],
+  string
+> = {
+  read: 'Read',
+  write: 'Write',
+  delete: 'Delete',
+  list: 'List',
+};
+
 export function AgentsPage(props: AgentsPageProps) {
   const [agents, setAgents] = createSignal<Agent[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
@@ -841,92 +853,94 @@ export function AgentsPage(props: AgentsPageProps) {
                     selectedAgent()!.workspace?.enabled
                   }
                 >
-                  <div class="space-y-6">
-                    {/* Workspace Info */}
-                    <div>
-                      <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
-                        Available Workspaces
-                      </h3>
+                  <Show
+                    when={selectedAgent()!.workspace!.workspaces.length > 0}
+                    fallback={
+                      <p class="text-sm text-text-tertiary">
+                        No workspaces configured for this agent.
+                      </p>
+                    }
+                  >
+                    <div class="space-y-4">
+                      {/* Primary: Files & preview — the main focus of this tab */}
+                      <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+                        <div class="lg:col-span-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          <FileExplorer
+                            agentId={selectedAgent()!.id}
+                            requestingAgentId={selectedAgent()!.id}
+                            canWrite={workspaceCanWrite()}
+                            selectedFilePath={
+                              selectedWorkspaceFile()?.path ?? null
+                            }
+                            onFileSelect={handleWorkspaceFileSelect}
+                            onFileDelete={handleWorkspaceFileDelete}
+                            onFileRename={handleWorkspaceFileRename}
+                            class="h-56 sm:h-72 lg:h-[34rem]"
+                          />
+                        </div>
+                        <div class="lg:col-span-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          <WorkspaceEditor
+                            agentId={selectedAgent()!.id}
+                            requestingAgentId={selectedAgent()!.id}
+                            selectedFile={selectedWorkspaceFile()}
+                            canWrite={workspaceCanWrite()}
+                            onDirtyChange={setHasUnsavedWorkspaceChanges}
+                            class="h-72 sm:h-80 lg:h-[34rem]"
+                          />
+                        </div>
+                      </div>
 
-                      <div class="space-y-3">
-                        <For each={selectedAgent()!.workspace!.workspaces}>
-                          {(workspace) => (
-                            <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                              <div class="flex items-center justify-between mb-3">
-                                <div class="flex items-center gap-2">
-                                  <Folder class="w-5 h-5 text-blue-500" />
-                                  <span class="font-medium text-gray-900 dark:text-gray-100">
+                      {/* Secondary: available workspaces — compact panel */}
+                      <div class="border border-gray-200 dark:border-gray-700 rounded-lg">
+                        <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                          <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            Available workspaces
+                          </h3>
+                          <span class="px-2 py-0.5 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-text-secondary">
+                            {selectedAgent()!.workspace!.workspaces.length}
+                          </span>
+                        </div>
+                        <div class="space-y-1 p-2">
+                          <For each={selectedAgent()!.workspace!.workspaces}>
+                            {(workspace) => (
+                              <div class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <div class="flex items-center gap-2 min-w-0">
+                                  <Folder class="w-4 h-4 text-blue-500 shrink-0" />
+                                  <span class="font-mono text-xs sm:text-sm text-gray-900 dark:text-gray-100 truncate">
                                     {workspace.path}
                                   </span>
                                 </div>
+                                <div class="flex items-center gap-1 shrink-0">
+                                  <For each={WORKSPACE_PERMISSION_KEYS}>
+                                    {(key) => {
+                                      const active = () =>
+                                        !!workspace.permissions?.[key];
+                                      return (
+                                        <span
+                                          title={`${WORKSPACE_PERMISSION_LABELS[key]}${
+                                            active() ? '' : ' (off)'
+                                          }`}
+                                          class={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-semibold ${
+                                            active()
+                                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                              : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+                                          }`}
+                                        >
+                                          {WORKSPACE_PERMISSION_LABELS[
+                                            key
+                                          ].charAt(0)}
+                                        </span>
+                                      );
+                                    }}
+                                  </For>
+                                </div>
                               </div>
-
-                              {/* Permissions */}
-                              <div class="grid grid-cols-4 gap-2">
-                                <Show when={workspace.permissions?.read}>
-                                  <span class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
-                                    Read ✓
-                                  </span>
-                                </Show>
-                                <Show when={workspace.permissions?.write}>
-                                  <span class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
-                                    Write ✓
-                                  </span>
-                                </Show>
-                                <Show when={workspace.permissions?.delete}>
-                                  <span class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
-                                    Delete ✓
-                                  </span>
-                                </Show>
-                                <Show when={workspace.permissions?.list}>
-                                  <span class="text-xs px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
-                                    List ✓
-                                  </span>
-                                </Show>
-                              </div>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </div>
-
-                    {/* File Explorer + Editor */}
-                    <Show
-                      when={selectedAgent()!.workspace!.workspaces.length > 0}
-                    >
-                      <div class="space-y-4">
-                        <h3 class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          Workspace Files
-                        </h3>
-                        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                          <div class="lg:col-span-2 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                            <FileExplorer
-                              agentId={selectedAgent()!.id}
-                              requestingAgentId={selectedAgent()!.id}
-                              canWrite={workspaceCanWrite()}
-                              selectedFilePath={
-                                selectedWorkspaceFile()?.path ?? null
-                              }
-                              onFileSelect={handleWorkspaceFileSelect}
-                              onFileDelete={handleWorkspaceFileDelete}
-                              onFileRename={handleWorkspaceFileRename}
-                              class="h-48 sm:h-64 lg:h-[32rem]"
-                            />
-                          </div>
-                          <div class="lg:col-span-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                            <WorkspaceEditor
-                              agentId={selectedAgent()!.id}
-                              requestingAgentId={selectedAgent()!.id}
-                              selectedFile={selectedWorkspaceFile()}
-                              canWrite={workspaceCanWrite()}
-                              onDirtyChange={setHasUnsavedWorkspaceChanges}
-                              class="h-64 sm:h-80 lg:h-[32rem]"
-                            />
-                          </div>
+                            )}
+                          </For>
                         </div>
                       </div>
-                    </Show>
-                  </div>
+                    </div>
+                  </Show>
                 </Show>
 
                 {/* Tools Tab */}
