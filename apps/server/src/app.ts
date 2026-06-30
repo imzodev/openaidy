@@ -453,13 +453,13 @@ export async function buildApp() {
       await api.register(providerRoutes, {
         services: services.providers,
         authMiddleware,
-        // dbAdapter.client is the raw drizzle instance (the only thing
-        // with .insert/.select/.update). At this point in app.ts
-        // dbAdapter has been instantiated (we'd have exited earlier if
-        // the DB couldn't be created). The cast to DatabaseClient is
-        // safe at runtime because client is the drizzle db, not the
-        // adapter envelope (which only has .repositories/.close/.kind).
-        db: dbAdapter!.client as import('@openaidy/db').DatabaseClient,
+        // When a DB is configured, pass the raw drizzle instance
+        // (dbAdapter.client) — the only thing with .insert/.select/.update.
+        // With DB_KIND=disabled there is no adapter; provider routes accept
+        // `db: undefined` and skip the OAuth/connection endpoints that need it.
+        ...(dbAdapter
+          ? { db: dbAdapter.client as import('@openaidy/db').DatabaseClient }
+          : {}),
         invalidateCredential,
       });
 

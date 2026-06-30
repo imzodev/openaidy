@@ -411,6 +411,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const modelId =
         request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+      this.logger.info(
+        `invokeStream: model=${modelId} baseURL=${this.config.baseUrl}`,
+      );
       const messages = this.mapMessages(request.messages);
       const toolMapping =
         request.tools && request.tools.length > 0

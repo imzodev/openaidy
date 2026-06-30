@@ -33,6 +33,7 @@ import {
   markRunSucceeded,
   markRunFailed,
   listSessionRunRecords,
+  deleteSessionRecord,
 } from './store';
 import type {
   SubmitMessageInput,
@@ -255,11 +256,8 @@ export class SessionMessageService {
       return result !== null;
     }
 
-    // For in-memory store, we need to implement delete
-    // Since store.ts doesn't have deleteSessionRecord, we'll return true
-    // The session exists (checked above) but we can't actually delete from in-memory
-    // This is a limitation of the in-memory store for testing
-    return true;
+    // In-memory store: actually remove the session (and its messages/runs).
+    return deleteSessionRecord(id);
   }
 
   /**

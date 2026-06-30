@@ -48,6 +48,20 @@ export function updateSessionTitleRecord(
   return updated;
 }
 
+export function deleteSessionRecord(id: string): boolean {
+  const record = sessions.get(id);
+  if (!record) return false;
+  sessions.delete(id);
+  // Cascade-delete the session's messages and runs.
+  for (const [messageId, message] of messages) {
+    if (message.sessionId === id) messages.delete(messageId);
+  }
+  for (const [runId, run] of runs) {
+    if (run.sessionId === id) runs.delete(runId);
+  }
+  return true;
+}
+
 // Message operations
 export function appendMessageRecord(
   input: AppendMessageInput,
