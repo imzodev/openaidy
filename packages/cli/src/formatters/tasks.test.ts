@@ -64,12 +64,16 @@ describe('formatDate', () => {
   });
 
   it('returns days ago for this week', () => {
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const threeDaysAgo = new Date(
+      Date.now() - 3 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     expect(formatDate(threeDaysAgo)).toBe('3d ago');
   });
 
   it('returns short date for older dates', () => {
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const twoWeeksAgo = new Date(
+      Date.now() - 14 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     // Should be a date string, not a relative string
     expect(formatDate(twoWeeksAgo)).not.toMatch(/^\d+m?h?d?a?go$/);
   });
@@ -113,8 +117,14 @@ describe('formatTaskDetail', () => {
       planningEnabled: true,
       planningStatus: 'completed' as const,
       sessionId: 'sess-001',
-      agents: [{ agentId: 'agent-1', role: 'primary', assignedAt: '2026-01-01T10:00:00Z' }],
-      subtaskCount: { pending: 2, in_progress: 1, completed: 5, failed: 0 },
+      agents: [
+        {
+          agentId: 'agent-1',
+          role: 'primary',
+          assignedAt: '2026-01-01T10:00:00Z',
+        },
+      ],
+      progress: { total: 8, completed: 5, inProgress: 1, failed: 0 },
       createdAt: '2026-01-01T10:00:00Z',
       updatedAt: '2026-01-15T14:30:00Z',
     };
@@ -126,8 +136,8 @@ describe('formatTaskDetail', () => {
     expect(result).toContain('enabled (completed)');
     expect(result).toContain('sess-001');
     expect(result).toContain('agent-1 (primary)');
-    expect(result).toContain('2 pending');
-    expect(result).toContain('5 done');
+    expect(result).toContain('8 total');
+    expect(result).toContain('5 completed');
   });
 
   it('handles no agents and no session', () => {
@@ -141,7 +151,7 @@ describe('formatTaskDetail', () => {
       planningStatus: null,
       sessionId: null,
       agents: [],
-      subtaskCount: { pending: 0, in_progress: 0, completed: 0, failed: 0 },
+      progress: { total: 0, completed: 0, inProgress: 0, failed: 0 },
       createdAt: '2026-01-01T10:00:00Z',
       updatedAt: '2026-01-01T10:00:00Z',
     };
@@ -158,9 +168,27 @@ describe('formatTaskList', () => {
 
   it('groups tasks by status and sorts by status order', () => {
     const tasks = [
-      { id: 't1', title: 'In Progress Task', status: 'in_progress' as const, priority: 'high' as const, createdAt: '2026-01-01T10:00:00Z' },
-      { id: 't2', title: 'Done Task', status: 'done' as const, priority: 'low' as const, createdAt: '2026-01-02T10:00:00Z' },
-      { id: 't3', title: 'Backlog Task', status: 'backlog' as const, priority: 'medium' as const, createdAt: '2026-01-03T10:00:00Z' },
+      {
+        id: 't1',
+        title: 'In Progress Task',
+        status: 'in_progress' as const,
+        priority: 'high' as const,
+        createdAt: '2026-01-01T10:00:00Z',
+      },
+      {
+        id: 't2',
+        title: 'Done Task',
+        status: 'done' as const,
+        priority: 'low' as const,
+        createdAt: '2026-01-02T10:00:00Z',
+      },
+      {
+        id: 't3',
+        title: 'Backlog Task',
+        status: 'backlog' as const,
+        priority: 'medium' as const,
+        createdAt: '2026-01-03T10:00:00Z',
+      },
     ];
     const result = formatTaskList(tasks);
     expect(result).toContain('Backlog');
@@ -175,12 +203,14 @@ describe('formatTaskList', () => {
 describe('formatKanbanBoard', () => {
   it('renders all 6 columns with correct headers', () => {
     const board = {
-      backlog:     [{ id: 't1', title: 'Backlog Item', priority: 'low' as const }],
-      todo:        [],
-      in_progress: [{ id: 't2', title: 'Working On It', priority: 'high' as const }],
-      review:      [],
-      done:        [{ id: 't3', title: 'Completed', priority: 'medium' as const }],
-      cancelled:   [],
+      backlog: [{ id: 't1', title: 'Backlog Item', priority: 'low' as const }],
+      todo: [],
+      in_progress: [
+        { id: 't2', title: 'Working On It', priority: 'high' as const },
+      ],
+      review: [],
+      done: [{ id: 't3', title: 'Completed', priority: 'medium' as const }],
+      cancelled: [],
     };
     const result = formatKanbanBoard(board);
     expect(result).toContain('Backlog (1)');
@@ -194,12 +224,20 @@ describe('formatKanbanBoard', () => {
   });
 
   it('shows "—" for empty columns', () => {
-    const emptyBoard: Record<string, Array<{ id: string; title: string; priority: string }>> = {
-      backlog: [], todo: [], in_progress: [], review: [], done: [], cancelled: [],
+    const emptyBoard: Record<
+      string,
+      Array<{ id: string; title: string; priority: string }>
+    > = {
+      backlog: [],
+      todo: [],
+      in_progress: [],
+      review: [],
+      done: [],
+      cancelled: [],
     };
     const result = formatKanbanBoard(emptyBoard);
     const lines = result.split('\n');
-    const emptyColLines = lines.filter(l => l.trim() === '—');
+    const emptyColLines = lines.filter((l) => l.trim() === '—');
     expect(emptyColLines.length).toBe(6);
   });
 });

@@ -36,7 +36,7 @@ Exit Codes:
     p.log.error(
       'Session ID is required.\n\nUsage: openaidy sessions get <sessionId>',
     );
-    return { exitCode: 2, error: 'Missing session ID' };
+    return { exitCode: 2, error: 'Missing Session ID' };
   }
 
   const config = resolveCLIConfig();

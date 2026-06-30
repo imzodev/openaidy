@@ -104,7 +104,7 @@ export function formatRunList(
   ];
   for (const run of runs) {
     const icon =
-      run.status === 'completed'
+      run.status === 'succeeded'
         ? '✓'
         : run.status === 'failed'
           ? '✗'
