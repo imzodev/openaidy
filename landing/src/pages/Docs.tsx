@@ -213,27 +213,35 @@ export default function Docs() {
   const navigate = useNavigate();
   const slug = docSlug || 'overview';
   const [content, setContent] = useState('');
+  // Which slug the currently-loaded content belongs to. Used to hide stale
+  // content while a newly-selected doc loads (replaces a synchronous reset).
+  const [loadedSlug, setLoadedSlug] = useState('');
   const [html, setHtml] = useState('');
   const [meta, setMeta] = useState<Record<string, string>>({});
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    setContent('');
+    let cancelled = false;
     fetch(`/docs/${slug}.md`)
       .then((r) => {
         if (!r.ok) throw new Error('not found');
         return r.text();
       })
       .then((raw) => {
+        if (cancelled) return;
         const { meta: fm, body } = parseFrontmatter(raw);
         setMeta(fm);
         setContent(body);
         setHtml(renderMarkdown(body));
+        setLoadedSlug(slug);
       })
       .catch(() => {
         // Fallback to index if not found
-        navigate('/docs/overview', { replace: true });
+        if (!cancelled) navigate('/docs/overview', { replace: true });
       });
+    return () => {
+      cancelled = true;
+    };
   }, [slug, navigate]);
 
   const { prev, next } = findAdjacent(slug);
@@ -304,7 +312,7 @@ export default function Docs() {
 
       {/* Main content */}
       <main className="docs-main">
-        {content ? (
+        {content && loadedSlug === slug ? (
           <>
             {/* Breadcrumb */}
             <nav className="docs-breadcrumb">

@@ -1,16 +1,5 @@
-import { createContext, useContext, useLayoutEffect, useState } from 'react';
-
-type Theme = 'dark' | 'light';
-
-interface ThemeContextValue {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
-  setTheme: () => {},
-});
+import { useLayoutEffect, useState } from 'react';
+import { ThemeContext, type Theme } from './theme-context';
 
 const STORAGE_KEY = 'theme';
 const DEFAULT: Theme = 'dark';
@@ -48,10 +37,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
-}
-
-export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
 }
 
 export default ThemeProvider;

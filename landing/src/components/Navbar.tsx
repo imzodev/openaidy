@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { useTheme } from './ThemeProvider';
+import { useTheme } from './theme-context';
 import {
   Github,
   BookOpen,

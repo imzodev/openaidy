@@ -39,7 +39,9 @@ export function TypewriterText({
             typeSpeed,
           );
         } else {
-          setMode('holding');
+          // Defer the transition so we don't call setState synchronously in
+          // the effect body (matches the other deferred branches).
+          timer = setTimeout(() => setMode('holding'), 0);
         }
         break;
       case 'holding':
@@ -52,7 +54,8 @@ export function TypewriterText({
             eraseSpeed,
           );
         } else {
-          setMode('pausing');
+          // Defer the transition (see 'typing' branch above).
+          timer = setTimeout(() => setMode('pausing'), 0);
         }
         break;
       case 'pausing':
