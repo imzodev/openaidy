@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from './env';
 
@@ -52,31 +53,38 @@ describe('parseEnv', () => {
   });
 
   it('derives openaidy paths from OPENAIDY_HOME', () => {
+    const customHome = resolve(tmpdir(), 'custom-openaidy');
     const parsed = parseEnv({
-      OPENAIDY_HOME: '/tmp/custom-openaidy',
+      OPENAIDY_HOME: customHome,
     });
 
-    expect(parsed.OPENAIDY_HOME).toBe('/tmp/custom-openaidy');
-    expect(parsed.APP_CONFIG_PATH).toBe('/tmp/custom-openaidy/openaidy.json');
+    expect(parsed.OPENAIDY_HOME).toBe(customHome);
+    expect(parsed.APP_CONFIG_PATH).toBe(resolve(customHome, 'openaidy.json'));
     expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(
-      '/tmp/custom-openaidy/credentials/bootstrap-admin.json',
+      resolve(customHome, 'credentials/bootstrap-admin.json'),
     );
-    expect(parsed.WORKSPACE_BASE_DIR).toBe('/tmp/custom-openaidy/workspaces');
+    expect(parsed.WORKSPACE_BASE_DIR).toBe(resolve(customHome, 'workspaces'));
   });
 
   it('prefers explicit path overrides over OPENAIDY_HOME derived defaults', () => {
+    const customHome = resolve(tmpdir(), 'custom-openaidy');
+    const appConfigOverride = resolve(tmpdir(), 'other', 'config.json');
+    const bootstrapOverride = resolve(
+      tmpdir(),
+      'other',
+      'bootstrap-admin.json',
+    );
+    const workspaceOverride = resolve(tmpdir(), 'other', 'workspaces');
     const parsed = parseEnv({
-      OPENAIDY_HOME: '/tmp/custom-openaidy',
-      APP_CONFIG_PATH: '/tmp/other/config.json',
-      BOOTSTRAP_ADMIN_TOKEN_PATH: '/tmp/other/bootstrap-admin.json',
-      WORKSPACE_BASE_DIR: '/tmp/other/workspaces',
+      OPENAIDY_HOME: customHome,
+      APP_CONFIG_PATH: appConfigOverride,
+      BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapOverride,
+      WORKSPACE_BASE_DIR: workspaceOverride,
     });
 
-    expect(parsed.APP_CONFIG_PATH).toBe('/tmp/other/config.json');
-    expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(
-      '/tmp/other/bootstrap-admin.json',
-    );
-    expect(parsed.WORKSPACE_BASE_DIR).toBe('/tmp/other/workspaces');
+    expect(parsed.APP_CONFIG_PATH).toBe(appConfigOverride);
+    expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(bootstrapOverride);
+    expect(parsed.WORKSPACE_BASE_DIR).toBe(workspaceOverride);
   });
 
   it('uses a provided sqlite path', () => {

@@ -83,8 +83,12 @@ describe('Version Manager', () => {
     });
 
     it('should handle tilde ranges', () => {
+      // Tilde allows patch-level changes within the locked minor version:
+      // ~1.0.0 := >=1.0.0 <1.1.0. A minor bump (1.1.0) is therefore excluded;
+      // matching it would make tilde identical to caret (covered above).
       expect(satisfiesVersion('1.0.0', '~1.0.0')).toBe(true);
-      expect(satisfiesVersion('1.1.0', '~1.0.0')).toBe(true);
+      expect(satisfiesVersion('1.0.5', '~1.0.0')).toBe(true);
+      expect(satisfiesVersion('1.1.0', '~1.0.0')).toBe(false);
       expect(satisfiesVersion('2.0.0', '~1.0.0')).toBe(false);
     });
 

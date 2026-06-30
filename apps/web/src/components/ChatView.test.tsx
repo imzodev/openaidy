@@ -4,24 +4,23 @@ import { ChatView } from './ChatView';
 import type { SessionMessage } from '../lib/api';
 import type { QueuedMessage } from '../lib/types';
 
-// Mock lucide-solid
-vi.mock('lucide-solid', () => {
-  const icon = (label: string) => () => <span data-testid={`${label}-icon`} />;
-  return {
-    User: icon('user'),
-    Bot: icon('bot'),
-    AlertCircle: icon('alert'),
-    Wrench: icon('wrench'),
-    Server: icon('server'),
-    Loader: icon('loader'),
-    ChevronDown: icon('chevron-down'),
-    ChevronRight: icon('chevron-right'),
-    Clock: icon('clock'),
-    Pencil: icon('pencil'),
-    X: icon('x'),
-    Check: icon('check'),
-  };
-});
+// Stub the icons ChatView and its child blocks render. Plain-object factory
+// (a Proxy module mock hangs vitest collection here).
+vi.mock('lucide-solid', () => ({
+  User: () => <span data-testid="user" />,
+  Bot: () => <span data-testid="bot" />,
+  AlertCircle: () => <span data-testid="alert-circle" />,
+  Wrench: () => <span data-testid="wrench" />,
+  Server: () => <span data-testid="server" />,
+  Brain: () => <span data-testid="brain" />,
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  ChevronRight: () => <span data-testid="chevron-right" />,
+  Loader: () => <span data-testid="loader" />,
+  Clock: () => <span data-testid="clock" />,
+  Pencil: () => <span data-testid="pencil" />,
+  X: () => <span data-testid="x" />,
+  Check: () => <span data-testid="check" />,
+}));
 
 describe('ChatView', () => {
   const mockMessages: SessionMessage[] = [

@@ -85,9 +85,11 @@ const makeSubtasksRepo = () => ({
       assignedAgentId: input.assignedAgentId,
     } as MockSubtask),
   ),
+  deleteByTask: vi.fn().mockResolvedValue([]),
 });
 
 const makeTaskAgentsRepo = () => ({
+  removeAllFromTask: vi.fn().mockResolvedValue([]),
   assignMultiple: vi.fn().mockResolvedValue([]),
 });
 

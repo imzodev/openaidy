@@ -198,7 +198,8 @@ describe('WorkspaceService', () => {
       const files = await service.listFiles(agentId, 'subdir');
       expect(files).toHaveLength(1);
       expect(files[0]!.name).toBe('nested.txt');
-      expect(files[0]!.path).toBe('subdir/nested.txt');
+      // `path` uses OS-native separators (relative()), so compare with join().
+      expect(files[0]!.path).toBe(join('subdir', 'nested.txt'));
     });
   });
 

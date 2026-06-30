@@ -126,22 +126,33 @@ describe('TaskScheduleService integration tests', { timeout: 15000 }, () => {
   });
 
   it('updateSchedule recomputes nextRunAt when the schedule changes', async () => {
-    const created = await service!.createSchedule(task.id, {
-      schedule: { every: '1h' },
-    });
-    expect(created.ok).toBe(true);
-    if (!created.ok) return;
+    // Pin the clock so the comparison is deterministic. `1h` (`0 * * * *`)
+    // and `30m` (`*/30 * * * *`) both resolve to the next `:00` during the
+    // back half of any hour, which made this assertion flaky by wall-clock.
+    // At 12:10Z they differ: 1h → 13:00Z, 30m → 12:30Z. Fake only `Date`
+    // (not setTimeout/etc.) so the real async + SQLite flow is unaffected.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-06-29T12:10:00.000Z'));
+    try {
+      const created = await service!.createSchedule(task.id, {
+        schedule: { every: '1h' },
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
 
-    const originalNext = created.data.nextRunAt;
-    // Change to every 30m — nextRunAt should be sooner.
-    const updated = await service!.updateSchedule(task.id, {
-      schedule: { every: '30m' },
-    });
-    expect(updated.ok).toBe(true);
-    if (!updated.ok) return;
-    expect(updated.data.cronExpression).toBe('*/30 * * * *');
-    // The new nextRunAt should be different (likely sooner for hourly).
-    expect(updated.data.nextRunAt).not.toBe(originalNext);
+      const originalNext = created.data.nextRunAt;
+      // Change to every 30m — nextRunAt should be sooner.
+      const updated = await service!.updateSchedule(task.id, {
+        schedule: { every: '30m' },
+      });
+      expect(updated.ok).toBe(true);
+      if (!updated.ok) return;
+      expect(updated.data.cronExpression).toBe('*/30 * * * *');
+      // The new nextRunAt should be sooner (12:30Z vs 13:00Z), hence different.
+      expect(updated.data.nextRunAt).not.toBe(originalNext);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('pauseSchedule + resumeSchedule transitions work', async () => {

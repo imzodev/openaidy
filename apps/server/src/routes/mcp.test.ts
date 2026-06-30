@@ -22,12 +22,14 @@ const mockAuthMiddleware = {
     exp: 9999999999,
   }),
   extractFromHeader: (_h: string) => 'test-token',
+  extractFromQuery: (_q: Record<string, string | undefined>) => null,
   hasCapability: () => true,
 } as unknown as AuthMiddleware;
 
 const noAuthMiddleware = {
   validateToken: async () => null,
   extractFromHeader: (_h: string) => null,
+  extractFromQuery: (_q: Record<string, string | undefined>) => null,
   hasCapability: () => false,
 } as unknown as AuthMiddleware;
 

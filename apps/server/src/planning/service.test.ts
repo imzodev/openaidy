@@ -338,6 +338,7 @@ describe('PlanningService', () => {
         getAgent: vi
           .fn()
           .mockReturnValue({ id: 'default', model: 'openai/gpt-4o' }),
+        listAllAgents: vi.fn().mockReturnValue([]),
       };
 
       const svc = new PlanningService({
@@ -392,6 +393,7 @@ describe('PlanningService', () => {
         getAgent: vi
           .fn()
           .mockReturnValue({ id: 'default', model: 'bad-model-no-slash' }),
+        listAllAgents: vi.fn().mockReturnValue([]),
       };
 
       const svc = new PlanningService({
@@ -452,7 +454,7 @@ describe('PlanningService', () => {
       ]);
       const result = service.parsePlanningResponse(content, { maxSubtasks: 2 });
 
-      expect(result).toHaveLength(2);
+      expect(result.subtasks).toHaveLength(2);
     });
 
     it('throws on invalid JSON', () => {
@@ -557,10 +559,12 @@ describe('PlanningService', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          value: JSON.stringify([
-            { title: 'Subtask 1', description: 'First', dependencies: [] },
-            { title: 'Subtask 2', description: 'Second', dependencies: [0] },
-          ]),
+          value: {
+            content: JSON.stringify([
+              { title: 'Subtask 1', description: 'First', dependencies: [] },
+              { title: 'Subtask 2', description: 'Second', dependencies: [0] },
+            ]),
+          },
         });
 
       // First plan
@@ -581,14 +585,20 @@ describe('PlanningService', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          value: JSON.stringify([
-            { title: 'New Subtask 1', description: 'First', dependencies: [] },
-            {
-              title: 'New Subtask 2',
-              description: 'Second',
-              dependencies: [0],
-            },
-          ]),
+          value: {
+            content: JSON.stringify([
+              {
+                title: 'New Subtask 1',
+                description: 'First',
+                dependencies: [],
+              },
+              {
+                title: 'New Subtask 2',
+                description: 'Second',
+                dependencies: [0],
+              },
+            ]),
+          },
         });
 
       // Second plan (re-plan)
@@ -620,20 +630,22 @@ describe('PlanningService', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          value: JSON.stringify([
-            {
-              title: 'Subtask 1',
-              description: 'First',
-              assignedAgentId: 'agent-1',
-              dependencies: [],
-            },
-            {
-              title: 'Subtask 2',
-              description: 'Second',
-              assignedAgentId: 'agent-2',
-              dependencies: [0],
-            },
-          ]),
+          value: {
+            content: JSON.stringify([
+              {
+                title: 'Subtask 1',
+                description: 'First',
+                assignedAgentId: 'agent-1',
+                dependencies: [],
+              },
+              {
+                title: 'Subtask 2',
+                description: 'Second',
+                assignedAgentId: 'agent-2',
+                dependencies: [0],
+              },
+            ]),
+          },
         });
 
       await svc.planTask('task-1');

@@ -22,6 +22,8 @@ type MockSubtasksRepo = {
   updateStatus: ReturnType<typeof vi.fn>;
   assignAgent: ReturnType<typeof vi.fn>;
   setResult: ReturnType<typeof vi.fn>;
+  completeSubtask: ReturnType<typeof vi.fn>;
+  failSubtask: ReturnType<typeof vi.fn>;
   create: ReturnType<typeof vi.fn>;
   getCountsByStatus: ReturnType<typeof vi.fn>;
 };
@@ -53,6 +55,8 @@ describe('Subtask Execution', () => {
       updateStatus: vi.fn().mockResolvedValue({}),
       assignAgent: vi.fn().mockResolvedValue({}),
       setResult: vi.fn().mockResolvedValue({}),
+      completeSubtask: vi.fn().mockResolvedValue({}),
+      failSubtask: vi.fn().mockResolvedValue({}),
       create: vi.fn(),
       getCountsByStatus: vi.fn().mockResolvedValue({
         pending: 0,
@@ -339,7 +343,7 @@ describe('Subtask Execution', () => {
         id: 'subtask-1',
         taskId: 'task-1',
       });
-      mockSubtasksRepo.update.mockResolvedValue({
+      mockSubtasksRepo.completeSubtask.mockResolvedValue({
         id: 'subtask-1',
         status: 'completed',
         result: 'Success result',
@@ -365,7 +369,7 @@ describe('Subtask Execution', () => {
         id: 'subtask-2',
         taskId: 'task-1',
       });
-      mockSubtasksRepo.update.mockResolvedValue({
+      mockSubtasksRepo.completeSubtask.mockResolvedValue({
         id: 'subtask-2',
         status: 'completed',
         result: 'Done',
@@ -388,7 +392,7 @@ describe('Subtask Execution', () => {
         id: 'subtask-1',
         taskId: 'task-1',
       });
-      mockSubtasksRepo.update.mockResolvedValue({
+      mockSubtasksRepo.completeSubtask.mockResolvedValue({
         id: 'subtask-1',
         status: 'completed',
         result: 'Partial result',
@@ -421,7 +425,7 @@ describe('Subtask Execution', () => {
         id: 'subtask-1',
         taskId: 'task-1',
       });
-      mockSubtasksRepo.update.mockResolvedValue({
+      mockSubtasksRepo.failSubtask.mockResolvedValue({
         id: 'subtask-1',
         status: 'failed',
         result: 'Error: Something went wrong',

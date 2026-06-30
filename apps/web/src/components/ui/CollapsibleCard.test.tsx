@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
 import { CollapsibleCard } from './CollapsibleCard';
 
-// Mock lucide-solid icons
+// Stub the icons CollapsibleCard renders. Plain-object factory
+// (a Proxy module mock hangs vitest collection here). Trash2 uses the `trash`
+// testid so the existing delete-button assertions keep working.
 vi.mock('lucide-solid', () => ({
-  ChevronDown: () => <span data-testid="chevron-down">↓</span>,
-  ChevronRight: () => <span data-testid="chevron-right">→</span>,
-  Trash2: () => <span data-testid="trash">🗑</span>,
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  ChevronRight: () => <span data-testid="chevron-right" />,
+  Trash2: () => <span data-testid="trash" />,
 }));
 
 describe('CollapsibleCard', () => {

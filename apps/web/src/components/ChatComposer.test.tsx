@@ -2,12 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render } from '@solidjs/testing-library';
 import { ChatComposer } from './ChatComposer';
 
-// Mock lucide-solid
+// Stub the icons ChatComposer + AgentPicker render. Plain-object factory
+// (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
-  Send: () => <span data-testid="send-icon">S</span>,
-  ListPlus: () => <span data-testid="queue-icon">Q</span>,
-  Bot: () => <span data-testid="bot-icon">B</span>,
-  ChevronDown: () => <span data-testid="chevron-icon">V</span>,
+  Send: () => <span data-testid="send" />,
+  ListPlus: () => <span data-testid="list-plus" />,
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  Bot: () => <span data-testid="bot" />,
 }));
 
 describe('ChatComposer', () => {

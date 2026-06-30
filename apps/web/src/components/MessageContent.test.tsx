@@ -5,7 +5,11 @@ import { parseThinking } from './ThinkingBlock';
 
 afterEach(() => cleanup());
 
+// Stub the icons ThinkingBlock renders. Plain-object factory (not a Proxy —
+// a Proxy module mock hangs vitest collection here). Test-ids match the
+// kebab-case icon name so the chevron assertions below can target them.
 vi.mock('lucide-solid', () => ({
+  Brain: () => <span data-testid="brain" />,
   ChevronDown: () => <span data-testid="chevron-down" />,
   ChevronRight: () => <span data-testid="chevron-right" />,
 }));

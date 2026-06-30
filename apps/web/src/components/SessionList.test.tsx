@@ -3,11 +3,11 @@ import { render, screen, cleanup } from '@solidjs/testing-library';
 import { SessionList } from './SessionList';
 import type { Session } from '../lib/api';
 
-// Mock lucide-solid
+// Stub the icons SessionList renders. Plain-object factory
+// (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
-  Plus: () => <span data-testid="plus-icon">+</span>,
-  MessageSquare: () => <span data-testid="msg-icon">M</span>,
-  Trash2: () => <span data-testid="trash-icon">T</span>,
+  MessageSquare: () => <span data-testid="message-square" />,
+  Trash2: () => <span data-testid="trash-2" />,
 }));
 
 describe('SessionList', () => {
