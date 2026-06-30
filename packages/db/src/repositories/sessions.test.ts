@@ -150,14 +150,18 @@ describe('SessionsRepository', () => {
 
     it('truncates long snippets to 200 characters', async () => {
       const session = await sessionsRepo.create({ title: 'My Session' });
-      const longContent = 'A'.repeat(300);
+      // Repeat a real word so the content is both >200 chars and matchable
+      // by the FTS query (a single 300-char token would not match 'React').
+      const longContent = 'React is a great library for building UIs. '.repeat(
+        10,
+      );
       await messagesRepo.append({
         sessionId: session.id,
         role: 'user',
         content: longContent,
       });
 
-      const results = await sessionsRepo.searchByContent('A');
+      const results = await sessionsRepo.searchByContent('React');
       const found = results.find((r) => r.id === session.id);
 
       expect((found!.snippet as string).length).toBeLessThanOrEqual(203);
