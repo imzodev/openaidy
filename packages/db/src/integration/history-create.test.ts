@@ -1,36 +1,53 @@
 /**
  * Integration test: verify that taskExecutionHistoryRepo.create actually
- * inserts a row into the SQLite DB. This is the missing piece in the
+ * inserts a row into the DB. This is the missing piece in the
  * recurring-tasks audit trail (the schedule.executionCount updates but
  * no history row is ever written).
  *
- * Run with: pnpm --filter @openaidy/db test -- src/integration/history-create.test.ts
- *
- * Connects to the same SQLite DB the dev server uses.
+ * Hermetic: spins up a fresh in-memory SQLite DB and seeds the parent
+ * task + schedule the FK constraints require. The tasks/task-schedules
+ * repositories use Postgres-style Drizzle inserts that don't run on
+ * SQLite (the same mismatch task-execution-history.ts documents), so the
+ * parent rows are seeded via raw SQL — the same approach the repo under
+ * test uses for its own insert.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createDatabaseAdapter } from '../adapter';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { createDatabaseClient, type DatabaseConnection } from '../client';
+import { TaskExecutionHistoryRepository } from '../repositories/task-execution-history';
+
+type Database = DatabaseConnection['db'];
 
 describe('taskExecutionHistoryRepo.create (sqlite integration)', () => {
-  const DB_PATH = '../../apps/server/data/openaidy.db';
-  let adapter: Awaited<ReturnType<typeof createDatabaseAdapter>>;
+  let db: Database;
+  let repo: TaskExecutionHistoryRepository;
+  const taskId = 'task_test_history';
+  const scheduleId = 'schedule_test_history';
 
-  beforeAll(async () => {
-    adapter = await createDatabaseAdapter({
+  beforeEach(async () => {
+    const conn = await createDatabaseClient({
       kind: 'sqlite',
-      sqlitePath: DB_PATH,
+      sqlitePath: ':memory:',
     });
-  });
+    db = conn.db;
+    repo = new TaskExecutionHistoryRepository(db);
 
-  afterAll(async () => {
-    if (adapter) await adapter.close();
+    // Seed the parent rows the FK constraints require.
+    const now = new Date().toISOString();
+    await db.run(
+      sql`INSERT INTO tasks (id, title, description, created_at, updated_at)
+          VALUES (${taskId}, ${'TEST task'}, ${'TEST'}, ${now}, ${now})`,
+    );
+    await db.run(
+      sql`INSERT INTO task_schedules (id, task_id, next_run_at, created_at, updated_at)
+          VALUES (${scheduleId}, ${taskId}, ${now}, ${now}, ${now})`,
+    );
   });
 
   it('inserts a row into task_execution_history for an existing task + schedule', async () => {
-    const repo = adapter.repositories.taskExecutionHistory;
     const row = await repo.create({
-      taskId: '3v96Kifo6ZQE_PbGmlybD',
-      scheduleId: 'sFnZ35HScgSjsDnGh-dMt',
+      taskId,
+      scheduleId,
       taskTitle: 'TEST Di una palabra en ingles',
       taskDescription: 'TEST',
     });

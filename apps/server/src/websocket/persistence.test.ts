@@ -12,8 +12,13 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PairingService } from './pairing-service';
-import { PairingRequestsRepository, DevicesRepository } from '@openaidy/db';
-import type { PairingRequestRecord, DeviceRecord } from '@openaidy/db';
+import type {
+  PairingRequestRecord,
+  DeviceRecord,
+  PairingRequestsStore,
+  DevicesStore,
+} from '@openaidy/db';
+import type { AuthMiddleware } from './middleware/auth';
 import type { Logger } from 'pino';
 
 // Mock stores for testing persistence
@@ -66,7 +71,9 @@ class MockPairingRequestsStore {
   }
 
   async listPending(): Promise<PairingRequestRecord[]> {
-    return Array.from(this.store.values()).filter(r => r.status === 'pending');
+    return Array.from(this.store.values()).filter(
+      (r) => r.status === 'pending',
+    );
   }
 
   async listAll(): Promise<PairingRequestRecord[]> {
@@ -188,19 +195,29 @@ const mockLogger = {
 
 // Mock auth middleware
 class MockAuthMiddleware {
-  private tokens: Map<string, { clientId: string; type: string; scopes: string[] }> = new Map();
+  private tokens: Map<
+    string,
+    { clientId: string; type: string; scopes: string[] }
+  > = new Map();
 
-  async generateToken(input: { clientId: string; type: string; scopes: string[]; expiresIn: number }): Promise<string> {
+  async generateToken(input: {
+    clientId: string;
+    type: string;
+    scopes: string[];
+    expiresIn: number;
+  }): Promise<string> {
     const token = `token-${input.clientId}-${Date.now()}`;
-    this.tokens.set(token, { 
-      clientId: input.clientId, 
-      type: input.type, 
-      scopes: input.scopes 
+    this.tokens.set(token, {
+      clientId: input.clientId,
+      type: input.type,
+      scopes: input.scopes,
     });
     return token;
   }
 
-  async validateToken(token: string): Promise<{ clientId: string; type: string; scopes: string[] } | null> {
+  async validateToken(
+    token: string,
+  ): Promise<{ clientId: string; type: string; scopes: string[] } | null> {
     return this.tokens.get(token) ?? null;
   }
 
@@ -221,14 +238,19 @@ describe('Persistence Strategy - Issue #129', () => {
     devicesStore = new MockDevicesStore();
     authMiddleware = new MockAuthMiddleware();
 
-    pairingService = new PairingService(authMiddleware as any, mockLogger, {
-      persistence: {
-        pairingRequests: pairingRequestsStore as any,
-        devices: devicesStore as any,
+    pairingService = new PairingService(
+      authMiddleware as unknown as AuthMiddleware,
+      mockLogger,
+      {
+        persistence: {
+          pairingRequests:
+            pairingRequestsStore as unknown as PairingRequestsStore,
+          devices: devicesStore as unknown as DevicesStore,
+        },
+        // Disable cleanup timer in tests
+        cleanupInterval: 0,
       },
-      // Disable cleanup timer in tests
-      cleanupInterval: 0,
-    });
+    );
   });
 
   afterEach(() => {
@@ -238,7 +260,9 @@ describe('Persistence Strategy - Issue #129', () => {
 
   describe('Persistence Round-Trip', () => {
     it('should persist pairing request on creation', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
 
       // Wait for async persistence
       await pairingService.awaitPendingWrites();
@@ -250,10 +274,15 @@ describe('Persistence Strategy - Issue #129', () => {
     });
 
     it('should update persisted request on approval', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       expect(approved).not.toBeNull();
@@ -266,10 +295,15 @@ describe('Persistence Strategy - Issue #129', () => {
     });
 
     it('should persist device on approval', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       const device = await devicesStore.findByNodeId(approved!.nodeId!);
@@ -279,7 +313,9 @@ describe('Persistence Strategy - Issue #129', () => {
     });
 
     it('should update request on denial', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
       pairingService.denyRequest(request.requestId, 'admin-1');
@@ -293,10 +329,15 @@ describe('Persistence Strategy - Issue #129', () => {
 
   describe('Token Validation Against Persisted Data', () => {
     it('should validate token against persisted device', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Token should be valid
@@ -309,7 +350,9 @@ describe('Persistence Strategy - Issue #129', () => {
       expect(validated!.clientId).toBe(approved!.nodeId);
     });
 
-    it.todo('should reject revoked device token - requires revocation check in validateToken');
+    it.todo(
+      'should reject revoked device token - requires revocation check in validateToken',
+    );
 
     it('should reject unknown token', async () => {
       const validated = await pairingService.validateToken('unknown-token');
@@ -319,10 +362,15 @@ describe('Persistence Strategy - Issue #129', () => {
 
   describe('Revocation Persistence', () => {
     it('should persist revoked status', async () => {
-      const request = pairingService.createRequest('Test Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Test Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Revoke
@@ -332,7 +380,9 @@ describe('Persistence Strategy - Issue #129', () => {
       expect(device!.status).toBe('revoked');
     });
 
-    it.todo('should reject authentication for revoked device - requires revocation checking in validateToken');
+    it.todo(
+      'should reject authentication for revoked device - requires revocation checking in validateToken',
+    );
   });
 
   describe('Simulated Restart Behavior', () => {
@@ -347,13 +397,18 @@ describe('Persistence Strategy - Issue #129', () => {
       await pairingService.awaitPendingWrites();
 
       // Create new service instance (simulating restart)
-      const newService = new PairingService(authMiddleware as any, mockLogger, {
-        persistence: {
-          pairingRequests: pairingRequestsStore as any,
-          devices: devicesStore as any,
+      const newService = new PairingService(
+        authMiddleware as unknown as AuthMiddleware,
+        mockLogger,
+        {
+          persistence: {
+            pairingRequests:
+              pairingRequestsStore as unknown as PairingRequestsStore,
+            devices: devicesStore as unknown as DevicesStore,
+          },
+          cleanupInterval: 0,
         },
-        cleanupInterval: 0,
-      });
+      );
 
       // Load persisted state
       await newService.loadPersistedState();
@@ -362,7 +417,7 @@ describe('Persistence Strategy - Issue #129', () => {
       const pending = newService.getPendingRequests();
       expect(pending.length).toBe(1); // Only r2 should be pending
       expect(pending[0]!.requestId).toBe(r2.requestId);
-      
+
       newService.destroy();
     });
 
@@ -372,18 +427,26 @@ describe('Persistence Strategy - Issue #129', () => {
       const r2 = pairingService.createRequest('Device 2', 'desktop', ['chat']);
       await pairingService.awaitPendingWrites();
 
-      const approved1 = await pairingService.approveRequest(r1.requestId, 'admin-1');
+      const approved1 = await pairingService.approveRequest(
+        r1.requestId,
+        'admin-1',
+      );
       await pairingService.approveRequest(r2.requestId, 'admin-1');
       await pairingService.awaitPendingWrites();
 
       // Create new service instance (simulating restart)
-      const newService = new PairingService(authMiddleware as any, mockLogger, {
-        persistence: {
-          pairingRequests: pairingRequestsStore as any,
-          devices: devicesStore as any,
+      const newService = new PairingService(
+        authMiddleware as unknown as AuthMiddleware,
+        mockLogger,
+        {
+          persistence: {
+            pairingRequests:
+              pairingRequestsStore as unknown as PairingRequestsStore,
+            devices: devicesStore as unknown as DevicesStore,
+          },
+          cleanupInterval: 0,
         },
-        cleanupInterval: 0,
-      });
+      );
 
       // Load persisted state
       await newService.loadPersistedState();
@@ -392,19 +455,26 @@ describe('Persistence Strategy - Issue #129', () => {
       const validated = await newService.validateToken(approved1!.token!);
       expect(validated).not.toBeNull();
       expect(validated!.clientId).toBe(approved1!.nodeId);
-      
+
       newService.destroy();
     });
 
-    it.todo('should maintain revoked status across restart and reject revoked tokens');
+    it.todo(
+      'should maintain revoked status across restart and reject revoked tokens',
+    );
   });
 
   describe('Device Lifecycle', () => {
     it('should track device status changes', async () => {
-      const request = pairingService.createRequest('Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Device is approved
@@ -423,10 +493,15 @@ describe('Persistence Strategy - Issue #129', () => {
     });
 
     it('should track lastSeen timestamp', async () => {
-      const request = pairingService.createRequest('Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       const initialTime = new Date('2026-01-01T10:00:00Z');
@@ -447,7 +522,9 @@ describe('Persistence Strategy - Issue #129', () => {
       // Create multiple devices
       const requests = [];
       for (let i = 0; i < 5; i++) {
-        const req = pairingService.createRequest(`Device ${i}`, 'mobile', ['chat']);
+        const req = pairingService.createRequest(`Device ${i}`, 'mobile', [
+          'chat',
+        ]);
         requests.push(req);
       }
       await pairingService.awaitPendingWrites();
@@ -467,10 +544,15 @@ describe('Persistence Strategy - Issue #129', () => {
   describe('Persistence vs Ephemeral State', () => {
     it('should distinguish pairing request from in-memory connection state', async () => {
       // Create and approve a device
-      const request = pairingService.createRequest('Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Device identity persists in DB
@@ -479,36 +561,53 @@ describe('Persistence Strategy - Issue #129', () => {
 
       // In-memory node registry would be empty after restart
       // (simulated by creating new service instance)
-      const newService = new PairingService(authMiddleware as any, mockLogger, {
-        persistence: {
-          pairingRequests: pairingRequestsStore as any,
-          devices: devicesStore as any,
+      const newService = new PairingService(
+        authMiddleware as unknown as AuthMiddleware,
+        mockLogger,
+        {
+          persistence: {
+            pairingRequests:
+              pairingRequestsStore as unknown as PairingRequestsStore,
+            devices: devicesStore as unknown as DevicesStore,
+          },
+          cleanupInterval: 0,
         },
-        cleanupInterval: 0,
-      });
+      );
 
       // Device identity still exists in DB
-      const persistedDevice = await devicesStore.findByNodeId(approved!.nodeId!);
+      const persistedDevice = await devicesStore.findByNodeId(
+        approved!.nodeId!,
+      );
       expect(persistedDevice).not.toBeNull();
-      
+
       newService.destroy();
     });
 
     it('should require re-authentication after restart simulation', async () => {
-      const request = pairingService.createRequest('Device', 'mobile', ['chat']);
+      const request = pairingService.createRequest('Device', 'mobile', [
+        'chat',
+      ]);
       await pairingService.awaitPendingWrites();
 
-      const approved = await pairingService.approveRequest(request.requestId, 'admin-1');
+      const approved = await pairingService.approveRequest(
+        request.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Simulate restart
-      const newService = new PairingService(authMiddleware as any, mockLogger, {
-        persistence: {
-          pairingRequests: pairingRequestsStore as any,
-          devices: devicesStore as any,
+      const newService = new PairingService(
+        authMiddleware as unknown as AuthMiddleware,
+        mockLogger,
+        {
+          persistence: {
+            pairingRequests:
+              pairingRequestsStore as unknown as PairingRequestsStore,
+            devices: devicesStore as unknown as DevicesStore,
+          },
+          cleanupInterval: 0,
         },
-        cleanupInterval: 0,
-      });
+      );
 
       // Load persisted state (devices and tokens)
       await newService.loadPersistedState();
@@ -516,7 +615,7 @@ describe('Persistence Strategy - Issue #129', () => {
       // Token should still be valid after loading persisted state
       const validated = await newService.validateToken(approved!.token!);
       expect(validated).not.toBeNull();
-      
+
       newService.destroy();
     });
   });
@@ -540,7 +639,10 @@ describe('Persistence Strategy - Issue #129', () => {
       // Original pairing
       const r1 = pairingService.createRequest('Device', 'mobile', ['chat']);
       await pairingService.awaitPendingWrites();
-      const approved1 = await pairingService.approveRequest(r1.requestId, 'admin-1');
+      const approved1 = await pairingService.approveRequest(
+        r1.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Revoke device in database
@@ -549,7 +651,10 @@ describe('Persistence Strategy - Issue #129', () => {
       // New pairing request
       const r2 = pairingService.createRequest('Device', 'mobile', ['chat']);
       await pairingService.awaitPendingWrites();
-      const approved2 = await pairingService.approveRequest(r2.requestId, 'admin-1');
+      const approved2 = await pairingService.approveRequest(
+        r2.requestId,
+        'admin-1',
+      );
       await pairingService.awaitPendingWrites();
 
       // Should create new device with different node ID
@@ -569,17 +674,23 @@ describe('Persistence Strategy - Issue #129', () => {
 
     it('should handle persistence without database (in-memory fallback)', () => {
       // Service without persistence
-      const memoryOnlyService = new PairingService(authMiddleware as any, mockLogger, {
-        cleanupInterval: 0,
-      });
+      const memoryOnlyService = new PairingService(
+        authMiddleware as unknown as AuthMiddleware,
+        mockLogger,
+        {
+          cleanupInterval: 0,
+        },
+      );
 
-      const request = memoryOnlyService.createRequest('Device', 'mobile', ['chat']);
+      const request = memoryOnlyService.createRequest('Device', 'mobile', [
+        'chat',
+      ]);
       expect(request.requestId).toBeDefined();
 
       // Should still work in memory-only mode
       const pending = memoryOnlyService.getPendingRequests();
       expect(pending.length).toBe(1);
-      
+
       memoryOnlyService.destroy();
     });
   });

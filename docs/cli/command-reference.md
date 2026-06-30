@@ -547,6 +547,112 @@ Denied:    2026-04-01 14:36:00
 
 ---
 
+### `sessions` - Chat Session Management
+
+Commands for managing chat sessions.
+
+#### `sessions list`
+
+List all sessions.
+
+```bash
+openaidy sessions list [--limit <n>]
+```
+
+#### `sessions create`
+
+Create a new session.
+
+```bash
+openaidy sessions create [title]
+```
+
+#### `sessions get`
+
+Get session details by ID.
+
+```bash
+openaidy sessions get <sessionId>
+```
+
+#### `sessions messages`
+
+List all messages in a session.
+
+```bash
+openaidy sessions messages <sessionId>
+```
+
+#### `sessions runs`
+
+List all runs for a session.
+
+```bash
+openaidy sessions runs <sessionId>
+```
+
+---
+
+### `providers` - Provider Management
+
+Commands for managing LLM provider connections.
+
+#### `providers list`
+
+List all available providers.
+
+```bash
+openaidy providers list
+```
+
+#### `providers connect`
+
+Connect to a provider.
+
+```bash
+openaidy providers connect <provider-id> [--api-key <key>]
+```
+
+#### `providers disconnect`
+
+Disconnect from a provider.
+
+```bash
+openaidy providers disconnect <provider-id>
+```
+
+---
+
+## Server Management Commands
+
+Top-level commands for controlling the OpenAidy server process.
+
+#### `start`
+
+Start the OpenAidy server as a background process.
+
+```bash
+openaidy start
+```
+
+#### `stop`
+
+Stop the running OpenAidy server.
+
+```bash
+openaidy stop
+```
+
+#### `status`
+
+Show the current server status.
+
+```bash
+openaidy status
+```
+
+---
+
 ## Exit Codes Reference
 
 | Code | Name              | Description                    |
@@ -858,10 +964,10 @@ openaidy tasks list [--status <status>] [--limit <n>]
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
+| Option              | Description                                                           |
+| ------------------- | --------------------------------------------------------------------- |
 | `--status <status>` | Filter by status: backlog, todo, in_progress, review, done, cancelled |
-| `--limit <n>` | Limit number of results (default: 50) |
+| `--limit <n>`       | Limit number of results (default: 50)                                 |
 
 **Examples:**
 
@@ -887,9 +993,9 @@ openaidy tasks get <id>
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `<id>` | Task ID (required) |
+| Argument | Description        |
+| -------- | ------------------ |
+| `<id>`   | Task ID (required) |
 
 **Examples:**
 
@@ -913,17 +1019,17 @@ openaidy tasks create [title] [--description <desc>] [--priority <p>] [--plannin
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
+| Argument  | Description                                                 |
+| --------- | ----------------------------------------------------------- |
 | `[title]` | Task title (optional — derived from description if omitted) |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
-| `--description <desc>` | Task description (required if no title) |
-| `--priority <p>` | Priority: low, medium, high, urgent (default: medium) |
-| `--planning` | Enable planning agent to decompose into subtasks |
+| Option                 | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `--description <desc>` | Task description (required if no title)               |
+| `--priority <p>`       | Priority: low, medium, high, urgent (default: medium) |
+| `--planning`           | Enable planning agent to decompose into subtasks      |
 
 **Examples:**
 
@@ -949,18 +1055,18 @@ openaidy tasks update <id> [--title <title>] [--description <desc>] [--priority 
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `<id>` | Task ID (required) |
+| Argument | Description        |
+| -------- | ------------------ |
+| `<id>`   | Task ID (required) |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
-| `--title <title>` | New task title |
-| `--description <desc>` | New task description |
-| `--priority <p>` | Priority: low, medium, high, urgent |
-| `--status <s>` | Status: backlog, todo, in_progress, review, done, cancelled |
+| Option                 | Description                                                 |
+| ---------------------- | ----------------------------------------------------------- |
+| `--title <title>`      | New task title                                              |
+| `--description <desc>` | New task description                                        |
+| `--priority <p>`       | Priority: low, medium, high, urgent                         |
+| `--status <s>`         | Status: backlog, todo, in_progress, review, done, cancelled |
 
 **Examples:**
 
@@ -986,9 +1092,9 @@ openaidy tasks delete <id>
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
-| `<id>` | Task ID (required) |
+| Argument | Description        |
+| -------- | ------------------ |
+| `<id>`   | Task ID (required) |
 
 **Examples:**
 
@@ -1038,8 +1144,8 @@ openaidy subtasks list <taskId>
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
+| Argument   | Description        |
+| ---------- | ------------------ |
 | `<taskId>` | Task ID (required) |
 
 **Examples:**
@@ -1064,14 +1170,14 @@ openaidy subtasks complete <subtaskId> [--result <result>]
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
+| Argument      | Description           |
+| ------------- | --------------------- |
 | `<subtaskId>` | Subtask ID (required) |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
+| Option         | Description                            |
+| -------------- | -------------------------------------- |
 | `--result <r>` | Completion result / summary (optional) |
 
 **Examples:**
@@ -1097,14 +1203,14 @@ openaidy subtasks fail <subtaskId> [--reason <reason>]
 
 **Arguments:**
 
-| Argument | Description |
-|----------|-------------|
+| Argument      | Description           |
+| ------------- | --------------------- |
 | `<subtaskId>` | Subtask ID (required) |
 
 **Options:**
 
-| Option | Description |
-|--------|-------------|
+| Option         | Description                               |
+| -------------- | ----------------------------------------- |
 | `--reason <r>` | Failure reason / error message (optional) |
 
 **Examples:**

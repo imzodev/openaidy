@@ -1,19 +1,13 @@
 /**
  * Documentation Validation Tests
- * 
+ *
  * Tests that verify documentation matches implemented commands and paths.
  */
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import {
-  commands,
-  commandMeta,
-  commandGroups,
-  listCommands,
-  listGroups,
-} from './commands/index.js';
+import { listCommands } from './commands/index.js';
 
 const docsDir = join(import.meta.dirname, '../../../docs/cli');
 
@@ -26,11 +20,11 @@ describe('Documentation Validation', () => {
 
     it('documents all registered commands', () => {
       const allCommands = listCommands();
-      
+
       for (const cmd of allCommands) {
         expect(
           commandRef.includes(cmd),
-          `Command "${cmd}" should be documented in command-reference.md`
+          `Command "${cmd}" should be documented in command-reference.md`,
         ).toBe(true);
       }
     });
@@ -62,7 +56,7 @@ describe('Documentation Validation', () => {
 
     it('documents token location', () => {
       expect(
-        bootstrap.includes('.openaidy/credentials/bootstrap-admin.json')
+        bootstrap.includes('.openaidy/credentials/bootstrap-admin.json'),
       ).toBe(true);
     });
 
@@ -98,16 +92,14 @@ describe('Documentation Validation', () => {
     it('documents troubleshooting section', () => {
       expect(
         gettingStarted.includes('Troubleshooting') ||
-        gettingStarted.includes('troubleshooting')
+          gettingStarted.includes('troubleshooting'),
       ).toBe(true);
     });
   });
 
   describe('Architecture Guide', () => {
     const archPath = join(docsDir, 'architecture.md');
-    const arch = existsSync(archPath)
-      ? readFileSync(archPath, 'utf-8')
-      : '';
+    const arch = existsSync(archPath) ? readFileSync(archPath, 'utf-8') : '';
 
     it('documents package structure', () => {
       expect(arch.includes('@openaidy/cli')).toBe(true);
@@ -116,16 +108,14 @@ describe('Documentation Validation', () => {
     });
 
     it('documents workflow pattern', () => {
-      expect(
-        arch.includes('WorkflowResult') ||
-        arch.includes('workflow')
-      ).toBe(true);
+      expect(arch.includes('WorkflowResult') || arch.includes('workflow')).toBe(
+        true,
+      );
     });
 
     it('documents command registration', () => {
       expect(
-        arch.includes('registerCommand') ||
-        arch.includes('register')
+        arch.includes('registerCommand') || arch.includes('register'),
       ).toBe(true);
     });
   });
@@ -163,7 +153,7 @@ describe('Documentation Validation', () => {
     it('documents design principles', () => {
       expect(
         controlPlane.includes('Local-First') ||
-        controlPlane.includes('local-first')
+          controlPlane.includes('local-first'),
       ).toBe(true);
     });
   });

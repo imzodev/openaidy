@@ -4,11 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import {
-  PresenceManager,
-  type PresenceInfo,
-  type PresenceStatus,
-} from './presence-manager';
+import { PresenceManager, type PresenceInfo } from './presence-manager';
 
 // ============================================================================
 // Mock Logger
@@ -21,7 +17,7 @@ const createMockLogger = () =>
     error: vi.fn(),
     debug: vi.fn(),
     child: vi.fn(() => createMockLogger()),
-  } as unknown as FastifyBaseLogger);
+  }) as unknown as FastifyBaseLogger;
 
 // ============================================================================
 // Tests
@@ -83,7 +79,9 @@ describe('PresenceManager', () => {
 
     it('should update clientId if changed', () => {
       manager.updatePresence('conn-1', 'online', { clientId: 'client-abc' });
-      const info = manager.updatePresence('conn-1', 'online', { clientId: 'client-xyz' });
+      const info = manager.updatePresence('conn-1', 'online', {
+        clientId: 'client-xyz',
+      });
 
       expect(info.clientId).toBe('client-xyz');
     });
@@ -349,7 +347,7 @@ describe('PresenceManager', () => {
       manager.updatePresence('conn-1', 'online');
 
       // Wait a bit so conn-1 becomes stale
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
       // conn-2 is created after the wait, so it's fresh
       manager.updatePresence('conn-2', 'online');
@@ -468,7 +466,10 @@ describe('PresenceManager', () => {
         },
       ];
 
-      const managerWithInit = new PresenceManager({ initialPresence }, mockLogger);
+      const managerWithInit = new PresenceManager(
+        { initialPresence },
+        mockLogger,
+      );
 
       expect(managerWithInit.size).toBe(2);
       expect(managerWithInit.getClientPresence('client-a')).toHaveLength(1);

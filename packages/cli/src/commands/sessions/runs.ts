@@ -82,7 +82,7 @@ Exit Codes:
   const { items } = (await res.json()) as {
     items: Array<{
       id: string;
-      status: 'pending' | 'running' | 'completed' | 'failed';
+      status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
       providerId?: string;
       modelId?: string;
       durationMs?: number;

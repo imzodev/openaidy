@@ -1,6 +1,6 @@
 /**
  * CLI Extension Points Tests
- * 
+ *
  * Tests verifying the CLI structure supports future growth:
  * - JSON output readiness
  * - Command scalability
@@ -115,7 +115,7 @@ describe('CLI Extension Points', () => {
     });
 
     it('CommandHandler type is async', async () => {
-      const handler: CommandHandler = async (args) => {
+      const handler: CommandHandler = async (_args) => {
         return { exitCode: 0, output: 'OK' };
       };
 

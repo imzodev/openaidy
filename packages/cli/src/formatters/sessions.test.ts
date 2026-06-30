@@ -168,7 +168,9 @@ describe('formatMessageList', () => {
     const longContent = 'a'.repeat(300);
     const msg = makeMessage({ content: longContent });
     const output = formatMessageList([msg], 'Test');
-    expect(output).not.toContain('aaaaa'); // truncated content
+    // Truncated to 200 chars: the kept slice is present, the full blob is not.
+    expect(output).toContain('a'.repeat(200));
+    expect(output).not.toContain('a'.repeat(201));
     expect(output).toContain('…');
   });
 });

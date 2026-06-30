@@ -262,7 +262,7 @@ export interface DocsResult {
  */
 export type SessionRun = {
   id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
   providerId?: string;
   modelId?: string;
   durationMs?: number;
