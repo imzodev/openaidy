@@ -16,21 +16,23 @@ import {
   mapWorkflowError,
   type CLIErrorCategory,
 } from './errors.js';
-import { ExitCodes } from './types.js';
 
 describe('CLI Error Model', () => {
   describe('createCLIError', () => {
     it('creates error with category and default message', () => {
       const error = createCLIError('REQUEST_NOT_FOUND');
-      
+
       expect(error.category).toBe('REQUEST_NOT_FOUND');
       expect(error.message).toBe('Pairing request not found');
       expect(error.exitCode).toBe(1);
     });
 
     it('creates error with custom message', () => {
-      const error = createCLIError('REQUEST_NOT_FOUND', 'Request abc123 not found');
-      
+      const error = createCLIError(
+        'REQUEST_NOT_FOUND',
+        'Request abc123 not found',
+      );
+
       expect(error.category).toBe('REQUEST_NOT_FOUND');
       expect(error.message).toBe('Request abc123 not found');
       expect(error.exitCode).toBe(1);
@@ -40,12 +42,15 @@ describe('CLI Error Model', () => {
       const error = createCLIError('REQUEST_NOT_FOUND', 'Request not found', {
         requestId: 'abc123',
       });
-      
+
       expect(error.details).toEqual({ requestId: 'abc123' });
     });
 
     it('maps categories to correct exit codes', () => {
-      const tests: Array<{ category: CLIErrorCategory; expectedExitCode: number }> = [
+      const tests: Array<{
+        category: CLIErrorCategory;
+        expectedExitCode: number;
+      }> = [
         { category: 'REQUEST_NOT_FOUND', expectedExitCode: 1 },
         { category: 'ARGUMENT_MISSING', expectedExitCode: 2 },
         { category: 'COMMAND_UNKNOWN', expectedExitCode: 2 },
@@ -65,7 +70,7 @@ describe('CLI Error Model', () => {
     it('formats basic error message', () => {
       const error = createCLIError('REQUEST_NOT_FOUND');
       const formatted = formatCLIError(error);
-      
+
       expect(formatted).toContain('Error:');
       expect(formatted).toContain('Pairing request not found');
     });
@@ -75,7 +80,7 @@ describe('CLI Error Model', () => {
         usage: 'openaidy devices approve <request-id>',
       });
       const formatted = formatCLIError(error);
-      
+
       expect(formatted).toContain('Usage:');
       expect(formatted).toContain('openaidy devices approve');
     });
@@ -85,15 +90,17 @@ describe('CLI Error Model', () => {
         suggestion: 'devices list',
       });
       const formatted = formatCLIError(error);
-      
+
       expect(formatted).toContain('Did you mean');
       expect(formatted).toContain('devices list');
     });
 
     it('includes hint for missing bootstrap token', () => {
-      const error = createCLIError('BOOTSTRAP_TOKEN_MISSING', undefined, { showHint: true });
+      const error = createCLIError('BOOTSTRAP_TOKEN_MISSING', undefined, {
+        showHint: true,
+      });
       const formatted = formatCLIError(error);
-      
+
       expect(formatted).toContain('Run:');
       expect(formatted).toContain('openaidy admin token create');
     });
@@ -101,9 +108,12 @@ describe('CLI Error Model', () => {
 
   describe('errorToResult', () => {
     it('converts error to CommandResult', () => {
-      const error = createCLIError('REQUEST_NOT_FOUND', 'Request abc123 not found');
+      const error = createCLIError(
+        'REQUEST_NOT_FOUND',
+        'Request abc123 not found',
+      );
       const result = errorToResult(error);
-      
+
       expect(result.exitCode).toBe(1);
       expect(result.error).toBeDefined();
       expect(result.output).toBeUndefined();
@@ -114,7 +124,7 @@ describe('CLI Error Model', () => {
     describe('cliError', () => {
       it('creates and formats error in one step', () => {
         const result = cliError('REQUEST_NOT_FOUND', 'Request not found');
-        
+
         expect(result.exitCode).toBe(1);
         expect(result.error).toContain('Error:');
       });
@@ -122,8 +132,11 @@ describe('CLI Error Model', () => {
 
     describe('argMissing', () => {
       it('creates argument missing error', () => {
-        const result = argMissing('request-id', 'openaidy devices approve <request-id>');
-        
+        const result = argMissing(
+          'request-id',
+          'openaidy devices approve <request-id>',
+        );
+
         expect(result.exitCode).toBe(2);
         expect(result.error).toContain('Missing required argument');
         expect(result.error).toContain('request-id');
@@ -134,7 +147,7 @@ describe('CLI Error Model', () => {
     describe('unknownCommand', () => {
       it('creates unknown command error', () => {
         const result = unknownCommand('foo', 'devices');
-        
+
         expect(result.exitCode).toBe(2);
         expect(result.error).toContain('Unknown command');
         expect(result.error).toContain('foo');
@@ -145,7 +158,7 @@ describe('CLI Error Model', () => {
     describe('unknownSubcommand', () => {
       it('creates unknown subcommand error', () => {
         const result = unknownSubcommand('devices', 'foo');
-        
+
         expect(result.exitCode).toBe(2);
         expect(result.error).toContain('Unknown subcommand');
         expect(result.error).toContain('devices foo');
@@ -155,7 +168,7 @@ describe('CLI Error Model', () => {
     describe('requestNotFound', () => {
       it('creates request not found error', () => {
         const result = requestNotFound('abc123');
-        
+
         expect(result.exitCode).toBe(1);
         expect(result.error).toContain('not found');
         expect(result.error).toContain('abc123');
@@ -165,7 +178,7 @@ describe('CLI Error Model', () => {
     describe('serviceUnavailable', () => {
       it('creates service unavailable error', () => {
         const result = serviceUnavailable();
-        
+
         expect(result.exitCode).toBe(1);
         expect(result.error).toContain('pairing service');
       });
@@ -176,10 +189,22 @@ describe('CLI Error Model', () => {
     it('maps bootstrap errors', () => {
       const tests = [
         { code: 'BOOTSTRAP_ADMIN_DISABLED', expected: 'BOOTSTRAP_DISABLED' },
-        { code: 'BOOTSTRAP_ADMIN_TOKEN_MISSING', expected: 'BOOTSTRAP_TOKEN_MISSING' },
-        { code: 'BOOTSTRAP_ADMIN_TOKEN_MALFORMED', expected: 'BOOTSTRAP_TOKEN_MALFORMED' },
-        { code: 'BOOTSTRAP_ADMIN_TOKEN_INVALID', expected: 'BOOTSTRAP_TOKEN_INVALID' },
-        { code: 'BOOTSTRAP_ADMIN_TOKEN_EXPIRED', expected: 'BOOTSTRAP_TOKEN_EXPIRED' },
+        {
+          code: 'BOOTSTRAP_ADMIN_TOKEN_MISSING',
+          expected: 'BOOTSTRAP_TOKEN_MISSING',
+        },
+        {
+          code: 'BOOTSTRAP_ADMIN_TOKEN_MALFORMED',
+          expected: 'BOOTSTRAP_TOKEN_MALFORMED',
+        },
+        {
+          code: 'BOOTSTRAP_ADMIN_TOKEN_INVALID',
+          expected: 'BOOTSTRAP_TOKEN_INVALID',
+        },
+        {
+          code: 'BOOTSTRAP_ADMIN_TOKEN_EXPIRED',
+          expected: 'BOOTSTRAP_TOKEN_EXPIRED',
+        },
       ];
 
       for (const { code, expected } of tests) {
@@ -192,7 +217,10 @@ describe('CLI Error Model', () => {
       const tests = [
         { code: 'PAIRING_REQUEST_NOT_FOUND', expected: 'REQUEST_NOT_FOUND' },
         { code: 'PAIRING_REQUEST_EXPIRED', expected: 'REQUEST_EXPIRED' },
-        { code: 'PAIRING_REQUEST_ALREADY_PROCESSED', expected: 'REQUEST_NOT_PENDING' },
+        {
+          code: 'PAIRING_REQUEST_ALREADY_PROCESSED',
+          expected: 'REQUEST_NOT_PENDING',
+        },
       ];
 
       for (const { code, expected } of tests) {
@@ -219,7 +247,10 @@ describe('CLI Error Model', () => {
     });
 
     it('preserves custom message', () => {
-      const error = mapWorkflowError('PAIRING_REQUEST_NOT_FOUND', 'Custom message');
+      const error = mapWorkflowError(
+        'PAIRING_REQUEST_NOT_FOUND',
+        'Custom message',
+      );
       expect(error.message).toBe('Custom message');
     });
   });

@@ -7,6 +7,7 @@ import {
   ERROR_MESSAGES,
 } from './errors';
 import { WS_ERROR_CODES, type WSError } from '@openaidy/shared-types';
+import type { FastifyBaseLogger } from 'fastify';
 
 // Mock logger
 const mockLogger = {
@@ -24,8 +25,12 @@ describe('errors', () => {
     it('should have messages for all error codes', () => {
       const codes = Object.values(WS_ERROR_CODES);
       for (const code of codes) {
-        expect(ERROR_MESSAGES[code as keyof typeof ERROR_MESSAGES]).toBeDefined();
-        expect(typeof ERROR_MESSAGES[code as keyof typeof ERROR_MESSAGES]).toBe('string');
+        expect(
+          ERROR_MESSAGES[code as keyof typeof ERROR_MESSAGES],
+        ).toBeDefined();
+        expect(typeof ERROR_MESSAGES[code as keyof typeof ERROR_MESSAGES]).toBe(
+          'string',
+        );
       }
     });
   });
@@ -35,7 +40,7 @@ describe('errors', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      handler = new WSErrorHandler(mockLogger as any);
+      handler = new WSErrorHandler(mockLogger as unknown as FastifyBaseLogger);
     });
 
     describe('createError', () => {
@@ -66,7 +71,10 @@ describe('errors', () => {
 
         expect(error.code).toBe(WS_ERROR_CODES.INVALID_PAYLOAD);
         expect(error.message).toBe('Validation failed');
-        expect(error.details).toEqual({ field: 'sessionId', reason: 'required' });
+        expect(error.details).toEqual({
+          field: 'sessionId',
+          reason: 'required',
+        });
       });
     });
 
@@ -245,7 +253,10 @@ describe('errors', () => {
 
   describe('createWSErrorResponse (helper)', () => {
     it('should create error response with default message', () => {
-      const response = createWSErrorResponse('req-123', WS_ERROR_CODES.AUTH_REQUIRED);
+      const response = createWSErrorResponse(
+        'req-123',
+        WS_ERROR_CODES.AUTH_REQUIRED,
+      );
 
       expect(response.type).toBe('error');
       expect(response.payload.requestId).toBe('req-123');
@@ -271,7 +282,9 @@ describe('errors', () => {
         { fields: ['sessionId', 'type'] },
       );
 
-      expect(response.payload.error.details).toEqual({ fields: ['sessionId', 'type'] });
+      expect(response.payload.error.details).toEqual({
+        fields: ['sessionId', 'type'],
+      });
     });
   });
 
@@ -284,7 +297,10 @@ describe('errors', () => {
     });
 
     it('should create WSError with custom message', () => {
-      const error = createWSErrorObj(WS_ERROR_CODES.RATE_LIMITED, 'Custom rate limit');
+      const error = createWSErrorObj(
+        WS_ERROR_CODES.RATE_LIMITED,
+        'Custom rate limit',
+      );
 
       expect(error.message).toBe('Custom rate limit');
     });
@@ -310,7 +326,10 @@ describe('errors', () => {
     });
 
     it('should create error with custom message', () => {
-      const error = new WSErrorClass(WS_ERROR_CODES.FORBIDDEN, 'Access denied to resource');
+      const error = new WSErrorClass(
+        WS_ERROR_CODES.FORBIDDEN,
+        'Access denied to resource',
+      );
 
       expect(error.message).toBe('Access denied to resource');
     });
@@ -326,11 +345,9 @@ describe('errors', () => {
     });
 
     it('should convert to WSError', () => {
-      const error = new WSErrorClass(
-        WS_ERROR_CODES.NOT_FOUND,
-        'Not found',
-        { resource: 'session' },
-      );
+      const error = new WSErrorClass(WS_ERROR_CODES.NOT_FOUND, 'Not found', {
+        resource: 'session',
+      });
 
       const wsError = error.toWSError();
 

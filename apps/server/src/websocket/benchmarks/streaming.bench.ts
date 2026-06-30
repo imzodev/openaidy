@@ -15,17 +15,18 @@ import type { FastifyBaseLogger } from 'fastify';
 // Mock Factories
 // ============================================================================
 
-const createMockLogger = (): FastifyBaseLogger => ({
-  info: () => {},
-  error: () => {},
-  warn: () => {},
-  debug: () => {},
-  fatal: () => {},
-  trace: () => {},
-  child: () => createMockLogger(),
-  level: 'info',
-  silent: false,
-} as unknown as FastifyBaseLogger);
+const createMockLogger = (): FastifyBaseLogger =>
+  ({
+    info: () => {},
+    error: () => {},
+    warn: () => {},
+    debug: () => {},
+    fatal: () => {},
+    trace: () => {},
+    child: () => createMockLogger(),
+    level: 'info',
+    silent: false,
+  }) as unknown as FastifyBaseLogger;
 
 // ============================================================================
 // Benchmarks
@@ -43,11 +44,7 @@ describe('Streaming Benchmarks', () => {
     runEvents = new RunEventEmitter();
     connectionManager = new ConnectionManager(defaultWebSocketConfig);
 
-    streamManager = new StreamManager(
-      runEvents,
-      connectionManager,
-      mockLogger,
-    );
+    streamManager = new StreamManager(runEvents, connectionManager, mockLogger);
 
     streamManager.start();
   });
@@ -105,7 +102,7 @@ describe('Streaming Benchmarks', () => {
       streamManager.subscribeToRun(runId, `conn_bench_bc_${i}`);
     }
     // In real scenario, this would send to each subscriber
-    const count = streamManager.getRunSubscriptionCount(runId);
-    count; // Use the value
+    // Measure the overhead of reading the subscription count.
+    streamManager.getRunSubscriptionCount(runId);
   });
 });

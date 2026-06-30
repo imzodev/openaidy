@@ -6,6 +6,7 @@ import {
 } from './streaming';
 import type { RunEvent, RunEventEmitter } from '../dispatch/events';
 import type { ConnectionManager } from './connection-manager';
+import type { FastifyBaseLogger } from 'fastify';
 import type {
   SessionStreamStart,
   SessionStreamDelta,
@@ -45,7 +46,12 @@ const createMockConnectionManager = () => ({
   updateHeartbeat: vi.fn(),
   checkStaleConnections: vi.fn().mockReturnValue([]),
   getLastHeartbeat: vi.fn(),
-  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, info: { remaining: 10, reset: Date.now(), limit: 100 } }),
+  checkRateLimit: vi
+    .fn()
+    .mockReturnValue({
+      allowed: true,
+      info: { remaining: 10, reset: Date.now(), limit: 100 },
+    }),
   recordRequest: vi.fn(),
   resetRateLimit: vi.fn(),
   closeAll: vi.fn(),
@@ -215,7 +221,7 @@ describe('StreamManager', () => {
     manager = new StreamManager(
       mockRunEvents as unknown as RunEventEmitter,
       mockConnectionManager as unknown as ConnectionManager,
-      mockLogger as any,
+      mockLogger as unknown as FastifyBaseLogger,
     );
   });
 
@@ -223,7 +229,10 @@ describe('StreamManager', () => {
     it('should subscribe to run events', () => {
       manager.subscribeToRun('run-123', 'conn-1');
 
-      expect(mockRunEvents.subscribe).toHaveBeenCalledWith('run-123', expect.any(Function));
+      expect(mockRunEvents.subscribe).toHaveBeenCalledWith(
+        'run-123',
+        expect.any(Function),
+      );
       expect(manager.getRunSubscriptionCount('run-123')).toBe(1);
       expect(manager.getConnectionSubscriptionCount('conn-1')).toBe(1);
     });
@@ -437,7 +446,7 @@ describe('createStreamManager', () => {
     const manager = createStreamManager(
       mockRunEvents as unknown as RunEventEmitter,
       mockConnectionManager as unknown as ConnectionManager,
-      mockLogger as any,
+      mockLogger as unknown as FastifyBaseLogger,
     );
 
     expect(manager).toBeInstanceOf(StreamManager);

@@ -1,15 +1,30 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  ConnectionManager,
-  RateLimiter,
-  type ConnectionContext,
-} from './connection-manager';
+import type { WebSocket } from '@fastify/websocket';
+import { ConnectionManager, RateLimiter } from './connection-manager';
 import { defaultWebSocketConfig } from './types';
 
+/**
+ * Minimal subset of the WebSocket surface the ConnectionManager uses.
+ * Mock sockets implement this and are cast through `unknown` to `WebSocket`.
+ */
+interface MockSocket {
+  send: (data?: string) => void;
+  close: () => void;
+  readyState: number;
+}
+
+/** Cast a mock socket to the WebSocket type expected by ConnectionManager. */
+const asWebSocket = (socket: MockSocket): WebSocket =>
+  socket as unknown as WebSocket;
+
 // Mock WebSocket
-const createMockSocket = () => ({
-  send: (_data?: string) => {},
-  close: () => {},
+const createMockSocket = (): MockSocket => ({
+  send: (_data?: string) => {
+    // no-op
+  },
+  close: () => {
+    // no-op
+  },
   readyState: 1, // OPEN
 });
 
@@ -103,7 +118,7 @@ describe('ConnectionManager', () => {
 
   describe('registerConnection', () => {
     it('should register a new connection', () => {
-      const ctx = manager.registerConnection('conn-1', mockSocket as any);
+      const ctx = manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       expect(ctx.id).toBe('conn-1');
       expect(ctx.status).toBe('connected');
@@ -114,15 +129,15 @@ describe('ConnectionManager', () => {
     });
 
     it('should track connection count', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       expect(manager.getConnectionCount()).toBe(1);
 
-      manager.registerConnection('conn-2', mockSocket as any);
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
       expect(manager.getConnectionCount()).toBe(2);
     });
 
     it('should create rate limiter for connection', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       const result = manager.checkRateLimit('conn-1');
       expect(result.allowed).toBe(true);
@@ -131,7 +146,7 @@ describe('ConnectionManager', () => {
 
   describe('removeConnection', () => {
     it('should remove a connection', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.removeConnection('conn-1');
 
       expect(manager.getConnection('conn-1')).toBeUndefined();
@@ -139,7 +154,7 @@ describe('ConnectionManager', () => {
     });
 
     it('should clean up rate limiter', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.removeConnection('conn-1');
 
       const result = manager.checkRateLimit('conn-1');
@@ -147,7 +162,7 @@ describe('ConnectionManager', () => {
     });
 
     it('should clean up subscriptions', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.subscribe('conn-1', 'topic-1');
       manager.removeConnection('conn-1');
 
@@ -158,7 +173,7 @@ describe('ConnectionManager', () => {
 
   describe('getConnection', () => {
     it('should return connection context', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       const ctx = manager.getConnection('conn-1');
 
       expect(ctx).toBeDefined();
@@ -172,8 +187,8 @@ describe('ConnectionManager', () => {
 
   describe('getAllConnections', () => {
     it('should return all connections', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      manager.registerConnection('conn-2', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
 
       const connections = manager.getAllConnections();
       expect(connections.length).toBe(2);
@@ -188,7 +203,7 @@ describe('ConnectionManager', () => {
 
   describe('hasConnection', () => {
     it('should return true for existing connection', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       expect(manager.hasConnection('conn-1')).toBe(true);
     });
 
@@ -203,15 +218,18 @@ describe('ConnectionManager', () => {
 
   describe('authenticate', () => {
     it('should mark connection as authenticated', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      const result = manager.authenticate('conn-1', 'client-123', ['read', 'write']);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      const result = manager.authenticate('conn-1', 'client-123', [
+        'read',
+        'write',
+      ]);
 
       expect(result).toBe(true);
       expect(manager.isAuthenticated('conn-1')).toBe(true);
     });
 
     it('should set client identity', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', ['read', 'write']);
 
       const ctx = manager.getConnection('conn-1');
@@ -226,12 +244,12 @@ describe('ConnectionManager', () => {
 
   describe('isAuthenticated', () => {
     it('should return false for unauthenticated connection', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       expect(manager.isAuthenticated('conn-1')).toBe(false);
     });
 
     it('should return true after authentication', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', []);
       expect(manager.isAuthenticated('conn-1')).toBe(true);
     });
@@ -239,10 +257,14 @@ describe('ConnectionManager', () => {
 
   describe('getCapabilities', () => {
     it('should return capabilities for authenticated connection', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', ['read', 'write', 'admin']);
 
-      expect(manager.getCapabilities('conn-1')).toEqual(['read', 'write', 'admin']);
+      expect(manager.getCapabilities('conn-1')).toEqual([
+        'read',
+        'write',
+        'admin',
+      ]);
     });
 
     it('should return empty array for unknown connection', () => {
@@ -252,7 +274,7 @@ describe('ConnectionManager', () => {
 
   describe('hasCapability', () => {
     it('should return true if connection has capability', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', ['read', 'write']);
 
       expect(manager.hasCapability('conn-1', 'read')).toBe(true);
@@ -260,14 +282,14 @@ describe('ConnectionManager', () => {
     });
 
     it('should return false if connection lacks capability', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', ['read']);
 
       expect(manager.hasCapability('conn-1', 'admin')).toBe(false);
     });
 
     it('should return true for wildcard capability', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.authenticate('conn-1', 'client-123', ['*']);
 
       expect(manager.hasCapability('conn-1', 'any-capability')).toBe(true);
@@ -284,7 +306,7 @@ describe('ConnectionManager', () => {
 
   describe('subscribe', () => {
     it('should subscribe connection to topic', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       const result = manager.subscribe('conn-1', 'session-123');
 
       expect(result).toBe(true);
@@ -296,7 +318,7 @@ describe('ConnectionManager', () => {
     });
 
     it('should allow multiple subscriptions', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.subscribe('conn-1', 'topic-1');
       manager.subscribe('conn-1', 'topic-2');
       manager.subscribe('conn-1', 'topic-3');
@@ -308,7 +330,7 @@ describe('ConnectionManager', () => {
 
   describe('unsubscribe', () => {
     it('should unsubscribe connection from topic', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.subscribe('conn-1', 'topic-1');
       const result = manager.unsubscribe('conn-1', 'topic-1');
 
@@ -323,7 +345,7 @@ describe('ConnectionManager', () => {
 
   describe('unsubscribeAll', () => {
     it('should unsubscribe from all topics', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.subscribe('conn-1', 'topic-1');
       manager.subscribe('conn-1', 'topic-2');
       manager.subscribe('conn-1', 'topic-3');
@@ -336,9 +358,9 @@ describe('ConnectionManager', () => {
 
   describe('getSubscribers', () => {
     it('should return subscribers for topic', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      manager.registerConnection('conn-2', mockSocket as any);
-      manager.registerConnection('conn-3', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
+      manager.registerConnection('conn-3', asWebSocket(mockSocket));
 
       manager.subscribe('conn-1', 'topic-1');
       manager.subscribe('conn-2', 'topic-1');
@@ -359,13 +381,13 @@ describe('ConnectionManager', () => {
 
   describe('send', () => {
     it('should send message to connection', () => {
-      const socket = { send: () => {}, close: () => {}, readyState: 1 };
+      const socket: MockSocket = createMockSocket();
       let sentData: string | undefined;
       socket.send = (data?: string) => {
         sentData = data;
       };
 
-      manager.registerConnection('conn-1', socket as any);
+      manager.registerConnection('conn-1', asWebSocket(socket));
       const result = manager.send('conn-1', { type: 'test', data: 'hello' });
 
       expect(result).toBe(true);
@@ -378,13 +400,13 @@ describe('ConnectionManager', () => {
     });
 
     it('should handle string messages', () => {
-      const socket = { send: () => {}, close: () => {}, readyState: 1 };
+      const socket: MockSocket = createMockSocket();
       let sentData: string | undefined;
       socket.send = (data?: string) => {
         sentData = data;
       };
 
-      manager.registerConnection('conn-1', socket as any);
+      manager.registerConnection('conn-1', asWebSocket(socket));
       manager.send('conn-1', 'plain text');
 
       expect(sentData).toBe('plain text');
@@ -396,12 +418,12 @@ describe('ConnectionManager', () => {
       const received: string[] = [];
 
       for (let i = 1; i <= 3; i++) {
-        const socket = {
-          send: (data: string) => received.push(data),
+        const socket: MockSocket = {
+          send: (data?: string) => received.push(data ?? ''),
           close: () => {},
           readyState: 1,
         };
-        manager.registerConnection(`conn-${i}`, socket as any);
+        manager.registerConnection(`conn-${i}`, asWebSocket(socket));
       }
 
       const sent = manager.broadcast({ type: 'broadcast' });
@@ -414,12 +436,12 @@ describe('ConnectionManager', () => {
       const received: string[] = [];
 
       for (let i = 1; i <= 3; i++) {
-        const socket = {
-          send: (data: string) => received.push(`conn-${i}`),
+        const socket: MockSocket = {
+          send: (_data?: string) => received.push(`conn-${i}`),
           close: () => {},
           readyState: 1,
         };
-        manager.registerConnection(`conn-${i}`, socket as any);
+        manager.registerConnection(`conn-${i}`, asWebSocket(socket));
       }
 
       const sent = manager.broadcast({ type: 'broadcast' }, ['conn-1']);
@@ -433,12 +455,12 @@ describe('ConnectionManager', () => {
       const received: string[] = [];
 
       for (let i = 1; i <= 3; i++) {
-        const socket = {
-          send: (data: string) => received.push(`conn-${i}`),
+        const socket: MockSocket = {
+          send: (_data?: string) => received.push(`conn-${i}`),
           close: () => {},
           readyState: 1,
         };
-        manager.registerConnection(`conn-${i}`, socket as any);
+        manager.registerConnection(`conn-${i}`, asWebSocket(socket));
       }
 
       manager.subscribe('conn-1', 'topic-1');
@@ -460,12 +482,14 @@ describe('ConnectionManager', () => {
 
   describe('updateHeartbeat', () => {
     it('should update heartbeat timestamp', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       const before = manager.getLastHeartbeat('conn-1')!;
 
       // Small delay
       const start = Date.now();
-      while (Date.now() === start) {}
+      while (Date.now() === start) {
+        // Busy-wait until the clock advances at least 1ms
+      }
 
       manager.updateHeartbeat('conn-1');
       const after = manager.getLastHeartbeat('conn-1');
@@ -476,8 +500,8 @@ describe('ConnectionManager', () => {
 
   describe('checkStaleConnections', () => {
     it('should identify stale connections', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      manager.registerConnection('conn-2', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
 
       // Make conn-1 stale
       const ctx = manager.getConnection('conn-1')!;
@@ -490,8 +514,8 @@ describe('ConnectionManager', () => {
     });
 
     it('should return empty array when no stale connections', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      manager.registerConnection('conn-2', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
 
       const stale = manager.checkStaleConnections(60000);
 
@@ -505,14 +529,14 @@ describe('ConnectionManager', () => {
 
   describe('checkRateLimit', () => {
     it('should allow requests under limit', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       const result = manager.checkRateLimit('conn-1');
       expect(result.allowed).toBe(true);
     });
 
     it('should deny requests over limit', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       // Exhaust limit
       for (let i = 0; i < 100; i++) {
@@ -531,7 +555,7 @@ describe('ConnectionManager', () => {
 
   describe('recordRequest', () => {
     it('should record request for rate limiting', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       manager.recordRequest('conn-1');
       manager.recordRequest('conn-1');
@@ -543,7 +567,7 @@ describe('ConnectionManager', () => {
 
   describe('resetRateLimit', () => {
     it('should reset rate limiter', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
 
       for (let i = 0; i < 50; i++) {
         manager.recordRequest('conn-1');
@@ -562,8 +586,8 @@ describe('ConnectionManager', () => {
 
   describe('closeAll', () => {
     it('should close all connections', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
-      manager.registerConnection('conn-2', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
+      manager.registerConnection('conn-2', asWebSocket(mockSocket));
 
       manager.closeAll();
 
@@ -571,7 +595,7 @@ describe('ConnectionManager', () => {
     });
 
     it('should clear topic index', () => {
-      manager.registerConnection('conn-1', mockSocket as any);
+      manager.registerConnection('conn-1', asWebSocket(mockSocket));
       manager.subscribe('conn-1', 'topic-1');
 
       manager.closeAll();
