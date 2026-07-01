@@ -22,6 +22,7 @@ export type {
   McpToolWithSchema,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
   Session,
   MessageRole,

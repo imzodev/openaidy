@@ -20,22 +20,17 @@
  */
 
 import type { McpServerConfig } from '@openaidy/config';
-import type { McpServerTransport } from '@openaidy/shared-types';
+import type {
+  McpServerTransport,
+  McpServerImportEntry,
+} from '@openaidy/shared-types';
 
 /**
  * A raw MCP server entry in the keyed-map format. Transport may be given as
- * `type` or `transport`, or omitted and inferred.
+ * `type` or `transport`, or omitted and inferred. Shared with the web/CLI
+ * clients via {@link McpServerImportEntry}.
  */
-export type RawMcpServerEntry = {
-  type?: string;
-  transport?: string;
-  name?: string;
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  headers?: Record<string, string>;
-};
+export type RawMcpServerEntry = McpServerImportEntry;
 
 /** The standard `mcpServers` map: server id → entry. */
 export type RawMcpServerMap = Record<string, RawMcpServerEntry>;

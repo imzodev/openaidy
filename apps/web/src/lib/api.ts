@@ -65,6 +65,7 @@ export type {
   McpToolWithSchema,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
 } from './types';
 
@@ -110,6 +111,7 @@ import type {
   McpToolWithSchema,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
 } from './types';
 
@@ -701,6 +703,26 @@ export async function createMcpServer(
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ApiError;
     throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Import one or more MCP servers from the standard keyed-map config format
+ * (Claude Desktop / VS Code / Cursor). Atomic on the server: nothing is
+ * imported if any entry is invalid or any id already exists.
+ */
+export async function importMcpServers(
+  body: ImportMcpServersRequest,
+): Promise<{ servers: McpServerRecord[] }> {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errBody = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, errBody);
   }
   return response.json();
 }
