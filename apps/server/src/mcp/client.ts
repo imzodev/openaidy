@@ -13,6 +13,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpServerConfig } from '@openaidy/config';
+import { EnvPlaceholderResolver } from './placeholder-resolver';
 
 /**
  * Tool definition from an MCP server
@@ -62,6 +63,11 @@ type McpConnection = {
  */
 export type McpClientServiceOptions = {
   logger?: FastifyBaseLogger | undefined;
+  /**
+   * Resolves `${VAR}` placeholders in server `env`/`headers`. Injectable for
+   * testing; defaults to reading from `process.env`.
+   */
+  resolver?: EnvPlaceholderResolver | undefined;
 };
 
 /**
@@ -72,10 +78,12 @@ export type McpClientServiceOptions = {
 export class McpClientService {
   private connections = new Map<string, McpConnection>();
   private logger: FastifyBaseLogger | undefined;
+  private resolver: EnvPlaceholderResolver;
   private shutdownHandlersRegistered = false;
 
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
+    this.resolver = options?.resolver ?? new EnvPlaceholderResolver();
     this.registerShutdownHandlers();
   }
 
@@ -119,39 +127,6 @@ export class McpClientService {
   }
 
   /**
-   * Validate environment variable placeholders in config
-   * Checks for placeholders like ${VAR_NAME} and ensures they exist in process.env
-   */
-  private validateEnvPlaceholders(
-    env: Record<string, string> | undefined,
-    serverId: string,
-  ): void {
-    if (!env) return;
-
-    const placeholderPattern = /\$\{([^}]+)\}/g;
-    const missingVars: string[] = [];
-
-    for (const [key, value] of Object.entries(env)) {
-      const matches = value.match(placeholderPattern);
-      if (matches) {
-        for (const match of matches) {
-          const varName = match.slice(2, -1); // Extract VAR_NAME from ${VAR_NAME}
-          if (!process.env[varName]) {
-            missingVars.push(`${key}: ${varName}`);
-          }
-        }
-      }
-    }
-
-    if (missingVars.length > 0) {
-      throw new Error(
-        `MCP server ${serverId}: Missing required environment variables: ${missingVars.join(', ')}. ` +
-          `Please set these environment variables before starting the server.`,
-      );
-    }
-  }
-
-  /**
    * Connect to a stdio-based MCP server
    *
    * The {@link StdioClientTransport} owns the spawned child process — it
@@ -167,8 +142,12 @@ export class McpClientService {
       throw new Error(`stdio transport requires command for server ${id}`);
     }
 
-    // Validate environment variable placeholders before spawning
-    this.validateEnvPlaceholders(env, id);
+    // Resolve ${VAR} placeholders from the environment before spawning; throws
+    // MissingEnvVarsError listing any unset variables.
+    const resolvedEnv = this.resolver.resolveRecord(
+      env,
+      `MCP server ${id} env`,
+    );
 
     this.logger?.info(
       { serverId: id, command },
@@ -182,7 +161,7 @@ export class McpClientService {
     const transport = new StdioClientTransport({
       command,
       args: args ?? [],
-      ...(env ? { env } : {}),
+      ...(resolvedEnv ? { env: resolvedEnv } : {}),
       stderr: 'pipe',
     });
 
@@ -251,6 +230,15 @@ export class McpClientService {
       throw new Error(`http transport requires url for server ${id}`);
     }
 
+    // Resolve ${VAR} placeholders (e.g. `Bearer ${TOKEN}`) before connecting;
+    // throws MissingEnvVarsError listing any unset variables. Done outside the
+    // try below so the failure surfaces directly rather than as a generic
+    // connection error.
+    const resolvedHeaders = this.resolver.resolveRecord(
+      headers,
+      `MCP server ${id} headers`,
+    );
+
     this.logger?.info(
       { serverId: id, url },
       'Connecting to MCP server via HTTP',
@@ -259,9 +247,9 @@ export class McpClientService {
     try {
       // Create Streamable HTTP transport with optional headers via requestInit
       const httpTransportOptions: { requestInit?: RequestInit } = {};
-      if (headers && Object.keys(headers).length > 0) {
+      if (resolvedHeaders && Object.keys(resolvedHeaders).length > 0) {
         httpTransportOptions.requestInit = {
-          headers,
+          headers: resolvedHeaders,
         };
       }
       const transport = new StreamableHTTPClientTransport(

@@ -13,12 +13,29 @@ import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { McpServerConfig } from '@openaidy/config';
 import {
-  type McpServerRecord,
   type McpToolWithSchema,
   type CreateMcpServerRequest,
   type UpdateMcpServerRequest,
 } from '@openaidy/shared-types';
 import { requireAuth } from '../middleware/require-auth';
+import {
+  toMcpServerRecord,
+  unmaskRecord,
+  type McpRuntimeStatus,
+} from '../mcp/server-record';
+import {
+  normalizeMcpServerMap,
+  McpConfigImportError,
+  type RawMcpServerMap,
+} from '../mcp/config-import';
+
+/**
+ * Managing MCP servers means running arbitrary local processes (stdio) or
+ * dialling out with stored credentials (http), so all write/lifecycle
+ * operations require the admin scope — matching access-token and addon
+ * management.
+ */
+const ADMIN_SCOPE = '*';
 
 /**
  * MCP routes options
@@ -39,41 +56,35 @@ export async function registerMcpRoutes(
   const { mcpService, configService, authMiddleware } = options;
 
   /**
+   * Live connection state for a server, used to enrich the persisted config
+   * into an API record.
+   */
+  const runtimeStatus = (id: string): McpRuntimeStatus => {
+    const connected = mcpService.isConnected(id);
+    const tools = connected
+      ? mcpService.getTools(id).map((t) => ({
+          name: t.name,
+          description: t.description,
+        }))
+      : [];
+    return { connected, tools };
+  };
+
+  /**
    * GET /mcp/servers
    *
    * List all configured MCP servers (from config) with their live runtime status.
-   * Shows both persisted config and current connection state.
+   * Shows both persisted config and current connection state. Secret values in
+   * env/headers are redacted (see toMcpServerRecord).
    */
   fastify.get(
     '/mcp/servers',
     async (_request: FastifyRequest, _reply: FastifyReply) => {
-      const configuredServers = configService.getMcpServers();
-
-      const servers: McpServerRecord[] = configuredServers.map(
-        (serverConfig) => {
-          const connected = mcpService.isConnected(serverConfig.id);
-          const tools = connected
-            ? mcpService.getTools(serverConfig.id).map((t) => ({
-                name: t.name,
-                description: t.description,
-              }))
-            : [];
-
-          return {
-            id: serverConfig.id,
-            name: serverConfig.name,
-            transport: serverConfig.transport,
-            command: serverConfig.command,
-            args: serverConfig.args,
-            env: serverConfig.env,
-            url: serverConfig.url,
-            headers: serverConfig.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
-          };
-        },
-      );
+      const servers = configService
+        .getMcpServers()
+        .map((serverConfig) =>
+          toMcpServerRecord(serverConfig, runtimeStatus(serverConfig.id)),
+        );
 
       return { servers };
     },
@@ -99,29 +110,7 @@ export async function registerMcpRoutes(
         });
       }
 
-      const connected = mcpService.isConnected(id);
-      const tools = connected
-        ? mcpService.getTools(id).map((t) => ({
-            name: t.name,
-            description: t.description,
-          }))
-        : [];
-
-      const record: McpServerRecord = {
-        id: serverConfig.id,
-        name: serverConfig.name,
-        transport: serverConfig.transport,
-        command: serverConfig.command,
-        args: serverConfig.args,
-        env: serverConfig.env,
-        url: serverConfig.url,
-        headers: serverConfig.headers,
-        connected,
-        toolCount: tools.length,
-        tools,
-      };
-
-      return { server: record };
+      return { server: toMcpServerRecord(serverConfig, runtimeStatus(id)) };
     },
   );
 
@@ -162,7 +151,7 @@ export async function registerMcpRoutes(
   await fastify.register(async (authRequired) => {
     authRequired.addHook(
       'preHandler',
-      requireAuth({ authMiddleware, requiredScope: 'agents.list' }),
+      requireAuth({ authMiddleware, requiredScope: ADMIN_SCOPE }),
     );
 
     /**
@@ -228,10 +217,8 @@ export async function registerMcpRoutes(
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
         // Attempt connection (non-fatal if it fails)
-        let connected = false;
         try {
           await mcpService.connect(config as McpServerConfig);
-          connected = true;
         } catch (error) {
           fastify.log.warn(
             {
@@ -242,28 +229,120 @@ export async function registerMcpRoutes(
           );
         }
 
-        const tools = connected
-          ? mcpService.getTools(config.id).map((t) => ({
-              name: t.name,
-              description: t.description,
-            }))
-          : [];
-
         return reply.status(201).send({
-          server: {
-            id: config.id,
-            name: config.name,
-            transport: config.transport,
-            command: config.command,
-            args: config.args,
-            env: config.env,
-            url: config.url,
-            headers: config.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
-          },
+          server: toMcpServerRecord(
+            config as McpServerConfig,
+            runtimeStatus(config.id),
+          ),
         });
+      },
+    );
+
+    /**
+     * POST /mcp/servers/import
+     *
+     * Import one or more servers from the standard keyed-map config format
+     * (Claude Desktop / VS Code / Cursor), e.g.:
+     *
+     *   { "mcpServers": { "github": { "type": "http", "url": "…",
+     *     "headers": { "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" } } } }
+     *
+     * Atomic: if any entry is invalid or any id already exists, nothing is
+     * imported. Each imported server is then connected (non-fatal on failure).
+     */
+    authRequired.post<{ Body: { mcpServers: RawMcpServerMap } }>(
+      '/mcp/servers/import',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['mcpServers'],
+            properties: {
+              mcpServers: {
+                type: 'object',
+                minProperties: 1,
+                additionalProperties: {
+                  type: 'object',
+                  properties: {
+                    type: { type: 'string' },
+                    transport: { type: 'string' },
+                    name: { type: 'string' },
+                    command: { type: 'string' },
+                    args: { type: 'array', items: { type: 'string' } },
+                    env: {
+                      type: 'object',
+                      additionalProperties: { type: 'string' },
+                    },
+                    url: { type: 'string' },
+                    headers: {
+                      type: 'object',
+                      additionalProperties: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{ Body: { mcpServers: RawMcpServerMap } }>,
+        reply: FastifyReply,
+      ) => {
+        // Normalise the keyed-map format into our flat config shape.
+        let servers;
+        try {
+          servers = normalizeMcpServerMap(request.body.mcpServers);
+        } catch (error) {
+          if (error instanceof McpConfigImportError) {
+            return reply
+              .status(400)
+              .send({ error: 'INVALID_CONFIG', message: error.message });
+          }
+          throw error;
+        }
+
+        // All-or-nothing: reject the whole import if any id already exists.
+        const existingIds = new Set(
+          configService.getMcpServers().map((s) => s.id),
+        );
+        const conflicts = servers
+          .map((s) => s.id)
+          .filter((id) => existingIds.has(id));
+        if (conflicts.length > 0) {
+          return reply.status(409).send({
+            error: 'CONFLICT',
+            message: `MCP server(s) already exist in config: ${conflicts.join(', ')}`,
+          });
+        }
+
+        // Persist all in a single save.
+        const fullConfig = configService.getConfig();
+        await configService.save({
+          ...fullConfig,
+          mcpServers: [...(fullConfig.mcpServers ?? []), ...servers],
+        });
+
+        // Connect each (non-fatal) and build redacted records.
+        const records = [];
+        for (const serverConfig of servers) {
+          try {
+            await mcpService.connect(serverConfig);
+          } catch (error) {
+            fastify.log.warn(
+              {
+                serverId: serverConfig.id,
+                err: error instanceof Error ? error.message : String(error),
+              },
+              'MCP server imported but initial connection failed',
+            );
+          }
+          records.push(
+            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig.id)),
+          );
+        }
+
+        return reply.status(201).send({ servers: records });
       },
     );
 
@@ -320,7 +399,9 @@ export async function registerMcpRoutes(
           });
         }
 
-        // Build updated config (merge patch into existing)
+        // Build updated config (merge patch into existing). env/headers go
+        // through unmaskRecord so a client that echoes back redacted values
+        // (MASKED_VALUE) keeps the stored secret instead of overwriting it.
         const updated: McpServerConfig = {
           ...existing,
           ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -329,9 +410,13 @@ export async function registerMcpRoutes(
             : {}),
           ...(patch.command !== undefined ? { command: patch.command } : {}),
           ...(patch.args !== undefined ? { args: patch.args } : {}),
-          ...(patch.env !== undefined ? { env: patch.env } : {}),
+          ...(patch.env !== undefined
+            ? { env: unmaskRecord(patch.env, existing.env) }
+            : {}),
           ...(patch.url !== undefined ? { url: patch.url } : {}),
-          ...(patch.headers !== undefined ? { headers: patch.headers } : {}),
+          ...(patch.headers !== undefined
+            ? { headers: unmaskRecord(patch.headers, existing.headers) }
+            : {}),
         };
 
         // Persist to config
@@ -341,29 +426,7 @@ export async function registerMcpRoutes(
         );
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        const connected = mcpService.isConnected(id);
-        const tools = connected
-          ? mcpService.getTools(id).map((t) => ({
-              name: t.name,
-              description: t.description,
-            }))
-          : [];
-
-        return {
-          server: {
-            id: updated.id,
-            name: updated.name,
-            transport: updated.transport,
-            command: updated.command,
-            args: updated.args,
-            env: updated.env,
-            url: updated.url,
-            headers: updated.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
-          },
-        };
+        return { server: toMcpServerRecord(updated, runtimeStatus(id)) };
       },
     );
 
