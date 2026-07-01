@@ -607,6 +607,104 @@ describe('MCP Routes', () => {
   });
 
   // -------------------------------------------------------------------------
+  describe('POST /mcp/servers/import', () => {
+    beforeEach(async () => {
+      mcpService = makeMcpService([], []);
+      configService = makeConfigService([]);
+      app = await buildApp(mcpService, configService);
+    });
+
+    it('imports the Claude-Desktop http map format and connects', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: {
+            github: {
+              type: 'http',
+              url: 'https://api.githubcopilot.com/mcp/',
+              headers: {
+                Authorization: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}',
+              },
+            },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.servers).toHaveLength(1);
+      expect(body.servers[0].id).toBe('github');
+      expect(body.servers[0].transport).toBe('http');
+      // Persisted with transport (not the raw "type") and connected.
+      const stored = configService.getMcpServer('github');
+      expect(stored?.transport).toBe('http');
+      expect(mcpService.connect).toHaveBeenCalled();
+      // Secret still redacted in the response.
+      expect(body.servers[0].headers.Authorization).toBe('••••••');
+    });
+
+    it('imports multiple servers in one call', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: {
+            github: { type: 'http', url: 'https://api.githubcopilot.com/mcp/' },
+            fs: { command: 'npx', args: ['-y', 'server-fs'] },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().servers).toHaveLength(2);
+    });
+
+    it('returns 400 for an invalid entry (nothing persisted)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: { mcpServers: { bad: { type: 'sse', url: 'https://e.com' } } },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_CONFIG');
+      expect(configService.save).not.toHaveBeenCalled();
+    });
+
+    it('returns 409 when an id already exists (all-or-nothing)', async () => {
+      configService = makeConfigService([makeServerConfig({ id: 'github' })]);
+      app = await buildApp(mcpService, configService);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: {
+            github: { type: 'http', url: 'https://api.githubcopilot.com/mcp/' },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error).toBe('CONFLICT');
+      expect(configService.save).not.toHaveBeenCalled();
+    });
+
+    it('requires admin scope (403 for non-admin token)', async () => {
+      app = await buildApp(mcpService, configService, nonAdminAuthMiddleware);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: { github: { type: 'http', url: 'https://e.com/mcp' } },
+        },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe('PATCH secret round-trip safety', () => {
     it('keeps the stored secret when the client echoes back a masked value', async () => {
       const servers = [

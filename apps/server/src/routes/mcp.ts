@@ -23,6 +23,11 @@ import {
   unmaskRecord,
   type McpRuntimeStatus,
 } from '../mcp/server-record';
+import {
+  normalizeMcpServerMap,
+  McpConfigImportError,
+  type RawMcpServerMap,
+} from '../mcp/config-import';
 
 /**
  * Managing MCP servers means running arbitrary local processes (stdio) or
@@ -230,6 +235,114 @@ export async function registerMcpRoutes(
             runtimeStatus(config.id),
           ),
         });
+      },
+    );
+
+    /**
+     * POST /mcp/servers/import
+     *
+     * Import one or more servers from the standard keyed-map config format
+     * (Claude Desktop / VS Code / Cursor), e.g.:
+     *
+     *   { "mcpServers": { "github": { "type": "http", "url": "…",
+     *     "headers": { "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" } } } }
+     *
+     * Atomic: if any entry is invalid or any id already exists, nothing is
+     * imported. Each imported server is then connected (non-fatal on failure).
+     */
+    authRequired.post<{ Body: { mcpServers: RawMcpServerMap } }>(
+      '/mcp/servers/import',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['mcpServers'],
+            properties: {
+              mcpServers: {
+                type: 'object',
+                minProperties: 1,
+                additionalProperties: {
+                  type: 'object',
+                  properties: {
+                    type: { type: 'string' },
+                    transport: { type: 'string' },
+                    name: { type: 'string' },
+                    command: { type: 'string' },
+                    args: { type: 'array', items: { type: 'string' } },
+                    env: {
+                      type: 'object',
+                      additionalProperties: { type: 'string' },
+                    },
+                    url: { type: 'string' },
+                    headers: {
+                      type: 'object',
+                      additionalProperties: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{ Body: { mcpServers: RawMcpServerMap } }>,
+        reply: FastifyReply,
+      ) => {
+        // Normalise the keyed-map format into our flat config shape.
+        let servers;
+        try {
+          servers = normalizeMcpServerMap(request.body.mcpServers);
+        } catch (error) {
+          if (error instanceof McpConfigImportError) {
+            return reply
+              .status(400)
+              .send({ error: 'INVALID_CONFIG', message: error.message });
+          }
+          throw error;
+        }
+
+        // All-or-nothing: reject the whole import if any id already exists.
+        const existingIds = new Set(
+          configService.getMcpServers().map((s) => s.id),
+        );
+        const conflicts = servers
+          .map((s) => s.id)
+          .filter((id) => existingIds.has(id));
+        if (conflicts.length > 0) {
+          return reply.status(409).send({
+            error: 'CONFLICT',
+            message: `MCP server(s) already exist in config: ${conflicts.join(', ')}`,
+          });
+        }
+
+        // Persist all in a single save.
+        const fullConfig = configService.getConfig();
+        await configService.save({
+          ...fullConfig,
+          mcpServers: [...(fullConfig.mcpServers ?? []), ...servers],
+        });
+
+        // Connect each (non-fatal) and build redacted records.
+        const records = [];
+        for (const serverConfig of servers) {
+          try {
+            await mcpService.connect(serverConfig);
+          } catch (error) {
+            fastify.log.warn(
+              {
+                serverId: serverConfig.id,
+                err: error instanceof Error ? error.message : String(error),
+              },
+              'MCP server imported but initial connection failed',
+            );
+          }
+          records.push(
+            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig.id)),
+          );
+        }
+
+        return reply.status(201).send({ servers: records });
       },
     );
 
