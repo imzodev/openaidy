@@ -7,11 +7,13 @@ import {
   deleteMcpServer,
   connectMcpServer,
   disconnectMcpServer,
+  importMcpServers,
   type McpServerRecord,
 } from '../../lib/api';
 import type {
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
 } from '../../lib/api';
 
 function StatusBadge(props: { connected: boolean }) {
@@ -302,6 +304,122 @@ function ServerFormModal(props: {
   );
 }
 
+const IMPORT_PLACEHOLDER = `{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer \${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}`;
+
+function ImportModal(props: {
+  onImport: (body: ImportMcpServersRequest) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [text, setText] = createSignal('');
+  const [importing, setImporting] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const handleImport = async () => {
+    setError(null);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text());
+    } catch {
+      setError('Invalid JSON — paste a valid MCP server config.');
+      return;
+    }
+
+    // Accept either the standard `{ "mcpServers": { … } }` wrapper or a bare
+    // `{ "<id>": { … } }` map.
+    const map =
+      parsed && typeof parsed === 'object' && 'mcpServers' in parsed
+        ? (parsed as { mcpServers: unknown }).mcpServers
+        : parsed;
+
+    if (!map || typeof map !== 'object' || Array.isArray(map)) {
+      setError('Expected an object mapping server ids to their config.');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      await props.onImport({
+        mcpServers: map as ImportMcpServersRequest['mcpServers'],
+      });
+      props.onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import servers');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Import MCP Servers
+          </h2>
+          <button
+            onClick={props.onClose}
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="p-4 space-y-3">
+          <Show when={error()}>
+            <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+              {error()}
+            </div>
+          </Show>
+
+          <p class="text-sm text-text-secondary">
+            Paste a standard MCP config (Claude Desktop / VS Code / Cursor).
+            Secrets stay safe: reference them with{' '}
+            <code class="text-xs px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded">
+              ${'{ENV_VAR}'}
+            </code>{' '}
+            placeholders resolved from the server environment.
+          </p>
+
+          <textarea
+            value={text()}
+            onInput={(e) => setText(e.currentTarget.value)}
+            placeholder={IMPORT_PLACEHOLDER}
+            rows={12}
+            class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-3 p-4 border-t dark:border-gray-700">
+          <button
+            onClick={props.onClose}
+            class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleImport()}
+            disabled={importing() || !text().trim()}
+            class="px-4 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {importing() ? 'Importing…' : 'Import'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ConfirmDeleteModal(props: {
   server: McpServerRecord;
   onConfirm: () => Promise<void>;
@@ -380,6 +498,7 @@ export function McpsPage() {
   const [showDelete, setShowDelete] = createSignal<McpServerRecord | null>(
     null,
   );
+  const [showImport, setShowImport] = createSignal(false);
 
   const selected = createMemo(() =>
     servers().find((s) => s.id === selectedId()),
@@ -472,6 +591,12 @@ export function McpsPage() {
     }
   };
 
+  const handleImport = async (body: ImportMcpServersRequest) => {
+    await importMcpServers(body);
+    // Refetch so the list reflects the newly imported + connected servers.
+    await loadServers();
+  };
+
   const connectedCount = () => servers().filter((s) => s.connected).length;
   const totalTools = () =>
     servers()
@@ -483,12 +608,20 @@ export function McpsPage() {
       title="MCP Servers"
       description="Manage Model Context Protocol server connections"
       actions={
-        <button
-          onClick={() => setShowForm({ mode: 'create' })}
-          class="flex items-center gap-2 px-3 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          + Add Server
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Import
+          </button>
+          <button
+            onClick={() => setShowForm({ mode: 'create' })}
+            class="flex items-center gap-2 px-3 py-2 text-sm text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            + Add Server
+          </button>
+        </div>
       }
     >
       {/* Action-level error banner */}
@@ -845,6 +978,13 @@ export function McpsPage() {
           server={showDelete()!}
           onConfirm={handleDelete}
           onClose={() => setShowDelete(null)}
+        />
+      </Show>
+
+      <Show when={showImport()}>
+        <ImportModal
+          onImport={handleImport}
+          onClose={() => setShowImport(false)}
         />
       </Show>
     </Layout>

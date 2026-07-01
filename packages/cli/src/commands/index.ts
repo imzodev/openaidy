@@ -990,3 +990,32 @@ registerCommand(
     examples: ['pnpm openaidy providers disconnect openai'],
   },
 );
+
+// MCP commands
+registerGroup({
+  name: 'mcp',
+  description: 'Manage Model Context Protocol servers',
+  commands: {
+    'mcp import': {
+      description: 'Import MCP servers from a standard config file or stdin',
+      usage: 'openaidy mcp import [file]',
+      examples: [
+        'openaidy mcp import ./mcp.json',
+        'cat ~/.config/mcp.json | openaidy mcp import',
+      ],
+    },
+  },
+});
+
+registerCommand(
+  'mcp import',
+  async (args: string[]) => {
+    const { mcpImportHandler } = await import('./mcp/import.js');
+    return mcpImportHandler(args);
+  },
+  {
+    description: 'Import MCP servers from a standard config file or stdin',
+    usage: 'openaidy mcp import [file]',
+    examples: ['openaidy mcp import ./mcp.json'],
+  },
+);

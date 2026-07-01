@@ -593,6 +593,28 @@ openaidy sessions runs <sessionId>
 
 ---
 
+### `mcp` - MCP Server Management
+
+Commands for managing Model Context Protocol servers.
+
+#### `mcp import`
+
+Import one or more MCP servers from a standard config file (or stdin) in the
+keyed-map format used by Claude Desktop, VS Code and Cursor. Accepts either the
+full `{ "mcpServers": { … } }` wrapper or a bare `{ "<id>": { … } }` map;
+transport is taken from `type`/`transport` or inferred from `command`/`url`.
+Reference secrets with `${ENV_VAR}` placeholders — they are resolved from the
+server environment at connection time and never persisted in plaintext.
+
+```bash
+openaidy mcp import ./mcp.json
+cat ~/.config/mcp.json | openaidy mcp import
+```
+
+Requires an admin token.
+
+---
+
 ### `providers` - Provider Management
 
 Commands for managing LLM provider connections.
