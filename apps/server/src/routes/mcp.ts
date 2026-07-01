@@ -57,17 +57,51 @@ export async function registerMcpRoutes(
 
   /**
    * Live connection state for a server, used to enrich the persisted config
-   * into an API record.
+   * into an API record. Also reports any `${VAR}` secrets the server still
+   * needs (so the UI can flag it as "awaiting configuration" rather than a
+   * plain disconnected server).
    */
-  const runtimeStatus = (id: string): McpRuntimeStatus => {
-    const connected = mcpService.isConnected(id);
+  const runtimeStatus = (config: McpServerConfig): McpRuntimeStatus => {
+    const connected = mcpService.isConnected(config.id);
     const tools = connected
-      ? mcpService.getTools(id).map((t) => ({
+      ? mcpService.getTools(config.id).map((t) => ({
           name: t.name,
           description: t.description,
         }))
       : [];
-    return { connected, tools };
+    return {
+      connected,
+      tools,
+      missingSecrets: mcpService.missingSecrets(config),
+    };
+  };
+
+  /**
+   * Connect a freshly saved/imported server unless it's still awaiting its
+   * secrets. A server with unresolved `${VAR}` placeholders (e.g. a
+   * preinstalled GitHub server before the user pastes a token) is left
+   * disconnected without a warning — that's an awaiting-configuration state,
+   * not a failure. `failureContext` is the log message used only when a
+   * genuinely-configured server fails to connect.
+   */
+  const connectIfReady = async (
+    serverConfig: McpServerConfig,
+    failureContext: string,
+  ): Promise<void> => {
+    if (mcpService.missingSecrets(serverConfig).length > 0) {
+      return;
+    }
+    try {
+      await mcpService.connect(serverConfig);
+    } catch (error) {
+      fastify.log.warn(
+        {
+          serverId: serverConfig.id,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        failureContext,
+      );
+    }
   };
 
   /**
@@ -83,7 +117,7 @@ export async function registerMcpRoutes(
       const servers = configService
         .getMcpServers()
         .map((serverConfig) =>
-          toMcpServerRecord(serverConfig, runtimeStatus(serverConfig.id)),
+          toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
         );
 
       return { servers };
@@ -110,7 +144,9 @@ export async function registerMcpRoutes(
         });
       }
 
-      return { server: toMcpServerRecord(serverConfig, runtimeStatus(id)) };
+      return {
+        server: toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
+      };
     },
   );
 
@@ -216,23 +252,18 @@ export async function registerMcpRoutes(
         ];
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        // Attempt connection (non-fatal if it fails)
-        try {
-          await mcpService.connect(config as McpServerConfig);
-        } catch (error) {
-          fastify.log.warn(
-            {
-              serverId: config.id,
-              err: error instanceof Error ? error.message : String(error),
-            },
-            'MCP server saved but initial connection failed',
-          );
-        }
+        // Connect now unless the server is still awaiting its secrets (a
+        // server with unset ${VAR} placeholders isn't broken, just
+        // unconfigured — so no connection is attempted and no warning logged).
+        await connectIfReady(
+          config as McpServerConfig,
+          'MCP server saved but initial connection failed',
+        );
 
         return reply.status(201).send({
           server: toMcpServerRecord(
             config as McpServerConfig,
-            runtimeStatus(config.id),
+            runtimeStatus(config as McpServerConfig),
           ),
         });
       },
@@ -323,22 +354,18 @@ export async function registerMcpRoutes(
           mcpServers: [...(fullConfig.mcpServers ?? []), ...servers],
         });
 
-        // Connect each (non-fatal) and build redacted records.
+        // Connect each (non-fatal), skipping any still awaiting secrets, then
+        // build redacted records. An imported server that references an unset
+        // ${VAR} (e.g. a token the user hasn't pasted yet) is saved and
+        // reported as awaiting configuration rather than a failed connection.
         const records = [];
         for (const serverConfig of servers) {
-          try {
-            await mcpService.connect(serverConfig);
-          } catch (error) {
-            fastify.log.warn(
-              {
-                serverId: serverConfig.id,
-                err: error instanceof Error ? error.message : String(error),
-              },
-              'MCP server imported but initial connection failed',
-            );
-          }
+          await connectIfReady(
+            serverConfig,
+            'MCP server imported but initial connection failed',
+          );
           records.push(
-            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig.id)),
+            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
           );
         }
 
@@ -426,7 +453,7 @@ export async function registerMcpRoutes(
         );
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        return { server: toMcpServerRecord(updated, runtimeStatus(id)) };
+        return { server: toMcpServerRecord(updated, runtimeStatus(updated)) };
       },
     );
 

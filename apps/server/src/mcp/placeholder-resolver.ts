@@ -83,4 +83,26 @@ export class EnvPlaceholderResolver {
     }
     return resolved;
   }
+
+  /**
+   * Collect the names of `${VAR}` placeholders that are unset (or empty)
+   * across one or more records, without throwing. Non-throwing companion to
+   * {@link resolveRecord}: lets a caller decide whether a config is ready to
+   * use — e.g. skip auto-connecting a server that is still awaiting its API
+   * key — rather than treating an unset secret as a connection failure.
+   */
+  findMissingVars(
+    ...records: Array<Record<string, string> | undefined>
+  ): string[] {
+    const missing = new Set<string>();
+    for (const record of records) {
+      if (!record) continue;
+      for (const value of Object.values(record)) {
+        // resolveString records unset vars into `missing` as a side effect;
+        // its (partially resolved) return value is intentionally discarded.
+        this.resolveString(value, missing);
+      }
+    }
+    return [...missing];
+  }
 }

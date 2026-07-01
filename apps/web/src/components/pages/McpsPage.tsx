@@ -16,16 +16,29 @@ import type {
   ImportMcpServersRequest,
 } from '../../lib/api';
 
-function StatusBadge(props: { connected: boolean }) {
+/** A server is awaiting configuration when it references secrets not yet set. */
+function isAwaitingConfig(server: McpServerRecord): boolean {
+  return (server.missingSecrets?.length ?? 0) > 0;
+}
+
+function StatusBadge(props: { connected: boolean; awaitingConfig?: boolean }) {
+  const label = () =>
+    props.connected
+      ? 'Connected'
+      : props.awaitingConfig
+        ? 'Needs API key'
+        : 'Disconnected';
+  const classes = () =>
+    props.connected
+      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+      : props.awaitingConfig
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
   return (
     <span
-      class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-        props.connected
-          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-      }`}
+      class={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${classes()}`}
     >
-      {props.connected ? 'Connected' : 'Disconnected'}
+      {label()}
     </span>
   );
 }
@@ -746,13 +759,18 @@ export function McpsPage() {
                       <span class="font-medium text-sm text-gray-900 dark:text-gray-100">
                         {server.name ?? server.id}
                       </span>
-                      <StatusBadge connected={server.connected} />
+                      <StatusBadge
+                        connected={server.connected}
+                        awaitingConfig={isAwaitingConfig(server)}
+                      />
                     </div>
                     <div class="text-xs text-text-tertiary">
                       {server.transport} ·{' '}
                       {server.connected
                         ? `${server.toolCount} tool${server.toolCount !== 1 ? 's' : ''}`
-                        : 'disconnected'}
+                        : isAwaitingConfig(server)
+                          ? 'needs API key'
+                          : 'disconnected'}
                     </div>
                   </button>
                 )}
@@ -879,6 +897,32 @@ export function McpsPage() {
 
               {/* Config details */}
               <div class="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
+                <Show when={isAwaitingConfig(selected()!)}>
+                  <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300">
+                    <p class="text-sm font-medium">Awaiting configuration</p>
+                    <p class="mt-1 text-xs">
+                      This server needs a value for{' '}
+                      <For each={selected()!.missingSecrets}>
+                        {(name, i) => (
+                          <>
+                            <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded">
+                              {name}
+                            </code>
+                            {i() < selected()!.missingSecrets.length - 1
+                              ? ', '
+                              : ''}
+                          </>
+                        )}
+                      </For>{' '}
+                      before it can connect. Click <strong>Edit</strong> and
+                      paste your API key in place of the{' '}
+                      <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded">
+                        ${'{…}'}
+                      </code>{' '}
+                      placeholder, or set it in the server environment.
+                    </p>
+                  </div>
+                </Show>
                 <Show when={selected()!.transport === 'stdio'}>
                   <div>
                     <span class="text-xs text-text-tertiary">Command</span>

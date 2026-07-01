@@ -843,6 +843,19 @@ export async function buildApp() {
     // down the HTTP API (routes already tolerate unconnected servers).
     const mcpServers = configService.getMcpServers();
     for (const serverConfig of mcpServers) {
+      // A server whose ${VAR} secrets aren't set yet (e.g. a preinstalled
+      // GitHub server before the user pastes a token) isn't broken — it's
+      // just awaiting configuration. Skip the connect so startup doesn't emit
+      // a misleading "failed to connect" warning; it connects on demand once
+      // its secrets are provided (via the connect endpoint or a restart).
+      const missing = mcpService.missingSecrets(serverConfig);
+      if (missing.length > 0) {
+        log.info('MCP server awaiting configuration — not auto-connecting', {
+          serverId: serverConfig.id,
+          missing,
+        });
+        continue;
+      }
       void (async () => {
         try {
           await mcpService.connect(serverConfig);

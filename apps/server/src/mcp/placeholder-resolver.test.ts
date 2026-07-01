@@ -71,6 +71,39 @@ describe('EnvPlaceholderResolver', () => {
     );
   });
 
+  describe('findMissingVars', () => {
+    it('returns the names of unset (or empty) placeholders without throwing', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.findMissingVars({
+          A: '${API_KEY}', // set
+          B: '${NOT_SET}', // unset
+          C: '${EMPTY}', // empty → treated as unset
+        }),
+      ).toEqual(['NOT_SET', 'EMPTY']);
+    });
+
+    it('returns an empty array when every placeholder resolves', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(resolver.findMissingVars({ A: 'Bearer ${API_KEY}' })).toEqual([]);
+    });
+
+    it('has no placeholders → nothing missing', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(resolver.findMissingVars({ A: 'literal' })).toEqual([]);
+    });
+
+    it('dedupes and spans multiple records, skipping undefined ones', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.findMissingVars({ A: '${NOT_SET}' }, undefined, {
+          B: '${NOT_SET}',
+          C: '${OTHER_MISSING}',
+        }),
+      ).toEqual(['NOT_SET', 'OTHER_MISSING']);
+    });
+  });
+
   it('defaults to process.env when no source is injected', () => {
     process.env.__MCP_TEST_VAR__ = 'from-process-env';
     try {

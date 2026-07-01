@@ -25,6 +25,11 @@ const PURE_PLACEHOLDER_PATTERN = /^\$\{[^}]+\}$/;
 export type McpRuntimeStatus = {
   connected: boolean;
   tools: McpToolSummary[];
+  /**
+   * `${VAR}` secret placeholders referenced by the server but not yet set in
+   * the environment. Omitted → treated as none (fully configured).
+   */
+  missingSecrets?: string[];
 };
 
 /**
@@ -87,5 +92,6 @@ export function toMcpServerRecord(
     connected: runtime.connected,
     toolCount: runtime.tools.length,
     tools: runtime.tools,
+    missingSecrets: runtime.missingSecrets ?? [],
   };
 }
