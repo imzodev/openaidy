@@ -105,6 +105,11 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'presence.getAll': [WS_CAPABILITIES.SYSTEM_NOTIFY],
   'presence.subscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
   'presence.unsubscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  // Managing MCP servers runs arbitrary local processes / dials out with
+  // stored credentials, so it requires admin — matching the REST routes.
+  'mcp.connect': [WS_CAPABILITIES.ADMIN],
+  'mcp.disconnect': [WS_CAPABILITIES.ADMIN],
+  'mcp.call': [WS_CAPABILITIES.ADMIN],
 };
 
 /**
@@ -126,10 +131,10 @@ const AUTHENTICATED_ONLY_MESSAGE_TYPES = new Set<string>([
   'log.stats',
   'log.subscribe',
   'log.unsubscribe',
+  // mcp.list is a read-only listing of connected servers + tool names (no
+  // secrets); the powerful mcp.connect/disconnect/call require admin and live
+  // in MESSAGE_CAPABILITIES instead.
   'mcp.list',
-  'mcp.connect',
-  'mcp.disconnect',
-  'mcp.call',
   'channel.subscribe',
   'channel.unsubscribe',
 ]);

@@ -33,6 +33,20 @@ const noAuthMiddleware = {
   hasCapability: () => false,
 } as unknown as AuthMiddleware;
 
+// Authenticated with a valid token but WITHOUT the admin scope.
+const nonAdminAuthMiddleware = {
+  validateToken: async () => ({
+    sub: 'test',
+    scopes: ['sessions.read'],
+    type: 'access' as const,
+    iat: 0,
+    exp: 9999999999,
+  }),
+  extractFromHeader: (_h: string) => 'test-token',
+  extractFromQuery: (_q: Record<string, string | undefined>) => null,
+  hasCapability: (_scopes: string[], cap: string) => cap !== '*',
+} as unknown as AuthMiddleware;
+
 function makeServerConfig(
   overrides: Partial<McpServerConfig> = {},
 ): McpServerConfig {
@@ -528,6 +542,97 @@ describe('MCP Routes', () => {
       });
       expect(res.statusCode).toBe(401);
       await unauthApp.close();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('secret redaction', () => {
+    beforeEach(async () => {
+      const servers = [
+        makeServerConfig({
+          id: 'http-srv',
+          transport: 'http',
+          command: undefined,
+          args: undefined,
+          url: 'https://api.githubcopilot.com/mcp/',
+          headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+          env: { INLINE: 'raw-secret-value', PLACEHOLDER: '${SOME_VAR}' },
+        }),
+      ];
+      mcpService = makeMcpService(servers, []);
+      configService = makeConfigService(servers);
+      app = await buildApp(mcpService, configService);
+    });
+
+    it('masks mixed/inlined secret values but preserves ${VAR} placeholders', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/servers/http-srv',
+      });
+      expect(res.statusCode).toBe(200);
+      const { server } = res.json();
+      // Bearer ${GH_TOKEN} embeds a placeholder → treated as a secret → masked.
+      expect(server.headers.Authorization).not.toContain('${GH_TOKEN}');
+      expect(server.headers.Authorization).toBe('••••••');
+      // Inlined raw value masked; pure placeholder preserved.
+      expect(server.env.INLINE).toBe('••••••');
+      expect(server.env.PLACEHOLDER).toBe('${SOME_VAR}');
+    });
+
+    it('never leaks secrets in the list endpoint either', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/mcp/servers' });
+      const body = res.json();
+      expect(JSON.stringify(body)).not.toContain('raw-secret-value');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('admin scope enforcement', () => {
+    beforeEach(async () => {
+      mcpService = makeMcpService([], []);
+      configService = makeConfigService([]);
+    });
+
+    it('rejects a create from a non-admin (authenticated) token with 403', async () => {
+      app = await buildApp(mcpService, configService, nonAdminAuthMiddleware);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers',
+        headers: { 'content-type': 'application/json' },
+        payload: { config: { id: 'x', transport: 'stdio', command: 'echo' } },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('INSUFFICIENT_SCOPE');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('PATCH secret round-trip safety', () => {
+    it('keeps the stored secret when the client echoes back a masked value', async () => {
+      const servers = [
+        makeServerConfig({
+          id: 'http-srv',
+          transport: 'http',
+          command: undefined,
+          args: undefined,
+          url: 'https://example.com/mcp',
+          headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+        }),
+      ];
+      mcpService = makeMcpService(servers, []);
+      configService = makeConfigService(servers);
+      app = await buildApp(mcpService, configService);
+
+      await app.inject({
+        method: 'PATCH',
+        url: '/api/mcp/servers/http-srv',
+        headers: { 'content-type': 'application/json' },
+        // Client re-sends the masked value it received from a GET.
+        payload: { headers: { Authorization: '••••••' } },
+      });
+
+      const stored = configService.getMcpServer('http-srv');
+      expect(stored?.headers?.Authorization).toBe('Bearer ${GH_TOKEN}');
     });
   });
 });

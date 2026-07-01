@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { McpClientService, createMcpClientService } from './client';
+import {
+  EnvPlaceholderResolver,
+  MissingEnvVarsError,
+} from './placeholder-resolver';
 import type { McpServerConfig } from '@openaidy/config';
 
 describe('McpClientService', () => {
@@ -120,6 +124,56 @@ describe('McpClientService', () => {
       };
       await expect(mcpService.connect(config)).rejects.toThrow(
         'requires command',
+      );
+    });
+  });
+
+  describe('env/header placeholder resolution', () => {
+    it('fails fast (before spawning) when a stdio env placeholder is unset', async () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}),
+      });
+      const config: McpServerConfig = {
+        id: 'stdio-missing',
+        transport: 'stdio',
+        command: 'echo',
+        env: { TOKEN: '${MISSING_VAR}' },
+      };
+      await expect(service.connect(config)).rejects.toBeInstanceOf(
+        MissingEnvVarsError,
+      );
+      expect(service.isConnected('stdio-missing')).toBe(false);
+    });
+
+    it('fails fast (before connecting) when an http header placeholder is unset', async () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}),
+      });
+      const config: McpServerConfig = {
+        id: 'http-missing',
+        transport: 'http',
+        url: 'http://localhost:1/mcp',
+        headers: { Authorization: 'Bearer ${MISSING_VAR}' },
+      };
+      await expect(service.connect(config)).rejects.toBeInstanceOf(
+        MissingEnvVarsError,
+      );
+    });
+
+    it('passes header resolution when the var is set (fails later at the network)', async () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({ GH_TOKEN: 'ghp_x' }),
+      });
+      const config: McpServerConfig = {
+        id: 'http-resolved',
+        transport: 'http',
+        url: 'http://localhost:1/mcp',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      };
+      // Resolution succeeded (no MissingEnvVarsError); the connection then
+      // fails at the transport/network layer with the wrapped message.
+      await expect(service.connect(config)).rejects.toThrow(
+        'Failed to connect to MCP server',
       );
     });
   });
