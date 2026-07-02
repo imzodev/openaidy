@@ -205,12 +205,7 @@ export function spawnCliOAuth(
       const argv = descriptor.args(
         options.extraArgs ? { extraArgs: options.extraArgs } : {},
       );
-      // `script -qec` takes a single command STRING that a shell parses,
-      // so every token must be shell-quoted. This matters now that the
-      // binary can be an absolute path to node plus a bundled script
-      // path (see mmx-bridge's resolveMmxInvocation) — either of which
-      // may contain spaces on some systems.
-      const command = [descriptor.binary, ...argv].map(shQuote).join(' ');
+      const command = buildPtyCommand(descriptor.binary, argv);
       child = spawn('script', ['-qec', command, '/dev/null'], {
         env: childEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -378,9 +373,24 @@ export function spawnCliOAuth(
  * it through unmangled even when it contains spaces or metacharacters.
  * Wraps in single quotes and escapes any embedded single quote as
  * `'\''`.
+ *
+ * Exported for unit testing.
  */
-function shQuote(token: string): string {
+export function shQuote(token: string): string {
   return `'${token.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Build the single command string handed to `script -qec`, which a
+ * shell re-parses. Every token is shell-quoted because the binary can
+ * be an absolute path to node plus a bundled script path (see
+ * mmx-bridge's resolveMmxInvocation) — either of which may contain
+ * spaces on some systems.
+ *
+ * Exported for unit testing.
+ */
+export function buildPtyCommand(binary: string, argv: string[]): string {
+  return [binary, ...argv].map(shQuote).join(' ');
 }
 
 /**

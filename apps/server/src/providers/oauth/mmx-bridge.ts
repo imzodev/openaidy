@@ -119,8 +119,10 @@ type MmxInvocation = { binary: string; prefixArgs: string[] };
  * flow should work immediately after install, with no extra manual
  * step. Falls back to a bare `mmx` on PATH if the bundled copy can't
  * be resolved for some reason.
+ *
+ * Exported for unit testing.
  */
-function resolveMmxInvocation(): MmxInvocation {
+export function resolveMmxInvocation(): MmxInvocation {
   try {
     const require = createRequire(import.meta.url);
     const pkgJsonPath = require.resolve('mmx-cli/package.json');
