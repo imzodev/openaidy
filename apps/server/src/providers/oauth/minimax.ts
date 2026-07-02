@@ -93,8 +93,9 @@ export async function startMiniMaxOAuth(
       ok: false,
       error: 'mmx_not_installed',
       message:
-        'The mmx-cli tool is not on PATH. OpenAidy depends on it for MiniMax OAuth. ' +
-        'Install it with: pnpm add -g mmx-cli',
+        'The mmx-cli tool could not be found. OpenAidy bundles it as a ' +
+        'server dependency, so this usually means dependencies are not ' +
+        'installed — run: pnpm install',
     };
   }
 

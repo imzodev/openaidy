@@ -205,14 +205,16 @@ export function spawnCliOAuth(
       const argv = descriptor.args(
         options.extraArgs ? { extraArgs: options.extraArgs } : {},
       );
-      child = spawn(
-        'script',
-        ['-qec', `${descriptor.binary} ${argv.join(' ')}`, '/dev/null'],
-        {
-          env: childEnv,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
+      // `script -qec` takes a single command STRING that a shell parses,
+      // so every token must be shell-quoted. This matters now that the
+      // binary can be an absolute path to node plus a bundled script
+      // path (see mmx-bridge's resolveMmxInvocation) — either of which
+      // may contain spaces on some systems.
+      const command = [descriptor.binary, ...argv].map(shQuote).join(' ');
+      child = spawn('script', ['-qec', command, '/dev/null'], {
+        env: childEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (err) {
       rejectUserCode(err instanceof Error ? err : new Error(String(err)));
       finish({
@@ -369,6 +371,16 @@ export function spawnCliOAuth(
       }
     },
   };
+}
+
+/**
+ * POSIX shell single-quote a token so `script -qec "<command>"` passes
+ * it through unmangled even when it contains spaces or metacharacters.
+ * Wraps in single quotes and escapes any embedded single quote as
+ * `'\''`.
+ */
+function shQuote(token: string): string {
+  return `'${token.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
