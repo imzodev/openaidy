@@ -1,9 +1,9 @@
 ---
-summary: "Landing page for OpenAidy project documentation"
+summary: 'Landing page for OpenAidy project documentation'
 read_when:
   - You want an overview of the OpenAidy docs set
   - You are starting work on the project and want to know where to begin
-title: "OpenAidy Docs"
+title: 'OpenAidy Docs'
 ---
 
 # OpenAidy Docs
@@ -21,7 +21,6 @@ Use these docs to move from product idea to implementation foundation.
 ## Architecture and planning
 
 - [OpenAidy Architecture](./architecture) — core services, subsystem boundaries, data flow, event model, and security model.
-- [OpenAidy MVP Roadmap](./mvp-roadmap) — phased implementation plan for reaching a practical MVP.
 - [OpenAidy Data Model](./data-model) — recommended relational schema and persistence boundaries.
 
 ## Extension model
@@ -46,8 +45,7 @@ If you are just starting:
 2. Read [OpenAidy Architecture](./architecture).
 3. Read [Bootstrapping OpenAidy](./bootstrapping).
 4. Use [Bootstrap Checklist](./bootstrap-checklist) while creating the repo.
-5. Use [OpenAidy MVP Roadmap](./mvp-roadmap) to sequence implementation.
-6. Refer to [OpenAidy Data Model](./data-model), [OpenAidy Plugin SDK](./plugin-sdk), and [OpenAidy API Design](./api-design) as implementation references.
+5. Refer to [OpenAidy Data Model](./data-model), [OpenAidy Plugin SDK](./plugin-sdk), and [OpenAidy API Design](./api-design) as implementation references.
 
 ## Intended outcome
 
