@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shQuote, buildPtyCommand } from './cli-bridge';
+import { shQuote, buildPtyCommand, buildSpawnArgs } from './cli-bridge';
 
 /**
  * Unit tests for the shell-quoting used to build the command string
@@ -54,5 +54,48 @@ describe('buildPtyCommand', () => {
 
   it('handles an empty argv (just the binary)', () => {
     expect(buildPtyCommand('mmx', [])).toBe(`'mmx'`);
+  });
+});
+
+describe('buildSpawnArgs', () => {
+  const argv = [
+    '/opt/mmx-cli/dist/mmx.mjs',
+    'auth',
+    'login',
+    '--region=global',
+  ];
+
+  it('wraps the CLI in a `script` PTY on Linux', () => {
+    const { file, args } = buildSpawnArgs('/usr/bin/node', argv, 'linux');
+    expect(file).toBe('script');
+    expect(args[0]).toBe('-qec');
+    expect(args[2]).toBe('/dev/null');
+    // The command is the shell-quoted single string.
+    expect(args[1]).toBe(buildPtyCommand('/usr/bin/node', argv));
+  });
+
+  it('wraps the CLI in a `script` PTY on macOS', () => {
+    const { file } = buildSpawnArgs('/usr/bin/node', argv, 'darwin');
+    expect(file).toBe('script');
+  });
+
+  it('spawns the CLI directly on Windows (no `script`, no /dev/null)', () => {
+    const { file, args } = buildSpawnArgs('C:\\node\\node.exe', argv, 'win32');
+    // Regression guard: Windows has no script(1) — spawning it would
+    // ENOENT and turn a clean flow into a confusing error.
+    expect(file).toBe('C:\\node\\node.exe');
+    expect(file).not.toBe('script');
+    // argv is passed straight through (spawn quotes natively on Windows).
+    expect(args).toEqual(argv);
+    expect(args).not.toContain('/dev/null');
+  });
+
+  it('does not shell-quote on Windows, preserving spaced paths as one arg', () => {
+    const { args } = buildSpawnArgs(
+      'C:\\Program Files\\node\\node.exe',
+      ['C:\\my apps\\mmx.mjs', 'auth'],
+      'win32',
+    );
+    expect(args).toEqual(['C:\\my apps\\mmx.mjs', 'auth']);
   });
 });

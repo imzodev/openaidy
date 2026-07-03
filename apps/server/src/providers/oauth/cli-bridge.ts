@@ -187,8 +187,11 @@ export function spawnCliOAuth(
       });
     });
 
-    // 2. Spawn the CLI inside a pseudo-TTY so it enters the interactive
-    //    (browser) flow. `script(1)` (util-linux) provides the PTY.
+    // 2. Spawn the CLI so it enters the interactive (browser) flow.
+    //    On POSIX we wrap it in a pseudo-TTY via `script(1)` (util-linux)
+    //    because the CLI drops to non-interactive mode without a TTY.
+    //    Windows has no `script`, so we spawn the CLI directly — see
+    //    buildSpawnArgs for the platform split.
     try {
       const childEnv: NodeJS.ProcessEnv = { ...process.env };
       for (const key of descriptor.envVarsToStrip) {
@@ -205,8 +208,8 @@ export function spawnCliOAuth(
       const argv = descriptor.args(
         options.extraArgs ? { extraArgs: options.extraArgs } : {},
       );
-      const command = buildPtyCommand(descriptor.binary, argv);
-      child = spawn('script', ['-qec', command, '/dev/null'], {
+      const { file, args } = buildSpawnArgs(descriptor.binary, argv);
+      child = spawn(file, args, {
         env: childEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -391,6 +394,37 @@ export function shQuote(token: string): string {
  */
 export function buildPtyCommand(binary: string, argv: string[]): string {
   return [binary, ...argv].map(shQuote).join(' ');
+}
+
+/**
+ * Resolve the actual `spawn(file, args)` for the current platform.
+ *
+ * POSIX wraps the CLI in `script -qec "<command>" /dev/null` to give it
+ * a pseudo-TTY (many CLIs, mmx included, fall back to non-interactive
+ * mode without one). Windows has no `script(1)` and no `/dev/null`, so
+ * we spawn the CLI directly with an argv array — spawn handles spaces
+ * natively there, so no shell quoting is involved. The interactive
+ * region prompt is avoided by passing `--region` as a flag, and the
+ * device-code/browser flow needs no stdin, so the CLI can still print
+ * its user_code. If a CLI insists on a TTY it will exit non-zero and
+ * surface a clear error rather than a confusing `spawn script ENOENT`.
+ *
+ * `platform` is injectable for unit testing; it defaults to the host.
+ *
+ * Exported for unit testing.
+ */
+export function buildSpawnArgs(
+  binary: string,
+  argv: string[],
+  platform: NodeJS.Platform = process.platform,
+): { file: string; args: string[] } {
+  if (platform === 'win32') {
+    return { file: binary, args: argv };
+  }
+  return {
+    file: 'script',
+    args: ['-qec', buildPtyCommand(binary, argv), '/dev/null'],
+  };
 }
 
 /**
