@@ -599,16 +599,16 @@ describe('MCP Routes', () => {
       app = await buildApp(mcpService, configService);
     });
 
-    it('masks mixed/inlined secret values but preserves ${VAR} placeholders', async () => {
+    it('masks inlined secrets but preserves ${VAR} placeholders (including in templates)', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/mcp/servers/http-srv',
       });
       expect(res.statusCode).toBe(200);
       const { server } = res.json();
-      // Bearer ${GH_TOKEN} embeds a placeholder → treated as a secret → masked.
-      expect(server.headers.Authorization).not.toContain('${GH_TOKEN}');
-      expect(server.headers.Authorization).toBe('••••••');
+      // Bearer ${GH_TOKEN} is a placeholder template — the secret lives in the
+      // environment, so it is shown verbatim rather than masked.
+      expect(server.headers.Authorization).toBe('Bearer ${GH_TOKEN}');
       // Inlined raw value masked; pure placeholder preserved.
       expect(server.env.INLINE).toBe('••••••');
       expect(server.env.PLACEHOLDER).toBe('${SOME_VAR}');
@@ -681,8 +681,11 @@ describe('MCP Routes', () => {
       expect(body.servers[0].missingSecrets).toEqual([
         'GITHUB_PERSONAL_ACCESS_TOKEN',
       ]);
-      // Secret still redacted in the response.
-      expect(body.servers[0].headers.Authorization).toBe('••••••');
+      // Placeholder template shown verbatim (the token lives in the env, so
+      // there's no secret value to redact here).
+      expect(body.servers[0].headers.Authorization).toBe(
+        'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}',
+      );
     });
 
     it('connects an imported server once its secret is available', async () => {
