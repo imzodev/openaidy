@@ -14,15 +14,23 @@ import { isBodySizeValid } from './sanitize.js';
  * The frontmatter is read by line-scan rather than a real YAML parser, so
  * a quoted value like `description: 'Do the thing.'` would otherwise keep
  * its quotes literally and surface them in the UI and in skill-selection
- * prompts. Only an outer pair of matching `'` or `"` is removed; inner
- * quotes are left untouched.
+ * prompts. Only an outer pair of matching `'` or `"` wrapping a genuine
+ * single quoted scalar is removed — a value in which that quote char
+ * reappears (e.g. `"foo" or "bar"`) is left untouched. Quotes of the
+ * other kind (the apostrophe in `"it's"`) are always preserved.
  */
 function unquote(value: string): string {
   if (value.length >= 2) {
     const first = value[0];
     const last = value[value.length - 1];
     if ((first === '"' || first === "'") && last === first) {
-      return value.slice(1, -1);
+      const inner = value.slice(1, -1);
+      // Only unwrap a genuine single quoted scalar. If the same quote char
+      // reappears inside, this isn't one (e.g. `"foo" or "bar"`) — leave it
+      // untouched rather than mangle it into `foo" or "bar`.
+      if (!inner.includes(first)) {
+        return inner;
+      }
     }
   }
   return value;

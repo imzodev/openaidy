@@ -96,6 +96,21 @@ describe('parseSkillMd', () => {
     });
   });
 
+  it('leaves a value with the same quote reappearing inside untouched', () => {
+    const content = [
+      '---',
+      'name: Plain',
+      'description: "foo" or "bar"',
+      '---',
+      'Body.',
+    ].join('\n');
+
+    const result = parseSkillMd(content, 'plain', '/path/to/SKILL.md');
+
+    // Not a single quoted scalar — must not be mangled into `foo" or "bar`.
+    expect(result).toMatchObject({ description: '"foo" or "bar"' });
+  });
+
   it('leaves an unquoted description untouched', () => {
     const content = [
       '---',
