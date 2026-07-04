@@ -897,7 +897,9 @@ export function McpsPage() {
 
               {/* Config details */}
               <div class="flex-1 overflow-y-auto p-4 space-y-3 text-sm">
-                <Show when={isAwaitingConfig(selected()!)}>
+                <Show
+                  when={!selected()!.connected && isAwaitingConfig(selected()!)}
+                >
                   <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300">
                     <p class="text-sm font-medium">Awaiting configuration</p>
                     <p class="mt-1 text-xs">
