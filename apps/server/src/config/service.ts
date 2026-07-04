@@ -83,14 +83,19 @@ export class AppConfigService {
    * doesn't have yet. The template is only copied on first run, so without this
    * a server added to the template later would never reach existing installs.
    *
-   * Servers the user has deleted are remembered in a manifest and not re-added;
-   * servers already present are left untouched. Persists the config (only when
-   * something is added) and the manifest, and returns the ids added. Must be
-   * called after {@link load}.
+   * A newly shipped server is added; a preinstalled server whose template
+   * definition changed is updated **only if the user hasn't modified it**;
+   * servers the user deleted are remembered and not re-added; user-created or
+   * user-edited servers are never clobbered. Persists the config when a server
+   * is added or updated, and the manifest whenever it changes. Returns the ids
+   * touched. Must be called after {@link load}.
    */
-  async reconcilePreinstalledMcpServers(): Promise<string[]> {
+  async reconcilePreinstalledMcpServers(): Promise<{
+    added: string[];
+    updated: string[];
+  }> {
     const templateServers = this.readTemplateMcpServers();
-    if (templateServers.length === 0) return [];
+    if (templateServers.length === 0) return { added: [], updated: [] };
 
     const manifestPath = join(dirname(this.configPath), MCP_SEED_MANIFEST_FILE);
     const manifest = readMcpSeedManifest(manifestPath);
@@ -101,14 +106,14 @@ export class AppConfigService {
       manifest,
     );
 
-    if (result.added.length > 0) {
+    if (result.added.length > 0 || result.updated.length > 0) {
       await this.save({ ...this.getConfig(), mcpServers: result.servers });
     }
     if (result.changed) {
       writeMcpSeedManifest(manifestPath, result.manifest);
     }
 
-    return result.added;
+    return { added: result.added, updated: result.updated };
   }
 
   /** Read the `mcpServers` shipped in the config template, if any. */

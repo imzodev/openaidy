@@ -45,20 +45,18 @@ describe('reconcilePreinstalledMcpServers', () => {
     expect(result.changed).toBe(false);
   });
 
-  it('leaves an existing server untouched but records it in the manifest', () => {
-    // User has their own edited copy of github (extra arg); must not be clobbered.
-    const userGithub: McpServerConfig = {
-      ...github,
-      args: [...(github.args ?? []), '--verbose'],
-    };
+  it('leaves an untracked, user-differing server untouched and does not adopt it', () => {
+    // User has their own copy of github (different from the template) that we
+    // never seeded — we must neither overwrite nor claim it in the manifest.
+    const userGithub: McpServerConfig = { ...github, name: 'My GitHub' };
 
     const result = reconcilePreinstalledMcpServers([userGithub], [github], {});
 
     expect(result.added).toEqual([]);
+    expect(result.updated).toEqual([]);
     expect(result.servers).toEqual([userGithub]); // unchanged, not overwritten
-    // Manifest records the TEMPLATE hash so a later deletion is remembered.
-    expect(result.manifest['github']?.hash).toBe(hashMcpServer(github));
-    expect(result.changed).toBe(true); // manifest gained an entry
+    expect(result.manifest['github']).toBeUndefined(); // not adopted
+    expect(result.changed).toBe(false);
   });
 
   it('adds only the new server when one is already configured', () => {
@@ -89,7 +87,72 @@ describe('reconcilePreinstalledMcpServers', () => {
     const result = reconcilePreinstalledMcpServers([github], [], {});
 
     expect(result.added).toEqual([]);
+    expect(result.updated).toEqual([]);
     expect(result.changed).toBe(false);
     expect(result.servers).toEqual([github]);
+  });
+
+  it('updates a pristine (as-seeded) server when the template definition changed', () => {
+    // Previously seeded the old stdio github; manifest records that hash.
+    const oldGithub: McpServerConfig = {
+      id: 'github',
+      name: 'GitHub Tools',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' },
+    };
+    const manifest: McpSeedManifest = {
+      github: { hash: hashMcpServer(oldGithub) },
+    };
+
+    // Template now ships the http remote definition (`github`).
+    const result = reconcilePreinstalledMcpServers(
+      [oldGithub],
+      [github],
+      manifest,
+    );
+
+    expect(result.updated).toEqual(['github']);
+    expect(result.added).toEqual([]);
+    expect(result.servers).toEqual([github]); // replaced with new definition
+    expect(result.manifest['github']?.hash).toBe(hashMcpServer(github));
+    expect(result.changed).toBe(true);
+  });
+
+  it('does NOT update a server the user modified since it was seeded', () => {
+    const oldGithub: McpServerConfig = {
+      id: 'github',
+      name: 'GitHub Tools',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-github'],
+      env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' },
+    };
+    // Manifest hash reflects the ORIGINAL seed; the user has since edited it.
+    const manifest: McpSeedManifest = {
+      github: { hash: hashMcpServer(oldGithub) },
+    };
+    const userEdited: McpServerConfig = { ...oldGithub, name: 'My GitHub' };
+
+    const result = reconcilePreinstalledMcpServers(
+      [userEdited],
+      [github],
+      manifest,
+    );
+
+    expect(result.updated).toEqual([]);
+    expect(result.servers).toEqual([userEdited]); // preserved, not clobbered
+  });
+
+  it('adopts an untracked server that is byte-identical to the template', () => {
+    // Server present and equal to the template, but never recorded (no entry).
+    const result = reconcilePreinstalledMcpServers([github], [github], {});
+
+    expect(result.added).toEqual([]);
+    expect(result.updated).toEqual([]);
+    expect(result.servers).toEqual([github]); // unchanged
+    expect(result.manifest['github']?.hash).toBe(hashMcpServer(github)); // adopted
+    expect(result.changed).toBe(true); // manifest gained the entry
   });
 });

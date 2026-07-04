@@ -35,28 +35,36 @@ export function hashMcpServer(server: McpServerConfig): string {
 }
 
 export type ReconcileResult = {
-  /** The (possibly extended) server list to persist. */
+  /** The (possibly changed) server list to persist. */
   servers: McpServerConfig[];
   /** The manifest to persist. */
   manifest: McpSeedManifest;
   /** Ids of servers newly added to the config this run. */
   added: string[];
-  /** Whether the manifest changed (config or manifest needs persisting). */
+  /** Ids of preinstalled servers updated to a new template definition. */
+  updated: string[];
+  /** Whether the config or manifest changed (needs persisting). */
   changed: boolean;
 };
 
 /**
- * Decide which preinstalled (template) MCP servers to add to a config. Pure —
- * no IO.
+ * Reconcile the config's MCP servers against the template's preinstalled
+ * servers. Pure — no IO.
  *
- * Policy (mirrors the skills seed manifest in {@link ./../skills/seed}):
- * - Template server already in the config → left untouched (a user's own edits
- *   are never clobbered); the manifest is refreshed so a later deletion is
- *   remembered.
- * - Template server absent from the config but present in the manifest → the
- *   user deleted it after it was seeded, so it is NOT re-added.
- * - Template server absent from both → a newly shipped preinstalled server;
- *   add it and record it in the manifest.
+ * The manifest records, per server id, the hash of the definition we last
+ * seeded/updated — so `manifest[id].hash === hash(configServer)` means the
+ * user hasn't touched it since we wrote it. Policy (mirrors the skills seed
+ * manifest in {@link ./../skills/seed}):
+ *
+ * - Absent from config, absent from manifest → newly shipped server; ADD it.
+ * - Absent from config, present in manifest → user deleted a seeded server;
+ *   do NOT re-add.
+ * - Present and pristine (matches what we last seeded) → UPDATE to the new
+ *   template definition when it changed; otherwise leave it.
+ * - Present, untracked, but byte-identical to the template → ADOPT it (record
+ *   in the manifest) so future template changes reach it too.
+ * - Present and user-modified (or a user's own server with the same id) →
+ *   leave it untouched, never clobbering their edits.
  */
 export function reconcilePreinstalledMcpServers(
   currentServers: McpServerConfig[],
@@ -64,36 +72,50 @@ export function reconcilePreinstalledMcpServers(
   manifest: McpSeedManifest,
 ): ReconcileResult {
   const nextManifest: McpSeedManifest = { ...manifest };
-  const presentIds = new Set(currentServers.map((s) => s.id));
   const servers = [...currentServers];
+  const indexById = new Map(currentServers.map((s, i) => [s.id, i]));
   const added: string[] = [];
+  const updated: string[] = [];
 
   for (const tpl of templateServers) {
-    const hash = hashMcpServer(tpl);
+    const templateHash = hashMcpServer(tpl);
+    const idx = indexById.get(tpl.id);
 
-    if (presentIds.has(tpl.id)) {
-      // Already configured — respect the user's copy, just record that we've
-      // seen this server so a future deletion isn't undone.
-      nextManifest[tpl.id] = { hash };
+    if (idx === undefined) {
+      if (manifest[tpl.id]) continue; // deleted by user — don't resurrect
+      servers.push(tpl);
+      nextManifest[tpl.id] = { hash: templateHash };
+      added.push(tpl.id);
       continue;
     }
 
-    if (manifest[tpl.id]) {
-      // Seeded before and since removed by the user — do not resurrect it.
-      continue;
-    }
+    const currentHash = hashMcpServer(servers[idx]!);
+    const seededHash = manifest[tpl.id]?.hash;
 
-    // Brand-new preinstalled server — add it.
-    servers.push(tpl);
-    nextManifest[tpl.id] = { hash };
-    added.push(tpl.id);
+    if (seededHash === currentHash) {
+      // Pristine as-seeded — safe to update to a changed template definition.
+      if (templateHash !== currentHash) {
+        servers[idx] = tpl;
+        nextManifest[tpl.id] = { hash: templateHash };
+        updated.push(tpl.id);
+      }
+    } else if (seededHash === undefined && currentHash === templateHash) {
+      // Untracked but identical to the template — adopt it so future template
+      // changes can update it. Config is unchanged.
+      nextManifest[tpl.id] = { hash: templateHash };
+    }
+    // Otherwise the user created or modified this server — leave it untouched.
   }
 
   return {
     servers,
     manifest: nextManifest,
     added,
-    changed: added.length > 0 || !manifestsEqual(manifest, nextManifest),
+    updated,
+    changed:
+      added.length > 0 ||
+      updated.length > 0 ||
+      !manifestsEqual(manifest, nextManifest),
   };
 }
 
