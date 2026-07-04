@@ -9,10 +9,9 @@ import {
 const github: McpServerConfig = {
   id: 'github',
   name: 'GitHub Tools',
-  transport: 'stdio',
-  command: 'npx',
-  args: ['-y', '@modelcontextprotocol/server-github'],
-  env: { GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}' },
+  transport: 'http',
+  url: 'https://api.githubcopilot.com/mcp/',
+  headers: { Authorization: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}' },
 };
 
 const fetchServer: McpServerConfig = {
