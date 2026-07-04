@@ -275,4 +275,101 @@ describe('seedBundledSkills', () => {
       expect(existsSync(join(destDir, 'my-skill', 'SKILL.md'))).toBe(true);
     });
   });
+
+  describe('skills with subdirectories (references, scripts, templates)', () => {
+    function writeRichSkill(dir: string, skillId: string): void {
+      const skillDir = join(dir, skillId);
+      mkdirSync(join(skillDir, 'references'), { recursive: true });
+      mkdirSync(join(skillDir, 'scripts'), { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), skillV1, 'utf8');
+      writeFileSync(
+        join(skillDir, 'references', 'guide.md'),
+        '# guide\n',
+        'utf8',
+      );
+      writeFileSync(
+        join(skillDir, 'scripts', 'run.mjs'),
+        'console.log("hi");\n',
+        'utf8',
+      );
+    }
+
+    it('does not throw on a skill dir containing subdirectories', () => {
+      // Regression: the seeder used to call readFileSync/copyFileSync on
+      // subdirectory entries, throwing EISDIR and aborting startup.
+      writeRichSkill(srcDir, 'rich-skill');
+      expect(() => seedBundledSkills(srcDir, destDir)).not.toThrow();
+    });
+
+    it('copies nested files preserving directory structure', () => {
+      writeRichSkill(srcDir, 'rich-skill');
+      seedBundledSkills(srcDir, destDir);
+
+      expect(existsSync(join(destDir, 'rich-skill', 'SKILL.md'))).toBe(true);
+      expect(
+        readFileSync(
+          join(destDir, 'rich-skill', 'references', 'guide.md'),
+          'utf8',
+        ),
+      ).toBe('# guide\n');
+      expect(
+        readFileSync(join(destDir, 'rich-skill', 'scripts', 'run.mjs'), 'utf8'),
+      ).toBe('console.log("hi");\n');
+    });
+
+    it('records nested files in the manifest under forward-slash keys', () => {
+      writeRichSkill(srcDir, 'rich-skill');
+      seedBundledSkills(srcDir, destDir);
+
+      const manifest = readManifest(destDir);
+      expect(manifest['rich-skill/SKILL.md']).toBeDefined();
+      expect(manifest['rich-skill/references/guide.md']).toBeDefined();
+      expect(manifest['rich-skill/scripts/run.mjs']).toBeDefined();
+    });
+
+    it('preserves a user-modified nested file while updating an unmodified sibling', () => {
+      writeRichSkill(srcDir, 'rich-skill');
+      seedBundledSkills(srcDir, destDir);
+
+      // User edits one reference file locally.
+      writeFileSync(
+        join(destDir, 'rich-skill', 'references', 'guide.md'),
+        '# my edit\n',
+        'utf8',
+      );
+
+      // App ships new content for both nested files (no version → content-based).
+      writeFileSync(
+        join(srcDir, 'rich-skill', 'references', 'guide.md'),
+        '# upstream guide v2\n',
+        'utf8',
+      );
+      writeFileSync(
+        join(srcDir, 'rich-skill', 'scripts', 'run.mjs'),
+        'console.log("v2");\n',
+        'utf8',
+      );
+      seedBundledSkills(srcDir, destDir);
+
+      expect(
+        readFileSync(
+          join(destDir, 'rich-skill', 'references', 'guide.md'),
+          'utf8',
+        ),
+      ).toBe('# my edit\n'); // preserved
+      expect(
+        readFileSync(join(destDir, 'rich-skill', 'scripts', 'run.mjs'), 'utf8'),
+      ).toBe('console.log("v2");\n'); // updated
+    });
+
+    it('is idempotent on re-seed with unchanged source', () => {
+      writeRichSkill(srcDir, 'rich-skill');
+      seedBundledSkills(srcDir, destDir);
+      const first = readManifest(destDir);
+
+      expect(() => seedBundledSkills(srcDir, destDir)).not.toThrow();
+      const second = readManifest(destDir);
+      expect(second).toEqual(first);
+    });
+  });
 });
