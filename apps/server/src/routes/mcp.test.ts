@@ -8,6 +8,7 @@ import type { McpClientService } from '../mcp/client';
 import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { McpServerConfig } from '@openaidy/config';
+import { EnvPlaceholderResolver } from '../mcp/placeholder-resolver';
 
 // ---------------------------------------------------------------------------
 // Helpers / stubs
@@ -76,6 +77,13 @@ function makeMcpService(
     connect: vi.fn(),
     disconnect: vi.fn(),
     callTool: vi.fn(),
+    // Mirror the real service: any ${VAR} in the relevant field is "missing"
+    // when resolved against an empty environment.
+    missingSecrets: vi.fn((config: McpServerConfig) => {
+      const resolver = new EnvPlaceholderResolver({});
+      const record = config.transport === 'http' ? config.headers : config.env;
+      return resolver.findMissingVars(record);
+    }),
   } as unknown as McpClientService;
 }
 
@@ -328,6 +336,33 @@ describe('MCP Routes', () => {
       });
       expect(res.statusCode).toBe(401);
       await unauthApp.close();
+    });
+
+    it('saves a server awaiting secrets without attempting to connect', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          config: {
+            id: 'gh',
+            transport: 'stdio',
+            command: 'npx',
+            env: {
+              GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}',
+            },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      // Persisted but not connected — and reported as awaiting its token.
+      expect(configService.save).toHaveBeenCalled();
+      expect(mcpService.connect).not.toHaveBeenCalled();
+      expect(body.server.connected).toBe(false);
+      expect(body.server.missingSecrets).toEqual([
+        'GITHUB_PERSONAL_ACCESS_TOKEN',
+      ]);
     });
   });
 
@@ -614,7 +649,7 @@ describe('MCP Routes', () => {
       app = await buildApp(mcpService, configService);
     });
 
-    it('imports the Claude-Desktop http map format and connects', async () => {
+    it('imports the Claude-Desktop http map format (awaiting its token, no connect)', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/mcp/servers/import',
@@ -636,12 +671,35 @@ describe('MCP Routes', () => {
       expect(body.servers).toHaveLength(1);
       expect(body.servers[0].id).toBe('github');
       expect(body.servers[0].transport).toBe('http');
-      // Persisted with transport (not the raw "type") and connected.
+      // Persisted with transport (not the raw "type").
       const stored = configService.getMcpServer('github');
       expect(stored?.transport).toBe('http');
-      expect(mcpService.connect).toHaveBeenCalled();
+      // The token isn't set, so the server is imported as awaiting
+      // configuration — no connection attempt, no warning.
+      expect(mcpService.connect).not.toHaveBeenCalled();
+      expect(body.servers[0].connected).toBe(false);
+      expect(body.servers[0].missingSecrets).toEqual([
+        'GITHUB_PERSONAL_ACCESS_TOKEN',
+      ]);
       // Secret still redacted in the response.
       expect(body.servers[0].headers.Authorization).toBe('••••••');
+    });
+
+    it('connects an imported server once its secret is available', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: {
+            // No ${VAR} placeholders → nothing to resolve → connects.
+            everything: { command: 'npx', args: ['-y', 'server-everything'] },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(mcpService.connect).toHaveBeenCalled();
+      expect(res.json().servers[0].missingSecrets).toEqual([]);
     });
 
     it('imports multiple servers in one call', async () => {

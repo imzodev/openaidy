@@ -107,6 +107,22 @@ export class McpClientService {
   }
 
   /**
+   * Names of `${VAR}` placeholders in this server's secret-bearing fields
+   * (`env` for stdio, `headers` for http) that are not yet set in the
+   * environment. Empty when the server is fully configured and ready to
+   * connect. Lets callers skip a doomed connect — and its misleading
+   * "connection failed" warning — for a server that is simply awaiting its
+   * API key (e.g. a preinstalled GitHub server before a token is pasted in).
+   */
+  missingSecrets(serverConfig: McpServerConfig): string[] {
+    const record =
+      serverConfig.transport === 'http'
+        ? serverConfig.headers
+        : serverConfig.env;
+    return this.resolver.findMissingVars(record);
+  }
+
+  /**
    * Connect to an MCP server
    */
   async connect(serverConfig: McpServerConfig): Promise<void> {

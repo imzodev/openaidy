@@ -178,6 +178,64 @@ describe('McpClientService', () => {
     });
   });
 
+  describe('missingSecrets', () => {
+    it('reports unset ${VAR} placeholders in a stdio server env', () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}),
+      });
+      const config: McpServerConfig = {
+        id: 'gh',
+        transport: 'stdio',
+        command: 'npx',
+        env: {
+          GITHUB_PERSONAL_ACCESS_TOKEN: '${GITHUB_PERSONAL_ACCESS_TOKEN}',
+        },
+      };
+      expect(service.missingSecrets(config)).toEqual([
+        'GITHUB_PERSONAL_ACCESS_TOKEN',
+      ]);
+    });
+
+    it('reports unset ${VAR} placeholders in an http server headers', () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}),
+      });
+      const config: McpServerConfig = {
+        id: 'gh',
+        transport: 'http',
+        url: 'https://api.githubcopilot.com/mcp/',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      };
+      expect(service.missingSecrets(config)).toEqual(['GH_TOKEN']);
+    });
+
+    it('is empty once the secret is set (ready to connect)', () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({ GH_TOKEN: 'ghp_x' }),
+      });
+      const config: McpServerConfig = {
+        id: 'gh',
+        transport: 'http',
+        url: 'https://api.githubcopilot.com/mcp/',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      };
+      expect(service.missingSecrets(config)).toEqual([]);
+    });
+
+    it('is empty for a server with no secret-bearing fields', () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}),
+      });
+      const config: McpServerConfig = {
+        id: 'fs',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'server-filesystem', '.'],
+      };
+      expect(service.missingSecrets(config)).toEqual([]);
+    });
+  });
+
   describe('callTool', () => {
     it('should throw for unconnected server', async () => {
       await expect(

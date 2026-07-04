@@ -40,6 +40,13 @@ export type McpServerRecord = McpServerTransportConfig & {
   connected: boolean;
   toolCount: number;
   tools: McpToolSummary[];
+  /**
+   * Names of `${VAR}` secret placeholders that are referenced by this server
+   * but not yet set in the server environment. Non-empty means the server is
+   * awaiting configuration (e.g. an API key) and won't be auto-connected
+   * until it's provided; empty means it's fully configured.
+   */
+  missingSecrets: string[];
 };
 
 /**
