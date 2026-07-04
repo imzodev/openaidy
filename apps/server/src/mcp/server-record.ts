@@ -18,8 +18,32 @@ import type { McpServerRecord, McpToolSummary } from '@openaidy/shared-types';
  */
 export const MASKED_VALUE = '••••••';
 
-/** A value that is exactly a `${VAR}` placeholder — safe to show, not a secret. */
-const PURE_PLACEHOLDER_PATTERN = /^\$\{[^}]+\}$/;
+/** A `${VAR}` placeholder occurring anywhere in a value. */
+const PLACEHOLDER_PATTERN = /\$\{[^}]+\}/g;
+
+/**
+ * A long opaque token — used to detect an inlined secret in the literal
+ * (non-placeholder) part of a value, so `Bearer sk-longlivedsecret...` is still
+ * masked even though it isn't a pure literal.
+ */
+const LITERAL_SECRET_PATTERN = /[A-Za-z0-9_-]{16,}/;
+
+/**
+ * Whether a value is safe to show verbatim in API output rather than masked.
+ *
+ * Safe when the value references its secret through one or more `${VAR}`
+ * placeholders — the actual secret lives in the environment, not in the config
+ * — and the surrounding literal text is mere scaffolding (e.g. `${TOKEN}` or
+ * `Bearer ${TOKEN}`). A value with no placeholder, or one that still contains a
+ * long opaque token once placeholders are stripped, is treated as an inlined
+ * secret and masked.
+ */
+function isSafeToShow(value: string): boolean {
+  const trimmed = value.trim();
+  if (!/\$\{[^}]+\}/.test(trimmed)) return false;
+  const literal = trimmed.replace(PLACEHOLDER_PATTERN, ' ');
+  return !LITERAL_SECRET_PATTERN.test(literal);
+}
 
 /** Live connection state for a server, as seen by the client service. */
 export type McpRuntimeStatus = {
@@ -35,10 +59,12 @@ export type McpRuntimeStatus = {
 /**
  * Redact secret values in an `env`/`headers` record for API output.
  *
- * Keys are always preserved (callers need to know which are set). A value that
- * is exactly a `${VAR}` placeholder is kept verbatim — it is not itself a
- * secret and preserving it lets the UI round-trip the config safely. Any other
- * value may be an inlined secret and is masked.
+ * Keys are always preserved (callers need to know which are set). A value whose
+ * only sensitive content is a `${VAR}` placeholder is kept verbatim — the
+ * secret itself lives in the environment, and preserving the template (e.g.
+ * `Bearer ${TOKEN}`) lets the UI show what's needed and round-trip the config
+ * safely. Any value that looks like an inlined secret is masked. See
+ * {@link isSafeToShow}.
  */
 export function redactSecrets(
   record: Record<string, string> | undefined,
@@ -47,9 +73,7 @@ export function redactSecrets(
 
   const redacted: Record<string, string> = {};
   for (const [key, value] of Object.entries(record)) {
-    redacted[key] = PURE_PLACEHOLDER_PATTERN.test(value.trim())
-      ? value
-      : MASKED_VALUE;
+    redacted[key] = isSafeToShow(value) ? value : MASKED_VALUE;
   }
   return redacted;
 }
