@@ -189,6 +189,16 @@ export async function buildApp() {
   });
   await configService.load();
 
+  // Add any preinstalled MCP servers shipped in the config template that this
+  // install doesn't have yet (respecting servers the user deleted). Lets a new
+  // default server reach existing installs on update, not just fresh installs.
+  const addedMcpServers = await configService.reconcilePreinstalledMcpServers();
+  if (addedMcpServers.length > 0) {
+    log.info('Added preinstalled MCP server(s) from config template', {
+      added: addedMcpServers,
+    });
+  }
+
   // Create MCP client service (before sessionService so it can be injected)
   const mcpService = createMcpClientService({
     logger: log as unknown as FastifyBaseLogger,

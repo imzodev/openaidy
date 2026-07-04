@@ -6,7 +6,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   appConfigSchema,
   envSecret,
@@ -26,6 +26,12 @@ import type {
   AppConfigStatus,
 } from './types';
 import type { CredentialProvider } from '@openaidy/shared-types';
+import {
+  MCP_SEED_MANIFEST_FILE,
+  reconcilePreinstalledMcpServers,
+  readMcpSeedManifest,
+  writeMcpSeedManifest,
+} from '../mcp/preinstall';
 
 export class AppConfigService {
   private readonly configPath: string;
@@ -70,6 +76,52 @@ export class AppConfigService {
     return {
       issues: [...this.issues],
     };
+  }
+
+  /**
+   * Add any preinstalled MCP servers from the config template that this install
+   * doesn't have yet. The template is only copied on first run, so without this
+   * a server added to the template later would never reach existing installs.
+   *
+   * Servers the user has deleted are remembered in a manifest and not re-added;
+   * servers already present are left untouched. Persists the config (only when
+   * something is added) and the manifest, and returns the ids added. Must be
+   * called after {@link load}.
+   */
+  async reconcilePreinstalledMcpServers(): Promise<string[]> {
+    const templateServers = this.readTemplateMcpServers();
+    if (templateServers.length === 0) return [];
+
+    const manifestPath = join(dirname(this.configPath), MCP_SEED_MANIFEST_FILE);
+    const manifest = readMcpSeedManifest(manifestPath);
+
+    const result = reconcilePreinstalledMcpServers(
+      this.getMcpServers(),
+      templateServers,
+      manifest,
+    );
+
+    if (result.added.length > 0) {
+      await this.save({ ...this.getConfig(), mcpServers: result.servers });
+    }
+    if (result.changed) {
+      writeMcpSeedManifest(manifestPath, result.manifest);
+    }
+
+    return result.added;
+  }
+
+  /** Read the `mcpServers` shipped in the config template, if any. */
+  private readTemplateMcpServers(): McpServerConfig[] {
+    if (!existsSync(this.templatePath)) return [];
+    try {
+      const parsed = appConfigSchema.parse(
+        JSON.parse(readFileSync(this.templatePath, 'utf-8')),
+      );
+      return parsed.mcpServers ?? [];
+    } catch {
+      return [];
+    }
   }
 
   getPaths(): { configPath: string; templatePath: string } {
