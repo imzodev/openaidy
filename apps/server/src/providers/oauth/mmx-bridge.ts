@@ -126,9 +126,22 @@ export function resolveMmxInvocation(): MmxInvocation {
   try {
     const require = createRequire(import.meta.url);
     const pkgJsonPath = require.resolve('mmx-cli/package.json');
-    const scriptPath = join(dirname(pkgJsonPath), 'dist', 'mmx.mjs');
-    if (existsSync(scriptPath)) {
-      return { binary: process.execPath, prefixArgs: [scriptPath] };
+    // Read the entry script from the package's own `bin` field rather than
+    // hardcoding `dist/mmx.mjs`. The two can drift across mmx-cli versions,
+    // and a silent miss here falls back to a (usually absent) global `mmx`,
+    // reintroducing the "not installed" failure this resolution prevents.
+    const pkg = require(pkgJsonPath) as {
+      bin?: string | Record<string, string>;
+    };
+    const binRel =
+      typeof pkg.bin === 'string'
+        ? pkg.bin
+        : (pkg.bin?.['mmx'] ?? Object.values(pkg.bin ?? {})[0]);
+    if (binRel) {
+      const scriptPath = join(dirname(pkgJsonPath), binRel);
+      if (existsSync(scriptPath)) {
+        return { binary: process.execPath, prefixArgs: [scriptPath] };
+      }
     }
   } catch {
     // mmx-cli isn't resolvable from here — fall back to PATH lookup.

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { resolveMmxInvocation, isMmxInstalled } from './mmx-bridge';
 import { buildPtyCommand } from './cli-bridge';
 
@@ -32,6 +34,23 @@ describe('resolveMmxInvocation', () => {
     const scriptPath = inv.prefixArgs[0]!;
     expect(scriptPath.endsWith('mmx.mjs')).toBe(true);
     expect(existsSync(scriptPath)).toBe(true);
+  });
+
+  it('derives the entry from the package `bin` field, not a hardcoded path', () => {
+    // Guards against reverting to a hardcoded `dist/mmx.mjs`: the resolved
+    // script must match whatever mmx-cli declares in its own `bin`, so a
+    // future entry relocation is followed instead of silently missed.
+    const require = createRequire(import.meta.url);
+    const pkgJsonPath = require.resolve('mmx-cli/package.json');
+    const pkg = require(pkgJsonPath) as {
+      bin?: string | Record<string, string>;
+    };
+    const binRel = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.['mmx'];
+    expect(binRel).toBeTruthy();
+    const expected = join(dirname(pkgJsonPath), binRel!);
+
+    const inv = resolveMmxInvocation();
+    expect(inv.prefixArgs[0]).toBe(expected);
   });
 
   it('produces a shell command referencing node and the bundled script', () => {
