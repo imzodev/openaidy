@@ -8,6 +8,26 @@
 
 import { isBodySizeValid } from './sanitize.js';
 
+/**
+ * Strip a single matching pair of surrounding quotes from a YAML scalar.
+ *
+ * The frontmatter is read by line-scan rather than a real YAML parser, so
+ * a quoted value like `description: 'Do the thing.'` would otherwise keep
+ * its quotes literally and surface them in the UI and in skill-selection
+ * prompts. Only an outer pair of matching `'` or `"` is removed; inner
+ * quotes are left untouched.
+ */
+function unquote(value: string): string {
+  if (value.length >= 2) {
+    const first = value[0];
+    const last = value[value.length - 1];
+    if ((first === '"' || first === "'") && last === first) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+}
+
 export type SkillDefinition = {
   /** Directory name — the canonical skill ID */
   id: string;
@@ -82,11 +102,11 @@ export function parseSkillMd(
     const line = lines[i];
     if (!line) continue;
     if (line.startsWith('name:')) {
-      name = line.substring('name:'.length).trim();
+      name = unquote(line.substring('name:'.length).trim());
     } else if (line.startsWith('description:')) {
-      description = line.substring('description:'.length).trim();
+      description = unquote(line.substring('description:'.length).trim());
     } else if (line.startsWith('version:')) {
-      version = line.substring('version:'.length).trim();
+      version = unquote(line.substring('version:'.length).trim());
     }
   }
 
