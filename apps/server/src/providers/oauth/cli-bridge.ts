@@ -399,15 +399,26 @@ export function buildPtyCommand(binary: string, argv: string[]): string {
 /**
  * Resolve the actual `spawn(file, args)` for the current platform.
  *
- * POSIX wraps the CLI in `script -qec "<command>" /dev/null` to give it
- * a pseudo-TTY (many CLIs, mmx included, fall back to non-interactive
- * mode without one). Windows has no `script(1)` and no `/dev/null`, so
- * we spawn the CLI directly with an argv array — spawn handles spaces
- * natively there, so no shell quoting is involved. The interactive
- * region prompt is avoided by passing `--region` as a flag, and the
- * device-code/browser flow needs no stdin, so the CLI can still print
- * its user_code. If a CLI insists on a TTY it will exit non-zero and
- * surface a clear error rather than a confusing `spawn script ENOENT`.
+ * `script` wraps the CLI in a pseudo-TTY (many CLIs, mmx included, fall
+ * back to non-interactive mode without one), but the three platforms
+ * need different invocations:
+ *
+ * - **Linux** (util-linux `script`): the command is one string re-parsed
+ *   by a shell — `script -qec "<command>" /dev/null` — so every token is
+ *   shell-quoted via buildPtyCommand.
+ * - **macOS** (BSD `script`): has neither `-c` nor `-e`; it takes the
+ *   command as trailing argv after the typescript file and runs it
+ *   directly (no shell) — `script -q /dev/null <binary> <argv...>`, so no
+ *   quoting is needed. Using the Linux `-qec` form here fails with an
+ *   "illegal option" usage error before the CLI ever runs.
+ * - **Windows**: no `script(1)` and no `/dev/null`, so spawn the CLI
+ *   directly with an argv array (spawn quotes spaces natively).
+ *
+ * The interactive region prompt is avoided by passing `--region` as a
+ * flag, and the device-code/browser flow needs no stdin, so the CLI can
+ * still print its user_code. If a CLI insists on a TTY it will exit
+ * non-zero and surface a clear error rather than a confusing
+ * `spawn script ENOENT`.
  *
  * `platform` is injectable for unit testing; it defaults to the host.
  *
@@ -420,6 +431,9 @@ export function buildSpawnArgs(
 ): { file: string; args: string[] } {
   if (platform === 'win32') {
     return { file: binary, args: argv };
+  }
+  if (platform === 'darwin') {
+    return { file: 'script', args: ['-q', '/dev/null', binary, ...argv] };
   }
   return {
     file: 'script',

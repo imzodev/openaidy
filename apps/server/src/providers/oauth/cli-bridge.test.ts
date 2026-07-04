@@ -74,9 +74,16 @@ describe('buildSpawnArgs', () => {
     expect(args[1]).toBe(buildPtyCommand('/usr/bin/node', argv));
   });
 
-  it('wraps the CLI in a `script` PTY on macOS', () => {
-    const { file } = buildSpawnArgs('/usr/bin/node', argv, 'darwin');
+  it('wraps the CLI in a BSD `script` PTY on macOS (command as argv, not `-qec`)', () => {
+    const { file, args } = buildSpawnArgs('/usr/bin/node', argv, 'darwin');
     expect(file).toBe('script');
+    // BSD `script` (macOS) has no -c/-e: the command is trailing argv
+    // after the typescript file, run directly with no shell re-parse.
+    expect(args).toEqual(['-q', '/dev/null', '/usr/bin/node', ...argv]);
+    // Regression guard: the util-linux `-qec` string form errors out on
+    // macOS with "illegal option" before the CLI ever runs.
+    expect(args).not.toContain('-qec');
+    expect(args).not.toContain(buildPtyCommand('/usr/bin/node', argv));
   });
 
   it('spawns the CLI directly on Windows (no `script`, no /dev/null)', () => {
