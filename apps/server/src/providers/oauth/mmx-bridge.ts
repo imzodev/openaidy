@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, chmod } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   spawnCliOAuth,
   defaultIsInstalled,
@@ -103,14 +104,63 @@ export type SpawnMmxLoginOptions = MmxLoginOptions;
 export type MmxLoginHandle = CliOAuthHandle;
 
 /**
+ * How to invoke mmx: either the bundled copy shipped as an
+ * `apps/server` dependency (preferred — no separate install step) or
+ * a global `mmx` binary on PATH (fallback for anyone who already has
+ * one installed).
+ */
+type MmxInvocation = { binary: string; prefixArgs: string[] };
+
+/**
+ * OpenAidy is plug-and-play: `mmx-cli` is declared as a normal
+ * dependency of `apps/server` (see package.json) so `pnpm install`
+ * pulls it in automatically. Resolve its bundled entry script here
+ * instead of requiring a global `pnpm add -g mmx-cli` — the OAuth
+ * flow should work immediately after install, with no extra manual
+ * step. Falls back to a bare `mmx` on PATH if the bundled copy can't
+ * be resolved for some reason.
+ *
+ * Exported for unit testing.
+ */
+export function resolveMmxInvocation(): MmxInvocation {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkgJsonPath = require.resolve('mmx-cli/package.json');
+    // Read the entry script from the package's own `bin` field rather than
+    // hardcoding `dist/mmx.mjs`. The two can drift across mmx-cli versions,
+    // and a silent miss here falls back to a (usually absent) global `mmx`,
+    // reintroducing the "not installed" failure this resolution prevents.
+    const pkg = require(pkgJsonPath) as {
+      bin?: string | Record<string, string>;
+    };
+    const binRel =
+      typeof pkg.bin === 'string'
+        ? pkg.bin
+        : (pkg.bin?.['mmx'] ?? Object.values(pkg.bin ?? {})[0]);
+    if (binRel) {
+      const scriptPath = join(dirname(pkgJsonPath), binRel);
+      if (existsSync(scriptPath)) {
+        return { binary: process.execPath, prefixArgs: [scriptPath] };
+      }
+    }
+  } catch {
+    // mmx-cli isn't resolvable from here — fall back to PATH lookup.
+  }
+  return { binary: 'mmx', prefixArgs: [] };
+}
+
+const mmxInvocation = resolveMmxInvocation();
+
+/**
  * The MiniMax-specific descriptor fed to the generic CLI bridge.
  * Kept private — callers go through `spawnMmxLogin` (which adds the
  * region flag and the MMX_CONFIG_DIR env var).
  */
 const mmxDescriptor: CliOAuthDescriptor = {
   providerId: 'minimax',
-  binary: 'mmx',
+  binary: mmxInvocation.binary,
   args: ({ extraArgs }) => [
+    ...mmxInvocation.prefixArgs,
     'auth',
     'login',
     '--recommend',
@@ -131,9 +181,11 @@ const mmxDescriptor: CliOAuthDescriptor = {
 };
 
 /**
- * Check whether mmx-cli is installed and on PATH.
+ * Check whether mmx is available: either the bundled copy resolved at
+ * module load, or a global `mmx` on PATH.
  */
 export async function isMmxInstalled(): Promise<boolean> {
+  if (mmxInvocation.binary !== 'mmx') return true;
   return defaultIsInstalled('mmx');
 }
 

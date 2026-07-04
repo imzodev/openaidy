@@ -187,8 +187,11 @@ export function spawnCliOAuth(
       });
     });
 
-    // 2. Spawn the CLI inside a pseudo-TTY so it enters the interactive
-    //    (browser) flow. `script(1)` (util-linux) provides the PTY.
+    // 2. Spawn the CLI so it enters the interactive (browser) flow.
+    //    On POSIX we wrap it in a pseudo-TTY via `script(1)` (util-linux)
+    //    because the CLI drops to non-interactive mode without a TTY.
+    //    Windows has no `script`, so we spawn the CLI directly — see
+    //    buildSpawnArgs for the platform split.
     try {
       const childEnv: NodeJS.ProcessEnv = { ...process.env };
       for (const key of descriptor.envVarsToStrip) {
@@ -205,14 +208,11 @@ export function spawnCliOAuth(
       const argv = descriptor.args(
         options.extraArgs ? { extraArgs: options.extraArgs } : {},
       );
-      child = spawn(
-        'script',
-        ['-qec', `${descriptor.binary} ${argv.join(' ')}`, '/dev/null'],
-        {
-          env: childEnv,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        },
-      );
+      const { file, args } = buildSpawnArgs(descriptor.binary, argv);
+      child = spawn(file, args, {
+        env: childEnv,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (err) {
       rejectUserCode(err instanceof Error ? err : new Error(String(err)));
       finish({
@@ -368,6 +368,76 @@ export function spawnCliOAuth(
         }
       }
     },
+  };
+}
+
+/**
+ * POSIX shell single-quote a token so `script -qec "<command>"` passes
+ * it through unmangled even when it contains spaces or metacharacters.
+ * Wraps in single quotes and escapes any embedded single quote as
+ * `'\''`.
+ *
+ * Exported for unit testing.
+ */
+export function shQuote(token: string): string {
+  return `'${token.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Build the single command string handed to `script -qec`, which a
+ * shell re-parses. Every token is shell-quoted because the binary can
+ * be an absolute path to node plus a bundled script path (see
+ * mmx-bridge's resolveMmxInvocation) — either of which may contain
+ * spaces on some systems.
+ *
+ * Exported for unit testing.
+ */
+export function buildPtyCommand(binary: string, argv: string[]): string {
+  return [binary, ...argv].map(shQuote).join(' ');
+}
+
+/**
+ * Resolve the actual `spawn(file, args)` for the current platform.
+ *
+ * `script` wraps the CLI in a pseudo-TTY (many CLIs, mmx included, fall
+ * back to non-interactive mode without one), but the three platforms
+ * need different invocations:
+ *
+ * - **Linux** (util-linux `script`): the command is one string re-parsed
+ *   by a shell — `script -qec "<command>" /dev/null` — so every token is
+ *   shell-quoted via buildPtyCommand.
+ * - **macOS** (BSD `script`): has neither `-c` nor `-e`; it takes the
+ *   command as trailing argv after the typescript file and runs it
+ *   directly (no shell) — `script -q /dev/null <binary> <argv...>`, so no
+ *   quoting is needed. Using the Linux `-qec` form here fails with an
+ *   "illegal option" usage error before the CLI ever runs.
+ * - **Windows**: no `script(1)` and no `/dev/null`, so spawn the CLI
+ *   directly with an argv array (spawn quotes spaces natively).
+ *
+ * The interactive region prompt is avoided by passing `--region` as a
+ * flag, and the device-code/browser flow needs no stdin, so the CLI can
+ * still print its user_code. If a CLI insists on a TTY it will exit
+ * non-zero and surface a clear error rather than a confusing
+ * `spawn script ENOENT`.
+ *
+ * `platform` is injectable for unit testing; it defaults to the host.
+ *
+ * Exported for unit testing.
+ */
+export function buildSpawnArgs(
+  binary: string,
+  argv: string[],
+  platform: NodeJS.Platform = process.platform,
+): { file: string; args: string[] } {
+  if (platform === 'win32') {
+    return { file: binary, args: argv };
+  }
+  if (platform === 'darwin') {
+    return { file: 'script', args: ['-q', '/dev/null', binary, ...argv] };
+  }
+  return {
+    file: 'script',
+    args: ['-qec', buildPtyCommand(binary, argv), '/dev/null'],
   };
 }
 
