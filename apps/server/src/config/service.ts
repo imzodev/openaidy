@@ -107,7 +107,16 @@ export class AppConfigService {
     );
 
     if (result.added.length > 0 || result.updated.length > 0) {
-      await this.save({ ...this.getConfig(), mcpServers: result.servers });
+      // Persist directly rather than via save(): load() already ran
+      // applyConfig (providers, agents), and only mcpServers changed — which
+      // applyConfig doesn't touch — so a second full apply would be wasted work
+      // at startup. Validate, write, and refresh the in-memory config.
+      const nextConfig = appConfigSchema.parse({
+        ...this.getConfig(),
+        mcpServers: result.servers,
+      });
+      this.writeConfigFile(nextConfig);
+      this.currentConfig = nextConfig;
     }
     if (result.changed) {
       writeMcpSeedManifest(manifestPath, result.manifest);
