@@ -22,27 +22,30 @@ export const MASKED_VALUE = '••••••';
 const PLACEHOLDER_PATTERN = /\$\{[^}]+\}/g;
 
 /**
- * A long opaque token — used to detect an inlined secret in the literal
- * (non-placeholder) part of a value, so `Bearer sk-longlivedsecret...` is still
- * masked even though it isn't a pure literal.
+ * Literal (non-placeholder) text that is safe to reveal alongside a `${VAR}`
+ * placeholder: auth-scheme words and spacing only. Anything else — digits, `:`
+ * `/` `@` `=` `.` `_`, etc. — could be part of an inlined credential (a URL with
+ * an embedded password, an API token), so a value containing it is masked.
  */
-const LITERAL_SECRET_PATTERN = /[A-Za-z0-9_-]{16,}/;
+const SAFE_SCAFFOLDING_PATTERN = /^[A-Za-z \t-]*$/;
 
 /**
  * Whether a value is safe to show verbatim in API output rather than masked.
  *
- * Safe when the value references its secret through one or more `${VAR}`
- * placeholders — the actual secret lives in the environment, not in the config
- * — and the surrounding literal text is mere scaffolding (e.g. `${TOKEN}` or
- * `Bearer ${TOKEN}`). A value with no placeholder, or one that still contains a
- * long opaque token once placeholders are stripped, is treated as an inlined
- * secret and masked.
+ * Safe only when the value references its secret through one or more `${VAR}`
+ * placeholders — the actual secret lives in the environment, not the config —
+ * AND the remaining literal text is nothing but auth-scheme scaffolding (e.g.
+ * `${TOKEN}` or `Bearer ${TOKEN}`). A value with no placeholder, or whose
+ * literal part contains anything that could be an inlined secret (digits, URL
+ * punctuation, a token), is masked. Deliberately conservative: better to mask a
+ * benign value than to leak a credential inlined next to a placeholder — e.g.
+ * `postgres://user:pass@host/${DB}` must never be shown.
  */
 function isSafeToShow(value: string): boolean {
   const trimmed = value.trim();
   if (!/\$\{[^}]+\}/.test(trimmed)) return false;
   const literal = trimmed.replace(PLACEHOLDER_PATTERN, ' ');
-  return !LITERAL_SECRET_PATTERN.test(literal);
+  return SAFE_SCAFFOLDING_PATTERN.test(literal);
 }
 
 /** Live connection state for a server, as seen by the client service. */

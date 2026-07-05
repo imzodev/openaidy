@@ -37,6 +37,16 @@ describe('redactSecrets', () => {
     ).toEqual({ Authorization: MASKED_VALUE });
   });
 
+  it('masks an inlined credential even when a placeholder co-occurs (no long run)', () => {
+    // Password `S3cr3t` is short and broken up by URL punctuation, so it has no
+    // long opaque run — but the URL punctuation/digits mean it must still mask.
+    expect(
+      redactSecrets({
+        DATABASE_URL: 'postgres://admin:S3cr3t@db.example.com/${DBNAME}',
+      }),
+    ).toEqual({ DATABASE_URL: MASKED_VALUE });
+  });
+
   it('masks a plain non-secret-looking literal too (no placeholder)', () => {
     // No placeholder → treated as possibly sensitive and masked.
     expect(redactSecrets({ NODE_ENV: 'production' })).toEqual({
