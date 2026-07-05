@@ -24,9 +24,33 @@ describe('redactSecrets', () => {
     });
   });
 
-  it('masks mixed values that embed a placeholder (e.g. Bearer ${VAR})', () => {
+  it('shows a placeholder value with only scaffolding around it (e.g. Bearer ${VAR})', () => {
     expect(redactSecrets({ Authorization: 'Bearer ${GH_TOKEN}' })).toEqual({
-      Authorization: MASKED_VALUE,
+      Authorization: 'Bearer ${GH_TOKEN}',
+    });
+  });
+
+  it('masks a value that inlines a real secret alongside a placeholder', () => {
+    // A long opaque literal token remains after stripping the placeholder.
+    expect(
+      redactSecrets({ Authorization: 'Bearer ghp_realLongLivedToken123 ${X}' }),
+    ).toEqual({ Authorization: MASKED_VALUE });
+  });
+
+  it('masks an inlined credential even when a placeholder co-occurs (no long run)', () => {
+    // Password `S3cr3t` is short and broken up by URL punctuation, so it has no
+    // long opaque run — but the URL punctuation/digits mean it must still mask.
+    expect(
+      redactSecrets({
+        DATABASE_URL: 'postgres://admin:S3cr3t@db.example.com/${DBNAME}',
+      }),
+    ).toEqual({ DATABASE_URL: MASKED_VALUE });
+  });
+
+  it('masks a plain non-secret-looking literal too (no placeholder)', () => {
+    // No placeholder → treated as possibly sensitive and masked.
+    expect(redactSecrets({ NODE_ENV: 'production' })).toEqual({
+      NODE_ENV: MASKED_VALUE,
     });
   });
 });
@@ -62,9 +86,22 @@ describe('toMcpServerRecord', () => {
     headers: { Authorization: 'Bearer ${GH_TOKEN}' },
   } as McpServerConfig;
 
-  it('never emits raw secret header/env values', () => {
+  it('shows placeholder templates but masks inlined raw secret values', () => {
+    // A placeholder template is not itself a secret — shown so the UI can
+    // display and round-trip it.
     const record = toMcpServerRecord(base, { connected: true, tools: [] });
-    expect(record.headers).toEqual({ Authorization: MASKED_VALUE });
+    expect(record.headers).toEqual({ Authorization: 'Bearer ${GH_TOKEN}' });
+
+    // An inlined raw token must never be emitted.
+    const withRawSecret = {
+      ...base,
+      headers: { Authorization: 'Bearer ghp_realLongLivedToken1234567890' },
+    } as McpServerConfig;
+    const redactedRecord = toMcpServerRecord(withRawSecret, {
+      connected: true,
+      tools: [],
+    });
+    expect(redactedRecord.headers).toEqual({ Authorization: MASKED_VALUE });
   });
 
   it('reflects runtime status and tool count', () => {

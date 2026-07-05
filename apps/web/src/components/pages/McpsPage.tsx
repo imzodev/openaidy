@@ -65,6 +65,11 @@ function ServerFormModal(props: {
           .map(([k, v]) => `${k}=${v}`)
           .join('\n')
       : '',
+    headers: props.server?.headers
+      ? Object.entries(props.server.headers)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join('\n')
+      : '',
   });
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -99,6 +104,17 @@ function ServerFormModal(props: {
       return {
         ...base,
         url: formData().url || undefined,
+        headers: formData().headers
+          ? Object.fromEntries(
+              formData()
+                .headers.split('\n')
+                .filter((l) => l.includes(':'))
+                .map((l) => {
+                  const idx = l.indexOf(':');
+                  return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()];
+                }),
+            )
+          : undefined,
       };
     }
   };
@@ -293,6 +309,26 @@ function ServerFormModal(props: {
                 placeholder="https://my-mcp-server.com/mcp"
                 class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
               />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Headers
+              </label>
+              <textarea
+                value={formData().headers}
+                onInput={(e) =>
+                  setFormData((p) => ({ ...p, headers: e.currentTarget.value }))
+                }
+                placeholder="Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+                rows={3}
+                class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              />
+              <p class="mt-1 text-xs text-text-tertiary">
+                One <code>Name: value</code> per line. Use $&#123;VAR_NAME&#125;{' '}
+                for secret placeholders (resolved from the server environment),
+                or paste the value directly.
+              </p>
             </div>
           </Show>
         </div>
@@ -965,6 +1001,26 @@ export function McpsPage() {
                         {([key, val]) => (
                           <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
                             {key}=<span class="text-text-tertiary">{val}</span>
+                          </p>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+
+                <Show
+                  when={
+                    selected()!.headers &&
+                    Object.keys(selected()!.headers!).length > 0
+                  }
+                >
+                  <div>
+                    <span class="text-xs text-text-tertiary">Headers</span>
+                    <div class="mt-1 space-y-0.5">
+                      <For each={Object.entries(selected()!.headers!)}>
+                        {([key, val]) => (
+                          <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
+                            {key}: <span class="text-text-tertiary">{val}</span>
                           </p>
                         )}
                       </For>

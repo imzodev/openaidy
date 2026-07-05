@@ -6,7 +6,7 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   appConfigSchema,
   envSecret,
@@ -26,6 +26,12 @@ import type {
   AppConfigStatus,
 } from './types';
 import type { CredentialProvider } from '@openaidy/shared-types';
+import {
+  MCP_SEED_MANIFEST_FILE,
+  reconcilePreinstalledMcpServers,
+  readMcpSeedManifest,
+  writeMcpSeedManifest,
+} from '../mcp/preinstall';
 
 export class AppConfigService {
   private readonly configPath: string;
@@ -70,6 +76,66 @@ export class AppConfigService {
     return {
       issues: [...this.issues],
     };
+  }
+
+  /**
+   * Add any preinstalled MCP servers from the config template that this install
+   * doesn't have yet. The template is only copied on first run, so without this
+   * a server added to the template later would never reach existing installs.
+   *
+   * A newly shipped server is added; a preinstalled server whose template
+   * definition changed is updated **only if the user hasn't modified it**;
+   * servers the user deleted are remembered and not re-added; user-created or
+   * user-edited servers are never clobbered. Persists the config when a server
+   * is added or updated, and the manifest whenever it changes. Returns the ids
+   * touched. Must be called after {@link load}.
+   */
+  async reconcilePreinstalledMcpServers(): Promise<{
+    added: string[];
+    updated: string[];
+  }> {
+    const templateServers = this.readTemplateMcpServers();
+    if (templateServers.length === 0) return { added: [], updated: [] };
+
+    const manifestPath = join(dirname(this.configPath), MCP_SEED_MANIFEST_FILE);
+    const manifest = readMcpSeedManifest(manifestPath);
+
+    const result = reconcilePreinstalledMcpServers(
+      this.getMcpServers(),
+      templateServers,
+      manifest,
+    );
+
+    if (result.added.length > 0 || result.updated.length > 0) {
+      // Persist directly rather than via save(): load() already ran
+      // applyConfig (providers, agents), and only mcpServers changed — which
+      // applyConfig doesn't touch — so a second full apply would be wasted work
+      // at startup. Validate, write, and refresh the in-memory config.
+      const nextConfig = appConfigSchema.parse({
+        ...this.getConfig(),
+        mcpServers: result.servers,
+      });
+      this.writeConfigFile(nextConfig);
+      this.currentConfig = nextConfig;
+    }
+    if (result.changed) {
+      writeMcpSeedManifest(manifestPath, result.manifest);
+    }
+
+    return { added: result.added, updated: result.updated };
+  }
+
+  /** Read the `mcpServers` shipped in the config template, if any. */
+  private readTemplateMcpServers(): McpServerConfig[] {
+    if (!existsSync(this.templatePath)) return [];
+    try {
+      const parsed = appConfigSchema.parse(
+        JSON.parse(readFileSync(this.templatePath, 'utf-8')),
+      );
+      return parsed.mcpServers ?? [];
+    } catch {
+      return [];
+    }
   }
 
   getPaths(): { configPath: string; templatePath: string } {

@@ -189,6 +189,26 @@ export async function buildApp() {
   });
   await configService.load();
 
+  // Reconcile preinstalled MCP servers from the config template: add ones this
+  // install is missing and update pristine (unmodified) ones whose definition
+  // changed, so template changes reach existing installs, not just fresh ones.
+  // User-created/edited servers and ones the user deleted are left alone.
+  // Wrapped so a config-dir write failure (read-only mount, ENOSPC, EACCES)
+  // logs and continues rather than aborting startup — seeding is best-effort.
+  try {
+    const mcpReconcile = await configService.reconcilePreinstalledMcpServers();
+    if (mcpReconcile.added.length > 0 || mcpReconcile.updated.length > 0) {
+      log.info('Reconciled preinstalled MCP server(s) from config template', {
+        added: mcpReconcile.added,
+        updated: mcpReconcile.updated,
+      });
+    }
+  } catch (err) {
+    log.warn('Failed to reconcile preinstalled MCP servers; continuing', {
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Create MCP client service (before sessionService so it can be injected)
   const mcpService = createMcpClientService({
     logger: log as unknown as FastifyBaseLogger,
