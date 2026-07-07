@@ -33,3 +33,12 @@ export {
   type RawMcpServerEntry,
   type RawMcpServerMap,
 } from './config-import';
+
+export {
+  SCREENSHOT_WORKSPACE_DIR,
+  isScreenshotTool,
+  stripScreenshotFilename,
+  buildScreenshotFilename,
+  persistScreenshotImages,
+  type PersistScreenshotResult,
+} from './screenshot-capture';

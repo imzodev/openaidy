@@ -279,6 +279,45 @@ describe('WorkspaceService', () => {
     });
   });
 
+  describe('writeBinaryFile', () => {
+    it('should write raw bytes and return the absolute path', async () => {
+      const agentId = 'binary-agent';
+      await service.ensureWorkspace(agentId);
+
+      // A tiny PNG header — non-UTF-8 bytes that must round-trip exactly.
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x00]);
+      const absolutePath = await service.writeBinaryFile(
+        agentId,
+        'screenshots/shot.png',
+        bytes,
+      );
+
+      expect(absolutePath).toBe(
+        join(service.getWorkspacePath(agentId), 'screenshots', 'shot.png'),
+      );
+
+      const result = await service.readFileWithType(
+        agentId,
+        'screenshots/shot.png',
+      );
+      expect(result.mimeType).toBe('image/png');
+      expect(result.size).toBe(bytes.length);
+    });
+
+    it('should block path traversal in binary write', async () => {
+      const agentId = 'binary-traversal-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.writeBinaryFile(
+          agentId,
+          '../../../tmp/evil.png',
+          Buffer.from([0x00]),
+        ),
+      ).rejects.toThrow(WorkspaceError);
+    });
+  });
+
   describe('deleteFile', () => {
     it('should delete existing file', async () => {
       const agentId = 'delete-test-agent';

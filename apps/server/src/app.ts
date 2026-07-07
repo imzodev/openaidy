@@ -302,6 +302,7 @@ export async function buildApp() {
     logger: log as unknown as FastifyBaseLogger,
     agents: agentRegistry,
     mcp: mcpService,
+    workspace: workspaceService,
     builtinTools: builtinToolRegistry,
     skills: skillRegistry,
     personality: personalityService,

@@ -1,7 +1,13 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
-import type { McpClientService } from '../mcp/client';
+import type { McpClientService, McpToolResult } from '../mcp/client';
+import type { WorkspaceService } from '../workspace/service';
+import {
+  isScreenshotTool,
+  stripScreenshotFilename,
+  persistScreenshotImages,
+} from '../mcp/screenshot-capture';
 import type { BuiltinToolRegistry } from '../tools';
 import type {
   ToolDefinition,
@@ -71,6 +77,7 @@ export class SessionMessageService {
   private readonly logger: FastifyBaseLogger | undefined;
   private readonly agents: AgentRegistry | undefined;
   private readonly mcp: McpClientService | undefined;
+  private readonly workspace: WorkspaceService | undefined;
   private readonly builtinTools: BuiltinToolRegistry | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
@@ -89,6 +96,7 @@ export class SessionMessageService {
     this.logger = options.logger;
     this.agents = options.agents;
     this.mcp = options.mcp;
+    this.workspace = options.workspace;
     this.builtinTools = options.builtinTools;
     this.getDefaultAgentId = options.getDefaultAgentId;
     this.skillRegistry = options.skills;
@@ -1169,12 +1177,21 @@ export class SessionMessageService {
               }
             } else {
               // Fall back to MCP tool
-              const mcpResult = await this.mcp
-                ?.callTool(
-                  tc.name.split('::')[0]!,
-                  tc.name.split('::')[1] ?? tc.name,
-                  tc.arguments,
-                )
+              const mcpServerId = tc.name.split('::')[0]!;
+              const mcpToolName = tc.name.split('::')[1] ?? tc.name;
+
+              // Screenshot tools save images to a directory chosen at the
+              // server's launch — not per-agent. Strip `filename` so the
+              // server returns the image inline, then we persist those bytes
+              // into this agent's workspace `screenshots/` folder below.
+              const captureScreenshot =
+                !!this.workspace && isScreenshotTool(mcpToolName);
+              const { forwardedArgs, requestedFilename } = captureScreenshot
+                ? stripScreenshotFilename(tc.arguments)
+                : { forwardedArgs: tc.arguments, requestedFilename: undefined };
+
+              let mcpResult = await this.mcp
+                ?.callTool(mcpServerId, mcpToolName, forwardedArgs)
                 .catch((e: unknown) => {
                   toolIsError = true;
                   return {
@@ -1186,6 +1203,35 @@ export class SessionMessageService {
                     ],
                   };
                 });
+
+              // Persist any inline screenshot image into the agent workspace.
+              // Best-effort: a failure here must not fail the tool call.
+              if (
+                captureScreenshot &&
+                this.workspace &&
+                mcpResult &&
+                !toolIsError
+              ) {
+                try {
+                  const persisted = await persistScreenshotImages({
+                    result: mcpResult as McpToolResult,
+                    workspace: this.workspace,
+                    agentId,
+                    requestedFilename,
+                    logger: this.logger,
+                  });
+                  mcpResult = persisted.result;
+                } catch (e) {
+                  this.logger?.warn(
+                    {
+                      agentId,
+                      tool: mcpToolName,
+                      error: e instanceof Error ? e.message : String(e),
+                    },
+                    'Failed to persist screenshot to workspace',
+                  );
+                }
+              }
               const mcpText = Array.isArray(
                 (mcpResult as { content?: unknown[] } | undefined)?.content,
               )
