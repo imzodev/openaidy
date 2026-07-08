@@ -185,7 +185,7 @@ The following MCP servers ship preinstalled (reconciled into every install on st
 | ------------------- | --------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | GitHub              | http      | `${GITHUB_PERSONAL_ACCESS_TOKEN}` | [PAT](https://github.com/settings/tokens) with `repo` + `read:user` scopes                                     |
 | Sequential Thinking | stdio     | none                              | step-by-step reasoning                                                                                         |
-| Time                | stdio     | none                              | time + timezone conversion                                                                                     |
+| Time                | stdio     | none                              | time + timezone conversion (`@guanxiong/mcp-server-time`)                                                      |
 | Playwright Browser  | stdio     | none                              | Microsoft-maintained browser automation                                                                        |
 | Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}` |
 | Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |

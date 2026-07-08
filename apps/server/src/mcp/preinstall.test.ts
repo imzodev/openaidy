@@ -36,7 +36,7 @@ const time: McpServerConfig = {
   name: 'Time',
   transport: 'stdio',
   command: 'npx',
-  args: ['-y', '@modelcontextprotocol/server-time'],
+  args: ['-y', '@guanxiong/mcp-server-time'],
 };
 
 const playwright: McpServerConfig = {
