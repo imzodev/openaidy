@@ -105,6 +105,49 @@ openaidy/
 | `pnpm lint`       | Lint all packages                 |
 | `pnpm format`     | Format all files with Prettier    |
 
+## Providers
+
+OpenAidy talks to LLMs through a pluggable `Provider` abstraction. Configure providers through the UI (Settings → Providers) or via the config file. Presets ship in `packages/shared-types/src/providers-preset.ts`:
+
+| Provider      | Type               | Auth                                    |
+| ------------- | ------------------ | --------------------------------------- |
+| OpenAI        | OpenAI-compatible  | API key                                 |
+| Anthropic     | Anthropic          | API key                                 |
+| Google Gemini | Gemini             | API key                                 |
+| Groq          | OpenAI-compatible  | API key                                 |
+| DeepSeek      | OpenAI-compatible  | API key                                 |
+| MiniMax       | OpenAI-compatible  | API key                                 |
+| OpenCode Go   | OpenAI / Anthropic | API key                                 |
+| Ollama        | OpenAI-compatible  | **none — local** (`localhost:11434/v1`) |
+| LM Studio     | OpenAI-compatible  | **none — local** (`localhost:1234/v1`)  |
+
+### Local providers (Ollama, LM Studio)
+
+Local providers expose an OpenAI-compatible endpoint on `localhost` and ignore the `Authorization` header. OpenAidy's UI:
+
+- Skips the credential dialog when you pick a local preset card.
+- Auto-discovers installed/loaded models by probing `{baseUrl}/models` (click **Discover models** in the provider modal).
+- Sends a placeholder `Bearer` header that the local server ignores.
+
+Before configuring, make sure the local server is running and has at least one model loaded:
+
+```bash
+# Ollama — https://ollama.com
+ollama serve                # default port 11434
+ollama pull llama3.2        # pull a model into the local store
+
+# LM Studio — https://lmstudio.ai
+# Start the local server from the LM Studio "Developer" tab (default port 1234).
+```
+
+Then in OpenAidy: **Settings → Providers → Ollama (or LM Studio) → Discover models → Save**.
+
+If you run a local server on a non-default port or behind a tunnel, use **Add Custom** with `vendorFamily: openai-compatible` and your full base URL (e.g. `http://localhost:11435/v1`).
+
+### Custom providers
+
+Any OpenAI-compatible, Anthropic, or Gemini endpoint can be added through the **Add Custom** dialog in Settings → Providers. Provide a unique ID, display name, base URL, and (optionally) the name of an env var holding the API key.
+
 ## Skills
 
 Skills are reusable system-prompt instructions attached to agents. Bundled skills from `config/skills/` are automatically seeded to `OPENAIDY_HOME/skills/` on server startup.
