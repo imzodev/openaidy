@@ -61,6 +61,17 @@ const providersQuerySchema = z.object({
 });
 
 /**
+ * Schema for the model-discovery request. Probes an OpenAI-compatible
+ * `{baseUrl}/models` endpoint — used to list the models installed on a local
+ * provider (Ollama, LM Studio) before it's saved to config.
+ */
+const discoverModelsSchema = z.object({
+  baseUrl: z.string().url(),
+  /** Optional env var name holding an API key, for compatible remote gateways. */
+  apiKeyEnv: z.string().min(1).optional(),
+});
+
+/**
  * Provider routes response types
  */
 type ProviderInfo = {
@@ -356,6 +367,77 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       }
     },
   );
+
+  /**
+   * POST /providers/discover-models
+   * Probe an OpenAI-compatible `{baseUrl}/models` endpoint and return the
+   * models it reports. Used by the UI to auto-populate a local provider's
+   * (Ollama / LM Studio) model list before saving it to config — the model
+   * set is host-specific and can't be hardcoded in a preset.
+   */
+  app.post('/providers/discover-models', async (request, reply) => {
+    const parsed = discoverModelsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: 'Invalid request',
+        message: parsed.error.issues[0]?.message ?? 'Invalid body',
+      };
+    }
+    const { baseUrl, apiKeyEnv } = parsed.data;
+
+    if (!/^https?:\/\//i.test(baseUrl)) {
+      reply.code(400);
+      return { error: 'baseUrl must be an http(s) URL' };
+    }
+
+    // `{baseUrl}/models` — baseUrl already includes the API version (e.g.
+    // `http://localhost:11434/v1`), matching how the adapter builds requests.
+    const url = `${baseUrl.replace(/\/$/, '')}/models`;
+    const headers: Record<string, string> = {};
+    const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : undefined;
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let response: Response;
+      try {
+        response = await fetch(url, { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        reply.code(502);
+        return {
+          error: 'Provider returned an error',
+          message: `${response.status} ${response.statusText}`,
+        };
+      }
+
+      const body = (await response.json()) as {
+        data?: Array<{ id?: unknown }>;
+      };
+      const models = (body.data ?? [])
+        .map((m) => (typeof m.id === 'string' ? m.id : null))
+        .filter((id): id is string => !!id)
+        .map((id) => ({ id, name: id }));
+
+      return { models };
+    } catch (error) {
+      reply.code(502);
+      return {
+        error: 'Could not reach provider',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error probing models',
+      };
+    }
+  });
 
   /**
    * POST /providers/register

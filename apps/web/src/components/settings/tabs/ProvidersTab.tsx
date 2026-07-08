@@ -241,8 +241,10 @@ export function ProvidersTab(props: ProvidersTabProps) {
               const isThisDisconnecting = () =>
                 isDisconnecting() && disconnectTarget()?.id === preset.id;
               const handleSelect = () => {
-                if (isConfigured()) {
-                  // If configured, show the config modal
+                if (isConfigured() || preset.local) {
+                  // Configured providers — and local providers, which need no
+                  // API key — go straight to the model-config modal. Only
+                  // remote, unconfigured providers open the credential dialog.
                   setSelectedPreset(preset);
                 } else {
                   // If not configured, show connection dialog

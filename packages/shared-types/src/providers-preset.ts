@@ -10,7 +10,9 @@ export type ProviderPresetId =
   | 'deepseek'
   | 'minimax'
   | 'opencode-go'
-  | 'opencode-go-anthropic';
+  | 'opencode-go-anthropic'
+  | 'ollama'
+  | 'lmstudio';
 
 export type ModelPreset = {
   id: string;
@@ -29,6 +31,13 @@ export type ProviderPreset = {
   websiteUrl: string;
   documentationUrl: string;
   icon: string;
+  /**
+   * A local provider (e.g. Ollama, LM Studio) reachable at a localhost base
+   * URL and requiring no API key. The UI skips the credential/connect dialog
+   * for these and configures them directly (base URL + discovered models);
+   * the adapter sends a placeholder key the local server ignores.
+   */
+  local?: boolean;
 };
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -314,6 +323,33 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         description: 'Previous-gen Qwen open model',
       },
     ],
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'http://localhost:11434/v1',
+    websiteUrl: 'https://ollama.com',
+    documentationUrl:
+      'https://github.com/ollama/ollama/blob/main/docs/openai.md',
+    recommendedModel: '',
+    icon: 'bi-cpu',
+    local: true,
+    // Installed models are host-specific — populated via "Discover models".
+    models: [],
+  },
+  {
+    id: 'lmstudio',
+    name: 'LM Studio',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'http://localhost:1234/v1',
+    websiteUrl: 'https://lmstudio.ai',
+    documentationUrl: 'https://lmstudio.ai/docs/app/api/endpoints/openai',
+    recommendedModel: '',
+    icon: 'bi-pc-display',
+    local: true,
+    // Loaded models are host-specific — populated via "Discover models".
+    models: [],
   },
 ];
 

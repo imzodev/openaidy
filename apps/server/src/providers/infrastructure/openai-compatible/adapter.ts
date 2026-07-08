@@ -139,9 +139,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.logger = createLogger(this.config.providerId ?? PROVIDER_ID);
     this.codec = selectAdapterCodec(this.config.baseUrl);
 
-    // Initialize OpenAI SDK client
+    // Initialize OpenAI SDK client. The OpenAI SDK throws at construction
+    // when the API key is empty, so fall back to a placeholder for local /
+    // no-auth providers (e.g. Ollama, LM Studio) that ignore the header. A
+    // real cloud provider with a genuinely missing key then degrades to a
+    // clean 401 at request time instead of crashing here.
     this.client = new OpenAI({
-      apiKey: this.config.apiKey,
+      apiKey: this.config.apiKey || 'no-key-required',
       baseURL: this.config.baseUrl,
       organization: this.config.organizationId,
       defaultHeaders: this.config.headers,
@@ -231,10 +235,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
     try {
       const response = await this.client.models.list();
 
-      // Filter to chat models and map to descriptors
+      // The `gpt`/`o1`/`chat`/`glm` name filter only makes sense for OpenAI
+      // itself (its /models list is noisy with embeddings, audio, etc.). Any
+      // other OpenAI-compatible endpoint — Ollama, LM Studio, Groq, … — uses
+      // arbitrary model names, so return everything it reports.
+      const isOpenAiCloud = this.config.baseUrl.includes('api.openai.com');
       const models: ModelDescriptor[] = response.data
         .filter(
           (model) =>
+            !isOpenAiCloud ||
             model.id.includes('gpt') ||
             model.id.includes('o1') ||
             model.id.includes('chat') ||
