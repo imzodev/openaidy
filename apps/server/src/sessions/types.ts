@@ -67,6 +67,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 import type { McpClientService } from '../mcp/client';
+import type { WorkspaceService } from '../workspace/service';
 import type { BuiltinToolRegistry } from '../tools';
 import type { SkillRegistry } from '../skills';
 import type { AgentPersonalityService } from '../agents/personality-service';
@@ -85,6 +86,11 @@ export type SessionMessageServiceOptions = {
   logger?: FastifyBaseLogger;
   agents?: AgentRegistry;
   mcp?: McpClientService;
+  /**
+   * Workspace service — used to persist MCP artifacts (e.g. screenshots)
+   * into the calling agent's workspace.
+   */
+  workspace?: WorkspaceService;
   /** Registry of native (in-process) builtin tools — separate from MCP */
   builtinTools?: BuiltinToolRegistry;
   /** Registry of skills for skill injection into system prompt */

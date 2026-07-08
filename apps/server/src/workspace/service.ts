@@ -459,6 +459,49 @@ export class WorkspaceService {
   }
 
   /**
+   * Write binary content (e.g. an image) to a file in the workspace.
+   *
+   * Mirrors {@link writeFile} but takes a Buffer and writes raw bytes rather
+   * than UTF-8 text — used to persist MCP tool artifacts such as screenshots.
+   * Returns the absolute path of the written file.
+   */
+  async writeBinaryFile(
+    agentId: string,
+    filePath: string,
+    data: Buffer,
+  ): Promise<string> {
+    const absolutePath = this.validatePath(agentId, filePath);
+    log.debug('Writing binary file:', {
+      agentId,
+      filePath,
+      absolutePath,
+      bytes: data.length,
+    });
+
+    try {
+      // Ensure parent directory exists
+      const parentDir = dirname(absolutePath);
+      await mkdir(parentDir, { recursive: true });
+
+      await writeFile(absolutePath, data);
+      log.info('Binary file written:', {
+        agentId,
+        filePath,
+        bytes: data.length,
+      });
+      return absolutePath;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.error('Failed to write binary file:', { agentId, filePath }, err);
+      throw new WorkspaceError(
+        `Failed to write file: ${filePath}`,
+        'WRITE_FILE_FAILED',
+        err,
+      );
+    }
+  }
+
+  /**
    * Delete a file from the workspace
    */
   async deleteFile(agentId: string, filePath: string): Promise<void> {
