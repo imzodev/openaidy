@@ -215,6 +215,98 @@ describe('OpenAICompatibleProvider', () => {
         expect(result.error.code).toBe('provider.unknown');
       }
     });
+
+    it('returns every model for non-OpenAI-cloud baseUrls (Ollama, LM Studio, Groq)', async () => {
+      mockListModels.mockResolvedValueOnce({
+        data: [
+          { id: 'llama3:8b', object: 'model', created: 0, owned_by: 'ollama' },
+          { id: 'mistral:7b', object: 'model', created: 0, owned_by: 'ollama' },
+          {
+            id: 'qwen2.5-coder:7b',
+            object: 'model',
+            created: 0,
+            owned_by: 'ollama',
+          },
+        ],
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'no-key-required',
+        baseUrl: 'http://localhost:11434/v1',
+      });
+      const result = await provider.listModels();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.map((m) => m.id)).toEqual([
+          'llama3:8b',
+          'mistral:7b',
+          'qwen2.5-coder:7b',
+        ]);
+      }
+    });
+
+    it('filters to gpt/o1/chat/glm for api.openai.com baseUrl', async () => {
+      mockListModels.mockResolvedValueOnce({
+        data: [
+          { id: 'gpt-4o', object: 'model', created: 0, owned_by: 'openai' },
+          { id: 'whisper-1', object: 'model', created: 0, owned_by: 'openai' },
+          { id: 'dall-e-3', object: 'model', created: 0, owned_by: 'openai' },
+          {
+            id: 'text-embedding-3-large',
+            object: 'model',
+            created: 0,
+            owned_by: 'openai',
+          },
+        ],
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+      });
+      const result = await provider.listModels();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.map((m) => m.id)).toEqual(['gpt-4o']);
+      }
+    });
+  });
+
+  describe('empty API key (local providers)', () => {
+    it('falls back to a placeholder so the OpenAI SDK constructor does not throw', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const OpenAI = (await import('openai')).default as any;
+
+      expect(() =>
+        createOpenAICompatibleProvider({
+          apiKey: '',
+          baseUrl: 'http://localhost:11434/v1',
+        }),
+      ).not.toThrow();
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'no-key-required',
+          baseURL: 'http://localhost:11434/v1',
+        }),
+      );
+    });
+
+    it('uses the configured key verbatim when one is provided', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const OpenAI = (await import('openai')).default as any;
+
+      createOpenAICompatibleProvider({
+        apiKey: 'sk-real',
+        baseUrl: 'https://api.openai.com/v1',
+      });
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk-real' }),
+      );
+    });
   });
 
   describe('getModel', () => {

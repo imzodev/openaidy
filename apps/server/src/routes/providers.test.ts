@@ -650,4 +650,210 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       expect(response.statusCode).toBe(200);
     });
   });
+
+  describe('POST /providers/discover-models', () => {
+    let originalFetch: typeof globalThis.fetch;
+
+    const installFetch = (impl: typeof globalThis.fetch) => {
+      globalThis.fetch = impl;
+    };
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    const okResponse = (body: unknown) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => body,
+    });
+
+    it('returns the model list from a successful /v1/models probe', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        okResponse({
+          data: [{ id: 'llama3:8b' }, { id: 'mistral:7b' }],
+        }),
+      );
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        models: [
+          { id: 'llama3:8b', name: 'llama3:8b' },
+          { id: 'mistral:7b', name: 'mistral:7b' },
+        ],
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.objectContaining({ headers: {} }),
+      );
+    });
+
+    it('filters out non-string ids from the response', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        okResponse({
+          data: [
+            { id: 'good' },
+            { id: 42 },
+            { id: null },
+            { notId: 'ignored' },
+          ],
+        }),
+      );
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().models).toEqual([{ id: 'good', name: 'good' }]);
+    });
+
+    it('returns an empty model list when the response body has no data field', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({}));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ models: [] });
+    });
+
+    it('strips a trailing slash before appending /models', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1/' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.any(Object),
+      );
+    });
+
+    it('returns 400 when baseUrl is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when baseUrl is not http(s)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'file:///etc/passwd' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 502 when the provider responds with non-2xx', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: async () => ({}),
+      });
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.error).toBe('Provider returned an error');
+      expect(body.message).toContain('401');
+    });
+
+    it('returns 502 when the fetch itself throws (server unreachable)', async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { baseUrl: 'http://localhost:11434/v1' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json().message).toContain('ECONNREFUSED');
+    });
+
+    it('sends a Bearer Authorization header when apiKeyEnv is set and present', async () => {
+      process.env['TEST_DISCOVERY_KEY'] = 'sk-test-123';
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/providers/discover-models',
+          payload: {
+            baseUrl: 'https://api.example.com/v1',
+            apiKeyEnv: 'TEST_DISCOVERY_KEY',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://api.example.com/v1/models',
+          expect.objectContaining({
+            headers: { Authorization: 'Bearer sk-test-123' },
+          }),
+        );
+      } finally {
+        delete process.env['TEST_DISCOVERY_KEY'];
+      }
+    });
+
+    it('omits the Authorization header when apiKeyEnv is set but the env var is unset', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: {
+          baseUrl: 'http://localhost:11434/v1',
+          apiKeyEnv: 'OPENAIDY_TEST_UNSET_VAR',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.objectContaining({ headers: {} }),
+      );
+    });
+  });
 });
