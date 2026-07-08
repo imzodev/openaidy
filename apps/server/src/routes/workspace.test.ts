@@ -228,6 +228,83 @@ describe('workspace routes', () => {
     });
   });
 
+  describe('GET /workspace/:agentId/raw/*', () => {
+    const readableAgent = (id: string): Agent => ({
+      id,
+      name: id,
+      enabled: true,
+      systemPrompt: 'test',
+      model: 'openai/gpt-4o-mini',
+      version: 1,
+      workspace: {
+        enabled: true,
+        workspaces: [{ path: '/project' }],
+      },
+    });
+
+    it('serves raw image bytes with a media type', async () => {
+      addAgent(readableAgent('agent-1'));
+      await workspaceService.ensureWorkspace('agent-1');
+      const wsPath = workspaceService.getWorkspacePath('agent-1');
+      await mkdir(join(wsPath, 'screenshots'), { recursive: true });
+      const png = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
+      ]);
+      await writeFile(join(wsPath, 'screenshots', 'shot.png'), png);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/workspace/agent-1/raw/screenshots/shot.png',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('image/png');
+      expect(response.rawPayload.equals(png)).toBe(true);
+    });
+
+    it('returns 404 for a missing file', async () => {
+      addAgent(readableAgent('agent-1'));
+      await workspaceService.ensureWorkspace('agent-1');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/workspace/agent-1/raw/missing.png',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 when the agent lacks read permission', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+        workspace: {
+          enabled: true,
+          defaultPermissions: {
+            read: false,
+            write: false,
+            delete: false,
+            list: true,
+          },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/workspace/agent-1/raw/anything.png',
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+  });
+
   describe('POST /workspace/:agentId/files/*', () => {
     it('should create a new file', async () => {
       const agent: Agent = {

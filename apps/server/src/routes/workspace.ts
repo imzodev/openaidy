@@ -79,6 +79,8 @@ export const workspaceRoutes: FastifyPluginAsync<
   );
 
   const MAX_EDITABLE_FILE_BYTES = 1_000_000;
+  // Raw preview (images etc.) tolerates larger files than the inline editor.
+  const MAX_RAW_FILE_BYTES = 25_000_000;
 
   /**
    * Validate access and return error response if denied.
@@ -213,6 +215,69 @@ export const workspaceRoutes: FastifyPluginAsync<
           reply.code(404);
           return { error: 'Path not found', code: 'NOT_FOUND' };
         }
+      }
+    },
+  );
+
+  /**
+   * GET /workspace/:agentId/raw/*
+   * Serve a file's raw bytes with its media type — used by the UI to preview
+   * images (and other binary files) that the JSON read endpoint returns with
+   * empty content. Fetched by the client through the authenticated fetch
+   * wrapper (Bearer token), so an <img src> points at an object URL, not here.
+   */
+  app.get(
+    '/workspace/:agentId/raw/*',
+    async (
+      request: FastifyRequest<{ Params: { agentId: string; '*': string } }>,
+      reply,
+    ) => {
+      const { agentId: targetAgentId, '*': filePath } = request.params;
+
+      if (!filePath) {
+        reply.code(400);
+        return { error: 'File path is required', code: 'BAD_REQUEST' };
+      }
+
+      const access = validateAccess(targetAgentId, 'read');
+      if (!access.allowed) {
+        reply.code(403);
+        return access.error;
+      }
+
+      try {
+        const file = await workspaceService.readRawFile(
+          targetAgentId,
+          filePath,
+          { maxBytes: MAX_RAW_FILE_BYTES },
+        );
+        reply.header('Content-Type', file.mimeType);
+        reply.header('Content-Length', file.size);
+        reply.header('Cache-Control', 'private, no-cache');
+        return reply.send(file.buffer);
+      } catch (error) {
+        const workspaceError = error as { code?: string };
+        if (workspaceError.code === 'FILE_NOT_FOUND') {
+          reply.code(404);
+          return { error: 'File not found', code: 'NOT_FOUND' };
+        }
+        if (workspaceError.code === 'NOT_A_FILE') {
+          reply.code(400);
+          return { error: 'Path is a directory', code: 'NOT_A_FILE' };
+        }
+        if (workspaceError.code === 'FILE_TOO_LARGE') {
+          reply.code(413);
+          return {
+            error: 'File is too large to preview',
+            code: 'FILE_TOO_LARGE',
+          };
+        }
+        log.error(
+          'Failed to read raw file',
+          error instanceof Error ? error.message : String(error),
+        );
+        reply.code(500);
+        return { error: 'Failed to read file', code: 'INTERNAL_ERROR' };
       }
     },
   );

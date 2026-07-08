@@ -233,6 +233,60 @@ describe('WorkspaceService', () => {
     });
   });
 
+  describe('readRawFile', () => {
+    it('returns raw bytes and a media type from the extension', async () => {
+      const agentId = 'raw-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]);
+      await fsWriteFile(join(wsPath, 'a.png'), bytes);
+
+      const result = await service.readRawFile(agentId, 'a.png');
+      expect(result.mimeType).toBe('image/png');
+      expect(result.size).toBe(bytes.length);
+      expect(result.buffer.equals(bytes)).toBe(true);
+    });
+
+    it('uses the extension for types that sniff as text (svg)', async () => {
+      const agentId = 'raw-svg-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      await fsWriteFile(join(wsPath, 'icon.svg'), '<svg></svg>');
+
+      const result = await service.readRawFile(agentId, 'icon.svg');
+      expect(result.mimeType).toBe('image/svg+xml');
+    });
+
+    it('enforces the maxBytes cap', async () => {
+      const agentId = 'raw-big-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      await fsWriteFile(join(wsPath, 'big.png'), Buffer.alloc(2048));
+
+      await expect(
+        service.readRawFile(agentId, 'big.png', { maxBytes: 1024 }),
+      ).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' });
+    });
+
+    it('throws FILE_NOT_FOUND for a missing file', async () => {
+      const agentId = 'raw-missing-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.readRawFile(agentId, 'nope.png'),
+      ).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
+    });
+
+    it('blocks path traversal', async () => {
+      const agentId = 'raw-traversal-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.readRawFile(agentId, '../../../etc/hosts'),
+      ).rejects.toThrow(WorkspaceError);
+    });
+  });
+
   describe('writeFile', () => {
     it('should write file content', async () => {
       const agentId = 'write-test-agent';

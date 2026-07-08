@@ -245,6 +245,96 @@ export class WorkspaceService {
   }
 
   /**
+   * File extensions whose media type can't be reliably sniffed from content
+   * (SVG is XML text; some formats share/omit magic bytes). Used by
+   * {@link resolveMediaType} to pick a Content-Type for raw serving.
+   */
+  private static readonly MIME_BY_EXTENSION: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    bmp: 'image/bmp',
+    ico: 'image/x-icon',
+    avif: 'image/avif',
+    pdf: 'application/pdf',
+  };
+
+  /**
+   * Best-effort media type for raw serving: prefer the file extension (the
+   * name is authoritative for e.g. SVG, which sniffs as text), then fall back
+   * to content-signature detection.
+   */
+  private resolveMediaType(filePath: string, buffer: Buffer): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    return (
+      WorkspaceService.MIME_BY_EXTENSION[ext] ??
+      this.detectMimeTypeFromContent(buffer)
+    );
+  }
+
+  /**
+   * Read a file's raw bytes for serving/preview (e.g. images), together with a
+   * best-effort media type. Unlike {@link readFileWithType} — which returns
+   * empty content for binary files — this returns the actual bytes.
+   *
+   * Enforces `maxBytes` (when given) so a huge file can't be pulled into
+   * memory; throws a `FILE_TOO_LARGE` {@link WorkspaceError} in that case.
+   */
+  async readRawFile(
+    agentId: string,
+    filePath: string,
+    options: { maxBytes?: number } = {},
+  ): Promise<{ buffer: Buffer; mimeType: string; size: number }> {
+    const absolutePath = this.validatePath(agentId, filePath);
+    log.debug('Reading raw file:', { agentId, filePath, absolutePath });
+
+    try {
+      const stats = await stat(absolutePath);
+      if (stats.isDirectory()) {
+        throw new WorkspaceError(
+          `Path is a directory: ${filePath}`,
+          'NOT_A_FILE',
+        );
+      }
+
+      if (options.maxBytes !== undefined && stats.size > options.maxBytes) {
+        throw new WorkspaceError(
+          `File is too large to serve (${stats.size} bytes)`,
+          'FILE_TOO_LARGE',
+        );
+      }
+
+      const buffer = await readFile(absolutePath);
+      return {
+        buffer,
+        mimeType: this.resolveMediaType(filePath, buffer),
+        size: buffer.length,
+      };
+    } catch (error) {
+      if (error instanceof WorkspaceError) {
+        throw error;
+      }
+      const err = error instanceof Error ? error : new Error(String(error));
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new WorkspaceError(
+          `File not found: ${filePath}`,
+          'FILE_NOT_FOUND',
+          err,
+        );
+      }
+      log.error('Failed to read raw file:', { agentId, filePath }, err);
+      throw new WorkspaceError(
+        `Failed to read file: ${filePath}`,
+        'READ_FILE_FAILED',
+        err,
+      );
+    }
+  }
+
+  /**
    * Validate that a requested path is within the agent's workspace.
    * Returns the validated absolute path or throws an error.
    */

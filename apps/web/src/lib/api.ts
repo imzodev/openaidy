@@ -545,6 +545,33 @@ export async function readWorkspaceFile(
 }
 
 /**
+ * Fetch a workspace file's raw bytes as a Blob (e.g. for image preview).
+ *
+ * Goes through the authenticated fetch wrapper, so the caller should turn the
+ * result into an object URL (`URL.createObjectURL`) for an <img> src — a plain
+ * <img src="/api/..."> can't send the Bearer token.
+ */
+export async function fetchWorkspaceFileBlob(
+  agentId: string,
+  filePath: string,
+): Promise<Blob> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workspace/${agentId}/raw/${filePath}`,
+  );
+  if (!response.ok) {
+    let message = `Failed to load file (${response.status})`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body?.error) message = body.error;
+    } catch {
+      // non-JSON error body — keep the status-based message
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
+/**
  * Write a file to an agent's workspace
  */
 export async function writeWorkspaceFile(
