@@ -134,6 +134,38 @@ Your skill instructions here.
 
 OpenAidy connects to external MCP servers via stdio or HTTP transport. Configure servers through the UI or the REST API at `POST /api/mcp/servers`.
 
+### Preinstalled servers
+
+The following MCP servers ship preinstalled (reconciled into every install on startup from `config/openaidy.template.json`):
+
+| Server              | Transport | Auth                              | Notes                                                                                                          |
+| ------------------- | --------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| GitHub              | http      | `${GITHUB_PERSONAL_ACCESS_TOKEN}` | [PAT](https://github.com/settings/tokens) with `repo` + `read:user` scopes                                     |
+| Sequential Thinking | stdio     | none                              | step-by-step reasoning                                                                                         |
+| Time                | stdio     | none                              | time + timezone conversion                                                                                     |
+| Playwright Browser  | stdio     | none                              | Microsoft-maintained browser automation                                                                        |
+| Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}` |
+| Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
+| Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
+
+#### Setting API keys
+
+Servers that require a secret reference it as `${VAR_NAME}` in `headers` (http) or `env` (stdio). Two ways to satisfy:
+
+1. **Set the env var before starting the server** — recommended. Secrets stay out of the config file:
+   ```bash
+   export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
+   export BRAVE_API_KEY=…
+   openaidy start
+   ```
+2. **Edit the server via the UI** (`MCP` page → Edit) and replace `${VAR}` with the literal key. This persists the key in `~/.openaidy/config.json` — convenient but less secure.
+
+A server whose `${VAR}` is unset sits in "Awaiting configuration" instead of trying (and failing) to connect — set the env var or paste the key to activate it.
+
+#### Adding or removing preinstalled servers
+
+Edit `config/openaidy.template.json` and add/remove entries. On the next server start, `apps/server/src/mcp/preinstall.ts` reconciles: new entries are added, updated entries replace pristine ones, and servers the user has deleted are not resurrected. User-edited entries are never clobbered.
+
 ## Architecture
 
 See the [`docs/`](./docs/) directory for detailed documentation:

@@ -9,6 +9,8 @@ coverage
 .cache
 .temp
 .tmp
+# Playwright MCP screenshot/artifact output dir (created wherever the server runs)
+.playwright-mcp/
 .DS_Store
 *.log
 apps/web/.solid

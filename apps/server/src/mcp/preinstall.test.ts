@@ -23,6 +23,66 @@ const fetchServer: McpServerConfig = {
   env: {},
 };
 
+const sequentialThinking: McpServerConfig = {
+  id: 'sequential-thinking',
+  name: 'Sequential Thinking',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
+};
+
+const time: McpServerConfig = {
+  id: 'time',
+  name: 'Time',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@modelcontextprotocol/server-time'],
+};
+
+const playwright: McpServerConfig = {
+  id: 'playwright',
+  name: 'Playwright Browser',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@playwright/mcp@latest'],
+};
+
+const context7: McpServerConfig = {
+  id: 'context7',
+  name: 'Context7 Docs',
+  transport: 'http',
+  url: 'https://mcp.context7.com/mcp',
+};
+
+const braveSearch: McpServerConfig = {
+  id: 'brave-search',
+  name: 'Brave Search',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@brave/brave-search-mcp-server'],
+  env: { BRAVE_API_KEY: '${BRAVE_API_KEY}' },
+};
+
+const tavily: McpServerConfig = {
+  id: 'tavily',
+  name: 'Tavily Search',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', 'tavily-mcp@latest'],
+  env: { TAVILY_API_KEY: '${TAVILY_API_KEY}' },
+};
+
+/** The full preinstalled set shipped in `config/openaidy.template.json`. */
+const allPreinstalled: McpServerConfig[] = [
+  github,
+  sequentialThinking,
+  time,
+  playwright,
+  context7,
+  braveSearch,
+  tavily,
+];
+
 describe('reconcilePreinstalledMcpServers', () => {
   it('adds a new template server absent from config and manifest', () => {
     const result = reconcilePreinstalledMcpServers([], [github], {});
@@ -154,5 +214,34 @@ describe('reconcilePreinstalledMcpServers', () => {
     expect(result.servers).toEqual([github]); // unchanged
     expect(result.manifest['github']?.hash).toBe(hashMcpServer(github)); // adopted
     expect(result.changed).toBe(true); // manifest gained the entry
+  });
+
+  it('seeds every preinstalled server into a fresh install with no manifest', () => {
+    // Fresh install: empty config, empty manifest, full template set.
+    const result = reconcilePreinstalledMcpServers([], allPreinstalled, {});
+
+    expect(result.added).toEqual(allPreinstalled.map((s) => s.id));
+    expect(result.updated).toEqual([]);
+    expect(result.servers).toEqual(allPreinstalled);
+    // Every preinstalled id is tracked in the manifest after seeding.
+    for (const server of allPreinstalled) {
+      expect(result.manifest[server.id]?.hash).toBe(hashMcpServer(server));
+    }
+    expect(result.changed).toBe(true);
+  });
+
+  it('is idempotent across the full preinstalled set on a second run', () => {
+    // After a successful first run, a second boot must be a no-op.
+    const first = reconcilePreinstalledMcpServers([], allPreinstalled, {});
+    const second = reconcilePreinstalledMcpServers(
+      first.servers,
+      allPreinstalled,
+      first.manifest,
+    );
+
+    expect(second.added).toEqual([]);
+    expect(second.updated).toEqual([]);
+    expect(second.changed).toBe(false);
+    expect(second.servers).toEqual(allPreinstalled);
   });
 });
