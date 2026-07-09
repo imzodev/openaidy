@@ -239,7 +239,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
       // itself (its /models list is noisy with embeddings, audio, etc.). Any
       // other OpenAI-compatible endpoint — Ollama, LM Studio, Groq, … — uses
       // arbitrary model names, so return everything it reports.
-      const isOpenAiCloud = this.config.baseUrl.includes('api.openai.com');
+      const isOpenAiCloud = this.config.baseUrl
+        .toLowerCase()
+        .includes('api.openai.com');
       const models: ModelDescriptor[] = response.data
         .filter(
           (model) =>

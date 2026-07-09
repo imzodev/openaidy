@@ -121,6 +121,25 @@ Exit Codes:
     return { exitCode: 1, error: `Unknown provider: ${providerId}` };
   }
 
+  // Local providers (Ollama, LM Studio) ship no model list — it's host-specific
+  // and discovered from the running server. The CLI connect flow would build a
+  // config with an empty `models` array (and no API key), which the server's
+  // config schema rejects. Direct the user to the UI, which has the discovery
+  // step.
+  if (preset.local) {
+    p.log.error(
+      `${preset.name} is a local provider — configure it in the OpenAidy UI.`,
+    );
+    p.log.info(
+      `Open Settings → Providers → ${preset.name} → "Discover models", then Save. ` +
+        'No API key is required.',
+    );
+    return {
+      exitCode: 1,
+      error: 'Local providers are configured via the UI, not the CLI',
+    };
+  }
+
   // Get API key from --api-key argument
   const apiKeyIndex = args.indexOf('--api-key');
   let apiKey: string | undefined;

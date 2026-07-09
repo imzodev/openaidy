@@ -112,28 +112,28 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
     setDiscoverError(null);
     setDiscoverInfo(null);
     try {
-      const found = await discoverProviderModels(
-        props.preset.baseUrl,
-        props.existingProvider?.apiKeyEnv,
-      );
-      // Don't duplicate models already offered by the preset or added manually.
-      const customIds = new Set(customModels().map((m) => m.id));
-      const fresh = found.filter(
-        (m) =>
-          !props.preset.models.some((pm) => pm.id === m.id) &&
-          !customIds.has(m.id),
-      );
-      setDiscoveredModels(fresh);
-      // Pre-select everything discovered so the user can just save.
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        for (const m of fresh) next.add(m.id);
-        return next;
-      });
+      const found = await discoverProviderModels(props.preset.id);
+      // Only models not already listed (preset, previously discovered, or
+      // custom) are "new". We append new ones and auto-select only those — so
+      // re-clicking Discover doesn't re-check models the user unchecked, and
+      // their prior selections survive.
+      const knownIds = new Set(allModels().map((m) => m.id));
+      const additions = found.filter((m) => !knownIds.has(m.id));
+      if (additions.length > 0) {
+        setDiscoveredModels((prev) => [...prev, ...additions]);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const m of additions) next.add(m.id);
+          return next;
+        });
+      }
       setDiscoverInfo(
         found.length === 0
           ? 'No models reported. Pull/load a model on the server, then retry.'
-          : `Found ${found.length} model${found.length === 1 ? '' : 's'}.`,
+          : `Found ${found.length} model${found.length === 1 ? '' : 's'}` +
+              (additions.length < found.length
+                ? ` (${additions.length} new).`
+                : '.'),
       );
     } catch (err) {
       setDiscoverError(
