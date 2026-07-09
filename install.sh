@@ -41,7 +41,10 @@ NODE_VERSION="22.12.0"
 # Options
 RUN_SETUP=true
 SKIP_BUILD=false
-BRANCH="main"
+# Empty = auto: resolve the latest published release tag (falling back to
+# `main` when no release exists yet). An explicit --branch/--tag overrides.
+BRANCH=""
+BRANCH_EXPLICIT=false
 NON_INTERACTIVE=false
 
 # State
@@ -65,8 +68,9 @@ while [[ $# -gt 0 ]]; do
             RUN_SETUP=false
             shift
             ;;
-        --branch|-Branch)
+        --branch|-Branch|--tag)
             BRANCH="$2"
+            BRANCH_EXPLICIT=true
             shift 2
             ;;
         --dir)
@@ -83,7 +87,9 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --dir <path>       Install to custom directory (default: ~/.openaidy)"
-            echo "  --branch <name>    Branch to install (default: main)"
+            echo "  --branch <ref>     Branch or tag to install"
+            echo "                     (default: latest release; use 'main' for the dev edge)"
+            echo "  --tag <ref>        Alias for --branch (install a specific release tag)"
             echo "  --skip-build       Skip build step"
             echo "  --skip-setup       Skip initial setup"
             echo "  --non-interactive  Run without interactive prompts"
@@ -458,8 +464,39 @@ check_ripgrep() {
 # Repository
 # ============================================================================
 
+# Query the newest published release tag via the GitHub API. Prints the tag
+# (e.g. "v0.1.0") on success, or "main" when there's no release yet / the API
+# is unreachable — so a fresh repo with no releases still installs.
+resolve_default_ref() {
+    local api="https://api.github.com/repos/imzodev/openaidy/releases/latest"
+    local tag=""
+    tag=$(curl -fsSL "$api" 2>/dev/null | grep -m1 '"tag_name"' \
+        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/') || true
+    if [ -n "$tag" ]; then
+        printf '%s' "$tag"
+    else
+        printf 'main'
+    fi
+}
+
+# Decide which ref to install: an explicit --branch/--tag wins; otherwise the
+# latest release tag (falling back to main).
+resolve_install_ref() {
+    if [ "$BRANCH_EXPLICIT" = true ]; then
+        log_info "Installing ref: $BRANCH (explicit)"
+        return 0
+    fi
+    log_info "Resolving latest release..."
+    BRANCH="$(resolve_default_ref)"
+    if [ "$BRANCH" = "main" ]; then
+        log_warn "No published release found — installing from 'main' (development edge)."
+    else
+        log_success "Latest release: $BRANCH"
+    fi
+}
+
 clone_or_update_repo() {
-    log_info "Preparing repository (branch: $BRANCH)..."
+    log_info "Preparing repository (ref: $BRANCH)..."
 
     if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --quiet HEAD 2>/dev/null; then
         log_info "Repository already exists — updating..."
@@ -689,6 +726,7 @@ main() {
     check_node
     check_pnpm
     check_ripgrep
+    resolve_install_ref
     clone_or_update_repo
     build_project
     create_cli_wrapper

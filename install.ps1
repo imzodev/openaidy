@@ -11,7 +11,10 @@
 # ============================================================================
 
 param(
-    [string]$Branch = "main",
+    # Empty = auto: resolve the latest published release tag (falling back to
+    # 'main' when no release exists yet). Pass -Branch main for the dev edge,
+    # or -Branch v0.1.0 for a specific release.
+    [string]$Branch = "",
     [string]$InstallDir = "$env:LOCALAPPDATA\openaidy",
     [switch]$SkipBuild
 )
@@ -35,6 +38,18 @@ function Log-Error   { param([string]$Message) Write-Host "[openaidy] ✗ $Messa
 function New-TempFile {
     $tmp = [System.IO.Path]::GetTempPath()
     return Join-Path $tmp "openaidy-install-$(Get-Random).tmp"
+}
+
+# Query the newest published release tag via the GitHub API. Returns the tag
+# (e.g. "v0.1.0"), or "main" when there's no release yet / the API is
+# unreachable — so a fresh repo with no releases still installs.
+function Resolve-DefaultRef {
+    try {
+        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/imzodev/openaidy/releases/latest" `
+            -Headers @{ "User-Agent" = "OpenAidy-Installer" } -TimeoutSec 15
+        if ($rel.tag_name) { return $rel.tag_name }
+    } catch { }
+    return "main"
 }
 
 # ============================================================================
@@ -565,7 +580,17 @@ Write-Host "OpenAidy Installer" -ForegroundColor White
 Write-Host ""
 
 Log-Info "Install directory: $InstallDir"
-Log-Info "Branch: $Branch"
+if ([string]::IsNullOrWhiteSpace($Branch)) {
+    Log-Info "Resolving latest release..."
+    $Branch = Resolve-DefaultRef
+    if ($Branch -eq "main") {
+        Log-Warn "No published release found — installing from 'main' (development edge)."
+    } else {
+        Log-Success "Latest release: $Branch"
+    }
+} else {
+    Log-Info "Installing ref: $Branch (explicit)"
+}
 Write-Host ""
 
 # Git
