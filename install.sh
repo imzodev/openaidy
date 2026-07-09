@@ -461,7 +461,7 @@ check_ripgrep() {
 clone_or_update_repo() {
     log_info "Preparing repository (branch: $BRANCH)..."
 
-    if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-verify --quiet HEAD 2>/dev/null; then
+    if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --quiet HEAD 2>/dev/null; then
         log_info "Repository already exists — updating..."
         cd "$INSTALL_DIR"
         git fetch origin "$BRANCH" 2>/dev/null || true
@@ -656,9 +656,15 @@ run_init() {
 }
 
 run_start() {
-    # Run `openaidy start` and capture the output.
+    # Run `openaidy start --server-only` and capture the output.
+    #
+    # --server-only: the server serves the already-built web bundle itself
+    # (apps/web/dist, resolved via the OPENAIDY_REPO fallback), so the whole
+    # UI is available on the server's port. We deliberately do NOT spawn the
+    # Vite dev server here — that's a development tool, redundant for an
+    # installed instance, and a flaky Vite start shouldn't fail the install.
     log_info "Starting the server (this may take up to 30 seconds)..."
-    "$link_dir_global/openaidy" start 2>&1
+    "$link_dir_global/openaidy" start --server-only 2>&1
 }
 
 # Capture the wrapper path now so run_init can invoke it (create_cli_wrapper
@@ -695,13 +701,14 @@ main() {
 
     # PR2: start the server and open the browser.
     echo ""
-    log "Starting the server..."
+    log_info "Starting the server..."
     START_URL=""
     if START_OUTPUT=$(run_start 2>&1); then
-        START_URL=$(echo "$START_OUTPUT" | grep -oP 'http://localhost:\d+' | head -1)
-        log "Server is ready."
+        # -oE (POSIX ERE), not -oP — BSD/macOS grep has no -P.
+        START_URL=$(echo "$START_OUTPUT" | grep -oE 'http://localhost:[0-9]+' | head -1)
+        log_success "Server is ready."
     else
-        log "Warning: server did not start (will be available after re-login)."
+        log_warn "Server did not start automatically."
     fi
 
     echo ""
@@ -733,10 +740,11 @@ main() {
         echo ""
         echo "Use 'openaidy stop' to stop the server."
     else
-        echo "Run 'openaidy start' to bring the server online."
+        echo "Run 'openaidy start --server-only' to bring the server online,"
+        echo "then open http://localhost:3001 in your browser."
         echo ""
-        echo "Next steps:"
-        echo "  cd $INSTALL_DIR && pnpm --filter @openaidy/server dev"
+        echo "If it still doesn't start, check the log at:"
+        echo "  $OPENAIDY_HOME/logs/server.log"
     fi
     echo ""
 }
