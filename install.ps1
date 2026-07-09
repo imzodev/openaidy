@@ -649,8 +649,22 @@ $BootstrapToken = Invoke-Init
 # flaky Vite start shouldn't fail the install.
 Write-Host ""
 Log-Info "Starting the server (this may take up to 30 seconds)..."
-$StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start --server-only 2>&1
-$StartExit = $LASTEXITCODE
+# Capture stdout only (the "Server running on http://..." line lives there).
+# We must NOT use `2>&1`: under $ErrorActionPreference='Stop', PowerShell 5.1
+# turns any stderr line from the native command (e.g. a Node
+# `ExperimentalWarning` from `node --import tsx`) into a terminating
+# NativeCommandError and aborts the installer before we can read the exit
+# code. Let stderr flow to the console, and wrap defensively so a flaky start
+# still falls through to the "did not start" guidance instead of crashing.
+$StartOutput = ""
+$StartExit = 1
+try {
+    $StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start --server-only
+    $StartExit = $LASTEXITCODE
+} catch {
+    $StartExit = 1
+    $StartOutput = "$_"
+}
 $StartUrl = ""
 if ($StartExit -eq 0) {
     $StartUrl = [regex]::Match($StartOutput, 'http://localhost:\d+').Value
