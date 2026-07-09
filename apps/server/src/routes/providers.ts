@@ -20,6 +20,7 @@ import type {
   ProviderInfo as ConnectionProviderInfo,
   ConnectProviderResponse,
 } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
 /**
  * Schema for test-invoke request
@@ -58,6 +59,21 @@ const testInvokeSchema = z.object({
  */
 const providersQuerySchema = z.object({
   enabled: z.coerce.boolean().optional(),
+});
+
+/**
+ * Schema for the model-discovery request.
+ *
+ * Takes only the preset `id` of a local provider — NOT a client-supplied
+ * base URL or env-var name. The server resolves the (hardcoded, localhost)
+ * base URL from the preset itself. Accepting a caller-supplied `baseUrl` +
+ * `apiKeyEnv` previously let an authenticated caller point the server at any
+ * host (SSRF) and read any `process.env` value into the outgoing
+ * Authorization header (secret exfiltration); resolving server-side removes
+ * both.
+ */
+const discoverModelsSchema = z.object({
+  id: z.string().min(1),
 });
 
 /**
@@ -356,6 +372,80 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
       }
     },
   );
+
+  /**
+   * POST /providers/discover-models
+   * Probe an OpenAI-compatible `{baseUrl}/models` endpoint and return the
+   * models it reports. Used by the UI to auto-populate a local provider's
+   * (Ollama / LM Studio) model list before saving it to config — the model
+   * set is host-specific and can't be hardcoded in a preset.
+   */
+  app.post('/providers/discover-models', async (request, reply) => {
+    const parsed = discoverModelsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error: 'Invalid request',
+        message: parsed.error.issues[0]?.message ?? 'Invalid body',
+      };
+    }
+    const { id } = parsed.data;
+
+    // Resolve the base URL server-side from the known LOCAL presets. Discovery
+    // is only offered for local (localhost, no-auth) providers, so no API key
+    // is ever needed — and never accepting a client base URL or env-var name
+    // is what keeps this endpoint free of SSRF / secret-exfiltration.
+    const preset = PROVIDER_PRESETS.find((p) => p.id === id && p.local);
+    if (!preset) {
+      reply.code(400);
+      return {
+        error: `Unknown local provider: ${id}`,
+        message: 'Model discovery is only available for local providers.',
+      };
+    }
+
+    // `{baseUrl}/models` — the preset base URL already includes the API
+    // version (e.g. `http://localhost:11434/v1`).
+    const url = `${preset.baseUrl.replace(/\/$/, '')}/models`;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      let response: Response;
+      try {
+        response = await fetch(url, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (!response.ok) {
+        reply.code(502);
+        return {
+          error: 'Provider returned an error',
+          message: `${response.status} ${response.statusText}`,
+        };
+      }
+
+      const body = (await response.json()) as {
+        data?: Array<{ id?: unknown }>;
+      };
+      const models = (body.data ?? [])
+        .map((m) => (typeof m.id === 'string' ? m.id : null))
+        .filter((mid): mid is string => !!mid)
+        .map((mid) => ({ id: mid, name: mid }));
+
+      return { models };
+    } catch (error) {
+      reply.code(502);
+      return {
+        error: 'Could not reach provider',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error probing models',
+      };
+    }
+  });
 
   /**
    * POST /providers/register

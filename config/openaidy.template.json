@@ -27,7 +27,7 @@
       "name": "Time",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-time"]
+      "args": ["-y", "@guanxiong/mcp-server-time"]
     },
     {
       "id": "playwright",

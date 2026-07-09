@@ -1227,6 +1227,34 @@ export async function connectProviderWithApiKey(
 }
 
 /**
+ * Discover the models a local provider currently serves. Takes the provider's
+ * preset id (e.g. `"ollama"`); the server resolves the localhost base URL and
+ * probes its `/models` endpoint. Used to auto-populate a local provider's
+ * (Ollama / LM Studio) model list before it is saved to config. Throws with a
+ * readable message when the server can't be reached so the modal can surface it.
+ */
+export async function discoverProviderModels(
+  id: string,
+): Promise<{ id: string; name: string }[]> {
+  const res = await apiFetch(`${API_BASE}/api/providers/discover-models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  const body = (await res.json()) as {
+    models?: { id: string; name: string }[];
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      body.message || body.error || `Discovery failed (${res.status})`,
+    );
+  }
+  return body.models ?? [];
+}
+
+/**
  * Start OAuth flow for a provider.
  *
  * For MiniMax (the only OAuth-enabled provider in this phase): the
