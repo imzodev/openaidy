@@ -498,7 +498,7 @@ resolve_install_ref() {
 clone_or_update_repo() {
     log_info "Preparing repository (ref: $BRANCH)..."
 
-    if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --quiet HEAD 2>/dev/null; then
+    if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
         log_info "Repository already exists — updating..."
         cd "$INSTALL_DIR"
         git fetch origin "$BRANCH" 2>/dev/null || true
