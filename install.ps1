@@ -615,10 +615,16 @@ $env:OPENAIDY_REPO = $InstallDir
 $env:WS_TOKEN_SECRET = $script:JwtSecret
 $BootstrapToken = Invoke-Init
 
-# PR2: start the server and open the browser
+# PR2: start the server and open the browser.
+#
+# --server-only: the server serves the already-built web bundle itself
+# (apps/web/dist, resolved via the OPENAIDY_REPO fallback), so the whole UI is
+# available on the server's port. We deliberately do NOT spawn the Vite dev
+# server — it's a development tool, redundant for an installed instance, and a
+# flaky Vite start shouldn't fail the install.
 Write-Host ""
 Log-Info "Starting the server (this may take up to 30 seconds)..."
-$StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start 2>&1
+$StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start --server-only 2>&1
 $StartExit = $LASTEXITCODE
 $StartUrl = ""
 if ($StartExit -eq 0) {
@@ -646,10 +652,10 @@ if ($StartUrl) {
     Write-Host ""
     Write-Host "Use 'openaidy stop' to stop the server."
 } else {
-    Write-Host "Run 'openaidy start' to bring the server online."
+    Write-Host "Run 'openaidy start --server-only' to bring the server online,"
+    Write-Host "then open http://localhost:3001 in your browser."
     Write-Host ""
-    Write-Host "Next steps:"
-    Write-Host "  cd $InstallDir"
-    Write-Host "  pnpm --filter @openaidy/server dev"
+    Write-Host "If it still doesn't start, check the log at:"
+    Write-Host "  $env:USERPROFILE\.openaidy\logs\server.log"
 }
 Write-Host ""
