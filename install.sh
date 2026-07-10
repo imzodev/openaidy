@@ -325,29 +325,52 @@ check_node() {
 # ============================================================================
 
 install_pnpm() {
-    log_info "Installing pnpm..."
+    log_info "Installing pnpm via Corepack..."
 
-    local pnpm_install_log=$(mktemp)
-    local pnpm_installer=$(mktemp)
-
-    if ! curl -fsSL https://get.pnpm.io/install.sh -o "$pnpm_installer" 2>"$pnpm_install_log"; then
-        log_error "Failed to download pnpm installer"
-        sed 's/^/    /' "$pnpm_install_log" >&2
-        rm -f "$pnpm_install_log" "$pnpm_installer"
+    # Node is provisioned before pnpm (check_node runs first), so use its
+    # bundled Corepack rather than pnpm's standalone binary. That binary is
+    # dynamically linked against libatomic.so.1, which is absent on minimal
+    # Linux images and fails there with:
+    #   "error while loading shared libraries: libatomic.so.1"
+    # Corepack downloads pnpm as a JS package and runs it on Node, so it has no
+    # such native dependency.
+    local corepack="$INSTALL_DIR/node/bin/corepack"
+    if [ ! -x "$corepack" ]; then
+        corepack="$(command -v corepack || true)"
+    fi
+    if [ -z "$corepack" ]; then
+        log_error "Corepack not found (ships with Node >= 16.9). Cannot install pnpm."
         exit 1
     fi
 
+    # Never prompt on first download — this runs non-interactively via
+    # `curl | bash`. Exported here so build_project's `pnpm install` (same
+    # process) also downloads the pinned pnpm without prompting.
+    export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+    # Install the pnpm/pnpx shims into $INSTALL_DIR/pnpm — the location the rest
+    # of the installer (check_pnpm, build_project, the CLI wrapper) already
+    # expects on PATH.
     export PNPM_HOME="$INSTALL_DIR/pnpm"
     mkdir -p "$PNPM_HOME"
+    export PATH="$PNPM_HOME:$INSTALL_DIR/node/bin:$PATH"
 
-    if SHELL=bash bash "$pnpm_installer" >>"$pnpm_install_log" 2>&1; then
-        rm -f "$pnpm_installer" "$pnpm_install_log"
-        local pnpm_ver=$("$INSTALL_DIR/pnpm/pnpm" --version 2>/dev/null)
-        log_success "pnpm $pnpm_ver installed"
+    if ! "$corepack" enable --install-directory "$PNPM_HOME" pnpm 2>&1; then
+        # Older Corepack lacks --install-directory: enable into its default
+        # (Node's bin dir, which is already on PATH via check_node).
+        if ! "$corepack" enable pnpm 2>&1; then
+            log_error "Failed to enable pnpm via Corepack"
+            exit 1
+        fi
+    fi
+
+    # The shim resolves its exact pnpm version from the repo's `packageManager`
+    # field at build time; we only confirm it's resolvable now (invoking it
+    # here would trigger a premature download outside the project).
+    if [ -x "$PNPM_HOME/pnpm" ] || command -v pnpm >/dev/null 2>&1; then
+        log_success "pnpm enabled via Corepack"
     else
-        log_error "Failed to install pnpm"
-        sed 's/^/    /' "$pnpm_install_log" >&2
-        rm -f "$pnpm_install_log" "$pnpm_installer"
+        log_error "pnpm shim not found after Corepack enable"
         exit 1
     fi
 }
@@ -593,6 +616,9 @@ OPENAIDY_REPO="${OPENAIDY_REPO:-$HOME/.openaidy}"
 # `bin` holds the OpenAidy-managed ripgrep fallback; prepending it
 # means code_search / code_glob work even when the system has no rg.
 export PATH="$OPENAIDY_REPO/bin:$OPENAIDY_REPO/node/bin:$OPENAIDY_REPO/pnpm:$PATH"
+# pnpm is a Corepack shim; never prompt before fetching the pinned version
+# (e.g. when `openaidy start --integrated` shells out to pnpm).
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 if [ -f "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" ]; then
     exec node --import tsx "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" "$@"
