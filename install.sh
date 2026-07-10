@@ -2,80 +2,52 @@
 # ============================================================================
 # OpenAidy Installer
 # ============================================================================
-# Installs OpenAidy on Linux, macOS, and WSL2.
+# Installs OpenAidy on Linux, macOS, and WSL2 from the prebuilt npm package
+# (@openaidy/app). No git clone, no source build — just Node + ripgrep, then
+# `npm install -g @openaidy/app`.
 #
 # Usage:
 #   curl -fsSL https://openaidy.com/install.sh | bash
 #
 # Or with options:
-#   curl -fsSL ... | bash -s -- --dir /path/to/install --branch feat/x
+#   curl -fsSL ... | bash -s -- --version 0.2.1
 #
 # ============================================================================
 
 set -e
-
-if [ -n "${OPENAIDY_HOME:-}" ]; then
-    unset OPENAIDY_HOME
-fi
-
-export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"
-export PNPM_NO_CONFIG=1
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-MAGENTA='\033[0;35m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:imzodev/openaidy.git"
-REPO_URL_HTTPS="https://github.com/imzodev/openaidy.git"
+# Data root (config, state, credentials, logs) AND where a managed Node is
+# installed. Honors an existing OPENAIDY_HOME; matches the CLI's default so a
+# later `openaidy` invocation without env finds the same home.
 OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
-INSTALL_DIR_EXPLICIT=false
 NODE_VERSION="22.12.0"
+NPM_PKG="@openaidy/app"
 
 # Options
-RUN_SETUP=true
-SKIP_BUILD=false
-# Empty = auto: resolve the latest published release tag (falling back to
-# `main` when no release exists yet). An explicit --branch/--tag overrides.
-BRANCH=""
-BRANCH_EXPLICIT=false
+VERSION=""            # empty = @latest; else install @openaidy/app@$VERSION
 NON_INTERACTIVE=false
 
 # State
 NODE_PROVISIONED=false
 
-# Detect interactive terminal
-if [ -t 0 ]; then
-    IS_INTERACTIVE=true
-else
-    IS_INTERACTIVE=false
-fi
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --skip-build)
-            SKIP_BUILD=true
-            shift
-            ;;
-        --skip-setup)
-            RUN_SETUP=false
-            shift
-            ;;
-        --branch|-Branch|--tag)
-            BRANCH="$2"
-            BRANCH_EXPLICIT=true
+        --version|--tag)
+            VERSION="${2#v}"   # tolerate a leading "v" (v0.2.1 -> 0.2.1)
             shift 2
             ;;
         --dir)
             OPENAIDY_HOME="$2"
-            INSTALL_DIR_EXPLICIT=true
             shift 2
             ;;
         --non-interactive|-NonInteractive)
@@ -86,12 +58,8 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: curl -fsSL https://openaidy.com/install.sh | bash [options]"
             echo ""
             echo "Options:"
-            echo "  --dir <path>       Install to custom directory (default: ~/.openaidy)"
-            echo "  --branch <ref>     Branch or tag to install"
-            echo "                     (default: latest release; use 'main' for the dev edge)"
-            echo "  --tag <ref>        Alias for --branch (install a specific release tag)"
-            echo "  --skip-build       Skip build step"
-            echo "  --skip-setup       Skip initial setup"
+            echo "  --dir <path>       Data/home directory (default: ~/.openaidy)"
+            echo "  --version <x.y.z>  Install a specific @openaidy/app version (default: latest)"
             echo "  --non-interactive  Run without interactive prompts"
             exit 0
             ;;
@@ -102,7 +70,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Resolve install dir
 INSTALL_DIR="$OPENAIDY_HOME"
 
 # OS detection
@@ -136,88 +103,6 @@ log_info()    { echo -e "${BLUE}[openaidy]${NC} $*"; }
 log_success() { echo -e "${GREEN}[openaidy]${NC} ✓ $*"; }
 log_warn()    { echo -e "${YELLOW}[openaidy]${NC} ⚠ $*"; }
 log_error()   { echo -e "${RED}[openaidy]${NC} ✗ $*"; }
-
-# ============================================================================
-# Git Provisioning
-# ============================================================================
-
-install_git() {
-    log_info "Git not found — installing..."
-
-    case "$OS" in
-        macos)
-            if command -v brew >/dev/null 2>&1; then
-                log_info "Installing Git via Homebrew..."
-                brew install git >/dev/null 2>&1 || true
-                command -v git >/dev/null 2>&1 && return 0
-            fi
-            if command -v xcode-select >/dev/null 2>&1; then
-                log_info "Requesting Apple Command Line Tools..."
-                log_info "If a dialog appears, click Install and accept the license."
-                xcode-select --install >/dev/null 2>&1 || true
-                local waited=0
-                while [ "$waited" -lt 600 ]; do
-                    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
-                        return 0
-                    fi
-                    sleep 5
-                    waited=$((waited + 5))
-                done
-            fi
-            ;;
-        linux)
-            local sudo_cmd=""
-            if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
-                command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
-            fi
-            case "$DISTRO" in
-                ubuntu|debian)
-                    log_info "Installing Git via apt..."
-                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1 || true
-                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null 2>&1 || true
-                    ;;
-                fedora)
-                    log_info "Installing Git via dnf..."
-                    $sudo_cmd dnf install -y git >/dev/null 2>&1 || true
-                    ;;
-                arch)
-                    log_info "Installing Git via pacman..."
-                    $sudo_cmd pacman -S --noconfirm git >/dev/null 2>&1 || true
-                    ;;
-            esac
-            command -v git >/dev/null 2>&1 && return 0
-            ;;
-    esac
-
-    log_error "Could not install Git automatically. Please install it manually."
-    case "$OS" in
-        linux)
-            case "$DISTRO" in
-                ubuntu|debian) log_info "  sudo apt update && sudo apt install git" ;;
-                fedora)        log_info "  sudo dnf install git" ;;
-                arch)          log_info "  sudo pacman -S git" ;;
-                *)             log_info "  Use your package manager to install git" ;;
-            esac
-            ;;
-        macos) log_info "  xcode-select --install  or  brew install git" ;;
-    esac
-    exit 1
-}
-
-check_git() {
-    log_info "Checking Git..."
-
-    if command -v git >/dev/null 2>&1 && git --version >/dev/null 2>&1; then
-        GIT_VERSION=$(git --version | awk '{print $3}')
-        log_success "Git $GIT_VERSION found"
-        return 0
-    fi
-
-    log_warn "Git not found"
-    install_git
-    GIT_VERSION=$(git --version | awk '{print $3}')
-    log_success "Git $GIT_VERSION installed"
-}
 
 # ============================================================================
 # Node.js Provisioning
@@ -264,7 +149,7 @@ install_node() {
     local tmp_dir=$(mktemp -d)
 
     log_info "Downloading Node.js $NODE_VERSION ($node_os-$node_arch)..."
-    if ! curl -fsSL "$download_url" -o "$tmp_dir/$tarball_name"; then
+    if ! curl -fsSL --retry 3 --retry-connrefused "$download_url" -o "$tmp_dir/$tarball_name"; then
         log_error "Download failed (URL: $download_url)"
         rm -rf "$tmp_dir"
         exit 1
@@ -318,78 +203,6 @@ check_node() {
 
     log_info "Node.js not found — installing Node.js $NODE_VERSION LTS..."
     install_node
-}
-
-# ============================================================================
-# pnpm Provisioning
-# ============================================================================
-
-install_pnpm() {
-    log_info "Installing pnpm via Corepack..."
-
-    # Node is provisioned before pnpm (check_node runs first), so use its
-    # bundled Corepack rather than pnpm's standalone binary. That binary is
-    # dynamically linked against libatomic.so.1, which is absent on minimal
-    # Linux images and fails there with:
-    #   "error while loading shared libraries: libatomic.so.1"
-    # Corepack downloads pnpm as a JS package and runs it on Node, so it has no
-    # such native dependency.
-    local corepack="$INSTALL_DIR/node/bin/corepack"
-    if [ ! -x "$corepack" ]; then
-        corepack="$(command -v corepack || true)"
-    fi
-    if [ -z "$corepack" ]; then
-        log_error "Corepack not found (ships with Node >= 16.9). Cannot install pnpm."
-        exit 1
-    fi
-
-    # Never prompt on first download — this runs non-interactively via
-    # `curl | bash`. Exported here so build_project's `pnpm install` (same
-    # process) also downloads the pinned pnpm without prompting.
-    export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-
-    # Install the pnpm/pnpx shims into $INSTALL_DIR/pnpm — the location the rest
-    # of the installer (check_pnpm, build_project, the CLI wrapper) already
-    # expects on PATH.
-    export PNPM_HOME="$INSTALL_DIR/pnpm"
-    mkdir -p "$PNPM_HOME"
-    export PATH="$PNPM_HOME:$INSTALL_DIR/node/bin:$PATH"
-
-    if ! "$corepack" enable --install-directory "$PNPM_HOME" pnpm 2>&1; then
-        # Older Corepack lacks --install-directory: enable into its default
-        # (Node's bin dir, which is already on PATH via check_node).
-        if ! "$corepack" enable pnpm 2>&1; then
-            log_error "Failed to enable pnpm via Corepack"
-            exit 1
-        fi
-    fi
-
-    # The shim resolves its exact pnpm version from the repo's `packageManager`
-    # field at build time; we only confirm it's resolvable now (invoking it
-    # here would trigger a premature download outside the project).
-    if [ -x "$PNPM_HOME/pnpm" ] || command -v pnpm >/dev/null 2>&1; then
-        log_success "pnpm enabled via Corepack"
-    else
-        log_error "pnpm shim not found after Corepack enable"
-        exit 1
-    fi
-}
-
-check_pnpm() {
-    export PNPM_HOME="$INSTALL_DIR/pnpm"
-    export PATH="$PNPM_HOME:$PATH"
-
-    if command -v pnpm >/dev/null 2>&1; then
-        log_success "pnpm $(pnpm --version) found"
-        return 0
-    fi
-
-    if [ -x "$INSTALL_DIR/pnpm/pnpm" ]; then
-        log_success "pnpm found (OpenAidy-managed)"
-        return 0
-    fi
-
-    install_pnpm
 }
 
 # ============================================================================
@@ -449,7 +262,7 @@ install_ripgrep() {
     local tmp_dir
     tmp_dir=$(mktemp -d)
     log_info "Downloading ripgrep static binary..."
-    if curl -fsSL "$url" -o "$tmp_dir/ripgrep.tar.gz" \
+    if curl -fsSL --retry 3 --retry-connrefused "$url" -o "$tmp_dir/ripgrep.tar.gz" \
         && tar xzf "$tmp_dir/ripgrep.tar.gz" -C "$tmp_dir" \
         && mkdir -p "$INSTALL_DIR/bin" \
         && mv "$tmp_dir"/ripgrep-*/rg "$INSTALL_DIR/bin/rg" \
@@ -484,206 +297,56 @@ check_ripgrep() {
 }
 
 # ============================================================================
-# Repository
+# OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
-# Query the newest published release tag via the GitHub API. Prints the tag
-# (e.g. "v0.1.0") on success, or "main" when there's no release yet / the API
-# is unreachable — so a fresh repo with no releases still installs.
-resolve_default_ref() {
-    local api="https://api.github.com/repos/imzodev/openaidy/releases/latest"
-    local tag=""
-    tag=$(curl -fsSL "$api" 2>/dev/null | grep -m1 '"tag_name"' \
-        | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/') || true
-    if [ -n "$tag" ]; then
-        printf '%s' "$tag"
-    else
-        printf 'main'
-    fi
-}
+install_openaidy() {
+    local spec="$NPM_PKG"
+    [ -n "$VERSION" ] && spec="$NPM_PKG@$VERSION"
+    log_info "Installing $spec from npm..."
 
-# Decide which ref to install: an explicit --branch/--tag wins; otherwise the
-# latest release tag (falling back to main).
-resolve_install_ref() {
-    if [ "$BRANCH_EXPLICIT" = true ]; then
-        log_info "Installing ref: $BRANCH (explicit)"
-        return 0
-    fi
-    log_info "Resolving latest release..."
-    BRANCH="$(resolve_default_ref)"
-    if [ "$BRANCH" = "main" ]; then
-        log_warn "No published release found — installing from 'main' (development edge)."
-    else
-        log_success "Latest release: $BRANCH"
-    fi
-}
+    # Use the resolved Node's npm.
+    if command -v node >/dev/null 2>&1; then :; else export PATH="$INSTALL_DIR/node/bin:$PATH"; fi
 
-clone_or_update_repo() {
-    log_info "Preparing repository (ref: $BRANCH)..."
-
-    # Non-interactive SSH: auto-accept an unknown host key and never prompt —
-    # this runs under `curl | bash`, where an interactive host-key prompt would
-    # hang or read the wrong stdin. Harmless when cloning over HTTPS.
-    export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
-
-    if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
-        log_info "Repository already exists — updating to $BRANCH..."
-        cd "$INSTALL_DIR"
-        # Fetch the requested ref (branch OR tag). FETCH_HEAD then points at it
-        # regardless of kind, so a single hard reset pins both cases — the old
-        # `--heads` check skipped tags entirely and left re-installs stale.
-        if git fetch --tags --force origin "$BRANCH" 2>/dev/null; then
-            git checkout -f "$BRANCH" 2>/dev/null || git checkout -f FETCH_HEAD 2>/dev/null || true
-            git reset --hard FETCH_HEAD 2>/dev/null || true
-        else
-            log_warn "Could not fetch '$BRANCH'; keeping the existing checkout."
-        fi
-    else
-        log_info "Cloning repository..."
-        mkdir -p "$(dirname "$INSTALL_DIR")"
-
-        # Probe reachability with a real ref (HEAD). Do NOT combine `--heads`
-        # with `HEAD`: `--heads` restricts to refs/heads/*, which `HEAD` never
-        # matches, so `--exit-code` reports "no refs" (exit 2) even when the
-        # remote is perfectly reachable — which wrongly fell through to SSH.
-        local repo_url="$REPO_URL_HTTPS"
-        if ! git ls-remote --exit-code "$repo_url" HEAD >/dev/null 2>&1; then
-            log_warn "HTTPS unreachable, trying SSH..."
-            if git ls-remote --exit-code "$REPO_URL_SSH" HEAD >/dev/null 2>&1; then
-                repo_url="$REPO_URL_SSH"
-                log_info "Using SSH"
-            else
-                log_error "Repository unreachable via HTTPS and SSH"
-                log_info "Check your network connection and SSH key configuration"
-                exit 1
-            fi
-        else
-            log_info "Using HTTPS"
-        fi
-
-        rm -rf "$INSTALL_DIR"
-        # --branch accepts a branch OR a tag; --depth 1 keeps it shallow.
-        if ! git clone --branch "$BRANCH" --depth 1 "$repo_url" "$INSTALL_DIR" 2>&1; then
-            log_error "Failed to clone repository (ref: $BRANCH)"
-            log_info "Check your network connection and try again"
-            exit 1
-        fi
-    fi
-
-    log_success "Repository ready at $INSTALL_DIR ($BRANCH)"
-}
-
-# ============================================================================
-# Build
-# ============================================================================
-
-build_project() {
-    if [ "$SKIP_BUILD" = true ]; then
-        log_info "Skipping build (--skip-build)"
-        return 0
-    fi
-
-    log_info "Installing dependencies..."
-    cd "$INSTALL_DIR"
-
-    export PNPM_HOME="$INSTALL_DIR/pnpm"
-    export PATH="$PNPM_HOME:$PATH"
-
-    if ! pnpm install --frozen-lockfile 2>&1; then
-        log_info "Frozen lockfile failed — retrying with regular install..."
-        if ! pnpm install 2>&1; then
-            log_error "Dependency installation failed"
-            exit 1
-        fi
-    fi
-
-    log_info "Building project..."
-    if ! pnpm build 2>&1; then
-        log_error "Build failed"
+    if ! npm install -g "$spec" 2>&1; then
+        log_error "Failed to install $spec"
+        log_info "Check your network connection and try again"
         exit 1
     fi
 
-    log_success "Build complete"
-}
-
-# ============================================================================
-# CLI Wrapper
-# ============================================================================
-
-create_cli_wrapper() {
-    local link_dir
+    # Expose the `openaidy` bin on PATH. npm installs it into the global prefix's
+    # bin dir; symlink it into the same link dir we use for node.
+    local link_dir npm_prefix bin_src
     link_dir="$(get_node_link_dir)"
     mkdir -p "$link_dir"
+    npm_prefix="$(npm prefix -g 2>/dev/null || echo "$INSTALL_DIR/node")"
+    for bin_src in "$npm_prefix/bin/openaidy" "$INSTALL_DIR/node/bin/openaidy"; do
+        if [ -x "$bin_src" ]; then
+            ln -sf "$bin_src" "$link_dir/openaidy"
+            break
+        fi
+    done
 
-    local wrapper="$link_dir/openaidy"
-
-    cat > "$wrapper" << 'WRAPPER_EOF'
-#!/bin/sh
-# OpenAidy CLI wrapper — auto-managed by the installer.
-# DO NOT EDIT — re-run install.sh to update.
-
-OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
-# OPENAIDY_REPO = code root (used by `start` to resolve server entry).
-# On Unix, repo and data share the same dir; the var exists for cross-platform
-# parity with the Windows installer where they differ.
-OPENAIDY_REPO="${OPENAIDY_REPO:-$HOME/.openaidy}"
-# `bin` holds the OpenAidy-managed ripgrep fallback; prepending it
-# means code_search / code_glob work even when the system has no rg.
-export PATH="$OPENAIDY_REPO/bin:$OPENAIDY_REPO/node/bin:$OPENAIDY_REPO/pnpm:$PATH"
-# pnpm is a Corepack shim; never prompt before fetching the pinned version
-# (e.g. when `openaidy start --integrated` shells out to pnpm).
-export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-
-if [ -f "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" ]; then
-    exec node --import tsx "$OPENAIDY_REPO/packages/cli/bin/openaidy.ts" "$@"
-else
-    echo "OpenAidy not found at $OPENAIDY_REPO" >&2
-    echo "Re-run the installer: curl -fsSL https://openaidy.com/install.sh | bash" >&2
-    exit 1
-fi
-WRAPPER_EOF
-
-    chmod +x "$wrapper"
-
-    if [ "$NODE_PROVISIONED" = true ]; then
-        local node_link_dir
-        node_link_dir="$(get_node_link_dir)"
-        for tool in node npm npx; do
-            local target="$INSTALL_DIR/node/bin/$tool"
-            local link="$node_link_dir/$tool"
-            # Only create if missing or broken — never overwrite existing symlinks
-            # (e.g. user-managed nvm/fnm setup).
-            if [ ! -e "$link" ]; then
-                ln -sf "$target" "$link"
-            fi
-        done
-    fi
-
-    log_success "CLI installed to $wrapper"
-    log_info "Run: openaidy --help"
+    log_success "openaidy installed ($spec)"
 }
 
 # ============================================================================
-# Bootstrap Admin Token (PR1)
+# Bootstrap Admin Token
 # ============================================================================
 
 # Generate a 32-byte hex JWT secret. Persisted at $OPENAIDY_HOME/state/install.json
-# so subsequent installs reuse it (idempotency per CC-7).
+# so subsequent installs reuse it (idempotency).
 generate_jwt_secret() {
-    # Prefer openssl (always available on macOS / most Linux); fall back to /dev/urandom
     if command -v openssl >/dev/null 2>&1; then
         openssl rand -hex 32
     else
-        # Portable fallback: 32 random bytes → hex via od
         od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
     fi
 }
 
 load_jwt_secret() {
-    # If $OPENAIDY_HOME/state/install.json already exists, reuse the secret.
     local manifest="$OPENAIDY_HOME/state/install.json"
     if [ -f "$manifest" ]; then
-        # Extract wsTokenSecret via grep + sed (avoid jq dependency).
         local existing
         existing=$(grep -E '"wsTokenSecret"\s*:' "$manifest" | sed -E 's/.*"wsTokenSecret"\s*:\s*"([^"]+)".*/\1/')
         if [ -n "$existing" ]; then
@@ -691,11 +354,9 @@ load_jwt_secret() {
             return 0
         fi
     fi
-    # Otherwise generate a new one and persist it.
     mkdir -p "$OPENAIDY_HOME/state"
     local new_secret
     new_secret=$(generate_jwt_secret)
-    # Atomic write to avoid partial files on crash.
     local tmp_manifest="$OPENAIDY_HOME/state/install.json.tmp"
     cat > "$tmp_manifest" <<EOF
 {
@@ -709,9 +370,6 @@ EOF
 }
 
 run_init() {
-    # Run `openaidy init` and capture the token from stdout. Per PR1 R-4 the
-    # init command prints exactly one parseable line:
-    #   Bootstrap admin token: <jwt>
     log_info "Generating bootstrap admin token..."
     local init_output
     if ! init_output=$("$link_dir_global/openaidy" init 2>&1); then
@@ -733,19 +391,13 @@ run_init() {
 }
 
 run_start() {
-    # Run `openaidy start --server-only` and capture the output.
-    #
-    # --server-only: the server serves the already-built web bundle itself
-    # (apps/web/dist, resolved via the OPENAIDY_REPO fallback), so the whole
-    # UI is available on the server's port. We deliberately do NOT spawn the
-    # Vite dev server here — that's a development tool, redundant for an
-    # installed instance, and a flaky Vite start shouldn't fail the install.
+    # The packaged server serves the web UI itself on one port, so plain
+    # `openaidy start` needs no flags (no Vite dev server is spawned).
     log_info "Starting the server (this may take up to 30 seconds)..."
-    "$link_dir_global/openaidy" start --server-only 2>&1
+    "$link_dir_global/openaidy" start 2>&1
 }
 
-# Capture the wrapper path now so run_init can invoke it (create_cli_wrapper
-# hasn't run yet when main invokes run_init).
+# Capture the wrapper/link path now so run_init/run_start can invoke the bin.
 link_dir_global="$(get_node_link_dir)"
 
 # ============================================================================
@@ -759,27 +411,21 @@ main() {
 
     detect_os
     log_info "Detected: $OS / $DISTRO"
-    log_info "Install directory: $INSTALL_DIR"
+    log_info "Home directory: $INSTALL_DIR"
     echo ""
 
-    check_git
     check_node
-    check_pnpm
     check_ripgrep
-    resolve_install_ref
-    clone_or_update_repo
-    build_project
-    create_cli_wrapper
+    install_openaidy
 
-    # PR1: ensure JWT secret + generate bootstrap-admin token (idempotent).
+    # Ensure JWT secret + generate bootstrap-admin token (idempotent).
     export WS_TOKEN_SECRET
     WS_TOKEN_SECRET=$(load_jwt_secret)
     export OPENAIDY_HOME="$INSTALL_DIR"
     BOOTSTRAP_TOKEN=$(run_init)
 
-    # PR2: start the server and open the browser.
+    # Start the server and open the browser.
     echo ""
-    log_info "Starting the server..."
     START_URL=""
     if START_OUTPUT=$(run_start 2>&1); then
         # -oE (POSIX ERE), not -oP — BSD/macOS grep has no -P.
@@ -799,7 +445,7 @@ main() {
         echo "Server is running at: $START_URL"
         echo ""
 
-        # Auto-open browser (best-effort per NDQ-4)
+        # Auto-open browser (best-effort)
         case "$(uname -s)" in
             Linux*|WSL*)
                 if command -v xdg-open >/dev/null 2>&1; then
@@ -818,13 +464,20 @@ main() {
         echo ""
         echo "Use 'openaidy stop' to stop the server."
     else
-        echo "Run 'openaidy start --server-only' to bring the server online,"
+        echo "Run 'openaidy start' to bring the server online,"
         echo "then open http://localhost:3001 in your browser."
         echo ""
         echo "If it still doesn't start, check the log at:"
         echo "  $OPENAIDY_HOME/logs/server.log"
     fi
     echo ""
+
+    if [ "$(get_node_link_dir)" = "$HOME/.local/bin" ]; then
+        case ":$PATH:" in
+            *":$HOME/.local/bin:"*) ;;
+            *) echo "Note: add ~/.local/bin to your PATH to run 'openaidy' in new shells." ;;
+        esac
+    fi
 }
 
 main
