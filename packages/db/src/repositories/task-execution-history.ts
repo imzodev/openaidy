@@ -32,14 +32,14 @@ export class TaskExecutionHistoryRepository {
   }): Promise<schema.TaskExecutionHistoryRow> {
     // We bypass the typed Drizzle insert because the table is declared
     // with `pgTable` (Postgres-style types), but the actual driver in
-    // the dev SQLite DB is better-sqlite3. Two mismatches:
+    // the dev SQLite DB is node:sqlite. Two mismatches:
     //   1. `defaultNow()` would compile to `now()` in SQL, which
     //      SQLite doesn't have. `task_execution_history` is created
     //      via raw CREATE TABLE in client.ts with `TEXT NOT NULL
     //      DEFAULT CURRENT_TIMESTAMP` (so the SQL default works) but
     //      Drizzle still emits `now()` from the typed schema.
     //   2. `timestamp({ withTimezone: true })` columns try to bind
-    //      JS `Date` objects, but better-sqlite3 only accepts
+    //      JS `Date` objects, but node:sqlite only accepts
     //      numbers/strings/bigints/buffers/null. Other repos work
     //      around this by passing the value through a different path,
     //      but `create` here is the only place that does an INSERT

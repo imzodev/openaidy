@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
-import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import Database from './node-sqlite';
+import { drizzleNodeSqlite } from './drizzle-node-sqlite';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as accessTokenSchema from './schema/access-tokens';
@@ -631,7 +631,9 @@ export async function createDatabaseClient(
     initializeSqliteSchema(sqlite);
     runSqliteMigrations(sqlite);
 
-    const db = drizzleSqlite(sqlite, { schema }) as DatabaseClient;
+    const db = drizzleNodeSqlite(sqlite, {
+      schema,
+    }) as unknown as DatabaseClient;
     return {
       db,
       kind: 'sqlite',

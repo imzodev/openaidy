@@ -7,7 +7,7 @@ import type {
 } from '@openaidy/shared-types';
 
 /**
- * Helper to access raw better-sqlite3 instance from a Drizzle client.
+ * Helper to access the raw sqlite instance from a Drizzle client.
  */
 function getRawSqlite(db: DatabaseClient) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

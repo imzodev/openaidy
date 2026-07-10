@@ -29,7 +29,7 @@ BOLD='\033[1m'
 # installed. Honors an existing OPENAIDY_HOME; matches the CLI's default so a
 # later `openaidy` invocation without env finds the same home.
 OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.openaidy}"
-NODE_VERSION="22.12.0"
+NODE_VERSION="22.23.1"
 NPM_PKG="@openaidy/app"
 
 # Options
@@ -187,22 +187,44 @@ install_node() {
     NODE_PROVISIONED=true
 }
 
+# OpenAidy's SQLite layer uses Node's built-in `node:sqlite`, available without
+# a flag only on Node >= 22.13 (older Node lacks it or hides it behind
+# --experimental-sqlite). A too-old system Node is bypassed for a managed copy.
+node_is_adequate() {
+    command -v node >/dev/null 2>&1 || return 1
+    local v major minor
+    v="$(node --version 2>/dev/null | sed 's/^v//')"
+    major="${v%%.*}"
+    minor="$(echo "$v" | cut -d. -f2)"
+    [ -n "$major" ] || return 1
+    [ "$major" -ge 24 ] && return 0
+    [ "$major" -eq 22 ] && [ "$minor" -ge 13 ] && return 0
+    return 1
+}
+
 check_node() {
     log_info "Checking Node.js..."
 
-    if command -v node >/dev/null 2>&1; then
+    if node_is_adequate; then
         log_success "Node.js $(node --version) found"
         return 0
     fi
 
-    if [ -x "$INSTALL_DIR/node/bin/node" ]; then
-        export PATH="$INSTALL_DIR/node/bin:$PATH"
-        log_success "Node.js $(node --version) found (OpenAidy-managed)"
-        return 0
+    if command -v node >/dev/null 2>&1; then
+        log_warn "Node.js $(node --version) is too old (need >= 22.13 for node:sqlite) — installing a managed copy..."
     fi
 
-    log_info "Node.js not found — installing Node.js $NODE_VERSION LTS..."
+    if [ -x "$INSTALL_DIR/node/bin/node" ]; then
+        export PATH="$INSTALL_DIR/node/bin:$PATH"
+        if node_is_adequate; then
+            log_success "Node.js $(node --version) found (OpenAidy-managed)"
+            return 0
+        fi
+    fi
+
+    log_info "Installing Node.js $NODE_VERSION LTS..."
     install_node
+    export PATH="$INSTALL_DIR/node/bin:$PATH"
 }
 
 # ============================================================================
