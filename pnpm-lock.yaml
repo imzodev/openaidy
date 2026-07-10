@@ -17,6 +17,9 @@ importers:
       '@types/pg':
         specifier: ^8.18.0
         version: 8.18.0
+      esbuild:
+        specifier: 0.18.20
+        version: 0.18.20
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@1.21.7)

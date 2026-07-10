@@ -1,21 +1,18 @@
 name: Release
 
 # Cut a release by pushing a semver tag:
-#   git tag v0.1.0 && git push origin v0.1.0
-# This gates on the same checks as CI (lint + typecheck/build + test), then
-# publishes a GitHub Release with auto-generated notes. The installer's
-# default channel resolves to the newest release tag, so a green release here
-# is what `curl -fsSL https://openaidy.com/install.sh | bash` installs.
+#   git tag v0.2.0 && git push origin v0.2.0
+# Gates on the same checks as CI, publishes the prebuilt `openaidy` package to
+# npm, then publishes a GitHub Release. The installer runs `npm i -g openaidy`,
+# so a green publish here is what users install.
 on:
   push:
     tags:
       - 'v*.*.*'
-  # Manual re-run for an existing tag (e.g. if the first run failed after the
-  # gates but before publishing). Requires the tag to already exist.
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to release (e.g. v0.1.0)'
+        description: 'Existing tag to release (e.g. v0.2.0)'
         required: true
         type: string
 
@@ -48,9 +45,41 @@ jobs:
       - name: Test
         run: pnpm -r test
 
+  publish-npm:
+    name: Publish openaidy to npm
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          # Writes an .npmrc that authenticates `npm publish` via NODE_AUTH_TOKEN.
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+      - name: Build web bundle
+        run: pnpm --filter web build
+      - name: Build npm package
+        run: pnpm build:npm
+      - name: Publish (skip if this version is already on npm)
+        working-directory: build/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view "openaidy@$VER" version >/dev/null 2>&1; then
+            echo "openaidy@$VER already published — skipping."
+          else
+            npm publish --access public
+          fi
+
   release:
     name: Publish GitHub Release
-    needs: gate
+    needs: [gate, publish-npm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +97,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          # Idempotent: if a run already created the release, don't fail.
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — skipping."
             exit 0
