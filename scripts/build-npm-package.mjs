@@ -124,7 +124,10 @@ try {
 
 // ── package.json for the published package.
 const pkg = {
-  name: 'openaidy',
+  // Scoped under the @openaidy org: npm's typosquat filter blocks the unscoped
+  // `openaidy` (too close to `openai`). The `bin` name stays `openaidy`, so
+  // users still run `openaidy` regardless of the (scoped) install name.
+  name: '@openaidy/app',
   version: rootPkg.version,
   description: 'OpenAidy — self-hosted AI agent platform (prebuilt).',
   type: 'module',
@@ -132,12 +135,14 @@ const pkg = {
   files: ['dist', 'web', 'assets', 'README.md'],
   engines: { node: '>=22.12.0' },
   dependencies: deps,
+  // Scoped packages default to restricted; make it public.
+  publishConfig: { access: 'public' },
   license: rootPkg.license ?? 'UNLICENSED',
 };
 writeFileSync(resolve(out, 'package.json'), JSON.stringify(pkg, null, 2));
 writeFileSync(
   resolve(out, 'README.md'),
-  `# openaidy\n\nPrebuilt OpenAidy. Install and run:\n\n\`\`\`\nnpm install -g openaidy\nopenaidy start\n\`\`\`\n`,
+  `# @openaidy/app\n\nPrebuilt OpenAidy. Install and run:\n\n\`\`\`\nnpm install -g @openaidy/app\nopenaidy start\n\`\`\`\n`,
 );
 
 console.log(
