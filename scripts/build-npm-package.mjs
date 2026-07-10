@@ -134,6 +134,12 @@ const pkg = {
   bin: { openaidy: './dist/cli.mjs' },
   files: ['dist', 'web', 'assets', 'README.md'],
   engines: { node: '>=22.12.0' },
+  // Required for npm provenance (OIDC trusted publishing): must match the repo
+  // that builds/publishes the package.
+  repository: {
+    type: 'git',
+    url: 'git+https://github.com/imzodev/openaidy.git',
+  },
   dependencies: deps,
   // Scoped packages default to restricted; make it public.
   publishConfig: { access: 'public' },

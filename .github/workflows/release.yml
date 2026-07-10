@@ -58,13 +58,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+      # Node 24 ships a modern npm (>= 11.5.1, with sigstore) that supports OIDC
+      # trusted publishing + provenance. We do NOT `npm install -g npm@latest`:
+      # upgrading npm in-place corrupts its bundled deps, which is what caused
+      # provenance to fail with "Cannot find module 'sigstore'".
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
-      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
-      - name: Upgrade npm (OIDC trusted publishing)
-        run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - name: Build web bundle
         run: pnpm --filter web build
