@@ -46,11 +46,15 @@ jobs:
         run: pnpm -r test
 
   publish-npm:
-    name: Publish openaidy to npm
+    name: Publish @openaidy/app to npm
     needs: gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # OIDC trusted publishing: npm exchanges this short-lived GitHub identity
+      # for publish rights (no long-lived NPM_TOKEN). Requires a Trusted
+      # Publisher configured on the package pointing at this repo + workflow.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -58,8 +62,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          # Writes an .npmrc that authenticates `npm publish` via NODE_AUTH_TOKEN.
-          registry-url: 'https://registry.npmjs.org'
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
+      - name: Upgrade npm (OIDC trusted publishing)
+        run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - name: Build web bundle
         run: pnpm --filter web build
@@ -67,14 +72,13 @@ jobs:
         run: pnpm build:npm
       - name: Publish (skip if this version is already on npm)
         working-directory: build/npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          NAME=$(node -p "require('./package.json').name")
           VER=$(node -p "require('./package.json').version")
-          if npm view "openaidy@$VER" version >/dev/null 2>&1; then
-            echo "openaidy@$VER already published — skipping."
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "$NAME@$VER already published — skipping."
           else
-            npm publish --access public
+            npm publish
           fi
 
   release:
