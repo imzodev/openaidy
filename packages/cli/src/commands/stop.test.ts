@@ -56,10 +56,7 @@ describe('openaidy stop', () => {
     expect(result.output).toContain('stale');
   });
 
-  it('reports "not running" when OPENAIDY_HOME is not set', async () => {
-    delete process.env.OPENAIDY_HOME;
-    const result = await stopHandler([]);
-    expect(result.exitCode).toBe(0);
-    expect(result.output).toContain('not running');
-  });
+  // Note: OPENAIDY_HOME now defaults to ~/.openaidy when unset (so a global
+  // `openaidy stop` finds the running server), so there's no longer an
+  // "unset → not running" special case — the no-PID-file path above covers it.
 });

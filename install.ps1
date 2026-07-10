@@ -1,22 +1,22 @@
 ﻿# ============================================================================
 # OpenAidy Installer for Windows
 # ============================================================================
+# Installs OpenAidy from the prebuilt npm package (@openaidy/app). No git
+# clone, no source build — just Node + ripgrep, then `npm install -g`.
 #
 # Usage:
 #   iex (irm https://openaidy.com/install.ps1)
 #
 # Or download and run with options:
-#   .\install.ps1 -Branch feat/x -SkipBuild
+#   .\install.ps1 -Version 0.2.1
 #
 # ============================================================================
 
 param(
-    # Empty = auto: resolve the latest published release tag (falling back to
-    # 'main' when no release exists yet). Pass -Branch main for the dev edge,
-    # or -Branch v0.1.0 for a specific release.
-    [string]$Branch = "",
-    [string]$InstallDir = "$env:LOCALAPPDATA\openaidy",
-    [switch]$SkipBuild
+    # Specific @openaidy/app version to install; empty = latest.
+    [string]$Version = "",
+    # Tools directory (managed Node + ripgrep).
+    [string]$InstallDir = "$env:LOCALAPPDATA\openaidy"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +25,11 @@ $ProgressPreference = "SilentlyContinue"
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 } catch { }
+
+# Data root (config, state, credentials, logs). Matches the CLI's default
+# (os.homedir()/.openaidy) so a later `openaidy` invocation with no env finds
+# the same home.
+$script:DataHome = "$env:USERPROFILE\.openaidy"
 
 # ============================================================================
 # Helpers
@@ -38,84 +43,6 @@ function Log-Error   { param([string]$Message) Write-Host "[openaidy] ✗ $Messa
 function New-TempFile {
     $tmp = [System.IO.Path]::GetTempPath()
     return Join-Path $tmp "openaidy-install-$(Get-Random).tmp"
-}
-
-# Query the newest published release tag via the GitHub API. Returns the tag
-# (e.g. "v0.1.0"), or "main" when there's no release yet / the API is
-# unreachable — so a fresh repo with no releases still installs.
-function Resolve-DefaultRef {
-    try {
-        $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/imzodev/openaidy/releases/latest" `
-            -Headers @{ "User-Agent" = "OpenAidy-Installer" } -TimeoutSec 15
-        if ($rel.tag_name) { return $rel.tag_name }
-    } catch { }
-    return "main"
-}
-
-# ============================================================================
-# Git provisioning
-# ============================================================================
-
-function Install-Git {
-    Log-Info "Git not found — installing..."
-
-    # Try winget
-    $winget = Get-Command winget -ErrorAction SilentlyContinue
-    if ($winget) {
-        Log-Info "Installing Git via winget..."
-        winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements 2>$null
-        if (Get-Command git -ErrorAction SilentlyContinue) {
-            Log-Success "Git installed via winget"
-            return $true
-        }
-    }
-
-    # Try choco
-    $choco = Get-Command choco -ErrorAction SilentlyContinue
-    if ($choco) {
-        Log-Info "Installing Git via Chocolatey..."
-        choco install git -y 2>$null
-        if (Get-Command git -ErrorAction SilentlyContinue) {
-            Log-Success "Git installed via Chocolatey"
-            return $true
-        }
-    }
-
-    # Direct download as last resort
-    Log-Info "Downloading Portable Git..."
-    $url = "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/MinGit-2.47.0-64-bit.zip"
-    $zipPath = New-TempFile
-    $installPath = Join-Path $env:LOCALAPPDATA "Git"
-    $exePath = Join-Path $installPath "cmd\git.exe"
-
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $zipPath -UserAgent "OpenAidy/1.0" -TimeoutSec 60
-        Expand-Archive -Path $zipPath -DestinationPath $installPath -Force
-        Remove-Item $zipPath -ErrorAction SilentlyContinue
-
-        $gitBin = Join-Path $installPath "cmd"
-        $env:PATH = "$gitBin;$env:PATH"
-
-        if (Test-Path $exePath) {
-            Log-Success "Git installed to $installPath"
-            return $true
-        }
-    } catch {
-        Remove-Item $zipPath -ErrorAction SilentlyContinue
-    }
-
-    return $false
-}
-
-function Test-Git {
-    try {
-        $v = git --version 2>$null
-        if ($v) {
-            Log-Success "Git $($v.Split(' ')[2]) found"
-            return $true
-        }
-    } catch { }
-    return $false
 }
 
 # ============================================================================
@@ -155,7 +82,7 @@ function Install-Node {
             $ver = & "$nodeExe" --version 2>$null
             Log-Success "Node.js $ver installed to $nodePath"
 
-            # Add to user PATH
+            # Add to user PATH (npm global bins land in this dir too).
             $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
             $binPath = $nodePath
             if ($userPath -notlike "*$binPath*") {
@@ -186,80 +113,6 @@ function Test-Node {
 }
 
 # ============================================================================
-# pnpm provisioning
-# ============================================================================
-
-function Install-Pnpm {
-    Log-Info "Installing pnpm..."
-
-    $pnpmHome = Join-Path $InstallDir "pnpm"
-    $pnpmBin = Join-Path $pnpmHome "pnpm.exe"
-    $pnpmFallback = Join-Path $pnpmHome "bin\pnpm.exe"
-
-    if ((Test-Path $pnpmBin) -or (Test-Path $pnpmFallback)) {
-        $ver = & $pnpmBin --version 2>$null
-        Log-Success "pnpm $ver found"
-        $env:PNPM_HOME = $pnpmHome
-        $env:PATH = "$pnpmHome;$env:PATH"
-        return $true
-    }
-
-    try {
-        # Use npm to install pnpm globally
-        $env:PNPM_HOME = $pnpmHome
-        New-Item -ItemType Directory -Path $pnpmHome -Force | Out-Null
-
-        $npmExe = Join-Path (Split-Path (Get-Command node).Source) "npm.exe"
-        if (Test-Path $npmExe) {
-            $proc = Start-Process -FilePath $npmExe -ArgumentList "install","-g","pnpm" -PassThru -NoWindow -RedirectStandardOutput (New-TempFile) -RedirectStandardError (New-TempFile)
-            $proc.WaitForExit()
-
-            $pnpmCli = Join-Path $env:APPDATA "npm\pnpm.cmd"
-            if (Test-Path $pnpmCli) {
-                Copy-Item $pnpmCli $pnpmBin -Force
-                $ver = & $pnpmBin --version 2>$null
-                Log-Success "pnpm $ver installed"
-                return $true
-            }
-        }
-    } catch {
-        Log-Warn "pnpm install via npm failed"
-    }
-
-    # Direct install via pnpm installer script
-    try {
-        $installScript = Join-Path $pnpmHome "install.ps1"
-        New-Item -ItemType Directory -Path $pnpmHome -Force | Out-Null
-        Invoke-WebRequest -Uri "https://get.pnpm.io/install.ps1" -OutFile $installScript -UserAgent "OpenAidy/1.0" -TimeoutSec 30
-        $env:PNPM_HOME = $pnpmHome
-        $env:PATH = "$pnpmHome;$env:PATH"
-        Invoke-Expression "powershell -ExecutionPolicy Bypass -File $installScript"
-        Remove-Item $installScript -ErrorAction SilentlyContinue
-
-        if (Test-Path $pnpmBin) {
-            $ver = & $pnpmBin --version 2>$null
-            Log-Success "pnpm $ver installed"
-            return $true
-        }
-    } catch {
-        Log-Warn "pnpm direct install failed: $_"
-    }
-
-    return $false
-}
-
-function Test-Pnpm {
-    try {
-        $v = pnpm --version 2>$null
-        if ($v) {
-            Log-Success "pnpm $v found"
-            return $true
-        }
-    } catch { }
-    return $false
-}
-
-# ============================================================================
 # ripgrep provisioning
 # ============================================================================
 # Required by code_search / code_glob tools. Without it those tools fail at
@@ -268,7 +121,6 @@ function Test-Pnpm {
 function Install-Ripgrep {
     Log-Info "Installing ripgrep..."
 
-    # Try winget first
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         Log-Info "Installing ripgrep via winget..."
@@ -279,7 +131,6 @@ function Install-Ripgrep {
         }
     }
 
-    # Then Chocolatey
     $choco = Get-Command choco -ErrorAction SilentlyContinue
     if ($choco) {
         Log-Info "Installing ripgrep via Chocolatey..."
@@ -290,7 +141,6 @@ function Install-Ripgrep {
         }
     }
 
-    # Then Scoop
     $scoop = Get-Command scoop -ErrorAction SilentlyContinue
     if ($scoop) {
         Log-Info "Installing ripgrep via Scoop..."
@@ -318,8 +168,6 @@ function Install-Ripgrep {
             New-Item -ItemType Directory -Path $binDir -Force | Out-Null
         }
 
-        # The zip ships as ripgrep-<ver>-<arch>/rg.exe — expand into a
-        # throwaway dir then move the binary into $binDir.
         $expandDir = Join-Path ([System.IO.Path]::GetTempPath()) ("openaidy-rg-" + [Guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Path $expandDir -Force | Out-Null
         Expand-Archive -Path $zipPath -DestinationPath $expandDir -Force
@@ -330,7 +178,6 @@ function Install-Ripgrep {
             Remove-Item -Path $expandDir -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path $zipPath -ErrorAction SilentlyContinue
 
-            # Surface the OpenAidy-managed binary on PATH for subsequent steps.
             $env:PATH = "$binDir;$env:PATH"
             Log-Success "ripgrep installed to $rgExe"
             return $true
@@ -347,7 +194,6 @@ function Install-Ripgrep {
 }
 
 function Test-Ripgrep {
-    # Honor a previously-installed OpenAidy-managed binary.
     $binDir = Join-Path $InstallDir "bin"
     $rgExe = Join-Path $binDir "rg.exe"
     if (Test-Path $rgExe) {
@@ -371,123 +217,44 @@ function Test-Ripgrep {
 }
 
 # ============================================================================
-# Repository
+# OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
-function Clone-Repo {
-    param([string]$Branch)
-
-    Log-Info "Cloning repository (branch: $Branch)..."
-
-    if (Test-Path (Join-Path $InstallDir ".git")) {
-        Log-Info "Repository exists — updating..."
-        Set-Location $InstallDir
-        git fetch origin $Branch 2>&1 | Out-Null
-        git checkout $Branch 2>&1 | Out-Null
-        git reset --hard "origin/$Branch" 2>&1 | Out-Null
-    } else {
-        $parent = Split-Path $InstallDir
-        if ($parent -and -not (Test-Path $parent)) {
-            New-Item -ItemType Directory -Path $parent -Force | Out-Null
-        }
-
-        $repoUrl = "https://github.com/imzodev/openaidy.git"
-        Log-Info "Cloning from $repoUrl..."
-        git clone --branch $Branch --depth 1 --quiet $repoUrl $InstallDir 2>&1 | Out-Null
+function Install-OpenAidy {
+    $spec = "@openaidy/app"
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $spec = "@openaidy/app@" + ($Version -replace '^v', '')
     }
+    Log-Info "Installing $spec from npm..."
 
-    if (Test-Path (Join-Path $InstallDir "package.json")) {
-        Log-Success "Repository ready at $InstallDir"
-        return $true
-    } else {
-        Log-Error "Repository setup failed"
-        return $false
-    }
-}
-
-# ============================================================================
-# Build
-# ============================================================================
-
-function Build-Project {
-    if ($SkipBuild) {
-        Log-Info "Skipping build (-SkipBuild)"
-        return $true
-    }
-
-    Set-Location $InstallDir
-
-    $pnpmHome = Join-Path $InstallDir "pnpm"
-    $env:PNPM_HOME = $pnpmHome
-    $env:PATH = "$pnpmHome;$env:PATH"
-
-    Log-Info "Installing dependencies..."
-    pnpm install --frozen-lockfile
+    npm install -g $spec
     if ($LASTEXITCODE -ne 0) {
-        Log-Info "Frozen lockfile failed — retrying with regular install..."
-        pnpm install
-        if ($LASTEXITCODE -ne 0) {
-            Log-Error "Dependency installation failed"
-            exit 1
-        }
-    }
-
-    Log-Info "Building project..."
-    pnpm build
-    if ($LASTEXITCODE -ne 0) {
-        Log-Error "Build failed"
+        Log-Error "Failed to install $spec"
         exit 1
     }
 
-    Log-Success "Build complete"
-    return $true
+    # Locate the installed `openaidy` bin (npm places .cmd shims in the global
+    # prefix root on Windows) and make sure that dir is on the user PATH.
+    $npmPrefix = ""
+    try { $npmPrefix = (& npm prefix -g).Trim() } catch { }
+    $cmd = ""
+    if ($npmPrefix -and (Test-Path (Join-Path $npmPrefix "openaidy.cmd"))) {
+        $cmd = Join-Path $npmPrefix "openaidy.cmd"
+        $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if ($userPath -notlike "*$npmPrefix*") {
+            [Environment]::SetEnvironmentVariable("Path", "$npmPrefix;$userPath", "User")
+        }
+        $env:PATH = "$npmPrefix;$env:PATH"
+    }
+    $script:OpenAidyCmd = $cmd
+    Log-Success "openaidy installed ($spec)"
 }
 
 # ============================================================================
-# CLI
+# Bootstrap Admin Token
 # ============================================================================
 
-function Install-Cli {
-    $binDir = Join-Path $env:LOCALAPPDATA "openaidy\bin"
-    if (-not (Test-Path $binDir)) {
-        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
-    }
-
-    $cliPath = Join-Path $binDir "openaidy.cmd"
-
-    # OPENAIDY_HOME = data root (tokens, PID, logs) in user's home dir.
-    # OPENAIDY_REPO = code root (repo clone) used by `start` to resolve server entry.
-    $dataDir = "$env:USERPROFILE\.openaidy"
-    $cliContent = "@echo off`r`n" +
-        "set OPENAIDY_HOME=$dataDir`r`n" +
-        "set OPENAIDY_REPO=$InstallDir`r`n" +
-        "set PATH=%OPENAIDY_REPO%\bin;%OPENAIDY_REPO%\node;%OPENAIDY_REPO%\pnpm;%PATH%`r`n" +
-        "cd /d `"%OPENAIDY_REPO%`"`r`n" +
-        "if exist `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" (`r`n" +
-        "  node --import tsx `"%OPENAIDY_REPO%\packages\cli\bin\openaidy.ts`" %*`r`n" +
-        ") else (`r`n" +
-        "  echo OpenAidy not found at %OPENAIDY_REPO%`r`n" +
-        "  exit /b 1`r`n" +
-        ")"
-
-    [System.IO.File]::WriteAllText($cliPath, $cliContent)
-
-    # Add to user PATH
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*$binDir*") {
-        [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
-    }
-
-    Log-Success "CLI installed to $cliPath"
-    Log-Info "Run: openaidy --help"
-}
-
-# ============================================================================
-# Bootstrap Admin Token (PR1)
-# ============================================================================
-
-# Generate a 32-byte hex JWT secret. Persisted at $env:LOCALAPPDATA\openaidy\state\install.json
-# so subsequent installs reuse it (idempotency per CC-7).
+# 32-byte hex JWT secret, persisted under the data home so re-installs reuse it.
 function New-JwtSecret {
     $bytes = New-Object byte[] 32
     $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
@@ -500,7 +267,7 @@ function New-JwtSecret {
 }
 
 function Get-JwtSecret {
-    $stateDir = Join-Path $InstallDir "state"
+    $stateDir = Join-Path $script:DataHome "state"
     $manifestPath = Join-Path $stateDir "install.json"
 
     if (Test-Path $manifestPath) {
@@ -514,7 +281,6 @@ function Get-JwtSecret {
         }
     }
 
-    # Generate and persist
     if (-not (Test-Path $stateDir)) {
         New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
     }
@@ -524,7 +290,6 @@ function Get-JwtSecret {
         generatedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     }
     $obj | ConvertTo-Json | Set-Content -Path $manifestPath -Encoding UTF8
-    # Tighten ACL on the manifest (Windows best-effort)
     try {
         icacls $manifestPath /inheritance:r /grant:r "$env:USERNAME:(R,W)" 2>$null | Out-Null
     } catch { }
@@ -534,21 +299,17 @@ function Get-JwtSecret {
 
 function Invoke-Init {
     Log-Info "Generating bootstrap admin token..."
-    $binDir = Join-Path $env:LOCALAPPDATA "openaidy\bin"
-    $cliPath = Join-Path $binDir "openaidy.cmd"
 
-    # Call the wrapper. Output capture requires cmd's stdout, so use Process.
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $cliPath
+    $psi.FileName = $script:OpenAidyCmd
     $psi.Arguments = "init"
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
-    $psi.EnvironmentVariables["OPENAIDY_HOME"] = "$env:USERPROFILE\.openaidy"
-    $psi.EnvironmentVariables["OPENAIDY_REPO"] = $InstallDir
+    $psi.EnvironmentVariables["OPENAIDY_HOME"] = $script:DataHome
     $psi.EnvironmentVariables["WS_TOKEN_SECRET"] = $script:JwtSecret
-    $psi.EnvironmentVariables["PATH"] = "$InstallDir\node;$InstallDir\pnpm;$env:PATH"
+    $psi.EnvironmentVariables["PATH"] = "$InstallDir\bin;$InstallDir\node;$env:PATH"
 
     $proc = [System.Diagnostics.Process]::Start($psi)
     $stdout = $proc.StandardOutput.ReadToEnd()
@@ -561,7 +322,6 @@ function Invoke-Init {
         exit 1
     }
 
-    # Parse `Bootstrap admin token: <jwt>` from stdout
     $match = [regex]::Match($stdout, '(?m)^Bootstrap admin token:\s+(.+?)\s*$')
     if (-not $match.Success) {
         Log-Error "openaidy init succeeded but no token line was printed"
@@ -579,27 +339,9 @@ Write-Host ""
 Write-Host "OpenAidy Installer" -ForegroundColor White
 Write-Host ""
 
-Log-Info "Install directory: $InstallDir"
-if ([string]::IsNullOrWhiteSpace($Branch)) {
-    Log-Info "Resolving latest release..."
-    $Branch = Resolve-DefaultRef
-    if ($Branch -eq "main") {
-        Log-Warn "No published release found — installing from 'main' (development edge)."
-    } else {
-        Log-Success "Latest release: $Branch"
-    }
-} else {
-    Log-Info "Installing ref: $Branch (explicit)"
-}
+Log-Info "Tools directory: $InstallDir"
+Log-Info "Home directory:  $script:DataHome"
 Write-Host ""
-
-# Git
-if (-not (Test-Git)) {
-    if (-not (Install-Git)) {
-        Log-Error "Could not install Git. Install Git manually from https://git-scm.com"
-        exit 1
-    }
-}
 
 # Node
 if (-not (Test-Node)) {
@@ -609,57 +351,40 @@ if (-not (Test-Node)) {
     }
 }
 
-# pnpm
-if (-not (Test-Pnpm)) {
-    Install-Pnpm
-}
-
 # ripgrep
 if (-not (Test-Ripgrep)) {
     exit 1
 }
 
-# Repo
-if (-not (Clone-Repo -Branch $Branch)) {
+# OpenAidy CLI (prebuilt package)
+Install-OpenAidy
+if ([string]::IsNullOrWhiteSpace($script:OpenAidyCmd)) {
+    Log-Error "openaidy was installed but its command could not be located on PATH."
+    Log-Error "Open a new terminal and run 'openaidy start'."
     exit 1
 }
 
-# Build
-if (-not (Build-Project)) {
-    Log-Error "Build failed"
-    exit 1
-}
-
-# CLI
-Install-Cli
-
-# PR1: ensure JWT secret + generate bootstrap-admin token (idempotent).
+# Ensure JWT secret + generate bootstrap-admin token (idempotent).
 $script:JwtSecret = Get-JwtSecret
-$env:OPENAIDY_HOME = "$env:USERPROFILE\.openaidy"
-$env:OPENAIDY_REPO = $InstallDir
+$env:OPENAIDY_HOME = $script:DataHome
 $env:WS_TOKEN_SECRET = $script:JwtSecret
 $BootstrapToken = Invoke-Init
 
-# PR2: start the server and open the browser.
+# Start the server and open the browser. The packaged server serves the web UI
+# itself on one port, so plain `openaidy start` needs no flags (no Vite).
 #
-# --server-only: the server serves the already-built web bundle itself
-# (apps/web/dist, resolved via the OPENAIDY_REPO fallback), so the whole UI is
-# available on the server's port. We deliberately do NOT spawn the Vite dev
-# server — it's a development tool, redundant for an installed instance, and a
-# flaky Vite start shouldn't fail the install.
+# We must NOT use `2>&1`: under $ErrorActionPreference='Stop', PowerShell 5.1
+# turns any stderr line from the native command into a terminating
+# NativeCommandError and aborts the installer before we can read the exit code.
+# Let stderr flow to the console, and wrap defensively so a flaky start still
+# falls through to the "did not start" guidance instead of crashing.
 Write-Host ""
 Log-Info "Starting the server (this may take up to 30 seconds)..."
-# Capture stdout only (the "Server running on http://..." line lives there).
-# We must NOT use `2>&1`: under $ErrorActionPreference='Stop', PowerShell 5.1
-# turns any stderr line from the native command (e.g. a Node
-# `ExperimentalWarning` from `node --import tsx`) into a terminating
-# NativeCommandError and aborts the installer before we can read the exit
-# code. Let stderr flow to the console, and wrap defensively so a flaky start
-# still falls through to the "did not start" guidance instead of crashing.
 $StartOutput = ""
 $StartExit = 1
 try {
-    $StartOutput = & "$env:LOCALAPPDATA\openaidy\bin\openaidy.cmd" start --server-only
+    $env:OPENAIDY_HOME = $script:DataHome
+    $StartOutput = & $script:OpenAidyCmd start
     $StartExit = $LASTEXITCODE
 } catch {
     $StartExit = 1
@@ -682,7 +407,6 @@ Write-Host ""
 if ($StartUrl) {
     Write-Host "Server is running at: $StartUrl"
     Write-Host ""
-    # Auto-open browser (best-effort per NDQ-4)
     try {
         Start-Process $StartUrl
     } catch {
@@ -691,10 +415,10 @@ if ($StartUrl) {
     Write-Host ""
     Write-Host "Use 'openaidy stop' to stop the server."
 } else {
-    Write-Host "Run 'openaidy start --server-only' to bring the server online,"
+    Write-Host "Open a new terminal and run 'openaidy start' to bring the server online,"
     Write-Host "then open http://localhost:3001 in your browser."
     Write-Host ""
     Write-Host "If it still doesn't start, check the log at:"
-    Write-Host "  $env:USERPROFILE\.openaidy\logs\server.log"
+    Write-Host "  $script:DataHome\logs\server.log"
 }
 Write-Host ""

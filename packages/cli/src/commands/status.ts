@@ -18,6 +18,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { homedir } from 'node:os';
 import type { CommandResult } from '../types.js';
 import {
   isProcessAlive,
@@ -84,7 +85,7 @@ export async function statusHandler(
   }
 
   const env = envOverride ?? process.env;
-  const home = env.OPENAIDY_HOME ?? process.cwd();
+  const home = env.OPENAIDY_HOME ?? resolve(homedir(), '.openaidy');
   const pidPath = resolve(home, 'state', 'server.pid');
   const webPidPath = resolve(home, 'state', 'web.pid');
 

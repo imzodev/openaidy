@@ -27,6 +27,7 @@ import { resolve, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
 import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
@@ -194,15 +195,10 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  // Resolve OPENAIDY_HOME
-  const openaidyHome = process.env.OPENAIDY_HOME;
-  if (!openaidyHome) {
-    return {
-      exitCode: 1,
-      output:
-        'Error: OPENAIDY_HOME is not set. Run from the install directory or set OPENAIDY_HOME.',
-    };
-  }
+  // Resolve OPENAIDY_HOME — default to ~/.openaidy so a globally-installed
+  // `openaidy` (npm i -g @openaidy/app) works with no env setup.
+  const openaidyHome =
+    process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
 
   // Packaged-install detection: the npm build ships the bundled server next to
   // this CLI (both in <pkg>/dist). In that mode we run the bundled server with

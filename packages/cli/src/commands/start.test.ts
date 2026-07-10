@@ -40,12 +40,19 @@ describe('openaidy start', () => {
     expect(result.output).toContain('Usage:');
   });
 
-  it('exits 1 when OPENAIDY_HOME is not set', async () => {
+  it('defaults OPENAIDY_HOME when unset (no longer requires it)', async () => {
+    // A globally-installed `openaidy` has no OPENAIDY_HOME; it should default to
+    // ~/.openaidy and proceed. With OPENAIDY_REPO pointed at an empty dir (so
+    // the test doesn't depend on ~/.openaidy contents), it gets past home
+    // resolution and fails later on the missing server entry.
     delete process.env.OPENAIDY_HOME;
-    delete process.env.OPENAIDY_REPO;
+    const noServer = join(tmpdir(), `openaidy-start-nohome-${randomUUID()}`);
+    await mkdir(noServer, { recursive: true });
+    process.env.OPENAIDY_REPO = noServer;
     const result = await startHandler([]);
+    delete process.env.OPENAIDY_REPO;
     expect(result.exitCode).toBe(1);
-    expect(result.output).toContain('OPENAIDY_HOME');
+    expect(result.output).toContain('not found');
   });
 
   it('exits 1 when server entry is missing', async () => {

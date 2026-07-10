@@ -17,6 +17,7 @@
 import { execFile } from 'node:child_process';
 import { unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { homedir } from 'node:os';
 import type { CommandResult } from '../types.js';
 import {
   readPidFile,
@@ -114,10 +115,10 @@ export async function stopHandler(args: string[]): Promise<CommandResult> {
   // --server-only: stop only the server, leave the web frontend running
   const serverOnly = args.includes('--server-only');
 
-  const openaidyHome = process.env.OPENAIDY_HOME;
-  if (!openaidyHome) {
-    return { exitCode: 0, output: 'Server is not running.' };
-  }
+  // Default to ~/.openaidy so a globally-installed `openaidy` finds the running
+  // server's PID file without any env setup.
+  const openaidyHome =
+    process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
 
   const lines: string[] = [];
   let hadError = false;
