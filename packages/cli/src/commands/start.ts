@@ -323,19 +323,22 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     childEnv['OPENAIDY_SDK_PATH'] = resolve(pkgRoot, 'assets/openaidy-sdk.js');
     childEnv['OPENAIDY_DRIZZLE_DIR'] = resolve(pkgRoot, 'assets/drizzle');
   }
+  // Hand the log file's descriptor directly to the detached child so it writes
+  // its own stdout/stderr to the file. We must NOT pipe the child's output
+  // through this CLI process: the CLI exits right after the health check, which
+  // would close the read end of those pipes and kill the (now parentless)
+  // server with EPIPE on its next log write. Owning the fd makes the server
+  // fully independent of the CLI's lifetime.
+  const fs = await import('node:fs');
+  const logFd = fs.openSync(logFile, 'a');
   const child = spawn(nodeBin, runtimeArgs, {
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', logFd, logFd],
     shell: process.platform === 'win32',
     env: childEnv,
   });
-
-  // Capture stdout/stderr to log file
-  const logStream = await import('node:fs').then((fs) =>
-    fs.createWriteStream(logFile, { flags: 'a' }),
-  );
-  if (child.stdout) child.stdout.pipe(logStream);
-  if (child.stderr) child.stderr.pipe(logStream);
+  // The child inherited its own reference to the fd; release ours.
+  fs.closeSync(logFd);
 
   // Write PID file
   const rec = {
