@@ -650,18 +650,18 @@ export async function createDatabaseClient(
 
   const pool = new Pool({ connectionString: config.connectionString });
 
+  // OPENAIDY_DRIZZLE_DIR lets a packaged (bundled) install point at the SQL
+  // migrations shipped in the package; dev/source falls back to the sibling
+  // `drizzle/` dir resolved from this module's location.
+  const drizzleDir = process.env['OPENAIDY_DRIZZLE_DIR']
+    ? resolve(process.env['OPENAIDY_DRIZZLE_DIR'])
+    : resolve(fileURLToPath(import.meta.url), '../../drizzle');
   const migrationSql = readFileSync(
-    resolve(
-      fileURLToPath(import.meta.url),
-      '../../drizzle/0001_initial_schema.sql',
-    ),
+    resolve(drizzleDir, '0001_initial_schema.sql'),
     'utf-8',
   );
   const runningStatusMigrationSql = readFileSync(
-    resolve(
-      fileURLToPath(import.meta.url),
-      '../../drizzle/0010_add_running_status.sql',
-    ),
+    resolve(drizzleDir, '0010_add_running_status.sql'),
     'utf-8',
   );
   const client = await pool.connect();

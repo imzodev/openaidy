@@ -388,7 +388,11 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     // SDK is shared across addons, so the token need not be addon-bound.
     if (!requireAssetToken(request, reply)) return reply;
 
-    const sdkPath = path.join(__dirname, '../sdk/openaidy-sdk.js');
+    // OPENAIDY_SDK_PATH lets a packaged (bundled) install point at the SDK
+    // shipped in the package; dev/source falls back to the co-located file.
+    const sdkPath =
+      process.env['OPENAIDY_SDK_PATH'] ??
+      path.join(__dirname, '../sdk/openaidy-sdk.js');
     if (!fs.existsSync(sdkPath)) {
       return reply.code(404).send({ error: 'SDK not found' });
     }

@@ -23,8 +23,10 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { request } from 'node:http';
 import type { CommandResult } from '../types.js';
 import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
@@ -202,23 +204,38 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     };
   }
 
-  // Resolve server entry point (source .ts — tsx handles ESM resolution).
-  // OPENAIDY_REPO points at the cloned repo (code root). When unset — e.g. an
-  // older Windows wrapper that only exported OPENAIDY_HOME — fall back to
-  // OPENAIDY_HOME so existing installs keep working.
+  // Packaged-install detection: the npm build ships the bundled server next to
+  // this CLI (both in <pkg>/dist). In that mode we run the bundled server with
+  // plain node — no repo, no tsx — and point it at assets shipped in the
+  // package. Otherwise (dev / from-source install) run the TS entry via tsx.
+  const cliDir = dirname(fileURLToPath(import.meta.url));
+  const packagedServerEntry = resolve(cliDir, 'server.mjs');
+  const packaged = existsSync(packagedServerEntry);
+  const pkgRoot = resolve(cliDir, '..');
+  // OPENAIDY_REPO points at the cloned repo (code root) for from-source
+  // installs. When unset, fall back to OPENAIDY_HOME so older installs keep
+  // working. Unused in packaged mode.
   const repoRoot = process.env.OPENAIDY_REPO ?? openaidyHome;
-  const serverEntry = resolve(repoRoot, 'apps/server/src/server.ts');
-  try {
-    await import('node:fs/promises').then((fs) => fs.access(serverEntry));
-  } catch {
-    return {
-      exitCode: 1,
-      output: `Error: Server entry not found at ${serverEntry}. Has the repo been cloned and built?`,
-    };
+
+  let serverEntry: string;
+  let runtimeArgs: string[];
+  if (packaged) {
+    serverEntry = packagedServerEntry;
+    runtimeArgs = [serverEntry];
+  } else {
+    serverEntry = resolve(repoRoot, 'apps/server/src/server.ts');
+    try {
+      await import('node:fs/promises').then((fs) => fs.access(serverEntry));
+    } catch {
+      return {
+        exitCode: 1,
+        output: `Error: Server entry not found at ${serverEntry}. Has the repo been cloned and built?`,
+      };
+    }
+    // node --import tsx enables ESM + extensionless resolution for the TS entry.
+    runtimeArgs = ['--import', 'tsx', serverEntry];
   }
 
-  // Use node --import tsx to enable ESM extensionless resolution
-  // This is more reliable cross-platform than spawning tsx directly
   const nodeBin = process.execPath;
 
   // Resolve the listen port. CLI flag wins, then env, then default. We
@@ -250,7 +267,10 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   // Build synchronously so a failure aborts startup with a clear error
   // before we leave a half-running server behind.
   let webDistPath: string | undefined;
-  if (integrated) {
+  if (packaged) {
+    // The packaged server serves the SPA shipped alongside it in the package.
+    webDistPath = resolve(pkgRoot, 'web');
+  } else if (integrated) {
     webDistPath = resolve(repoRoot, 'apps', 'web', 'dist');
     const buildResult = spawnSync('pnpm', ['--filter', 'web', 'build'], {
       cwd: repoRoot,
@@ -297,7 +317,17 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   if (webDistPath) {
     childEnv['OPENAIDY_WEB_DIST'] = webDistPath;
   }
-  const child = spawn(nodeBin, ['--import', 'tsx', serverEntry], {
+  if (packaged) {
+    // Point the bundled server at the assets shipped in the package (the
+    // import.meta.url-relative defaults don't apply once bundled).
+    childEnv['APP_CONFIG_TEMPLATE_PATH'] = resolve(
+      pkgRoot,
+      'assets/openaidy.template.json',
+    );
+    childEnv['OPENAIDY_SDK_PATH'] = resolve(pkgRoot, 'assets/openaidy-sdk.js');
+    childEnv['OPENAIDY_DRIZZLE_DIR'] = resolve(pkgRoot, 'assets/drizzle');
+  }
+  const child = spawn(nodeBin, runtimeArgs, {
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
@@ -354,7 +384,9 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   // there's no separate Vite process to start. Otherwise (the default),
   // spawn a Vite dev server unless --server-only was passed.
 
-  if (integrated) {
+  // Packaged and --integrated both serve the SPA from the server itself on one
+  // port, so there's no Vite process to spawn.
+  if (integrated || packaged) {
     return {
       exitCode: 0,
       output: [
