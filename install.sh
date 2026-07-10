@@ -99,10 +99,12 @@ detect_os() {
     fi
 }
 
-log_info()    { echo -e "${BLUE}[openaidy]${NC} $*"; }
-log_success() { echo -e "${GREEN}[openaidy]${NC} ✓ $*"; }
-log_warn()    { echo -e "${YELLOW}[openaidy]${NC} ⚠ $*"; }
-log_error()   { echo -e "${RED}[openaidy]${NC} ✗ $*"; }
+# Logs go to stderr so they never pollute a `$(...)` capture of a function's
+# stdout (e.g. run_init returns the token, load_jwt_secret returns the secret).
+log_info()    { echo -e "${BLUE}[openaidy]${NC} $*" >&2; }
+log_success() { echo -e "${GREEN}[openaidy]${NC} ✓ $*" >&2; }
+log_warn()    { echo -e "${YELLOW}[openaidy]${NC} ⚠ $*" >&2; }
+log_error()   { echo -e "${RED}[openaidy]${NC} ✗ $*" >&2; }
 
 # ============================================================================
 # Node.js Provisioning
