@@ -521,22 +521,35 @@ resolve_install_ref() {
 clone_or_update_repo() {
     log_info "Preparing repository (ref: $BRANCH)..."
 
+    # Non-interactive SSH: auto-accept an unknown host key and never prompt —
+    # this runs under `curl | bash`, where an interactive host-key prompt would
+    # hang or read the wrong stdin. Harmless when cloning over HTTPS.
+    export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+
     if [ -d "$INSTALL_DIR/.git" ] && git -C "$INSTALL_DIR" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
-        log_info "Repository already exists — updating..."
+        log_info "Repository already exists — updating to $BRANCH..."
         cd "$INSTALL_DIR"
-        git fetch origin "$BRANCH" 2>/dev/null || true
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-            git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH" 2>/dev/null
-            git reset --hard "origin/$BRANCH" 2>/dev/null || git reset --hard
+        # Fetch the requested ref (branch OR tag). FETCH_HEAD then points at it
+        # regardless of kind, so a single hard reset pins both cases — the old
+        # `--heads` check skipped tags entirely and left re-installs stale.
+        if git fetch --tags --force origin "$BRANCH" 2>/dev/null; then
+            git checkout -f "$BRANCH" 2>/dev/null || git checkout -f FETCH_HEAD 2>/dev/null || true
+            git reset --hard FETCH_HEAD 2>/dev/null || true
+        else
+            log_warn "Could not fetch '$BRANCH'; keeping the existing checkout."
         fi
     else
         log_info "Cloning repository..."
         mkdir -p "$(dirname "$INSTALL_DIR")"
 
+        # Probe reachability with a real ref (HEAD). Do NOT combine `--heads`
+        # with `HEAD`: `--heads` restricts to refs/heads/*, which `HEAD` never
+        # matches, so `--exit-code` reports "no refs" (exit 2) even when the
+        # remote is perfectly reachable — which wrongly fell through to SSH.
         local repo_url="$REPO_URL_HTTPS"
-        if ! git ls-remote --exit-code --heads "$repo_url" HEAD >/dev/null 2>&1; then
+        if ! git ls-remote --exit-code "$repo_url" HEAD >/dev/null 2>&1; then
             log_warn "HTTPS unreachable, trying SSH..."
-            if git ls-remote --exit-code --heads "$REPO_URL_SSH" HEAD >/dev/null 2>&1; then
+            if git ls-remote --exit-code "$REPO_URL_SSH" HEAD >/dev/null 2>&1; then
                 repo_url="$REPO_URL_SSH"
                 log_info "Using SSH"
             else
@@ -549,14 +562,15 @@ clone_or_update_repo() {
         fi
 
         rm -rf "$INSTALL_DIR"
+        # --branch accepts a branch OR a tag; --depth 1 keeps it shallow.
         if ! git clone --branch "$BRANCH" --depth 1 "$repo_url" "$INSTALL_DIR" 2>&1; then
-            log_error "Failed to clone repository"
+            log_error "Failed to clone repository (ref: $BRANCH)"
             log_info "Check your network connection and try again"
             exit 1
         fi
     fi
 
-    log_success "Repository ready at $INSTALL_DIR"
+    log_success "Repository ready at $INSTALL_DIR ($BRANCH)"
 }
 
 # ============================================================================
