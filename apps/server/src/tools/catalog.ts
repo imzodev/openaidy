@@ -208,7 +208,8 @@ export const addonCreateMeta: ToolMeta = {
   category: 'Addons',
   description:
     'Scaffold a new OpenAidy addon, register it in the database, and enable it. ' +
-    'The addon appears in the sidebar immediately — no restart needed.',
+    'The addon appears in the sidebar immediately — no restart needed. ' +
+    'This is the ONLY way to create an addon — never use workspace_write, code_edit, or exec_run to scaffold addon files (addons live in a separate directory the loader will not see otherwise).',
 };
 
 export const addonUpdateMeta: ToolMeta = {
@@ -217,7 +218,8 @@ export const addonUpdateMeta: ToolMeta = {
   description:
     'Modify an existing OpenAidy addon: overwrite/add/delete its UI files and/or ' +
     'change manifest fields (name, description, version, permissions, externalDomains). ' +
-    'Keeps the on-disk addon.json and the database record in sync.',
+    'Keeps the on-disk addon.json and the database record in sync. ' +
+    'This is the ONLY way to update an addon — never use workspace_write, code_edit, or exec_run to patch addon files (the loader will not see changes made outside this tool).',
 };
 
 export const addonListQueriesMeta: ToolMeta = {
