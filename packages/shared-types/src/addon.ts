@@ -137,6 +137,22 @@ export const AddonOpenAidySchema = z.object({
 export type AddonOpenAidy = z.infer<typeof AddonOpenAidySchema>;
 
 /**
+ * Addon storage block — declares the addon's own per-addon SQLite storage.
+ *
+ * `migrations` is an ordered list of DDL/DML statements the host applies once,
+ * by index, the first time the addon's DB is opened (and again for any newly
+ * added entries after an upgrade). Declaring the schema here — rather than
+ * having the UI create tables on first load — means the tables exist even when
+ * no addon UI has run (e.g. an agent writing to the store headless). Each entry
+ * must be plain SQL without its own BEGIN/COMMIT; `ATTACH`/`DETACH` are rejected.
+ */
+export const AddonStorageConfigSchema = z.object({
+  migrations: z.array(z.string().min(1).max(20_000)).max(200).optional(),
+});
+
+export type AddonStorageConfig = z.infer<typeof AddonStorageConfigSchema>;
+
+/**
  * Main addon manifest structure
  */
 export const AddonManifestSchema = z.object({
@@ -167,6 +183,7 @@ export const AddonManifestSchema = z.object({
   ui: AddonUIConfigSchema.optional(),
   agents: z.array(AddonAgentReferenceSchema).optional(),
   config: AddonConfigBlockSchema.optional(),
+  storage: AddonStorageConfigSchema.optional(),
   dependencies: z.record(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
   /**
@@ -387,6 +404,7 @@ export const PERMISSION_RESOURCES = [
   'mcp',
   'workspace',
   'logs',
+  'storage',
 ] as const;
 
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];

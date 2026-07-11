@@ -36,6 +36,7 @@ import { logRoutes } from './routes/logs';
 import { createMcpRoutesPlugin } from './routes/mcp';
 import { addonRoutes } from './routes/addons';
 import { addonProxyRoutes } from './addons/proxy-routes';
+import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
@@ -236,6 +237,14 @@ export async function buildApp() {
         openAidyVersion,
       })
     : undefined;
+
+  // Per-addon SQLite storage engine (lazy connections; shared by the addon
+  // proxy routes and the uninstall cleanup path).
+  const addonStorageEngine = new AddonStorageEngine(
+    path.join(env.OPENAIDY_HOME, 'addons'),
+    DEFAULT_QUOTAS,
+    { warn: (message, meta) => log.warn(message, meta) },
+  );
 
   // Create builtin tool registry (native, in-process tools — separate from MCP)
   // Session tools and Tasks tools use lazy getters to break circular dependencies:
@@ -729,6 +738,7 @@ export async function buildApp() {
           internalApiBaseUrl: `http://${env.HOST}:${env.PORT}`,
           sessionService,
           agentRegistry,
+          storageEngine: addonStorageEngine,
         });
       }
     },
@@ -758,6 +768,7 @@ export async function buildApp() {
       jwtSecret: env.WS_TOKEN_SECRET,
       openAidyVersion,
       manifestValidator: addonManifestValidator,
+      storageEngine: addonStorageEngine,
     });
   }
 

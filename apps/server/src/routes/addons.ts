@@ -67,6 +67,7 @@ export type AddonRoutesOptions = {
   jwtSecret: string;
   openAidyVersion: string;
   manifestValidator: ManifestValidator;
+  storageEngine?: import('../addons/storage/engine').AddonStorageEngine;
 };
 
 /**
@@ -253,6 +254,9 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     async (request, reply) => {
       try {
         await addonService.uninstallAddon(request.params.addonId, 'admin');
+        // Close the storage connection and delete the addon's on-disk
+        // directory (source + data) — previously left behind entirely.
+        opts.storageEngine?.destroyAddon(request.params.addonId);
         return reply.code(204).send();
       } catch (error: unknown) {
         const err = error as { code?: string; message?: string };

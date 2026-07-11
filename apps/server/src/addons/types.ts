@@ -22,6 +22,7 @@ export interface AddonProxyRoutesOptions {
   internalApiBaseUrl: string;
   sessionService?: SessionMessageService;
   agentRegistry?: AgentRegistry;
+  storageEngine?: import('./storage/engine').AddonStorageEngine;
 }
 
 /**
