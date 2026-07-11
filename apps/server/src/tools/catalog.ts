@@ -220,6 +220,22 @@ export const addonUpdateMeta: ToolMeta = {
     'Keeps the on-disk addon.json and the database record in sync.',
 };
 
+export const addonListQueriesMeta: ToolMeta = {
+  name: 'addon_list_queries',
+  category: 'Addons',
+  description:
+    'Discover the named data queries an addon exposes to agents. Returns, per addon that opted in, its addon_id and a catalog of queries (name, description, typed params, read/write). Call this before addon_run to find the right query — never guess a query name or write raw SQL.',
+};
+
+export const addonRunMeta: ToolMeta = {
+  name: 'addon_run',
+  category: 'Addons',
+  description:
+    "Run a named query an addon exposes to agents (see addon_list_queries) against that addon's private storage. " +
+    'You supply the addon_id, the query name, and its declared parameters — never raw SQL. ' +
+    'Read queries return rows; write queries return the number of changes (and require the addon to grant agent write access).',
+};
+
 // ── UI ────────────────────────────────────────────────────────────────────────
 
 export const presentChoicesMeta: ToolMeta = {
@@ -450,6 +466,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   webFetchMeta,
   addonCreateMeta,
   addonUpdateMeta,
+  addonListQueriesMeta,
+  addonRunMeta,
   presentChoicesMeta,
   memorySaveMeta,
   memorySearchMeta,

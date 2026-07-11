@@ -265,6 +265,7 @@ export async function buildApp() {
     skills: { registry: skillRegistry },
     addons: {
       addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+      storageEngine: addonStorageEngine,
       ...(addonService ? { addonService } : {}),
     },
     agents: {
@@ -918,6 +919,8 @@ export async function buildApp() {
     if (dbAdapter) {
       await dbAdapter.close();
     }
+    // Close per-addon SQLite connections (checkpoints WAL) on shutdown.
+    addonStorageEngine.closeAll();
   });
 
   return app;

@@ -19,8 +19,10 @@
 export type SdkParamKind =
   | 'string'
   | 'object'
+  | 'number'
   | 'optional_string'
-  | 'optional_object';
+  | 'optional_object'
+  | 'optional_number';
 
 export type SdkParam = {
   readonly name: string;
@@ -192,6 +194,136 @@ export const SDK_METHODS: readonly SdkMethod[] = [
       'Low-level escape hatch for routes not covered by named methods.',
     exampleJs:
       "sdk.request('GET', '/api/addon-proxy/agents').then(function(r) { console.log(r); });",
+  },
+
+  // ── Storage (per-addon SQLite) ────────────────────────────────────────────
+  // Declare the schema in the manifest under `storage.migrations`. KV needs no
+  // schema. Requires the `storage.read` / `storage.write` permissions.
+  {
+    name: 'storage.kv.get',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/kv/:key',
+    httpMethod: 'GET',
+    requiredPermission: 'storage.read',
+    params: [{ name: 'key', kind: 'string', description: 'Key to read' }],
+    returns: 'Promise<any>',
+    description: 'Read a JSON value by key (resolves undefined if absent).',
+    exampleJs:
+      "sdk.storage.kv.get('prefs').then(function(v) { console.log(v); });",
+  },
+  {
+    name: 'storage.kv.set',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/kv/:key',
+    httpMethod: 'PATCH',
+    requiredPermission: 'storage.write',
+    params: [
+      { name: 'key', kind: 'string', description: 'Key to write' },
+      {
+        name: 'value',
+        kind: 'object',
+        description: 'Any JSON-serializable value',
+      },
+    ],
+    returns: 'Promise<{ ok: true }>',
+    description: 'Write a JSON value by key.',
+    exampleJs: "sdk.storage.kv.set('prefs', { theme: 'dark' });",
+  },
+  {
+    name: 'storage.kv.list',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/kv',
+    httpMethod: 'GET',
+    requiredPermission: 'storage.read',
+    params: [
+      {
+        name: 'prefix',
+        kind: 'optional_string',
+        description: 'Only return keys starting with this prefix',
+      },
+    ],
+    returns: 'Promise<{ key: string; value: any }[]>',
+    description: 'List key/value entries, optionally filtered by key prefix.',
+    exampleJs:
+      "sdk.storage.kv.list('note:').then(function(items) { console.log(items); });",
+  },
+  {
+    name: 'storage.kv.delete',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/kv/:key',
+    httpMethod: 'DELETE',
+    requiredPermission: 'storage.write',
+    params: [{ name: 'key', kind: 'string', description: 'Key to delete' }],
+    returns: 'Promise<boolean>',
+    description: 'Delete a key; resolves true if a row was removed.',
+    exampleJs: "sdk.storage.kv.delete('prefs');",
+  },
+  {
+    name: 'storage.query',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/query',
+    httpMethod: 'POST',
+    requiredPermission: 'storage.read',
+    params: [
+      { name: 'sql', kind: 'string', description: 'A SELECT statement' },
+      {
+        name: 'params',
+        kind: 'optional_object',
+        description: 'Positional (array) or named (:name → object) parameters',
+      },
+    ],
+    returns: 'Promise<object[]>',
+    description:
+      "Run a read query against the addon's own SQLite file; resolves row objects.",
+    exampleJs:
+      "sdk.storage.query('SELECT * FROM notes WHERE tag = ?', ['work']).then(function(rows) { console.log(rows); });",
+  },
+  {
+    name: 'storage.exec',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/exec',
+    httpMethod: 'POST',
+    requiredPermission: 'storage.write',
+    params: [
+      {
+        name: 'sql',
+        kind: 'string',
+        description: 'An INSERT/UPDATE/DELETE/CREATE statement',
+      },
+      {
+        name: 'params',
+        kind: 'optional_object',
+        description: 'Positional (array) or named (:name → object) parameters',
+      },
+    ],
+    returns: 'Promise<{ changes: number; lastInsertRowid: number }>',
+    description: "Run a write statement against the addon's own SQLite file.",
+    exampleJs:
+      "sdk.storage.exec('INSERT INTO notes (title) VALUES (?)', ['Hello']);",
+  },
+  {
+    name: 'storage.search',
+    category: 'Storage',
+    proxyPath: '/api/addon-proxy/storage/search',
+    httpMethod: 'POST',
+    requiredPermission: 'storage.read',
+    params: [
+      {
+        name: 'table',
+        kind: 'string',
+        description: 'Name of a declared FTS5 virtual table',
+      },
+      { name: 'match', kind: 'string', description: 'FTS5 MATCH query' },
+      {
+        name: 'limit',
+        kind: 'optional_number',
+        description: 'Max rows (default 50)',
+      },
+    ],
+    returns: 'Promise<object[]>',
+    description: 'Full-text search over a declared FTS5 table.',
+    exampleJs:
+      "sdk.storage.search('notes_fts', 'vite').then(function(rows) { console.log(rows); });",
   },
 ] as const;
 

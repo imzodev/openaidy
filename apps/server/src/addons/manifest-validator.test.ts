@@ -292,4 +292,58 @@ describe('AddonManifestSchema', () => {
       );
     }
   });
+
+  describe('storage validation', () => {
+    const v = createManifestValidator({ openAidyVersion: '1.0.0' });
+    const base = {
+      id: 'store-addon',
+      name: 'Store',
+      version: '1.0.0',
+      description: 'x',
+      openaidy: { minVersion: '0.1.0' },
+      entry: 'app/index.html',
+      permissions: [] as string[],
+    };
+    const withQueries = (
+      agentQueries: Array<{ name: string; sql: string }>,
+    ) => ({
+      ...base,
+      storage: {
+        agentQueries: agentQueries.map((q) => ({
+          ...q,
+          description: 'q',
+          access: 'read' as const,
+        })),
+      },
+    });
+
+    it('rejects duplicate agent query names', () => {
+      const result = v.validate(
+        withQueries([
+          { name: 'dup', sql: 'SELECT 1' },
+          { name: 'dup', sql: 'SELECT 2' },
+        ]),
+        [],
+      );
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(
+          result.errors.some(
+            (e: ValidationError) => e.code === 'DUPLICATE_QUERY_NAME',
+          ),
+        ).toBe(true);
+      }
+    });
+
+    it('accepts unique agent query names', () => {
+      const result = v.validate(
+        withQueries([
+          { name: 'a', sql: 'SELECT 1' },
+          { name: 'b', sql: 'SELECT 2' },
+        ]),
+        [],
+      );
+      expect(result.valid).toBe(true);
+    });
+  });
 });
