@@ -517,3 +517,17 @@ export type {
   CreatePulseInput as CreatePulseBody,
   UpdatePulseInput as UpdatePulseBody,
 } from '@openaidy/shared-types';
+
+/**
+ * Build / runtime info exposed by GET /api/info.
+ * `version` is semver ("0.3.0", no "v"). The UI prepends "v" for display.
+ */
+export type AppInfo = {
+  version: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  pid: number;
+  startedAt: string;
+  uptimeMs: number;
+};

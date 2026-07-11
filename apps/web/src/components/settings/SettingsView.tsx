@@ -3,7 +3,13 @@ import { Save } from 'lucide-solid';
 import type { AppConfig, RewiredAgentNotice } from '../../lib/api';
 import { useConfig } from './hooks/useConfig';
 import { SaveMessage, Tabs, type Tab } from '../ui';
-import { DefaultsTab, ProvidersTab, AgentsTab, RawJsonTab } from './tabs';
+import {
+  DefaultsTab,
+  ProvidersTab,
+  AgentsTab,
+  RawJsonTab,
+  AboutTab,
+} from './tabs';
 import type { ConfigTab } from './types';
 
 const tabs: { id: ConfigTab; label: string }[] = [
@@ -11,6 +17,7 @@ const tabs: { id: ConfigTab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'agents', label: 'Agents' },
   { id: 'raw', label: 'Raw JSON' },
+  { id: 'about', label: 'About' },
 ];
 
 export function SettingsView() {
@@ -321,6 +328,11 @@ export function SettingsView() {
                   setHasChanges(true);
                 }}
               />
+            </Show>
+
+            {/* About Tab */}
+            <Show when={activeTab() === 'about'}>
+              <AboutTab />
             </Show>
           </Show>
         </div>

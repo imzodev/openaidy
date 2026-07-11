@@ -46,6 +46,7 @@ export type {
   ScheduleInput,
   CreatePulseBody,
   UpdatePulseBody,
+  AppInfo,
 } from './types';
 
 export type {
@@ -92,6 +93,7 @@ import type {
   PulseRun,
   CreatePulseBody,
   UpdatePulseBody,
+  AppInfo,
 } from './types';
 
 import type {
@@ -1295,4 +1297,17 @@ export async function disconnectProvider(providerId: string): Promise<void> {
     },
   );
   if (!res.ok) throw new Error(`disconnectProvider: ${res.status}`);
+}
+
+/**
+ * Fetch build / runtime info (version, node, platform, uptime).
+ * Returns the raw AppInfo shape — `version` is semver ("0.3.0", no "v");
+ * callers that want the GitHub-tag display format must prepend "v".
+ */
+export async function fetchAppInfo(): Promise<AppInfo> {
+  const response = await apiFetch(`${API_BASE}/api/info`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch app info: ${response.statusText}`);
+  }
+  return response.json();
 }
