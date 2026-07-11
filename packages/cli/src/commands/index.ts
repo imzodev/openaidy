@@ -385,6 +385,23 @@ registerCommand(
 );
 
 registerCommand(
+  'restart',
+  async (args: string[]) => {
+    const { restartHandler } = await import('./restart.js');
+    return restartHandler(args);
+  },
+  {
+    description: 'Restart the OpenAidy server (stop + start, port preserved)',
+    usage: 'openaidy restart [--port <N>] [--server-only] [--integrated]',
+    examples: [
+      'openaidy restart',
+      'openaidy restart --port 3001',
+      'openaidy restart --integrated',
+    ],
+  },
+);
+
+registerCommand(
   'status',
   async (args: string[]) => {
     const { statusHandler } = await import('./status.js');
