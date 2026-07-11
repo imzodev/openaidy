@@ -265,6 +265,7 @@ export async function buildApp() {
     skills: { registry: skillRegistry },
     addons: {
       addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+      storageEngine: addonStorageEngine,
       ...(addonService ? { addonService } : {}),
     },
     agents: {

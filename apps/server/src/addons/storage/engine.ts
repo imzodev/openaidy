@@ -68,6 +68,8 @@ export class AddonStorageError extends Error {
 
 interface Handle {
   db: DatabaseSync;
+  /** Lazily-opened read-only connection (used for agent read queries). */
+  ro?: DatabaseSync;
   lastUsed: number;
 }
 
@@ -208,16 +210,7 @@ export class AddonStorageEngine {
 
   // ── Raw SQL (iframe SDK) ────────────────────────────────────────────────────
 
-  /** Run a read query and return rows (capped at the row quota). */
-  query(
-    addonId: string,
-    migrations: readonly string[],
-    sql: string,
-    params?: StorageParams,
-  ): unknown[] {
-    this.assertSafe(sql);
-    const db = this.connect(addonId, migrations);
-    const stmt = db.prepare(sql);
+  private iterateCapped(stmt: StatementSync, params: StorageParams): unknown[] {
     const out: unknown[] = [];
     const iter =
       params === undefined
@@ -231,6 +224,38 @@ export class AddonStorageEngine {
       if (out.length >= this.quotas.maxRows) break;
     }
     return out;
+  }
+
+  /** Run a read query and return rows (capped at the row quota). */
+  query(
+    addonId: string,
+    migrations: readonly string[],
+    sql: string,
+    params?: StorageParams,
+  ): unknown[] {
+    this.assertSafe(sql);
+    const db = this.connect(addonId, migrations);
+    return this.iterateCapped(db.prepare(sql), params);
+  }
+
+  /**
+   * Run a read query on a read-only connection. Used for agent read queries so
+   * a mis-tagged write can't mutate data — the connection physically rejects
+   * writes ("attempt to write a readonly database"). Migrations are applied via
+   * the read/write connection first so the schema is present.
+   */
+  queryReadOnly(
+    addonId: string,
+    migrations: readonly string[],
+    sql: string,
+    params?: StorageParams,
+  ): unknown[] {
+    this.assertSafe(sql);
+    // Ensure the file exists + migrations are applied (read/write connection).
+    this.connect(addonId, migrations);
+    const h = this.handles.get(addonId)!;
+    h.ro ??= new DatabaseSync(this.dbPath(addonId), { readOnly: true });
+    return this.iterateCapped(h.ro.prepare(sql), params);
   }
 
   /** Run a write statement and return {changes, lastInsertRowid}. */
@@ -342,14 +367,16 @@ export class AddonStorageEngine {
     }
   }
 
-  /** Close and forget an addon's connection (e.g. on disable or upgrade). */
+  /** Close and forget an addon's connection(s) (e.g. on disable or upgrade). */
   close(addonId: string): void {
     const h = this.handles.get(addonId);
     if (!h) return;
-    try {
-      h.db.close();
-    } catch {
-      /* ignore */
+    for (const conn of [h.ro, h.db]) {
+      try {
+        conn?.close();
+      } catch {
+        /* ignore */
+      }
     }
     this.handles.delete(addonId);
   }

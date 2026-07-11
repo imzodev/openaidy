@@ -34,6 +34,11 @@ export type AddonToolDeps = {
    * (useful in environments where the DB is not configured).
    */
   addonService?: AddonService;
+  /**
+   * Per-addon storage engine. Required by the addon_run / addon_list_queries
+   * tools; absent when storage is unavailable.
+   */
+  storageEngine?: import('../../addons/storage/engine').AddonStorageEngine;
 };
 
 // ── Validation helpers ────────────────────────────────────────────────────────
