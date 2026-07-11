@@ -166,6 +166,76 @@
       );
     },
 
+    // ── Storage (per-addon SQLite) ────────────────────────────────────────
+    // Requires the `storage.read` / `storage.write` permissions. Schema is
+    // declared in the manifest under `storage.migrations`.
+    storage: {
+      kv: {
+        /** Read a JSON value by key (resolves undefined if absent). */
+        get: function (key) {
+          return request(
+            'GET',
+            '/api/addon-proxy/storage/kv/' + encodeURIComponent(key),
+          ).then(function (r) {
+            return r.value;
+          });
+        },
+        /** Write a JSON value by key. */
+        set: function (key, value) {
+          return request(
+            'PUT',
+            '/api/addon-proxy/storage/kv/' + encodeURIComponent(key),
+            { value: value },
+          );
+        },
+        /** List {key, value} entries, optionally filtered by key prefix. */
+        list: function (prefix) {
+          return request(
+            'GET',
+            '/api/addon-proxy/storage/kv' +
+              (prefix ? '?prefix=' + encodeURIComponent(prefix) : ''),
+          ).then(function (r) {
+            return r.items;
+          });
+        },
+        /** Delete a key; resolves true if a row was removed. */
+        delete: function (key) {
+          return request(
+            'DELETE',
+            '/api/addon-proxy/storage/kv/' + encodeURIComponent(key),
+          ).then(function (r) {
+            return r.deleted;
+          });
+        },
+      },
+      /** Run a read query (SELECT/…); resolves an array of row objects. */
+      query: function (sql, params) {
+        return request('POST', '/api/addon-proxy/storage/query', {
+          sql: sql,
+          params: params,
+        }).then(function (r) {
+          return r.rows;
+        });
+      },
+      /** Run a write statement; resolves {changes, lastInsertRowid}. */
+      exec: function (sql, params) {
+        return request('POST', '/api/addon-proxy/storage/exec', {
+          sql: sql,
+          params: params,
+        });
+      },
+      /** Full-text search over a declared FTS5 table; resolves matching rows. */
+      search: function (table, match, limit) {
+        return request('POST', '/api/addon-proxy/storage/search', {
+          table: table,
+          match: match,
+          limit: limit,
+        }).then(function (r) {
+          return r.rows;
+        });
+      },
+    },
+
     // ── Raw request (escape hatch) ────────────────────────────────────────
     request: function (method, path, body) {
       return request(method, path, body);

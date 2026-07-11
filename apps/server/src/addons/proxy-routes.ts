@@ -2,6 +2,8 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import type { AddonProxyRoutesOptions, InvokeAgentBody } from './types';
 import { createAddonProxyService } from '../addons/proxy';
 import { AddonProxyAgentService } from './proxy-agent-service';
+import { AddonStorageError } from './storage/engine';
+import type { StorageParams } from './storage/engine';
 
 // Extend FastifyRequest to include addon context
 declare module 'fastify' {
@@ -288,6 +290,210 @@ export const addonProxyRoutes: FastifyPluginAsync<
         config: {},
         message: 'Config retrieval placeholder',
       });
+    },
+  );
+
+  // ==========================================================================
+  // Storage (per-addon SQLite) — /addon-proxy/storage/*
+  // ==========================================================================
+  //
+  // The addon's own iframe reaches its private SQLite file through these
+  // routes. Reads require `storage.read`, writes require `storage.write`. The
+  // schema (manifest.storage.migrations) is applied lazily by the engine on
+  // first open, so tables exist even if the UI has never run.
+
+  const getMigrations = (manifest: unknown): string[] => {
+    const m = manifest as { storage?: { migrations?: string[] } } | null;
+    return m?.storage?.migrations ?? [];
+  };
+
+  /**
+   * Resolve the addon + authorize a storage permission. Returns the addon's
+   * migrations on success, or null after having sent the error response.
+   */
+  const forStorage = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    permission: 'storage.read' | 'storage.write',
+  ): Promise<{ migrations: string[] } | null> => {
+    if (!opts.storageEngine) {
+      reply
+        .code(503)
+        .send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Storage not available',
+        });
+      return null;
+    }
+    const addon = await opts.addonService.getAddon(request.addonId!);
+    if (!addon) {
+      reply
+        .code(404)
+        .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
+      return null;
+    }
+    const auth = proxyService.authorize(addon, permission);
+    if (!auth.authorized) {
+      reply.code(403).send({ error: 'PERMISSION_DENIED', message: auth.error });
+      return null;
+    }
+    return { migrations: getMigrations(addon.manifest) };
+  };
+
+  /** Run a (synchronous) storage operation, mapping engine errors to HTTP. */
+  const runStorage = (reply: FastifyReply, fn: () => unknown) => {
+    try {
+      return reply.send(fn());
+    } catch (err) {
+      if (err instanceof AddonStorageError) {
+        return reply.code(400).send({ error: err.code, message: err.message });
+      }
+      return reply.code(500).send({
+        error: 'STORAGE_ERROR',
+        message: err instanceof Error ? err.message : 'Storage error',
+      });
+    }
+  };
+
+  // KV — list / get / set / delete
+  app.get<{ Querystring: { prefix?: string } }>(
+    '/addon-proxy/storage/kv',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.read');
+      if (!ctx) return;
+      await proxyService.recordUsage(request.addonId!, '/storage/kv');
+      return runStorage(reply, () => ({
+        items: opts.storageEngine!.kvList(
+          request.addonId!,
+          ctx.migrations,
+          request.query.prefix,
+        ),
+      }));
+    },
+  );
+
+  app.get<{ Params: { key: string } }>(
+    '/addon-proxy/storage/kv/:key',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.read');
+      if (!ctx) return;
+      await proxyService.recordUsage(request.addonId!, '/storage/kv/:key');
+      return runStorage(reply, () => ({
+        value: opts.storageEngine!.kvGet(
+          request.addonId!,
+          ctx.migrations,
+          request.params.key,
+        ),
+      }));
+    },
+  );
+
+  app.put<{ Params: { key: string }; Body: { value: unknown } }>(
+    '/addon-proxy/storage/kv/:key',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.write');
+      if (!ctx) return;
+      await proxyService.recordUsage(request.addonId!, '/storage/kv/:key');
+      return runStorage(reply, () => {
+        opts.storageEngine!.kvSet(
+          request.addonId!,
+          ctx.migrations,
+          request.params.key,
+          request.body?.value,
+        );
+        return { ok: true };
+      });
+    },
+  );
+
+  app.delete<{ Params: { key: string } }>(
+    '/addon-proxy/storage/kv/:key',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.write');
+      if (!ctx) return;
+      await proxyService.recordUsage(request.addonId!, '/storage/kv/:key');
+      return runStorage(reply, () => ({
+        deleted: opts.storageEngine!.kvDelete(
+          request.addonId!,
+          ctx.migrations,
+          request.params.key,
+        ),
+      }));
+    },
+  );
+
+  // Raw SQL — query (read) / exec (write)
+  app.post<{ Body: { sql: string; params?: StorageParams } }>(
+    '/addon-proxy/storage/query',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.read');
+      if (!ctx) return;
+      const { sql, params } = request.body ?? {};
+      if (typeof sql !== 'string') {
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_REQUEST', message: 'sql is required' });
+      }
+      await proxyService.recordUsage(request.addonId!, '/storage/query');
+      return runStorage(reply, () => ({
+        rows: opts.storageEngine!.query(
+          request.addonId!,
+          ctx.migrations,
+          sql,
+          params,
+        ),
+      }));
+    },
+  );
+
+  app.post<{ Body: { sql: string; params?: StorageParams } }>(
+    '/addon-proxy/storage/exec',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.write');
+      if (!ctx) return;
+      const { sql, params } = request.body ?? {};
+      if (typeof sql !== 'string') {
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_REQUEST', message: 'sql is required' });
+      }
+      await proxyService.recordUsage(request.addonId!, '/storage/exec');
+      return runStorage(reply, () =>
+        opts.storageEngine!.exec(request.addonId!, ctx.migrations, sql, params),
+      );
+    },
+  );
+
+  // Full-text search over a declared FTS5 table
+  app.post<{ Body: { table: string; match: string; limit?: number } }>(
+    '/addon-proxy/storage/search',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const ctx = await forStorage(request, reply, 'storage.read');
+      if (!ctx) return;
+      const { table, match, limit } = request.body ?? {};
+      if (typeof table !== 'string' || typeof match !== 'string') {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message: 'table and match are required',
+        });
+      }
+      await proxyService.recordUsage(request.addonId!, '/storage/search');
+      return runStorage(reply, () => ({
+        rows: opts.storageEngine!.search(
+          request.addonId!,
+          ctx.migrations,
+          table,
+          match,
+          limit,
+        ),
+      }));
     },
   );
 

@@ -195,13 +195,6 @@ export class AddonStorageEngine {
 
   // ── Parameter binding ──────────────────────────────────────────────────────
 
-  private allRows(stmt: StatementSync, params: StorageParams): unknown[] {
-    if (params === undefined) return stmt.all();
-    if (Array.isArray(params)) return stmt.all(...(params as never[]));
-    stmt.setAllowBareNamedParameters(true);
-    return stmt.all(params as never);
-  }
-
   private runStmt(stmt: StatementSync, params: StorageParams): ExecResult {
     let r: { changes: number | bigint; lastInsertRowid: number | bigint };
     if (params === undefined) r = stmt.run();
@@ -367,8 +360,8 @@ export class AddonStorageEngine {
   }
 
   /**
-   * Close the connection and delete the addon's on-disk data directory
-   * (store.db + WAL/SHM sidecars). Called on uninstall.
+   * Close the connection and delete only the addon's data directory
+   * (store.db + WAL/SHM sidecars), leaving its source files in place.
    */
   destroyData(addonId: string): void {
     this.close(addonId);
@@ -376,5 +369,15 @@ export class AddonStorageEngine {
       recursive: true,
       force: true,
     });
+  }
+
+  /**
+   * Close the connection and delete the addon's entire on-disk directory
+   * (source files + data). Called on uninstall — previously addon files were
+   * left behind entirely.
+   */
+  destroyAddon(addonId: string): void {
+    this.close(addonId);
+    rmSync(join(this.addonsDir, addonId), { recursive: true, force: true });
   }
 }

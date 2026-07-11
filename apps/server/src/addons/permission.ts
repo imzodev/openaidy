@@ -23,6 +23,7 @@ export const PERMISSION_RESOURCES = [
   'mcp',
   'workspace',
   'logs',
+  'storage',
 ] as const;
 
 /**
