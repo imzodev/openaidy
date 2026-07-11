@@ -9,7 +9,7 @@
  *
  * Layout produced:
  *   build/npm/
- *     package.json        name "openaidy", bin, deps (third-party + native)
+ *     package.json        name "openaidy", bin, deps (third-party)
  *     dist/server.mjs     esbuild bundle of apps/server (@openaidy/* inlined)
  *     dist/cli.mjs        esbuild bundle of the CLI (bin, shebang)
  *     web/                apps/web/dist (the built SPA)
@@ -17,9 +17,11 @@
  *     assets/openaidy-sdk.js
  *     assets/drizzle/*.sql
  *
- * First-party @openaidy/* code is bundled in; third-party deps (incl. the
- * native better-sqlite3) stay external and are declared as `dependencies` so
- * npm installs them (better-sqlite3 pulls its prebuilt binary — no compiler).
+ * First-party @openaidy/* code is bundled in; third-party deps stay external
+ * and are declared as `dependencies` so npm installs them. There are no native
+ * addons — the SQLite layer uses Node's built-in `node:sqlite` — so nothing
+ * needs a compiler or a postinstall script (safe under npm v12's script
+ * defaults). Requires Node >= 22.13 (node:sqlite without a flag).
  */
 
 import { createRequire } from 'node:module';
@@ -133,7 +135,7 @@ const pkg = {
   type: 'module',
   bin: { openaidy: './dist/cli.mjs' },
   files: ['dist', 'web', 'assets', 'README.md'],
-  engines: { node: '>=22.12.0' },
+  engines: { node: '>=22.13.0' },
   // Required for npm provenance (OIDC trusted publishing): must match the repo
   // that builds/publishes the package.
   repository: {

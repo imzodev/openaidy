@@ -31,6 +31,10 @@ try {
 # the same home.
 $script:DataHome = "$env:USERPROFILE\.openaidy"
 
+# Node version to provision. Must be >= 22.13 so Node's built-in `node:sqlite`
+# (OpenAidy's SQLite driver) is available without the --experimental-sqlite flag.
+$script:NodeVersion = "22.23.1"
+
 # ============================================================================
 # Helpers
 # ============================================================================
@@ -50,13 +54,14 @@ function New-TempFile {
 # ============================================================================
 
 function Install-Node {
-    Log-Info "Installing Node.js 22 LTS..."
+    Log-Info "Installing Node.js $($script:NodeVersion) LTS..."
 
     $arch = $env:PROCESSOR_ARCHITECTURE
     $nodeArch = "x64"
     if ($arch -eq "ARM64") { $nodeArch = "arm64" }
 
-    $url = "https://nodejs.org/dist/latest-v22.x/node-v22.12.0-win-$nodeArch.zip"
+    $v = $script:NodeVersion
+    $url = "https://nodejs.org/dist/v$v/node-v$v-win-$nodeArch.zip"
     $zipPath = New-TempFile
     $nodePath = Join-Path $InstallDir "node"
 
@@ -101,14 +106,25 @@ function Install-Node {
     return $false
 }
 
+# OpenAidy's SQLite layer uses Node's built-in `node:sqlite`, available without
+# a flag only on Node >= 22.13. A too-old system Node returns $false here so a
+# managed copy is provisioned instead.
 function Test-Node {
-    try {
-        $v = node --version 2>$null
-        if ($v) {
-            Log-Success "Node.js $v found"
-            return $true
-        }
-    } catch { }
+    $v = $null
+    try { $v = node --version 2>$null } catch { }
+    if (-not $v) { return $false }
+
+    $m = [regex]::Match([string]$v, 'v(\d+)\.(\d+)\.')
+    if (-not $m.Success) { return $false }
+    $major = [int]$m.Groups[1].Value
+    $minor = [int]$m.Groups[2].Value
+    $adequate = ($major -ge 24) -or ($major -eq 22 -and $minor -ge 13)
+
+    if ($adequate) {
+        Log-Success "Node.js $v found"
+        return $true
+    }
+    Log-Warn "Node.js $v is too old (need >= 22.13 for node:sqlite) — installing a managed copy..."
     return $false
 }
 

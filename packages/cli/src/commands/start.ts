@@ -217,7 +217,10 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   let runtimeArgs: string[];
   if (packaged) {
     serverEntry = packagedServerEntry;
-    runtimeArgs = [serverEntry];
+    // The bundled server uses Node's built-in node:sqlite, which prints an
+    // ExperimentalWarning on every start. Silence it so server.log stays clean
+    // (safe: we require Node >= 22.13, where node:sqlite is available).
+    runtimeArgs = ['--disable-warning=ExperimentalWarning', serverEntry];
   } else {
     serverEntry = resolve(repoRoot, 'apps/server/src/server.ts');
     try {
