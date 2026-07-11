@@ -23,6 +23,11 @@ type ChatComposerProps = {
 export function ChatComposer(props: ChatComposerProps) {
   const [input, setInput] = createSignal('');
   const [isSending, setIsSending] = createSignal(false);
+  // Below Tailwind's `md` (768px) we use the mobile layout: the agent picker
+  // moves to a chip above the input, and the send button is merged into the
+  // input pill — reclaiming horizontal room for typing. Defaults to desktop
+  // when matchMedia is unavailable (e.g. jsdom under test).
+  const [isMobile, setIsMobile] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
 
   // Queue mode: usable composer, but submitting enqueues for later send.
@@ -33,6 +38,15 @@ export function ChatComposer(props: ChatComposerProps) {
     if (props.onInputReady) {
       props.onInputReady(() => textareaRef?.focus());
     }
+
+    const mq = window.matchMedia?.('(max-width: 767px)');
+    if (mq) {
+      const update = () => setIsMobile(mq.matches);
+      update();
+      mq.addEventListener?.('change', update);
+      onCleanup(() => mq.removeEventListener?.('change', update));
+    }
+
     onCleanup(() => {
       textareaRef = undefined; // Clear ref on unmount to prevent stale closures
     });
@@ -68,57 +82,106 @@ export function ChatComposer(props: ChatComposerProps) {
     textareaRef = el;
   };
 
+  const inputDisabled = () => props.disabled || isSending();
+  const sendDisabled = () => props.disabled || isSending() || !input().trim();
+  const sendAriaLabel = () => (isQueueing() ? 'Queue message' : 'Send message');
+  const sendTitle = () =>
+    isQueueing()
+      ? 'Agent is responding — your message will be queued'
+      : 'Send message';
+
+  // Send-button inner content (spinner while sending, else queue/send icon).
+  const sendIcon = () => (
+    <Show
+      when={isSending()}
+      fallback={
+        <Show when={isQueueing()} fallback={<Send class="w-4 h-4" />}>
+          <ListPlus class="w-4 h-4" />
+        </Show>
+      }
+    >
+      <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+    </Show>
+  );
+
   return (
     <form
       onSubmit={handleSubmit}
-      class="border-t border-gray-200 dark:border-gray-700 p-4"
+      class="border-t border-gray-200 dark:border-gray-700 px-3 py-2 md:p-4"
     >
-      <div class="flex items-center gap-3">
-        {/* Agent picker */}
-        <AgentPicker
-          agents={props.agents}
-          selectedAgentId={props.selectedAgentId}
-          onSelect={props.onAgentSelect}
-          disabled={props.disabled || isSending()}
-        />
+      <Show
+        when={isMobile()}
+        fallback={
+          /* ── Desktop / tablet (≥ md): [picker] [input] [send] ── */
+          <div class="flex items-center gap-3">
+            <AgentPicker
+              agents={props.agents}
+              selectedAgentId={props.selectedAgentId}
+              onSelect={props.onAgentSelect}
+              disabled={inputDisabled()}
+            />
 
-        {/* Text input */}
-        <div class="flex-1">
+            <div class="flex-1">
+              <textarea
+                ref={setRef}
+                value={input()}
+                onInput={(e) => setInput(e.currentTarget.value)}
+                onKeyDown={handleKeyDown}
+                disabled={inputDisabled()}
+                placeholder={placeholder()}
+                rows={1}
+                class="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed min-h-10 max-h-32 overflow-y-auto mt-1"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={sendDisabled()}
+              class="flex-shrink-0 w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+              aria-label={sendAriaLabel()}
+              title={sendTitle()}
+            >
+              {sendIcon()}
+            </button>
+          </div>
+        }
+      >
+        {/* ── Mobile (< md): one compact row — agent icon, input, send — in a
+            single pill, so the chat scrollback keeps the vertical space. The
+            agent is icon-only (its name shows in the picker sheet), and the
+            keyboard hint below is hidden. ── */}
+        <div class="flex items-end gap-1.5 rounded-2xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent">
+          <AgentPicker
+            variant="icon"
+            agents={props.agents}
+            selectedAgentId={props.selectedAgentId}
+            onSelect={props.onAgentSelect}
+            disabled={inputDisabled()}
+          />
           <textarea
             ref={setRef}
             value={input()}
             onInput={(e) => setInput(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
-            disabled={props.disabled || isSending()}
+            disabled={inputDisabled()}
             placeholder={placeholder()}
             rows={1}
-            class="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed min-h-10 max-h-32 overflow-y-auto mt-1"
+            class="flex-1 min-w-0 resize-none bg-transparent py-1 text-text-primary placeholder-text-tertiary focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed min-h-8 max-h-32 overflow-y-auto"
           />
+          <button
+            type="submit"
+            disabled={sendDisabled()}
+            class="flex-shrink-0 w-8 h-8 rounded-full bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+            aria-label={sendAriaLabel()}
+            title={sendTitle()}
+          >
+            {sendIcon()}
+          </button>
         </div>
+      </Show>
 
-        {/* Send / queue button */}
-        <button
-          type="submit"
-          disabled={props.disabled || isSending() || !input().trim()}
-          class="flex-shrink-0 w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
-          aria-label={isQueueing() ? 'Queue message' : 'Send message'}
-          title={
-            isQueueing()
-              ? 'Agent is responding — your message will be queued'
-              : 'Send message'
-          }
-        >
-          <Show when={isSending()}>
-            <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          </Show>
-          <Show when={!isSending()}>
-            <Show when={isQueueing()} fallback={<Send class="w-4 h-4" />}>
-              <ListPlus class="w-4 h-4" />
-            </Show>
-          </Show>
-        </button>
-      </div>
-      <p class="mt-2 text-xs text-text-tertiary">
+      {/* Keyboard hint — desktop only; hidden on mobile to maximize chat space. */}
+      <p class="mt-2 text-xs text-text-tertiary hidden md:block">
         <Show
           when={isQueueing()}
           fallback="Press Enter to send, Shift+Enter for new line"
