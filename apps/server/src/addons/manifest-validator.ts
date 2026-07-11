@@ -372,6 +372,34 @@ function validateEntry(manifest: AddonManifest): ValidationError[] {
 }
 
 /**
+ * Validate the storage block. The Zod schema already checks structure; here we
+ * add the cross-field check it can't: agent query names must be unique (an
+ * addon_run call resolves a query by name, so duplicates would silently shadow).
+ */
+function validateStorage(manifest: AddonManifest): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const queries = (
+    manifest as { storage?: { agentQueries?: Array<{ name: string }> } }
+  ).storage?.agentQueries;
+  if (!queries) return errors;
+
+  const seen = new Set<string>();
+  for (const q of queries) {
+    if (seen.has(q.name)) {
+      errors.push(
+        createValidationError(
+          'storage.agentQueries',
+          `Duplicate agent query name: "${q.name}"`,
+          'DUPLICATE_QUERY_NAME',
+        ),
+      );
+    }
+    seen.add(q.name);
+  }
+  return errors;
+}
+
+/**
  * Validate dependencies
  */
 function validateDependencies(manifest: AddonManifest): ValidationError[] {
@@ -444,6 +472,7 @@ export class ManifestValidator {
     allErrors.push(...validateUIConfig(typedManifest));
     allErrors.push(...validateEntry(typedManifest));
     allErrors.push(...validateDependencies(typedManifest));
+    allErrors.push(...validateStorage(typedManifest));
 
     if (allErrors.length > 0) {
       return {
