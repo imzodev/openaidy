@@ -171,6 +171,7 @@ export type SessionRunsStore = Pick<
   | 'markSucceeded'
   | 'markFailed'
   | 'markCancelled'
+  | 'listRunning'
   | 'getLatest'
   | 'getActive'
   | 'countByStatus'
