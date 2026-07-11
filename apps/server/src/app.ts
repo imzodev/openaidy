@@ -846,6 +846,7 @@ export async function buildApp() {
 
   // Start scheduler after server is ready
   let stuckSubtaskInterval: ReturnType<typeof setInterval> | undefined;
+  let stuckRunInterval: ReturnType<typeof setInterval> | undefined;
   app.addHook('onReady', async () => {
     if (scheduler) {
       // Recover any stuck jobs from previous run
@@ -865,6 +866,47 @@ export async function buildApp() {
         5 * 60 * 1000,
       ); // Every 5 minutes
       log.info('Stuck subtask checker started (every 5 minutes)');
+    }
+
+    // Recover / reap stuck agent runs. The streaming consume loop has no
+    // timeout, so a hung provider stream — or a process restart mid-run —
+    // leaves a session_run pinned at `running` forever, with no terminal
+    // status. On startup, fail any `running` run (it is orphaned from a prior
+    // process); then periodically fail runs that have been `running` far longer
+    // than any real run should take.
+    if (dbAdapter) {
+      const runsRepo = dbAdapter.repositories.sessionRuns;
+      const RUN_STUCK_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+      const reapStuckRuns = async (maxAgeMs: number) => {
+        const running = await runsRepo.listRunning();
+        const cutoff = Date.now() - maxAgeMs;
+        let failed = 0;
+        for (const run of running) {
+          const startedAt = new Date(run.startedAt ?? run.createdAt).getTime();
+          if (startedAt <= cutoff) {
+            await runsRepo.markFailed(run.id, {
+              errorCode: 'STUCK',
+              errorMessage:
+                'Run did not reach a terminal state and was reaped as stuck.',
+            });
+            failed++;
+          }
+        }
+        if (failed > 0) log.warn(`Reaped ${failed} stuck run(s)`);
+      };
+
+      await reapStuckRuns(0).catch((err) =>
+        log.error('Startup stuck-run recovery failed', err),
+      );
+      stuckRunInterval = setInterval(
+        () => {
+          reapStuckRuns(RUN_STUCK_TIMEOUT_MS).catch((err) => {
+            log.error('Failed to reap stuck runs', err);
+          });
+        },
+        5 * 60 * 1000,
+      );
+      log.info('Stuck run reaper started (every 5 minutes)');
     }
 
     // Auto-connect MCP servers from config — non-blocking. These are
@@ -908,6 +950,9 @@ export async function buildApp() {
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
+    }
+    if (stuckRunInterval) {
+      clearInterval(stuckRunInterval);
     }
     if (recurringTasksService) {
       await recurringTasksService.stop();

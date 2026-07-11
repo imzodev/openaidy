@@ -110,6 +110,19 @@ export class SessionRunsRepository {
   }
 
   /**
+   * List every run currently in the `running` state. Used by startup recovery
+   * and the periodic reaper to find runs whose provider stream hung — or that
+   * were left `running` by a process restart — and never reached a terminal
+   * status on their own.
+   */
+  async listRunning(): Promise<schema.SessionRun[]> {
+    return this.db
+      .select()
+      .from(schema.sessionRuns)
+      .where(eq(schema.sessionRuns.status, 'running'));
+  }
+
+  /**
    * Mark a run as succeeded
    */
   async markSucceeded(

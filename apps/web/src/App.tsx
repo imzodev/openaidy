@@ -125,6 +125,40 @@ function AppContent(props: AppContentProps) {
   );
   const [isDeletingSession, setIsDeletingSession] = createSignal(false);
 
+  // ── Stream watchdog ────────────────────────────────────────────────────────
+  // `isStreaming` is a single app-wide flag that gates ALL sends and is only
+  // cleared by a `session.stream.end` event. If a run hangs server-side, or an
+  // `end` is lost (e.g. a reconnect after a network blip / server restart), the
+  // flag would stay `true` forever — silently queueing every future message in
+  // every session and never refetching messages. This watchdog recovers the UI
+  // if the stream goes idle (no start/delta/tool_call/end) for too long.
+  const STREAM_IDLE_TIMEOUT_MS = 120_000;
+  let streamWatchdog: ReturnType<typeof setTimeout> | undefined;
+  const clearStreamWatchdog = () => {
+    if (streamWatchdog !== undefined) {
+      clearTimeout(streamWatchdog);
+      streamWatchdog = undefined;
+    }
+  };
+  const armStreamWatchdog = () => {
+    clearStreamWatchdog();
+    streamWatchdog = setTimeout(() => {
+      streamWatchdog = undefined;
+      if (!isStreaming()) return;
+      // Assume the stream is dead — recover so the UI isn't permanently stuck.
+      setIsStreaming(false);
+      setStreamingContent('');
+      setStreamingToolCalls([]);
+      setPendingUserMessage(undefined);
+      const sid = selectedSessionId();
+      if (sid) {
+        queryClient.invalidateQueries({ queryKey: ['messages', sid] });
+        queryClient.invalidateQueries({ queryKey: ['runs', sid] });
+      }
+      processQueue();
+    }, STREAM_IDLE_TIMEOUT_MS);
+  };
+
   // Subscribe to streaming events when a session is selected
   createEffect(() => {
     const sessionId = selectedSessionId();
@@ -137,10 +171,12 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(true);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      armStreamWatchdog();
     };
 
     const handleStreamDelta = (event: { payload: { content: string } }) => {
       setStreamingContent((prev) => prev + event.payload.content);
+      armStreamWatchdog();
     };
 
     const handleStreamToolCall = (event: {
@@ -157,9 +193,11 @@ function AppContent(props: AppContentProps) {
         ...prev,
         { id: tc.id, name: tc.name, input: tc.arguments },
       ]);
+      armStreamWatchdog();
     };
 
     const handleStreamEnd = () => {
+      clearStreamWatchdog();
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingToolCalls([]);
@@ -180,6 +218,7 @@ function AppContent(props: AppContentProps) {
     const handleStreamError = (event: {
       payload: { error: { message: string } };
     }) => {
+      clearStreamWatchdog();
       setSubmitError(event.payload.error.message);
       setIsStreaming(false);
       setStreamingContent('');
@@ -192,6 +231,7 @@ function AppContent(props: AppContentProps) {
     };
 
     const handleChoicesEvent = (event: { payload: ChoicesEvent }) => {
+      clearStreamWatchdog();
       setCurrentChoices(event.payload);
       // Clear streaming state so input becomes enabled for user to type their own answer
       setIsStreaming(false);
@@ -363,6 +403,8 @@ function AppContent(props: AppContentProps) {
     setIsStreaming(true);
     setStreamingContent('');
     setStreamingToolCalls([]);
+    // Guard against a `start`/`end` that never arrives (hung run, lost event).
+    armStreamWatchdog();
     setPendingUserMessage({
       id: `pending-${Date.now()}`,
       sessionId,
@@ -486,11 +528,19 @@ function AppContent(props: AppContentProps) {
     }
   });
 
-  // Clear choices card when switching sessions
+  // Reset transient chat state when switching sessions. Critically, this clears
+  // `isStreaming` — otherwise a hung or lost stream in the previous session
+  // would leave the app-wide flag stuck `true`, freezing composing and message
+  // rendering in every session you switch to afterwards.
   createEffect(() => {
     const sessionId = selectedSessionId();
     if (sessionId) {
+      clearStreamWatchdog();
       setCurrentChoices(null);
+      setIsStreaming(false);
+      setStreamingContent('');
+      setStreamingToolCalls([]);
+      setPendingUserMessage(undefined);
     }
   });
 
