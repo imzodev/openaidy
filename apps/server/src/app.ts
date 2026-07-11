@@ -919,6 +919,8 @@ export async function buildApp() {
     if (dbAdapter) {
       await dbAdapter.close();
     }
+    // Close per-addon SQLite connections (checkpoints WAL) on shutdown.
+    addonStorageEngine.closeAll();
   });
 
   return app;
