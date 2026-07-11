@@ -744,11 +744,12 @@ export class SessionMessageService {
     });
 
     // 3. Create run record
-    // Track how many more messages should receive ONBOARDING.
-    // Starts at 2 (first message + first user response).
-    // Decremented each message, stops at 0.
+    // Track how many more messages may include the (discretion-based) ONBOARDING
+    // guidance. Starts at 2 (first message + first user response); decremented
+    // each message, stops at 0. The block itself now lets the agent decide
+    // whether to actually onboard, so it never gatekeeps a greeting or a task.
     if (isFirstMessage) {
-      this.onboardingCounter.set(input.sessionId, 5);
+      this.onboardingCounter.set(input.sessionId, 2);
     }
     const onboardingMessagesRemaining =
       this.onboardingCounter.get(input.sessionId) ?? 0;
