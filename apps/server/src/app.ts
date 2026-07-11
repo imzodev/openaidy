@@ -21,6 +21,8 @@ import {
   noopInvalidator,
 } from './lib/credential-provider';
 import { healthRoutes } from './routes/health';
+import { infoRoutes } from './routes/info';
+import { OPEN_AIDY_VERSION } from './lib/version';
 import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
 import { createAccessTokenService } from './access-tokens/service';
@@ -228,7 +230,7 @@ export async function buildApp() {
 
   // Create AddonService early so it can be injected into the builtin tool registry
   const addonManifestValidator = new ManifestValidator();
-  const openAidyVersion = process.env.npm_package_version ?? '0.0.0';
+  const openAidyVersion = OPEN_AIDY_VERSION;
   const addonService = dbAdapter
     ? createAddonService({
         repository: dbAdapter.repositories.addons,
@@ -470,6 +472,10 @@ export async function buildApp() {
         configService: services.config,
         authMiddleware,
       });
+
+      // /api/info — build/runtime info (version, node, platform, uptime).
+      // Unauthenticated; discloses nothing sensitive (same level as /health).
+      await api.register(infoRoutes);
 
       // Pass shared services to session routes
       await api.register(sessionRoutes, {
