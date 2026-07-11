@@ -409,6 +409,47 @@ OpenAidy.ready(function(sdk) {
     expect(enableCalled).toBe(true);
     if (result.ok) expect(result.content).toContain('Registered and enabled');
   });
+
+  // ── Storage ────────────────────────────────────────────────────────────────
+
+  it('declares a storage parameter and documents it', () => {
+    const props = (
+      tool.parameters as unknown as { properties: Record<string, unknown> }
+    ).properties;
+    expect(props.storage).toBeDefined();
+    expect(tool.description).toContain('storage.migrations');
+    expect(tool.description).toContain('agentQueries');
+    expect(tool.description).toContain('sdk.storage');
+  });
+
+  it('merges the storage block into addon.json', async () => {
+    const storage = {
+      migrations: ['CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)'],
+      agentAccess: 'readwrite',
+      agentQueries: [
+        {
+          name: 'add_note',
+          description: 'Add a note',
+          params: { title: 'string' },
+          access: 'write',
+          sql: 'INSERT INTO notes (title) VALUES (:title)',
+        },
+      ],
+    };
+    const result = await tool.execute(
+      {
+        ...VALID_ARGS,
+        permissions: ['storage.read', 'storage.write'],
+        storage,
+      },
+      { agentId: 'agent', sessionId: 'test-session' },
+    );
+    expect(result.ok).toBe(true);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(addonsDir, 'my-addon', 'addon.json'), 'utf-8'),
+    );
+    expect(manifest.storage).toEqual(storage);
+  });
 });
 
 // ── sdk-reference integration ──────────────────────────────────────────────────
@@ -430,5 +471,15 @@ describe('sdk-reference', () => {
     expect(ref).toContain('listAgents');
     expect(ref).toContain('Agents');
     expect(ref).toContain('Sessions');
+  });
+
+  it('documents the storage SDK methods', async () => {
+    const { SDK_METHODS, renderSdkReference } =
+      await import('../../addons/sdk-reference.js');
+    const names = SDK_METHODS.map((m) => m.name);
+    expect(names).toContain('storage.kv.get');
+    expect(names).toContain('storage.query');
+    expect(names).toContain('storage.search');
+    expect(renderSdkReference()).toContain('Storage');
   });
 });

@@ -140,6 +140,16 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '',
       sdkReference,
       '',
+      'STORAGE (optional — give the addon its own database)',
+      '────────────────────────────────────────────────────',
+      'Pass the `storage` parameter to give the addon a private SQLite database — use it',
+      'for anything that accumulates data (notes, contacts, logs, trackers, caches).',
+      'Declare tables in storage.migrations (applied automatically, so they exist even before',
+      'the UI runs). The UI reads/writes via sdk.storage.* — add "storage.read"/"storage.write"',
+      'to permissions for that. To let AGENTS work with the data, set storage.agentAccess',
+      '("read" or "readwrite") and declare storage.agentQueries: named, parameterized queries',
+      'the agent runs by name via the addon_run tool (agents never write raw SQL).',
+      '',
       'AGENT IDS',
       '─────────',
       'NEVER hardcode an agent ID. Agent IDs are user-defined and vary between',
@@ -224,6 +234,35 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'Paths must be relative with no ".." segments. Do not include "addon.json".',
           additionalProperties: { type: 'string' },
         },
+        storage: {
+          type: 'object',
+          description:
+            'Optional. Gives the addon its own private SQLite database. ' +
+            'Declare the schema in `migrations` (ordered SQL DDL, applied automatically — so tables exist even before the UI runs). ' +
+            "The UI reads/writes it via the storage SDK (sdk.storage.kv.*, sdk.storage.query/exec/search) — add 'storage.read' and/or 'storage.write' to `permissions` for that. " +
+            "To let AGENTS use the data, set `agentAccess` ('read' or 'readwrite') and declare `agentQueries`: named, parameterized queries the agent runs by name (agents never write raw SQL). " +
+            'Example: { "migrations": ["CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT, created_at TEXT DEFAULT (datetime(\'now\')))"], "agentAccess": "readwrite", "agentQueries": [{ "name": "add_note", "description": "Add a note", "params": { "title": "string" }, "access": "write", "sql": "INSERT INTO notes (title) VALUES (:title)" }, { "name": "recent_notes", "description": "Most recent notes", "access": "read", "sql": "SELECT title FROM notes ORDER BY created_at DESC LIMIT 20" }] }',
+          properties: {
+            migrations: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Ordered SQL DDL statements applied once, by index (CREATE TABLE / INDEX / VIRTUAL TABLE ... USING fts5). No BEGIN/COMMIT; no ATTACH/DETACH.',
+            },
+            agentAccess: {
+              type: 'string',
+              enum: ['read', 'readwrite'],
+              description:
+                "Opt the addon's data into agent access. 'read' allows read queries; 'readwrite' also allows write queries.",
+            },
+            agentQueries: {
+              type: 'array',
+              description:
+                'Named, parameterized queries agents can run via addon_run. Each: { name, description, params?: {name: "string"|"int"|"number"|"boolean"}, access: "read"|"write", sql (use :name for params) }.',
+              items: { type: 'object' },
+            },
+          },
+        },
       },
       required: ['id', 'name', 'description', 'permissions', 'files'],
     },
@@ -241,6 +280,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       const externalImageDomains = Array.isArray(args['externalImageDomains'])
         ? (args['externalImageDomains'] as string[])
         : undefined;
+      const storage =
+        args['storage'] && typeof args['storage'] === 'object'
+          ? (args['storage'] as Record<string, unknown>)
+          : undefined;
       const filesArg = args['files'];
 
       // ── Input validation ────────────────────────────────────────────────
@@ -429,6 +472,20 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           }
           await writeFile(join(addonDir, filePath), content, 'utf-8');
         }
+      }
+
+      // Merge the declared storage block into the scaffolded addon.json so the
+      // on-disk manifest reflects it (and the DB registration below picks it up).
+      // The full storage schema is validated by installAddon's manifest validator.
+      if (storage) {
+        const { readFileSync, writeFileSync } = await import('node:fs');
+        const manifestPath = join(addonDir, 'addon.json');
+        const m = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
+          string,
+          unknown
+        >;
+        m.storage = storage;
+        writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf-8');
       }
 
       // ── Step 2: register + enable via AddonService (in-process) ──────────
