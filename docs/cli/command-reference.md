@@ -665,6 +665,20 @@ Stop the running OpenAidy server.
 openaidy stop
 ```
 
+#### `restart`
+
+Restart the running OpenAidy server: stops it (gracefully) then starts a fresh one. Equivalent to running `openaidy stop` followed by `openaidy start`, but in a single command with port preservation and a coherent exit code (0 only if both steps succeed).
+
+```bash
+openaidy restart
+openaidy restart --port 3001
+openaidy restart --integrated
+```
+
+The port from the previous server PID file is preserved by default, so the user's browser tab and any client config stays pointed at the same origin. Pass `--port` to override (same semantics as `openaidy start`). `--server-only` and `--integrated` work exactly like `start`.
+
+If `stop` fails, `start` is **not** attempted — otherwise you'd risk starting a second server on a still-busy port. The stop error is surfaced directly.
+
 #### `status`
 
 Show the current server status.
