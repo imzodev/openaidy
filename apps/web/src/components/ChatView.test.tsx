@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { ChatView } from './ChatView';
 import type { SessionMessage } from '../lib/api';
@@ -125,6 +125,50 @@ describe('ChatView', () => {
       fireEvent.input(textarea, { target: { value: 'Edited content' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
       expect(onEditQueued).toHaveBeenCalledWith('q1', 'Edited content');
+    });
+  });
+
+  describe('auto-scroll containment', () => {
+    beforeEach(() => {
+      vi.mocked(Element.prototype.scrollTo).mockClear();
+      vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    });
+    afterEach(() => {
+      vi.mocked(Element.prototype.scrollTo).mockClear();
+      vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    });
+
+    it('scrolls the chat container, not the document, when messages change', () => {
+      const { container } = render(() => (
+        <ChatView messages={mockMessages} isLoading={false} />
+      ));
+      // The scroll container is the first child div (the ref div with
+      // overflow-y-auto). After mount + initial render, the auto-scroll
+      // effect must have called scrollTo on it — never scrollIntoView on
+      // any descendant.
+      const scrollContainer = container.firstElementChild as HTMLElement;
+      expect(scrollContainer).toBeTruthy();
+      expect(vi.mocked(Element.prototype.scrollTo).mock.instances).toContain(
+        scrollContainer,
+      );
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('scrolls to a specific message inside the chat container', () => {
+      const { container } = render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          scrollToMessageId="1"
+        />
+      ));
+      const scrollContainer = container.firstElementChild as HTMLElement;
+      // The scrollTo for the run click should also land on the chat
+      // container — never the document or a descendant element.
+      expect(scrollContainer).toBeTruthy();
+      const instances = vi.mocked(Element.prototype.scrollTo).mock.instances;
+      expect(instances).toContain(scrollContainer);
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     });
   });
 });
