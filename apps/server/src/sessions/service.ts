@@ -91,6 +91,10 @@ export class SessionMessageService {
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
 
+  // In-flight tool AbortControllers so a user "Stop" can cancel a running tool
+  // (issue #375). Key: `${runId}:${toolCallId}`.
+  private readonly inflightTools = new Map<string, AbortController>();
+
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
     this.logger = options.logger;
@@ -116,6 +120,18 @@ export class SessionMessageService {
    */
   get isDbBacked(): boolean {
     return !!this.sessionsRepo;
+  }
+
+  /**
+   * Cancel an in-flight tool call (user hit Stop). Aborts the tool's
+   * AbortSignal; the tool resolves with an error and the streaming loop
+   * continues. Returns true if a matching in-flight tool was found.
+   */
+  cancelTool(runId: string, toolCallId: string): boolean {
+    const controller = this.inflightTools.get(`${runId}:${toolCallId}`);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   /**
@@ -1112,12 +1128,41 @@ export class SessionMessageService {
               ? this.builtinTools?.get(tc.name)
               : undefined;
             if (builtinTool) {
+              // Register an AbortController so the user can cancel this tool
+              // (issue #375). Keyed by (runId, toolCallId); cleaned up when the
+              // tool settles.
+              const cancelKey = input.runId
+                ? `${input.runId}:${tc.id}`
+                : undefined;
+              const controller = new AbortController();
+              if (cancelKey) this.inflightTools.set(cancelKey, controller);
+
               const builtinResult = await builtinTool
-                .execute(tc.arguments, { agentId, sessionId: input.sessionId })
+                .execute(tc.arguments, {
+                  agentId,
+                  sessionId: input.sessionId,
+                  signal: controller.signal,
+                  onOutput: (chunk) =>
+                    onStreamEvent({
+                      type: 'exec_output',
+                      toolCallId: tc.id,
+                      stream: chunk.stream,
+                      data: chunk.data,
+                    }),
+                })
                 .catch((e: unknown) => ({
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,
-                }));
+                }))
+                .finally(() => {
+                  if (cancelKey) this.inflightTools.delete(cancelKey);
+                });
+
+              // If the user cancelled this tool, tell the UI so it can mark the
+              // block "Cancelled by user".
+              if (controller.signal.aborted) {
+                onStreamEvent({ type: 'tool_cancelled', toolCallId: tc.id });
+              }
 
               // Check for INTERRUPT_CHOICES sentinel from present_choices tool
               if (builtinResult.ok) {

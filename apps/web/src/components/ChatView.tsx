@@ -12,6 +12,10 @@ type StreamingToolCall = {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /** Live stdout/stderr streamed while the tool runs (e.g. exec_run). */
+  output?: string;
+  /** True once the user cancelled this tool call. */
+  cancelled?: boolean;
 };
 
 type ChatViewProps = {
@@ -25,6 +29,8 @@ type ChatViewProps = {
   queuedMessages?: QueuedMessage[];
   onEditQueued?: (id: string, content: string) => void;
   onRemoveQueued?: (id: string) => void;
+  /** Ask the server to cancel an in-flight tool call. */
+  onCancelTool?: (toolCallId: string) => void;
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
 };
@@ -244,7 +250,14 @@ export function ChatView(props: ChatViewProps) {
                       <ToolCallBlock
                         name={tc.name}
                         input={tc.input}
-                        isActive={true}
+                        isActive={!tc.cancelled}
+                        output={tc.output}
+                        cancelled={tc.cancelled}
+                        onStop={
+                          props.onCancelTool
+                            ? () => props.onCancelTool?.(tc.id)
+                            : undefined
+                        }
                       />
                     )}
                   </For>

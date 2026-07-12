@@ -9,6 +9,8 @@ export type RunEventType =
   | 'run.started'
   | 'run.delta'
   | 'run.tool_call'
+  | 'run.exec_output'
+  | 'run.tool_cancelled'
   | 'run.completed'
   | 'run.failed'
   | 'session.run.choices';
@@ -182,6 +184,52 @@ export class RunEventEmitter {
       timestamp: new Date().toISOString(),
       data: {
         toolCall: params.toolCall,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.exec_output event (live stdout/stderr chunk from a tool).
+   */
+  emitExecOutput(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    toolCallId: string;
+    stream: 'stdout' | 'stderr';
+    chunk: string;
+  }): void {
+    this.emit({
+      type: 'run.exec_output',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        toolCallId: params.toolCallId,
+        stream: params.stream,
+        chunk: params.chunk,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.tool_cancelled event (a tool call was aborted by the user).
+   */
+  emitToolCancelled(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    toolCallId: string;
+  }): void {
+    this.emit({
+      type: 'run.tool_cancelled',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        toolCallId: params.toolCallId,
       },
     });
   }
