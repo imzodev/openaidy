@@ -205,5 +205,21 @@ describe('ChatView', () => {
         screen.queryByRole('button', { name: 'Stop agent' }),
       ).not.toBeInTheDocument();
     });
+
+    it('renders the activity badge from runActivity', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          runActivity={{
+            phase: 'running_tool',
+            toolName: 'exec_run',
+            elapsedMs: 7000,
+          }}
+        />
+      ));
+      expect(screen.getByText('Running exec_run…')).toBeInTheDocument();
+    });
   });
 });

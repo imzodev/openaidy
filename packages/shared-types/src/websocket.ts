@@ -547,6 +547,22 @@ export type SessionStreamRunCancelled = WSMessage<
   }
 >;
 
+/**
+ * Server-driven liveness heartbeat so the UI can show what the agent is doing
+ * between other events ("Thinking…" / "Running <tool>… 12s"). At most one per
+ * second per run (#378).
+ */
+export type SessionStreamActivity = WSMessage<
+  'session.stream.activity',
+  {
+    sessionId: string;
+    runId: string;
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  }
+>;
+
 export type SessionRunChoicesEvent = WSMessage<
   'session.run.choices',
   ChoicesEvent
@@ -559,6 +575,7 @@ export type SessionStreamEvent =
   | SessionStreamExecOutput
   | SessionStreamToolCancelled
   | SessionStreamRunCancelled
+  | SessionStreamActivity
   | SessionStreamUsage
   | SessionStreamEnd
   | SessionStreamError
@@ -1072,6 +1089,7 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.exec_output',
   'session.stream.tool_cancelled',
   'session.stream.run_cancelled',
+  'session.stream.activity',
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
@@ -1104,6 +1122,7 @@ const STREAM_EVENT_TYPES: Set<string> = new Set([
   'session.stream.exec_output',
   'session.stream.tool_cancelled',
   'session.stream.run_cancelled',
+  'session.stream.activity',
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',

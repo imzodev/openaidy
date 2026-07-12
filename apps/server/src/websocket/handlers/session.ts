@@ -736,6 +736,12 @@ export class SessionHandler {
             'Auto-rename session failed (non-fatal)',
           );
         });
+      } else if (result.error.code === 'cancelled') {
+        // User hit "Stop agent" — deliver a clean run.cancelled on the
+        // WS-level run channel the client is subscribed to (issue #376), not a
+        // generic stream error. (The service also marks the run cancelled and
+        // emits on its own run.id channel for any run-id subscribers.)
+        this.runEvents?.emitRunCancelled({ runId, sessionId, agentId });
       } else {
         // Emit failure
         this.runEvents?.emitFailed({

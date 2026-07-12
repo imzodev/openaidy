@@ -12,6 +12,7 @@ export type RunEventType =
   | 'run.exec_output'
   | 'run.tool_cancelled'
   | 'run.cancelled'
+  | 'run.activity'
   | 'run.completed'
   | 'run.failed'
   | 'session.run.choices';
@@ -250,6 +251,32 @@ export class RunEventEmitter {
       agentId: params.agentId,
       timestamp: new Date().toISOString(),
       data: {},
+    });
+  }
+
+  /**
+   * Emit a run.activity heartbeat (server-driven liveness indicator). Lets the
+   * UI show "Thinking…" / "Running <tool>… 12s" between other events (#378).
+   */
+  emitActivity(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  }): void {
+    this.emit({
+      type: 'run.activity',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        phase: params.phase,
+        elapsedMs: params.elapsedMs,
+        ...(params.toolName !== undefined && { toolName: params.toolName }),
+      },
     });
   }
 

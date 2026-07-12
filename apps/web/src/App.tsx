@@ -120,6 +120,15 @@ function AppContent(props: AppContentProps) {
   const [currentRunId, setCurrentRunId] = createSignal<string | undefined>(
     undefined,
   );
+  // Server-driven activity heartbeat for the current run (#378).
+  const [runActivity, setRunActivity] = createSignal<
+    | {
+        phase: 'thinking' | 'running_tool' | 'cancelled' | 'failed';
+        toolName?: string;
+        elapsedMs: number;
+      }
+    | undefined
+  >(undefined);
   // Client-side queue of messages typed while the agent is responding.
   const messageQueue = useMessageQueue();
   const [pendingUserMessage, setPendingUserMessage] = createSignal<
@@ -161,6 +170,7 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      setRunActivity(undefined);
       setPendingUserMessage(undefined);
       const sid = selectedSessionId();
       if (sid) {
@@ -183,6 +193,21 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(true);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      setRunActivity({ phase: 'thinking', elapsedMs: 0 });
+      armStreamWatchdog();
+    };
+
+    // Server-driven activity heartbeat — what the agent is doing between
+    // events, with a run-elapsed counter the badge ticks locally (#378).
+    const handleActivity = (event: {
+      payload: {
+        phase: 'thinking' | 'running_tool';
+        toolName?: string;
+        elapsedMs: number;
+      };
+    }) => {
+      const { phase, toolName, elapsedMs } = event.payload;
+      setRunActivity({ phase, elapsedMs, ...(toolName ? { toolName } : {}) });
       armStreamWatchdog();
     };
 
@@ -250,6 +275,7 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      setRunActivity(undefined);
       setPendingUserMessage(undefined);
       queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
       queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
@@ -261,6 +287,7 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      setRunActivity(undefined);
       setPendingUserMessage(undefined);
       // Refresh messages to show the completed response
       queryClient.invalidateQueries({
@@ -283,6 +310,7 @@ function AppContent(props: AppContentProps) {
       setIsStreaming(false);
       setStreamingContent('');
       setStreamingToolCalls([]);
+      setRunActivity(undefined);
       setPendingUserMessage(undefined);
     };
 
@@ -320,6 +348,10 @@ function AppContent(props: AppContentProps) {
       'session.stream.run_cancelled',
       handleRunCancelled,
     );
+    const unsubActivity = wsClient.on(
+      'session.stream.activity',
+      handleActivity,
+    );
 
     // Subscribe to the session
     wsClient.subscribeToSession(sessionId).catch((err: Error) => {
@@ -338,6 +370,7 @@ function AppContent(props: AppContentProps) {
       unsubExecOutput();
       unsubToolCancelled();
       unsubRunCancelled();
+      unsubActivity();
       setFocusChatInput(undefined); // Clear stale focus function
     });
   });
@@ -827,6 +860,7 @@ function AppContent(props: AppContentProps) {
               }
               onCancelTool={handleCancelTool}
               onCancelRun={handleCancelRun}
+              runActivity={isStreaming() ? runActivity() : undefined}
               queuedMessages={messageQueue.items()}
               onEditQueued={messageQueue.edit}
               onRemoveQueued={messageQueue.remove}

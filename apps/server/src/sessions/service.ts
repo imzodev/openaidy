@@ -852,6 +852,36 @@ export class SessionMessageService {
       this.inflightRuns.set(input.runId, runController);
     }
 
+    // Server-driven activity heartbeat (issue #378): emit a `run.activity`
+    // event (at most 1/s) while the run is idle between other events, so the
+    // UI can show "Thinking…" / "Running <tool>… 12s". Emitted under the
+    // WS-level runId so it reaches the subscribed client; skipped for non-WS
+    // callers (no runId). `lastActivityAt` is bumped whenever we produce a
+    // real event, so a continuously-streaming run stays quiet.
+    const activityRunId = input.runId;
+    const runStartAt = Date.now();
+    let lastActivityAt = runStartAt;
+    let activityPhase: 'thinking' | 'running_tool' = 'thinking';
+    let activityToolName: string | undefined;
+    const heartbeat =
+      activityRunId && this.runEvents
+        ? setInterval(() => {
+            const now = Date.now();
+            // Already busy (event within the last 500ms) — stay quiet.
+            if (now - lastActivityAt < 500) return;
+            this.runEvents!.emitActivity({
+              runId: activityRunId,
+              sessionId: input.sessionId,
+              agentId,
+              phase: activityPhase,
+              elapsedMs: now - runStartAt,
+              ...(activityToolName !== undefined && {
+                toolName: activityToolName,
+              }),
+            });
+          }, 1000)
+        : undefined;
+
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
     const historyMessages: Message[] = history.map((m) => {
@@ -1031,6 +1061,11 @@ export class SessionMessageService {
           switch (value.type) {
             case 'stream.content_delta': {
               accumulatedContent += value.delta;
+              // Content is flowing — mark busy so the heartbeat stays quiet
+              // and the phase reads as thinking/streaming (#378).
+              lastActivityAt = Date.now();
+              activityPhase = 'thinking';
+              activityToolName = undefined;
               onStreamEvent({ type: 'delta', content: value.delta });
               break;
             }
@@ -1177,6 +1212,11 @@ export class SessionMessageService {
                 );
               }
 
+              // Reflect the running tool in the activity heartbeat (#378).
+              activityPhase = 'running_tool';
+              activityToolName = tc.name;
+              lastActivityAt = Date.now();
+
               const builtinResult = await builtinTool
                 .execute(tc.arguments, {
                   agentId,
@@ -1197,6 +1237,11 @@ export class SessionMessageService {
                 .finally(() => {
                   if (cancelKey) this.inflightTools.delete(cancelKey);
                 });
+
+              // Tool settled — back to thinking until the next tool runs (#378).
+              activityPhase = 'thinking';
+              activityToolName = undefined;
+              lastActivityAt = Date.now();
 
               // If the user cancelled this tool, tell the UI so it can mark the
               // block "Cancelled by user".
@@ -1462,6 +1507,7 @@ export class SessionMessageService {
         errorMsg,
       );
     } finally {
+      if (heartbeat) clearInterval(heartbeat);
       if (input.runId) this.inflightRuns.delete(input.runId);
     }
   }

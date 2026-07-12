@@ -14,6 +14,7 @@ import {
   type SessionStreamExecOutput,
   type SessionStreamToolCancelled,
   type SessionStreamRunCancelled,
+  type SessionStreamActivity,
   type SessionStreamUsage,
   type SessionStreamEnd,
   type SessionStreamError,
@@ -35,6 +36,7 @@ export type SessionStreamEvent =
   | SessionStreamExecOutput
   | SessionStreamToolCancelled
   | SessionStreamRunCancelled
+  | SessionStreamActivity
   | SessionStreamUsage
   | SessionStreamEnd
   | SessionStreamError
@@ -128,6 +130,18 @@ export function mapRunEventToStreamEvent(
         sessionId: event.sessionId,
         runId: event.runId,
       }) as SessionStreamRunCancelled;
+    }
+
+    case 'run.activity': {
+      return createWSMessage('session.stream.activity', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        phase: event.data.phase as 'thinking' | 'running_tool',
+        elapsedMs: event.data.elapsedMs as number,
+        ...(event.data.toolName !== undefined && {
+          toolName: event.data.toolName as string,
+        }),
+      }) as SessionStreamActivity;
     }
 
     case 'run.completed': {

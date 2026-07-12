@@ -14,6 +14,8 @@ import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
 import { QueuedMessageCard } from './QueuedMessageCard';
+import { RunActivityBadge } from './RunActivityBadge';
+import type { RunActivityPhase } from './RunActivityBadge';
 
 type StreamingToolCall = {
   id: string;
@@ -40,6 +42,12 @@ type ChatViewProps = {
   onCancelTool?: (toolCallId: string) => void;
   /** Ask the server to cancel the whole in-flight run ("Stop agent"). */
   onCancelRun?: () => void;
+  /** Server-driven activity heartbeat for the in-flight run (#378). */
+  runActivity?: {
+    phase: RunActivityPhase;
+    toolName?: string;
+    elapsedMs: number;
+  };
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
 };
@@ -262,6 +270,16 @@ export function ChatView(props: ChatViewProps) {
                 <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />
                   <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+                </div>
+              </Show>
+              {/* Live activity heartbeat — what the agent is doing right now */}
+              <Show when={props.runActivity}>
+                <div class="mb-2">
+                  <RunActivityBadge
+                    phase={props.runActivity!.phase}
+                    toolName={props.runActivity!.toolName}
+                    elapsedMs={props.runActivity!.elapsedMs}
+                  />
                 </div>
               </Show>
               <Show when={(props.streamingToolCalls?.length ?? 0) > 0}>
