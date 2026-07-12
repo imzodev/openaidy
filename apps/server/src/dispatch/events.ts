@@ -11,6 +11,7 @@ export type RunEventType =
   | 'run.tool_call'
   | 'run.exec_output'
   | 'run.tool_cancelled'
+  | 'run.cancelled'
   | 'run.completed'
   | 'run.failed'
   | 'session.run.choices';
@@ -231,6 +232,24 @@ export class RunEventEmitter {
       data: {
         toolCallId: params.toolCallId,
       },
+    });
+  }
+
+  /**
+   * Emit a run.cancelled event (the whole run was aborted by the user).
+   */
+  emitRunCancelled(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+  }): void {
+    this.emit({
+      type: 'run.cancelled',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {},
     });
   }
 

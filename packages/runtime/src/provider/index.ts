@@ -71,6 +71,12 @@ export type ModelRequest = {
   readonly stopSequences?: readonly string[];
   readonly stream?: boolean;
   readonly metadata?: Record<string, unknown>;
+  /**
+   * Optional caller-supplied abort signal (e.g. a user-initiated "Stop agent").
+   * Adapters combine it with their own request-timeout signal so aborting it
+   * cancels the in-flight provider fetch. Not serialized to the wire.
+   */
+  readonly signal?: AbortSignal;
 };
 
 /**

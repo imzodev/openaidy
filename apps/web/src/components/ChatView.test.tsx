@@ -178,5 +178,32 @@ describe('ChatView', () => {
       expect(screen.getByText('Cancelled by user')).toBeInTheDocument();
       expect(screen.queryByText('Stop')).not.toBeInTheDocument();
     });
+
+    it('shows a Stop agent button that invokes onCancelRun', () => {
+      const onCancelRun = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          onCancelRun={onCancelRun}
+        />
+      ));
+      fireEvent.click(screen.getByRole('button', { name: 'Stop agent' }));
+      expect(onCancelRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits the Stop agent button when onCancelRun is not provided', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+        />
+      ));
+      expect(
+        screen.queryByRole('button', { name: 'Stop agent' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

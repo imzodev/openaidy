@@ -660,12 +660,13 @@ describe('Session Integration Tests', () => {
       expect(messageRouter.hasHandler('session.messages')).toBe(true);
       expect(messageRouter.hasHandler('session.runs')).toBe(true);
       expect(messageRouter.hasHandler('session.tool.cancel')).toBe(true);
+      expect(messageRouter.hasHandler('session.run.cancel')).toBe(true);
     });
 
-    it('should have exactly 8 session handlers', () => {
+    it('should have exactly 9 session handlers', () => {
       const types = messageRouter.getHandlerTypes();
       const sessionHandlers = types.filter((t) => t.startsWith('session.'));
-      expect(sessionHandlers).toHaveLength(8);
+      expect(sessionHandlers).toHaveLength(9);
     });
   });
 

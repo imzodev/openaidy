@@ -517,6 +517,20 @@ export class WebSocketClient {
   }
 
   /**
+   * Cancel an in-flight run (user hit "Stop agent"). Fire-and-forget: the
+   * server aborts the run and the UI reacts to the resulting
+   * `session.stream.run_cancelled` event, so we don't await a response.
+   */
+  cancelRun(sessionId: string, runId: string): void {
+    void this.sendRequest('session.run.cancel', {
+      sessionId,
+      runId,
+    }).catch(() => {
+      /* best-effort — cancellation is confirmed via the stream event */
+    });
+  }
+
+  /**
    * Subscribe to session events
    */
   async subscribeToSession(

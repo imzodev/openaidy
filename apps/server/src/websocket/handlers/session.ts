@@ -24,6 +24,7 @@ import {
   type SessionMessagesRequest,
   type SessionRunsRequest,
   type SessionToolCancelRequest,
+  type SessionRunCancelRequest,
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessagesResponse,
@@ -382,6 +383,20 @@ export class SessionHandler {
   ): Promise<void> {
     const { runId, toolCallId } = request.payload;
     this.sessionService.cancelTool(runId, toolCallId);
+  }
+
+  /**
+   * Handle session.run.cancel — the user hit "Stop agent". Aborts the whole
+   * run (provider stream + any running tool); the UI reacts to the resulting
+   * run.cancelled event, so no response is returned.
+   */
+  async handleRunCancel(
+    _connectionId: string,
+    request: SessionRunCancelRequest,
+    _context: HandlerContext,
+  ): Promise<void> {
+    const { runId } = request.payload;
+    this.sessionService.cancelRun(runId);
   }
 
   /**
@@ -927,6 +942,10 @@ export function registerSessionHandlers(
 
   router.registerHandler('session.tool.cancel', (connId, msg, ctx) =>
     handler.handleToolCancel(connId, msg as SessionToolCancelRequest, ctx),
+  );
+
+  router.registerHandler('session.run.cancel', (connId, msg, ctx) =>
+    handler.handleRunCancel(connId, msg as SessionRunCancelRequest, ctx),
   );
 }
 

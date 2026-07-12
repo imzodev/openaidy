@@ -243,6 +243,19 @@ function AppContent(props: AppContentProps) {
       );
     };
 
+    const handleRunCancelled = () => {
+      // User hit "Stop agent": tear down the streaming UI, drop any partial
+      // content, and refresh so the run shows its cancelled status (#376).
+      clearStreamWatchdog();
+      setIsStreaming(false);
+      setStreamingContent('');
+      setStreamingToolCalls([]);
+      setPendingUserMessage(undefined);
+      queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
+      processQueue();
+    };
+
     const handleStreamEnd = () => {
       clearStreamWatchdog();
       setIsStreaming(false);
@@ -303,6 +316,10 @@ function AppContent(props: AppContentProps) {
       'session.stream.tool_cancelled',
       handleToolCancelled,
     );
+    const unsubRunCancelled = wsClient.on(
+      'session.stream.run_cancelled',
+      handleRunCancelled,
+    );
 
     // Subscribe to the session
     wsClient.subscribeToSession(sessionId).catch((err: Error) => {
@@ -320,6 +337,7 @@ function AppContent(props: AppContentProps) {
       unsubChoices();
       unsubExecOutput();
       unsubToolCancelled();
+      unsubRunCancelled();
       setFocusChatInput(undefined); // Clear stale focus function
     });
   });
@@ -443,6 +461,16 @@ function AppContent(props: AppContentProps) {
     const rid = currentRunId();
     if (wsClient && sid && rid) {
       wsClient.cancelTool(sid, rid, toolCallId);
+    }
+  };
+
+  // User hit "Stop agent" — ask the server to cancel the whole run (#376).
+  const handleCancelRun = () => {
+    const wsClient = client();
+    const sid = selectedSessionId();
+    const rid = currentRunId();
+    if (wsClient && sid && rid) {
+      wsClient.cancelRun(sid, rid);
     }
   };
 
@@ -798,6 +826,7 @@ function AppContent(props: AppContentProps) {
                 isStreaming() ? streamingToolCalls() : undefined
               }
               onCancelTool={handleCancelTool}
+              onCancelRun={handleCancelRun}
               queuedMessages={messageQueue.items()}
               onEditQueued={messageQueue.edit}
               onRemoveQueued={messageQueue.remove}

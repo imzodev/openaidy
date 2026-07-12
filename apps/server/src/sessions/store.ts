@@ -195,6 +195,13 @@ export function markRunFailed(
   return updateRunRecord(id, updates);
 }
 
+export function markRunCancelled(id: string): SessionRunRecord | undefined {
+  return updateRunRecord(id, {
+    status: 'cancelled',
+    finishedAt: new Date().toISOString(),
+  });
+}
+
 export function listSessionRunRecords(sessionId: string): SessionRunRecord[] {
   return Array.from(runs.values())
     .filter((r) => r.sessionId === sessionId)
