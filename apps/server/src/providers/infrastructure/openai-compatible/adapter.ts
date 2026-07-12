@@ -374,7 +374,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
       this.logger.info(
         `invoke: final requestParams = ${JSON.stringify({ ...requestParams, messages: '[...]' })}`,
       );
-      const response = await this.client.chat.completions.create(requestParams);
+      const response = await this.client.chat.completions.create(
+        requestParams,
+        request.signal ? { signal: request.signal } : {},
+      );
 
       return ok(
         this.mapResponse(response, modelId, toolMapping?.nameMap ?? new Map()),
@@ -444,7 +447,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
         requestParams.tools = tools;
       }
 
-      const stream = await this.client.chat.completions.create(requestParams);
+      // Forward the caller's abort signal (e.g. user "Stop agent") to the SDK
+      // so aborting it cancels the in-flight streaming request. The SDK applies
+      // its own per-request timeout (config.timeoutMs) alongside this.
+      const stream = await this.client.chat.completions.create(
+        requestParams,
+        request.signal ? { signal: request.signal } : {},
+      );
 
       let finishReason: 'stop' | 'length' | 'tool_calls' | 'content_filter' =
         'stop';

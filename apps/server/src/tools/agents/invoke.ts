@@ -89,10 +89,22 @@ export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
 }
 
 /**
- * Sleep helper for polling delays
+ * Sleep helper for polling delays. Resolves early if `signal` aborts, so a
+ * user "Stop" wakes the wait immediately instead of riding out the interval.
  */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
 
 export function createAgentsInvokeAndWaitTool(
@@ -123,7 +135,7 @@ export function createAgentsInvokeAndWaitTool(
       required: ['agentId', 'content'],
     },
 
-    async execute(args, _ctx) {
+    async execute(args, ctx) {
       const agentId = args['agentId'];
       const content = args['content'];
       const sessionId =
@@ -151,6 +163,7 @@ export function createAgentsInvokeAndWaitTool(
         };
       }
 
+      const signal = ctx?.signal;
       const sessionService = deps.getSessionService();
 
       // Step 1: Dispatch the agent
@@ -177,6 +190,17 @@ export function createAgentsInvokeAndWaitTool(
 
       try {
         while (totalWaited < MAX_WAIT_MS) {
+          // User hit Stop — bail out of the local wait. The dispatched
+          // sub-agent keeps running in its own session (its lifecycle is owned
+          // by the sub-session, not this tool call) and stays inspectable via
+          // sessions_read.
+          if (signal?.aborted) {
+            return {
+              ok: false,
+              error: 'Cancelled by user while waiting for agent response',
+            };
+          }
+
           // Check runs status using listRuns (lightweight, no full messages)
           const runs = await sessionService.listRuns(resolvedId);
           const lastRun = runs[runs.length - 1] as
@@ -217,8 +241,8 @@ export function createAgentsInvokeAndWaitTool(
             // Status is 'running' or 'queued' - continue polling
           }
 
-          // Wait with backoff
-          await sleep(currentInterval);
+          // Wait with backoff (wakes immediately if the user cancels)
+          await sleep(currentInterval, signal);
           totalWaited += currentInterval;
 
           // Exponential backoff: 2s -> 3s -> 4.5s -> 6s (capped)

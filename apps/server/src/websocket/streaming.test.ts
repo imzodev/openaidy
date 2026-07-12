@@ -12,6 +12,7 @@ import type {
   SessionStreamDelta,
   SessionStreamEnd,
   SessionStreamError,
+  SessionStreamActivity,
 } from '@openaidy/shared-types';
 
 // Mock logger
@@ -46,12 +47,10 @@ const createMockConnectionManager = () => ({
   updateHeartbeat: vi.fn(),
   checkStaleConnections: vi.fn().mockReturnValue([]),
   getLastHeartbeat: vi.fn(),
-  checkRateLimit: vi
-    .fn()
-    .mockReturnValue({
-      allowed: true,
-      info: { remaining: 10, reset: Date.now(), limit: 100 },
-    }),
+  checkRateLimit: vi.fn().mockReturnValue({
+    allowed: true,
+    info: { remaining: 10, reset: Date.now(), limit: 100 },
+  }),
   recordRequest: vi.fn(),
   resetRateLimit: vi.fn(),
   closeAll: vi.fn(),
@@ -191,6 +190,55 @@ describe('mapRunEventToStreamEvent', () => {
     expect(result?.type).toBe('session.stream.error');
     expect(result?.payload.error.code).toBe('unknown_error');
     expect(result?.payload.error.message).toBe('Unknown error');
+  });
+
+  it('should map run.activity event (with tool name)', () => {
+    const event: RunEvent = {
+      type: 'run.activity',
+      runId: 'run-123',
+      sessionId: 'session-456',
+      agentId: 'agent-789',
+      timestamp: '2024-01-01T00:00:12.000Z',
+      data: {
+        phase: 'running_tool',
+        toolName: 'exec_run',
+        elapsedMs: 12000,
+      },
+    };
+
+    const result = mapRunEventToStreamEvent(
+      event,
+    ) as SessionStreamActivity | null;
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('session.stream.activity');
+    expect(result?.payload.phase).toBe('running_tool');
+    expect(result?.payload.toolName).toBe('exec_run');
+    expect(result?.payload.elapsedMs).toBe(12000);
+  });
+
+  it('should map run.activity event (thinking, no tool name)', () => {
+    const event: RunEvent = {
+      type: 'run.activity',
+      runId: 'run-123',
+      sessionId: 'session-456',
+      agentId: 'agent-789',
+      timestamp: '2024-01-01T00:00:02.000Z',
+      data: {
+        phase: 'thinking',
+        elapsedMs: 2000,
+      },
+    };
+
+    const result = mapRunEventToStreamEvent(
+      event,
+    ) as SessionStreamActivity | null;
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('session.stream.activity');
+    expect(result?.payload.phase).toBe('thinking');
+    expect(result?.payload.toolName).toBeUndefined();
+    expect(result?.payload.elapsedMs).toBe(2000);
   });
 
   it('should return null for unknown event types', () => {

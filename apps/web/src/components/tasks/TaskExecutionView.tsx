@@ -15,6 +15,7 @@ import {
 } from '../../lib/api-tasks';
 import { useWebSocketContext } from '../../lib/ws-provider';
 import { submitMessageStreaming } from '../../lib/ws-api';
+import { RunActivityBadge } from '../RunActivityBadge';
 
 /**
  * Session message type
@@ -41,7 +42,7 @@ export type TaskExecutionViewProps = {
  */
 export function TaskExecutionView(props: TaskExecutionViewProps) {
   const { client, isConnected } = useWebSocketContext();
-  
+
   const [task, setTask] = createSignal<TaskWithDetails | null>(null);
   const [sessionId, setSessionId] = createSignal<string | null>(null);
   const [messages, setMessages] = createSignal<SessionMessage[]>([]);
@@ -49,23 +50,43 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
   const [inputValue, setInputValue] = createSignal('');
   const [isExecuting, setIsExecuting] = createSignal(false);
   const [isStreaming, setIsStreaming] = createSignal(false);
+  const [runActivity, setRunActivity] = createSignal<
+    | {
+        phase: 'thinking' | 'running_tool' | 'cancelled' | 'failed';
+        toolName?: string;
+        elapsedMs: number;
+      }
+    | undefined
+  >(undefined);
   const [error, setError] = createSignal<string | null>(null);
 
   // Subscribe to streaming events when we have a session and WebSocket is connected
   createEffect(() => {
     const sid = sessionId();
     const wsClient = client();
-    
+
     if (!sid || !wsClient || !isConnected()) return;
 
     // Subscribe to session stream events
     const handleStreamStart = () => {
       setIsStreaming(true);
       setStreamingContent('');
+      setRunActivity({ phase: 'thinking', elapsedMs: 0 });
     };
 
     const handleStreamDelta = (event: { payload: { content: string } }) => {
       setStreamingContent((prev) => prev + event.payload.content);
+    };
+
+    const handleActivity = (event: {
+      payload: {
+        phase: 'thinking' | 'running_tool';
+        toolName?: string;
+        elapsedMs: number;
+      };
+    }) => {
+      const { phase, toolName, elapsedMs } = event.payload;
+      setRunActivity({ phase, elapsedMs, ...(toolName ? { toolName } : {}) });
     };
 
     const handleStreamEnd = () => {
@@ -82,18 +103,26 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
       }
       setIsStreaming(false);
       setStreamingContent('');
+      setRunActivity(undefined);
     };
 
-    const handleStreamError = (event: { payload: { error: { message: string } } }) => {
+    const handleStreamError = (event: {
+      payload: { error: { message: string } };
+    }) => {
       setError(event.payload.error.message);
       setIsStreaming(false);
       setStreamingContent('');
+      setRunActivity(undefined);
     };
 
     const unsubStart = wsClient.on('session.stream.start', handleStreamStart);
     const unsubDelta = wsClient.on('session.stream.delta', handleStreamDelta);
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
+    const unsubActivity = wsClient.on(
+      'session.stream.activity',
+      handleActivity,
+    );
 
     // Subscribe to the session
     wsClient.subscribeToSession(sid).catch((err) => {
@@ -105,6 +134,7 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
       unsubDelta();
       unsubEnd();
       unsubError();
+      unsubActivity();
     });
   });
 
@@ -148,7 +178,9 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
         setError(result.error.message);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start execution');
+      setError(
+        err instanceof Error ? err.message : 'Failed to start execution',
+      );
     } finally {
       setIsExecuting(false);
     }
@@ -223,11 +255,13 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
           </Show>
           {/* WebSocket connection status */}
           <Show when={sessionId()}>
-            <span class={`px-2 py-0.5 text-xs rounded ${
-              isConnected() 
-                ? 'bg-green-100 text-green-700' 
-                : 'bg-red-100 text-red-700'
-            }`}>
+            <span
+              class={`px-2 py-0.5 text-xs rounded ${
+                isConnected()
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-red-100 text-red-700'
+              }`}
+            >
               {isConnected() ? 'WS Connected' : 'WS Disconnected'}
             </span>
           </Show>
@@ -243,9 +277,7 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
 
       {/* Error state */}
       <Show when={error()}>
-        <div class="p-4 bg-red-50 text-red-600 text-sm">
-          {error()}
-        </div>
+        <div class="p-4 bg-red-50 text-red-600 text-sm">{error()}</div>
       </Show>
 
       {/* Execution prompt */}
@@ -289,11 +321,13 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
                   message.role === 'user'
                     ? 'bg-blue-50 ml-8'
                     : message.role === 'assistant'
-                    ? 'bg-gray-50 mr-8'
-                    : 'bg-yellow-50'
+                      ? 'bg-gray-50 mr-8'
+                      : 'bg-yellow-50'
                 }`}
               >
-                <div class="text-xs text-gray-500 mb-1 capitalize">{message.role}</div>
+                <div class="text-xs text-gray-500 mb-1 capitalize">
+                  {message.role}
+                </div>
                 <div class="text-sm text-gray-900 whitespace-pre-wrap">
                   {message.content}
                 </div>
@@ -307,19 +341,46 @@ export function TaskExecutionView(props: TaskExecutionViewProps) {
           {/* Streaming indicator with live content */}
           <Show when={isStreaming()}>
             <div class="p-3 bg-gray-50 rounded-lg mr-8">
-              <Show when={streamingContent()} fallback={
-                <div class="flex items-center gap-2 text-gray-500">
-                  <Loader2 class="w-4 h-4 animate-spin" />
-                  <span class="text-sm">Agent is typing...</span>
-                </div>
-              }>
+              <Show
+                when={streamingContent()}
+                fallback={
+                  <Show
+                    when={runActivity()}
+                    fallback={
+                      <div class="flex items-center gap-2 text-gray-500">
+                        <Loader2 class="w-4 h-4 animate-spin" />
+                        <span class="text-sm">Agent is typing...</span>
+                      </div>
+                    }
+                  >
+                    <RunActivityBadge
+                      phase={runActivity()!.phase}
+                      toolName={runActivity()!.toolName}
+                      elapsedMs={runActivity()!.elapsedMs}
+                    />
+                  </Show>
+                }
+              >
                 <div class="text-xs text-gray-500 mb-1">assistant</div>
                 <div class="text-sm text-gray-900 whitespace-pre-wrap">
                   {streamingContent()}
                 </div>
-                <div class="flex items-center gap-1 mt-1 text-xs text-gray-400">
-                  <Loader2 class="w-3 h-3 animate-spin" />
-                  <span>streaming...</span>
+                <div class="mt-1">
+                  <Show
+                    when={runActivity()}
+                    fallback={
+                      <div class="flex items-center gap-1 text-xs text-gray-400">
+                        <Loader2 class="w-3 h-3 animate-spin" />
+                        <span>streaming...</span>
+                      </div>
+                    }
+                  >
+                    <RunActivityBadge
+                      phase={runActivity()!.phase}
+                      toolName={runActivity()!.toolName}
+                      elapsedMs={runActivity()!.elapsedMs}
+                    />
+                  </Show>
                 </div>
               </Show>
             </div>
