@@ -32,6 +32,21 @@ export type BuiltinToolContext = {
   readonly agentId: string;
   /** The session in which the tool is being invoked */
   readonly sessionId?: string;
+  /**
+   * Fired when the user cancels this in-flight tool call. Tools that run
+   * long/interruptible work (e.g. exec_run) should honor it; tools that ignore
+   * it keep working unchanged.
+   */
+  readonly signal?: AbortSignal;
+  /**
+   * Stream partial output to the UI while the tool runs. The host wires this to
+   * emit per-chunk events addressed to this tool call. Optional — tools that
+   * don't produce incremental output ignore it.
+   */
+  readonly onOutput?: (chunk: {
+    stream: 'stdout' | 'stderr';
+    data: string;
+  }) => void;
 };
 
 /**

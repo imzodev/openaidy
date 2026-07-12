@@ -106,8 +106,20 @@ function AppContent(props: AppContentProps) {
   const [streamingContent, setStreamingContent] = createSignal('');
   const [isStreaming, setIsStreaming] = createSignal(false);
   const [streamingToolCalls, setStreamingToolCalls] = createSignal<
-    Array<{ id: string; name: string; input: Record<string, unknown> }>
+    Array<{
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      /** Live stdout/stderr accumulated from run.exec_output (e.g. exec_run). */
+      output?: string;
+      /** Set once the user cancels this tool call. */
+      cancelled?: boolean;
+    }>
   >([]);
+  // The active run's id (from stream events), needed to address a tool cancel.
+  const [currentRunId, setCurrentRunId] = createSignal<string | undefined>(
+    undefined,
+  );
   // Client-side queue of messages typed while the agent is responding.
   const messageQueue = useMessageQueue();
   const [pendingUserMessage, setPendingUserMessage] = createSignal<
@@ -181,6 +193,7 @@ function AppContent(props: AppContentProps) {
 
     const handleStreamToolCall = (event: {
       payload: {
+        runId?: string;
         toolCall: {
           id: string;
           name: string;
@@ -189,11 +202,45 @@ function AppContent(props: AppContentProps) {
       };
     }) => {
       const tc = event.payload.toolCall;
+      if (event.payload.runId) setCurrentRunId(event.payload.runId);
       setStreamingToolCalls((prev) => [
         ...prev,
-        { id: tc.id, name: tc.name, input: tc.arguments },
+        { id: tc.id, name: tc.name, input: tc.arguments, output: '' },
       ]);
       armStreamWatchdog();
+    };
+
+    // Live stdout/stderr from an in-flight tool (e.g. exec_run) — append to the
+    // matching tool call, keeping the most recent 50 KB (matches server cap).
+    const handleExecOutput = (event: {
+      payload: {
+        runId: string;
+        toolCallId: string;
+        stream: 'stdout' | 'stderr';
+        data: string;
+      };
+    }) => {
+      setCurrentRunId(event.payload.runId);
+      const { toolCallId, data } = event.payload;
+      setStreamingToolCalls((prev) =>
+        prev.map((tc) =>
+          tc.id === toolCallId
+            ? { ...tc, output: ((tc.output ?? '') + data).slice(-51_200) }
+            : tc,
+        ),
+      );
+      armStreamWatchdog();
+    };
+
+    const handleToolCancelled = (event: {
+      payload: { toolCallId: string };
+    }) => {
+      const { toolCallId } = event.payload;
+      setStreamingToolCalls((prev) =>
+        prev.map((tc) =>
+          tc.id === toolCallId ? { ...tc, cancelled: true } : tc,
+        ),
+      );
     };
 
     const handleStreamEnd = () => {
@@ -248,6 +295,14 @@ function AppContent(props: AppContentProps) {
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
     const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
     const unsubChoices = wsClient.on('session.run.choices', handleChoicesEvent);
+    const unsubExecOutput = wsClient.on(
+      'session.stream.exec_output',
+      handleExecOutput,
+    );
+    const unsubToolCancelled = wsClient.on(
+      'session.stream.tool_cancelled',
+      handleToolCancelled,
+    );
 
     // Subscribe to the session
     wsClient.subscribeToSession(sessionId).catch((err: Error) => {
@@ -263,6 +318,8 @@ function AppContent(props: AppContentProps) {
       unsubError();
       unsubUpdated();
       unsubChoices();
+      unsubExecOutput();
+      unsubToolCancelled();
       setFocusChatInput(undefined); // Clear stale focus function
     });
   });
@@ -377,6 +434,16 @@ function AppContent(props: AppContentProps) {
       return;
     }
     await sendMessage(content, agentId);
+  };
+
+  // User hit Stop on an in-flight tool call — ask the server to cancel it.
+  const handleCancelTool = (toolCallId: string) => {
+    const wsClient = client();
+    const sid = selectedSessionId();
+    const rid = currentRunId();
+    if (wsClient && sid && rid) {
+      wsClient.cancelTool(sid, rid, toolCallId);
+    }
   };
 
   // Drain the next queued message once the run is idle and the user is not
@@ -730,6 +797,7 @@ function AppContent(props: AppContentProps) {
               streamingToolCalls={
                 isStreaming() ? streamingToolCalls() : undefined
               }
+              onCancelTool={handleCancelTool}
               queuedMessages={messageQueue.items()}
               onEditQueued={messageQueue.edit}
               onRemoveQueued={messageQueue.remove}

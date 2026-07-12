@@ -11,6 +11,8 @@ import {
   type SessionStreamStart,
   type SessionStreamDelta,
   type SessionStreamToolCall,
+  type SessionStreamExecOutput,
+  type SessionStreamToolCancelled,
   type SessionStreamUsage,
   type SessionStreamEnd,
   type SessionStreamError,
@@ -29,6 +31,8 @@ export type SessionStreamEvent =
   | SessionStreamStart
   | SessionStreamDelta
   | SessionStreamToolCall
+  | SessionStreamExecOutput
+  | SessionStreamToolCancelled
   | SessionStreamUsage
   | SessionStreamEnd
   | SessionStreamError
@@ -97,6 +101,24 @@ export function mapRunEventToStreamEvent(
           arguments: tc.arguments,
         },
       }) as SessionStreamToolCall;
+    }
+
+    case 'run.exec_output': {
+      return createWSMessage('session.stream.exec_output', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCallId: event.data.toolCallId as string,
+        stream: event.data.stream as 'stdout' | 'stderr',
+        data: event.data.chunk as string,
+      }) as SessionStreamExecOutput;
+    }
+
+    case 'run.tool_cancelled': {
+      return createWSMessage('session.stream.tool_cancelled', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCallId: event.data.toolCallId as string,
+      }) as SessionStreamToolCancelled;
     }
 
     case 'run.completed': {

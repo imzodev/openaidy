@@ -17,6 +17,11 @@ export type SubmitMessageInput = {
  * Input for submitting a streaming message to a session
  */
 export type SubmitMessageStreamingInput = SubmitMessageInput & {
+  /**
+   * The run identifier from the WS layer. Used to key in-flight tool
+   * AbortControllers so `cancelTool(runId, toolCallId)` can find them.
+   */
+  runId?: string;
   /** Callback for stream events */
   onStreamEvent: (
     event:
@@ -29,6 +34,13 @@ export type SubmitMessageStreamingInput = SubmitMessageInput & {
             arguments: Record<string, unknown>;
           };
         }
+      | {
+          type: 'exec_output';
+          toolCallId: string;
+          stream: 'stdout' | 'stderr';
+          data: string;
+        }
+      | { type: 'tool_cancelled'; toolCallId: string }
       | {
           type: 'usage';
           usage: {
