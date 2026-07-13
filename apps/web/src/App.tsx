@@ -353,11 +353,17 @@ function AppContent(props: AppContentProps) {
       handleActivity,
     );
 
-    // Subscribe to the session
-    wsClient.subscribeToSession(sessionId).catch((err: Error) => {
-      console.error('Failed to subscribe to session:', err);
-      setSubmitError(err.message);
-    });
+    // Subscribe to the session. A successful (re)subscribe means we have a
+    // live connection but may have missed events while disconnected, so
+    // reconcile any stale streaming state right away instead of waiting on
+    // the watchdog.
+    wsClient
+      .subscribeToSession(sessionId)
+      .then(() => reconcileStreamState())
+      .catch((err: Error) => {
+        console.error('Failed to subscribe to session:', err);
+        setSubmitError(err.message);
+      });
 
     onCleanup(() => {
       unsubStart();
@@ -383,6 +389,22 @@ function AppContent(props: AppContentProps) {
     if (sessionIdFromUrl) {
       setSelectedSessionId(sessionIdFromUrl);
     }
+  });
+
+  // Backgrounding a tab/app can leave the socket looking "connected" while it
+  // has actually stopped delivering events (throttled timers, suspended
+  // heartbeat). Reconcile as soon as the app is foregrounded again rather
+  // than waiting for the socket to notice and the watchdog to fire.
+  onMount(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        reconcileStreamState();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    onCleanup(() =>
+      document.removeEventListener('visibilitychange', handleVisibility),
+    );
   });
 
   // Note: We do NOT clear selectedAgentId when session changes.
@@ -516,6 +538,28 @@ function AppContent(props: AppContentProps) {
     if (next) {
       void sendMessage(next.content, next.agentId);
     }
+  };
+
+  // Force-refresh messages/runs and drop any stuck streaming state. There is
+  // no server-side mechanism to resume a run's live stream after a dropped
+  // connection, so once we're (re)connected the only reliable signal is a
+  // fresh fetch. Called after every successful session subscribe (covers
+  // reconnect) and on tab/app visibility regain (covers a connection that
+  // silently stopped delivering events without actually closing).
+  const reconcileStreamState = () => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) return;
+    if (isStreaming()) {
+      clearStreamWatchdog();
+      setIsStreaming(false);
+      setStreamingContent('');
+      setStreamingToolCalls([]);
+      setRunActivity(undefined);
+      setPendingUserMessage(undefined);
+    }
+    queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+    queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
+    processQueue();
   };
 
   // Actually dispatch a message and begin a streaming run.
