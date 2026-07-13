@@ -8,6 +8,7 @@ import {
   X,
   FileText,
   AlignLeft,
+  Filter,
 } from 'lucide-solid';
 import { searchSessions } from '../../lib/api';
 import type { Session } from '../../lib/api';
@@ -22,6 +23,27 @@ type SessionsPageProps = {
   isLoading?: boolean;
 };
 
+// Sessions created on behalf of an addon aren't given a distinct `type` —
+// they're plain 'chat' sessions tagged only by this title convention (see
+// AddonProxyAgentService.invoke's `sessionTitle`).
+const ADDON_SESSION_TITLE_PREFIX = 'addon:';
+
+type SessionCategory = 'chat' | 'task' | 'subtask' | 'addon';
+
+const CATEGORY_LABELS: Record<SessionCategory, string> = {
+  chat: 'Chat',
+  task: 'Tasks',
+  subtask: 'Subtasks',
+  addon: 'Addons',
+};
+
+function categorizeSession(session: Session): SessionCategory {
+  if (session.type === 'task') return 'task';
+  if (session.type === 'subtask') return 'subtask';
+  if (session.title?.startsWith(ADDON_SESSION_TITLE_PREFIX)) return 'addon';
+  return 'chat';
+}
+
 export function SessionsPage(props: SessionsPageProps) {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal<
@@ -29,6 +51,10 @@ export function SessionsPage(props: SessionsPageProps) {
   >(null);
   const [isSearching, setIsSearching] = createSignal(false);
   const [searchError, setSearchError] = createSignal<string | null>(null);
+  // Initial view is chat-only; task/subtask/addon sessions are opt-in.
+  const [activeCategories, setActiveCategories] = createSignal<
+    SessionCategory[]
+  >(['chat']);
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -96,7 +122,18 @@ export function SessionsPage(props: SessionsPageProps) {
   const isSearching_ = () => isSearching();
   const hasSearchResults = () => searchResults() !== null;
   const searchResults_ = () => searchResults() ?? [];
-  const sessions_ = () => props.sessions;
+  const sessions_ = () =>
+    props.sessions.filter((s) =>
+      activeCategories().includes(categorizeSession(s)),
+    );
+
+  const toggleCategory = (category: SessionCategory) => {
+    setActiveCategories((prev) =>
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
+    );
+  };
 
   return (
     <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
@@ -202,6 +239,25 @@ export function SessionsPage(props: SessionsPageProps) {
 
         {/* Default session list (shown when not searching) */}
         <Show when={!hasSearchResults()}>
+          {/* Category filter */}
+          <div class="flex items-center gap-2 flex-wrap mb-4">
+            <Filter class="w-4 h-4 text-text-tertiary" />
+            <For each={Object.keys(CATEGORY_LABELS) as SessionCategory[]}>
+              {(category) => (
+                <button
+                  onClick={() => toggleCategory(category)}
+                  class={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                    activeCategories().includes(category)
+                      ? 'bg-primary/10 text-primary border border-primary/50'
+                      : 'bg-gray-100 text-gray-500 border border-transparent dark:bg-gray-700 dark:text-gray-400'
+                  }`}
+                >
+                  {CATEGORY_LABELS[category]}
+                </button>
+              )}
+            </For>
+          </div>
+
           <Show when={props.isLoading}>
             <div class="text-center py-12">
               <div class="animate-pulse text-text-tertiary">
@@ -210,7 +266,13 @@ export function SessionsPage(props: SessionsPageProps) {
             </div>
           </Show>
 
-          <Show when={!props.isLoading && sessions_().length === 0}>
+          <Show
+            when={
+              !props.isLoading &&
+              sessions_().length === 0 &&
+              props.sessions.length === 0
+            }
+          >
             <div class="text-center py-12">
               <MessageSquare class="w-12 h-12 mx-auto mb-4 text-text-muted" />
               <h3 class="text-lg font-medium text-text-primary mb-2">
@@ -225,6 +287,24 @@ export function SessionsPage(props: SessionsPageProps) {
               >
                 Create Session
               </button>
+            </div>
+          </Show>
+
+          <Show
+            when={
+              !props.isLoading &&
+              sessions_().length === 0 &&
+              props.sessions.length > 0
+            }
+          >
+            <div class="text-center py-12">
+              <Filter class="w-12 h-12 mx-auto mb-4 text-text-muted" />
+              <h3 class="text-lg font-medium text-text-primary mb-2">
+                No sessions match the current filter
+              </h3>
+              <p class="text-text-secondary mb-4">
+                Enable another category above to see more sessions.
+              </p>
             </div>
           </Show>
 

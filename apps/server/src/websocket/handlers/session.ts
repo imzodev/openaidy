@@ -185,6 +185,7 @@ export class SessionHandler {
             return {
               id: session.id,
               title: session.title,
+              type: session.type,
               status: session.status ?? 'active',
               agentId: (session as { agentId?: string }).agentId,
               createdAt: new Date(session.createdAt).toISOString(),

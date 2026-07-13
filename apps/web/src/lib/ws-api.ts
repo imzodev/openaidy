@@ -55,6 +55,7 @@ export async function listSessions(): Promise<{ items: Session[] }> {
         items: response.payload.sessions.map((session) => ({
           id: session.id,
           title: session.title ?? 'Untitled Session',
+          type: session.type,
           status: session.status,
           agentId: session.agentId,
           createdAt: session.createdAt,

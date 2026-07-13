@@ -6,7 +6,7 @@
  */
 
 import type { ChoicesEvent } from './choices.js';
-import type { SessionStatus } from './sessions.js';
+import type { SessionStatus, SessionType } from './sessions.js';
 
 // ============================================================================
 // Message Envelope
@@ -350,6 +350,7 @@ export type SessionListResponse = WSMessage<
     sessions: Array<{
       id: string;
       title?: string;
+      type?: SessionType;
       status: SessionStatus;
       agentId?: string;
       createdAt: string;
