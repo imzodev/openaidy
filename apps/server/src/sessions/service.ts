@@ -38,6 +38,7 @@ import {
   markRunRunning,
   markRunSucceeded,
   markRunFailed,
+  markRunCancelled,
   listSessionRunRecords,
   deleteSessionRecord,
 } from './store';
@@ -91,6 +92,15 @@ export class SessionMessageService {
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
 
+  // In-flight tool AbortControllers so a user "Stop" can cancel a running tool
+  // (issue #375). Key: `${runId}:${toolCallId}`.
+  private readonly inflightTools = new Map<string, AbortController>();
+
+  // In-flight run-level AbortControllers so a user "Stop agent" can abort the
+  // whole turn — the provider stream and any running tools (issue #376).
+  // Key: runId (the WS-level run id the client addresses).
+  private readonly inflightRuns = new Map<string, AbortController>();
+
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
     this.logger = options.logger;
@@ -116,6 +126,32 @@ export class SessionMessageService {
    */
   get isDbBacked(): boolean {
     return !!this.sessionsRepo;
+  }
+
+  /**
+   * Cancel an in-flight tool call (user hit Stop). Aborts the tool's
+   * AbortSignal; the tool resolves with an error and the streaming loop
+   * continues. Returns true if a matching in-flight tool was found.
+   */
+  cancelTool(runId: string, toolCallId: string): boolean {
+    const controller = this.inflightTools.get(`${runId}:${toolCallId}`);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+
+  /**
+   * Cancel an in-flight run (user hit "Stop agent"). Aborts the run-level
+   * AbortSignal, which cancels the provider stream and any tool currently
+   * running under this run. The streaming loop marks the run `cancelled` and
+   * emits `run.cancelled` without persisting a final assistant message.
+   * Returns true if a matching in-flight run was found.
+   */
+  cancelRun(runId: string): boolean {
+    const controller = this.inflightRuns.get(runId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   /**
@@ -809,6 +845,44 @@ export class SessionMessageService {
     // 4. Mark run as running
     await this.markRunRunning(run.id);
 
+    // Run-level AbortController: a user "Stop agent" aborts this, which cancels
+    // the provider stream and any tool running under this run (issue #376).
+    // Registered under the WS-level runId the client uses to address a cancel.
+    const runController = new AbortController();
+    if (input.runId) {
+      this.inflightRuns.set(input.runId, runController);
+    }
+
+    // Server-driven activity heartbeat (issue #378): emit a `run.activity`
+    // event (at most 1/s) while the run is idle between other events, so the
+    // UI can show "Thinking…" / "Running <tool>… 12s". Emitted under the
+    // WS-level runId so it reaches the subscribed client; skipped for non-WS
+    // callers (no runId). `lastActivityAt` is bumped whenever we produce a
+    // real event, so a continuously-streaming run stays quiet.
+    const activityRunId = input.runId;
+    const runStartAt = Date.now();
+    let lastActivityAt = runStartAt;
+    let activityPhase: 'thinking' | 'running_tool' = 'thinking';
+    let activityToolName: string | undefined;
+    const heartbeat =
+      activityRunId && this.runEvents
+        ? setInterval(() => {
+            const now = Date.now();
+            // Already busy (event within the last 500ms) — stay quiet.
+            if (now - lastActivityAt < 500) return;
+            this.runEvents!.emitActivity({
+              runId: activityRunId,
+              sessionId: input.sessionId,
+              agentId,
+              phase: activityPhase,
+              elapsedMs: now - runStartAt,
+              ...(activityToolName !== undefined && {
+                toolName: activityToolName,
+              }),
+            });
+          }, 1000)
+        : undefined;
+
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
     const historyMessages: Message[] = history.map((m) => {
@@ -944,6 +1018,8 @@ export class SessionMessageService {
           model: modelId,
           messages: loopMessages,
           ...(allTools.length > 0 && { tools: allTools, toolChoice: 'auto' }),
+          // Run-level cancel: aborting this signal cancels the provider fetch.
+          signal: runController.signal,
         };
 
         // Local accumulator for the tool calls the model
@@ -986,6 +1062,11 @@ export class SessionMessageService {
           switch (value.type) {
             case 'stream.content_delta': {
               accumulatedContent += value.delta;
+              // Content is flowing — mark busy so the heartbeat stays quiet
+              // and the phase reads as thinking/streaming (#378).
+              lastActivityAt = Date.now();
+              activityPhase = 'thinking';
+              activityToolName = undefined;
               onStreamEvent({ type: 'delta', content: value.delta });
               break;
             }
@@ -1113,12 +1194,61 @@ export class SessionMessageService {
               ? this.builtinTools?.get(tc.name)
               : undefined;
             if (builtinTool) {
+              // Register an AbortController so the user can cancel this tool
+              // (issue #375). Keyed by (runId, toolCallId); cleaned up when the
+              // tool settles.
+              const cancelKey = input.runId
+                ? `${input.runId}:${tc.id}`
+                : undefined;
+              const controller = new AbortController();
+              if (cancelKey) this.inflightTools.set(cancelKey, controller);
+              // A run-level "Stop agent" also aborts the tool in flight (#376).
+              if (runController.signal.aborted) {
+                controller.abort();
+              } else {
+                runController.signal.addEventListener(
+                  'abort',
+                  () => controller.abort(),
+                  { once: true },
+                );
+              }
+
+              // Reflect the running tool in the activity heartbeat (#378).
+              activityPhase = 'running_tool';
+              activityToolName = tc.name;
+              lastActivityAt = Date.now();
+
               const builtinResult = await builtinTool
-                .execute(tc.arguments, { agentId, sessionId: input.sessionId })
+                .execute(tc.arguments, {
+                  agentId,
+                  sessionId: input.sessionId,
+                  signal: controller.signal,
+                  onOutput: (chunk) =>
+                    onStreamEvent({
+                      type: 'exec_output',
+                      toolCallId: tc.id,
+                      stream: chunk.stream,
+                      data: chunk.data,
+                    }),
+                })
                 .catch((e: unknown) => ({
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,
-                }));
+                }))
+                .finally(() => {
+                  if (cancelKey) this.inflightTools.delete(cancelKey);
+                });
+
+              // Tool settled — back to thinking until the next tool runs (#378).
+              activityPhase = 'thinking';
+              activityToolName = undefined;
+              lastActivityAt = Date.now();
+
+              // If the user cancelled this tool, tell the UI so it can mark the
+              // block "Cancelled by user".
+              if (controller.signal.aborted) {
+                onStreamEvent({ type: 'tool_cancelled', toolCallId: tc.id });
+              }
 
               // Check for INTERRUPT_CHOICES sentinel from present_choices tool
               if (builtinResult.ok) {
@@ -1319,6 +1449,16 @@ export class SessionMessageService {
         break;
       }
 
+      // If the user hit "Stop agent", mark the run cancelled and bail without
+      // persisting a final assistant message (issue #376).
+      if (runController.signal.aborted) {
+        await this.markRunCancelled(run);
+        return {
+          ok: false,
+          error: { code: 'cancelled', message: 'Run cancelled by user' },
+        };
+      }
+
       // 7. Persist assistant message with accumulated content
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
@@ -1350,6 +1490,15 @@ export class SessionMessageService {
 
       return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
+      // A user "Stop agent" aborts the provider fetch, which surfaces here as
+      // an AbortError. Treat that as a cancellation, not a failure (issue #376).
+      if (runController.signal.aborted) {
+        await this.markRunCancelled(run);
+        return {
+          ok: false,
+          error: { code: 'cancelled', message: 'Run cancelled by user' },
+        };
+      }
       const errorMsg =
         error instanceof Error ? error.message : 'Streaming failed';
       return this.handleFailure(
@@ -1358,6 +1507,9 @@ export class SessionMessageService {
         'streaming_error',
         errorMsg,
       );
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      if (input.runId) this.inflightRuns.delete(input.runId);
     }
   }
 
@@ -1564,6 +1716,25 @@ export class SessionMessageService {
       return this.runsRepo.markFailed(id, input);
     }
     return markRunFailed(id, input) ?? null;
+  }
+
+  /**
+   * Mark a run as cancelled (user hit "Stop agent") and emit run.cancelled.
+   */
+  private async markRunCancelled(
+    run: SessionRunRecord | SessionRun,
+  ): Promise<SessionRunRecord | SessionRun | null> {
+    const updated = this.runsRepo
+      ? await this.runsRepo.markCancelled(run.id)
+      : (markRunCancelled(run.id) ?? null);
+    if (this.runEvents && updated) {
+      this.runEvents.emitRunCancelled({
+        runId: run.id,
+        sessionId: run.sessionId,
+        agentId: run.agentId,
+      });
+    }
+    return updated;
   }
 
   /**

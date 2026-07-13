@@ -46,6 +46,24 @@ OpenAidy.ready(function(sdk) {});`;
     expect(tool.description).toContain('getConfig');
   });
 
+  it('description leads with the addon-routing guardrail', () => {
+    // The agent must be told addons live outside the workspace and that this
+    // tool is the only way to create them (issue #372).
+    expect(tool.description).toContain('WHERE ADDONS LIVE');
+    expect(tool.description).toContain('ONLY WAY TO CREATE');
+    expect(tool.description).toContain('workspace_write');
+    // Guardrail precedes the structural guidance.
+    expect(tool.description.indexOf('WHERE ADDONS LIVE')).toBeLessThan(
+      tool.description.indexOf('ADDON STRUCTURE'),
+    );
+  });
+
+  it('catalog descriptions carry the addon-routing guardrail', async () => {
+    const { addonCreateMeta, addonUpdateMeta } = await import('../catalog.js');
+    expect(addonCreateMeta.description).toMatch(/never use workspace_write/i);
+    expect(addonUpdateMeta.description).toMatch(/never use workspace_write/i);
+  });
+
   it('description embeds the bootstrap code snippet verbatim', () => {
     expect(tool.description).toContain(
       "window.parent.postMessage({ type: 'ADDON_READY' }, '*');",

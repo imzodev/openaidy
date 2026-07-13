@@ -80,4 +80,52 @@ describe('RunEventEmitter', () => {
       expect(payload.choices).toEqual(['Yes', 'No']);
     });
   });
+
+  describe('emitActivity', () => {
+    it('publishes a run.activity event with phase, tool name, and elapsed', () => {
+      const listener = vi.fn();
+      emitter.subscribe('run-1', listener);
+
+      emitter.emitActivity({
+        runId: 'run-1',
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        phase: 'running_tool',
+        toolName: 'exec_run',
+        elapsedMs: 12000,
+      });
+
+      expect(listener).toHaveBeenCalledOnce();
+      const event = listener.mock.calls[0]![0] as {
+        type: string;
+        runId: string;
+        data: { phase: string; toolName?: string; elapsedMs: number };
+      };
+      expect(event.type).toBe('run.activity');
+      expect(event.runId).toBe('run-1');
+      expect(event.data.phase).toBe('running_tool');
+      expect(event.data.toolName).toBe('exec_run');
+      expect(event.data.elapsedMs).toBe(12000);
+    });
+
+    it('omits toolName when not provided (thinking phase)', () => {
+      const listener = vi.fn();
+      emitter.subscribe('run-2', listener);
+
+      emitter.emitActivity({
+        runId: 'run-2',
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        phase: 'thinking',
+        elapsedMs: 500,
+      });
+
+      expect(listener).toHaveBeenCalledOnce();
+      const event = listener.mock.calls[0]![0] as {
+        data: { phase: string; toolName?: string };
+      };
+      expect(event.data.phase).toBe('thinking');
+      expect(event.data.toolName).toBeUndefined();
+    });
+  });
 });

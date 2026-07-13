@@ -23,6 +23,8 @@ import {
   type SessionMessageRequest,
   type SessionMessagesRequest,
   type SessionRunsRequest,
+  type SessionToolCancelRequest,
+  type SessionRunCancelRequest,
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessagesResponse,
@@ -370,6 +372,34 @@ export class SessionHandler {
   }
 
   /**
+   * Handle session.tool.cancel — the user hit Stop on an in-flight tool call.
+   * Aborts the matching tool's AbortSignal; the UI reacts to the resulting
+   * run.tool_cancelled event, so no response is returned.
+   */
+  async handleToolCancel(
+    _connectionId: string,
+    request: SessionToolCancelRequest,
+    _context: HandlerContext,
+  ): Promise<void> {
+    const { runId, toolCallId } = request.payload;
+    this.sessionService.cancelTool(runId, toolCallId);
+  }
+
+  /**
+   * Handle session.run.cancel — the user hit "Stop agent". Aborts the whole
+   * run (provider stream + any running tool); the UI reacts to the resulting
+   * run.cancelled event, so no response is returned.
+   */
+  async handleRunCancel(
+    _connectionId: string,
+    request: SessionRunCancelRequest,
+    _context: HandlerContext,
+  ): Promise<void> {
+    const { runId } = request.payload;
+    this.sessionService.cancelRun(runId);
+  }
+
+  /**
    * Handle session.message request
    *
    * Supports both streaming and non-streaming modes:
@@ -590,6 +620,7 @@ export class SessionHandler {
         role: request.payload.role,
         content: request.payload.content,
         agentId,
+        runId,
         ...(providerId != null && { providerId }),
         ...(modelId != null && { modelId }),
         onStreamEvent: (event) => {
@@ -609,6 +640,24 @@ export class SessionHandler {
                 sessionId,
                 agentId,
                 toolCall: event.toolCall!,
+              });
+              break;
+            case 'exec_output':
+              this.runEvents?.emitExecOutput({
+                runId,
+                sessionId,
+                agentId,
+                toolCallId: event.toolCallId,
+                stream: event.stream,
+                chunk: event.data,
+              });
+              break;
+            case 'tool_cancelled':
+              this.runEvents?.emitToolCancelled({
+                runId,
+                sessionId,
+                agentId,
+                toolCallId: event.toolCallId,
               });
               break;
             case 'usage':
@@ -687,6 +736,12 @@ export class SessionHandler {
             'Auto-rename session failed (non-fatal)',
           );
         });
+      } else if (result.error.code === 'cancelled') {
+        // User hit "Stop agent" — deliver a clean run.cancelled on the
+        // WS-level run channel the client is subscribed to (issue #376), not a
+        // generic stream error. (The service also marks the run cancelled and
+        // emits on its own run.id channel for any run-id subscribers.)
+        this.runEvents?.emitRunCancelled({ runId, sessionId, agentId });
       } else {
         // Emit failure
         this.runEvents?.emitFailed({
@@ -889,6 +944,14 @@ export function registerSessionHandlers(
         msg as SessionRunsRequest,
         ctx,
       ) as Promise<WSResponse>,
+  );
+
+  router.registerHandler('session.tool.cancel', (connId, msg, ctx) =>
+    handler.handleToolCancel(connId, msg as SessionToolCancelRequest, ctx),
+  );
+
+  router.registerHandler('session.run.cancel', (connId, msg, ctx) =>
+    handler.handleRunCancel(connId, msg as SessionRunCancelRequest, ctx),
   );
 }
 

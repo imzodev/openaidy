@@ -471,7 +471,7 @@ export class GeminiProvider implements ModelProvider {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(geminiRequest),
-        signal: this.createAbortSignal(),
+        signal: this.createAbortSignal(request.signal),
       });
 
       if (!response.ok) {
@@ -565,7 +565,7 @@ export class GeminiProvider implements ModelProvider {
         method: 'POST',
         headers: { ...this.getHeaders(), Accept: 'text/event-stream' },
         body: JSON.stringify(geminiRequest),
-        signal: this.createAbortSignal(),
+        signal: this.createAbortSignal(request.signal),
       });
 
       if (!response.ok) {
@@ -695,12 +695,27 @@ export class GeminiProvider implements ModelProvider {
     return headers;
   }
 
-  private createAbortSignal(): AbortSignal {
+  private createAbortSignal(external?: AbortSignal): AbortSignal {
     const controller = new AbortController();
-    setTimeout(
+    const timeoutId = setTimeout(
       () => controller.abort(),
       this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     );
+    if (external) {
+      if (external.aborted) {
+        clearTimeout(timeoutId);
+        controller.abort();
+      } else {
+        external.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timeoutId);
+            controller.abort();
+          },
+          { once: true },
+        );
+      }
+    }
     return controller.signal;
   }
 

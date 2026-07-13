@@ -70,6 +70,16 @@ describe('addon_update tool', () => {
     expect(tool.name).toBe('addon_update');
   });
 
+  it('description leads with the addon-routing guardrail', () => {
+    // Route addon edits through this tool, never generic file tools (issue #372).
+    expect(tool.description).toContain('WHERE ADDONS LIVE');
+    expect(tool.description).toContain('ONLY WAY TO UPDATE');
+    expect(tool.description).toContain('workspace_write');
+    expect(tool.description.indexOf('WHERE ADDONS LIVE')).toBeLessThan(
+      tool.description.indexOf('WHAT YOU CAN CHANGE'),
+    );
+  });
+
   it('requires only id', () => {
     const required = (tool.parameters as unknown as { required: string[] })
       .required;

@@ -20,6 +20,8 @@ vi.mock('lucide-solid', () => ({
   Pencil: () => <span data-testid="pencil" />,
   X: () => <span data-testid="x" />,
   Check: () => <span data-testid="check" />,
+  CircleStop: () => <span data-testid="circle-stop" />,
+  Ban: () => <span data-testid="ban" />,
 }));
 
 describe('ChatView', () => {
@@ -169,6 +171,96 @@ describe('ChatView', () => {
       const instances = vi.mocked(Element.prototype.scrollTo).mock.instances;
       expect(instances).toContain(scrollContainer);
       expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  describe('streaming tool calls', () => {
+    const toolCall = {
+      id: 'tc-1',
+      name: 'exec_run',
+      input: { command: 'npm test' },
+    };
+
+    it('renders live output for an in-flight tool call', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[{ ...toolCall, output: 'running tests...' }]}
+        />
+      ));
+      expect(screen.getByText('running tests...')).toBeInTheDocument();
+    });
+
+    it('shows a Stop button and invokes onCancelTool with the tool id', () => {
+      const onCancelTool = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[toolCall]}
+          onCancelTool={onCancelTool}
+        />
+      ));
+      fireEvent.click(screen.getByText('Stop'));
+      expect(onCancelTool).toHaveBeenCalledWith('tc-1');
+    });
+
+    it('shows a cancelled badge and no Stop button once cancelled', () => {
+      const onCancelTool = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[{ ...toolCall, cancelled: true }]}
+          onCancelTool={onCancelTool}
+        />
+      ));
+      expect(screen.getByText('Cancelled by user')).toBeInTheDocument();
+      expect(screen.queryByText('Stop')).not.toBeInTheDocument();
+    });
+
+    it('shows a Stop agent button that invokes onCancelRun', () => {
+      const onCancelRun = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          onCancelRun={onCancelRun}
+        />
+      ));
+      fireEvent.click(screen.getByRole('button', { name: 'Stop agent' }));
+      expect(onCancelRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits the Stop agent button when onCancelRun is not provided', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+        />
+      ));
+      expect(
+        screen.queryByRole('button', { name: 'Stop agent' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the activity badge from runActivity', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          runActivity={{
+            phase: 'running_tool',
+            toolName: 'exec_run',
+            elapsedMs: 7000,
+          }}
+        />
+      ));
+      expect(screen.getByText('Running exec_run…')).toBeInTheDocument();
     });
   });
 });

@@ -1,5 +1,12 @@
 import { Show, For, createEffect } from 'solid-js';
-import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
+import {
+  User,
+  Bot,
+  AlertCircle,
+  Wrench,
+  Server,
+  CircleStop,
+} from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
@@ -7,11 +14,17 @@ import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
 import { QueuedMessageCard } from './QueuedMessageCard';
+import { RunActivityBadge } from './RunActivityBadge';
+import type { RunActivityPhase } from './RunActivityBadge';
 
 type StreamingToolCall = {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /** Live stdout/stderr streamed while the tool runs (e.g. exec_run). */
+  output?: string;
+  /** True once the user cancelled this tool call. */
+  cancelled?: boolean;
 };
 
 type ChatViewProps = {
@@ -25,6 +38,16 @@ type ChatViewProps = {
   queuedMessages?: QueuedMessage[];
   onEditQueued?: (id: string, content: string) => void;
   onRemoveQueued?: (id: string) => void;
+  /** Ask the server to cancel an in-flight tool call. */
+  onCancelTool?: (toolCallId: string) => void;
+  /** Ask the server to cancel the whole in-flight run ("Stop agent"). */
+  onCancelRun?: () => void;
+  /** Server-driven activity heartbeat for the in-flight run (#378). */
+  runActivity?: {
+    phase: RunActivityPhase;
+    toolName?: string;
+    elapsedMs: number;
+  };
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
 };
@@ -241,11 +264,33 @@ export function ChatView(props: ChatViewProps) {
                         : 'Thinking...'}
                   </span>
                 </span>
+                {/* Stop agent — aborts the whole run (provider stream + tools) */}
+                <Show when={props.onCancelRun}>
+                  <button
+                    type="button"
+                    onClick={() => props.onCancelRun?.()}
+                    aria-label="Stop agent"
+                    class="ml-auto inline-flex items-center gap-1 rounded border border-red-200 dark:border-red-800 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <CircleStop class="w-3.5 h-3.5" />
+                    Stop agent
+                  </button>
+                </Show>
               </div>
               <Show when={props.streamingContent}>
                 <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />
                   <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+                </div>
+              </Show>
+              {/* Live activity heartbeat — what the agent is doing right now */}
+              <Show when={props.runActivity}>
+                <div class="mb-2">
+                  <RunActivityBadge
+                    phase={props.runActivity!.phase}
+                    toolName={props.runActivity!.toolName}
+                    elapsedMs={props.runActivity!.elapsedMs}
+                  />
                 </div>
               </Show>
               <Show when={(props.streamingToolCalls?.length ?? 0) > 0}>
@@ -255,7 +300,14 @@ export function ChatView(props: ChatViewProps) {
                       <ToolCallBlock
                         name={tc.name}
                         input={tc.input}
-                        isActive={true}
+                        isActive={!tc.cancelled}
+                        output={tc.output}
+                        cancelled={tc.cancelled}
+                        onStop={
+                          props.onCancelTool
+                            ? () => props.onCancelTool?.(tc.id)
+                            : undefined
+                        }
                       />
                     )}
                   </For>

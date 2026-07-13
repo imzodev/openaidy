@@ -84,6 +84,8 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'session.runs': [WS_CAPABILITIES.SESSIONS_READ],
   'session.subscribe': [WS_CAPABILITIES.SESSIONS_READ],
   'session.unsubscribe': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.tool.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.run.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
   'agent.list': [WS_CAPABILITIES.AGENTS_READ],
   'agent.get': [WS_CAPABILITIES.AGENTS_READ],
   'provider.list': [WS_CAPABILITIES.PROVIDERS_READ],
