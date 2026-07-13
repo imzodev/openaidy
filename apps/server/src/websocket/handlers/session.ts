@@ -730,6 +730,20 @@ export class SessionHandler {
           'Streaming run completed',
         );
 
+        // Bump the session's last-activity timestamp so the chat list re-sorts
+        // this session to the top. updateSessionAgentId already writes a fresh
+        // updatedAt on the row — we just need to tell subscribers to refetch.
+        // (Without this, session.updated is only broadcast on first-run rename,
+        // so subsequent runs don't reorder the list live.)
+        if (this.subscriptionManager) {
+          const activityEvent = createWSMessage('session.updated', {
+            sessionId,
+            updates: {},
+            updatedAt: new Date().toISOString(),
+          });
+          this.subscriptionManager.broadcastToSession(sessionId, activityEvent);
+        }
+
         // Auto-rename session on the first run
         this.maybeRenameSession(
           sessionId,

@@ -684,10 +684,14 @@ function AppContent(props: AppContentProps) {
       !currentSelectedId &&
       sessionList.length > 0
     ) {
-      // Sort by createdAt descending and select the most recent
+      // Sort by updatedAt (last activity) descending, falling back to createdAt.
+      // The server bumps updatedAt on every successful run (via
+      // updateSessionAgentId) and broadcasts session.updated, so a session the
+      // user just chatted with floats to the top.
+      const activityMs = (s: (typeof sessionList)[number]) =>
+        new Date(s.updatedAt ?? s.createdAt ?? 0).getTime();
       const sorted = [...sessionList].sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        (a, b) => activityMs(b) - activityMs(a),
       );
       setSelectedSessionId(sorted[0].id);
     }
