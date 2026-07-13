@@ -265,10 +265,15 @@ export class SessionHandler {
         request.payload.sessionId,
       )) as SessionMessage[];
 
-      // Apply pagination
+      // Apply pagination. `messages` is chronological (oldest first), so with
+      // no explicit offset we want the most recent `limit` messages, not the
+      // oldest ones — otherwise sessions past `limit` total messages would
+      // never surface anything newer.
       const offset = request.payload.offset ?? 0;
       const limit = request.payload.limit ?? 50;
-      const paginated = messages.slice(offset, offset + limit);
+      const end = Math.max(0, messages.length - offset);
+      const start = Math.max(0, end - limit);
+      const paginated = messages.slice(start, end);
 
       this.logger.info(
         {
