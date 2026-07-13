@@ -171,6 +171,9 @@ describe('ChatView', () => {
       const instances = vi.mocked(Element.prototype.scrollTo).mock.instances;
       expect(instances).toContain(scrollContainer);
       expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
+
   describe('streaming tool calls', () => {
     const toolCall = {
       id: 'tc-1',
