@@ -136,7 +136,7 @@ export function SessionsPage(props: SessionsPageProps) {
   };
 
   return (
-    <div class="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+    <div class="flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 dark:bg-gray-900">
       <div class="w-full py-6 px-4 sm:px-6">
         <div class="flex items-center justify-between mb-4">
           <h1 class="text-2xl font-bold text-text-primary">Sessions</h1>
@@ -190,7 +190,7 @@ export function SessionsPage(props: SessionsPageProps) {
               <For each={searchResults_()}>
                 {(result) => (
                   <div
-                    class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/50 transition-all cursor-pointer"
+                    class="min-w-0 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-primary/50 transition-all cursor-pointer"
                     onClick={() => handleSelectSearchResult(result)}
                   >
                     <div class="flex items-start gap-3">
@@ -313,7 +313,7 @@ export function SessionsPage(props: SessionsPageProps) {
               <For each={sessions_()}>
                 {(session) => (
                   <div
-                    class={`p-4 rounded-lg border transition-all cursor-pointer ${
+                    class={`min-w-0 p-4 rounded-lg border transition-all cursor-pointer ${
                       props.selectedSessionId === session.id
                         ? 'border-primary bg-blue-50 dark:bg-blue-900/20'
                         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'

@@ -53,7 +53,7 @@ export function ThinkingBlock(props: ThinkingBlockProps) {
       </button>
       <Show when={open()}>
         <div class="px-3 pb-3 pt-0">
-          <p class="whitespace-pre-wrap text-sm text-text-tertiary italic leading-relaxed">
+          <p class="whitespace-pre-wrap break-words text-sm text-text-tertiary italic leading-relaxed">
             {props.text}
           </p>
         </div>
