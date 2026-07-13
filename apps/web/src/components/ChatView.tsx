@@ -68,12 +68,20 @@ export function ChatView(props: ChatViewProps) {
     void props.messages.length;
     void props.streamingContent;
     void props.queuedMessages?.length;
-    if (!isUserScrolledUp) {
-      bottomRef?.scrollIntoView({ behavior: 'smooth' });
+    if (!isUserScrolledUp && scrollContainerRef) {
+      // Scroll the chat container directly. scrollIntoView on a nested
+      // overflow-auto element inside an overflow-hidden parent can bubble up
+      // to the document on mobile, dragging the sticky header (which lives
+      // outside the chat container) off-screen.
+      scrollContainerRef.scrollTo({
+        top: scrollContainerRef.scrollHeight,
+        behavior: 'smooth',
+      });
     }
   });
 
-  // Scroll to a specific message when scrollToMessageId is set (e.g. from clicking a run)
+  // Scroll to a specific message when scrollToMessageId is set (e.g. from clicking a run).
+  // Same reason as above: keep the scroll inside the chat container.
   createEffect(() => {
     const targetId = props.scrollToMessageId;
     if (!targetId || !scrollContainerRef) return;
@@ -81,7 +89,10 @@ export function ChatView(props: ChatViewProps) {
       `[data-message-id="${targetId}"]`,
     );
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      scrollContainerRef.scrollTo({
+        top: el.offsetTop,
+        behavior: 'smooth',
+      });
     }
   });
 

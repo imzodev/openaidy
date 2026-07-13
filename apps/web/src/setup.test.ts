@@ -27,3 +27,6 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock scrollIntoView for jsdom
 Element.prototype.scrollIntoView = vi.fn();
+// Mock scrollTo for jsdom — used by ChatView's auto-scroll to keep the scroll
+// contained inside the chat container instead of bubbling to the document.
+Element.prototype.scrollTo = vi.fn();
