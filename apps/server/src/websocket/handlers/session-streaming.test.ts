@@ -507,6 +507,9 @@ describe('SessionHandler - auto-rename session after first run', () => {
       'session-1',
       'Fix login bug',
     );
+    // Two session.updated broadcasts on the first run:
+    //   1. activity bump (empty updates) so the chat list re-sorts
+    //   2. title rename broadcast from maybeRenameSession
     expect(mockBroadcast).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
@@ -546,7 +549,20 @@ describe('SessionHandler - auto-rename session after first run', () => {
 
     expect(sessionService.generateTitle).not.toHaveBeenCalled();
     expect(sessionService.updateSessionTitle).not.toHaveBeenCalled();
-    expect(mockBroadcast).not.toHaveBeenCalled();
+    // The activity-bump session.updated broadcast still fires for the
+    // session list re-sort, but no title-rename broadcast (which carries
+    // updates: { title }) happens on subsequent runs.
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'session.updated',
+        payload: expect.objectContaining({
+          sessionId: 'session-1',
+          updates: {},
+        }),
+      }),
+    );
   });
 
   it('skips rename when generateTitle returns null', async () => {
@@ -578,7 +594,19 @@ describe('SessionHandler - auto-rename session after first run', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(sessionService.updateSessionTitle).not.toHaveBeenCalled();
-    expect(mockBroadcast).not.toHaveBeenCalled();
+    // Only the activity-bump broadcast fires; no title-rename broadcast
+    // because generateTitle returned null.
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'session.updated',
+        payload: expect.objectContaining({
+          sessionId: 'session-1',
+          updates: {},
+        }),
+      }),
+    );
   });
 
   it('does not broadcast when no subscriptionManager is provided', async () => {
