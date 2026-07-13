@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import { MessageSquare, Trash2 } from 'lucide-solid';
 import type { Session } from '../lib/api';
 
@@ -11,7 +11,17 @@ type SessionListProps = {
   isActiveView: boolean;
 };
 
+// Most recent activity first. Falls back to createdAt for legacy sessions that
+// don't have an updatedAt (e.g. in-memory backend records).
+function lastActivityMs(session: Session): number {
+  const ts = session.updatedAt ?? session.createdAt;
+  return ts ? new Date(ts).getTime() : 0;
+}
+
 export function SessionList(props: SessionListProps) {
+  const sortedSessions = createMemo(() =>
+    [...props.sessions].sort((a, b) => lastActivityMs(b) - lastActivityMs(a)),
+  );
   return (
     <div class="h-full flex flex-col">
       <Show when={props.isLoading}>
@@ -38,7 +48,7 @@ export function SessionList(props: SessionListProps) {
       </Show>
 
       <ul class="space-y-1 p-2 flex-1 overflow-y-auto">
-        <For each={props.sessions}>
+        <For each={sortedSessions()}>
           {(session) => (
             <li>
               <div

@@ -1,4 +1,11 @@
-import { createSignal, Show, For, createEffect, onCleanup } from 'solid-js';
+import {
+  createSignal,
+  Show,
+  For,
+  createEffect,
+  onCleanup,
+  createMemo,
+} from 'solid-js';
 import {
   MessageSquare,
   Plus,
@@ -42,6 +49,13 @@ function categorizeSession(session: Session): SessionCategory {
   if (session.type === 'subtask') return 'subtask';
   if (session.title?.startsWith(ADDON_SESSION_TITLE_PREFIX)) return 'addon';
   return 'chat';
+}
+
+// Most recent activity first. Falls back to createdAt for legacy sessions that
+// don't have an updatedAt (e.g. in-memory backend records).
+function lastActivityMs(session: Session): number {
+  const ts = session.updatedAt ?? session.createdAt;
+  return ts ? new Date(ts).getTime() : 0;
 }
 
 export function SessionsPage(props: SessionsPageProps) {
@@ -122,8 +136,11 @@ export function SessionsPage(props: SessionsPageProps) {
   const isSearching_ = () => isSearching();
   const hasSearchResults = () => searchResults() !== null;
   const searchResults_ = () => searchResults() ?? [];
+  const sortedSessions = createMemo(() =>
+    [...props.sessions].sort((a, b) => lastActivityMs(b) - lastActivityMs(a)),
+  );
   const sessions_ = () =>
-    props.sessions.filter((s) =>
+    sortedSessions().filter((s) =>
       activeCategories().includes(categorizeSession(s)),
     );
 
@@ -327,7 +344,9 @@ export function SessionsPage(props: SessionsPageProps) {
                         </h3>
                         <div class="flex items-center gap-2 mt-1 text-sm text-text-tertiary">
                           <Clock class="w-3.5 h-3.5" />
-                          <span>{formatDate(session.createdAt)}</span>
+                          <span>
+                            {formatDate(session.updatedAt ?? session.createdAt)}
+                          </span>
                         </div>
                       </div>
                       <div class="flex items-center gap-2">

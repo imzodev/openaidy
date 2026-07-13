@@ -90,7 +90,7 @@ export function ChatView(props: ChatViewProps) {
     );
     if (el) {
       scrollContainerRef.scrollTo({
-        top: el.offsetTop,
+        top: (el as HTMLElement).offsetTop,
         behavior: 'smooth',
       });
     }
