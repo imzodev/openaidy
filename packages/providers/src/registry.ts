@@ -23,6 +23,7 @@ import { OpenAIProfile } from './openai/index';
 import { OpenRouterProfile } from './openrouter/index';
 import { OpenCodeGoProfile } from './opencode-go/index';
 import { OpenCodeGoAnthropicProfile } from './opencode-go-anthropic/index';
+import { OpenCodeZenProfile } from './opencode-zen/index';
 
 const builtInProfiles: ProviderProfile[] = [
   new AnthropicProfile(),
@@ -34,6 +35,7 @@ const builtInProfiles: ProviderProfile[] = [
   new OpenRouterProfile(),
   new OpenCodeGoProfile(),
   new OpenCodeGoAnthropicProfile(),
+  new OpenCodeZenProfile(),
 ];
 
 export class ProviderRegistry {

@@ -34,3 +34,4 @@ export { OpenAIProfile } from './openai/index';
 export { OpenRouterProfile } from './openrouter/index';
 export { OpenCodeGoProfile } from './opencode-go/index';
 export { OpenCodeGoAnthropicProfile } from './opencode-go-anthropic/index';
+export { OpenCodeZenProfile } from './opencode-zen/index';
