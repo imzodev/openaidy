@@ -1275,6 +1275,42 @@ export class SessionMessageService {
                         choicesCount: (parsed.choices as string[]).length,
                       },
                     }).catch(() => {});
+                    // Persist a synthetic tool result message so the conversation
+                    // history stays well-formed for the next turn. OpenAI-
+                    // compatible APIs (MiniMax, OpenAI, DeepSeek, etc.) require
+                    // every assistant message with `tool_calls` to be followed
+                    // by a matching `role: 'tool'` message — without it, the
+                    // next request errors with "tool call result does not
+                    // follow tool call" the moment the user replies.
+                    // The user-facing semantics are: present_choices paused the
+                    // loop and surfaced the choices to the UI; the "result"
+                    // here is just a marker that the tool is waiting on user
+                    // input. The user's next message will arrive as a regular
+                    // `role: 'user'` turn that resumes the conversation.
+                    await this.appendMessage({
+                      sessionId: input.sessionId,
+                      runId: run.id,
+                      role: 'tool',
+                      content: JSON.stringify({
+                        _type: 'INTERRUPT_CHOICES',
+                        status: 'awaiting_user_choice',
+                        question: parsed.question ?? null,
+                        choices: parsed.choices,
+                      }),
+                      toolCallId: tc.id,
+                      metadata: {
+                        toolName: tc.name,
+                        interrupt: 'awaiting_user_choice',
+                      },
+                    }).catch((err: unknown) => {
+                      // Non-fatal: if persisting fails the next turn will
+                      // surface the provider error, which is the same outcome
+                      // we had before this fix.
+                      this.logger?.warn(
+                        { err, sessionId: input.sessionId, toolCallId: tc.id },
+                        'Failed to persist synthetic INTERRUPT_CHOICES tool result',
+                      );
+                    });
                     return {
                       ok: true,
                       userMessage,
