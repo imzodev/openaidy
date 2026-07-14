@@ -53,10 +53,24 @@ import type {
 } from '@openaidy/shared-types';
 
 /**
+ * Attachment metadata on a session message. Bytes are fetched separately
+ * via GET /api/attachments/:id/raw (through the authenticated fetch).
+ */
+export type SessionMessageAttachment = {
+  id: string;
+  kind: 'image' | 'audio';
+  source: 'user_upload' | 'tool_output';
+  name?: string | null;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+/**
  * Session message — extends shared type with UI-only reasoning content field
  */
 export type SessionMessage = SharedSessionMessage & {
   reasoningContent?: string;
+  attachments?: SessionMessageAttachment[];
 };
 
 /**
@@ -178,6 +192,8 @@ export type QueuedMessage = {
   content: string;
   /** Agent selected at enqueue time, sent with the message. */
   agentId?: string;
+  /** Attachments uploaded at enqueue time, linked when the message sends. */
+  attachmentIds?: string[];
 };
 
 /**
@@ -189,6 +205,8 @@ export type SubmitMessageInput = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /** Ids of previously-uploaded attachments to link to this message */
+  attachmentIds?: string[];
 };
 
 /**

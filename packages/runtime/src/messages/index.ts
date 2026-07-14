@@ -19,10 +19,26 @@ export type SystemMessage = BaseMessage & {
 };
 
 /**
+ * Inline media attachment on a user message — bytes are carried as base64
+ * so the per-vendor request mappers can emit provider-specific content
+ * blocks (Anthropic `image`, OpenAI `image_url`/`input_audio`, Gemini
+ * `inlineData`) without touching disk.
+ */
+export type MessageAttachment = {
+  readonly kind: 'image' | 'audio';
+  readonly mimeType: string;
+  /** Base64-encoded bytes (no data: URI prefix) */
+  readonly data: string;
+  readonly name?: string;
+};
+
+/**
  * User message
  */
 export type UserMessage = BaseMessage & {
   readonly role: 'user';
+  /** Inline image/audio media to send alongside the text content */
+  readonly attachments?: readonly MessageAttachment[];
 };
 
 /**

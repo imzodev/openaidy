@@ -97,6 +97,22 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id           TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      message_id   TEXT REFERENCES session_messages(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,
+      source       TEXT NOT NULL DEFAULT 'user_upload',
+      name         TEXT,
+      mime_type    TEXT NOT NULL,
+      size_bytes   INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS message_attachments_message_id_idx ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS message_attachments_session_id_idx ON message_attachments(session_id);
+
     CREATE TABLE IF NOT EXISTS scheduled_jobs (
       id TEXT PRIMARY KEY NOT NULL,
       type TEXT NOT NULL,
@@ -666,10 +682,15 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0010_add_running_status.sql'),
     'utf-8',
   );
+  const messageAttachmentsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0012_message_attachments.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
     await client.query(runningStatusMigrationSql);
+    await client.query(messageAttachmentsMigrationSql);
   } finally {
     client.release();
   }

@@ -27,6 +27,8 @@ import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
 import { createAccessTokenService } from './access-tokens/service';
 import { sessionRoutes } from './routes/sessions';
+import { attachmentRoutes } from './routes/attachments';
+import { createAttachmentService } from './attachments/service';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
@@ -309,6 +311,15 @@ export async function buildApp() {
   // Create run event emitter for SSE streaming (needed by sessionService)
   const runEvents = new RunEventEmitter();
 
+  // Attachment storage (image/audio chat media) — requires the DB for
+  // metadata rows; bytes go under OPENAIDY_HOME/attachments.
+  const attachmentService = dbAdapter
+    ? createAttachmentService({
+        repository: dbAdapter.repositories.messageAttachments,
+        baseDir: path.join(env.OPENAIDY_HOME, 'attachments'),
+      })
+    : undefined;
+
   sessionService = new SessionMessageService({
     providers: providerServices,
     logger: log as unknown as FastifyBaseLogger,
@@ -321,6 +332,7 @@ export async function buildApp() {
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     runEvents,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+    ...(attachmentService ? { attachments: attachmentService } : {}),
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -482,6 +494,15 @@ export async function buildApp() {
         sessionService: services.sessions,
         authMiddleware,
       });
+
+      // Attachment upload/serving (requires DB-backed attachment storage)
+      if (attachmentService) {
+        await api.register(attachmentRoutes, {
+          attachmentService,
+          sessionService: services.sessions,
+          authMiddleware,
+        });
+      }
 
       // Pass shared services to provider routes. provider routes may
       // optionally use the DB (for OAuth state + provider credentials);

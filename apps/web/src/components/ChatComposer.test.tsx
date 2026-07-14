@@ -10,6 +10,8 @@ vi.mock('lucide-solid', () => ({
   ChevronDown: () => <span data-testid="chevron-down" />,
   Bot: () => <span data-testid="bot" />,
   X: () => <span data-testid="x" />,
+  Paperclip: () => <span data-testid="paperclip" />,
+  Music: () => <span data-testid="music" />,
 }));
 
 /** Force ChatComposer's `isMobile()` on by stubbing matchMedia. */

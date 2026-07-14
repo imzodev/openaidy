@@ -5,6 +5,7 @@ import type {
 } from '../client';
 import type { SessionsRepository } from '../repositories/sessions';
 import type { SessionMessagesRepository } from '../repositories/session-messages';
+import type { MessageAttachmentsRepository } from '../repositories/message-attachments';
 import type { SessionRunsRepository } from '../repositories/session-runs';
 import type { JobsRepository } from '../repositories/jobs';
 import type { JobRunsRepository } from '../repositories/job-runs';
@@ -162,6 +163,16 @@ export type SessionMessagesStore = Pick<
   | 'countBySession'
 >;
 
+export type MessageAttachmentsStore = Pick<
+  MessageAttachmentsRepository,
+  | 'create'
+  | 'findById'
+  | 'linkToMessage'
+  | 'listBySession'
+  | 'listByMessage'
+  | 'delete'
+>;
+
 export type SessionRunsStore = Pick<
   SessionRunsRepository,
   | 'create'
@@ -241,6 +252,7 @@ export type DatabaseRepositories = {
   sessions: SessionsStore;
   sessionMessages: SessionMessagesStore;
   sessionRuns: SessionRunsStore;
+  messageAttachments: MessageAttachmentsStore;
   jobs: JobsStore;
   jobRuns: JobRunsStore;
   pairingRequests: PairingRequestsStore;

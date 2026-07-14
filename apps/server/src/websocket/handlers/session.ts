@@ -293,6 +293,18 @@ export class SessionHandler {
           messages: paginated.map((msg) => {
             const reasoningContent = (msg as { reasoningContent?: string })
               .reasoningContent;
+            const attachments = (
+              msg as {
+                attachments?: Array<{
+                  id: string;
+                  kind: string;
+                  source: string;
+                  name: string | null;
+                  mimeType: string;
+                  sizeBytes: number;
+                }>;
+              }
+            ).attachments;
             return {
               id: msg.id,
               sessionId: msg.sessionId,
@@ -302,6 +314,18 @@ export class SessionHandler {
               createdAt: new Date(msg.createdAt).toISOString(),
               metadata: msg.metadata as Record<string, unknown> | undefined,
               ...(reasoningContent ? { reasoningContent } : {}),
+              ...(attachments?.length
+                ? {
+                    attachments: attachments.map((a) => ({
+                      id: a.id,
+                      kind: a.kind as 'image' | 'audio',
+                      source: a.source as 'user_upload' | 'tool_output',
+                      name: a.name,
+                      mimeType: a.mimeType,
+                      sizeBytes: a.sizeBytes,
+                    })),
+                  }
+                : {}),
             };
           }),
           total: messages.length,
@@ -440,6 +464,9 @@ export class SessionHandler {
         ...(resolvedAgentId != null && { agentId: resolvedAgentId }),
         ...(resolvedProviderId != null && { providerId: resolvedProviderId }),
         ...(resolvedModelId != null && { modelId: resolvedModelId }),
+        ...(request.payload.attachmentIds?.length && {
+          attachmentIds: request.payload.attachmentIds,
+        }),
         onStreamEvent: () => {},
       });
 
@@ -629,6 +656,9 @@ export class SessionHandler {
         runId,
         ...(providerId != null && { providerId }),
         ...(modelId != null && { modelId }),
+        ...(request.payload.attachmentIds?.length && {
+          attachmentIds: request.payload.attachmentIds,
+        }),
         onStreamEvent: (event) => {
           switch (event.type) {
             case 'delta':

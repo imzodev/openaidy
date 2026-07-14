@@ -22,9 +22,38 @@ export type OpenAITextContentPart = {
 };
 
 /**
+ * OpenAI message content part (image, as a data: or https: URL)
+ */
+export type OpenAIImageContentPart = {
+  type: 'image_url';
+  image_url: {
+    url: string;
+  };
+};
+
+/**
+ * OpenAI message content part (audio input)
+ */
+export type OpenAIAudioContentPart = {
+  type: 'input_audio';
+  input_audio: {
+    data: string;
+    format: string;
+  };
+};
+
+/**
+ * OpenAI message content part union
+ */
+export type OpenAIContentPart =
+  | OpenAITextContentPart
+  | OpenAIImageContentPart
+  | OpenAIAudioContentPart;
+
+/**
  * OpenAI message content (can be string or array of parts)
  */
-export type OpenAIMessageContent = string | OpenAITextContentPart[];
+export type OpenAIMessageContent = string | OpenAIContentPart[];
 
 /**
  * OpenAI tool call

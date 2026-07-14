@@ -10,6 +10,7 @@ export type {
   Session,
   MessageRole,
   SessionMessage,
+  SessionMessageAttachment,
   RunStatus,
   AgentWorkspacePermission,
   AgentWorkspace,
@@ -483,6 +484,71 @@ export async function submitMessage(
     },
   );
   return response.json();
+}
+
+/**
+ * Upload an image/audio file as a pending attachment for a session.
+ * Returns the attachment metadata; pass its id in `attachmentIds` when
+ * submitting the message.
+ */
+export async function uploadAttachment(
+  sessionId: string,
+  file: File,
+): Promise<import('./types').SessionMessageAttachment> {
+  const data = await fileToBase64(file);
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/attachments`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mimeType: file.type,
+        name: file.name,
+        data,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      error?: string;
+    };
+    throw new Error(
+      body.message ?? body.error ?? `Upload failed (${response.status})`,
+    );
+  }
+  return response.json();
+}
+
+/** Read a File's bytes as a bare base64 string (no data: URI prefix). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fetch an attachment's raw bytes (authenticated) and return an object URL
+ * suitable for <img src> / <audio src>. Callers must revoke the URL when
+ * done (URL.revokeObjectURL).
+ */
+export async function fetchAttachmentObjectUrl(
+  attachmentId: string,
+): Promise<string> {
+  const response = await apiFetch(
+    `${API_BASE}/api/attachments/${attachmentId}/raw`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to load attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 }
 
 /**

@@ -8,6 +8,7 @@ import {
 } from './repositories/pairing';
 import { createSessionsRepository } from './repositories/sessions';
 import { createSessionMessagesRepository } from './repositories/session-messages';
+import { createMessageAttachmentsRepository } from './repositories/message-attachments';
 import { createSessionRunsRepository } from './repositories/session-runs';
 import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
@@ -31,6 +32,7 @@ export async function createDatabaseAdapter(
     sessions: createSessionsRepository(client),
     sessionMessages: createSessionMessagesRepository(client),
     sessionRuns: createSessionRunsRepository(client),
+    messageAttachments: createMessageAttachmentsRepository(client),
     jobs: createJobsRepository(client),
     jobRuns: createJobRunsRepository(client),
     pairingRequests: createPairingRequestsRepository(client),

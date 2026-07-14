@@ -13,6 +13,7 @@ import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
 import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
+import { AttachmentList } from './AttachmentList';
 import { QueuedMessageCard } from './QueuedMessageCard';
 import { RunActivityBadge } from './RunActivityBadge';
 import type { RunActivityPhase } from './RunActivityBadge';
@@ -234,6 +235,9 @@ export function ChatView(props: ChatViewProps) {
                       content={message.content}
                       isMcp={isMcpTool(message)}
                     />
+                  </Show>
+                  <Show when={message.attachments?.length}>
+                    <AttachmentList attachments={message.attachments!} />
                   </Show>
                 </div>
               </div>
