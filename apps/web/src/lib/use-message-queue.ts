@@ -20,7 +20,11 @@ export interface UseMessageQueueReturn {
   /** True when no messages are queued. */
   isEmpty: Accessor<boolean>;
   /** Append a message to the end of the queue and return the created item. */
-  enqueue: (content: string, agentId?: string) => QueuedMessage;
+  enqueue: (
+    content: string,
+    agentId?: string,
+    attachmentIds?: string[],
+  ) => QueuedMessage;
   /** Replace the content of a queued message by id (no-op if not found). */
   edit: (id: string, content: string) => void;
   /** Remove a queued message by id (no-op if not found). */
@@ -40,12 +44,17 @@ export function useMessageQueue(): UseMessageQueueReturn {
   const [items, setItems] = createSignal<QueuedMessage[]>([]);
   let counter = 0;
 
-  const enqueue = (content: string, agentId?: string): QueuedMessage => {
+  const enqueue = (
+    content: string,
+    agentId?: string,
+    attachmentIds?: string[],
+  ): QueuedMessage => {
     counter += 1;
     const item: QueuedMessage = {
       id: `queued-${Date.now()}-${counter}`,
       content,
       ...(agentId ? { agentId } : {}),
+      ...(attachmentIds?.length ? { attachmentIds } : {}),
     };
     setItems((prev) => [...prev, item]);
     return item;

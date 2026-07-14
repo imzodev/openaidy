@@ -8,13 +8,19 @@ const createSessionSchema = z.object({
   title: z.string().min(1),
 });
 
-const submitMessageSchema = z.object({
-  role: z.enum(['user', 'system']),
-  content: z.string().min(1),
-  agentId: z.string().optional(),
-  providerId: z.string().optional(),
-  modelId: z.string().optional(),
-});
+const submitMessageSchema = z
+  .object({
+    role: z.enum(['user', 'system']),
+    content: z.string(),
+    agentId: z.string().optional(),
+    providerId: z.string().optional(),
+    modelId: z.string().optional(),
+    attachmentIds: z.array(z.string()).max(10).optional(),
+  })
+  .refine((body) => body.content.length > 0 || body.attachmentIds?.length, {
+    message: 'content is required unless attachments are provided',
+    path: ['content'],
+  });
 
 /**
  * Session routes options
@@ -168,6 +174,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
       ...(body.agentId !== undefined && { agentId: body.agentId }),
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
+      ...(body.attachmentIds !== undefined && {
+        attachmentIds: body.attachmentIds,
+      }),
     };
 
     const result = await sessionService.submitMessageStreaming({

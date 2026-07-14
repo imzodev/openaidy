@@ -127,6 +127,7 @@ export async function listMessages(
             createdAt: string;
             metadata?: Record<string, unknown>;
             reasoningContent?: string;
+            attachments?: SessionMessage['attachments'];
           }) => ({
             id: msg.id,
             sessionId: msg.sessionId,
@@ -137,6 +138,9 @@ export async function listMessages(
             metadata: msg.metadata,
             ...(msg.reasoningContent
               ? { reasoningContent: msg.reasoningContent }
+              : {}),
+            ...(msg.attachments?.length
+              ? { attachments: msg.attachments }
               : {}),
           }),
         ),
@@ -157,6 +161,9 @@ export async function submitMessage(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.attachmentIds?.length
+          ? { attachmentIds: input.attachmentIds }
+          : {}),
       });
 
       if (response.type !== 'session.message') {
@@ -228,6 +235,9 @@ export async function submitMessageStreaming(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.attachmentIds?.length
+          ? { attachmentIds: input.attachmentIds }
+          : {}),
       });
 
       if (

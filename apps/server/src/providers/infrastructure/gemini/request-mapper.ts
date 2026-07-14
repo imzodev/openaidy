@@ -55,11 +55,29 @@ export function mapMessage(message: Message): GeminiContent {
         parts: [{ text: message.content }],
       };
 
-    case 'user':
+    case 'user': {
+      // Attachments become inlineData parts (Gemini accepts both image and
+      // audio bytes inline as base64).
+      if (message.attachments && message.attachments.length > 0) {
+        const parts: GeminiPart[] = [];
+        if (message.content) {
+          parts.push({ text: message.content });
+        }
+        for (const attachment of message.attachments) {
+          parts.push({
+            inlineData: {
+              mimeType: attachment.mimeType,
+              data: attachment.data,
+            },
+          });
+        }
+        return { role: 'user', parts };
+      }
       return {
         role: 'user',
         parts: [{ text: message.content }],
       };
+    }
 
     case 'assistant': {
       const parts: GeminiPart[] = [];

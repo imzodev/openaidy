@@ -45,7 +45,12 @@ import { createRouter } from './lib/router';
 import { useMessageQueue } from './lib/use-message-queue';
 import { LoginScreen } from './components/LoginScreen';
 import { resolveToken, clearToken } from './lib/auth-token';
-import { listAddons, deleteSession, type AddonRecord } from './lib/api';
+import {
+  listAddons,
+  deleteSession,
+  uploadAttachment,
+  type AddonRecord,
+} from './lib/api';
 import type { ChoicesEvent } from '@openaidy/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
@@ -497,16 +502,41 @@ function AppContent(props: AppContentProps) {
 
   // Queue-aware entry point used by the composer and the choices card.
   // While a run is in flight the message is queued; otherwise it is sent now.
-  const handleSubmit = async (content: string, agentId?: string) => {
-    if (!selectedSessionId()) {
+  // Files are uploaded immediately (they don't need the run to be idle) and
+  // travel as attachment ids from then on.
+  const handleSubmit = async (
+    content: string,
+    agentId?: string,
+    files?: File[],
+  ) => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) {
       setSubmitError('No session selected');
       return;
     }
+
+    let attachmentIds: string[] | undefined;
+    if (files?.length) {
+      try {
+        const uploaded = await Promise.all(
+          files.map((file) => uploadAttachment(sessionId, file)),
+        );
+        attachmentIds = uploaded.map((a) => a.id);
+      } catch (err) {
+        setSubmitError(
+          err instanceof Error ? err.message : 'Failed to upload attachment',
+        );
+        throw err instanceof Error
+          ? err
+          : new Error('Failed to upload attachment');
+      }
+    }
+
     if (isStreaming()) {
-      messageQueue.enqueue(content, agentId);
+      messageQueue.enqueue(content, agentId, attachmentIds);
       return;
     }
-    await sendMessage(content, agentId);
+    await sendMessage(content, agentId, attachmentIds);
   };
 
   // User hit Stop on an in-flight tool call — ask the server to cancel it.
@@ -536,7 +566,7 @@ function AppContent(props: AppContentProps) {
     if (isStreaming() || currentChoices()) return;
     const next = messageQueue.dequeue();
     if (next) {
-      void sendMessage(next.content, next.agentId);
+      void sendMessage(next.content, next.agentId, next.attachmentIds);
     }
   };
 
@@ -563,7 +593,11 @@ function AppContent(props: AppContentProps) {
   };
 
   // Actually dispatch a message and begin a streaming run.
-  const sendMessage = async (content: string, agentId?: string) => {
+  const sendMessage = async (
+    content: string,
+    agentId?: string,
+    attachmentIds?: string[],
+  ) => {
     const sessionId = selectedSessionId();
     if (!sessionId) {
       setSubmitError('No session selected');
@@ -608,6 +642,7 @@ function AppContent(props: AppContentProps) {
         agentId,
         providerId,
         modelId,
+        ...(attachmentIds?.length ? { attachmentIds } : {}),
       });
 
       if (!result.ok) {

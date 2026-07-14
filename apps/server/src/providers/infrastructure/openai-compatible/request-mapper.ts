@@ -8,8 +8,18 @@ import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
 import type {
   OpenAIMessage,
   OpenAIChatCompletionRequest,
+  OpenAIContentPart,
   OpenAIToolDefinition,
 } from './types';
+
+/**
+ * Maps an audio mime type to the bare format string the OpenAI
+ * `input_audio` part expects (e.g. 'audio/wav' → 'wav').
+ */
+function audioFormatFromMime(mimeType: string): string {
+  const subtype = mimeType.split('/')[1] ?? mimeType;
+  return subtype === 'mpeg' ? 'mp3' : subtype;
+}
 
 // =====================
 // Message Mapping
@@ -26,11 +36,39 @@ export function mapMessage(message: Message): OpenAIMessage {
         content: message.content,
       };
 
-    case 'user':
+    case 'user': {
+      // Attachments become multi-part content: text plus provider-specific
+      // image/audio parts (bytes inline as base64).
+      if (message.attachments && message.attachments.length > 0) {
+        const parts: OpenAIContentPart[] = [];
+        if (message.content) {
+          parts.push({ type: 'text', text: message.content });
+        }
+        for (const attachment of message.attachments) {
+          if (attachment.kind === 'image') {
+            parts.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${attachment.mimeType};base64,${attachment.data}`,
+              },
+            });
+          } else {
+            parts.push({
+              type: 'input_audio',
+              input_audio: {
+                data: attachment.data,
+                format: audioFormatFromMime(attachment.mimeType),
+              },
+            });
+          }
+        }
+        return { role: 'user', content: parts };
+      }
       return {
         role: 'user',
         content: message.content,
       };
+    }
 
     case 'assistant': {
       const openAIMsg: OpenAIMessage = {
@@ -96,7 +134,9 @@ export function mapTool(tool: ToolDefinition): OpenAIToolDefinition {
 /**
  * Maps all tools to OpenAI format
  */
-export function mapTools(tools: readonly ToolDefinition[]): OpenAIToolDefinition[] {
+export function mapTools(
+  tools: readonly ToolDefinition[],
+): OpenAIToolDefinition[] {
   return tools.map(mapTool);
 }
 
@@ -104,7 +144,7 @@ export function mapTools(tools: readonly ToolDefinition[]): OpenAIToolDefinition
  * Maps tool choice to OpenAI format
  */
 export function mapToolChoice(
-  toolChoice?: 'auto' | 'required' | 'none'
+  toolChoice?: 'auto' | 'required' | 'none',
 ): 'auto' | 'required' | 'none' | undefined {
   return toolChoice;
 }

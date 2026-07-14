@@ -10,6 +10,7 @@ export * from './schema/deliverables';
 export * from './schema/addons';
 export * from './repositories/sessions';
 export * from './repositories/session-messages';
+export * from './repositories/message-attachments';
 export * from './repositories/session-runs';
 export * from './repositories/jobs';
 export * from './repositories/job-runs';
