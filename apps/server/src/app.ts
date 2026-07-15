@@ -864,6 +864,9 @@ export async function buildApp() {
           'public, max-age=31536000, immutable',
         );
       }
+      if (request.url === '/' || request.url.endsWith('/index.html')) {
+        void reply.header('cache-control', 'no-cache, must-revalidate');
+      }
     });
 
     // SPA fallback — serve index.html for client-side routes (e.g.
