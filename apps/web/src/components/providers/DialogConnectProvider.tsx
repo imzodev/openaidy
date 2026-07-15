@@ -260,7 +260,8 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                 <Show
                   when={
                     props.provider!.id !== 'opencode-go' &&
-                    props.provider!.id !== 'opencode-go-anthropic'
+                    props.provider!.id !== 'opencode-go-anthropic' &&
+                    props.provider!.id !== 'opencode-zen'
                   }
                 >
                   <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
