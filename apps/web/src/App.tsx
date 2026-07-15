@@ -760,7 +760,7 @@ function AppContent(props: AppContentProps) {
   const view = () => currentView();
 
   return (
-    <div class="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div class="h-dvh flex overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
       <Sidebar
         sessions={sessionsQuery.data?.items || []}
