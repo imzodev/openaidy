@@ -124,6 +124,25 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     completionPer1k: 0.00087,
     cacheReadPer1k: 0.000003625,
   },
+
+  // MiniMax
+  'MiniMax-M3': {
+    promptPer1k: 0.0003,
+    completionPer1k: 0.0012,
+    cacheReadPer1k: 0.00006,
+  },
+  'MiniMax-M2.7': {
+    promptPer1k: 0.0003,
+    completionPer1k: 0.0012,
+    cacheReadPer1k: 0.00006,
+    cacheCreationPer1k: 0.000375,
+  },
+  'MiniMax-M2.7-highspeed': {
+    promptPer1k: 0.0006,
+    completionPer1k: 0.0024,
+    cacheReadPer1k: 0.00006,
+    cacheCreationPer1k: 0.000375,
+  },
 };
 
 /**
