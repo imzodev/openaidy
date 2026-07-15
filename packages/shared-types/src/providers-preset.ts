@@ -20,6 +20,7 @@ export type ModelPreset = {
   name: string;
   description?: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
 };
 
 export type ProviderPreset = {
@@ -195,13 +196,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         id: 'deepseek-v4-pro',
         name: 'DeepSeek V4 Pro',
         description: 'Most capable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
       {
         id: 'deepseek-v4-flash',
         name: 'DeepSeek V4 Flash',
         description: 'Fast and affordable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
     ],
   },

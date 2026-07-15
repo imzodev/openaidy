@@ -102,16 +102,27 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-flash': { promptPer1k: 0.0003, completionPer1k: 0.0025 },
   'gemini-2.0-flash': { promptPer1k: 0.0001, completionPer1k: 0.0004 },
 
-  // DeepSeek
+  // DeepSeek (V4 generation)
+  'deepseek-v4-flash': {
+    promptPer1k: 0.00014,
+    completionPer1k: 0.00028,
+    cacheReadPer1k: 0.0000028,
+  },
+  'deepseek-v4-pro': {
+    promptPer1k: 0.000435,
+    completionPer1k: 0.00087,
+    cacheReadPer1k: 0.000003625,
+  },
+  // Legacy DeepSeek model ids (resolve to V4 Flash pricing)
   'deepseek-chat': {
-    promptPer1k: 0.00027,
-    completionPer1k: 0.0011,
-    cacheReadPer1k: 0.00007,
+    promptPer1k: 0.00014,
+    completionPer1k: 0.00028,
+    cacheReadPer1k: 0.0000028,
   },
   'deepseek-reasoner': {
-    promptPer1k: 0.00055,
-    completionPer1k: 0.00219,
-    cacheReadPer1k: 0.00014,
+    promptPer1k: 0.000435,
+    completionPer1k: 0.00087,
+    cacheReadPer1k: 0.000003625,
   },
 };
 
