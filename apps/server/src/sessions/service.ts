@@ -32,7 +32,8 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import type { SessionType } from '@openaidy/shared-types';
+import type { SessionType, ModelPricing } from '@openaidy/shared-types';
+import { estimateCost } from '@openaidy/shared-types';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -95,6 +96,7 @@ export class SessionMessageService {
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly workspaceBaseDir: string | undefined;
   private readonly attachments: AttachmentService | undefined;
+  private readonly modelPricing: Record<string, ModelPricing> | undefined;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -121,6 +123,7 @@ export class SessionMessageService {
     this.runEvents = options.runEvents;
     this.workspaceBaseDir = options.workspaceBaseDir;
     this.attachments = options.attachments;
+    this.modelPricing = options.modelPricing;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -460,6 +463,42 @@ export class SessionMessageService {
       return this.runsRepo.listBySession(sessionId);
     }
     return listSessionRunRecords(sessionId);
+  }
+
+  /**
+   * Cumulative usage totals for a session (succeeded runs). Returns zeroed
+   * totals when no DB-backed run store is configured.
+   */
+  async getSessionUsage(
+    sessionId: string,
+  ): Promise<import('@openaidy/db').SessionUsageTotals> {
+    if (this.runsRepo) {
+      return this.runsRepo.getSessionUsage(sessionId);
+    }
+    return {
+      runCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      cost: 0,
+      hasCost: false,
+    };
+  }
+
+  /**
+   * Raw per-run usage rows (succeeded runs) for aggregation, optionally
+   * filtered by an ISO created-at range. Empty when no DB store.
+   */
+  async listUsageRows(options?: {
+    from?: string;
+    to?: string;
+  }): Promise<import('@openaidy/db').UsageRunRow[]> {
+    if (this.runsRepo) {
+      return this.runsRepo.listUsageRows(options ?? {});
+    }
+    return [];
   }
 
   /**
@@ -1102,7 +1141,16 @@ export class SessionMessageService {
     };
 
     let accumulatedContent = '';
-    let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    // Usage accumulated across all tool-call rounds — each round is a
+    // separate billable provider call, so cache/cost totals sum them.
+    const finalUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+    };
+    let sawCacheTokens = false;
     let finalFinishReason: string | undefined;
     let finalReasoningContent: string | undefined;
     let finalProviderId = providerId;
@@ -1201,12 +1249,32 @@ export class SessionMessageService {
               break;
             }
             case 'stream.usage': {
-              finalUsage = {
-                promptTokens: value.usage.promptTokens,
-                completionTokens: value.usage.completionTokens,
-                totalTokens: value.usage.totalTokens,
-              };
-              onStreamEvent({ type: 'usage', usage: finalUsage });
+              finalUsage.promptTokens += value.usage.promptTokens;
+              finalUsage.completionTokens += value.usage.completionTokens;
+              finalUsage.totalTokens += value.usage.totalTokens;
+              if (value.usage.cacheReadTokens !== undefined) {
+                finalUsage.cacheReadTokens += value.usage.cacheReadTokens;
+                sawCacheTokens = true;
+              }
+              if (value.usage.cacheCreationTokens !== undefined) {
+                finalUsage.cacheCreationTokens +=
+                  value.usage.cacheCreationTokens;
+                sawCacheTokens = true;
+              }
+              onStreamEvent({
+                type: 'usage',
+                usage: {
+                  promptTokens: value.usage.promptTokens,
+                  completionTokens: value.usage.completionTokens,
+                  totalTokens: value.usage.totalTokens,
+                  ...(value.usage.cacheReadTokens !== undefined && {
+                    cacheReadTokens: value.usage.cacheReadTokens,
+                  }),
+                  ...(value.usage.cacheCreationTokens !== undefined && {
+                    cacheCreationTokens: value.usage.cacheCreationTokens,
+                  }),
+                },
+              });
               break;
             }
             case 'stream.started': {
@@ -1380,6 +1448,10 @@ export class SessionMessageService {
                       promptTokens: finalUsage.promptTokens,
                       completionTokens: finalUsage.completionTokens,
                       totalTokens: finalUsage.totalTokens,
+                      ...(sawCacheTokens && {
+                        cacheReadTokens: finalUsage.cacheReadTokens,
+                        cacheCreationTokens: finalUsage.cacheCreationTokens,
+                      }),
                       metadata: {
                         providerId: finalProviderId,
                         model: finalModelId,
@@ -1628,6 +1700,10 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
+        ...(sawCacheTokens && {
+          cacheReadTokens: finalUsage.cacheReadTokens,
+          cacheCreationTokens: finalUsage.cacheCreationTokens,
+        }),
         firstMessageId: assistantMessage.id,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
@@ -1758,30 +1834,59 @@ export class SessionMessageService {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
       firstMessageId?: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
+    // Estimate cost from the run's model + usage (null when pricing unknown).
+    const cost =
+      input.promptTokens !== undefined
+        ? estimateCost(
+            run.modelId,
+            {
+              promptTokens: input.promptTokens,
+              completionTokens: input.completionTokens ?? 0,
+              ...(input.cacheReadTokens !== undefined && {
+                cacheReadTokens: input.cacheReadTokens,
+              }),
+              ...(input.cacheCreationTokens !== undefined && {
+                cacheCreationTokens: input.cacheCreationTokens,
+              }),
+            },
+            this.modelPricing,
+          )
+        : null;
+
+    // Shared usage object for both persistence and the run.completed event.
+    const usage =
+      input.promptTokens !== undefined
+        ? {
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens ?? 0,
+            totalTokens: input.totalTokens ?? 0,
+            ...(input.cacheReadTokens !== undefined && {
+              cacheReadTokens: input.cacheReadTokens,
+            }),
+            ...(input.cacheCreationTokens !== undefined && {
+              cacheCreationTokens: input.cacheCreationTokens,
+            }),
+          }
+        : undefined;
+
     if (this.runsRepo) {
       const successInput: {
         finishReason: DbFinishReason;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
+        usage?: NonNullable<typeof usage>;
+        cost?: number | null;
         firstMessageId?: string;
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
       };
-      if (input.promptTokens !== undefined) {
-        successInput.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
-      }
+      if (usage) successInput.usage = usage;
+      if (cost !== null) successInput.cost = cost;
       if (input.firstMessageId !== undefined) {
         successInput.firstMessageId = input.firstMessageId;
       }
@@ -1789,62 +1894,31 @@ export class SessionMessageService {
         successInput.metadata = input.metadata;
       }
       const updated = await this.runsRepo.markSucceeded(run.id, successInput);
-      // Emit run.completed event
       if (this.runEvents && updated) {
-        const eventData: {
-          runId: string;
-          sessionId: string;
-          agentId: string;
-          finishReason: string;
-          usage?: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-          };
-        } = {
+        this.runEvents.emitCompleted({
           runId: run.id,
           sessionId: run.sessionId,
           agentId: run.agentId,
           finishReason: input.finishReason,
-        };
-        if (input.promptTokens !== undefined) {
-          eventData.usage = {
-            promptTokens: input.promptTokens,
-            completionTokens: input.completionTokens ?? 0,
-            totalTokens: input.totalTokens ?? 0,
-          };
-        }
-        this.runEvents.emitCompleted(eventData);
+          ...(usage && { usage }),
+          ...(cost !== null && { cost }),
+        });
       }
       return updated;
     }
-    const updated = markRunSucceeded(run.id, input);
-    // Emit run.completed event for in-memory runs too
+    const updated = markRunSucceeded(run.id, {
+      ...input,
+      ...(cost !== null && { cost }),
+    });
     if (this.runEvents && updated) {
-      const eventData: {
-        runId: string;
-        sessionId: string;
-        agentId: string;
-        finishReason: string;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
-      } = {
+      this.runEvents.emitCompleted({
         runId: run.id,
         sessionId: run.sessionId,
         agentId: run.agentId,
         finishReason: input.finishReason,
-      };
-      if (input.promptTokens !== undefined) {
-        eventData.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
-      }
-      this.runEvents.emitCompleted(eventData);
+        ...(usage && { usage }),
+        ...(cost !== null && { cost }),
+      });
     }
     return updated ?? null;
   }
@@ -1912,6 +1986,12 @@ export class SessionMessageService {
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,
       totalTokens: response.usage.totalTokens,
+      ...(response.usage.cacheReadTokens !== undefined && {
+        cacheReadTokens: response.usage.cacheReadTokens,
+      }),
+      ...(response.usage.cacheCreationTokens !== undefined && {
+        cacheCreationTokens: response.usage.cacheCreationTokens,
+      }),
       metadata: {
         providerId: response.providerId,
         model: response.model,

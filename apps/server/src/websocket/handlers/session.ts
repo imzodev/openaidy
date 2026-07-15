@@ -741,6 +741,11 @@ export class SessionHandler {
         const assistantMessage = result.assistantMessage as SessionMessage;
 
         // Emit completion with final usage
+        const runWithUsage = run as SessionRun & {
+          cacheReadTokens?: number | null;
+          cacheCreationTokens?: number | null;
+          cost?: number | null;
+        };
         this.runEvents?.emitCompleted({
           runId,
           sessionId,
@@ -751,8 +756,15 @@ export class SessionHandler {
               promptTokens: run.promptTokens,
               completionTokens: run.completionTokens ?? 0,
               totalTokens: run.totalTokens ?? 0,
+              ...(runWithUsage.cacheReadTokens != null && {
+                cacheReadTokens: runWithUsage.cacheReadTokens,
+              }),
+              ...(runWithUsage.cacheCreationTokens != null && {
+                cacheCreationTokens: runWithUsage.cacheCreationTokens,
+              }),
             },
           }),
+          ...(runWithUsage.cost != null && { cost: runWithUsage.cost }),
         });
 
         this.logger.info(

@@ -508,6 +508,8 @@ export type SessionStreamUsage = WSMessage<
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
     };
   }
 >;

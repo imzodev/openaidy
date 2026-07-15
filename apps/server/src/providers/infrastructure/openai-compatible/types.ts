@@ -107,6 +107,7 @@ export type OpenAIChatCompletionRequest = {
   top_p?: number;
   stop?: string | string[];
   stream?: boolean;
+  stream_options?: { include_usage?: boolean };
   metadata?: Record<string, unknown>;
 };
 
@@ -131,6 +132,7 @@ export type OpenAIChatCompletionResponse = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 };
 
@@ -163,6 +165,7 @@ export type OpenAIStreamChunk = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 };
 

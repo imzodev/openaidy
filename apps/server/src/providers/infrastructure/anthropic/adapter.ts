@@ -321,6 +321,15 @@ export class AnthropicProvider implements ModelProvider {
     const finishReason: FinishReason = 'stop';
     let messageId = streamId;
     let model = request.model;
+    // Prompt-side usage from message_start (input + cache tokens); combined
+    // with output tokens from message_delta to emit a complete usage figure.
+    let promptUsage:
+      | {
+          promptTokens: number;
+          cacheReadTokens?: number;
+          cacheCreationTokens?: number;
+        }
+      | undefined;
 
     try {
       // Build options, filtering out undefined values for exactOptionalPropertyTypes
@@ -410,6 +419,20 @@ export class AnthropicProvider implements ModelProvider {
               if (event.type === 'message_start') {
                 messageId = event.message.id;
                 model = event.message.model;
+                // Capture prompt-side usage here — the closing message_delta
+                // only reports output tokens.
+                const u = event.message.usage;
+                const cacheRead = u.cache_read_input_tokens ?? 0;
+                const cacheCreation = u.cache_creation_input_tokens ?? 0;
+                promptUsage = {
+                  promptTokens: u.input_tokens + cacheRead + cacheCreation,
+                  ...(u.cache_read_input_tokens !== undefined && {
+                    cacheReadTokens: cacheRead,
+                  }),
+                  ...(u.cache_creation_input_tokens !== undefined && {
+                    cacheCreationTokens: cacheCreation,
+                  }),
+                };
               }
 
               // Track tool calls
@@ -435,6 +458,7 @@ export class AnthropicProvider implements ModelProvider {
                 this.descriptor.id,
                 messageId,
                 model,
+                promptUsage,
               )) {
                 yield ok(normalizedEvent);
               }

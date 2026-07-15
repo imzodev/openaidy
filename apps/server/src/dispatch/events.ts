@@ -292,7 +292,10 @@ export class RunEventEmitter {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
     };
+    cost?: number | null;
   }): void {
     this.emit({
       type: 'run.completed',
@@ -303,6 +306,8 @@ export class RunEventEmitter {
       data: {
         finishReason: params.finishReason,
         usage: params.usage,
+        ...(params.cost !== undefined &&
+          params.cost !== null && { cost: params.cost }),
       },
     });
   }

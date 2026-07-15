@@ -664,6 +664,72 @@ describe('OpenAICompatibleProvider', () => {
         expect(events[0].value.type).toBe('stream.started');
       }
     });
+
+    it('requests usage via stream_options.include_usage', async () => {
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_u',
+          choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }],
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      for await (const _ of provider.invokeStream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+      })) {
+        // consume
+      }
+
+      const call = mockCreateCompletion.mock.calls[0];
+      const params = call![0] as {
+        stream_options?: { include_usage?: boolean };
+      };
+      expect(params.stream_options?.include_usage).toBe(true);
+    });
+
+    it('emits a stream.usage event from the final usage-only chunk', async () => {
+      // The last chunk carries usage and no choices (OpenAI's shape when
+      // stream_options.include_usage is set).
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_u2',
+          choices: [{ delta: { content: 'Hello' }, finish_reason: 'stop' }],
+        };
+        yield {
+          id: 'chatcmpl_u2',
+          choices: [],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 4,
+            total_tokens: 16,
+            prompt_tokens_details: { cached_tokens: 8 },
+          },
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const events = [];
+      for await (const event of provider.invokeStream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+      })) {
+        events.push(event);
+      }
+
+      const usageEvent = events.find(
+        (e) => e.ok && e.value.type === 'stream.usage',
+      );
+      expect(usageEvent).toBeDefined();
+      if (usageEvent?.ok && usageEvent.value.type === 'stream.usage') {
+        expect(usageEvent.value.usage.promptTokens).toBe(12);
+        expect(usageEvent.value.usage.completionTokens).toBe(4);
+        expect(usageEvent.value.usage.totalTokens).toBe(16);
+        expect(usageEvent.value.usage.cacheReadTokens).toBe(8);
+      }
+    });
   });
 });
 

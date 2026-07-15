@@ -37,6 +37,7 @@ import { AgentsPage } from './components/pages/AgentsPage';
 import { SkillsPage } from './components/pages/SkillsPage';
 import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
+import { UsagePage } from './components/pages/UsagePage';
 import { BackupsPage } from './components/pages/BackupsPage';
 import { AddonsPage } from './components/pages/AddonsPage';
 import { AddonViewPage } from './components/pages/AddonViewPage';
@@ -887,6 +888,10 @@ function AppContent(props: AppContentProps) {
           <LogsPage />
         </Show>
 
+        <Show when={view() === 'usage'}>
+          <UsagePage />
+        </Show>
+
         <Show when={view() === 'backups'}>
           <BackupsPage />
         </Show>
@@ -971,6 +976,7 @@ function AppContent(props: AppContentProps) {
               runs={runs()}
               isLoading={runsQuery.isLoading}
               error={runsQuery.error?.message}
+              sessionId={selectedSessionId()}
               onRunClick={(firstMessageId) => {
                 if (firstMessageId) {
                   setScrollToMessageId(firstMessageId);

@@ -256,6 +256,18 @@ export const appDefaultsSchema = z.object({
   agentId: z.string().min(1),
 });
 
+/**
+ * Per-model pricing override (USD per 1,000 tokens). Merged over the
+ * built-in MODEL_PRICING reference table so users can add custom providers
+ * or correct outdated rates. Keyed by model id.
+ */
+export const modelPricingSchema = z.object({
+  promptPer1k: z.number().nonnegative(),
+  completionPer1k: z.number().nonnegative(),
+  cacheReadPer1k: z.number().nonnegative().optional(),
+  cacheCreationPer1k: z.number().nonnegative().optional(),
+});
+
 export const appConfigSchema = z
   .object({
     version: z.number().int().positive().default(1),
@@ -264,6 +276,8 @@ export const appConfigSchema = z
     agents: z.array(appAgentConfigSchema).min(1),
     mcpServers: z.array(mcpServerConfigSchema).optional(),
     channels: z.array(channelConfigSchema).optional(),
+    /** Optional per-model pricing overrides for cost estimation */
+    modelPricing: z.record(z.string(), modelPricingSchema).optional(),
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();

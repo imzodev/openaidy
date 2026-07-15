@@ -18,3 +18,4 @@ export * from './pulses.js';
 export * from './tasks.js';
 export * from './task-schedules.js';
 export * from './bootstrap-admin.js';
+export * from './model-pricing.js';

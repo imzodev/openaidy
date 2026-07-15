@@ -210,6 +210,43 @@ export type SubmitMessageInput = {
 };
 
 /**
+ * Cumulative token usage totals (per session or overall).
+ */
+export type UsageTotals = {
+  runCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  cost: number;
+  hasCost: boolean;
+};
+
+export type UsageByDay = UsageTotals & { day: string };
+export type UsageByProvider = UsageTotals & { providerId: string };
+export type UsageByModel = UsageTotals & {
+  providerId: string;
+  modelId: string;
+};
+
+/** Aggregated usage report (GET /api/usage). */
+export type UsageReport = {
+  from?: string;
+  to?: string;
+  totals: UsageTotals;
+  byDay: UsageByDay[];
+  byProvider: UsageByProvider[];
+  byModel: UsageByModel[];
+};
+
+/** Per-session usage response (GET /api/sessions/:id/usage). */
+export type SessionUsageResponse = {
+  sessionId: string;
+  usage: UsageTotals;
+};
+
+/**
  * Submit message result
  */
 export type SubmitMessageResult =

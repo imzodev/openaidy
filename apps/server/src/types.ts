@@ -62,6 +62,9 @@ export type SessionRunRecord = {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cost?: number | null;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;

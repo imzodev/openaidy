@@ -441,6 +441,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
         temperature: request.temperature ?? null,
         max_tokens: request.maxTokens ?? null,
         stream: true,
+        // Ask the API to include a final usage-only chunk at the end of the
+        // stream. Without this, streaming responses carry no token counts
+        // (OpenAI, DeepSeek, OpenCode Zen, etc. all honor this flag).
+        stream_options: { include_usage: true },
       };
 
       if (tools) {
@@ -459,6 +463,27 @@ export class OpenAICompatibleProvider implements ModelProvider {
         'stop';
 
       for await (const chunk of stream) {
+        // Usage arrives on a final usage-only chunk (enabled via
+        // stream_options.include_usage) which carries no choices — check it
+        // before the choice guard so it isn't skipped. `cached_tokens` is
+        // the prompt-cache read count (OpenAI prompt_tokens_details).
+        if (chunk.usage) {
+          const cachedTokens = chunk.usage.prompt_tokens_details?.cached_tokens;
+          yield ok({
+            type: 'stream.usage',
+            timestamp: new Date().toISOString(),
+            id: responseId,
+            usage: {
+              promptTokens: chunk.usage.prompt_tokens,
+              completionTokens: chunk.usage.completion_tokens,
+              totalTokens: chunk.usage.total_tokens,
+              ...(cachedTokens !== undefined && {
+                cacheReadTokens: cachedTokens,
+              }),
+            },
+          });
+        }
+
         const choice = chunk.choices[0];
         if (!choice) continue;
 

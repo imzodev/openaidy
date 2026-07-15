@@ -76,6 +76,14 @@ export function StreamingMessage(props: StreamingMessageProps) {
               <span>in={props.usage!.inputTokens}, </span>
               <span>out={props.usage!.outputTokens}, </span>
               <span>total={props.usage!.totalTokens}</span>
+              <Show
+                when={
+                  props.usage!.cacheReadTokens !== undefined &&
+                  props.usage!.cacheReadTokens > 0
+                }
+              >
+                <span> (cached in={props.usage!.cacheReadTokens})</span>
+              </Show>
             </div>
           </Show>
         </div>

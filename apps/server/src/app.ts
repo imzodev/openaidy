@@ -29,6 +29,7 @@ import { createAccessTokenService } from './access-tokens/service';
 import { sessionRoutes } from './routes/sessions';
 import { attachmentRoutes } from './routes/attachments';
 import { createAttachmentService } from './attachments/service';
+import { usageRoutes } from './routes/usage';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
@@ -320,6 +321,13 @@ export async function buildApp() {
       })
     : undefined;
 
+  // Cast: zod infers optional fields as `T | undefined`, which is
+  // structurally the same as ModelPricing's optional fields but trips
+  // exactOptionalPropertyTypes at the call boundary.
+  const modelPricingConfig = configService.getConfig().modelPricing as
+    | Record<string, import('@openaidy/shared-types').ModelPricing>
+    | undefined;
+
   sessionService = new SessionMessageService({
     providers: providerServices,
     logger: log as unknown as FastifyBaseLogger,
@@ -333,6 +341,7 @@ export async function buildApp() {
     runEvents,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
     ...(attachmentService ? { attachments: attachmentService } : {}),
+    ...(modelPricingConfig ? { modelPricing: modelPricingConfig } : {}),
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -503,6 +512,12 @@ export async function buildApp() {
           authMiddleware,
         });
       }
+
+      // Usage tracking endpoints (per-session + aggregated)
+      await api.register(usageRoutes, {
+        sessionService: services.sessions,
+        authMiddleware,
+      });
 
       // Pass shared services to provider routes. provider routes may
       // optionally use the DB (for OAuth state + provider credentials);

@@ -23,6 +23,9 @@ export type {
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
+  UsageTotals,
+  UsageReport,
+  SessionUsageResponse,
   ModelCapability,
   ModelConfig,
   AgentDefaults,
@@ -549,6 +552,34 @@ export async function fetchAttachmentObjectUrl(
   }
   const blob = await response.blob();
   return URL.createObjectURL(blob);
+}
+
+/**
+ * Fetch cumulative token usage + cost for a single session.
+ */
+export async function getSessionUsage(
+  sessionId: string,
+): Promise<import('./types').SessionUsageResponse | ApiError> {
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/usage`,
+  );
+  return response.json();
+}
+
+/**
+ * Fetch aggregated usage across all sessions, optionally within a date
+ * range (ISO strings; `to` exclusive).
+ */
+export async function getUsage(options?: {
+  from?: string;
+  to?: string;
+}): Promise<import('./types').UsageReport | ApiError> {
+  const params = new URLSearchParams();
+  if (options?.from) params.set('from', options.from);
+  if (options?.to) params.set('to', options.to);
+  const qs = params.toString();
+  const response = await apiFetch(`${API_BASE}/api/usage${qs ? `?${qs}` : ''}`);
+  return response.json();
 }
 
 /**
