@@ -1,4 +1,4 @@
-import { Show, For, createSignal } from 'solid-js';
+import { Show, For, createSignal, createResource } from 'solid-js';
 import {
   Clock,
   CheckCircle,
@@ -9,11 +9,14 @@ import {
   ChevronUp,
 } from 'lucide-solid';
 import type { SessionRun, RunStatus } from '../lib/api';
+import { getSessionUsage } from '../lib/api';
 
 type RunListProps = {
   runs: SessionRun[];
   isLoading: boolean;
   error?: string;
+  /** Session whose cumulative usage totals are shown in the header. */
+  sessionId?: string;
   /** Called when user clicks on a run — passes the run's firstMessageId to scroll to */
   onRunClick?: (firstMessageId: string | undefined) => void;
 };
@@ -75,6 +78,28 @@ function truncateId(id: string): string {
 export function RunList(props: RunListProps) {
   const [isCollapsed, setIsCollapsed] = createSignal(true);
 
+  // Cumulative usage for this session. Re-fetches when the session changes
+  // or a new run count comes in (a completed run updates the totals).
+  const [usage] = createResource(
+    () =>
+      props.sessionId ? ([props.sessionId, props.runs.length] as const) : null,
+    async (key) => {
+      const result = await getSessionUsage(key[0]);
+      if ('error' in result) return null;
+      return result.usage;
+    },
+  );
+
+  const usageSummary = () => {
+    const u = usage();
+    if (!u || u.totalTokens === 0) return null;
+    const tokens = u.totalTokens.toLocaleString('en-US');
+    const cost = u.hasCost
+      ? ` · $${u.cost.toFixed(u.cost > 0 && u.cost < 1 ? 4 : 2)}`
+      : '';
+    return `${tokens} tokens${cost}`;
+  };
+
   return (
     <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
       {/* Header */}
@@ -91,11 +116,18 @@ export function RunList(props: RunListProps) {
           </Show>
           <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
         </div>
-        <Show when={props.runs.length > 0}>
-          <span class="text-xs text-text-tertiary">
-            {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
-          </span>
-        </Show>
+        <div class="flex items-center gap-2">
+          <Show when={usageSummary()}>
+            <span class="text-xs text-text-tertiary tabular-nums">
+              {usageSummary()}
+            </span>
+          </Show>
+          <Show when={props.runs.length > 0}>
+            <span class="text-xs text-text-tertiary">
+              {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
+            </span>
+          </Show>
+        </div>
       </div>
 
       {/* Content - hidden when collapsed */}

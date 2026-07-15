@@ -116,6 +116,7 @@ vi.mock('lucide-solid', () => ({
   ExternalLink: () => <span data-testid="external-link" />,
   Eye: () => <span data-testid="eye" />,
   EyeOff: () => <span data-testid="eye-off" />,
+  BarChart3: () => <span data-testid="bar-chart-3" />,
   File: () => <span data-testid="file" />,
   FileArchive: () => <span data-testid="file-archive" />,
   FileText: () => <span data-testid="file-text" />,

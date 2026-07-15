@@ -186,6 +186,8 @@ export type SessionRunsStore = Pick<
   | 'getLatest'
   | 'getActive'
   | 'countByStatus'
+  | 'listUsageRows'
+  | 'getSessionUsage'
 >;
 
 export type JobsStore = Pick<

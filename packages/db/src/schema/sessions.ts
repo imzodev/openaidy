@@ -3,6 +3,7 @@ import {
   text,
   timestamp,
   integer,
+  doublePrecision,
   jsonb,
   pgEnum,
   index,
@@ -199,6 +200,11 @@ export const sessionRuns = pgTable('session_runs', {
   promptTokens: integer('prompt_tokens'),
   completionTokens: integer('completion_tokens'),
   totalTokens: integer('total_tokens'),
+  // Prompt-cache token counts (subset of promptTokens; provider-dependent)
+  cacheReadTokens: integer('cache_read_tokens'),
+  cacheCreationTokens: integer('cache_creation_tokens'),
+  // Estimated cost in USD (null when pricing for the model is unknown)
+  cost: doublePrecision('cost'),
   // Timestamps
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),

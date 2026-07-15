@@ -52,6 +52,8 @@ export type SubmitMessageStreamingInput = SubmitMessageInput & {
             promptTokens: number;
             completionTokens: number;
             totalTokens: number;
+            cacheReadTokens?: number;
+            cacheCreationTokens?: number;
           };
         }
       | { type: 'error'; error: { code: string; message: string } }
@@ -120,6 +122,11 @@ export type SessionMessageServiceOptions = {
   workspaceBaseDir?: string;
   /** Attachment storage for image/audio chat media (requires DB) */
   attachments?: import('../attachments/service').AttachmentService;
+  /**
+   * Per-model pricing overrides (from app config) used for cost estimation.
+   * Merged over the built-in MODEL_PRICING table.
+   */
+  modelPricing?: Record<string, import('@openaidy/shared-types').ModelPricing>;
   repositories?:
     | {
         sessions: SessionsStore;

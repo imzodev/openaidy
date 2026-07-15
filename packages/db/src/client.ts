@@ -89,6 +89,9 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       prompt_tokens INTEGER,
       completion_tokens INTEGER,
       total_tokens INTEGER,
+      cache_read_tokens INTEGER,
+      cache_creation_tokens INTEGER,
+      cost REAL,
       started_at TEXT,
       finished_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -622,6 +625,28 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     sqlite.exec(`ALTER TABLE session_runs ADD COLUMN first_message_id TEXT`);
   }
 
+  // Migration: Add cache/cost usage columns to session_runs if not exist
+  const hasCacheReadTokens = sessionRunsInfo.some(
+    (col) => col.name === 'cache_read_tokens',
+  );
+  if (!hasCacheReadTokens) {
+    sqlite.exec(
+      `ALTER TABLE session_runs ADD COLUMN cache_read_tokens INTEGER`,
+    );
+  }
+  const hasCacheCreationTokens = sessionRunsInfo.some(
+    (col) => col.name === 'cache_creation_tokens',
+  );
+  if (!hasCacheCreationTokens) {
+    sqlite.exec(
+      `ALTER TABLE session_runs ADD COLUMN cache_creation_tokens INTEGER`,
+    );
+  }
+  const hasCost = sessionRunsInfo.some((col) => col.name === 'cost');
+  if (!hasCost) {
+    sqlite.exec(`ALTER TABLE session_runs ADD COLUMN cost REAL`);
+  }
+
   // Migration: Add subtask_summary to task_execution_history if not exists
   const historyInfo = sqlite.pragma(
     'table_info(task_execution_history)',
@@ -686,11 +711,16 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0012_message_attachments.sql'),
     'utf-8',
   );
+  const sessionRunsUsageMigrationSql = readFileSync(
+    resolve(drizzleDir, '0013_session_runs_usage.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
     await client.query(runningStatusMigrationSql);
     await client.query(messageAttachmentsMigrationSql);
+    await client.query(sessionRunsUsageMigrationSql);
   } finally {
     client.release();
   }
