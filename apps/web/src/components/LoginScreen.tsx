@@ -1,13 +1,16 @@
 import { createSignal } from 'solid-js';
 import { verifyToken } from '../lib/api';
-import { storeToken } from '../lib/auth-token';
+import { consumeTokenFromUrl, storeToken } from '../lib/auth-token';
 
 type LoginScreenProps = {
   onAuthenticated: () => void;
 };
 
 export function LoginScreen(props: LoginScreenProps) {
-  const [token, setToken] = createSignal('');
+  // Pre-fill from ?token=... so deep-linked installs only need a single click
+  // on "Connect". The URL parameter is consumed (stripped from the address
+  // bar) by consumeTokenFromUrl so it does not linger in history.
+  const [token, setToken] = createSignal(consumeTokenFromUrl() ?? '');
   const [error, setError] = createSignal<string | undefined>(undefined);
   const [isVerifying, setIsVerifying] = createSignal(false);
 
@@ -40,7 +43,9 @@ export function LoginScreen(props: LoginScreenProps) {
         <div class="text-center mb-8">
           <h1 class="text-2xl font-bold text-text-primary">OpenAidy</h1>
           <p class="mt-2 text-sm text-text-secondary">
-            Enter your API token to continue
+            {token()
+              ? 'Token pre-filled. Press Connect to continue.'
+              : 'Enter your API token to continue'}
           </p>
         </div>
 

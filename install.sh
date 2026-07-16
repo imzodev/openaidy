@@ -468,30 +468,35 @@ main() {
     echo ""
 
     if [ -n "$START_URL" ]; then
+        # Deep-link the browser straight into the login screen with the token
+        # pre-filled, so the user only has to press "Connect".
+        AUTH_URL="${START_URL}/?token=$(printf '%s' "$BOOTSTRAP_TOKEN" | sed 's/#/%23/g; s/&/%26/g; s/?/%3F/g')"
         echo "Server is running at: $START_URL"
+        echo "Login URL (token pre-filled): $AUTH_URL"
         echo ""
 
         # Auto-open browser (best-effort)
         case "$(uname -s)" in
             Linux*|WSL*)
                 if command -v xdg-open >/dev/null 2>&1; then
-                    xdg-open "$START_URL" 2>/dev/null || echo "Open $START_URL in your browser."
+                    xdg-open "$AUTH_URL" 2>/dev/null || echo "Open $AUTH_URL in your browser."
                 else
-                    echo "Open $START_URL in your browser."
+                    echo "Open $AUTH_URL in your browser."
                 fi
                 ;;
             Darwin*)
-                open "$START_URL" 2>/dev/null || echo "Open $START_URL in your browser."
+                open "$AUTH_URL" 2>/dev/null || echo "Open $AUTH_URL in your browser."
                 ;;
             *)
-                echo "Open $START_URL in your browser."
+                echo "Open $AUTH_URL in your browser."
                 ;;
         esac
         echo ""
         echo "Use 'openaidy stop' to stop the server."
     else
+        AUTH_URL="http://localhost:3001/?token=$(printf '%s' "$BOOTSTRAP_TOKEN" | sed 's/#/%23/g; s/&/%26/g; s/?/%3F/g')"
         echo "Run 'openaidy start' to bring the server online,"
-        echo "then open http://localhost:3001 in your browser."
+        echo "then open $AUTH_URL in your browser."
         echo ""
         echo "If it still doesn't start, check the log at:"
         echo "  $OPENAIDY_HOME/logs/server.log"
