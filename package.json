@@ -1,6 +1,6 @@
 {
   "name": "openaidy",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "packageManager": "pnpm@10.23.0",
   "type": "module",
