@@ -45,7 +45,7 @@ import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
 import { useMessageQueue } from './lib/use-message-queue';
 import { LoginScreen } from './components/LoginScreen';
-import { resolveToken, clearToken } from './lib/auth-token';
+import { getStoredToken, resolveToken, clearToken } from './lib/auth-token';
 import {
   listAddons,
   deleteSession,
@@ -1022,8 +1022,12 @@ function AppContent(props: AppContentProps) {
 }
 
 function AuthGate() {
+  // Only an already-persisted (localStorage) token auto-bypasses the login
+  // screen. A ?token=... deep link from the installer is left for the
+  // LoginScreen to consume so the user always gets a single explicit
+  // "Connect" click instead of silently being logged in.
   const [authenticated, setAuthenticated] = createSignal(
-    Boolean(resolveToken()),
+    Boolean(getStoredToken()),
   );
 
   return (
