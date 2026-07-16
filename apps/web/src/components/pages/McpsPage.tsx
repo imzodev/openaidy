@@ -1,5 +1,6 @@
 import { Layout } from './Layout';
 import { For, Show, createSignal, onMount, createMemo } from 'solid-js';
+import { createStore } from 'solid-js/store';
 import {
   listMcpServers,
   createMcpServer,
@@ -14,7 +15,277 @@ import type {
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
   ImportMcpServersRequest,
+  McpSecretKind,
+  McpSecretValue,
+  McpSecretField,
 } from '../../lib/api';
+
+/**
+ * A single row in the structured env/headers editor. Mirrors {@link
+ * McpSecretField} plus form-only UI state (`replaced`, `revealed`) that never
+ * leaves the client.
+ */
+type SecretRow = {
+  key: string;
+  kind: McpSecretKind;
+  /**
+   * For `kind: 'env'`, the raw `${VAR}` reference text. For `kind: 'inline'`,
+   * either the masked placeholder echoed from the server (`replaced` is
+   * false — never sent back as a new secret) or a freshly typed plaintext
+   * value (`replaced` is true — encrypted server-side on save).
+   */
+  value: string;
+  /** Only meaningful for `kind: 'inline'`; always true for `kind: 'env'`. */
+  replaced: boolean;
+  /** Per-row show/hide toggle for a freshly typed inline value. */
+  revealed: boolean;
+};
+
+function emptyRow(kind: McpSecretKind = 'env'): SecretRow {
+  return { key: '', kind, value: '', replaced: true, revealed: kind === 'env' };
+}
+
+function rowsFromRecord(
+  record: Record<string, McpSecretField> | undefined,
+): SecretRow[] {
+  if (!record) return [];
+  return Object.entries(record).map(([key, field]) => ({
+    key,
+    kind: field.kind,
+    value: field.value,
+    replaced: field.kind === 'env',
+    revealed: false,
+  }));
+}
+
+function recordFromRows(
+  rows: readonly SecretRow[],
+): Record<string, McpSecretValue> {
+  const out: Record<string, McpSecretValue> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (!key) continue;
+    // An inline row whose value is empty (in either masked or revealed
+    // state) means the user hasn't actually pasted a secret — drop it on
+    // save rather than persisting `enc:v1:…:` ciphertext of the empty
+    // string, which the decryptor would reject (an inlined credential
+    // without a value is never useful anyway).
+    if (row.kind === 'inline' && row.value.trim() === '') {
+      continue;
+    }
+    out[key] = { kind: row.kind, value: row.value };
+  }
+  return out;
+}
+
+/** Per-row mutation handlers backed by a fine-grained `createStore` array —
+ * editing one row's `value` never re-renders (or loses focus in) siblings. */
+function useSecretRows(initial: SecretRow[]) {
+  const [rows, setRows] = createStore<SecretRow[]>(initial);
+
+  const addRow = (kind: McpSecretKind = 'env') =>
+    setRows((prev) => [...prev, emptyRow(kind)]);
+  const removeRow = (index: number) =>
+    setRows((prev) => prev.filter((_, i) => i !== index));
+  const setKey = (index: number, key: string) => setRows(index, 'key', key);
+  const setValue = (index: number, value: string) =>
+    setRows(index, 'value', value);
+  const setKind = (index: number, kind: McpSecretKind) =>
+    setRows(index, {
+      kind,
+      value: '',
+      replaced: kind === 'env',
+      revealed: kind === 'env',
+    });
+  const startReplace = (index: number) =>
+    setRows(index, { replaced: true, value: '', revealed: false });
+  const toggleReveal = (index: number) =>
+    setRows(index, 'revealed', (v: boolean) => !v);
+
+  return {
+    rows,
+    addRow,
+    removeRow,
+    setKey,
+    setValue,
+    setKind,
+    startReplace,
+    toggleReveal,
+  };
+}
+
+/** A single key/value row: key input, env-vs-inline toggle, value input. */
+function SecretRowEditor(props: {
+  row: SecretRow;
+  index: number;
+  keyPlaceholder: string;
+  envPlaceholder: string;
+  onKeyChange: (index: number, key: string) => void;
+  onKindChange: (index: number, kind: McpSecretKind) => void;
+  onValueChange: (index: number, value: string) => void;
+  onReplace: (index: number) => void;
+  onToggleReveal: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  const isMasked = () => props.row.kind === 'inline' && !props.row.replaced;
+
+  return (
+    <div class="flex items-start gap-2">
+      <input
+        type="text"
+        value={props.row.key}
+        onInput={(e) => props.onKeyChange(props.index, e.currentTarget.value)}
+        placeholder={props.keyPlaceholder}
+        class="w-2/5 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+      />
+
+      <div class="flex flex-col gap-1 flex-1 min-w-0">
+        <div class="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-xs w-fit">
+          <button
+            type="button"
+            onClick={() => props.onKindChange(props.index, 'env')}
+            class={`px-2 py-1 transition-colors ${
+              props.row.kind === 'env'
+                ? 'bg-primary text-white'
+                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            Env var
+          </button>
+          <button
+            type="button"
+            onClick={() => props.onKindChange(props.index, 'inline')}
+            class={`px-2 py-1 border-l border-gray-200 dark:border-gray-700 transition-colors ${
+              props.row.kind === 'inline'
+                ? 'bg-primary text-white'
+                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            Inline secret
+          </button>
+        </div>
+
+        <Show when={props.row.kind === 'env'}>
+          <input
+            type="text"
+            value={props.row.value}
+            onInput={(e) =>
+              props.onValueChange(props.index, e.currentTarget.value)
+            }
+            placeholder={props.envPlaceholder}
+            class="w-full px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </Show>
+
+        <Show when={props.row.kind === 'inline'}>
+          <Show
+            when={!isMasked()}
+            fallback={
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  value="••••••••••"
+                  disabled
+                  class="flex-1 min-w-0 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm text-gray-400 dark:text-gray-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => props.onReplace(props.index)}
+                  class="px-2 py-1.5 text-xs text-primary border border-primary/30 rounded-lg hover:bg-primary/10 transition-colors whitespace-nowrap"
+                >
+                  Replace
+                </button>
+              </div>
+            }
+          >
+            <div class="flex items-center gap-2">
+              <input
+                type={props.row.revealed ? 'text' : 'password'}
+                value={props.row.value}
+                onInput={(e) =>
+                  props.onValueChange(props.index, e.currentTarget.value)
+                }
+                placeholder="Paste secret value"
+                class="flex-1 min-w-0 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button
+                type="button"
+                onClick={() => props.onToggleReveal(props.index)}
+                class="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
+              >
+                {props.row.revealed ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </Show>
+        </Show>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => props.onRemove(props.index)}
+        class="mt-1.5 text-gray-400 hover:text-red-500 text-lg leading-none px-1"
+        title="Remove"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** The full env/headers section: label, rows, add button, help text. */
+function SecretRowsField(props: {
+  label: string;
+  rows: SecretRow[];
+  keyPlaceholder: string;
+  envPlaceholder: string;
+  helpText: string;
+  onAdd: () => void;
+  onKeyChange: (index: number, key: string) => void;
+  onKindChange: (index: number, kind: McpSecretKind) => void;
+  onValueChange: (index: number, value: string) => void;
+  onReplace: (index: number) => void;
+  onToggleReveal: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div>
+      <div class="flex items-center justify-between mb-1">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          {props.label}
+        </label>
+        <button
+          type="button"
+          onClick={props.onAdd}
+          class="text-xs text-primary hover:text-primary/80"
+        >
+          + Add
+        </button>
+      </div>
+      <div class="space-y-2">
+        <For each={props.rows}>
+          {(row, index) => (
+            <SecretRowEditor
+              row={row}
+              index={index()}
+              keyPlaceholder={props.keyPlaceholder}
+              envPlaceholder={props.envPlaceholder}
+              onKeyChange={props.onKeyChange}
+              onKindChange={props.onKindChange}
+              onValueChange={props.onValueChange}
+              onReplace={props.onReplace}
+              onToggleReveal={props.onToggleReveal}
+              onRemove={props.onRemove}
+            />
+          )}
+        </For>
+        <Show when={props.rows.length === 0}>
+          <p class="text-xs text-text-tertiary italic">No entries yet.</p>
+        </Show>
+      </div>
+      <p class="mt-1 text-xs text-text-tertiary">{props.helpText}</p>
+    </div>
+  );
+}
 
 /** A server is awaiting configuration when it references secrets not yet set. */
 function isAwaitingConfig(server: McpServerRecord): boolean {
@@ -60,19 +331,12 @@ function ServerFormModal(props: {
     command: props.server?.command ?? '',
     args: props.server?.args?.join(' ') ?? '',
     url: props.server?.url ?? '',
-    env: props.server?.env
-      ? Object.entries(props.server.env)
-          .map(([k, v]) => `${k}=${v}`)
-          .join('\n')
-      : '',
-    headers: props.server?.headers
-      ? Object.entries(props.server.headers)
-          .map(([k, v]) => `${k}: ${v}`)
-          .join('\n')
-      : '',
   });
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+
+  const envRows = useSecretRows(rowsFromRecord(props.server?.env));
+  const headerRows = useSecretRows(rowsFromRecord(props.server?.headers));
 
   const isEdit = () => props.mode === 'edit';
   const isStdio = () => transport() === 'stdio';
@@ -88,33 +352,13 @@ function ServerFormModal(props: {
         ...base,
         command: formData().command || undefined,
         args: formData().args ? formData().args.trim().split(/\s+/) : undefined,
-        env: formData().env
-          ? Object.fromEntries(
-              formData()
-                .env.split('\n')
-                .filter((l) => l.includes('='))
-                .map((l) => {
-                  const idx = l.indexOf('=');
-                  return [l.slice(0, idx), l.slice(idx + 1)];
-                }),
-            )
-          : undefined,
+        env: recordFromRows(envRows.rows),
       };
     } else {
       return {
         ...base,
         url: formData().url || undefined,
-        headers: formData().headers
-          ? Object.fromEntries(
-              formData()
-                .headers.split('\n')
-                .filter((l) => l.includes(':'))
-                .map((l) => {
-                  const idx = l.indexOf(':');
-                  return [l.slice(0, idx).trim(), l.slice(idx + 1).trim()];
-                }),
-            )
-          : undefined,
+        headers: recordFromRows(headerRows.rows),
       };
     }
   };
@@ -274,24 +518,20 @@ function ServerFormModal(props: {
               </p>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Environment Variables
-              </label>
-              <textarea
-                value={formData().env}
-                onInput={(e) =>
-                  setFormData((p) => ({ ...p, env: e.currentTarget.value }))
-                }
-                placeholder="KEY=value&#10;SECRET=mysecret"
-                rows={3}
-                class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              />
-              <p class="mt-1 text-xs text-text-tertiary">
-                One KEY=value per line. Use $&#123;VAR_NAME&#125; for env var
-                placeholders.
-              </p>
-            </div>
+            <SecretRowsField
+              label="Environment Variables"
+              rows={envRows.rows}
+              keyPlaceholder="KEY"
+              envPlaceholder="e.g. ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+              helpText="Reference env var: resolved from the server environment at connection time. Inline secret: encrypted at rest, never shown again."
+              onAdd={() => envRows.addRow()}
+              onKeyChange={envRows.setKey}
+              onKindChange={envRows.setKind}
+              onValueChange={envRows.setValue}
+              onReplace={envRows.startReplace}
+              onToggleReveal={envRows.toggleReveal}
+              onRemove={envRows.removeRow}
+            />
           </Show>
 
           {/* HTTP fields */}
@@ -311,25 +551,20 @@ function ServerFormModal(props: {
               />
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Headers
-              </label>
-              <textarea
-                value={formData().headers}
-                onInput={(e) =>
-                  setFormData((p) => ({ ...p, headers: e.currentTarget.value }))
-                }
-                placeholder="Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
-                rows={3}
-                class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              />
-              <p class="mt-1 text-xs text-text-tertiary">
-                One <code>Name: value</code> per line. Use $&#123;VAR_NAME&#125;{' '}
-                for secret placeholders (resolved from the server environment),
-                or paste the value directly.
-              </p>
-            </div>
+            <SecretRowsField
+              label="Headers"
+              rows={headerRows.rows}
+              keyPlaceholder="Authorization"
+              envPlaceholder="e.g. Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+              helpText="Reference env var: resolved from the server environment at connection time. Inline secret: encrypted at rest, never shown again."
+              onAdd={() => headerRows.addRow()}
+              onKeyChange={headerRows.setKey}
+              onKindChange={headerRows.setKind}
+              onValueChange={headerRows.setValue}
+              onReplace={headerRows.startReplace}
+              onToggleReveal={headerRows.toggleReveal}
+              onRemove={headerRows.removeRow}
+            />
           </Show>
         </div>
 
@@ -998,9 +1233,17 @@ export function McpsPage() {
                     </span>
                     <div class="mt-1 space-y-0.5">
                       <For each={Object.entries(selected()!.env!)}>
-                        {([key, val]) => (
+                        {([key, field]) => (
                           <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
-                            {key}=<span class="text-text-tertiary">{val}</span>
+                            {key}=
+                            <span class="text-text-tertiary">
+                              {field.value}
+                            </span>
+                            <Show when={field.kind === 'inline'}>
+                              <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
+                                encrypted
+                              </span>
+                            </Show>
                           </p>
                         )}
                       </For>
@@ -1018,9 +1261,17 @@ export function McpsPage() {
                     <span class="text-xs text-text-tertiary">Headers</span>
                     <div class="mt-1 space-y-0.5">
                       <For each={Object.entries(selected()!.headers!)}>
-                        {([key, val]) => (
+                        {([key, field]) => (
                           <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
-                            {key}: <span class="text-text-tertiary">{val}</span>
+                            {key}:{' '}
+                            <span class="text-text-tertiary">
+                              {field.value}
+                            </span>
+                            <Show when={field.kind === 'inline'}>
+                              <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
+                                encrypted
+                              </span>
+                            </Show>
                           </p>
                         )}
                       </For>

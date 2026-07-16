@@ -1,16 +1,24 @@
 /**
- * Environment placeholder resolution for MCP server configs.
+ * Secret resolution for MCP server `env`/`headers` configs.
  *
- * MCP configs may reference secrets indirectly with `${VAR}` placeholders,
- * e.g. `{ "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" }`. This
- * keeps raw secrets out of the persisted config (and out of API responses),
- * resolving them from the process environment only at connection time.
+ * A record value is one of (see {@link McpSecretValue}):
+ * - a legacy plain string, possibly containing `${VAR}` placeholders, e.g.
+ *   `{ "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" }` — resolved
+ *   from the process environment at connection time, keeping the raw secret
+ *   out of the persisted config and API responses.
+ * - `{ kind: 'env', value }` — the structured form of the above.
+ * - `{ kind: 'inline', value }` — a secret encrypted at rest (see
+ *   `./secret-crypto`); decrypted at connection time. Never "missing" — the
+ *   value is always available once stored.
  *
- * Single responsibility: turn a record of placeholder-bearing strings into a
- * record of resolved strings, failing loudly when a referenced variable is
- * unset. The environment source is injected so the behaviour is testable
- * without mutating `process.env`.
+ * Single responsibility: turn a record of these into a record of resolved
+ * plain strings, failing loudly when a referenced `${VAR}` is unset. The
+ * environment source is injected so the behaviour is testable without
+ * mutating `process.env`.
  */
+
+import type { McpSecretValue } from '@openaidy/shared-types';
+import { decryptSecret, isEncryptedSecret } from './secret-crypto';
 
 /**
  * A source of environment variables. Defaults to `process.env` in production;
@@ -61,21 +69,40 @@ export class EnvPlaceholderResolver {
   }
 
   /**
+   * Resolve a single record value to its final plain-string secret.
+   * `${VAR}` placeholders (legacy string or `kind: 'env'`) are substituted
+   * from the environment, recording unset names into `missing`. Inline
+   * secrets are decrypted (or, pre-migration, used as stored plaintext) and
+   * never contribute to `missing`.
+   */
+  private resolveValue(value: McpSecretValue, missing: Set<string>): string {
+    if (typeof value === 'string') {
+      return this.resolveString(value, missing);
+    }
+    if (value.kind === 'env') {
+      return this.resolveString(value.value, missing);
+    }
+    return isEncryptedSecret(value.value)
+      ? decryptSecret(value.value)
+      : value.value;
+  }
+
+  /**
    * Resolve every value in a record. Returns a new record; the input is not
    * mutated. `undefined` in → `undefined` out (nothing to resolve).
    *
    * @throws {MissingEnvVarsError} if any referenced variable is unset.
    */
   resolveRecord(
-    record: Record<string, string> | undefined,
+    record: Record<string, McpSecretValue> | undefined,
     context: string,
   ): Record<string, string> | undefined {
-    if (!record) return record;
+    if (!record) return undefined;
 
     const missing = new Set<string>();
     const resolved: Record<string, string> = {};
     for (const [key, value] of Object.entries(record)) {
-      resolved[key] = this.resolveString(value, missing);
+      resolved[key] = this.resolveValue(value, missing);
     }
 
     if (missing.size > 0) {
@@ -90,17 +117,20 @@ export class EnvPlaceholderResolver {
    * {@link resolveRecord}: lets a caller decide whether a config is ready to
    * use — e.g. skip auto-connecting a server that is still awaiting its API
    * key — rather than treating an unset secret as a connection failure.
+   * Inline secrets are always considered present.
    */
   findMissingVars(
-    ...records: Array<Record<string, string> | undefined>
+    ...records: Array<Record<string, McpSecretValue> | undefined>
   ): string[] {
     const missing = new Set<string>();
     for (const record of records) {
       if (!record) continue;
       for (const value of Object.values(record)) {
+        if (typeof value !== 'string' && value.kind === 'inline') continue;
+        const toResolve = typeof value === 'string' ? value : value.value;
         // resolveString records unset vars into `missing` as a side effect;
         // its (partially resolved) return value is intentionally discarded.
-        this.resolveString(value, missing);
+        this.resolveString(toResolve, missing);
       }
     }
     return [...missing];

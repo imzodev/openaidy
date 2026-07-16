@@ -16,6 +16,7 @@ import {
 } from '@openaidy/db';
 import { env } from './lib/env';
 import { createLogger, registerHttpLogger } from './lib/logger';
+import { ensureEncryptionKey } from './mcp/secret-crypto';
 import {
   buildCredentialResolver,
   noopInvalidator,
@@ -191,6 +192,12 @@ export async function buildApp() {
     ...(credentialResolver ? { credentialProvider: credentialResolver } : {}),
   });
   await configService.load();
+
+  // Eagerly initialise the encryption key for inline MCP secrets (issue #401)
+  // — generates / loads the master key file before any MCP write path needs
+  // it, so a read-only filesystem or missing-key permission surfaces as a
+  // clean startup error rather than a 500 on the first MCP server POST.
+  ensureEncryptionKey();
 
   // Reconcile preinstalled MCP servers from the config template: add ones this
   // install is missing and update pristine (unmodified) ones whose definition

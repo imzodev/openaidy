@@ -338,6 +338,40 @@ describe('MCP Routes', () => {
       await unauthApp.close();
     });
 
+    it('encrypts an inline secret at rest and masks it in the response', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          config: {
+            id: 'inline-srv',
+            transport: 'http',
+            url: 'https://example.com/mcp',
+            headers: {
+              Authorization: { kind: 'inline', value: 'ghp_realtoken12345' },
+            },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+
+      const body = res.json();
+      expect(body.server.headers.Authorization).toEqual({
+        kind: 'inline',
+        value: '••••••',
+      });
+      expect(JSON.stringify(body)).not.toContain('ghp_realtoken12345');
+
+      const stored = configService.getMcpServer('inline-srv');
+      const storedHeader = stored?.headers?.Authorization as {
+        kind: string;
+        value: string;
+      };
+      expect(storedHeader.kind).toBe('inline');
+      expect(storedHeader.value.startsWith('enc:v1:')).toBe(true);
+    });
+
     it('saves a server awaiting secrets without attempting to connect', async () => {
       const res = await app.inject({
         method: 'POST',
@@ -608,10 +642,16 @@ describe('MCP Routes', () => {
       const { server } = res.json();
       // Bearer ${GH_TOKEN} is a placeholder template — the secret lives in the
       // environment, so it is shown verbatim rather than masked.
-      expect(server.headers.Authorization).toBe('Bearer ${GH_TOKEN}');
+      expect(server.headers.Authorization).toEqual({
+        kind: 'env',
+        value: 'Bearer ${GH_TOKEN}',
+      });
       // Inlined raw value masked; pure placeholder preserved.
-      expect(server.env.INLINE).toBe('••••••');
-      expect(server.env.PLACEHOLDER).toBe('${SOME_VAR}');
+      expect(server.env.INLINE).toEqual({ kind: 'inline', value: '••••••' });
+      expect(server.env.PLACEHOLDER).toEqual({
+        kind: 'env',
+        value: '${SOME_VAR}',
+      });
     });
 
     it('never leaks secrets in the list endpoint either', async () => {
@@ -683,9 +723,10 @@ describe('MCP Routes', () => {
       ]);
       // Placeholder template shown verbatim (the token lives in the env, so
       // there's no secret value to redact here).
-      expect(body.servers[0].headers.Authorization).toBe(
-        'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}',
-      );
+      expect(body.servers[0].headers.Authorization).toEqual({
+        kind: 'env',
+        value: 'Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}',
+      });
     });
 
     it('connects an imported server once its secret is available', async () => {
@@ -719,6 +760,40 @@ describe('MCP Routes', () => {
       });
       expect(res.statusCode).toBe(201);
       expect(res.json().servers).toHaveLength(2);
+    });
+
+    it('encrypts an inlined credential pasted directly into the import JSON', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/import',
+        headers: { 'content-type': 'application/json' },
+        payload: {
+          mcpServers: {
+            github: {
+              type: 'http',
+              url: 'https://api.githubcopilot.com/mcp/',
+              headers: {
+                Authorization: 'Bearer ghp_realLongLivedToken1234567890',
+              },
+            },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+
+      // Never returned in plaintext over the API.
+      const body = res.json();
+      expect(JSON.stringify(body)).not.toContain('ghp_realLongLivedToken');
+
+      // Never persisted in plaintext either — stored value is ciphertext.
+      const stored = configService.getMcpServer('github');
+      const storedHeader = stored?.headers?.Authorization as {
+        kind: string;
+        value: string;
+      };
+      expect(storedHeader.kind).toBe('inline');
+      expect(storedHeader.value.startsWith('enc:v1:')).toBe(true);
+      expect(storedHeader.value).not.toContain('ghp_realLongLivedToken');
     });
 
     it('returns 400 for an invalid entry (nothing persisted)', async () => {
@@ -792,6 +867,224 @@ describe('MCP Routes', () => {
 
       const stored = configService.getMcpServer('http-srv');
       expect(stored?.headers?.Authorization).toBe('Bearer ${GH_TOKEN}');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('POST /mcp/servers/migrate-secrets', () => {
+    it('encrypts plaintext inline secrets and persists', async () => {
+      const server: McpServerConfig = {
+        id: 'legacy',
+        transport: 'http',
+        url: 'https://example.com',
+        headers: { Authorization: 'ghp_realLongLivedToken1234567890' },
+      } as McpServerConfig;
+      mcpService = makeMcpService([server], []);
+      configService = makeConfigService([server]);
+      app = await buildApp(mcpService, configService);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/migrate-secrets',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        payload: {},
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.scanned).toBe(1);
+      expect(body.migrated).toBe(1);
+      expect(body.serversTouched).toEqual(['legacy']);
+      expect(body.dryRun).toBe(false);
+
+      // The stored config now has ciphertext, not plaintext.
+      const stored = configService.getMcpServer('legacy');
+      const auth = stored?.headers?.Authorization as {
+        kind: string;
+        value: string;
+      };
+      expect(auth.kind).toBe('inline');
+      expect(auth.value.startsWith('enc:v1:')).toBe(true);
+    });
+
+    it('dryRun returns a plan without persisting', async () => {
+      const server: McpServerConfig = {
+        id: 'legacy',
+        transport: 'http',
+        url: 'https://example.com',
+        headers: { Authorization: 'ghp_realLongLivedToken1234567890' },
+      } as McpServerConfig;
+      mcpService = makeMcpService([server], []);
+      configService = makeConfigService([server]);
+      app = await buildApp(mcpService, configService);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/migrate-secrets',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        payload: { dryRun: true },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.dryRun).toBe(true);
+      expect(body.migrated).toBe(1);
+
+      // Disk still has plaintext.
+      const stored = configService.getMcpServer('legacy');
+      expect(stored?.headers?.Authorization).toBe(
+        'ghp_realLongLivedToken1234567890',
+      );
+    });
+
+    it('is a no-op when nothing needs migrating', async () => {
+      const server: McpServerConfig = {
+        id: 'clean',
+        transport: 'http',
+        url: 'https://example.com',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      } as McpServerConfig;
+      mcpService = makeMcpService([server], []);
+      configService = makeConfigService([server]);
+      app = await buildApp(mcpService, configService);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/migrate-secrets',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        payload: {},
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.migrated).toBe(0);
+      expect(body.serversTouched).toEqual([]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('inline-secret encryption guard (issue #401)', () => {
+    it('POST /mcp/servers returns 503 when encryption is unavailable and the request introduces a new inline secret', async () => {
+      mcpService = makeMcpService([], []);
+      configService = makeConfigService([]);
+      app = await buildApp(mcpService, configService);
+
+      // Force the encryption probe to fail — simulates a master-key file
+      // that cannot be generated (read-only FS) or a stripped Node build.
+      const crypto = await import('../mcp/secret-crypto');
+      const spy = vi
+        .spyOn(crypto, 'ensureEncryptionKey')
+        .mockImplementation(() => {
+          throw new Error('master key file unwritable');
+        });
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/mcp/servers',
+          headers: {
+            authorization: 'Bearer test-token',
+            'content-type': 'application/json',
+          },
+          payload: {
+            config: {
+              id: 'srv',
+              transport: 'http',
+              url: 'https://example.com',
+              headers: {
+                Authorization: 'ghp_realLongLivedToken1234567890',
+              },
+            },
+          },
+        });
+        expect(res.statusCode).toBe(503);
+        const body = res.json();
+        expect(body.error).toBe('ENCRYPTION_UNAVAILABLE');
+        expect(body.message).toMatch(/master key file unwritable/);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('POST /mcp/servers accepts a pure-${VAR} request even when encryption is unavailable', async () => {
+      mcpService = makeMcpService([], []);
+      configService = makeConfigService([]);
+      app = await buildApp(mcpService, configService);
+
+      const crypto = await import('../mcp/secret-crypto');
+      const spy = vi
+        .spyOn(crypto, 'ensureEncryptionKey')
+        .mockImplementation(() => {
+          throw new Error('master key file unwritable');
+        });
+
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/mcp/servers',
+          headers: {
+            authorization: 'Bearer test-token',
+            'content-type': 'application/json',
+          },
+          payload: {
+            config: {
+              id: 'srv',
+              transport: 'http',
+              url: 'https://example.com',
+              headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+            },
+          },
+        });
+        // No inline secret introduced → no encryption probe → succeeds.
+        expect(res.statusCode).toBe(201);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('PATCH /mcp/servers/:id returns 503 when the patch introduces an inline secret and encryption is unavailable', async () => {
+      const server: McpServerConfig = {
+        id: 'srv',
+        transport: 'http',
+        url: 'https://example.com',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      } as McpServerConfig;
+      mcpService = makeMcpService([server], []);
+      configService = makeConfigService([server]);
+      app = await buildApp(mcpService, configService);
+
+      const crypto = await import('../mcp/secret-crypto');
+      const spy = vi
+        .spyOn(crypto, 'ensureEncryptionKey')
+        .mockImplementation(() => {
+          throw new Error('master key file unwritable');
+        });
+
+      try {
+        const res = await app.inject({
+          method: 'PATCH',
+          url: '/api/mcp/servers/srv',
+          headers: {
+            authorization: 'Bearer test-token',
+            'content-type': 'application/json',
+          },
+          payload: {
+            headers: {
+              Authorization: 'ghp_realLongLivedToken1234567890',
+            },
+          },
+        });
+        expect(res.statusCode).toBe(503);
+        expect(res.json().error).toBe('ENCRYPTION_UNAVAILABLE');
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 });
