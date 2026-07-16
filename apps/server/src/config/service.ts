@@ -259,10 +259,18 @@ export class AppConfigService {
       this.providers.registry.register(result.provider, registrationOptions);
     }
 
-    if (this.providers.registry.has(config.defaults.providerId)) {
+    // On a fresh (unconfigured) install both are undefined; only set a default
+    // once a default provider is configured and actually registered.
+    const { providerId: defaultProviderId, modelId: defaultModelId } =
+      config.defaults;
+    if (
+      defaultProviderId !== undefined &&
+      defaultModelId !== undefined &&
+      this.providers.registry.has(defaultProviderId)
+    ) {
       this.providers.registry.setDefault({
-        providerId: config.defaults.providerId,
-        modelId: config.defaults.modelId,
+        providerId: defaultProviderId,
+        modelId: defaultModelId,
       });
     }
   }

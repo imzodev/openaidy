@@ -606,3 +606,70 @@ describe('appConfigSchema disabled model validation', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('appConfigSchema unconfigured (fresh install)', () => {
+  // Mirrors config/openaidy.template.json: no providers, no default
+  // provider/model, and a single model-less agent.
+  const freshInstall = {
+    version: 1,
+    defaults: { agentId: 'default' },
+    providers: [],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default Assistant',
+        systemPrompt: 'You are an AI assistant.',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('accepts an empty providers list with no default provider/model', () => {
+    const result = appConfigSchema.safeParse(freshInstall);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a model-less agent', () => {
+    const result = appConfigSchema.safeParse(freshInstall);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.agents[0]!.model).toBeUndefined();
+    }
+  });
+
+  it('still rejects an agent whose model references an unconfigured provider', () => {
+    const config = {
+      ...freshInstall,
+      agents: [{ ...freshInstall.agents[0], model: 'ghost/model-x' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+
+  it('still rejects a default provider that is not configured', () => {
+    const config = {
+      ...freshInstall,
+      defaults: { agentId: 'default', providerId: 'ghost', modelId: 'm' },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a default provider set without a default model', () => {
+    const config = {
+      ...freshInstall,
+      defaults: { agentId: 'default', providerId: 'openai' },
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai-compatible',
+          enabled: true,
+          models: [{ id: 'm', name: 'M' }],
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+});
