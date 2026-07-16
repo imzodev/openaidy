@@ -38,6 +38,8 @@ export interface StreamingUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export interface UseStreamingOptions {
@@ -119,6 +121,12 @@ export function useStreaming(options: UseStreamingOptions): UseStreamingReturn {
           inputTokens: usagePayload.usage.promptTokens,
           outputTokens: usagePayload.usage.completionTokens,
           totalTokens: usagePayload.usage.totalTokens,
+          ...(usagePayload.usage.cacheReadTokens !== undefined && {
+            cacheReadTokens: usagePayload.usage.cacheReadTokens,
+          }),
+          ...(usagePayload.usage.cacheCreationTokens !== undefined && {
+            cacheCreationTokens: usagePayload.usage.cacheCreationTokens,
+          }),
         };
         setUsage(streamingUsage);
         break;

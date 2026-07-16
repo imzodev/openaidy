@@ -201,6 +201,19 @@ export type SessionDeleteRequest = WSMessage<
   }
 >;
 
+/**
+ * Attachment metadata surfaced on session messages (bytes are fetched
+ * separately via GET /api/attachments/:id/raw).
+ */
+export type SessionMessageAttachment = {
+  id: string;
+  kind: 'image' | 'audio';
+  source: 'user_upload' | 'tool_output';
+  name?: string | null;
+  mimeType: string;
+  sizeBytes: number;
+};
+
 export type SessionMessageRequest = WSMessage<
   'session.message',
   {
@@ -211,6 +224,8 @@ export type SessionMessageRequest = WSMessage<
     agentId?: string;
     providerId?: string;
     modelId?: string;
+    /** Ids of previously-uploaded attachments to link to this message */
+    attachmentIds?: string[];
     metadata?: Record<string, unknown>;
   }
 >;
@@ -279,6 +294,7 @@ export type SessionMessagesResponse = WSMessage<
       sequence: number;
       createdAt: string;
       metadata?: Record<string, unknown>;
+      attachments?: SessionMessageAttachment[];
     }>;
     total: number;
   }
@@ -492,6 +508,8 @@ export type SessionStreamUsage = WSMessage<
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
     };
   }
 >;

@@ -45,6 +45,10 @@ export type UsageInfo = {
   readonly promptTokens: number;
   readonly completionTokens: number;
   readonly totalTokens: number;
+  /** Prompt tokens served from cache (billed at a reduced rate) */
+  readonly cacheReadTokens?: number;
+  /** Prompt tokens written to cache (Anthropic bills these at a premium) */
+  readonly cacheCreationTokens?: number;
 };
 
 /**

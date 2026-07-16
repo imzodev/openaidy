@@ -187,6 +187,8 @@ export type MessageOptions = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /** Ids of previously-uploaded attachments to link to this message */
+  attachmentIds?: string[];
   metadata?: Record<string, unknown>;
 };
 

@@ -37,6 +37,7 @@ import { AgentsPage } from './components/pages/AgentsPage';
 import { SkillsPage } from './components/pages/SkillsPage';
 import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
+import { UsagePage } from './components/pages/UsagePage';
 import { BackupsPage } from './components/pages/BackupsPage';
 import { AddonsPage } from './components/pages/AddonsPage';
 import { AddonViewPage } from './components/pages/AddonViewPage';
@@ -44,8 +45,15 @@ import { AccessTokensPage } from './components/pages/AccessTokensPage';
 import { createRouter } from './lib/router';
 import { useMessageQueue } from './lib/use-message-queue';
 import { LoginScreen } from './components/LoginScreen';
-import { resolveToken, clearToken } from './lib/auth-token';
-import { listAddons, deleteSession, type AddonRecord } from './lib/api';
+import { getStoredToken, resolveToken, clearToken } from './lib/auth-token';
+import {
+  listAddons,
+  deleteSession,
+  uploadAttachment,
+  getConfig,
+  type AddonRecord,
+} from './lib/api';
+import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
 import type { ChoicesEvent } from '@openaidy/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
@@ -450,6 +458,34 @@ function AppContent(props: AppContentProps) {
     enabled: !!selectedSessionId(),
   }));
 
+  // Drives the first-run onboarding gate. A fresh install has no provider
+  // configured; we show the onboarding screen until the user sets one up.
+  // The ['config'] key is shared with the settings `useConfig` hook, so saving
+  // a provider during onboarding invalidates and refreshes this automatically.
+  const configGateQuery = createQuery(() => ({
+    queryKey: ['config'],
+    queryFn: getConfig,
+  }));
+
+  // True once config has loaded and the install is still unconfigured: there
+  // is no usable default provider. We key off `config.defaults.providerId`
+  // (which onboarding sets when it configures the first provider — local or
+  // remote) rather than credential connection status, because a credential can
+  // exist in the DB for a provider that is not in `config.providers` (e.g. a
+  // leftover from earlier testing); such a provider is "connected" but not
+  // usable for chat. Requiring the default to actually exist in the provider
+  // list is the correct "can the user chat?" signal. While loading we return
+  // false so a configured user isn't shown a flash of onboarding.
+  const needsProviderSetup = () => {
+    const data = configGateQuery.data;
+    const cfg = data && 'config' in data ? data.config : undefined;
+    if (!cfg) return false;
+    const defaultProviderId = cfg.defaults?.providerId;
+    if (!defaultProviderId) return true;
+    const configured = cfg.providers?.some((p) => p.id === defaultProviderId);
+    return !configured;
+  };
+
   // Create session mutation
   const createSessionMutation = createMutation(() => ({
     mutationFn: (title: string) => createSession(title),
@@ -497,16 +533,41 @@ function AppContent(props: AppContentProps) {
 
   // Queue-aware entry point used by the composer and the choices card.
   // While a run is in flight the message is queued; otherwise it is sent now.
-  const handleSubmit = async (content: string, agentId?: string) => {
-    if (!selectedSessionId()) {
+  // Files are uploaded immediately (they don't need the run to be idle) and
+  // travel as attachment ids from then on.
+  const handleSubmit = async (
+    content: string,
+    agentId?: string,
+    files?: File[],
+  ) => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) {
       setSubmitError('No session selected');
       return;
     }
+
+    let attachmentIds: string[] | undefined;
+    if (files?.length) {
+      try {
+        const uploaded = await Promise.all(
+          files.map((file) => uploadAttachment(sessionId, file)),
+        );
+        attachmentIds = uploaded.map((a) => a.id);
+      } catch (err) {
+        setSubmitError(
+          err instanceof Error ? err.message : 'Failed to upload attachment',
+        );
+        throw err instanceof Error
+          ? err
+          : new Error('Failed to upload attachment');
+      }
+    }
+
     if (isStreaming()) {
-      messageQueue.enqueue(content, agentId);
+      messageQueue.enqueue(content, agentId, attachmentIds);
       return;
     }
-    await sendMessage(content, agentId);
+    await sendMessage(content, agentId, attachmentIds);
   };
 
   // User hit Stop on an in-flight tool call — ask the server to cancel it.
@@ -536,7 +597,7 @@ function AppContent(props: AppContentProps) {
     if (isStreaming() || currentChoices()) return;
     const next = messageQueue.dequeue();
     if (next) {
-      void sendMessage(next.content, next.agentId);
+      void sendMessage(next.content, next.agentId, next.attachmentIds);
     }
   };
 
@@ -563,7 +624,11 @@ function AppContent(props: AppContentProps) {
   };
 
   // Actually dispatch a message and begin a streaming run.
-  const sendMessage = async (content: string, agentId?: string) => {
+  const sendMessage = async (
+    content: string,
+    agentId?: string,
+    attachmentIds?: string[],
+  ) => {
     const sessionId = selectedSessionId();
     if (!sessionId) {
       setSubmitError('No session selected');
@@ -608,6 +673,7 @@ function AppContent(props: AppContentProps) {
         agentId,
         providerId,
         modelId,
+        ...(attachmentIds?.length ? { attachmentIds } : {}),
       });
 
       if (!result.ok) {
@@ -724,7 +790,7 @@ function AppContent(props: AppContentProps) {
   const view = () => currentView();
 
   return (
-    <div class="h-screen flex overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div class="h-dvh flex overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
       <Sidebar
         sessions={sessionsQuery.data?.items || []}
@@ -852,6 +918,10 @@ function AppContent(props: AppContentProps) {
           <LogsPage />
         </Show>
 
+        <Show when={view() === 'usage'}>
+          <UsagePage />
+        </Show>
+
         <Show when={view() === 'backups'}>
           <BackupsPage />
         </Show>
@@ -874,87 +944,101 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'chat'}>
-          <Show when={!selectedSessionId()}>
-            <div class="flex-1 flex items-center justify-center">
-              <div class="text-center">
-                <h1 class="text-2xl font-bold text-text-primary mb-2">
-                  Welcome to OpenAidy
-                </h1>
-                <p class="text-text-secondary mb-4">
-                  Select a session or create a new one to start chatting
-                </p>
-                <button
-                  onClick={handleCreateSession}
-                  disabled={createSessionMutation.isPending}
-                  class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
-                >
-                  {createSessionMutation.isPending
-                    ? 'Creating...'
-                    : 'Create New Session'}
-                </button>
-              </div>
-            </div>
+          {/* First-run gate: on a fresh install with no provider configured,
+              the chat landing view is replaced by the provider onboarding
+              screen. The sidebar and logout stay reachable (not a modal). */}
+          <Show when={needsProviderSetup()}>
+            <ProviderOnboarding
+              onConfigured={() => void configGateQuery.refetch()}
+            />
           </Show>
 
-          <Show when={selectedSessionId()}>
-            <ChatView
-              messages={messages()}
-              isLoading={messagesQuery.isLoading}
-              error={messagesQuery.error?.message}
-              isStreaming={isStreaming()}
-              streamingContent={isStreaming() ? streamingContent() : undefined}
-              streamingToolCalls={
-                isStreaming() ? streamingToolCalls() : undefined
-              }
-              onCancelTool={handleCancelTool}
-              onCancelRun={handleCancelRun}
-              runActivity={isStreaming() ? runActivity() : undefined}
-              queuedMessages={messageQueue.items()}
-              onEditQueued={messageQueue.edit}
-              onRemoveQueued={messageQueue.remove}
-              scrollToMessageId={scrollToMessageId()}
-            />
-            <Show when={currentChoices()}>
-              {(c) => (
-                <ChoicesCard
-                  question={c().question}
-                  choices={c().choices}
-                  onSelect={(choice) => {
-                    setCurrentChoices(null);
-                    handleSubmit(choice, selectedAgentId());
-                  }}
-                  onDismiss={() => {
-                    setCurrentChoices(null);
-                    // Resume draining the queue now that the prompt is gone.
-                    processQueue();
-                    setTimeout(() => focusChatInput()?.(), 50);
-                  }}
-                />
-              )}
-            </Show>
-            <RunList
-              runs={runs()}
-              isLoading={runsQuery.isLoading}
-              error={runsQuery.error?.message}
-              onRunClick={(firstMessageId) => {
-                if (firstMessageId) {
-                  setScrollToMessageId(firstMessageId);
-                }
-              }}
-            />
-            <ChatComposer
-              onSend={handleSubmit}
-              isStreaming={isStreaming()}
-              placeholder="Type your message..."
-              agents={agents()}
-              selectedAgentId={effectiveAgentId()}
-              onAgentSelect={handleAgentSelect}
-              onInputReady={(focus) => setFocusChatInput(() => focus)}
-            />
-            <Show when={submitError()}>
-              <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
-                {submitError()}
+          <Show when={!needsProviderSetup()}>
+            <Show when={!selectedSessionId()}>
+              <div class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                  <h1 class="text-2xl font-bold text-text-primary mb-2">
+                    Welcome to OpenAidy
+                  </h1>
+                  <p class="text-text-secondary mb-4">
+                    Select a session or create a new one to start chatting
+                  </p>
+                  <button
+                    onClick={handleCreateSession}
+                    disabled={createSessionMutation.isPending}
+                    class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
+                  >
+                    {createSessionMutation.isPending
+                      ? 'Creating...'
+                      : 'Create New Session'}
+                  </button>
+                </div>
               </div>
+            </Show>
+
+            <Show when={selectedSessionId()}>
+              <ChatView
+                messages={messages()}
+                isLoading={messagesQuery.isLoading}
+                error={messagesQuery.error?.message}
+                isStreaming={isStreaming()}
+                streamingContent={
+                  isStreaming() ? streamingContent() : undefined
+                }
+                streamingToolCalls={
+                  isStreaming() ? streamingToolCalls() : undefined
+                }
+                onCancelTool={handleCancelTool}
+                onCancelRun={handleCancelRun}
+                runActivity={isStreaming() ? runActivity() : undefined}
+                queuedMessages={messageQueue.items()}
+                onEditQueued={messageQueue.edit}
+                onRemoveQueued={messageQueue.remove}
+                scrollToMessageId={scrollToMessageId()}
+              />
+              <Show when={currentChoices()}>
+                {(c) => (
+                  <ChoicesCard
+                    question={c().question}
+                    choices={c().choices}
+                    onSelect={(choice) => {
+                      setCurrentChoices(null);
+                      handleSubmit(choice, selectedAgentId());
+                    }}
+                    onDismiss={() => {
+                      setCurrentChoices(null);
+                      // Resume draining the queue now that the prompt is gone.
+                      processQueue();
+                      setTimeout(() => focusChatInput()?.(), 50);
+                    }}
+                  />
+                )}
+              </Show>
+              <RunList
+                runs={runs()}
+                isLoading={runsQuery.isLoading}
+                error={runsQuery.error?.message}
+                sessionId={selectedSessionId()}
+                onRunClick={(firstMessageId) => {
+                  if (firstMessageId) {
+                    setScrollToMessageId(firstMessageId);
+                  }
+                }}
+              />
+              <ChatComposer
+                onSend={handleSubmit}
+                isStreaming={isStreaming()}
+                placeholder="Type your message..."
+                agents={agents()}
+                selectedAgentId={effectiveAgentId()}
+                onAgentSelect={handleAgentSelect}
+                onInputReady={(focus) => setFocusChatInput(() => focus)}
+              />
+              <Show when={submitError()}>
+                <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                  {submitError()}
+                </div>
+              </Show>
             </Show>
           </Show>
         </Show>
@@ -981,8 +1065,12 @@ function AppContent(props: AppContentProps) {
 }
 
 function AuthGate() {
+  // Only an already-persisted (localStorage) token auto-bypasses the login
+  // screen. A ?token=... deep link from the installer is left for the
+  // LoginScreen to consume so the user always gets a single explicit
+  // "Connect" click instead of silently being logged in.
   const [authenticated, setAuthenticated] = createSignal(
-    Boolean(resolveToken()),
+    Boolean(getStoredToken()),
   );
 
   return (

@@ -7,15 +7,21 @@ import {
   isScreenshotTool,
   stripScreenshotFilename,
   persistScreenshotImages,
+  extractInlineImages,
+  MEDIA_WORKSPACE_DIR,
+  type PersistedImage,
 } from '../mcp/screenshot-capture';
 import type { BuiltinToolRegistry } from '../tools';
+import type { AttachmentService } from '../attachments/service';
 import type {
   ToolDefinition,
   Message,
+  MessageAttachment as RuntimeMessageAttachment,
   ModelRequest,
   ModelResponse,
   ToolCallRequest,
 } from '@openaidy/runtime';
+import type { MessageAttachment as DbMessageAttachment } from '@openaidy/db';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -26,7 +32,8 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import type { SessionType } from '@openaidy/shared-types';
+import type { SessionType, ModelPricing } from '@openaidy/shared-types';
+import { estimateCost } from '@openaidy/shared-types';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -88,6 +95,8 @@ export class SessionMessageService {
   private readonly personalityService: AgentPersonalityService | undefined;
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly workspaceBaseDir: string | undefined;
+  private readonly attachments: AttachmentService | undefined;
+  private readonly modelPricing: Record<string, ModelPricing> | undefined;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -113,6 +122,8 @@ export class SessionMessageService {
     this.personalityService = options.personality;
     this.runEvents = options.runEvents;
     this.workspaceBaseDir = options.workspaceBaseDir;
+    this.attachments = options.attachments;
+    this.modelPricing = options.modelPricing;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -420,13 +431,24 @@ export class SessionMessageService {
   }
 
   /**
-   * List messages for a session
+   * List messages for a session.
+   *
+   * When attachment storage is configured, each message additionally
+   * carries an `attachments` array (metadata only — no bytes) so both the
+   * UI and the model-request builder know what media belongs to it.
    */
   async listMessages(
     sessionId: string,
   ): Promise<SessionMessageRecord[] | SessionMessage[]> {
     if (this.messagesRepo) {
-      return this.messagesRepo.listBySession(sessionId);
+      const messages = await this.messagesRepo.listBySession(sessionId);
+      if (!this.attachments) return messages;
+      const grouped = await this.attachments.listBySessionGrouped(sessionId);
+      if (grouped.size === 0) return messages;
+      return messages.map((m) => {
+        const atts = grouped.get(m.id);
+        return atts ? { ...m, attachments: atts } : m;
+      }) as SessionMessage[];
     }
     return listSessionMessageRecords(sessionId);
   }
@@ -441,6 +463,42 @@ export class SessionMessageService {
       return this.runsRepo.listBySession(sessionId);
     }
     return listSessionRunRecords(sessionId);
+  }
+
+  /**
+   * Cumulative usage totals for a session (succeeded runs). Returns zeroed
+   * totals when no DB-backed run store is configured.
+   */
+  async getSessionUsage(
+    sessionId: string,
+  ): Promise<import('@openaidy/db').SessionUsageTotals> {
+    if (this.runsRepo) {
+      return this.runsRepo.getSessionUsage(sessionId);
+    }
+    return {
+      runCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      cost: 0,
+      hasCost: false,
+    };
+  }
+
+  /**
+   * Raw per-run usage rows (succeeded runs) for aggregation, optionally
+   * filtered by an ISO created-at range. Empty when no DB store.
+   */
+  async listUsageRows(options?: {
+    from?: string;
+    to?: string;
+  }): Promise<import('@openaidy/db').UsageRunRow[]> {
+    if (this.runsRepo) {
+      return this.runsRepo.listUsageRows(options ?? {});
+    }
+    return [];
   }
 
   /**
@@ -779,6 +837,27 @@ export class SessionMessageService {
       content: input.content,
     });
 
+    // Link any pending uploads to the persisted user message so they show
+    // up in the transcript and flow into the model request below.
+    if (input.attachmentIds?.length && this.attachments) {
+      try {
+        await this.attachments.linkToMessage(
+          input.attachmentIds,
+          input.sessionId,
+          userMessage.id,
+        );
+      } catch (e) {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            attachmentIds: input.attachmentIds,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          'Failed to link attachments to message',
+        );
+      }
+    }
+
     // 3. Create run record
     // Track how many more messages may include the (discretion-based) ONBOARDING
     // guidance. Starts at 2 (first message + first user response); decremented
@@ -883,9 +962,28 @@ export class SessionMessageService {
           }, 1000)
         : undefined;
 
+    // Model media capabilities — decide whether image/audio attachments are
+    // embedded natively as provider content blocks or degraded to a
+    // file-path note (so the model can reach for a vision-capable tool).
+    // Unknown capabilities are treated as capable (optimistic): a provider
+    // that can't handle the block will surface its own error.
+    let modelSupportsVision = true;
+    let modelSupportsAudio = true;
+    if (this.attachments && providerEntry) {
+      const modelResult = await providerEntry.provider
+        .getModel(modelId)
+        .catch(() => null);
+      if (modelResult?.ok && modelResult.value.capabilities.length > 0) {
+        modelSupportsVision = modelResult.value.capabilities.includes('vision');
+        modelSupportsAudio =
+          modelResult.value.capabilities.includes('audio_input');
+      }
+    }
+
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
-    const historyMessages: Message[] = history.map((m) => {
+    const historyMessages: Message[] = [];
+    for (const m of history) {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
@@ -893,11 +991,12 @@ export class SessionMessageService {
         .metadata;
 
       if (msgRole === 'tool') {
-        return {
+        historyMessages.push({
           role: 'tool' as const,
           content: msgContent,
           toolCallId: msgToolCallId ?? '',
-        };
+        });
+        continue;
       }
       if (msgRole === 'assistant') {
         // The DB row's `metadata.toolCalls` is an untyped JSON blob;
@@ -909,20 +1008,70 @@ export class SessionMessageService {
           | readonly ToolCallRequest[]
           | undefined;
         const msgReasoningContent = m.reasoningContent ?? undefined;
-        return {
+        historyMessages.push({
           role: 'assistant' as const,
           content: msgContent,
           ...(storedToolCalls?.length ? { toolCalls: storedToolCalls } : {}),
           ...(msgReasoningContent
             ? { reasoningContent: msgReasoningContent }
             : {}),
-        } as Message;
+        } as Message);
+        continue;
       }
-      return {
+
+      // User messages may carry attachments (linked above / in prior turns).
+      const msgAttachments = (m as { attachments?: DbMessageAttachment[] })
+        .attachments;
+      if (msgRole === 'user' && msgAttachments?.length && this.attachments) {
+        const inline: RuntimeMessageAttachment[] = [];
+        const degradedNotes: string[] = [];
+        for (const att of msgAttachments) {
+          if (att.kind !== 'image' && att.kind !== 'audio') continue;
+          const supported =
+            att.kind === 'image' ? modelSupportsVision : modelSupportsAudio;
+          if (!supported) {
+            degradedNotes.push(
+              `[Attached ${att.kind}${att.name ? ` "${att.name}"` : ''} (${att.mimeType}) is saved at ${att.storagePath} — this model cannot process it natively; use an available tool to analyze the file.]`,
+            );
+            continue;
+          }
+          try {
+            const { buffer } = await this.attachments.readBytes(att);
+            inline.push({
+              kind: att.kind,
+              mimeType: att.mimeType,
+              data: buffer.toString('base64'),
+              ...(att.name ? { name: att.name } : {}),
+            });
+          } catch (e) {
+            this.logger?.warn(
+              {
+                attachmentId: att.id,
+                error: e instanceof Error ? e.message : String(e),
+              },
+              'Failed to read attachment bytes for model request',
+            );
+            degradedNotes.push(
+              `[Attachment ${att.name ?? att.id} could not be read.]`,
+            );
+          }
+        }
+        const contentWithNotes = degradedNotes.length
+          ? [msgContent, ...degradedNotes].filter(Boolean).join('\n')
+          : msgContent;
+        historyMessages.push({
+          role: 'user' as const,
+          content: contentWithNotes,
+          ...(inline.length ? { attachments: inline } : {}),
+        } as Message);
+        continue;
+      }
+
+      historyMessages.push({
         role: msgRole as 'system' | 'user',
         content: msgContent,
-      } as Message;
-    });
+      } as Message);
+    }
 
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
@@ -992,7 +1141,16 @@ export class SessionMessageService {
     };
 
     let accumulatedContent = '';
-    let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    // Usage accumulated across all tool-call rounds — each round is a
+    // separate billable provider call, so cache/cost totals sum them.
+    const finalUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+    };
+    let sawCacheTokens = false;
     let finalFinishReason: string | undefined;
     let finalReasoningContent: string | undefined;
     let finalProviderId = providerId;
@@ -1091,12 +1249,32 @@ export class SessionMessageService {
               break;
             }
             case 'stream.usage': {
-              finalUsage = {
-                promptTokens: value.usage.promptTokens,
-                completionTokens: value.usage.completionTokens,
-                totalTokens: value.usage.totalTokens,
-              };
-              onStreamEvent({ type: 'usage', usage: finalUsage });
+              finalUsage.promptTokens += value.usage.promptTokens;
+              finalUsage.completionTokens += value.usage.completionTokens;
+              finalUsage.totalTokens += value.usage.totalTokens;
+              if (value.usage.cacheReadTokens !== undefined) {
+                finalUsage.cacheReadTokens += value.usage.cacheReadTokens;
+                sawCacheTokens = true;
+              }
+              if (value.usage.cacheCreationTokens !== undefined) {
+                finalUsage.cacheCreationTokens +=
+                  value.usage.cacheCreationTokens;
+                sawCacheTokens = true;
+              }
+              onStreamEvent({
+                type: 'usage',
+                usage: {
+                  promptTokens: value.usage.promptTokens,
+                  completionTokens: value.usage.completionTokens,
+                  totalTokens: value.usage.totalTokens,
+                  ...(value.usage.cacheReadTokens !== undefined && {
+                    cacheReadTokens: value.usage.cacheReadTokens,
+                  }),
+                  ...(value.usage.cacheCreationTokens !== undefined && {
+                    cacheCreationTokens: value.usage.cacheCreationTokens,
+                  }),
+                },
+              });
               break;
             }
             case 'stream.started': {
@@ -1186,6 +1364,9 @@ export class SessionMessageService {
             let toolContent: string | undefined;
             let toolIsError = false;
             let absolutePathFromTool: string | undefined;
+            // Inline images a tool returned and we persisted to disk —
+            // registered as attachments on the tool result message below.
+            let persistedImages: PersistedImage[] = [];
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session).
@@ -1267,6 +1448,10 @@ export class SessionMessageService {
                       promptTokens: finalUsage.promptTokens,
                       completionTokens: finalUsage.completionTokens,
                       totalTokens: finalUsage.totalTokens,
+                      ...(sawCacheTokens && {
+                        cacheReadTokens: finalUsage.cacheReadTokens,
+                        cacheCreationTokens: finalUsage.cacheCreationTokens,
+                      }),
                       metadata: {
                         providerId: finalProviderId,
                         model: finalModelId,
@@ -1275,6 +1460,42 @@ export class SessionMessageService {
                         choicesCount: (parsed.choices as string[]).length,
                       },
                     }).catch(() => {});
+                    // Persist a synthetic tool result message so the conversation
+                    // history stays well-formed for the next turn. OpenAI-
+                    // compatible APIs (MiniMax, OpenAI, DeepSeek, etc.) require
+                    // every assistant message with `tool_calls` to be followed
+                    // by a matching `role: 'tool'` message — without it, the
+                    // next request errors with "tool call result does not
+                    // follow tool call" the moment the user replies.
+                    // The user-facing semantics are: present_choices paused the
+                    // loop and surfaced the choices to the UI; the "result"
+                    // here is just a marker that the tool is waiting on user
+                    // input. The user's next message will arrive as a regular
+                    // `role: 'user'` turn that resumes the conversation.
+                    await this.appendMessage({
+                      sessionId: input.sessionId,
+                      runId: run.id,
+                      role: 'tool',
+                      content: JSON.stringify({
+                        _type: 'INTERRUPT_CHOICES',
+                        status: 'awaiting_user_choice',
+                        question: parsed.question ?? null,
+                        choices: parsed.choices,
+                      }),
+                      toolCallId: tc.id,
+                      metadata: {
+                        toolName: tc.name,
+                        interrupt: 'awaiting_user_choice',
+                      },
+                    }).catch((err: unknown) => {
+                      // Non-fatal: if persisting fails the next turn will
+                      // surface the provider error, which is the same outcome
+                      // we had before this fix.
+                      this.logger?.warn(
+                        { err, sessionId: input.sessionId, toolCallId: tc.id },
+                        'Failed to persist synthetic INTERRUPT_CHOICES tool result',
+                      );
+                    });
                     return {
                       ok: true,
                       userMessage,
@@ -1335,13 +1556,17 @@ export class SessionMessageService {
                   };
                 });
 
-              // Persist any inline screenshot image into the agent workspace.
-              // Best-effort: a failure here must not fail the tool call.
+              // Persist any inline image the tool returned into the agent
+              // workspace — screenshots keep their dedicated folder, other
+              // tool media goes to `media/`. The saved files are registered
+              // as attachments on the tool result message below so they
+              // render inline in chat. Best-effort: a failure here must not
+              // fail the tool call.
               if (
-                captureScreenshot &&
                 this.workspace &&
                 mcpResult &&
-                !toolIsError
+                !toolIsError &&
+                extractInlineImages(mcpResult as McpToolResult).length > 0
               ) {
                 try {
                   const persisted = await persistScreenshotImages({
@@ -1349,9 +1574,13 @@ export class SessionMessageService {
                     workspace: this.workspace,
                     agentId,
                     requestedFilename,
+                    ...(captureScreenshot
+                      ? {}
+                      : { targetDir: MEDIA_WORKSPACE_DIR }),
                     logger: this.logger,
                   });
                   mcpResult = persisted.result;
+                  persistedImages = persisted.saved;
                 } catch (e) {
                   this.logger?.warn(
                     {
@@ -1359,7 +1588,7 @@ export class SessionMessageService {
                       tool: mcpToolName,
                       error: e instanceof Error ? e.message : String(e),
                     },
-                    'Failed to persist screenshot to workspace',
+                    'Failed to persist tool image to workspace',
                   );
                 }
               }
@@ -1405,7 +1634,7 @@ export class SessionMessageService {
                 toolMetadata.absolutePath = absolutePathFromTool;
               }
               // Persist tool result message
-              await this.appendMessage({
+              const toolMessage = await this.appendMessage({
                 sessionId: input.sessionId,
                 runId: run.id,
                 role: 'tool',
@@ -1414,6 +1643,33 @@ export class SessionMessageService {
                 ...(toolIsError ? { isError: true } : {}),
                 metadata: toolMetadata,
               });
+
+              // Register tool-produced images as attachments on the tool
+              // result message so the chat renders them inline (instead of
+              // only leaving a workspace-path breadcrumb).
+              if (persistedImages.length > 0 && this.attachments) {
+                for (const img of persistedImages) {
+                  await this.attachments
+                    .registerToolOutput({
+                      sessionId: input.sessionId,
+                      messageId: toolMessage.id,
+                      mimeType: img.mimeType,
+                      storagePath: img.absolutePath,
+                      name:
+                        img.relativePath.split('/').pop() ?? img.relativePath,
+                    })
+                    .catch((e: unknown) => {
+                      this.logger?.warn(
+                        {
+                          messageId: toolMessage.id,
+                          path: img.absolutePath,
+                          error: e instanceof Error ? e.message : String(e),
+                        },
+                        'Failed to register tool image attachment',
+                      );
+                    });
+                }
+              }
 
               loopMessages.push({
                 role: 'tool',
@@ -1480,6 +1736,10 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
+        ...(sawCacheTokens && {
+          cacheReadTokens: finalUsage.cacheReadTokens,
+          cacheCreationTokens: finalUsage.cacheCreationTokens,
+        }),
         firstMessageId: assistantMessage.id,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
@@ -1610,30 +1870,59 @@ export class SessionMessageService {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
       firstMessageId?: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
+    // Estimate cost from the run's model + usage (null when pricing unknown).
+    const cost =
+      input.promptTokens !== undefined
+        ? estimateCost(
+            run.modelId,
+            {
+              promptTokens: input.promptTokens,
+              completionTokens: input.completionTokens ?? 0,
+              ...(input.cacheReadTokens !== undefined && {
+                cacheReadTokens: input.cacheReadTokens,
+              }),
+              ...(input.cacheCreationTokens !== undefined && {
+                cacheCreationTokens: input.cacheCreationTokens,
+              }),
+            },
+            this.modelPricing,
+          )
+        : null;
+
+    // Shared usage object for both persistence and the run.completed event.
+    const usage =
+      input.promptTokens !== undefined
+        ? {
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens ?? 0,
+            totalTokens: input.totalTokens ?? 0,
+            ...(input.cacheReadTokens !== undefined && {
+              cacheReadTokens: input.cacheReadTokens,
+            }),
+            ...(input.cacheCreationTokens !== undefined && {
+              cacheCreationTokens: input.cacheCreationTokens,
+            }),
+          }
+        : undefined;
+
     if (this.runsRepo) {
       const successInput: {
         finishReason: DbFinishReason;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
+        usage?: NonNullable<typeof usage>;
+        cost?: number | null;
         firstMessageId?: string;
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
       };
-      if (input.promptTokens !== undefined) {
-        successInput.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
-      }
+      if (usage) successInput.usage = usage;
+      if (cost !== null) successInput.cost = cost;
       if (input.firstMessageId !== undefined) {
         successInput.firstMessageId = input.firstMessageId;
       }
@@ -1641,62 +1930,31 @@ export class SessionMessageService {
         successInput.metadata = input.metadata;
       }
       const updated = await this.runsRepo.markSucceeded(run.id, successInput);
-      // Emit run.completed event
       if (this.runEvents && updated) {
-        const eventData: {
-          runId: string;
-          sessionId: string;
-          agentId: string;
-          finishReason: string;
-          usage?: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-          };
-        } = {
+        this.runEvents.emitCompleted({
           runId: run.id,
           sessionId: run.sessionId,
           agentId: run.agentId,
           finishReason: input.finishReason,
-        };
-        if (input.promptTokens !== undefined) {
-          eventData.usage = {
-            promptTokens: input.promptTokens,
-            completionTokens: input.completionTokens ?? 0,
-            totalTokens: input.totalTokens ?? 0,
-          };
-        }
-        this.runEvents.emitCompleted(eventData);
+          ...(usage && { usage }),
+          ...(cost !== null && { cost }),
+        });
       }
       return updated;
     }
-    const updated = markRunSucceeded(run.id, input);
-    // Emit run.completed event for in-memory runs too
+    const updated = markRunSucceeded(run.id, {
+      ...input,
+      ...(cost !== null && { cost }),
+    });
     if (this.runEvents && updated) {
-      const eventData: {
-        runId: string;
-        sessionId: string;
-        agentId: string;
-        finishReason: string;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
-      } = {
+      this.runEvents.emitCompleted({
         runId: run.id,
         sessionId: run.sessionId,
         agentId: run.agentId,
         finishReason: input.finishReason,
-      };
-      if (input.promptTokens !== undefined) {
-        eventData.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
-      }
-      this.runEvents.emitCompleted(eventData);
+        ...(usage && { usage }),
+        ...(cost !== null && { cost }),
+      });
     }
     return updated ?? null;
   }
@@ -1764,6 +2022,12 @@ export class SessionMessageService {
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,
       totalTokens: response.usage.totalTokens,
+      ...(response.usage.cacheReadTokens !== undefined && {
+        cacheReadTokens: response.usage.cacheReadTokens,
+      }),
+      ...(response.usage.cacheCreationTokens !== undefined && {
+        cacheCreationTokens: response.usage.cacheCreationTokens,
+      }),
       metadata: {
         providerId: response.providerId,
         model: response.model,

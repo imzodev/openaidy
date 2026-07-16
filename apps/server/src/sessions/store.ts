@@ -148,6 +148,9 @@ export function markRunSucceeded(
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+    cost?: number | null;
     firstMessageId?: string;
     metadata?: Record<string, unknown>;
   },
@@ -165,6 +168,11 @@ export function markRunSucceeded(
   if (input.completionTokens !== undefined)
     updates.completionTokens = input.completionTokens;
   if (input.totalTokens !== undefined) updates.totalTokens = input.totalTokens;
+  if (input.cacheReadTokens !== undefined)
+    updates.cacheReadTokens = input.cacheReadTokens;
+  if (input.cacheCreationTokens !== undefined)
+    updates.cacheCreationTokens = input.cacheCreationTokens;
+  if (input.cost !== undefined) updates.cost = input.cost;
   if (input.firstMessageId !== undefined)
     updates.firstMessageId = input.firstMessageId;
   if (input.metadata !== undefined) updates.metadata = input.metadata;

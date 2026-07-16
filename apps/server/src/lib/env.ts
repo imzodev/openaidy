@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_SERVER_PORT } from '@openaidy/config';
+import { DEFAULT_SERVER_PORT, resolveJwtSecret } from '@openaidy/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -54,7 +54,7 @@ const envSchema = z
       .transform((val) => val === 'true')
       .default('true'),
     WS_TOKEN_EXPIRY: z.coerce.number().positive().default(86400000),
-    WS_TOKEN_SECRET: z.string().default('change-me-in-production'),
+    WS_TOKEN_SECRET: z.string().optional(),
     WS_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     WS_RATE_LIMIT_WINDOW: z.coerce.number().positive().default(60000),
     // Pairing configuration
@@ -109,8 +109,19 @@ const envSchema = z
   })
   .transform((value) => {
     const openAidyHome = value.OPENAIDY_HOME;
+
+    // Resolve WS_TOKEN_SECRET via the shared helper. The install script
+    // persists the secret to $OPENAIDY_HOME/state/install.json so manual
+    // restarts (without the install script's env) still sign JWTs with
+    // the same secret — otherwise BootstrapAdminManager.ensureToken()
+    // would silently regenerate the admin JWT on every restart because
+    // signature validation would fail against the env-default unsafe
+    // secret, logging the user out of the UI.
+    const wsTokenSecret = resolveJwtSecret(value.WS_TOKEN_SECRET, openAidyHome);
+
     return {
       ...value,
+      WS_TOKEN_SECRET: wsTokenSecret,
       // Internal aliases — `PORT`, `CORS_ORIGIN`, and `WS_PORT` are kept as
       // names consumers (app.ts, websocket gateway, tests) can read without
       // caring which source-of-truth env var produced them. `WS_PORT` rides

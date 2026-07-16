@@ -17,6 +17,7 @@ import {
   Puzzle,
   Layers,
   KeyRound,
+  BarChart3,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
 import type { Session, AddonRecord } from '../lib/api';
@@ -32,6 +33,7 @@ export type ViewType =
   | 'skills'
   | 'mcps'
   | 'logs'
+  | 'usage'
   | 'backups'
   | 'addons'
   | 'addon-view'
@@ -93,6 +95,7 @@ const navSections: NavSection[] = [
   {
     title: 'System',
     items: [
+      { id: 'usage', label: 'Usage', icon: BarChart3 },
       { id: 'logs', label: 'Logs', icon: FileText },
       { id: 'backups', label: 'Backups', icon: Save },
       { id: 'api-keys', label: 'Access Tokens', icon: KeyRound },

@@ -11,6 +11,11 @@ export type SubmitMessageInput = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /**
+   * Ids of previously-uploaded (pending) attachments to link to this
+   * message. The bytes were stored via POST /sessions/:id/attachments.
+   */
+  attachmentIds?: string[];
 };
 
 /**
@@ -47,6 +52,8 @@ export type SubmitMessageStreamingInput = SubmitMessageInput & {
             promptTokens: number;
             completionTokens: number;
             totalTokens: number;
+            cacheReadTokens?: number;
+            cacheCreationTokens?: number;
           };
         }
       | { type: 'error'; error: { code: string; message: string } }
@@ -113,6 +120,13 @@ export type SessionMessageServiceOptions = {
   runEvents?: RunEventEmitter;
   /** Base directory for agent workspaces (for loading agent workspace skills) */
   workspaceBaseDir?: string;
+  /** Attachment storage for image/audio chat media (requires DB) */
+  attachments?: import('../attachments/service').AttachmentService;
+  /**
+   * Per-model pricing overrides (from app config) used for cost estimation.
+   * Merged over the built-in MODEL_PRICING table.
+   */
+  modelPricing?: Record<string, import('@openaidy/shared-types').ModelPricing>;
   repositories?:
     | {
         sessions: SessionsStore;

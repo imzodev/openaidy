@@ -290,6 +290,7 @@ function Get-JwtSecret {
         try {
             $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json
             if ($existing.wsTokenSecret) {
+                Log-Info "Reusing JWT signing secret from $manifestPath — the bootstrap admin token will NOT be regenerated."
                 return $existing.wsTokenSecret
             }
         } catch {
@@ -310,6 +311,7 @@ function Get-JwtSecret {
         icacls $manifestPath /inheritance:r /grant:r "$env:USERNAME:(R,W)" 2>$null | Out-Null
     } catch { }
 
+    Log-Info "Generated new JWT signing secret and persisted to $manifestPath."
     return $newSecret
 }
 
@@ -421,18 +423,25 @@ Write-Host "Bootstrap admin token: $BootstrapToken"
 Write-Host ""
 
 if ($StartUrl) {
+    # Deep-link the browser straight into the login screen with the token
+    # pre-filled, so the user only has to press "Connect".
+    $EncodedToken = [uri]::EscapeDataString($BootstrapToken)
+    $AuthUrl = "${StartUrl}/?token=${EncodedToken}"
     Write-Host "Server is running at: $StartUrl"
+    Write-Host "Login URL (token pre-filled): $AuthUrl"
     Write-Host ""
     try {
-        Start-Process $StartUrl
+        Start-Process $AuthUrl
     } catch {
-        Write-Host "Open $StartUrl in your browser."
+        Write-Host "Open $AuthUrl in your browser."
     }
     Write-Host ""
     Write-Host "Use 'openaidy stop' to stop the server."
 } else {
+    $EncodedToken = [uri]::EscapeDataString($BootstrapToken)
+    $AuthUrl = "http://localhost:3001/?token=${EncodedToken}"
     Write-Host "Open a new terminal and run 'openaidy start' to bring the server online,"
-    Write-Host "then open http://localhost:3001 in your browser."
+    Write-Host "then open $AuthUrl in your browser."
     Write-Host ""
     Write-Host "If it still doesn't start, check the log at:"
     Write-Host "  $script:DataHome\logs\server.log"

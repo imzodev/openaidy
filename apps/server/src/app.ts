@@ -28,6 +28,9 @@ import { authRoutes } from './routes/auth';
 import { accessTokenRoutes } from './routes/access-tokens';
 import { createAccessTokenService } from './access-tokens/service';
 import { sessionRoutes } from './routes/sessions';
+import { attachmentRoutes } from './routes/attachments';
+import { createAttachmentService } from './attachments/service';
+import { usageRoutes } from './routes/usage';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
@@ -316,6 +319,22 @@ export async function buildApp() {
   // Create run event emitter for SSE streaming (needed by sessionService)
   const runEvents = new RunEventEmitter();
 
+  // Attachment storage (image/audio chat media) — requires the DB for
+  // metadata rows; bytes go under OPENAIDY_HOME/attachments.
+  const attachmentService = dbAdapter
+    ? createAttachmentService({
+        repository: dbAdapter.repositories.messageAttachments,
+        baseDir: path.join(env.OPENAIDY_HOME, 'attachments'),
+      })
+    : undefined;
+
+  // Cast: zod infers optional fields as `T | undefined`, which is
+  // structurally the same as ModelPricing's optional fields but trips
+  // exactOptionalPropertyTypes at the call boundary.
+  const modelPricingConfig = configService.getConfig().modelPricing as
+    | Record<string, import('@openaidy/shared-types').ModelPricing>
+    | undefined;
+
   sessionService = new SessionMessageService({
     providers: providerServices,
     logger: log as unknown as FastifyBaseLogger,
@@ -328,6 +347,8 @@ export async function buildApp() {
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     runEvents,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+    ...(attachmentService ? { attachments: attachmentService } : {}),
+    ...(modelPricingConfig ? { modelPricing: modelPricingConfig } : {}),
     repositories: dbAdapter
       ? {
           sessions: dbAdapter.repositories.sessions,
@@ -486,6 +507,21 @@ export async function buildApp() {
 
       // Pass shared services to session routes
       await api.register(sessionRoutes, {
+        sessionService: services.sessions,
+        authMiddleware,
+      });
+
+      // Attachment upload/serving (requires DB-backed attachment storage)
+      if (attachmentService) {
+        await api.register(attachmentRoutes, {
+          attachmentService,
+          sessionService: services.sessions,
+          authMiddleware,
+        });
+      }
+
+      // Usage tracking endpoints (per-session + aggregated)
+      await api.register(usageRoutes, {
         sessionService: services.sessions,
         authMiddleware,
       });
@@ -834,6 +870,9 @@ export async function buildApp() {
           'cache-control',
           'public, max-age=31536000, immutable',
         );
+      }
+      if (request.url === '/' || request.url.endsWith('/index.html')) {
+        void reply.header('cache-control', 'no-cache, must-revalidate');
       }
     });
 

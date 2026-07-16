@@ -11,6 +11,7 @@ export type ProviderPresetId =
   | 'minimax'
   | 'opencode-go'
   | 'opencode-go-anthropic'
+  | 'opencode-zen'
   | 'ollama'
   | 'lmstudio';
 
@@ -19,6 +20,7 @@ export type ModelPreset = {
   name: string;
   description?: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
 };
 
 export type ProviderPreset = {
@@ -194,13 +196,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         id: 'deepseek-v4-pro',
         name: 'DeepSeek V4 Pro',
         description: 'Most capable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
       {
         id: 'deepseek-v4-flash',
         name: 'DeepSeek V4 Flash',
         description: 'Fast and affordable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
     ],
   },
@@ -211,26 +215,30 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.minimax.io/v1',
     websiteUrl: 'https://platform.minimax.io',
     documentationUrl: 'https://platform.minimax.io/docs',
-    recommendedModel: 'MiniMax-M2.7',
+    recommendedModel: 'MiniMax-M3',
     icon: 'bi-stars',
     models: [
       {
         id: 'MiniMax-M3',
         name: 'MiniMax M3',
-        description: 'Latest, strong reasoning',
+        description:
+          'Latest M-series for agentic reasoning, tool use, coding, and long-context tasks',
         contextWindow: 1000000,
+        maxOutputTokens: 16384,
       },
       {
         id: 'MiniMax-M2.7',
         name: 'MiniMax M2.7',
-        description: 'Fast reasoning model',
+        description: 'Recursive self-improvement, ~60 tps output',
         contextWindow: 204800,
+        maxOutputTokens: 8192,
       },
       {
         id: 'MiniMax-M2.7-highspeed',
         name: 'MiniMax M2.7 Highspeed',
-        description: 'Same as M2.7, faster',
+        description: 'Same as M2.7, ~100 tps output',
         contextWindow: 204800,
+        maxOutputTokens: 8192,
       },
     ],
   },
@@ -325,6 +333,38 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
   },
   {
+    id: 'opencode-zen',
+    name: 'OpenCode Zen',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    websiteUrl: 'https://opencode.ai/zen',
+    documentationUrl: 'https://opencode.ai/docs/zen',
+    recommendedModel: 'mimo-v2.5-free',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'mimo-v2.5-free',
+        name: 'MiMo V2.5 Free',
+        description: 'Free tier — high-volume open model',
+      },
+      {
+        id: 'north-mini-code-free',
+        name: 'North Mini Code Free',
+        description: 'Free tier — coding-specialized open model',
+      },
+      {
+        id: 'nemotron-3-ultra-free',
+        name: 'Nemotron 3 Ultra Free',
+        description: 'Free tier — NVIDIA open coding model',
+      },
+      {
+        id: 'deepseek-v4-flash-free',
+        name: 'DeepSeek V4 Flash Free',
+        description: 'Free tier — fast and affordable reasoning',
+      },
+    ],
+  },
+  {
     id: 'ollama',
     name: 'Ollama',
     vendorFamily: 'openai-compatible',
@@ -378,6 +418,52 @@ export const OPENCODE_GO_ANTHROPIC_MODEL_IDS: ReadonlySet<string> = new Set([
   'qwen3.7-plus',
   'qwen3.6-plus',
 ]);
+
+/**
+ * OpenCode Zen — free tier models served via OpenAI-compatible endpoint.
+ *
+ * Docs: https://opencode.ai/docs/zen
+ * Endpoint: https://opencode.ai/zen/v1/chat/completions
+ *
+ * Auth: Bearer API key (sign up at opencode.ai/zen, add billing, get key).
+ * No OAuth. Free to use — no per-request charges for the free-tier models.
+ *
+ * Only the free-tier models are included here. The full Zen catalog
+ * (GPT-5, Claude, Gemini, DeepSeek V4 Pro, etc.) requires a paid plan
+ * and is available via OpenCode Go (`opencode-go`) instead.
+ */
+export const OPENCODE_ZEN_PRESET: ProviderPreset = {
+  id: 'opencode-zen',
+  name: 'OpenCode Zen',
+  vendorFamily: 'openai-compatible',
+  baseUrl: 'https://opencode.ai/zen/v1',
+  websiteUrl: 'https://opencode.ai/zen',
+  documentationUrl: 'https://opencode.ai/docs/zen',
+  recommendedModel: 'mimo-v2.5-free',
+  icon: 'bi-stars',
+  models: [
+    {
+      id: 'mimo-v2.5-free',
+      name: 'MiMo V2.5 Free',
+      description: 'Free tier — high-volume open model',
+    },
+    {
+      id: 'north-mini-code-free',
+      name: 'North Mini Code Free',
+      description: 'Free tier — coding-specialized open model',
+    },
+    {
+      id: 'nemotron-3-ultra-free',
+      name: 'Nemotron 3 Ultra Free',
+      description: 'Free tier — NVIDIA open coding model',
+    },
+    {
+      id: 'deepseek-v4-flash-free',
+      name: 'DeepSeek V4 Flash Free',
+      description: 'Free tier — fast and affordable reasoning',
+    },
+  ],
+};
 
 /**
  * Hidden preset for the Anthropic-compatible subset of OpenCode

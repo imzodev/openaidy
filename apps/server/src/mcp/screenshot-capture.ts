@@ -29,6 +29,27 @@ import type { McpToolResult, McpTextContent } from './client';
 /** Workspace-relative folder screenshots are saved into. */
 export const SCREENSHOT_WORKSPACE_DIR = 'screenshots';
 
+/**
+ * Workspace-relative folder for inline images returned by non-screenshot
+ * MCP tools (e.g. image generation) — persisted by the same mechanism.
+ */
+export const MEDIA_WORKSPACE_DIR = 'media';
+
+/**
+ * Extract inline image content items from an MCP tool result. Returns an
+ * empty array when the result carries none — used to decide whether the
+ * persistence step should run at all.
+ */
+export function extractInlineImages(
+  result: McpToolResult | undefined,
+): Array<{ type: 'image'; data: string; mimeType?: string }> {
+  const content = Array.isArray(result?.content) ? result.content : [];
+  return content.filter(
+    (c): c is { type: 'image'; data: string; mimeType?: string } =>
+      c?.type === 'image' && typeof (c as { data?: unknown }).data === 'string',
+  );
+}
+
 /** Minimal logger shape — matches the subset of FastifyBaseLogger we use. */
 type Logger = { warn: (obj: unknown, msg?: string) => void };
 
@@ -118,11 +139,22 @@ export function buildScreenshotFilename(options: {
   return `${stem}${suffix}.${ext}`;
 }
 
+export type PersistedImage = {
+  /** Workspace-relative path (e.g. `screenshots/x.png`). */
+  relativePath: string;
+  /** Absolute on-disk path of the written file. */
+  absolutePath: string;
+  /** Mime type of the image bytes (defaults to image/png when unreported). */
+  mimeType: string;
+};
+
 export type PersistScreenshotResult = {
   /** The tool result, augmented with a text note of where images were saved. */
   result: McpToolResult;
   /** Workspace-relative paths of saved screenshots (e.g. `screenshots/x.png`). */
   savedPaths: string[];
+  /** Full details of each saved image, for attachment registration. */
+  saved: PersistedImage[];
   /** Absolute path of the first saved screenshot, for tool-result metadata. */
   absolutePath?: string;
 };
@@ -141,27 +173,30 @@ export async function persistScreenshotImages(params: {
   agentId: string;
   requestedFilename?: string | undefined;
   logger?: Logger | undefined;
+  /**
+   * Workspace-relative folder to save into. Defaults to the screenshots
+   * folder; non-screenshot tool media goes to {@link MEDIA_WORKSPACE_DIR}.
+   */
+  targetDir?: string;
   /** Injectable clock for deterministic tests. Defaults to `Date.now()`. */
   now?: () => number;
 }): Promise<PersistScreenshotResult> {
   const { result, workspace, agentId, requestedFilename, logger } = params;
+  const targetDir = params.targetDir ?? SCREENSHOT_WORKSPACE_DIR;
   const nowMs = (params.now ?? (() => Date.now()))();
 
-  const content = Array.isArray(result.content) ? result.content : [];
-  const images = content.filter(
-    (c): c is { type: 'image'; data: string; mimeType?: string } =>
-      c?.type === 'image' && typeof (c as { data?: unknown }).data === 'string',
-  );
+  const images = extractInlineImages(result);
 
   if (images.length === 0) {
     logger?.warn(
       { agentId },
       'Screenshot tool returned no inline image content to persist',
     );
-    return { result, savedPaths: [] };
+    return { result, savedPaths: [], saved: [] };
   }
 
   const savedPaths: string[] = [];
+  const saved: PersistedImage[] = [];
   let firstAbsolutePath: string | undefined;
 
   for (let i = 0; i < images.length; i++) {
@@ -172,7 +207,7 @@ export async function persistScreenshotImages(params: {
       index: i,
       now: nowMs,
     });
-    const relativePath = `${SCREENSHOT_WORKSPACE_DIR}/${filename}`;
+    const relativePath = `${targetDir}/${filename}`;
     const buffer = Buffer.from(image.data, 'base64');
     const absolutePath = await workspace.writeBinaryFile(
       agentId,
@@ -180,23 +215,29 @@ export async function persistScreenshotImages(params: {
       buffer,
     );
     savedPaths.push(relativePath);
+    saved.push({
+      relativePath,
+      absolutePath,
+      mimeType: image.mimeType ?? 'image/png',
+    });
     if (i === 0) firstAbsolutePath = absolutePath;
   }
 
   const note: McpTextContent = {
     type: 'text',
-    text: `Screenshot saved to workspace: ${savedPaths.join(', ')}`,
+    text: `${targetDir === SCREENSHOT_WORKSPACE_DIR ? 'Screenshot' : 'Image'} saved to workspace: ${savedPaths.join(', ')}`,
   };
 
   const augmented: McpToolResult = {
     ...result,
-    content: [...content, note],
+    content: [...(Array.isArray(result.content) ? result.content : []), note],
     ...(firstAbsolutePath ? { absolutePath: firstAbsolutePath } : {}),
   } as McpToolResult & { absolutePath?: string };
 
   return {
     result: augmented,
     savedPaths,
+    saved,
     ...(firstAbsolutePath ? { absolutePath: firstAbsolutePath } : {}),
   };
 }
