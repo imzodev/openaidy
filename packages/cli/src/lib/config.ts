@@ -12,19 +12,12 @@
  * `pnpm dev` keeps the legacy repo-local default.
  */
 import { resolve } from 'node:path';
-
-/**
- * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
- * packages/config/src/env.ts and the FALLBACK_BACKEND_PORT in
- * apps/web/vite.config.ts. Importing the constant from
- * @openaidy/config at runtime fails because that package's internal
- * relative imports are not ESM-compatible (Node ESM requires explicit
- * .js extensions on relative imports, and a proper fix would require
- * updating ~20 files in packages/config/src to add .js extensions).
- * For the out-of-the-box install goal, the duplicated constant is the
- * pragmatic trade-off.
- */
-const DEFAULT_SERVER_PORT = 3001;
+import { homedir } from 'node:os';
+import {
+  DEFAULT_SERVER_PORT,
+  resolveJwtSecret,
+  UNSAFE_DEFAULT_JWT_SECRET,
+} from '@openaidy/config';
 
 /**
  * CLI configuration resolved from environment
@@ -71,11 +64,21 @@ export function resolveCLIConfig(
       ? resolve(env.OPENAIDY_HOME, 'credentials', 'bootstrap-admin.json')
       : resolve('.openaidy/credentials/bootstrap-admin.json'));
 
-  // JWT secret (must match server)
-  const jwtSecret = env.WS_TOKEN_SECRET ?? 'change-me-in-production';
+  // JWT secret (must match server). Search the install manifest under
+  // both candidate homes: the explicit OPENAIDY_HOME (or its dev-mode
+  // `.openaidy` default) AND `~/.openaidy` (the install script's default
+  // when no env is set). The first hit wins; otherwise the env var (if
+  // any) wins; otherwise we fall back to the unsafe default sentinel —
+  // the CLI's `init` command refuses to mint with that value.
+  const jwtSecret = resolveJwtSecret(env.WS_TOKEN_SECRET, [
+    env.OPENAIDY_HOME ?? resolve('.openaidy'),
+    resolve(homedir(), '.openaidy'),
+  ]);
 
   // Bootstrap admin enabled
   const bootstrapAdminEnabled = env.BOOTSTRAP_ADMIN_ENABLED !== 'false';
 
   return { wsUrl, httpUrl, tokenPath, jwtSecret, bootstrapAdminEnabled };
 }
+
+export { UNSAFE_DEFAULT_JWT_SECRET };
