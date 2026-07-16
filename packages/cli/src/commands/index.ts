@@ -1036,3 +1036,20 @@ registerCommand(
     examples: ['openaidy mcp import ./mcp.json'],
   },
 );
+
+registerCommand(
+  'mcp migrate-secrets',
+  async (args: string[]) => {
+    const { mcpMigrateSecretsHandler } =
+      await import('./mcp/migrate-secrets.js');
+    return mcpMigrateSecretsHandler(args);
+  },
+  {
+    description: 'Encrypt plaintext MCP inline secrets at rest (issue #401)',
+    usage: 'openaidy mcp migrate-secrets [--dry-run]',
+    examples: [
+      'openaidy mcp migrate-secrets --dry-run',
+      'openaidy mcp migrate-secrets',
+    ],
+  },
+);

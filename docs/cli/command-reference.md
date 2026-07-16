@@ -613,6 +613,29 @@ cat ~/.config/mcp.json | openaidy mcp import
 
 Requires an admin token.
 
+#### `mcp migrate-secrets`
+
+One-shot migration: walk every persisted MCP server's `env`/`headers` and
+encrypt plaintext inline secrets in-place, so a copy of `~/.openaidy/openaidy.json`
+no longer exposes raw credentials. Existing installs that pasted a token
+directly into a header (the issue #401 scenario) end up with the same value
+re-written as `enc:v1:…` ciphertext.
+
+The migration is **idempotent**: re-running on an already-migrated config is
+a no-op. `${ENV_VAR}` references are left as plain placeholders — their
+secret lives in the process environment, not the config.
+
+```bash
+openaidy mcp migrate-secrets --dry-run   # show the plan without writing
+openaidy mcp migrate-secrets             # apply
+```
+
+Options:
+
+- `--dry-run` — print the plan (servers and key counts that would be encrypted) without persisting any changes.
+
+Requires an admin token.
+
 ---
 
 ### `providers` - Provider Management

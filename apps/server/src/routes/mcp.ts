@@ -5,13 +5,14 @@
  * - Config CRUD (stored in config/openaidy.json)
  * - Runtime connect/disconnect
  * - Tool discovery
+ * - One-shot inline-secret migration (issue #401)
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { McpClientService } from '../mcp/client';
 import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig, McpSecretValue } from '@openaidy/config';
 import {
   type McpToolWithSchema,
   type CreateMcpServerRequest,
@@ -28,6 +29,12 @@ import {
   McpConfigImportError,
   type RawMcpServerMap,
 } from '../mcp/config-import';
+import {
+  encryptSecret,
+  ensureEncryptionKey,
+  isEncryptedSecret,
+} from '../mcp/secret-crypto';
+import { migrateAllInlineSecrets } from '../mcp/migrate-secrets';
 
 /**
  * Managing MCP servers means running arbitrary local processes (stdio) or
@@ -36,6 +43,107 @@ import {
  * management.
  */
 const ADMIN_SCOPE = '*';
+
+/**
+ * JSON schema for a single `env`/`headers` value: a legacy plain string
+ * (backward-compatible with existing configs and import formats), or the
+ * structured `{ kind, value }` shape the MCP form UI sends — `kind: 'env'`
+ * for a `${VAR}` reference, `kind: 'inline'` for a secret encrypted at rest.
+ */
+const secretValueSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      required: ['kind', 'value'],
+      properties: {
+        kind: { type: 'string', enum: ['env', 'inline'] },
+        value: { type: 'string' },
+      },
+    },
+  ],
+};
+
+/**
+ * Result of validating that any newly-supplied inline secret in a request
+ * can actually be encrypted by the current process. {@link ensureEncryptionKey}
+ * surfaces most failures (no master key, unwritable key file) at startup;
+ * this probe catches anything that slipped past — and doubles as a smoke
+ * test of the full encrypt path so a misconfigured `CREDENTIALS_MASTER_KEY`
+ * override fails the request cleanly rather than on the way to disk.
+ */
+type InlineEncryptionCheck =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      statusCode: number;
+      error: string;
+      message: string;
+    };
+
+/**
+ * Verify the at-rest encryption pipeline can encrypt a fresh inline secret.
+ * Only call this for payloads that *introduce* new inline values (so a
+ * pure-placeholder patch is never blocked by a transient crypto outage).
+ */
+function ensureInlineEncryptionAvailable(): InlineEncryptionCheck {
+  try {
+    ensureEncryptionKey();
+    // Round-trip a probe value — catches cases where the master key exists
+    // but AES-256-GCM is unavailable (e.g. a stripped Node build).
+    const probe = encryptSecret('__openaidy_probe__');
+    if (!isEncryptedSecret(probe)) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'ENCRYPTION_UNAVAILABLE',
+        message:
+          'Inline-secret encryption is misconfigured: encrypt() did not produce the expected prefix',
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'ENCRYPTION_UNAVAILABLE',
+      message: `Could not initialise at-rest encryption for inline MCP secrets: ${
+        error instanceof Error ? error.message : String(error)
+      }. Set CREDENTIALS_MASTER_KEY or ensure OPENAIDY_HOME is writable.`,
+    };
+  }
+}
+
+/**
+ * Whether a patch actually introduces a *new* inline secret (one that
+ * needs encrypting). An incoming `{ kind: 'inline', value: MASKED_VALUE }`
+ * is not new — it's the client echoing back the redacted display — and
+ * a legacy plain string that passes the `isSafeToShow` heuristic is
+ * stored as a plain env reference. Only "needs encrypt" patches require
+ * the encryption service to be live.
+ */
+function patchIntroducesNewInlineSecret(
+  record: Record<string, McpSecretValue> | undefined,
+): boolean {
+  if (!record) return false;
+  for (const value of Object.values(record)) {
+    if (typeof value === 'string') {
+      // Legacy plain string that would be normalized to inline. Skip if
+      // the string is purely a ${VAR} reference — those stay plaintext.
+      if (/\$\{[^}]+\}/.test(value.trim())) {
+        const literal = value.trim().replace(/\$\{[^}]+\}/g, ' ');
+        if (/^[A-Za-z \t-]*$/.test(literal)) continue;
+      }
+      return true;
+    }
+    if (value.kind === 'inline' && value.value !== '••••••') {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * MCP routes options
@@ -217,12 +325,12 @@ export async function registerMcpRoutes(
                   args: { type: 'array', items: { type: 'string' } },
                   env: {
                     type: 'object',
-                    additionalProperties: { type: 'string' },
+                    additionalProperties: secretValueSchema,
                   },
                   url: { type: 'string' },
                   headers: {
                     type: 'object',
-                    additionalProperties: { type: 'string' },
+                    additionalProperties: secretValueSchema,
                   },
                 },
               },
@@ -244,27 +352,46 @@ export async function registerMcpRoutes(
           });
         }
 
+        // Fail fast (with a clean 503) if this request introduces inline
+        // secrets but encryption is unavailable — better than crashing in
+        // encryptSecret() halfway through the save.
+        if (
+          patchIntroducesNewInlineSecret(config.env) ||
+          patchIntroducesNewInlineSecret(config.headers)
+        ) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+
+        // Route env/headers through unmaskRecord (no existing record to
+        // merge against) so any inline secrets are encrypted before they
+        // ever reach disk.
+        const newConfig: McpServerConfig = {
+          ...(config as McpServerConfig),
+          env: unmaskRecord(config.env, undefined),
+          headers: unmaskRecord(config.headers, undefined),
+        };
+
         // Persist to config
         const fullConfig = configService.getConfig();
-        const newServers = [
-          ...(fullConfig.mcpServers ?? []),
-          config as McpServerConfig,
-        ];
+        const newServers = [...(fullConfig.mcpServers ?? []), newConfig];
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
         // Connect now unless the server is still awaiting its secrets (a
         // server with unset ${VAR} placeholders isn't broken, just
         // unconfigured — so no connection is attempted and no warning logged).
         await connectIfReady(
-          config as McpServerConfig,
+          newConfig,
           'MCP server saved but initial connection failed',
         );
 
         return reply.status(201).send({
-          server: toMcpServerRecord(
-            config as McpServerConfig,
-            runtimeStatus(config as McpServerConfig),
-          ),
+          server: toMcpServerRecord(newConfig, runtimeStatus(newConfig)),
         });
       },
     );
@@ -302,12 +429,12 @@ export async function registerMcpRoutes(
                     args: { type: 'array', items: { type: 'string' } },
                     env: {
                       type: 'object',
-                      additionalProperties: { type: 'string' },
+                      additionalProperties: secretValueSchema,
                     },
                     url: { type: 'string' },
                     headers: {
                       type: 'object',
-                      additionalProperties: { type: 'string' },
+                      additionalProperties: secretValueSchema,
                     },
                   },
                 },
@@ -321,9 +448,9 @@ export async function registerMcpRoutes(
         reply: FastifyReply,
       ) => {
         // Normalise the keyed-map format into our flat config shape.
-        let servers;
+        let normalized;
         try {
-          servers = normalizeMcpServerMap(request.body.mcpServers);
+          normalized = normalizeMcpServerMap(request.body.mcpServers);
         } catch (error) {
           if (error instanceof McpConfigImportError) {
             return reply
@@ -332,6 +459,35 @@ export async function registerMcpRoutes(
           }
           throw error;
         }
+
+        // Same fast-fail guard as POST/PATCH: if any imported server
+        // introduces an inline secret but encryption is unavailable, return
+        // a clean 503 instead of letting encryptSecret() crash mid-import.
+        const anyNewInlineSecret = normalized.some(
+          (s) =>
+            patchIntroducesNewInlineSecret(s.env) ||
+            patchIntroducesNewInlineSecret(s.headers),
+        );
+        if (anyNewInlineSecret) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+
+        // Imported configs use the plain-string wire format (Claude Desktop
+        // / VS Code / Cursor). Route env/headers through unmaskRecord so an
+        // inlined credential pasted straight into the import JSON — the
+        // exact scenario from issue #401 — is encrypted before it ever
+        // reaches disk, same as the structured form UI.
+        const servers: McpServerConfig[] = normalized.map((server) => ({
+          ...server,
+          env: unmaskRecord(server.env, undefined),
+          headers: unmaskRecord(server.headers, undefined),
+        }));
 
         // All-or-nothing: reject the whole import if any id already exists.
         const existingIds = new Set(
@@ -374,6 +530,54 @@ export async function registerMcpRoutes(
     );
 
     /**
+     * POST /mcp/servers/migrate-secrets
+     *
+     * One-shot migration: walk every persisted MCP server's env/headers
+     * and encrypt plaintext inline secrets in-place (issue #401). Idempotent
+     * — re-running on an already-migrated config is a no-op. With
+     * `dryRun: true` returns the plan without writing.
+     *
+     * Wired to the `openaidy mcp migrate-secrets` CLI command and also
+     * callable by any admin tool. Returns the per-server plan so the CLI
+     * can show what changed.
+     */
+    authRequired.post<{
+      Body: { dryRun?: boolean };
+    }>(
+      '/mcp/servers/migrate-secrets',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            properties: {
+              dryRun: { type: 'boolean', default: false },
+            },
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{ Body: { dryRun?: boolean } }>,
+        reply: FastifyReply,
+      ) => {
+        const dryRun = request.body?.dryRun === true;
+        try {
+          const report = await migrateAllInlineSecrets({
+            configService,
+            dryRun,
+          });
+          return reply.send({ ...report, dryRun });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          return reply.status(500).send({
+            error: 'MIGRATION_FAILED',
+            message: `Failed to migrate inline secrets: ${message}`,
+          });
+        }
+      },
+    );
+
+    /**
      * PATCH /mcp/servers/:id
      *
      * Update an existing MCP server config.
@@ -398,11 +602,11 @@ export async function registerMcpRoutes(
               transport: { type: 'string', enum: ['stdio', 'http'] },
               command: { type: 'string' },
               args: { type: 'array', items: { type: 'string' } },
-              env: { type: 'object', additionalProperties: { type: 'string' } },
+              env: { type: 'object', additionalProperties: secretValueSchema },
               url: { type: 'string' },
               headers: {
                 type: 'object',
-                additionalProperties: { type: 'string' },
+                additionalProperties: secretValueSchema,
               },
             },
           },
@@ -424,6 +628,22 @@ export async function registerMcpRoutes(
             error: 'NOT_FOUND',
             message: `MCP server "${id}" not found in config`,
           });
+        }
+
+        // Same fast-fail guard as POST: only when the patch actually
+        // introduces a new inline secret (so a pure-${VAR} patch or a
+        // MASKED_VALUE echo isn't blocked by a transient crypto outage).
+        if (
+          patchIntroducesNewInlineSecret(patch.env) ||
+          patchIntroducesNewInlineSecret(patch.headers)
+        ) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
         }
 
         // Build updated config (merge patch into existing). env/headers go

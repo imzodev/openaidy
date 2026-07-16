@@ -3,6 +3,7 @@ import {
   EnvPlaceholderResolver,
   MissingEnvVarsError,
 } from './placeholder-resolver';
+import { encryptSecret } from './secret-crypto';
 
 describe('EnvPlaceholderResolver', () => {
   const env = {
@@ -101,6 +102,57 @@ describe('EnvPlaceholderResolver', () => {
           C: '${OTHER_MISSING}',
         }),
       ).toEqual(['NOT_SET', 'OTHER_MISSING']);
+    });
+  });
+
+  describe('structured kind: env / kind: inline values', () => {
+    it('resolves a kind: env value the same as a legacy string', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.resolveRecord(
+          { Authorization: { kind: 'env', value: 'Bearer ${API_KEY}' } },
+          'headers',
+        ),
+      ).toEqual({ Authorization: 'Bearer sk-123' });
+    });
+
+    it('decrypts an encrypted kind: inline value and never treats it as missing', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      const encrypted = encryptSecret('ghp_realtoken');
+      expect(
+        resolver.resolveRecord(
+          { Authorization: { kind: 'inline', value: encrypted } },
+          'headers',
+        ),
+      ).toEqual({ Authorization: 'ghp_realtoken' });
+    });
+
+    it('uses a not-yet-encrypted kind: inline value as-is', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.resolveRecord(
+          { Authorization: { kind: 'inline', value: 'plaintext-secret' } },
+          'headers',
+        ),
+      ).toEqual({ Authorization: 'plaintext-secret' });
+    });
+
+    it('never reports a kind: inline value as missing', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.findMissingVars({
+          A: { kind: 'inline', value: encryptSecret('x') },
+        }),
+      ).toEqual([]);
+    });
+
+    it('reports an unset ${VAR} inside a kind: env value as missing', () => {
+      const resolver = new EnvPlaceholderResolver(env);
+      expect(
+        resolver.findMissingVars({
+          A: { kind: 'env', value: '${NOT_SET}' },
+        }),
+      ).toEqual(['NOT_SET']);
     });
   });
 

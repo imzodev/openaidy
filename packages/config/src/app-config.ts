@@ -35,6 +35,22 @@ export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
 
 /**
+ * A single `env`/`headers` secret value. A plain string is the legacy shape
+ * (still accepted for backward compatibility with existing configs); the
+ * structured object form records whether the value is a `${VAR}` environment
+ * reference or an inline secret. Inline values are stored encrypted at rest
+ * — see `apps/server/src/mcp/secret-crypto.ts` — the `value` here is the
+ * `enc:v1:...` ciphertext, never the plaintext secret.
+ */
+export const mcpSecretValueSchema = z.union([
+  z.string(),
+  z.object({
+    kind: z.enum(['env', 'inline']),
+    value: z.string(),
+  }),
+]);
+
+/**
  * MCP server configuration schema
  *
  * Supports two transport types:
@@ -49,10 +65,10 @@ export const mcpServerConfigSchema = z
     // stdio transport fields
     command: z.string().min(1).optional(),
     args: z.array(z.string()).optional(),
-    env: z.record(z.string()).optional(),
+    env: z.record(mcpSecretValueSchema).optional(),
     // http transport fields (NOT YET IMPLEMENTED)
     url: z.string().url().optional(),
-    headers: z.record(z.string()).optional(),
+    headers: z.record(mcpSecretValueSchema).optional(),
   })
   .refine(
     (data) => {
@@ -71,6 +87,7 @@ export const mcpServerConfigSchema = z
 
 export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
 export type McpServerTransport = z.infer<typeof mcpServerTransportSchema>;
+export type McpSecretValue = z.infer<typeof mcpSecretValueSchema>;
 
 /**
  * MCP Server runtime status (returned by API)
