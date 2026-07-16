@@ -11,28 +11,24 @@
  *    and persists to `resolveCLIConfig().tokenPath` (mode 0o600 on POSIX).
  *  - Valid existing token: reuses without rewriting the file.
  *  - Expired / corrupt / missing-field record: regenerates.
- *  - JWT secret is the unsafe default `'change-me-in-production'`:
- *    exits 1 with remediation message (R-2 / CC-3).
+ *  - JWT secret is the unsafe default: exits 1 with remediation message
+ *    (R-2 / CC-3). The unsafe default is `UNSAFE_DEFAULT_JWT_SECRET`
+ *    exported from `@openaidy/config`; resolveCLIConfig returns it when
+ *    neither `WS_TOKEN_SECRET` nor `$OPENAIDY_HOME/state/install.json`
+ *    provides a real secret.
  *  - `BOOTSTRAP_ADMIN_ENABLED=false`: exits 1.
  *  - Prints exactly one parseable line `Bootstrap admin token: <jwt>`
  *    on success so the install scripts can grep it.
  */
 
-import { resolve } from 'node:path';
 import {
   createBootstrapAdminWorkflow,
   type BootstrapAdminContext,
 } from '@openaidy/control-plane';
+import { UNSAFE_DEFAULT_JWT_SECRET } from '@openaidy/config';
 import type { CommandResult } from '../types.js';
 import { createCLIError, formatCLIError } from '../errors.js';
-
-/**
- * Default JWT secret that {@link resolveCLIConfig} falls back to when
- * WS_TOKEN_SECRET is unset. Kept in sync with
- * `packages/cli/src/lib/config.ts:53` and
- * `apps/server/src/websocket/types.ts:21`.
- */
-const UNSAFE_DEFAULT_SECRET = 'change-me-in-production';
+import { resolveCLIConfig } from '../lib/config.js';
 
 /**
  * Default bootstrap-admin client ID — must match the server's
@@ -64,11 +60,16 @@ This command:
 The token is required on first browser login. Open the URL printed by
 the installer and paste the token into the login screen.
 
+The JWT signing secret is resolved with the same precedence as the
+server: explicit WS_TOKEN_SECRET env var > $OPENAIDY_HOME/state/install.json
+(persisted by the install script) > refusal. Running on a fresh
+install without the manifest will exit 1.
+
 Options:
   -h, --help          Show this help message
 
 Environment:
-  WS_TOKEN_SECRET       JWT signing secret (required; not the default)
+  WS_TOKEN_SECRET       JWT signing secret (overrides the manifest)
   OPENAIDY_HOME         Install root (default: ~/.openaidy)
   BOOTSTRAP_ADMIN_ENABLED   Set to 'false' to disable (default: true)
 
@@ -83,28 +84,19 @@ Examples:
 `;
 
 /**
- * Build the {@link BootstrapAdminContext} from env vars, applying the
- * same resolution rules as `resolveCLIConfig()` but reading from the
- * passed-in env so tests can isolate state.
+ * Build the {@link BootstrapAdminContext} by deferring to
+ * `resolveCLIConfig(env)` so this command and the server agree on the
+ * same JWT secret resolution precedence (env > manifest > refusal). The
+ * test-only `envOverride` parameter keeps unit tests free of global
+ * `process.env` mutation.
  */
 function buildContext(env: NodeJS.ProcessEnv): BootstrapAdminContext {
-  const jwtSecret = env.WS_TOKEN_SECRET ?? UNSAFE_DEFAULT_SECRET;
-  const enabled = env.BOOTSTRAP_ADMIN_ENABLED !== 'false';
-
-  // Honor OPENAIDY_HOME per PR1 NDQ-5; otherwise mirror the server default
-  // by passing an explicit tokenPath. The CLI's config.ts will fall back
-  // to the repo-local default when neither is set; here we surface the
-  // env override first.
-  const tokenPath =
-    env.BOOTSTRAP_ADMIN_TOKEN_PATH ??
-    (env.OPENAIDY_HOME
-      ? resolve(env.OPENAIDY_HOME, 'credentials', 'bootstrap-admin.json')
-      : resolve('.openaidy', 'credentials', 'bootstrap-admin.json'));
+  const cfg = resolveCLIConfig(env);
 
   return {
-    enabled,
-    tokenPath,
-    jwtSecret,
+    enabled: cfg.bootstrapAdminEnabled,
+    tokenPath: cfg.tokenPath,
+    jwtSecret: cfg.jwtSecret,
     clientId: DEFAULT_BOOTSTRAP_CLIENT_ID,
     tokenExpiryMs: DEFAULT_TOKEN_EXPIRY_MS,
   };
@@ -138,10 +130,10 @@ export async function initHandler(
     return { exitCode: err.exitCode, error: formatCLIError(err) };
   }
 
-  if (ctx.jwtSecret === UNSAFE_DEFAULT_SECRET) {
+  if (ctx.jwtSecret === UNSAFE_DEFAULT_JWT_SECRET) {
     const err = createCLIError(
       'INTERNAL_ERROR',
-      'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment.',
+      'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment, or run via the install script which persists the secret to $OPENAIDY_HOME/state/install.json.',
     );
     return { exitCode: err.exitCode, error: formatCLIError(err) };
   }

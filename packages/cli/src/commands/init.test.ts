@@ -262,4 +262,90 @@ describe('openaidy init', () => {
     expect(stdout).toContain('Usage:');
     expect(stdout).toContain('openaidy init');
   });
+
+  // -------------------------------------------------------------------------
+  // Manifest-fallback regression tests (the user-reported reinstall bug):
+  // `openaidy stop && curl install.sh | bash` previously caused the server
+  // to silently regenerate the bootstrap admin JWT, logging the user out.
+  // The CLI's `init` command (used by the install script) must now agree
+  // with the server on the same JWT secret precedence: explicit env > the
+  // persisted manifest at $OPENAIDY_HOME/state/install.json > refusal.
+  // -------------------------------------------------------------------------
+
+  it('uses the manifest secret when WS_TOKEN_SECRET is unset (regression: reinstall bug)', async () => {
+    vi.resetModules();
+    const { initHandler } = await import('./init.js');
+
+    // Simulate the install script having persisted the secret on a
+    // previous run.
+    await mkdir(join(tempHome, 'state'), { recursive: true });
+    await writeFile(
+      join(tempHome, 'state', 'install.json'),
+      JSON.stringify({
+        wsTokenSecret: 'persisted-install-secret',
+        generatedAt: '2024-01-01T00:00:00Z',
+      }),
+      'utf-8',
+    );
+
+    const env = {
+      OPENAIDY_HOME: tempHome,
+      BOOTSTRAP_ADMIN_ENABLED: 'true',
+      // No WS_TOKEN_SECRET — exactly the manual-init scenario.
+    } as NodeJS.ProcessEnv;
+
+    const { result, stdout } = await captureStdout(() => initHandler([], env));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.error).toBeUndefined();
+    expect(stdout).toMatch(
+      /^Bootstrap admin token: [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/,
+    );
+
+    const persisted = JSON.parse(
+      await readFile(tokenPath, 'utf-8'),
+    ) as BootstrapAdminRecord;
+    expect(persisted.token).toBeTruthy();
+  });
+
+  it('explicit WS_TOKEN_SECRET wins over the manifest', async () => {
+    vi.resetModules();
+    const { initHandler } = await import('./init.js');
+
+    await mkdir(join(tempHome, 'state'), { recursive: true });
+    await writeFile(
+      join(tempHome, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'persisted-install-secret' }),
+      'utf-8',
+    );
+
+    const env = {
+      OPENAIDY_HOME: tempHome,
+      WS_TOKEN_SECRET: 'caller-override-secret',
+      BOOTSTRAP_ADMIN_ENABLED: 'true',
+    } as NodeJS.ProcessEnv;
+
+    const { result, stdout } = await captureStdout(() => initHandler([], env));
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toMatch(/^Bootstrap admin token: /);
+  });
+
+  it('still refuses to mint when neither env nor manifest has a real secret', async () => {
+    vi.resetModules();
+    const { initHandler } = await import('./init.js');
+
+    const env = {
+      OPENAIDY_HOME: tempHome,
+      BOOTSTRAP_ADMIN_ENABLED: 'true',
+    } as NodeJS.ProcessEnv;
+
+    const { result } = await captureStdout(() => initHandler([], env));
+
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toMatch(/default JWT secret/i);
+
+    // No token file should be written.
+    await expect(stat(tokenPath)).rejects.toThrow();
+  });
 });

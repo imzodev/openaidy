@@ -1,8 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { resolve } from 'node:path';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { resolve, join } from 'node:path';
 import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import {
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+  existsSync,
+  mkdtempSync,
+} from 'node:fs';
 import { parseEnv } from './env';
 
 const workspaceRoot = resolve(
@@ -113,5 +120,77 @@ describe('parseEnv', () => {
     expect(parsed.DATABASE_URL).toBe(
       'postgres://postgres:postgres@localhost:5432/openaidy',
     );
+  });
+});
+
+describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'openaidy-env-'));
+    mkdirSync(join(home, 'state'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('uses an explicit WS_TOKEN_SECRET over the manifest', () => {
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const parsed = parseEnv({
+      OPENAIDY_HOME: home,
+      WS_TOKEN_SECRET: 'env-secret',
+    });
+    expect(parsed.WS_TOKEN_SECRET).toBe('env-secret');
+  });
+
+  it('falls back to state/install.json when WS_TOKEN_SECRET is unset', () => {
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    expect(parsed.WS_TOKEN_SECRET).toBe('manifest-secret');
+  });
+
+  it('falls back to state/install.json when WS_TOKEN_SECRET is empty', () => {
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const parsed = parseEnv({
+      OPENAIDY_HOME: home,
+      WS_TOKEN_SECRET: '',
+    });
+    expect(parsed.WS_TOKEN_SECRET).toBe('manifest-secret');
+  });
+
+  it('uses the unsafe default sentinel when neither env nor manifest has a real secret', () => {
+    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    expect(parsed.WS_TOKEN_SECRET).toBe('change-me-in-production');
+  });
+
+  it('does not regenerate the JWT when the manifest secret matches the existing token (regression test for restart bug)', () => {
+    // Reproduces the user-reported bug: on `openaidy stop && openaidy start`
+    // without WS_TOKEN_SECRET in the env, the server previously fell back to
+    // the unsafe default and BootstrapAdminManager.ensureToken() would
+    // silently regenerate the admin JWT, logging the user out.
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'install-secret-persisted' }),
+      'utf-8',
+    );
+    // No WS_TOKEN_SECRET in the env — exactly the manual restart case.
+    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    expect(parsed.WS_TOKEN_SECRET).toBe('install-secret-persisted');
+    expect(parsed.WS_TOKEN_SECRET).not.toBe('change-me-in-production');
+    // Sanity: install.json is preserved across the read.
+    expect(existsSync(join(home, 'state', 'install.json'))).toBe(true);
   });
 });

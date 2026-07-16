@@ -1,4 +1,5 @@
 export * from './env';
+export * from './jwt-secret';
 export * from './provider';
 export * from './app-config';
 

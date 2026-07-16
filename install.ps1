@@ -290,6 +290,7 @@ function Get-JwtSecret {
         try {
             $existing = Get-Content $manifestPath -Raw | ConvertFrom-Json
             if ($existing.wsTokenSecret) {
+                Log-Info "Reusing JWT signing secret from $manifestPath — the bootstrap admin token will NOT be regenerated."
                 return $existing.wsTokenSecret
             }
         } catch {
@@ -310,6 +311,7 @@ function Get-JwtSecret {
         icacls $manifestPath /inheritance:r /grant:r "$env:USERNAME:(R,W)" 2>$null | Out-Null
     } catch { }
 
+    Log-Info "Generated new JWT signing secret and persisted to $manifestPath."
     return $newSecret
 }
 

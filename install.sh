@@ -374,6 +374,7 @@ load_jwt_secret() {
         local existing
         existing=$(grep -E '"wsTokenSecret"\s*:' "$manifest" | sed -E 's/.*"wsTokenSecret"\s*:\s*"([^"]+)".*/\1/')
         if [ -n "$existing" ]; then
+            log_info "Reusing JWT signing secret from $manifest — the bootstrap admin token will NOT be regenerated."
             printf '%s' "$existing"
             return 0
         fi
@@ -390,6 +391,7 @@ load_jwt_secret() {
 EOF
     mv "$tmp_manifest" "$manifest"
     chmod 600 "$manifest"
+    log_info "Generated new JWT signing secret and persisted to $manifest."
     printf '%s' "$new_secret"
 }
 

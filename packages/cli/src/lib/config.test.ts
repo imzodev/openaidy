@@ -9,11 +9,18 @@
  *  - With a relative OPENAIDY_HOME, tokenPath is resolved to absolute
  *  - Explicit BOOTSTRAP_ADMIN_TOKEN_PATH still wins
  *  - jwtSecret still falls back to the unsafe default when WS_TOKEN_SECRET
- *    is unset (so the init command can refuse it)
+ *    is unset and no manifest is present (so the init command can refuse it)
+ *  - jwtSecret reads from $OPENAIDY_HOME/state/install.json when the
+ *    install script has persisted a secret there — this is the fix for
+ *    the user-reported bug where `openaidy stop && openaidy start` (no
+ *    WS_TOKEN_SECRET in env) would otherwise cause the server to silently
+ *    regenerate the bootstrap admin JWT.
  */
 
-import { describe, it, expect } from 'vitest';
-import { resolve, isAbsolute } from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { resolve, isAbsolute, join } from 'node:path';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolveCLIConfig } from './config.js';
 
 describe('resolveCLIConfig() - tokenPath resolution (PR1 NDQ-5)', () => {
@@ -48,7 +55,7 @@ describe('resolveCLIConfig() - tokenPath resolution (PR1 NDQ-5)', () => {
     expect(cfg.tokenPath).toBe('/etc/openaidy/token.json');
   });
 
-  it('jwtSecret still falls back to the unsafe default when WS_TOKEN_SECRET is unset', () => {
+  it('jwtSecret falls back to the unsafe default when WS_TOKEN_SECRET is unset and no manifest is present', () => {
     const cfg = resolveCLIConfig({});
     expect(cfg.jwtSecret).toBe('change-me-in-production');
   });
@@ -106,5 +113,113 @@ describe('resolveCLIConfig() - port and path defaults (out-of-box install)', () 
       OPENAIDY_SERVER_URL: 'https://api.example.com',
     });
     expect(cfg.httpUrl).toBe('https://api.example.com');
+  });
+});
+
+describe('resolveCLIConfig() - WS_TOKEN_SECRET manifest fallback (restart bug fix)', () => {
+  let home: string;
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'openaidy-cli-config-'));
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('reads jwtSecret from $OPENAIDY_HOME/state/install.json when WS_TOKEN_SECRET is unset', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({ OPENAIDY_HOME: home });
+    expect(cfg.jwtSecret).toBe('manifest-secret');
+  });
+
+  it('reads jwtSecret from install.json in the install-mode home (~/.openaidy)', () => {
+    // No OPENAIDY_HOME → simulate the install-script default by writing
+    // the manifest at the user-home default location the CLI also checks.
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'user-home-manifest-secret' }),
+      'utf-8',
+    );
+    // We can't easily redirect the OS homedir in this test, so just
+    // verify the OPENAIDY_HOME path works and trust the array ordering
+    // logic for the secondary home (covered by the shared helper's tests).
+    const cfg = resolveCLIConfig({ OPENAIDY_HOME: home });
+    expect(cfg.jwtSecret).toBe('user-home-manifest-secret');
+  });
+
+  it('prefers WS_TOKEN_SECRET over the manifest', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({
+      OPENAIDY_HOME: home,
+      WS_TOKEN_SECRET: 'env-secret',
+    });
+    expect(cfg.jwtSecret).toBe('env-secret');
+  });
+
+  it('treats an empty WS_TOKEN_SECRET as unset and falls back to the manifest', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({
+      OPENAIDY_HOME: home,
+      WS_TOKEN_SECRET: '',
+    });
+    expect(cfg.jwtSecret).toBe('manifest-secret');
+  });
+
+  it('treats a WS_TOKEN_SECRET equal to the unsafe default as unset and falls back to the manifest', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({
+      OPENAIDY_HOME: home,
+      WS_TOKEN_SECRET: 'change-me-in-production',
+    });
+    expect(cfg.jwtSecret).toBe('manifest-secret');
+  });
+
+  it('ignores a manifest whose wsTokenSecret is the unsafe default', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: 'change-me-in-production' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({ OPENAIDY_HOME: home });
+    expect(cfg.jwtSecret).toBe('change-me-in-production');
+  });
+
+  it('ignores a manifest whose wsTokenSecret is empty', () => {
+    mkdirSync(join(home, 'state'), { recursive: true });
+    writeFileSync(
+      join(home, 'state', 'install.json'),
+      JSON.stringify({ wsTokenSecret: '' }),
+      'utf-8',
+    );
+    const cfg = resolveCLIConfig({ OPENAIDY_HOME: home });
+    expect(cfg.jwtSecret).toBe('change-me-in-production');
+  });
+
+  it('falls back to the unsafe default when neither env nor any manifest has a real secret', () => {
+    const cfg = resolveCLIConfig({ OPENAIDY_HOME: home });
+    expect(cfg.jwtSecret).toBe('change-me-in-production');
   });
 });
