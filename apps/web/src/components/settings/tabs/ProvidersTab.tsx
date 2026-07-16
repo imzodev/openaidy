@@ -97,67 +97,84 @@ export function ProvidersTab(props: ProvidersTabProps) {
   // ── Disconnect impact analysis ─────────────────────────────────
   //
   // Removing a provider breaks every agent whose `model` field
-  // references it ("<providerId>/<modelId>"). The server-side
-  // config schema rejects such a state, so we have to rewire the
-  // affected agents in the same write that removes the provider.
-  // We also need to flag the cases where the user can't disconnect
-  // at all: when the target is the project default provider, or
-  // when it would leave the config with zero enabled providers.
+  // references it ("<providerId>/<modelId>"). The server-side config
+  // schema rejects such a state, so `buildRewiredConfig` rewires the
+  // affected agents in the same write that removes the provider. This
+  // helper just lists them so the confirm dialog can name them.
 
-  type DisconnectImpact = {
-    /** Agents that need to be re-pointed at the project default. */
-    affectedAgents: { id: string; name: string }[];
-    /** True when this provider is the project default. */
-    isDefaultProvider: boolean;
-    /** True when removing this provider would leave no enabled providers. */
-    isLastEnabledProvider: boolean;
-  };
-
-  const computeDisconnectImpact = (targetId: string): DisconnectImpact => {
+  const computeDisconnectImpact = (
+    targetId: string,
+  ): { affectedAgents: { id: string; name: string }[] } => {
     const cfg = props.config();
     const affectedAgents =
       cfg?.agents
-        .filter((a) => a.model.split('/')[0] === targetId)
+        .filter((a) => a.model?.split('/')[0] === targetId)
         .map((a) => ({ id: a.id, name: a.name })) ?? [];
-    const isDefaultProvider = cfg?.defaults.providerId === targetId;
-    const isLastEnabledProvider =
-      cfg?.providers.filter((p) => p.id !== targetId && p.enabled).length === 0;
-    return { affectedAgents, isDefaultProvider, isLastEnabledProvider };
+    return { affectedAgents };
   };
 
-  // Build a new AppConfig with the target provider removed and all
-  // affected agents re-pointed at the project default. Returns
-  // `null` when the impact analysis says the user must change the
-  // default provider first (in which case `canDisconnect` is the
-  // source of truth for the UI).
+  // Build a new AppConfig with the target provider removed, the project
+  // default reassigned, and every affected agent (one whose model references
+  // the removed provider) rewired. Three outcomes:
+  //   • Default still valid  → keep it; affected agents point at it.
+  //   • Default removed, others remain → promote the first remaining provider
+  //     with an enabled model to default; affected agents point at it.
+  //   • No providers remain → clear the default and make affected agents
+  //     model-less, returning the install to its unconfigured state so the
+  //     onboarding gate reappears.
+  // Always returns a valid config (never null unless config hasn't loaded).
   const buildRewiredConfig = (targetId: string): AppConfig | null => {
     const cfg = props.config();
     if (!cfg) return null;
-    const impact = computeDisconnectImpact(targetId);
-    if (impact.isDefaultProvider || impact.isLastEnabledProvider) {
-      return null;
+
+    const remaining = cfg.providers.filter((p) => p.id !== targetId);
+
+    let defaults = cfg.defaults;
+    let replacementModel: string | undefined;
+
+    const defaultStillValid =
+      !!defaults.providerId &&
+      defaults.providerId !== targetId &&
+      remaining.some((p) => p.id === defaults.providerId);
+
+    if (defaultStillValid) {
+      replacementModel = `${defaults.providerId}/${defaults.modelId}`;
+    } else {
+      const next = remaining.find(
+        (p) =>
+          p.enabled !== false && p.models?.some((m) => m.enabled !== false),
+      );
+      if (next) {
+        const model =
+          next.models.find((m) => m.enabled !== false) ?? next.models[0];
+        defaults = { ...defaults, providerId: next.id, modelId: model?.id };
+        replacementModel = model ? `${next.id}/${model.id}` : undefined;
+      } else {
+        // Back to unconfigured — drop the default provider/model entirely.
+        defaults = { agentId: defaults.agentId };
+        replacementModel = undefined;
+      }
     }
-    const fallbackModel = `${cfg.defaults.providerId}/${cfg.defaults.modelId}`;
+
     return {
       ...cfg,
-      providers: cfg.providers.filter((p) => p.id !== targetId),
-      agents: cfg.agents.map((a) =>
-        a.model.split('/')[0] === targetId ? { ...a, model: fallbackModel } : a,
-      ),
+      providers: remaining,
+      defaults,
+      agents: cfg.agents.map((a) => {
+        if (a.model?.split('/')[0] !== targetId) return a;
+        if (replacementModel) return { ...a, model: replacementModel };
+        // No provider left to point at: strip the model so the agent falls
+        // back to the (now empty) default and the config stays schema-valid.
+        const { model: _removed, ...rest } = a;
+        return rest;
+      }),
     } as AppConfig;
   };
 
-  // Can the user disconnect this provider at all? Drives the
-  // confirm button's disabled state.
-  const canDisconnect = (targetId: string): boolean => {
-    const impact = computeDisconnectImpact(targetId);
-    return !impact.isDefaultProvider && !impact.isLastEnabledProvider;
-  };
-
   // Confirmed disconnect — order matters:
-  //   1. Persist the rewired config (with provider removed and
-  //      affected agents re-pointed at the project default) so the
-  //      server-side schema accepts the write.
+  //   1. Persist the rewired config (provider removed, default reassigned or
+  //      cleared, affected agents rewired accordingly) so the server-side
+  //      schema accepts the write.
   //   2. Clear the encrypted credential server-side. The OpenAI-
   //      compatible adapter's in-memory cache is invalidated by the
   //      repository's `onChange` hook on the credential write.
@@ -166,30 +183,24 @@ export function ProvidersTab(props: ProvidersTabProps) {
   const confirmDisconnect = async () => {
     const target = disconnectTarget();
     if (!target) return;
-    if (!canDisconnect(target.id)) {
-      setDisconnectError(
-        'Set another provider as the project default before disconnecting this one.',
-      );
-      return;
-    }
     const cfg = props.config();
     const rewired = buildRewiredConfig(target.id);
     if (!rewired || !cfg) return;
 
-    // Snapshot the pre-rewire model per agent before the new
-    // config is persisted, so the notice can say "this used to be
-    // X, now it's Y" instead of just "the model changed".
-    const fallbackModel = `${cfg.defaults.providerId}/${cfg.defaults.modelId}`;
-    const rewiredAgents = cfg.agents.filter(
-      (a) => a.model.split('/')[0] === target.id,
-    );
-    const notices: RewiredAgentNotice[] = rewiredAgents.map((a) => ({
-      agentId: a.id,
-      fromProviderId: target.id,
-      fromModel: a.model,
-      toModel: fallbackModel,
-      rewiredAt: new Date().toISOString(),
-    }));
+    // Derive one notice per affected agent by comparing its model before and
+    // after the rewire. `toModel` is empty when the agent was made model-less
+    // (the last provider was removed), which the Agents tab renders as "no
+    // model set".
+    const newAgentById = new Map(rewired.agents.map((a) => [a.id, a]));
+    const notices: RewiredAgentNotice[] = cfg.agents
+      .filter((a) => a.model?.split('/')[0] === target.id)
+      .map((a) => ({
+        agentId: a.id,
+        fromProviderId: target.id,
+        fromModel: a.model ?? '',
+        toModel: newAgentById.get(a.id)?.model ?? '',
+        rewiredAt: new Date().toISOString(),
+      }));
 
     setIsDisconnecting(true);
     setDisconnectError(null);
@@ -348,9 +359,6 @@ export function ProvidersTab(props: ProvidersTabProps) {
         tone="danger"
         confirmLabel="Disconnect"
         isPending={isDisconnecting()}
-        confirmDisabled={
-          !!disconnectTarget() && !canDisconnect(disconnectTarget()!.id)
-        }
         onConfirm={confirmDisconnect}
         onCancel={() => {
           if (!isDisconnecting()) setDisconnectTarget(null);
@@ -359,6 +367,13 @@ export function ProvidersTab(props: ProvidersTabProps) {
           <Show when={disconnectTarget()} keyed>
             {(target) => {
               const impact = computeDisconnectImpact(target.id);
+              const rewired = buildRewiredConfig(target.id);
+              // After removal, is the install left with no configured default
+              // (i.e. this was the only provider)? Then we return to setup.
+              const becomesUnconfigured = !rewired?.defaults.providerId;
+              const newDefault = rewired?.defaults.providerId
+                ? `${rewired.defaults.providerId}/${rewired.defaults.modelId}`
+                : '';
               return (
                 <div class="space-y-2">
                   <p>
@@ -379,27 +394,20 @@ export function ProvidersTab(props: ProvidersTabProps) {
                         </For>
                       </ul>
                       <p class="mt-1">
-                        They will be re-pointed at the project default model (
-                        <code class="font-mono">
-                          {props.config()?.defaults.providerId}/
-                          {props.config()?.defaults.modelId}
-                        </code>
-                        ).
+                        <Show
+                          when={!becomesUnconfigured}
+                          fallback="They will be left without a model until you connect another provider."
+                        >
+                          They will be re-pointed at{' '}
+                          <code class="font-mono">{newDefault}</code>.
+                        </Show>
                       </p>
                     </div>
                   </Show>
-                  <Show when={impact.isDefaultProvider}>
-                    <div class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
-                      This provider is your project default. Set another
-                      provider as default in the Configuration defaults before
-                      disconnecting.
-                    </div>
-                  </Show>
-                  <Show when={impact.isLastEnabledProvider}>
-                    <div class="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2 text-xs text-red-700 dark:text-red-300">
-                      This is the only enabled provider. Enable another provider
-                      first or the configuration would be left with no usable
-                      model.
+                  <Show when={becomesUnconfigured}>
+                    <div class="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2 text-xs text-blue-700 dark:text-blue-300">
+                      This is your only configured provider. Disconnecting takes
+                      you back to the setup screen to connect another.
                     </div>
                   </Show>
                   <Show when={disconnectError()}>

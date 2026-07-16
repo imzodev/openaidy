@@ -306,7 +306,10 @@ export type AgentConfig = {
   enabled?: boolean;
   description?: string;
   systemPrompt: string;
-  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini". Optional: a
+  // model-less agent inherits the config default (set once the first provider
+  // is connected during onboarding).
+  model?: string;
   tools?: string[];
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -317,8 +320,10 @@ export type AgentConfig = {
  * Application defaults
  */
 export type AppDefaults = {
-  providerId: string;
-  modelId: string;
+  // Optional to represent an unconfigured install (no providers yet). Both are
+  // set once the first provider is connected during onboarding.
+  providerId?: string;
+  modelId?: string;
   agentId: string;
 };
 

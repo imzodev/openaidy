@@ -209,18 +209,24 @@ export class DispatchService {
       };
     }
 
-    // Parse model string "providerId/modelId"
-    const modelParts = agent.model.split('/');
-    if (modelParts.length !== 2 || !modelParts[0] || !modelParts[1]) {
-      return {
-        error: {
-          code: 'agent.model_invalid',
-          message: `Invalid model format "${agent.model}" for agent "${agentId}". Expected "providerId/modelId"`,
-        },
-      };
+    // Parse the agent's model string "providerId/modelId" when set. A
+    // model-less agent (fresh install) leaves these undefined and falls back
+    // to the per-run overrides / system defaults resolved below.
+    let agentProviderId: string | undefined;
+    let agentModelId: string | undefined;
+    if (agent.model !== undefined) {
+      const modelParts = agent.model.split('/');
+      if (modelParts.length !== 2 || !modelParts[0] || !modelParts[1]) {
+        return {
+          error: {
+            code: 'agent.model_invalid',
+            message: `Invalid model format "${agent.model}" for agent "${agentId}". Expected "providerId/modelId"`,
+          },
+        };
+      }
+      agentProviderId = modelParts[0];
+      agentModelId = modelParts[1];
     }
-    const agentProviderId = modelParts[0];
-    const agentModelId = modelParts[1];
 
     // Resolution precedence
     const providerId =

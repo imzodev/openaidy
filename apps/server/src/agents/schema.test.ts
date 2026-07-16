@@ -28,14 +28,19 @@ describe('AgentSchema', () => {
     expect(agent.model).toBe('openai/gpt-4o-mini');
   });
 
-  it('should require model field', () => {
+  it('should allow a model-less agent (inherits the config default)', () => {
+    // A fresh install ships an agent with no model; it resolves to the
+    // config default provider/model at runtime once a provider is connected.
     const result = AgentSchema.safeParse({
       id: 'test-agent',
       name: 'Test Agent',
       enabled: true,
       systemPrompt: 'You are a test assistant.',
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.model).toBeUndefined();
+    }
   });
 
   it('should allow optional fields', () => {

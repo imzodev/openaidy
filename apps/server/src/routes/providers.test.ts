@@ -87,7 +87,9 @@ describe('Provider Routes', { timeout: 15000 }, () => {
   });
 
   describe('GET /providers', () => {
-    it('should return providers from config template', async () => {
+    it('should return an empty provider list on a fresh install', async () => {
+      // The shipped template configures no providers — a fresh install starts
+      // unconfigured and the user connects a provider via onboarding.
       const response = await app.inject({
         method: 'GET',
         url: '/api/providers',
@@ -96,7 +98,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body).toHaveProperty('providers');
-      expect(body.providers.length).toBeGreaterThanOrEqual(3);
+      expect(body.providers).toHaveLength(0);
     });
 
     it('should return providers list with enabled filter', async () => {
@@ -126,7 +128,8 @@ describe('Provider Routes', { timeout: 15000 }, () => {
       expect(['healthy', 'degraded', 'unhealthy']).toContain(body.status);
     });
 
-    it('should return health status from config template providers', async () => {
+    it('should report unhealthy on a fresh install with no providers', async () => {
+      // With no providers configured, there is nothing to be healthy.
       const response = await app.inject({
         method: 'GET',
         url: '/api/providers/health',
@@ -134,7 +137,8 @@ describe('Provider Routes', { timeout: 15000 }, () => {
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(['healthy', 'degraded']).toContain(body.status);
+      expect(body.status).toBe('unhealthy');
+      expect(body.providers).toHaveLength(0);
     });
   });
 

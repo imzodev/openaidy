@@ -240,7 +240,10 @@ export const appAgentConfigSchema = z.object({
   enabled: z.boolean().optional().default(true),
   description: z.string().optional(),
   systemPrompt: z.string().min(1),
-  model: z.string().min(1), // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini". Optional so a
+  // fresh install can ship an agent with no model; it inherits the config
+  // default (which onboarding sets once the first provider is connected).
+  model: z.string().min(1).optional(),
   tools: z.array(z.string()).optional(),
   mcpServers: z.array(appAgentMcpServerRefSchema).optional(),
   tags: z.array(z.string()).optional(),
@@ -251,8 +254,11 @@ export const appAgentConfigSchema = z.object({
 });
 
 export const appDefaultsSchema = z.object({
-  providerId: z.string().min(1),
-  modelId: z.string().min(1),
+  // providerId/modelId are optional to represent an "unconfigured" install
+  // (no providers yet). Once the first provider is connected via onboarding,
+  // these are set. agentId is always required (there is always >=1 agent).
+  providerId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
   agentId: z.string().min(1),
 });
 
@@ -272,7 +278,8 @@ export const appConfigSchema = z
   .object({
     version: z.number().int().positive().default(1),
     defaults: appDefaultsSchema,
-    providers: z.array(appProviderConfigSchema).min(1),
+    // May be empty on a fresh install; providers are added via onboarding.
+    providers: z.array(appProviderConfigSchema),
     agents: z.array(appAgentConfigSchema).min(1),
     mcpServers: z.array(mcpServerConfigSchema).optional(),
     channels: z.array(channelConfigSchema).optional(),
@@ -281,7 +288,6 @@ export const appConfigSchema = z
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();
-    const enabledProviderIds = new Set<string>();
     const providerModels = new Map<string, Set<string>>();
     const providerEnabledModels = new Map<string, Set<string>>();
 
@@ -294,9 +300,6 @@ export const appConfigSchema = z
         });
       }
       providerIds.add(provider.id);
-      if (provider.enabled) {
-        enabledProviderIds.add(provider.id);
-      }
 
       const modelIds = new Set<string>();
       const enabledModelIds = new Set<string>();
@@ -350,67 +353,90 @@ export const appConfigSchema = z
         enabledAgentIds.add(agent.id);
       }
 
-      // Validate model format "providerId/modelId"
-      const modelParts = agent.model.split('/');
-      if (modelParts.length !== 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['agents', agentIndex, 'model'],
-          message: `Invalid model format "${agent.model}". Expected "providerId/modelId"`,
-        });
-      } else {
-        const providerId = modelParts[0]!;
-        const modelId = modelParts[1]!;
-        if (!providerIds.has(providerId)) {
+      // Validate model format "providerId/modelId" only when a model is set.
+      // A model-less agent inherits the config default at runtime, so there is
+      // nothing to validate here (and it must not fail on an empty install).
+      if (agent.model !== undefined) {
+        const modelParts = agent.model.split('/');
+        if (modelParts.length !== 2) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: ['agents', agentIndex, 'model'],
-            message: `Unknown provider "${providerId}" for agent "${agent.id}"`,
+            message: `Invalid model format "${agent.model}". Expected "providerId/modelId"`,
           });
         } else {
-          const models = providerModels.get(providerId);
-          if (!models?.has(modelId)) {
+          const providerId = modelParts[0]!;
+          const modelId = modelParts[1]!;
+          if (!providerIds.has(providerId)) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
               path: ['agents', agentIndex, 'model'],
-              message: `Unknown model "${modelId}" for provider "${providerId}"`,
+              message: `Unknown provider "${providerId}" for agent "${agent.id}"`,
             });
-          } else if (!providerEnabledModels.get(providerId)?.has(modelId)) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              path: ['agents', agentIndex, 'model'],
-              message: `Model "${modelId}" is disabled in provider "${providerId}"`,
-            });
+          } else {
+            const models = providerModels.get(providerId);
+            if (!models?.has(modelId)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['agents', agentIndex, 'model'],
+                message: `Unknown model "${modelId}" for provider "${providerId}"`,
+              });
+            } else if (!providerEnabledModels.get(providerId)?.has(modelId)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['agents', agentIndex, 'model'],
+                message: `Model "${modelId}" is disabled in provider "${providerId}"`,
+              });
+            }
           }
         }
       }
     });
 
-    if (!providerIds.has(config.defaults.providerId)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['defaults', 'providerId'],
-        message: `Unknown default provider "${config.defaults.providerId}"`,
-      });
-    }
+    // Only validate the default provider/model when they are set. An
+    // unconfigured install leaves both undefined until onboarding connects a
+    // provider. If one is set, both must be set and must resolve.
+    const { providerId: defaultProviderId, modelId: defaultModelId } =
+      config.defaults;
+    if (defaultProviderId !== undefined || defaultModelId !== undefined) {
+      if (defaultProviderId === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['defaults', 'providerId'],
+          message: 'A default provider is required when a default model is set',
+        });
+      } else if (defaultModelId === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['defaults', 'modelId'],
+          message: 'A default model is required when a default provider is set',
+        });
+      } else {
+        if (!providerIds.has(defaultProviderId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['defaults', 'providerId'],
+            message: `Unknown default provider "${defaultProviderId}"`,
+          });
+        }
 
-    const defaultModels = providerModels.get(config.defaults.providerId);
-    if (!defaultModels?.has(config.defaults.modelId)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['defaults', 'modelId'],
-        message: `Unknown default model "${config.defaults.modelId}" for provider "${config.defaults.providerId}"`,
-      });
-    } else if (
-      !providerEnabledModels
-        .get(config.defaults.providerId)
-        ?.has(config.defaults.modelId)
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['defaults', 'modelId'],
-        message: `Default model "${config.defaults.modelId}" is disabled in provider "${config.defaults.providerId}"`,
-      });
+        const defaultModels = providerModels.get(defaultProviderId);
+        if (!defaultModels?.has(defaultModelId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['defaults', 'modelId'],
+            message: `Unknown default model "${defaultModelId}" for provider "${defaultProviderId}"`,
+          });
+        } else if (
+          !providerEnabledModels.get(defaultProviderId)?.has(defaultModelId)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['defaults', 'modelId'],
+            message: `Default model "${defaultModelId}" is disabled in provider "${defaultProviderId}"`,
+          });
+        }
+      }
     }
 
     if (!agentIds.has(config.defaults.agentId)) {
@@ -421,13 +447,10 @@ export const appConfigSchema = z
       });
     }
 
-    if (enabledProviderIds.size === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['providers'],
-        message: 'At least one provider must be enabled',
-      });
-    }
+    // No "at least one enabled provider" check: a fresh install ships with
+    // zero providers and the user connects one via onboarding. When providers
+    // ARE present but all disabled, that is still a valid (unusable) state and
+    // is surfaced to the user through the provider connection UI instead.
 
     if (enabledAgentIds.size === 0) {
       ctx.addIssue({
