@@ -36,6 +36,7 @@ const createMockTaskService = () => ({
   getTaskAgents: vi.fn(),
   createSubtask: vi.fn(),
   getSubtasks: vi.fn(),
+  updateSubtask: vi.fn(),
   updateSubtaskStatus: vi.fn(),
   assignSubtaskAgent: vi.fn(),
   setSubtaskResult: vi.fn(),
@@ -132,6 +133,8 @@ describe('taskRoutes', () => {
     expect(registeredRoutes).toContain('GET /tasks/:taskId/progress');
     expect(registeredRoutes).toContain('GET /tasks/:id/subtasks');
     expect(registeredRoutes).toContain('POST /tasks/:id/plan');
+    expect(registeredRoutes).toContain('PATCH /subtasks/:id');
+    expect(registeredRoutes).toContain('POST /subtasks/:id/assign');
   });
 
   describe('GET /tasks', () => {
@@ -575,6 +578,207 @@ describe('taskRoutes', () => {
 
       expect((result as { ok: boolean; data: unknown[] }).ok).toBe(true);
       expect((result as { ok: boolean; data: unknown[] }).data).toHaveLength(1);
+    });
+  });
+
+  describe('PATCH /subtasks/:id', () => {
+    async function setupWithMock() {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      const route = app._routes.find(
+        (r) => r.method === 'PATCH' && r.url === '/subtasks/:id',
+      );
+      return route!;
+    }
+
+    it('updates a subtask and returns the updated record', async () => {
+      const route = await setupWithMock();
+      mockService.updateSubtask.mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'sub1',
+          taskId: 'task1',
+          parentSubtaskId: '',
+          title: 'updated title',
+          description: 'updated description',
+          status: 'pending',
+          assignedAgentId: null,
+          sessionId: null,
+          orderIndex: 0,
+          result: null,
+          retryCount: 0,
+          pendingVerificationResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        {
+          params: { id: 'sub1' },
+          body: { description: 'updated description' },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(mockService.updateSubtask).toHaveBeenCalledWith('sub1', {
+        description: 'updated description',
+      });
+      expect(reply.code).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the subtask does not exist', async () => {
+      const route = await setupWithMock();
+      mockService.updateSubtask.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: 'Subtask "missing" not found',
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'missing' }, body: { description: 'whatever' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(404);
+    });
+
+    it('returns 400 when no editable field is supplied', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: {} },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.updateSubtask).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when description is an empty string', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { description: '   ' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.updateSubtask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /subtasks/:id/assign', () => {
+    async function setupWithMock() {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/subtasks/:id/assign',
+      );
+      return route!;
+    }
+
+    it('reassigns the agent and returns the updated subtask', async () => {
+      const route = await setupWithMock();
+      mockService.assignSubtaskAgent.mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'sub1',
+          taskId: 'task1',
+          parentSubtaskId: '',
+          title: 'sub',
+          description: 'desc',
+          status: 'pending',
+          assignedAgentId: 'agent2',
+          sessionId: null,
+          orderIndex: 0,
+          result: null,
+          retryCount: 0,
+          pendingVerificationResult: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { agentId: 'agent2' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(mockService.assignSubtaskAgent).toHaveBeenCalledWith(
+        'sub1',
+        'agent2',
+      );
+      expect(reply.code).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the subtask does not exist', async () => {
+      const route = await setupWithMock();
+      mockService.assignSubtaskAgent.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: 'Subtask "missing" not found',
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'missing' }, body: { agentId: 'agent1' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(404);
+    });
+
+    it('returns 400 when the agent does not exist', async () => {
+      const route = await setupWithMock();
+      mockService.assignSubtaskAgent.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'agent.not_found',
+          message: 'Agent "ghost" not found',
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { agentId: 'ghost' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 when agentId is missing from the body', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: {} },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.assignSubtaskAgent).not.toHaveBeenCalled();
     });
   });
 });
