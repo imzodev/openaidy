@@ -444,13 +444,31 @@ export type ProviderConfig =
   | GeminiProviderConfig;
 
 /**
+ * A configured messaging channel. WhatsApp is the only type today; the shape
+ * mirrors `whatsappChannelConfigSchema` in packages/config.
+ */
+export type WhatsAppChannelConfig = {
+  type: 'whatsapp';
+  id: string;
+  agentId: string;
+  allowlist?: string[];
+  enabled?: boolean;
+};
+
+export type ChannelConfig = WhatsAppChannelConfig;
+
+/**
  * Application configuration
+ *
+ * `channels` (and `mcpServers`, not modelled here) round-trip through the raw
+ * config JSON; `channels` is typed so the UI can add/remove entries safely.
  */
 export type AppConfig = {
   version: number;
   defaults: AppDefaults;
   providers: ProviderConfig[];
   agents: AgentConfig[];
+  channels?: ChannelConfig[];
 };
 
 /**

@@ -75,6 +75,7 @@ export type {
   UpdateMcpServerRequest,
   ImportMcpServersRequest,
   ChannelStatusResponse,
+  ChannelConfig,
 } from './types';
 
 export { ApiRequestError } from '@openaidy/shared-types';
@@ -122,6 +123,7 @@ import type {
   UpdateMcpServerRequest,
   ImportMcpServersRequest,
   ChannelStatusResponse,
+  ChannelConfig,
 } from './types';
 
 /**
@@ -1274,6 +1276,63 @@ export async function disconnectChannel(id: string): Promise<void> {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
+}
+
+/**
+ * Add a WhatsApp channel to the config. Reads the current config, appends the
+ * new channel entry, and persists it via the config PUT — the server then
+ * reconciles it into the live channel registry, so the caller can immediately
+ * `connectChannel(id)` to start the QR pairing flow without a restart.
+ *
+ * Throws if the id already exists or the config write fails.
+ */
+export async function addWhatsAppChannel(input: {
+  id: string;
+  agentId: string;
+  allowlist?: string[];
+}): Promise<void> {
+  const current = await getConfig();
+  if (!('config' in current)) {
+    throw new Error('Failed to load config');
+  }
+  const config = current.config;
+  const channels = config.channels ?? [];
+  if (channels.some((c) => c.id === input.id)) {
+    throw new Error(`A channel with id "${input.id}" already exists`);
+  }
+  const entry: ChannelConfig = {
+    type: 'whatsapp',
+    id: input.id,
+    agentId: input.agentId,
+    enabled: true,
+    ...(input.allowlist && input.allowlist.length > 0
+      ? { allowlist: input.allowlist }
+      : {}),
+  };
+  const result = await updateConfig({
+    ...config,
+    channels: [...channels, entry],
+  });
+  if ('error' in result) {
+    throw new Error(`Failed to save channel: ${result.error}`);
+  }
+}
+
+/**
+ * Remove a channel from the config by id. The server reconciles the live
+ * registry, disconnecting and dropping the channel.
+ */
+export async function removeChannel(id: string): Promise<void> {
+  const current = await getConfig();
+  if (!('config' in current)) {
+    throw new Error('Failed to load config');
+  }
+  const config = current.config;
+  const channels = (config.channels ?? []).filter((c) => c.id !== id);
+  const result = await updateConfig({ ...config, channels });
+  if ('error' in result) {
+    throw new Error(`Failed to remove channel: ${result.error}`);
+  }
 }
 
 // ============================================================================
