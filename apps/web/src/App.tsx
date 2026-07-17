@@ -486,6 +486,20 @@ function AppContent(props: AppContentProps) {
     return !configured;
   };
 
+  // Effective model ("providerId/modelId") for the active agent: the agent's
+  // own model, or the project default when the agent is model-less. Shown in
+  // the RunList header next to the session's usage totals.
+  const effectiveModel = (): string | undefined => {
+    const agent = agents().find((a) => a.id === effectiveAgentId());
+    if (agent?.model) return agent.model;
+    const data = configGateQuery.data;
+    const cfg = data && 'config' in data ? data.config : undefined;
+    const d = cfg?.defaults;
+    return d?.providerId && d?.modelId
+      ? `${d.providerId}/${d.modelId}`
+      : undefined;
+  };
+
   // Create session mutation
   const createSessionMutation = createMutation(() => ({
     mutationFn: (title: string) => createSession(title),
@@ -1019,6 +1033,7 @@ function AppContent(props: AppContentProps) {
                 isLoading={runsQuery.isLoading}
                 error={runsQuery.error?.message}
                 sessionId={selectedSessionId()}
+                model={effectiveModel()}
                 onRunClick={(firstMessageId) => {
                   if (firstMessageId) {
                     setScrollToMessageId(firstMessageId);
