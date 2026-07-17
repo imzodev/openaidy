@@ -9,6 +9,10 @@ import { signAssetToken, verifyAssetToken } from '../lib/asset-token';
 import { createAddonService } from '../addons/service';
 import type { AddonsRepository } from '@openaidy/db';
 import type { ManifestValidator } from '../addons/manifest-validator';
+import {
+  parseComponentManifest,
+  type ComponentManifest,
+} from '../addons/component-manifest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,6 +21,18 @@ const ADMIN_SCOPE = '*';
 // Asset tokens are short-lived; the addon's static assets all load within
 // seconds of the iframe navigation, so a small window is plenty.
 const ASSET_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The Tailwind Play CDN origin every addon's `index.html` auto-loads (see
+ * `tools/addons/create.ts`). This is a fixed PLATFORM allowance, not derived
+ * from a given addon's `externalDomains` — those only ever feed
+ * `connect-src`/`img-src` (fetch/XHR and images), never `script-src`, and we
+ * deliberately don't widen `script-src` to arbitrary addon-declared domains
+ * (an addon declaring an API host for fetch() should not thereby also be
+ * allowed to load a <script> from that same host). Tailwind is a built-in
+ * platform feature every addon gets, so it gets its own explicit allowance.
+ */
+const TAILWIND_CDN_ORIGIN = 'https://cdn.tailwindcss.com';
 
 /**
  * Append an asset token to a same-origin subresource URL. External, absolute,
@@ -407,6 +423,29 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       .send(fs.readFileSync(sdkPath));
   });
 
+  // GET /sdk/components.json - Serve the sdk.ui.* component manifest, parsed
+  // from @component JSDoc blocks in openaidy-sdk.js. Not asset-token gated —
+  // this is documentation, not a credential, same as GET /info. Cached after
+  // the first parse: the SDK file doesn't change within a server's lifetime.
+  let componentManifestCache: ComponentManifest | null = null;
+  app.get('/sdk/components.json', async (_request, reply) => {
+    if (!componentManifestCache) {
+      const sdkPath =
+        process.env['OPENAIDY_SDK_PATH'] ??
+        path.join(__dirname, '../sdk/openaidy-sdk.js');
+      if (!fs.existsSync(sdkPath)) {
+        return reply.code(404).send({ error: 'SDK not found' });
+      }
+      componentManifestCache = parseComponentManifest(
+        fs.readFileSync(sdkPath, 'utf-8'),
+      );
+    }
+    return reply
+      .header('Access-Control-Allow-Origin', '*')
+      .header('Cache-Control', 'no-cache, no-store, must-revalidate')
+      .send(componentManifestCache);
+  });
+
   // GET /addons/:addonId/* - Serve addon static files
   app.get<{ Params: { addonId: string; '*': string } }>(
     '/addons/:addonId/*',
@@ -498,6 +537,7 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         "'unsafe-inline'",
         ...(requestHost ? [`http://${requestHost}`] : []),
         `http://localhost:${env.PORT}`,
+        TAILWIND_CDN_ORIGIN,
       ];
       const scriptSrc = scriptSrcOrigins.join(' ');
 

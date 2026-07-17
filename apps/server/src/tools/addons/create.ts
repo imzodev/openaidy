@@ -47,6 +47,32 @@ function isValidId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/.test(id);
 }
 
+// ── Tailwind CDN auto-injection ────────────────────────────────────────────
+//
+// Every addon gets Tailwind CSS for free — the agent should never have to
+// remember to add it. We inject the plain (unversioned) Play CDN script,
+// which always serves the latest Tailwind v3; a specific release can be
+// pinned later by appending "/<version>" to the URL, once that path format
+// is verified against the currently-shipped version (not done here, since it
+// isn't checkable without network access at authoring time, and a wrong pin
+// would silently 404 every addon's styling).
+const TAILWIND_CDN_URL = 'https://cdn.tailwindcss.com';
+const TAILWIND_CDN_HOST = 'cdn.tailwindcss.com';
+const SDK_SCRIPT_TAG = '<script src="/sdk/openaidy-sdk.js">';
+
+/**
+ * Inject the Tailwind CDN <script> tag into an addon's index.html, right
+ * before the (already-validated) SDK script tag. Idempotent — a no-op if the
+ * agent already included the tag itself.
+ */
+function injectTailwindCdn(html: string): string {
+  if (html.includes(TAILWIND_CDN_HOST)) return html;
+  return html.replace(
+    SDK_SCRIPT_TAG,
+    `<script src="${TAILWIND_CDN_URL}"></script>\n  ${SDK_SCRIPT_TAG}`,
+  );
+}
+
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
 
 function sdkBootstrapSnippet(): string {
@@ -130,6 +156,18 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'Then at the top of app/index.js:',
       '',
       sdkBootstrapSnippet(),
+      '',
+      '',
+      'STYLING: TAILWIND CSS + sdk.ui.* COMPONENTS',
+      '────────────────────────────────────────────',
+      'Tailwind CSS is auto-injected into every addon — use utility classes freely,',
+      'no setup needed. For common UI (cards, buttons, tables, dialogs, forms, toasts,',
+      'etc.) prefer the built-in sdk.ui.* component library over hand-rolled HTML: it is',
+      'accessible (ARIA, keyboard nav, focus management), responsive, and already styled',
+      'to match the platform. Every sdk.ui.* method returns a real HTMLElement — build it',
+      'and append it, e.g. document.body.appendChild(sdk.ui.card({ title: "Hi" })).',
+      'See the UI section of the reference below for the full list with parameters, or',
+      'fetch GET /sdk/components.json at runtime for a machine-readable manifest.',
       '',
       '',
       'EXTERNAL DOMAINS (required when using fetch())',
@@ -423,7 +461,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             error: `File "${filePath}" must have string content`,
           };
         }
-        extraFiles[filePath] = content;
+        extraFiles[filePath] =
+          filePath === 'app/index.html' ? injectTailwindCdn(content) : content;
       }
 
       // ── Validate externalDomains: detect undeclared external fetch() calls ─
@@ -461,12 +500,19 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
 
       // ── Step 1: scaffold files via shared template generator ─────────────
 
+      // The Tailwind CDN <script> is auto-injected above; document it in the
+      // manifest's externalDomains too (informational — script-src for it is
+      // enforced as a fixed platform allowance, see routes/addons.ts).
+      const externalDomainsWithTailwind = Array.from(
+        new Set([...(externalDomains ?? []), TAILWIND_CDN_HOST]),
+      );
+
       const generated = await generateFromTemplate(template, addonDir, {
         name,
         id,
         description,
         permissions: permissions as string[],
-        ...(externalDomains ? { externalDomains } : {}),
+        externalDomains: externalDomainsWithTailwind,
         ...(externalImageDomains ? { externalImageDomains } : {}),
       });
 

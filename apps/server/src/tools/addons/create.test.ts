@@ -323,7 +323,7 @@ OpenAidy.ready(function(sdk) {
     expect(manifest.version).toBe('1.0.0');
   });
 
-  it('writes app/index.html from files param', async () => {
+  it('writes app/index.html from files param (with Tailwind CDN auto-injected)', async () => {
     await tool.execute(VALID_ARGS, {
       agentId: 'agent',
       sessionId: 'test-session',
@@ -331,7 +331,76 @@ OpenAidy.ready(function(sdk) {
     const htmlPath = path.join(addonsDir, 'my-addon', 'app', 'index.html');
     expect(fs.existsSync(htmlPath)).toBe(true);
     const html = fs.readFileSync(htmlPath, 'utf-8');
-    expect(html).toBe(VALID_HTML);
+    // The Tailwind <script> is injected right before the SDK script tag (see
+    // 'auto-injects the Tailwind CDN script tag' below); everything else is
+    // written verbatim.
+    expect(html).toBe(
+      VALID_HTML.replace(
+        '<script src="/sdk/openaidy-sdk.js">',
+        '<script src="https://cdn.tailwindcss.com"></script>\n  <script src="/sdk/openaidy-sdk.js">',
+      ),
+    );
+  });
+
+  it('auto-injects the Tailwind CDN script tag before the SDK script tag', async () => {
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
+    const htmlPath = path.join(addonsDir, 'my-addon', 'app', 'index.html');
+    const html = fs.readFileSync(htmlPath, 'utf-8');
+    expect(html).toContain('<script src="https://cdn.tailwindcss.com">');
+    expect(html.indexOf('cdn.tailwindcss.com')).toBeLessThan(
+      html.indexOf('/sdk/openaidy-sdk.js'),
+    );
+  });
+
+  it('does not duplicate the Tailwind tag if the agent already included it', async () => {
+    const htmlWithTailwind = VALID_HTML.replace(
+      '<script src="/sdk/openaidy-sdk.js">',
+      '<script src="https://cdn.tailwindcss.com"></script><script src="/sdk/openaidy-sdk.js">',
+    );
+    await tool.execute(
+      {
+        ...VALID_ARGS,
+        files: { ...VALID_ARGS.files, 'app/index.html': htmlWithTailwind },
+      },
+      { agentId: 'agent', sessionId: 'test-session' },
+    );
+    const htmlPath = path.join(addonsDir, 'my-addon', 'app', 'index.html');
+    const html = fs.readFileSync(htmlPath, 'utf-8');
+    expect(html.match(/cdn\.tailwindcss\.com/g)?.length).toBe(1);
+  });
+
+  it('auto-adds cdn.tailwindcss.com to addon.json externalDomains', async () => {
+    await tool.execute(VALID_ARGS, {
+      agentId: 'agent',
+      sessionId: 'test-session',
+    });
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(addonsDir, 'my-addon', 'addon.json'), 'utf-8'),
+    );
+    expect(manifest.externalDomains).toContain('cdn.tailwindcss.com');
+  });
+
+  it('keeps agent-declared externalDomains alongside the auto-added Tailwind host', async () => {
+    const jsWithFetch = `window.parent.postMessage({ type: 'ADDON_READY' }, '*');
+OpenAidy.ready(function(sdk) {
+  fetch('https://api.example.com/data').then(r => r.json());
+});`;
+    await tool.execute(
+      {
+        ...VALID_ARGS,
+        externalDomains: ['api.example.com'],
+        files: { ...VALID_ARGS.files, 'app/index.js': jsWithFetch },
+      },
+      { agentId: 'agent', sessionId: 'test-session' },
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(addonsDir, 'my-addon', 'addon.json'), 'utf-8'),
+    );
+    expect(manifest.externalDomains).toContain('api.example.com');
+    expect(manifest.externalDomains).toContain('cdn.tailwindcss.com');
   });
 
   it('writes app/index.js from files param', async () => {
@@ -473,11 +542,22 @@ OpenAidy.ready(function(sdk) {
 // ── sdk-reference integration ──────────────────────────────────────────────────
 
 describe('sdk-reference', () => {
-  it('every SDK_METHOD has a proxyPath starting with /api/addon-proxy/', async () => {
+  it('every non-UI SDK_METHOD has a proxyPath starting with /api/addon-proxy/', async () => {
     const { SDK_METHODS } = await import('../../addons/sdk-reference.js');
     for (const method of SDK_METHODS) {
-      if (method.name === 'request') continue;
+      if (method.name === 'request' || method.category === 'UI') continue;
       expect(method.proxyPath).toMatch(/^\/api\/addon-proxy\//);
+    }
+  });
+
+  it('UI components have no proxyPath/httpMethod — pure client-side, no server round-trip', async () => {
+    const { SDK_METHODS } = await import('../../addons/sdk-reference.js');
+    const uiMethods = SDK_METHODS.filter((m) => m.category === 'UI');
+    expect(uiMethods.length).toBe(25);
+    for (const m of uiMethods) {
+      expect(m.proxyPath).toBeUndefined();
+      expect(m.httpMethod).toBeUndefined();
+      expect(m.requiredPermission).toBeUndefined();
     }
   });
 
