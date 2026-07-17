@@ -11,6 +11,7 @@ import {
   appConfigSchema,
   envSecret,
   type AppProviderConfig,
+  type ChannelConfig,
   type McpServerConfig,
   type OpenAidyAppConfig,
   type ProviderConfig,
@@ -41,6 +42,9 @@ export class AppConfigService {
   private readonly credentialProvider: CredentialProvider | undefined;
   private currentConfig: OpenAidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
+  private channelReconciler:
+    | ((channels: ChannelConfig[] | undefined) => void | Promise<void>)
+    | undefined;
 
   constructor(options: AppConfigServiceOptions) {
     this.configPath = options.configPath;
@@ -48,6 +52,20 @@ export class AppConfigService {
     this.providers = options.providers;
     this.agents = options.agents;
     this.credentialProvider = options.credentialProvider;
+  }
+
+  /**
+   * Register a callback that syncs the live channel registry to the persisted
+   * `config.channels` after every {@link save}. Set once at startup (the
+   * registry is built after this service is constructed, hence a setter rather
+   * than a constructor option). Without it, a channel added/removed via the
+   * config PUT would not take effect until a restart. Kept as an injected
+   * callback so this config module stays free of channel/WhatsApp internals.
+   */
+  setChannelReconciler(
+    reconcile: (channels: ChannelConfig[] | undefined) => void | Promise<void>,
+  ): void {
+    this.channelReconciler = reconcile;
   }
 
   getConfig(): OpenAidyAppConfig {
@@ -158,6 +176,14 @@ export class AppConfigService {
     this.writeConfigFile(parsed);
     await this.applyConfig(parsed);
     this.currentConfig = parsed;
+    // Sync runtime channels to the freshly-saved config (registers new
+    // channels, disconnects+removes deleted ones) so UI changes take effect
+    // without a restart. applyConfig handles agents/providers; channels are
+    // reconciled here via the injected callback to keep this module decoupled
+    // from channel internals.
+    if (this.channelReconciler) {
+      await this.channelReconciler(parsed.channels);
+    }
     return parsed;
   }
 

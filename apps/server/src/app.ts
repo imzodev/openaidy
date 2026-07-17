@@ -81,7 +81,10 @@ import { createSkillRegistry } from './skills';
 import { skillRoutes } from './routes/skills';
 import { seedBundledSkills } from './skills/seed';
 import { createAgentPersonalityService } from './agents/personality-service';
-import { createChannelRegistry } from './channels/index.js';
+import {
+  createChannelRegistry,
+  reconcileChannelRegistry,
+} from './channels/index.js';
 import { PulseService } from './pulses/service.js';
 import { channelRoutes } from './routes/channels.js';
 import path from 'node:path';
@@ -364,13 +367,20 @@ export async function buildApp() {
   });
 
   // Create and wire channel registry
+  const channelDeps = {
+    sessionService,
+    authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
+    logger: log as unknown as FastifyBaseLogger,
+  };
   const channelRegistry = createChannelRegistry(
     configService.getConfig().channels,
-    {
-      sessionService,
-      authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
-      logger: log as unknown as FastifyBaseLogger,
-    },
+    channelDeps,
+  );
+
+  // Keep the live registry in sync when the config is saved (e.g. a WhatsApp
+  // channel added/removed from the UI), so it works without a restart.
+  configService.setChannelReconciler((channels) =>
+    reconcileChannelRegistry(channelRegistry, channels, channelDeps),
   );
 
   // Auto-connect enabled channels (non-blocking)
