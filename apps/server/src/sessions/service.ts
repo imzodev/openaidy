@@ -502,6 +502,20 @@ export class SessionMessageService {
   }
 
   /**
+   * Per-session usage totals for every session with succeeded runs, in one
+   * query. Used to show usage on the sessions list without an N+1 fan-out.
+   * Empty when no DB store.
+   */
+  async getUsageBySession(): Promise<
+    Array<import('@openaidy/db').SessionUsageTotals & { sessionId: string }>
+  > {
+    if (this.runsRepo) {
+      return this.runsRepo.getUsageBySession();
+    }
+    return [];
+  }
+
+  /**
    * Submit a message to a session (non-streaming, legacy path)
    *
    * @deprecated Prefer submitMessageStreaming for all new callers. This method
