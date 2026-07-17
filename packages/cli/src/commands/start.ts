@@ -325,6 +325,14 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     );
     childEnv['OPENAIDY_SDK_PATH'] = resolve(pkgRoot, 'assets/openaidy-sdk.js');
     childEnv['OPENAIDY_DRIZZLE_DIR'] = resolve(pkgRoot, 'assets/drizzle');
+    // Bundled pre-installed skills (browser-automation, code-review, …).
+    // The server reads from BUNDLED_SKILLS_DIR on startup and seeds
+    // ~/.openaidy/skills/ from there — without this override a packaged
+    // install's BUNDLED_SKILLS_DIR would fall back to the dev heuristic
+    // (which resolves to $HOME/config/skills, a non-existent directory
+    // for normal installs) and the seeder would silently no-op, leaving
+    // the user with no pre-installed skills.
+    childEnv['BUNDLED_SKILLS_DIR'] = resolve(pkgRoot, 'assets/skills');
   }
   // Hand the log file's descriptor directly to the detached child so it writes
   // its own stdout/stderr to the file. We must NOT pipe the child's output

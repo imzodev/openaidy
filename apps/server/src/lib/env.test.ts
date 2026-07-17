@@ -32,9 +32,18 @@ describe('parseEnv', () => {
     expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(
       resolve(workspaceRoot, 'config/openaidy.template.json'),
     );
+    expect(parsed.BUNDLED_SKILLS_DIR).toBe(
+      resolve(workspaceRoot, 'config/skills'),
+    );
     expect(parsed.WORKSPACE_BASE_DIR).toBe(
       resolve(workspaceRoot, '.openaidy/workspaces'),
     );
+  });
+
+  it('honors an explicit BUNDLED_SKILLS_DIR override (packaged CLI injects this)', () => {
+    const customSkills = resolve(tmpdir(), 'openaidy-packaged-skills');
+    const parsed = parseEnv({ BUNDLED_SKILLS_DIR: customSkills });
+    expect(parsed.BUNDLED_SKILLS_DIR).toBe(customSkills);
   });
 
   it('defaults OPENAIDY_PORT to DEFAULT_SERVER_PORT (3001) when unset', () => {

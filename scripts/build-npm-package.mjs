@@ -16,6 +16,13 @@
  *     assets/openaidy.template.json
  *     assets/openaidy-sdk.js
  *     assets/drizzle/*.sql
+ *     assets/skills/      pre-installed skill definitions (browser-automation,
+ *                          code-review, conventional-commits, …) — see
+ *                          config/skills/. The packaged CLI points the server
+ *                          at this directory via BUNDLED_SKILLS_DIR so a fresh
+ *                          install seeds the user's ~/.openaidy/skills/ from
+ *                          here, with the existing per-file manifest handling
+ *                          version updates and user-edit preservation.
  *
  * First-party @openaidy/* code is bundled in; third-party deps stay external
  * and are declared as `dependencies` so npm installs them. There are no native
@@ -28,6 +35,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -111,6 +119,22 @@ cpSync(
   resolve(out, 'assets/openaidy-sdk.js'),
 );
 cpSync(resolve(root, 'packages/db/drizzle'), resolve(out, 'assets/drizzle'), {
+  recursive: true,
+});
+// Bundled pre-installed skills (config/skills/). The packaged CLI passes
+// `<pkgRoot>/assets/skills` to the server via BUNDLED_SKILLS_DIR; the server
+// seeds ~/.openaidy/skills/ from there on every start, so skill updates
+// ship with the next npm upgrade (the existing per-file manifest at
+// ~/.openaidy/skills/.seed-manifest.json handles new / version-bumped /
+// user-modified files correctly).
+const skillsSource = resolve(root, 'config/skills');
+if (!existsSync(skillsSource)) {
+  throw new Error(
+    `Bundled skills source not found at ${skillsSource}. ` +
+      `Pre-installed skills must exist before building the package.`,
+  );
+}
+cpSync(skillsSource, resolve(out, 'assets/skills'), {
   recursive: true,
 });
 

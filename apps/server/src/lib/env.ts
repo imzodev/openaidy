@@ -12,6 +12,15 @@ const defaultAppConfigTemplatePath = resolve(
   workspaceRoot,
   'config/openaidy.template.json',
 );
+// Source of bundled pre-installed skills. In dev the source is the repo's
+// `config/skills/`; the packaged `openaidy` CLI injects
+// `<pkgRoot>/assets/skills` so the same code path serves both. The server
+// reads from here on every start and seeds `SKILLS_DIR` from it — without
+// this override a packaged install used to look at
+// `dirname(OPENAIDY_HOME)/config/skills`, which resolves to
+// `$HOME/config/skills` for normal installs and silently produced an empty
+// Skills page.
+const defaultBundledSkillsDir = resolve(workspaceRoot, 'config/skills');
 const resolveOpenAidyPath = (
   openAidyHome: string,
   relativePath: string,
@@ -89,6 +98,15 @@ const envSchema = z
     WORKSPACE_BASE_DIR: z.string().optional(),
     // Skills configuration
     SKILLS_DIR: z.string().optional(),
+    /**
+     * Source directory of the bundled pre-installed skills. Defaults to
+     * `<repo>/config/skills` in development (where the source files
+     * actually live); the packaged CLI overrides this with
+     * `<pkgRoot>/assets/skills` so a fresh `npm install -g openaidy` finds
+     * the bundled skills next to the bundled server. See env.ts top
+     * comment for the full rationale.
+     */
+    BUNDLED_SKILLS_DIR: z.string().default(defaultBundledSkillsDir),
     // Recurring tasks feature flag. Default: off in all envs — this is
     // a v1 feature and we're shipping behind a flag until Phase 7's
     // regression sweep. Production should explicitly opt in once the
