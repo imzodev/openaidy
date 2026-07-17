@@ -341,8 +341,12 @@ export class OpenAICompatibleProvider implements ModelProvider {
     }
 
     try {
+      // `||` (not `??`) is deliberate: `ModelRequest.model` is a required
+      // string, so some callers pass `''` to mean "no preference" — `??`
+      // would leave that empty string unresolved and send an invalid
+      // `model: ""` to the provider API. See selection.ts for the same fix.
       const modelId =
-        request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+        request.model || this.config.defaultModel || DEFAULT_MODEL;
       this.logger.info(
         `invoke: model=${modelId} baseURL=${this.config.baseUrl}`,
       );
@@ -423,8 +427,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
     let reasoningContent = '';
 
     try {
+      // See invoke() above: `||` so a `''` "no preference" sentinel falls
+      // through to the configured default instead of hitting the wire empty.
       const modelId =
-        request.model ?? this.config.defaultModel ?? DEFAULT_MODEL;
+        request.model || this.config.defaultModel || DEFAULT_MODEL;
       this.logger.info(
         `invokeStream: model=${modelId} baseURL=${this.config.baseUrl}`,
       );

@@ -97,6 +97,8 @@ export async function autoFillPersonalityFiles(options: {
         userFirstMessage,
       );
 
+      // `model` is a required field on ModelRequest; '' expresses "no
+      // preference" and resolves to the configured default provider/model.
       const result = await providers.invocation.invoke({
         model: '',
         messages: [{ role: 'user', content: userPrompt }],

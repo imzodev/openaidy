@@ -394,6 +394,43 @@ describe('OpenAICompatibleProvider', () => {
       }
     });
 
+    it('should use the configured default model when request.model is an empty string', async () => {
+      // Regression: ModelRequest.model is required, so some callers pass ''
+      // to mean "no preference". `||` (not `??`) must treat that the same as
+      // an unset model and fall back to the provider's defaultModel — `??`
+      // would send an invalid `model: ""` to the wire.
+      mockCreateCompletion.mockResolvedValueOnce({
+        id: 'chatcmpl_123',
+        object: 'chat.completion',
+        created: 1700000000,
+        model: 'configured-default',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'Hello!' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        defaultModel: 'configured-default',
+      });
+      const request: ModelRequest = {
+        model: '',
+        messages: [{ role: 'user', content: 'Hello' }],
+      };
+
+      const result = await provider.invoke(request);
+
+      expect(result.ok).toBe(true);
+      const call = mockCreateCompletion.mock.calls[0];
+      expect(call).toBeDefined();
+      expect((call![0] as { model: string }).model).toBe('configured-default');
+    });
+
     it('should normalize API errors', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const error = new Error('Rate limit exceeded') as any;
