@@ -5,11 +5,14 @@ import {
   type ProviderError,
 } from '@openaidy/runtime';
 import type { ProviderRegistryService } from './registry';
-import type { ProviderSelectionRequest, ProviderSelectionResult } from './types';
+import type {
+  ProviderSelectionRequest,
+  ProviderSelectionResult,
+} from './types';
 
 /**
  * Provider Selection Service
- * 
+ *
  * Handles provider and model selection logic including:
  * - Explicit provider/model resolution
  * - Default fallback selection
@@ -28,7 +31,7 @@ export class ProviderSelectionService {
       return this.selectExplicit(
         request.providerId,
         request.modelId,
-        request.capabilities
+        request.capabilities,
       );
     }
 
@@ -42,7 +45,7 @@ export class ProviderSelectionService {
   private selectExplicit(
     providerId: string,
     modelId?: string,
-    capabilities?: readonly ProviderCapability[]
+    capabilities?: readonly ProviderCapability[],
   ): ProviderSelectionResult {
     const entry = this.registry.getEntry(providerId);
 
@@ -53,7 +56,7 @@ export class ProviderSelectionService {
         error: createProviderError(
           'provider.unavailable',
           `Provider "${providerId}" is not registered`,
-          { providerId }
+          { providerId },
         ),
       };
     }
@@ -65,7 +68,7 @@ export class ProviderSelectionService {
         error: createProviderError(
           'provider.unavailable',
           `Provider "${providerId}" is disabled`,
-          { providerId }
+          { providerId },
         ),
       };
     }
@@ -77,7 +80,7 @@ export class ProviderSelectionService {
       const capabilityError = this.validateCapabilities(
         provider,
         capabilities,
-        providerId
+        providerId,
       );
       if (capabilityError) {
         return { ok: false, error: capabilityError };
@@ -87,7 +90,11 @@ export class ProviderSelectionService {
     // Resolve model ID: explicit model takes priority, then provider's default model
     // Note: We intentionally do NOT fall back to capabilities[0] because capability
     // flags (e.g., 'text_generation', 'streaming') are not valid model identifiers.
-    const resolvedModelId = modelId ?? entry.defaultModel;
+    // `||` (not `??`) is deliberate: a model ID is never legitimately an empty
+    // string, and some callers pass `''` as a "no preference" sentinel (the
+    // ModelRequest.model field is required, so it's the only way to express
+    // that) — `??` would leave it unresolved since '' is not null/undefined.
+    const resolvedModelId = modelId || entry.defaultModel;
 
     if (!resolvedModelId) {
       return {
@@ -95,8 +102,8 @@ export class ProviderSelectionService {
         error: createProviderError(
           'provider.config_invalid',
           `No model specified and provider "${providerId}" has no default model configured. ` +
-          `Please specify a modelId or configure a defaultModel for this provider.`,
-          { providerId }
+            `Please specify a modelId or configure a defaultModel for this provider.`,
+          { providerId },
         ),
       };
     }
@@ -113,7 +120,7 @@ export class ProviderSelectionService {
    */
   private selectDefault(
     modelId?: string,
-    capabilities?: readonly ProviderCapability[]
+    capabilities?: readonly ProviderCapability[],
   ): ProviderSelectionResult {
     const defaultConfig = this.registry.getDefault();
 
@@ -122,7 +129,7 @@ export class ProviderSelectionService {
         ok: false,
         error: createProviderError(
           'provider.config_invalid',
-          'No default provider configured'
+          'No default provider configured',
         ),
       };
     }
@@ -136,7 +143,7 @@ export class ProviderSelectionService {
         error: createProviderError(
           'provider.unavailable',
           `Default provider "${defaultConfig.providerId}" is not registered`,
-          { providerId: defaultConfig.providerId }
+          { providerId: defaultConfig.providerId },
         ),
       };
     }
@@ -147,7 +154,7 @@ export class ProviderSelectionService {
         error: createProviderError(
           'provider.unavailable',
           `Default provider "${defaultConfig.providerId}" is disabled`,
-          { providerId: defaultConfig.providerId }
+          { providerId: defaultConfig.providerId },
         ),
       };
     }
@@ -159,7 +166,7 @@ export class ProviderSelectionService {
       const capabilityError = this.validateCapabilities(
         provider,
         capabilities,
-        defaultConfig.providerId
+        defaultConfig.providerId,
       );
       if (capabilityError) {
         return { ok: false, error: capabilityError };
@@ -169,7 +176,9 @@ export class ProviderSelectionService {
     return {
       ok: true,
       provider,
-      modelId: modelId ?? defaultConfig.modelId,
+      // See the comment in `selectExplicit`: `||` (not `??`) so a `''`
+      // "no preference" sentinel falls through to the configured default.
+      modelId: modelId || defaultConfig.modelId,
     };
   }
 
@@ -179,14 +188,14 @@ export class ProviderSelectionService {
   private validateCapabilities(
     provider: ModelProvider,
     required: readonly ProviderCapability[],
-    providerId: string
+    providerId: string,
   ): ProviderError | null {
     for (const capability of required) {
       if (!provider.hasCapability(capability)) {
         return createProviderError(
           'provider.capability_unsupported',
           `Provider "${providerId}" does not support capability "${capability}"`,
-          { providerId }
+          { providerId },
         );
       }
     }
@@ -198,7 +207,7 @@ export class ProviderSelectionService {
    */
   hasCapabilities(
     providerId: string,
-    capabilities: readonly ProviderCapability[]
+    capabilities: readonly ProviderCapability[],
   ): boolean {
     const provider = this.registry.get(providerId);
     if (!provider) return false;
@@ -210,11 +219,13 @@ export class ProviderSelectionService {
    * Find providers that support specific capabilities
    */
   findProvidersWithCapabilities(
-    capabilities: readonly ProviderCapability[]
+    capabilities: readonly ProviderCapability[],
   ): ModelProvider[] {
-    return this.registry.listEnabled().filter((provider) =>
-      capabilities.every((cap) => provider.hasCapability(cap))
-    );
+    return this.registry
+      .listEnabled()
+      .filter((provider) =>
+        capabilities.every((cap) => provider.hasCapability(cap)),
+      );
   }
 
   /**
@@ -229,7 +240,7 @@ export class ProviderSelectionService {
  * Create a provider selection service
  */
 export function createProviderSelection(
-  registry: ProviderRegistryService
+  registry: ProviderRegistryService,
 ): ProviderSelectionService {
   return new ProviderSelectionService(registry);
 }
