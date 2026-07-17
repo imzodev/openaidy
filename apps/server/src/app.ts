@@ -86,6 +86,7 @@ import { PulseService } from './pulses/service.js';
 import { channelRoutes } from './routes/channels.js';
 import path from 'node:path';
 import { access } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import type { AppServices } from './types';
 
 /**
@@ -167,14 +168,18 @@ export async function buildApp() {
     initialAgents: [],
     configPath: env.APP_CONFIG_PATH,
   });
-  // Seed default skills from config/skills to .openaidy/skills.
-  // Uses a manifest to track what was seeded so app updates propagate
-  // only when the user has not modified their local copy.
-  const skillsSourceDir = path.join(
-    path.dirname(env.OPENAIDY_HOME),
-    'config',
-    'skills',
-  );
+  // Seed default skills from the bundled source (`env.BUNDLED_SKILLS_DIR`,
+  // overridden to `<pkgRoot>/assets/skills` by the packaged CLI; the dev
+  // fallback is `<repo>/config/skills`) into the user's SKILLS_DIR.
+  // A manifest tracks what was seeded so app updates propagate only when
+  // the user has not modified their local copy.
+  const skillsSourceDir = env.BUNDLED_SKILLS_DIR;
+  if (!existsSync(skillsSourceDir)) {
+    log.warn(
+      'bundled skills source directory not found — preinstalled skills will be empty',
+      { skillsSourceDir },
+    );
+  }
   seedBundledSkills(skillsSourceDir, env.SKILLS_DIR);
 
   const skillRegistry = createSkillRegistry({ skillsDir: env.SKILLS_DIR });
