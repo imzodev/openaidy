@@ -327,5 +327,71 @@ describe('Session Repositories (integration)', () => {
       expect(session2Runs[0]?.providerId).toBe('p2');
       expect(session2Runs[0]?.agentId).toBe('agent2');
     });
+
+    test('getUsageBySession aggregates succeeded runs per session', async () => {
+      const other = await sessionsRepo!.create({ title: 'Other' });
+
+      // Two succeeded runs on `sessionId`, one on `other`.
+      const r1 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r1.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        cost: 0.01,
+      });
+      const r2 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r2.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+        cost: 0.02,
+      });
+      const r3 = await runsRepo!.create({
+        sessionId: other.id,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r3.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 7, completionTokens: 3, totalTokens: 10 },
+      });
+      // A failed run must NOT be counted.
+      const r4 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markFailed(r4.id, {
+        errorCode: 'provider.error',
+        errorMessage: 'boom',
+      });
+
+      const rows = await runsRepo!.getUsageBySession();
+      const byId = new Map(rows.map((row) => [row.sessionId, row]));
+
+      const main = byId.get(sessionId);
+      expect(main).toBeDefined();
+      expect(main!.runCount).toBe(2);
+      expect(main!.totalTokens).toBe(45);
+      expect(main!.promptTokens).toBe(30);
+      expect(main!.cost).toBeCloseTo(0.03);
+      expect(main!.hasCost).toBe(true);
+
+      const otherUsage = byId.get(other.id);
+      expect(otherUsage!.runCount).toBe(1);
+      expect(otherUsage!.totalTokens).toBe(10);
+      // No cost recorded for that run.
+      expect(otherUsage!.hasCost).toBe(false);
+    });
   });
 });

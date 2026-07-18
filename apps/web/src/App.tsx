@@ -51,6 +51,7 @@ import {
   deleteSession,
   uploadAttachment,
   getConfig,
+  getUsageBySession,
   type AddonRecord,
 } from './lib/api';
 import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
@@ -304,6 +305,9 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({
         queryKey: ['runs', sessionId],
       });
+      // A completed run adds tokens/cost — refresh the per-session usage that
+      // the sessions cards display.
+      queryClient.invalidateQueries({ queryKey: ['session-usage'] });
       // Drain the next queued message, if any, now that the run is idle.
       processQueue();
       // Focus the chat input after streaming completes
@@ -423,6 +427,13 @@ function AppContent(props: AppContentProps) {
   const sessionsQuery = createQuery(() => ({
     queryKey: ['sessions'],
     queryFn: listSessions,
+  }));
+
+  // Per-session usage totals (tokens + cost), keyed by session id, for the
+  // usage shown on session cards. One batched request rather than per-card.
+  const sessionUsageQuery = createQuery(() => ({
+    queryKey: ['session-usage'],
+    queryFn: getUsageBySession,
   }));
 
   // Agents query
@@ -884,6 +895,7 @@ function AppContent(props: AppContentProps) {
         <Show when={view() === 'sessions'}>
           <SessionsPage
             sessions={sessionsQuery.data?.items || []}
+            usageBySession={sessionUsageQuery.data ?? {}}
             selectedSessionId={selectedSessionId()}
             onSelectSession={(id) => {
               setSelectedSessionId(id);

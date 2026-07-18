@@ -395,6 +395,74 @@ export class SessionRunsRepository {
   }
 
   /**
+   * Cumulative usage totals for every session that has at least one succeeded
+   * run, computed in a single pass. Grouping is done in JS (like
+   * {@link listUsageRows}) so the query stays portable across SQLite and
+   * Postgres. Sessions with no succeeded runs are simply absent from the
+   * result. Lets the UI show per-session usage on the whole list without an
+   * N+1 fan-out of {@link getSessionUsage} calls.
+   */
+  async getUsageBySession(): Promise<
+    Array<SessionUsageTotals & { sessionId: string }>
+  > {
+    const rows = await this.db
+      .select({
+        sessionId: schema.sessionRuns.sessionId,
+        promptTokens: schema.sessionRuns.promptTokens,
+        completionTokens: schema.sessionRuns.completionTokens,
+        totalTokens: schema.sessionRuns.totalTokens,
+        cacheReadTokens: schema.sessionRuns.cacheReadTokens,
+        cacheCreationTokens: schema.sessionRuns.cacheCreationTokens,
+        cost: schema.sessionRuns.cost,
+      })
+      .from(schema.sessionRuns)
+      .where(eq(schema.sessionRuns.status, 'succeeded'));
+
+    type Row = {
+      sessionId: string;
+      promptTokens: number | null;
+      completionTokens: number | null;
+      totalTokens: number | null;
+      cacheReadTokens: number | null;
+      cacheCreationTokens: number | null;
+      cost: number | null;
+    };
+
+    const bySession = new Map<
+      string,
+      SessionUsageTotals & { sessionId: string }
+    >();
+    for (const r of rows as Row[]) {
+      let totals = bySession.get(r.sessionId);
+      if (!totals) {
+        totals = {
+          sessionId: r.sessionId,
+          runCount: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          cacheReadTokens: 0,
+          cacheCreationTokens: 0,
+          cost: 0,
+          hasCost: false,
+        };
+        bySession.set(r.sessionId, totals);
+      }
+      totals.runCount += 1;
+      totals.promptTokens += r.promptTokens ?? 0;
+      totals.completionTokens += r.completionTokens ?? 0;
+      totals.totalTokens += r.totalTokens ?? 0;
+      totals.cacheReadTokens += r.cacheReadTokens ?? 0;
+      totals.cacheCreationTokens += r.cacheCreationTokens ?? 0;
+      if (r.cost !== null && r.cost !== undefined) {
+        totals.cost += r.cost;
+        totals.hasCost = true;
+      }
+    }
+    return [...bySession.values()];
+  }
+
+  /**
    * Count runs by status for a session
    */
   async countByStatus(
