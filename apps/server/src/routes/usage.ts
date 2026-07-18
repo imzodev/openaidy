@@ -46,6 +46,25 @@ export const usageRoutes: FastifyPluginAsync<UsageRoutesOptions> = async (
   });
 
   /**
+   * GET /usage/sessions
+   * Per-session usage totals for every session with succeeded runs, in one
+   * request — so the sessions list can show usage without an N+1 fan-out of
+   * `/sessions/:id/usage`. Returned as a map keyed by session id; sessions
+   * with no usage yet are simply absent.
+   */
+  app.get('/usage/sessions', async () => {
+    const rows = await sessionService.getUsageBySession();
+    const usageBySession: Record<
+      string,
+      import('@openaidy/db').SessionUsageTotals
+    > = {};
+    for (const { sessionId, ...usage } of rows) {
+      usageBySession[sessionId] = usage;
+    }
+    return { usageBySession };
+  });
+
+  /**
    * GET /usage?from=&to=
    * Aggregated usage across all sessions with day / provider / model
    * breakdowns. `from`/`to` are ISO timestamps (`to` exclusive); both

@@ -572,6 +572,23 @@ export async function getSessionUsage(
 }
 
 /**
+ * Fetch per-session usage totals for every session with usage, in one request
+ * (keyed by session id). Powers the usage shown on the sessions list without
+ * an N+1 fan-out of getSessionUsage. Returns an empty map on error so the list
+ * still renders.
+ */
+export async function getUsageBySession(): Promise<
+  Record<string, import('./types').UsageTotals>
+> {
+  const response = await apiFetch(`${API_BASE}/api/usage/sessions`);
+  if (!response.ok) return {};
+  const body = (await response.json()) as {
+    usageBySession?: Record<string, import('./types').UsageTotals>;
+  };
+  return body.usageBySession ?? {};
+}
+
+/**
  * Fetch aggregated usage across all sessions, optionally within a date
  * range (ISO strings; `to` exclusive).
  */

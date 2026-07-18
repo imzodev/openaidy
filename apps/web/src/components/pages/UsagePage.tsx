@@ -2,6 +2,7 @@ import { createResource, createSignal, For, Show } from 'solid-js';
 import { Layout } from './Layout';
 import { getUsage } from '../../lib/api';
 import type { UsageByDay, UsageReport } from '../../lib/types';
+import { formatNumber, formatCost } from '../../lib/usage-format';
 
 type RangePreset = '7d' | '30d' | '90d' | 'all';
 
@@ -19,17 +20,6 @@ function fromForPreset(preset: RangePreset): string | undefined {
   const now = new Date();
   const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return from.toISOString();
-}
-
-function formatNumber(n: number): string {
-  return n.toLocaleString('en-US');
-}
-
-function formatCost(cost: number, hasCost: boolean): string {
-  if (!hasCost) return '—';
-  // Small costs need more precision than cents.
-  const digits = cost > 0 && cost < 1 ? 4 : 2;
-  return `$${cost.toFixed(digits)}`;
 }
 
 /**
