@@ -51,6 +51,7 @@ import {
   deleteSession,
   uploadAttachment,
   getConfig,
+  getUsageBySession,
   type AddonRecord,
 } from './lib/api';
 import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
@@ -304,6 +305,9 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({
         queryKey: ['runs', sessionId],
       });
+      // A completed run adds tokens/cost — refresh the per-session usage that
+      // the sessions cards display.
+      queryClient.invalidateQueries({ queryKey: ['session-usage'] });
       // Drain the next queued message, if any, now that the run is idle.
       processQueue();
       // Focus the chat input after streaming completes
@@ -425,6 +429,13 @@ function AppContent(props: AppContentProps) {
     queryFn: listSessions,
   }));
 
+  // Per-session usage totals (tokens + cost), keyed by session id, for the
+  // usage shown on session cards. One batched request rather than per-card.
+  const sessionUsageQuery = createQuery(() => ({
+    queryKey: ['session-usage'],
+    queryFn: getUsageBySession,
+  }));
+
   // Agents query
   const agentsQuery = createQuery(() => ({
     queryKey: ['agents'],
@@ -484,6 +495,20 @@ function AppContent(props: AppContentProps) {
     if (!defaultProviderId) return true;
     const configured = cfg.providers?.some((p) => p.id === defaultProviderId);
     return !configured;
+  };
+
+  // Effective model ("providerId/modelId") for the active agent: the agent's
+  // own model, or the project default when the agent is model-less. Shown in
+  // the RunList header next to the session's usage totals.
+  const effectiveModel = (): string | undefined => {
+    const agent = agents().find((a) => a.id === effectiveAgentId());
+    if (agent?.model) return agent.model;
+    const data = configGateQuery.data;
+    const cfg = data && 'config' in data ? data.config : undefined;
+    const d = cfg?.defaults;
+    return d?.providerId && d?.modelId
+      ? `${d.providerId}/${d.modelId}`
+      : undefined;
   };
 
   // Create session mutation
@@ -870,6 +895,7 @@ function AppContent(props: AppContentProps) {
         <Show when={view() === 'sessions'}>
           <SessionsPage
             sessions={sessionsQuery.data?.items || []}
+            usageBySession={sessionUsageQuery.data ?? {}}
             selectedSessionId={selectedSessionId()}
             onSelectSession={(id) => {
               setSelectedSessionId(id);
@@ -1019,6 +1045,7 @@ function AppContent(props: AppContentProps) {
                 isLoading={runsQuery.isLoading}
                 error={runsQuery.error?.message}
                 sessionId={selectedSessionId()}
+                model={effectiveModel()}
                 onRunClick={(firstMessageId) => {
                   if (firstMessageId) {
                     setScrollToMessageId(firstMessageId);

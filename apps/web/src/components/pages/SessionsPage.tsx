@@ -16,10 +16,16 @@ import {
   FileText,
   AlignLeft,
   Filter,
+  Zap,
 } from 'lucide-solid';
 import { searchSessions } from '../../lib/api';
 import type { Session } from '../../lib/api';
-import type { SessionSearchResult } from '../../lib/types';
+import type { SessionSearchResult, UsageTotals } from '../../lib/types';
+import {
+  formatTokensCompact,
+  formatCost,
+  formatNumber,
+} from '../../lib/usage-format';
 
 type SessionsPageProps = {
   sessions: Session[];
@@ -28,6 +34,8 @@ type SessionsPageProps = {
   onCreateSession: () => void;
   onDeleteSession?: (id: string) => void;
   isLoading?: boolean;
+  /** Per-session usage totals keyed by session id (absent = no usage yet). */
+  usageBySession?: Record<string, UsageTotals>;
 };
 
 // Sessions created on behalf of an addon aren't given a distinct `type` —
@@ -143,6 +151,13 @@ export function SessionsPage(props: SessionsPageProps) {
     sortedSessions().filter((s) =>
       activeCategories().includes(categorizeSession(s)),
     );
+
+  // Usage badge data for a card — only when the session has recorded tokens,
+  // so brand-new / empty sessions don't show a "0 tokens" badge.
+  const usageFor = (session: Session): UsageTotals | undefined => {
+    const usage = props.usageBySession?.[session.id];
+    return usage && usage.totalTokens > 0 ? usage : undefined;
+  };
 
   const toggleCategory = (category: SessionCategory) => {
     setActiveCategories((prev) =>
@@ -342,11 +357,27 @@ export function SessionsPage(props: SessionsPageProps) {
                         <h3 class="font-medium text-text-primary truncate">
                           {session.title}
                         </h3>
-                        <div class="flex items-center gap-2 mt-1 text-sm text-text-tertiary">
-                          <Clock class="w-3.5 h-3.5" />
-                          <span>
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-text-tertiary">
+                          <span class="inline-flex items-center gap-1.5">
+                            <Clock class="w-3.5 h-3.5" />
                             {formatDate(session.updatedAt ?? session.createdAt)}
                           </span>
+                          <Show when={usageFor(session)}>
+                            {(usage) => (
+                              <span
+                                class="inline-flex items-center gap-1.5"
+                                title={`${formatNumber(usage().totalTokens)} tokens across ${usage().runCount} run(s)`}
+                              >
+                                <Zap class="w-3.5 h-3.5" />
+                                {formatTokensCompact(usage().totalTokens)}{' '}
+                                tokens
+                                <Show when={usage().hasCost}>
+                                  <span aria-hidden="true">·</span>
+                                  {formatCost(usage().cost, usage().hasCost)}
+                                </Show>
+                              </span>
+                            )}
+                          </Show>
                         </div>
                       </div>
                       <div class="flex items-center gap-2">
