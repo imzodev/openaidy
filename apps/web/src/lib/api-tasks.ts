@@ -380,6 +380,36 @@ export async function updateSubtaskStatus(
 }
 
 /**
+ * Edit a subtask's title/description/order after planning.
+ */
+export async function updateSubtask(
+  id: string,
+  updates: { title?: string; description?: string; orderIndex?: number },
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  return response.json();
+}
+
+/**
+ * (Re)assign an agent to a subtask.
+ */
+export async function assignSubtaskAgent(
+  id: string,
+  agentId: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId }),
+  });
+  return response.json();
+}
+
+/**
  * Execute a task (creates a session)
  */
 export async function executeTask(

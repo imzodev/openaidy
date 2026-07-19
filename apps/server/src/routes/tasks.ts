@@ -688,6 +688,104 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     }
   });
 
+  /**
+   * PATCH /subtasks/:id
+   * Edit a subtask's title / description / order after planning. Any subset
+   * of the three fields may be supplied; the corresponding DB row is
+   * updated and the updated record is returned. Used by the web UI's
+   * SubtaskList inline edit affordance.
+   */
+  app.patch<{
+    Params: { id: string };
+    Body: { title?: string; description?: string; orderIndex?: number };
+  }>('/subtasks/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body ?? {};
+    const input: { title?: string; description?: string; orderIndex?: number } =
+      {};
+    if (typeof body.title === 'string') input.title = body.title;
+    if (typeof body.description === 'string')
+      input.description = body.description;
+    if (typeof body.orderIndex === 'number') input.orderIndex = body.orderIndex;
+
+    if (
+      input.title === undefined &&
+      input.description === undefined &&
+      input.orderIndex === undefined
+    ) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.empty_patch',
+          message:
+            'At least one of title, description, or orderIndex must be supplied',
+        },
+      };
+    }
+    if (input.description !== undefined && input.description.trim() === '') {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.empty_description',
+          message: 'description must not be empty',
+        },
+      };
+    }
+
+    const result = await taskService.updateSubtask(id, input);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /subtasks/:id/assign
+   * (Re)assign an agent to a subtask. Used by the web UI's SubtaskList
+   * agent-picker dropdown. Body: `{ agentId: string }`.
+   */
+  app.post<{ Params: { id: string }; Body: { agentId?: string } }>(
+    '/subtasks/:id/assign',
+    async (request, reply) => {
+      const { id } = request.params;
+      const agentId = request.body?.agentId;
+      if (typeof agentId !== 'string' || agentId.trim() === '') {
+        reply.code(400);
+        return {
+          ok: false,
+          error: {
+            code: 'validation.missing_agent_id',
+            message: 'agentId is required',
+          },
+        };
+      }
+
+      const result = await taskService.assignSubtaskAgent(id, agentId);
+
+      if (result.ok) {
+        return { ok: true, data: result.data };
+      } else {
+        if (result.error.code === 'subtask.not_found') {
+          reply.code(404);
+        } else if (result.error.code === 'agent.not_found') {
+          reply.code(400);
+        } else {
+          reply.code(500);
+        }
+        return { ok: false, error: result.error };
+      }
+    },
+  );
+
   // ── Deliverables ────────────────────────────────────────────────────────────
 
   /**
