@@ -367,6 +367,13 @@ function makeStreamingService(opts: {
 
   const invokeStream = vi.fn(opts.invokeStream);
 
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+
   const service = new SessionMessageService({
     providers: {
       registry: {
@@ -379,6 +386,7 @@ function makeStreamingService(opts: {
         invokeStream,
       } as unknown as ModelInvocationService,
     },
+    logger: logger as unknown as import('fastify').FastifyBaseLogger,
     agents,
     builtinTools,
     maxToolRounds: opts.maxToolRounds,
@@ -393,7 +401,7 @@ function makeStreamingService(opts: {
     }),
   });
 
-  return { service, invokeStream };
+  return { service, invokeStream, logger };
 }
 
 async function submit(
@@ -787,5 +795,85 @@ describe('SessionMessageService — degenerate empty-turn retry', () => {
     expect(invokeStream).toHaveBeenCalledTimes(3);
     // Then the #435 fallback keeps the user unblocked.
     expect(result.assistantMessage.content.toLowerCase()).toContain('continue');
+  });
+});
+
+// ============================================================================
+// Agentic loop — context observability (issue #440)
+// ============================================================================
+
+describe('SessionMessageService — context observability', () => {
+  it('logs per-round context size and a per-run context summary', async () => {
+    const { service, logger } = makeStreamingService({
+      maxToolRounds: 3,
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({
+            type: 'stream.usage',
+            usage: { promptTokens: 123, completionTokens: 5, totalTokens: 128 },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Obs');
+    const result = await submit(service, (session as { id: string }).id);
+    expect(result.ok).toBe(true);
+
+    // Per-round debug log fired at least once.
+    const roundLogs = logger.debug.mock.calls.filter(
+      (c) => c[1] === 'Agentic loop round context size',
+    );
+    expect(roundLogs.length).toBeGreaterThan(0);
+    expect(roundLogs[0]![0]).toMatchObject({
+      round: expect.any(Number),
+      estTokens: expect.any(Number),
+      messageCount: expect.any(Number),
+    });
+
+    // Exactly one per-run summary, with the fields needed to tune the caps.
+    const summaryLogs = logger.info.mock.calls.filter(
+      (c) => c[1] === 'Agentic run context summary',
+    );
+    expect(summaryLogs).toHaveLength(1);
+    const summary = summaryLogs[0]![0] as {
+      roundsUsed: number;
+      peakPromptTokens: number;
+      peakEstTokens: number;
+      compactionFired: boolean;
+    };
+    expect(summary.roundsUsed).toBeGreaterThan(0);
+    expect(summary.peakPromptTokens).toBe(123); // captured from stream.usage
+    expect(summary.peakEstTokens).toBeGreaterThan(0);
+    expect(summary.compactionFired).toBe(false);
+  });
+
+  it('warns when a round nears the token budget', async () => {
+    const { service, logger } = makeStreamingService({
+      maxToolRounds: 2,
+      maxContextTokens: 10, // tiny, so even the system prompt is "near" it
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.content_delta', delta: 'done' });
+        yield ok({ type: 'stream.finished', finishReason: 'stop' });
+      },
+    });
+
+    const session = await service.createSession('Near budget');
+    await submit(service, (session as { id: string }).id);
+
+    const nearWarnings = logger.warn.mock.calls.filter(
+      (c) => c[1] === 'Agentic loop request nearing the context token budget',
+    );
+    expect(nearWarnings.length).toBeGreaterThan(0);
   });
 });

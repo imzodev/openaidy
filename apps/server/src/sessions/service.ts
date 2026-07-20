@@ -1345,6 +1345,14 @@ export class SessionMessageService {
       // across the whole run so a persistently-broken turn can't loop forever.
       const MAX_EMPTY_TURN_RETRIES = 2;
       let emptyTurnRetries = 0;
+      // Per-run observability (#440): track how close each round runs to the
+      // token budget and whether the safety mechanisms fired, so the caps
+      // (#436/#437) can be tuned from real data rather than guesswork.
+      const SOFT_BUDGET_FRACTION = 0.8;
+      let roundsUsed = 0;
+      let peakEstTokens = 0;
+      let peakPromptTokens = 0;
+      let compactionFired = false;
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         // On the final permitted round, stop offering tools so the model is
         // forced to turn what it has gathered into a text answer. Without this,
@@ -1375,6 +1383,7 @@ export class SessionMessageService {
         // run here reached ~1M prompt tokens on MiniMax-M3 and degraded.
         const elided = this.compactContextInPlace(loopMessages);
         if (elided > 0) {
+          compactionFired = true;
           this.logger?.warn(
             {
               sessionId: input.sessionId,
@@ -1385,6 +1394,44 @@ export class SessionMessageService {
               estTokens: this.estimateTokens(loopMessages),
             },
             'Compacted context — elided oldest tool outputs to fit the token budget',
+          );
+        }
+
+        // Per-round context observability (#440). Logged at debug (frequent);
+        // a warn fires only when the request is nearing the budget, so tuning
+        // signals stand out in the logs.
+        roundsUsed = round + 1;
+        const roundEstTokens = this.estimateTokens(loopMessages);
+        if (roundEstTokens > peakEstTokens) peakEstTokens = roundEstTokens;
+        let largestToolResultChars = 0;
+        for (const m of loopMessages) {
+          if (m.role === 'tool') {
+            const len = m.content?.length ?? 0;
+            if (len > largestToolResultChars) largestToolResultChars = len;
+          }
+        }
+        this.logger?.debug(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            round,
+            estTokens: roundEstTokens,
+            messageCount: loopMessages.length,
+            largestToolResultChars,
+            budgetTokens: this.maxContextTokens,
+          },
+          'Agentic loop round context size',
+        );
+        if (roundEstTokens > this.maxContextTokens * SOFT_BUDGET_FRACTION) {
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              estTokens: roundEstTokens,
+              budgetTokens: this.maxContextTokens,
+            },
+            'Agentic loop request nearing the context token budget',
           );
         }
 
@@ -1468,6 +1515,11 @@ export class SessionMessageService {
               finalUsage.promptTokens += value.usage.promptTokens;
               finalUsage.completionTokens += value.usage.completionTokens;
               finalUsage.totalTokens += value.usage.totalTokens;
+              // Track the largest single-round *actual* prompt size (#440) —
+              // the provider's count, more accurate than our char estimate.
+              if (value.usage.promptTokens > peakPromptTokens) {
+                peakPromptTokens = value.usage.promptTokens;
+              }
               if (value.usage.cacheReadTokens !== undefined) {
                 finalUsage.cacheReadTokens += value.usage.cacheReadTokens;
                 sawCacheTokens = true;
@@ -2009,6 +2061,22 @@ export class SessionMessageService {
       // 9. Update session's agentId to reflect the agent that just ran
       // This allows the session to "remember" which agent was last used
       await this.updateSessionAgentId(input.sessionId, agentId);
+
+      // Per-run context summary (#440): one line to see how hard this run
+      // pushed the budget and whether the safety mechanisms engaged.
+      this.logger?.info(
+        {
+          sessionId: input.sessionId,
+          runId: run.id,
+          roundsUsed,
+          maxRounds: this.maxToolRounds,
+          peakEstTokens,
+          peakPromptTokens,
+          budgetTokens: this.maxContextTokens,
+          compactionFired,
+        },
+        'Agentic run context summary',
+      );
 
       return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
