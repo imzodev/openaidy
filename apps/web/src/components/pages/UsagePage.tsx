@@ -100,7 +100,6 @@ function StackedDailyChart(props: {
 }) {
   const segmentsByDay = () => indexSegmentsByDay(props.byDayByModel);
   const colorByModel = () => buildModelColorMap(props.byModel);
-  const max = () => Math.max(1, ...props.byDay.map((d) => d.totalTokens));
 
   const width = 720;
   const height = 180;
