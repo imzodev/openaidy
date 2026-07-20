@@ -127,6 +127,12 @@ export type SessionMessageServiceOptions = {
    * Merged over the built-in MODEL_PRICING table.
    */
   modelPricing?: Record<string, import('@openaidy/shared-types').ModelPricing>;
+  /**
+   * Max rounds in the agentic tool-call loop before the model is forced to
+   * produce a final text answer (tools withheld on the last round). Defaults
+   * to 25. Exposed mainly so tests can drive the exhaustion path cheaply.
+   */
+  maxToolRounds?: number;
   repositories?:
     | {
         sessions: SessionsStore;
