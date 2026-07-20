@@ -52,18 +52,30 @@ function appendAssetToken(url: string, token: string): string {
 /**
  * Rewrite an addon HTML document so the sandboxed iframe can load its
  * subresources: propagate the asset token onto every local `src`/`href`, and
- * mark scripts `crossorigin="anonymous"` (CORS mode) so strict dev servers
- * don't reject the cross-origin no-cors loads.
+ * mark *local* scripts `crossorigin="anonymous"` (CORS mode) so strict dev
+ * servers don't reject the cross-origin no-cors loads. External scripts
+ * (e.g. the Tailwind Play CDN) are deliberately left alone — forcing CORS
+ * mode on a third-party script whose server doesn't send
+ * `Access-Control-Allow-Origin` makes the browser block the load entirely,
+ * where a plain no-cors `<script src>` (the default) would have loaded fine.
  */
-function rewriteAddonHtml(html: string, token: string): string {
+export function rewriteAddonHtml(html: string, token: string): string {
   const withTokens = html.replace(
     /\b(src|href)=("|')(.*?)\2/gi,
     (_match, attr: string, quote: string, url: string) =>
       `${attr}=${quote}${appendAssetToken(url, token)}${quote}`,
   );
   return withTokens.replace(
-    /<script(?![^>]*\bcrossorigin\b)([^>]*\bsrc=)/gi,
-    '<script crossorigin="anonymous"$1',
+    /<script([^>]*?)\bsrc=("|')(.*?)\2([^>]*)>/gi,
+    (fullMatch, before: string, quote: string, url: string, after: string) => {
+      if (/\bcrossorigin\b/i.test(before) || /\bcrossorigin\b/i.test(after)) {
+        return fullMatch;
+      }
+      const isExternal =
+        /^(https?:)?\/\//i.test(url) || /^(data:|blob:)/i.test(url);
+      if (isExternal) return fullMatch;
+      return `<script crossorigin="anonymous"${before}src=${quote}${url}${quote}${after}>`;
+    },
   );
 }
 
@@ -559,11 +571,15 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       // as cross-site. A classic `<script src>` tag is fetched in `no-cors`
       // mode by default, and strict dev servers reject cross-origin no-cors
       // script loads with 403 (Vite's rejectNoCorsRequestMiddleware —
-      // GHSA-4v9v-hfq4-rm2v). To let the addon's scripts (and the SDK) load,
-      // we rewrite `<script src>` tags to request in CORS mode by adding
-      // `crossorigin="anonymous"`. The responses already carry
+      // GHSA-4v9v-hfq4-rm2v). To let the addon's LOCAL scripts (and the SDK)
+      // load, we rewrite their `<script src>` tags to request in CORS mode by
+      // adding `crossorigin="anonymous"`. Those responses already carry
       // `Access-Control-Allow-Origin: *`, so the CORS check passes. This is
       // a no-op in production (the static handler still sends ACAO: *).
+      // EXTERNAL scripts (e.g. the Tailwind Play CDN) are left in the default
+      // no-cors mode instead — cdn.tailwindcss.com doesn't send an ACAO
+      // header, so forcing CORS mode on it would make the browser block the
+      // load outright rather than execute it opaquely.
       let payload: string | Buffer = fs.readFileSync(resolved);
       if (ext === '.html') {
         // Propagate the (validated) asset token onto every local subresource
