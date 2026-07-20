@@ -735,3 +735,57 @@ describe('SessionMessageService — stale history tool-output trimming', () => {
     for (const m of persistedTool) expect(m.content).toBe(BIG);
   });
 });
+
+// ============================================================================
+// Agentic loop — degenerate empty-turn retry (issue #439)
+// ============================================================================
+
+describe('SessionMessageService — degenerate empty-turn retry', () => {
+  it('retries a finish_reason=tool_calls turn that emits no tool call and no content, then recovers', async () => {
+    let calls = 0;
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 3,
+      invokeStream: async function* () {
+        const n = calls++;
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (n === 0) {
+          // Degenerate: signals tool_calls but streams nothing parseable.
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'recovered' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Retry');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Recovered on the retry — a real answer, not the fallback message.
+    expect(result.assistantMessage.content).toBe('recovered');
+    // Original + one retry (retry does not consume a tool round).
+    expect(invokeStream).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back after exhausting retries when the turn stays degenerate', async () => {
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 5,
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+      },
+    });
+
+    const session = await service.createSession('Retry exhausted');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Never loops forever: original + MAX_EMPTY_TURN_RETRIES (2) = 3 calls.
+    expect(invokeStream).toHaveBeenCalledTimes(3);
+    // Then the #435 fallback keeps the user unblocked.
+    expect(result.assistantMessage.content.toLowerCase()).toContain('continue');
+  });
+});
