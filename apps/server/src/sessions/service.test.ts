@@ -353,6 +353,7 @@ function makeStreamingService(opts: {
   maxToolRounds: number;
   maxToolOutputChars?: number;
   maxContextTokens?: number;
+  historyToolResultsKept?: number;
   /** Custom executor for the 'echo' tool (e.g. to return an oversized result). */
   echoExecute?: () => Promise<{ ok: true; content: string }>;
   invokeStream: (request: {
@@ -386,6 +387,9 @@ function makeStreamingService(opts: {
     }),
     ...(opts.maxContextTokens !== undefined && {
       maxContextTokens: opts.maxContextTokens,
+    }),
+    ...(opts.historyToolResultsKept !== undefined && {
+      historyToolResultsKept: opts.historyToolResultsKept,
     }),
   });
 
@@ -656,5 +660,78 @@ describe('SessionMessageService — context-window compaction', () => {
     const toolMsg = finalRoundMessages.find((m) => m.role === 'tool');
     expect(toolMsg?.content).toBe(SMALL);
     expect(toolMsg?.content).not.toContain('elided');
+  });
+});
+
+// ============================================================================
+// Cross-run history — stale tool-output trimming (issue #438)
+// ============================================================================
+
+describe('SessionMessageService — stale history tool-output trimming', () => {
+  it('summarizes older prior-run tool results on replay but keeps the most recent full', async () => {
+    const BIG = 'H'.repeat(600); // > the 500-char summarize threshold
+    let replayedMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      historyToolResultsKept: 1, // keep only the most recent tool result full
+      maxContextTokens: 10_000_000, // don't let #437 (budget) interfere
+      maxToolOutputChars: 100_000, // don't let #436 (per-result cap) interfere
+      echoExecute: async () => ({ ok: true as const, content: BIG }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        const msgs =
+          (request as { messages?: Array<{ role: string; content: string }> })
+            .messages ?? [];
+        const lastUser = [...msgs].reverse().find((m) => m.role === 'user');
+        // Second submit: capture the replayed history and answer immediately.
+        if (lastUser?.content.includes('inspect')) {
+          replayedMessages = msgs;
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+          return;
+        }
+        // First submit: chain tool calls to populate two prior tool results.
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: {},
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('History');
+    const sessionId = (session as { id: string }).id;
+
+    // Submit 1: produces two tool results (rounds 0 and 1), persisted.
+    await submit(service, sessionId, 'populate the task');
+    // Submit 2: replays history — trimming should apply.
+    await submit(service, sessionId, 'inspect now');
+
+    const toolMsgs = replayedMessages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(2);
+    // Oldest is summarized…
+    expect(toolMsgs[0]!.content).toContain('Prior tool result elided');
+    expect(toolMsgs[0]!.content).not.toBe(BIG);
+    // …most recent kept full.
+    expect(toolMsgs[1]!.content).toBe(BIG);
+
+    // Transcript keeps both results in full regardless.
+    const persisted = (await service.listMessages(sessionId)) as Array<{
+      role: string;
+      content: string;
+    }>;
+    const persistedTool = persisted.filter((m) => m.role === 'tool');
+    expect(persistedTool.length).toBe(2);
+    for (const m of persistedTool) expect(m.content).toBe(BIG);
   });
 });

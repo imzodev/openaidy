@@ -100,6 +100,7 @@ export class SessionMessageService {
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
   private readonly maxContextTokens: number;
+  private readonly historyToolResultsKept: number;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -130,6 +131,7 @@ export class SessionMessageService {
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
     this.maxContextTokens = options.maxContextTokens ?? 100_000;
+    this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -218,6 +220,46 @@ export class SessionMessageService {
    * The full results remain in the persisted transcript; this only shapes what
    * is re-sent to the model.
    */
+  /**
+   * When rebuilding a session's history for a new run, summarize the bodies of
+   * older tool results so a long multi-run session doesn't re-send every large
+   * tool output on every turn (issue #438). Unlike the per-round budget guard
+   * (#437, which only fires when *over* the token budget), this always keeps
+   * the request lean — the most-recent `historyToolResultsKept` tool results
+   * stay full (the model's likely working set on a "continue"), older ones are
+   * collapsed to a short notice. Only a tool message's `content` shrinks, so
+   * the tool_call↔tool_result pairing stays provider-valid; the full result
+   * remains in the persisted transcript. Mutates in place; returns count.
+   *
+   * The short summaries it writes fall under the #437 elide threshold, so the
+   * two passes compose without re-processing each other's output.
+   */
+  private trimStaleHistoryToolOutputs(messages: Message[]): number {
+    const keepRecent = this.historyToolResultsKept;
+    const MIN_SUMMARIZE_CHARS = 500; // leave small results alone
+    const PREFIX = '[Prior tool result elided from context:';
+
+    const toolIndexes: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i]!.role === 'tool') toolIndexes.push(i);
+    }
+    if (toolIndexes.length <= keepRecent) return 0;
+
+    const oldCount = toolIndexes.length - keepRecent;
+    let trimmed = 0;
+    for (let j = 0; j < oldCount; j++) {
+      const m = messages[toolIndexes[j]!]!;
+      const content = m.content ?? '';
+      if (content.startsWith(PREFIX)) continue;
+      if (content.length <= MIN_SUMMARIZE_CHARS) continue;
+      (m as { content: string }).content =
+        `${PREFIX} ${content.length} characters from an earlier turn omitted. ` +
+        `The full result is preserved in the transcript.]`;
+      trimmed++;
+    }
+    return trimmed;
+  }
+
   private compactContextInPlace(messages: Message[]): number {
     const budget = this.maxContextTokens;
     if (this.estimateTokens(messages) <= budget) return 0;
@@ -1176,6 +1218,22 @@ export class SessionMessageService {
         role: msgRole as 'system' | 'user',
         content: msgContent,
       } as Message);
+    }
+
+    // Summarize older tool-result bodies from prior turns so a long session
+    // doesn't re-send every large output each run (issue #438). Keeps the most
+    // recent results full; the full bodies stay in the persisted transcript.
+    const trimmedHistory = this.trimStaleHistoryToolOutputs(historyMessages);
+    if (trimmedHistory > 0) {
+      this.logger?.info(
+        {
+          sessionId: input.sessionId,
+          runId: run.id,
+          trimmed: trimmedHistory,
+          keptRecent: this.historyToolResultsKept,
+        },
+        'Trimmed stale tool outputs from replayed history',
+      );
     }
 
     // 5. Build tool definitions (needed for system prompt and invocation)

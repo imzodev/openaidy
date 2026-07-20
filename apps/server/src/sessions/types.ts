@@ -150,6 +150,15 @@ export type SessionMessageServiceOptions = {
    * results remain in the persisted transcript. Defaults to 100000.
    */
   maxContextTokens?: number;
+  /**
+   * How many of the most-recent tool results to replay in full when
+   * reconstructing a session's history for a new run. Older tool-result bodies
+   * from prior turns are summarized (their tool_call pairing is preserved), so
+   * a long multi-run session doesn't re-send every large tool output on every
+   * turn — a cost/latency win even when the request is under `maxContextTokens`.
+   * The full results remain in the persisted transcript. Defaults to 10.
+   */
+  historyToolResultsKept?: number;
   repositories?:
     | {
         sessions: SessionsStore;
