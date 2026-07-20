@@ -181,6 +181,35 @@ var menu = sdk.ui.dropdownMenu({
 document.getElementById('root').appendChild(menu); // dropdownMenu builds a closed menu — you still mount it
 ```
 
+## Prefer `sdk.ui.card` over hand-rolled repeated blocks
+
+If your addon renders a list/grid of items (phrase cards, contact rows,
+notification tiles — anything built in a `.map()`/`.forEach()` loop), wrap
+each item in `sdk.ui.card` instead of hand-rolling
+`document.createElement('div')` + Tailwind border/shadow/padding classes for
+it. This applies even when the item has no title — `title`/`subtitle` are
+optional, and `card` works fine with only `children`:
+
+```js
+// Don't: hand-rolled container for a repeated item
+var el = document.createElement('div');
+el.className = 'bg-white rounded-lg p-4 shadow-sm border-2 border-slate-200';
+el.appendChild(ltEl);
+el.appendChild(pronEl);
+el.appendChild(btn);
+
+// Do: same content, sdk.ui.card owns the container styling
+var el = sdk.ui.card({ children: [ltEl, pronEl, btn] });
+```
+
+A recurring pattern in generated addons: `sdk.ui.card` gets used once for a
+page header, then every item inside a loop reverts to a raw `<div>` — as if
+`card` were a one-per-page component rather than a general container. It
+isn't; use it anywhere a bordered/padded box is needed, including inside a
+loop. Reach for a hand-rolled `<div>` only when the block needs something
+`card`/`table`/`accordion` genuinely can't express (a custom progress-bar
+fill, a flip-animated flashcard face) — not merely because it repeats.
+
 ## Common mistakes to avoid
 
 - `document.body.appendChild(sdk.ui.dialog({...}))` — wrong; `dialog` is
