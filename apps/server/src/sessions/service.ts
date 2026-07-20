@@ -99,6 +99,7 @@ export class SessionMessageService {
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
+  private readonly maxContextTokens: number;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -128,6 +129,7 @@ export class SessionMessageService {
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
+    this.maxContextTokens = options.maxContextTokens ?? 100_000;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -181,6 +183,63 @@ export class SessionMessageService {
       `preserved in the transcript. If you need more, narrow the query, ` +
       `request a specific section/line range, or paginate.]`
     );
+  }
+
+  /**
+   * Rough token estimate for a set of messages (~4 chars/token plus a small
+   * per-message and per-tool-call overhead). Good enough to decide *when* to
+   * compact; we deliberately avoid a real tokenizer dependency on the hot path.
+   */
+  private estimateTokens(messages: Message[]): number {
+    let chars = 0;
+    for (const m of messages) {
+      chars += (m.content?.length ?? 0) + 8; // + role/framing overhead
+      const toolCalls = (
+        m as { toolCalls?: Array<{ arguments?: string; name?: string }> }
+      ).toolCalls;
+      if (toolCalls) {
+        for (const tc of toolCalls) {
+          chars += (tc.arguments?.length ?? 0) + (tc.name?.length ?? 0) + 16;
+        }
+      }
+    }
+    return Math.ceil(chars / 4);
+  }
+
+  /**
+   * Keep the loop history within `maxContextTokens` by eliding the *bodies* of
+   * the oldest tool results (issue #437). Recent tool results — the model's
+   * working set — are preserved; only prior, already-consumed outputs are
+   * collapsed to a short notice. Assistant/user/system turns and the
+   * tool_call↔tool_result pairing are never touched (only a tool message's
+   * `content` shrinks), so the request stays provider-valid. Mutates in place
+   * so the elision persists across subsequent rounds. Returns the count elided.
+   *
+   * The full results remain in the persisted transcript; this only shapes what
+   * is re-sent to the model.
+   */
+  private compactContextInPlace(messages: Message[]): number {
+    const budget = this.maxContextTokens;
+    if (this.estimateTokens(messages) <= budget) return 0;
+
+    const ELISION_PREFIX = '[Earlier tool output elided to fit context:';
+    const MIN_ELIDE_CHARS = 200; // not worth collapsing tiny results
+    let elided = 0;
+
+    // Oldest-first: the earliest tool results are the least likely to still
+    // matter to the current step.
+    for (const m of messages) {
+      if (this.estimateTokens(messages) <= budget) break;
+      if (m.role !== 'tool') continue;
+      const content = m.content ?? '';
+      if (content.startsWith(ELISION_PREFIX)) continue; // already elided
+      if (content.length <= MIN_ELIDE_CHARS) continue;
+      (m as { content: string }).content =
+        `${ELISION_PREFIX} ${content.length} characters omitted. The full ` +
+        `result is preserved in the transcript.]`;
+      elided++;
+    }
+    return elided;
   }
 
   /**
@@ -1243,6 +1302,26 @@ export class SessionMessageService {
             'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
           );
         }
+
+        // Keep the request within the input-token budget: elide the oldest
+        // tool-result bodies before sending (issue #437). Unbounded history is
+        // the root cause behind the round-exhaustion/stall symptom — a single
+        // run here reached ~1M prompt tokens on MiniMax-M3 and degraded.
+        const elided = this.compactContextInPlace(loopMessages);
+        if (elided > 0) {
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              elided,
+              budgetTokens: this.maxContextTokens,
+              estTokens: this.estimateTokens(loopMessages),
+            },
+            'Compacted context — elided oldest tool outputs to fit the token budget',
+          );
+        }
+
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,

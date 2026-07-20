@@ -352,6 +352,7 @@ describe('SessionMessageService.updateSessionTitle', () => {
 function makeStreamingService(opts: {
   maxToolRounds: number;
   maxToolOutputChars?: number;
+  maxContextTokens?: number;
   /** Custom executor for the 'echo' tool (e.g. to return an oversized result). */
   echoExecute?: () => Promise<{ ok: true; content: string }>;
   invokeStream: (request: {
@@ -382,6 +383,9 @@ function makeStreamingService(opts: {
     maxToolRounds: opts.maxToolRounds,
     ...(opts.maxToolOutputChars !== undefined && {
       maxToolOutputChars: opts.maxToolOutputChars,
+    }),
+    ...(opts.maxContextTokens !== undefined && {
+      maxContextTokens: opts.maxContextTokens,
     }),
   });
 
@@ -554,5 +558,103 @@ describe('SessionMessageService — tool-output context cap', () => {
     const toolMsg = finalRoundMessages.find((m) => m.role === 'tool');
     expect(toolMsg?.content).toBe(SMALL);
     expect(toolMsg?.content).not.toContain('truncated');
+  });
+});
+
+// ============================================================================
+// Agentic tool-call loop — context-window compaction (issue #437)
+// ============================================================================
+
+describe('SessionMessageService — context-window compaction', () => {
+  it('elides older tool-result bodies in the model context when over the token budget', async () => {
+    const BIG = 'Y'.repeat(400); // > the 200-char elide threshold
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      // Tiny budget so accumulated tool output must be compacted…
+      maxContextTokens: 20,
+      // …but the per-result cap is high, so #436 truncation is NOT what fires.
+      maxToolOutputChars: 100_000,
+      echoExecute: async () => ({ ok: true as const, content: BIG }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: {},
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Compact');
+    const sessionId = (session as { id: string }).id;
+    const result = await submit(service, sessionId);
+    expect(result.ok).toBe(true);
+
+    // At least one older tool result was collapsed to the elision notice…
+    const toolMsgs = finalRoundMessages.filter((m) => m.role === 'tool');
+    const elided = toolMsgs.filter((m) =>
+      m.content.includes('elided to fit context'),
+    );
+    expect(elided.length).toBeGreaterThan(0);
+    // …and elided by #437 (compaction), not #436 (per-result truncation).
+    expect(elided[0]!.content).not.toContain('truncated for context');
+
+    // The persisted transcript keeps every tool result in full.
+    const persisted = (await service.listMessages(sessionId)) as Array<{
+      role: string;
+      content: string;
+    }>;
+    const persistedTool = persisted.filter((m) => m.role === 'tool');
+    expect(persistedTool.length).toBeGreaterThan(0);
+    for (const m of persistedTool) expect(m.content).toBe(BIG);
+  });
+
+  it('leaves history untouched when under the token budget', async () => {
+    const SMALL = 'z'.repeat(300);
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      maxContextTokens: 1_000_000, // effectively unlimited
+      maxToolOutputChars: 100_000,
+      echoExecute: async () => ({ ok: true as const, content: SMALL }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('No compact');
+    await submit(service, (session as { id: string }).id);
+
+    const toolMsg = finalRoundMessages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe(SMALL);
+    expect(toolMsg?.content).not.toContain('elided');
   });
 });

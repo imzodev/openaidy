@@ -141,6 +141,15 @@ export type SessionMessageServiceOptions = {
    * the UI/history. Defaults to 24000 (~6k tokens).
    */
   maxToolOutputChars?: number;
+  /**
+   * Approximate input-token budget for the agentic loop. Before each model
+   * call, if the running message history is estimated to exceed this, the
+   * oldest tool-result bodies are elided (their tool_call/result pairing is
+   * preserved) until it fits — keeping a large or long conversation from
+   * degrading tool-calling or overflowing the model's window. The full
+   * results remain in the persisted transcript. Defaults to 100000.
+   */
+  maxContextTokens?: number;
   repositories?:
     | {
         sessions: SessionsStore;
