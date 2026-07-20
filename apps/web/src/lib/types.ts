@@ -232,6 +232,18 @@ export type UsageByModel = UsageTotals & {
   providerId: string;
   modelId: string;
 };
+/**
+ * Per-day × per-model rollup. Powers the stacked-bar usage chart on the
+ * dashboard, which needs to know exactly how much each model contributed
+ * on each day (not just the per-day total or the per-model total).
+ *
+ * Mirrors the server type in `apps/server/src/usage/aggregate.ts`.
+ */
+export type UsageByDayAndModel = UsageTotals & {
+  day: string;
+  providerId: string;
+  modelId: string;
+};
 
 /** Aggregated usage report (GET /api/usage). */
 export type UsageReport = {
@@ -241,6 +253,11 @@ export type UsageReport = {
   byDay: UsageByDay[];
   byProvider: UsageByProvider[];
   byModel: UsageByModel[];
+  /**
+   * Per-day × per-model breakdown. Empty when no rows in the selected
+   * range. Powers the stacked-bar chart on the usage page.
+   */
+  byDayByModel: UsageByDayAndModel[];
 };
 
 /** Per-session usage response (GET /api/sessions/:id/usage). */

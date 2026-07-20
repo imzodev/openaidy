@@ -2,8 +2,9 @@
  * Usage aggregation helpers.
  *
  * Pure functions that roll up per-run usage rows into totals and
- * breakdowns by day, provider, and model. Grouping is done here (rather
- * than in SQL) so the queries stay portable across SQLite and Postgres.
+ * breakdowns by day, provider, model, and day×model. Grouping is done
+ * here (rather than in SQL) so the queries stay portable across SQLite
+ * and Postgres.
  */
 
 import type { UsageRunRow } from '@openaidy/db';
@@ -27,12 +28,24 @@ export type UsageByModel = UsageTotals & {
   providerId: string;
   modelId: string;
 };
+/**
+ * Per-day × per-model rollup. Powers the stacked-bar usage chart on the
+ * dashboard, which needs to know exactly how much each model contributed
+ * on each day (not just the per-day total or the per-model total).
+ */
+export type UsageByDayAndModel = UsageTotals & {
+  day: string;
+  providerId: string;
+  modelId: string;
+};
 
 export type UsageReport = {
   totals: UsageTotals;
   byDay: UsageByDay[];
   byProvider: UsageByProvider[];
   byModel: UsageByModel[];
+  /** Per-day × per-model breakdown. Empty when no rows. */
+  byDayByModel: UsageByDayAndModel[];
 };
 
 function emptyTotals(): UsageTotals {
@@ -67,15 +80,19 @@ export function dayOf(isoTimestamp: string): string {
 }
 
 /**
- * Roll up usage rows into overall totals plus day/provider/model
- * breakdowns. Breakdown arrays are sorted: days ascending, provider/model
- * by descending total tokens.
+ * Roll up usage rows into overall totals plus day/provider/model/day×model
+ * breakdowns. Breakdown arrays are sorted: days ascending; provider/model
+ * by descending total tokens; byDayByModel by day ascending (within-day
+ * ordering is unspecified — renderers sort segments per bar).
  */
 export function aggregateUsage(rows: UsageRunRow[]): UsageReport {
   const totals = emptyTotals();
   const byDay = new Map<string, UsageByDay>();
   const byProvider = new Map<string, UsageByProvider>();
   const byModel = new Map<string, UsageByModel>();
+  // Nested map keeps lookups O(1) while we still process rows in a single
+  // pass. Outer key = day, inner key = `${providerId}/${modelId}`.
+  const byDayByModel = new Map<string, Map<string, UsageByDayAndModel>>();
 
   for (const row of rows) {
     addRow(totals, row);
@@ -106,6 +123,39 @@ export function aggregateUsage(rows: UsageRunRow[]): UsageReport {
       byModel.set(modelKey, modelEntry);
     }
     addRow(modelEntry, row);
+
+    let dayMap = byDayByModel.get(day);
+    if (!dayMap) {
+      dayMap = new Map();
+      byDayByModel.set(day, dayMap);
+    }
+    let dayModelEntry = dayMap.get(modelKey);
+    if (!dayModelEntry) {
+      dayModelEntry = {
+        ...emptyTotals(),
+        day,
+        providerId: row.providerId,
+        modelId: row.modelId,
+      };
+      dayMap.set(modelKey, dayModelEntry);
+    }
+    addRow(dayModelEntry, row);
+  }
+
+  // Flatten the nested day×model map. Sort by day ascending; within-day
+  // order doesn't matter for the chart (the renderer sorts segments by
+  // totalTokens desc per bar), but a stable day-first order keeps the
+  // payload diffable across requests and easier to scan in logs.
+  const byDayByModelList: UsageByDayAndModel[] = [];
+  const sortedDays = [...byDayByModel.keys()].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  for (const day of sortedDays) {
+    const dayMap = byDayByModel.get(day);
+    if (!dayMap) continue;
+    for (const entry of dayMap.values()) {
+      byDayByModelList.push(entry);
+    }
   }
 
   return {
@@ -117,5 +167,6 @@ export function aggregateUsage(rows: UsageRunRow[]): UsageReport {
     byModel: [...byModel.values()].sort(
       (a, b) => b.totalTokens - a.totalTokens,
     ),
+    byDayByModel: byDayByModelList,
   };
 }

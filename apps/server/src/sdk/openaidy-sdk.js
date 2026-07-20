@@ -18,7 +18,6 @@
   var SDK_VERSION = '0.3.0';
   console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
 
-  let _token = null;
   let _apiBase = null;
   let _nonce = null;
   let _ready = false;
@@ -57,7 +56,6 @@
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.type === 'OPENAIDY_INIT') {
-      _token = msg.token ?? null;
       _apiBase = msg.apiBase ?? null;
       _nonce = msg.nonce ?? null;
       _ready = true;
