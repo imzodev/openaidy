@@ -768,6 +768,107 @@ describe('OpenAICompatibleProvider', () => {
       }
     });
   });
+
+  // Pins the streaming tool-call parse behavior (issue #439 audit). The
+  // adapter accumulates `delta.tool_calls` by index and emits them before
+  // stream.finished; a `finish_reason: tool_calls` with no tool-call deltas
+  // correctly yields NO tool_call event (a genuine provider quirk the session
+  // loop recovers from via retry, not a parser bug).
+  describe('invokeStream tool-call parsing', () => {
+    const request: ModelRequest = {
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'weather in SF?' }],
+      tools: [
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+    };
+
+    async function collect(chunks: unknown[]) {
+      const mockStream = (async function* () {
+        for (const c of chunks) yield c;
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const events: Array<{ type: string; [k: string]: unknown }> = [];
+      for await (const event of provider.invokeStream(request)) {
+        if (event.ok) events.push(event.value as { type: string });
+      }
+      return events;
+    }
+
+    it('assembles incremental tool-call deltas into one tool_call', async () => {
+      const events = await collect([
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'get_weather', arguments: '{"ci' },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { arguments: 'ty":"SF"}' } },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+        },
+      ]);
+
+      const toolCalls = events.filter((e) => e.type === 'stream.tool_call');
+      expect(toolCalls).toHaveLength(1);
+      const tc = toolCalls[0]!.toolCall as { name: string; arguments: string };
+      expect(tc.name).toBe('get_weather');
+      expect(tc.arguments).toBe('{"city":"SF"}');
+      const finished = events.find((e) => e.type === 'stream.finished');
+      expect(finished?.finishReason).toBe('tool_calls');
+    });
+
+    it('emits no tool_call when finish_reason is tool_calls but no deltas arrive (degenerate turn)', async () => {
+      const events = await collect([
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+        },
+      ]);
+
+      expect(events.filter((e) => e.type === 'stream.tool_call')).toHaveLength(
+        0,
+      );
+      const finished = events.find((e) => e.type === 'stream.finished');
+      expect(finished?.finishReason).toBe('tool_calls');
+    });
+  });
 });
 
 describe('Factory functions', () => {

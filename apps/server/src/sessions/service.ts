@@ -1337,6 +1337,14 @@ export class SessionMessageService {
       // many tool calls (read files, search, fetch), so keep this generous —
       // a low cap makes the agent run out of rounds mid-task and stop.
       const MAX_TOOL_ROUNDS = this.maxToolRounds;
+      // Bounded recovery for degenerate turns: some providers (MiniMax under
+      // heavy context) occasionally report finish_reason `tool_calls` while
+      // emitting no parseable tool call and no content. That would otherwise
+      // fall straight through to the empty-message fallback and stall the run.
+      // Retry the turn a few times first — it's usually transient. Counted
+      // across the whole run so a persistently-broken turn can't loop forever.
+      const MAX_EMPTY_TURN_RETRIES = 2;
+      let emptyTurnRetries = 0;
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         // On the final permitted round, stop offering tools so the model is
         // forced to turn what it has gathered into a text answer. Without this,
@@ -1506,6 +1514,30 @@ export class SessionMessageService {
             errorCode,
             errorMessage,
           );
+        }
+
+        // Degenerate-turn recovery (#439): the model signaled it wanted tools
+        // but emitted no parseable tool call AND no text. Nothing was appended
+        // to loopMessages, so re-invoking replays the same request — usually
+        // enough to recover, since sampling varies. Doesn't consume a tool
+        // round (round is restored); bounded by MAX_EMPTY_TURN_RETRIES.
+        const degenerateEmptyTurn =
+          finalFinishReason === 'tool_calls' &&
+          toolCalls.length === 0 &&
+          accumulatedContent.trim() === '';
+        if (degenerateEmptyTurn && emptyTurnRetries < MAX_EMPTY_TURN_RETRIES) {
+          emptyTurnRetries++;
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              retry: emptyTurnRetries,
+            },
+            'Model signaled tool_calls but returned none — retrying the turn',
+          );
+          round--; // retry this round without consuming the budget
+          continue;
         }
 
         // If the model made tool calls, execute them and continue the loop
