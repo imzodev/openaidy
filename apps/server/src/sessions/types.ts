@@ -133,6 +133,14 @@ export type SessionMessageServiceOptions = {
    * to 25. Exposed mainly so tests can drive the exhaustion path cheaply.
    */
   maxToolRounds?: number;
+  /**
+   * Max characters of a single tool result that are fed back into the model
+   * context. Oversized results (e.g. broad MCP search responses) are truncated
+   * with a notice before entering the loop history, to keep the context from
+   * ballooning and degrading the model. The full result is still persisted for
+   * the UI/history. Defaults to 24000 (~6k tokens).
+   */
+  maxToolOutputChars?: number;
   repositories?:
     | {
         sessions: SessionsStore;

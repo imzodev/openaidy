@@ -98,6 +98,7 @@ export class SessionMessageService {
   private readonly attachments: AttachmentService | undefined;
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
+  private readonly maxToolOutputChars: number;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -126,6 +127,7 @@ export class SessionMessageService {
     this.attachments = options.attachments;
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
+    this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -151,6 +153,34 @@ export class SessionMessageService {
     if (!controller) return false;
     controller.abort();
     return true;
+  }
+
+  /**
+   * Cap the copy of a tool result that is fed back into the model context.
+   *
+   * A single oversized tool result (broad MCP search responses are the usual
+   * culprit — builtin read/fetch already self-cap) can balloon the request to
+   * the model's context limit, which degrades tool-calling and causes the run
+   * to stall (see the agentic-loop round-exhaustion analysis). We truncate the
+   * *context* copy only; the full result is still persisted to the DB so the
+   * UI and history keep it intact. Cross-run history replay is trimmed
+   * separately.
+   */
+  private capToolOutputForContext(content: string, toolName: string): string {
+    const cap = this.maxToolOutputChars;
+    if (content.length <= cap) return content;
+    const omitted = content.length - cap;
+    this.logger?.warn(
+      { toolName, originalChars: content.length, cap },
+      'Tool output exceeded context cap — truncated the copy sent to the model',
+    );
+    return (
+      content.slice(0, cap) +
+      `\n\n[Tool output truncated for context: showing ${cap} of ` +
+      `${content.length} characters (${omitted} omitted). The full result is ` +
+      `preserved in the transcript. If you need more, narrow the query, ` +
+      `request a specific section/line range, or paginate.]`
+    );
   }
 
   /**
@@ -1712,9 +1742,12 @@ export class SessionMessageService {
                 }
               }
 
+              // Feed the model a size-capped copy (the full result was just
+              // persisted above). Keeps one broad tool result from ballooning
+              // the context and stalling the run (issue #436).
               loopMessages.push({
                 role: 'tool',
-                content: toolContent,
+                content: this.capToolOutputForContext(toolContent, tc.name),
                 toolCallId: tc.id,
                 ...(toolIsError ? { isError: true } : {}),
               } as Message);
