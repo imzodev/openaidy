@@ -96,10 +96,15 @@ export function AddonViewPage(props: Props) {
     setTimeout(() => setReloading(false), 50);
   };
 
+  // The iframe never receives the user's auth token — it's a sandboxed,
+  // opaque-origin context that can run arbitrary (including LLM-generated)
+  // script, so anything posted into it must be assumed readable by the
+  // addon itself. All authenticated calls the addon triggers are proxied by
+  // this component (see handleMessage below) using a short-lived,
+  // addon-scoped token that never crosses into the iframe.
   const sendInit = () => {
-    const token = resolveToken();
     iframeRef?.contentWindow?.postMessage(
-      { type: 'OPENAIDY_INIT', token, apiBase: SERVER_BASE, nonce },
+      { type: 'OPENAIDY_INIT', apiBase: SERVER_BASE, nonce },
       '*',
     );
   };
@@ -124,6 +129,12 @@ export function AddonViewPage(props: Props) {
 
   // Bridge: proxy API requests from the iframe to the real backend
   const handleMessage = async (event: MessageEvent) => {
+    // The sandboxed iframe has an opaque origin, so `event.origin` can't be
+    // checked. Compare `event.source` — the iframe's actual window object —
+    // instead: this rejects messages from any other frame/tab up front, for
+    // every message type, including ADDON_READY (which necessarily arrives
+    // before the addon has a nonce to echo back).
+    if (event.source !== iframeRef?.contentWindow) return;
     const msg = event.data as Record<string, unknown>;
     if (typeof msg !== 'object') return;
     // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
@@ -178,13 +189,15 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    // Use addon-scoped token for addon-proxy routes, user token for everything else
-    const isAddonProxy = reqPath.startsWith('/api/addon-proxy/');
+    // Every allowed path is an addon-proxy route (see ALLOWED_ROUTES above),
+    // so this always requires the short-lived, addon-scoped token — never
+    // the user's own auth token. Fail closed if it's missing; there is no
+    // fallback to a broader credential.
     const addonToken = localStorage.getItem(
       `openaidy_addon_token:${props.addon.addonId}`,
     );
 
-    if (isAddonProxy && !addonToken) {
+    if (!addonToken) {
       iframeRef?.contentWindow?.postMessage(
         {
           type: 'OPENAIDY_RESPONSE',
@@ -199,13 +212,12 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    const token = isAddonProxy ? addonToken : resolveToken();
     try {
       const res = await fetch(`${SERVER_BASE}${reqPath}`, {
         method: method ?? 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${addonToken}`,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
