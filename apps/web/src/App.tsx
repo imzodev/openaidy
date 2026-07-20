@@ -57,6 +57,7 @@ import {
 import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
 import type { ChoicesEvent } from '@openaidy/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
+import { PausedRunNotice } from './components/PausedRunNotice';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import './index.css';
 
@@ -760,6 +761,19 @@ function AppContent(props: AppContentProps) {
     return data.items || [];
   };
 
+  // The latest run "paused" mid-task: it succeeded but with finish_reason
+  // `tool_calls`, meaning the agent wanted to keep going (hit its step limit
+  // or a degenerate empty turn). Surface a resume affordance instead of
+  // letting it look complete. Runs come back newest-first. Hidden while
+  // streaming or when a choices prompt is pending (mutually exclusive UIs).
+  const isPausedMidTask = (): boolean => {
+    if (isStreaming() || currentChoices()) return false;
+    const latest = runs()[0];
+    return (
+      latest?.status === 'succeeded' && latest?.finishReason === 'tool_calls'
+    );
+  };
+
   const agents = (): Agent[] => {
     return agentsQuery.data?.items || [];
   };
@@ -1039,6 +1053,11 @@ function AppContent(props: AppContentProps) {
                     }}
                   />
                 )}
+              </Show>
+              <Show when={isPausedMidTask()}>
+                <PausedRunNotice
+                  onContinue={() => handleSubmit('continue', selectedAgentId())}
+                />
               </Show>
               <RunList
                 runs={runs()}
