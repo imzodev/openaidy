@@ -1,7 +1,12 @@
 import { createResource, createSignal, For, Show } from 'solid-js';
 import { Layout } from './Layout';
 import { getUsage } from '../../lib/api';
-import type { UsageByDay, UsageReport } from '../../lib/types';
+import type {
+  UsageByDay,
+  UsageByDayAndModel,
+  UsageByModel,
+  UsageReport,
+} from '../../lib/types';
 import { formatNumber, formatCost } from '../../lib/usage-format';
 
 type RangePreset = '7d' | '30d' | '90d' | 'all';
@@ -23,18 +28,87 @@ function fromForPreset(preset: RangePreset): string | undefined {
 }
 
 /**
- * Daily token bar chart. Single series (magnitude), so no legend — one hue,
- * thin bars with rounded tops anchored to the baseline. Purely presentational
- * inline SVG so it stays self-contained (no chart dependency).
+ * Stable color palette for the stacked-bar chart. Models are assigned
+ * colors by descending totalTokens (top spender = palette[0], second =
+ * palette[1], ...). The palette wraps after 10 entries; if a project has
+ * more than 10 models the chart becomes hard to read but stays honest —
+ * every model still gets a visible segment and a legend entry.
+ *
+ * Why Tailwind classes and not raw hex: the rest of this file already
+ * uses Tailwind classes for SVG fill (`fill-primary`), and the same
+ * classes work for the legend swatches below.
  */
-function DailyChart(props: { byDay: UsageByDay[] }) {
-  const max = () => Math.max(1, ...props.byDay.map((d) => d.totalTokens));
+const CHART_PALETTE = [
+  'fill-blue-500',
+  'fill-emerald-500',
+  'fill-amber-500',
+  'fill-violet-500',
+  'fill-rose-500',
+  'fill-cyan-500',
+  'fill-orange-500',
+  'fill-lime-500',
+  'fill-pink-500',
+  'fill-indigo-500',
+] as const;
+
+const FILL_OVERFLOW = 'fill-gray-300 dark:fill-gray-600';
+
+/** Stable model-key → CSS-class assignment, sorted by totalTokens desc. */
+function buildModelColorMap(byModel: UsageByModel[]): Map<string, string> {
+  const map = new Map<string, string>();
+  byModel.forEach((row, i) => {
+    const key = `${row.providerId}/${row.modelId}`;
+    map.set(key, CHART_PALETTE[i % CHART_PALETTE.length] ?? FILL_OVERFLOW);
+  });
+  return map;
+}
+
+/**
+ * Index `byDayByModel` rows by day so each bar can find its segments in
+ * O(1). Inner key is the model key so we can pull total tokens per model
+ * per day without scanning.
+ */
+function indexSegmentsByDay(
+  rows: UsageByDayAndModel[],
+): Map<string, Map<string, UsageByDayAndModel>> {
+  const out = new Map<string, Map<string, UsageByDayAndModel>>();
+  for (const row of rows) {
+    const modelKey = `${row.providerId}/${row.modelId}`;
+    let dayMap = out.get(row.day);
+    if (!dayMap) {
+      dayMap = new Map();
+      out.set(row.day, dayMap);
+    }
+    dayMap.set(modelKey, row);
+  }
+  return out;
+}
+
+/**
+ * Stacked daily token-usage chart. Each bar = one day; bar height = that
+ * day's total tokens; bar segments = per-model contributions, colored
+ * stably by rank (top model = palette[0]). Replaces the previous
+ * single-color chart so the dashboard shows *which* models drove usage,
+ * not just the magnitude.
+ *
+ * Pure inline SVG — no chart dependency, matches the rest of the page.
+ */
+function StackedDailyChart(props: {
+  byDay: UsageByDay[];
+  byDayByModel: UsageByDayAndModel[];
+  byModel: UsageByModel[];
+}) {
+  const segmentsByDay = () => indexSegmentsByDay(props.byDayByModel);
+  const colorByModel = () => buildModelColorMap(props.byModel);
 
   const width = 720;
   const height = 180;
   const padBottom = 22;
   const padTop = 8;
   const gap = 3;
+  // Minimum visible segment height (px). Keeps tiny contributions
+  // hoverable; the tooltip shows the real (unfloored) value.
+  const minSegH = 0.5;
 
   const barWidth = () => {
     const n = props.byDay.length || 1;
@@ -58,31 +132,59 @@ function DailyChart(props: { byDay: UsageByDay[] }) {
           viewBox={`0 0 ${width} ${height}`}
           class="w-full min-w-[480px]"
           role="img"
-          aria-label="Daily token usage"
+          aria-label="Daily token usage by model"
         >
           <For each={props.byDay}>
             {(day, i) => {
               const bw = barWidth();
               const x = i() * (bw + gap);
               const usableH = height - padBottom - padTop;
-              const h = (day.totalTokens / max()) * usableH;
-              const y = height - padBottom - h;
+              const dayTotal = Math.max(1, day.totalTokens);
+              const dayMap = segmentsByDay().get(day.day);
+              // Within-day ordering: largest segment at the bottom of the
+              // bar so the total stays anchored and small contributions
+              // sit on top. Tie-break by model key for stable renders.
+              const segments = dayMap
+                ? [...dayMap.values()].sort((a, b) => {
+                    if (b.totalTokens !== a.totalTokens) {
+                      return b.totalTokens - a.totalTokens;
+                    }
+                    return `${a.providerId}/${a.modelId}`.localeCompare(
+                      `${b.providerId}/${b.modelId}`,
+                    );
+                  })
+                : [];
+
+              // `cursorY` tracks the top edge of the next segment to draw
+              // — we paint from the baseline upward.
+              let cursorY = height - padBottom;
               const showLabel = i() % labelEvery() === 0;
               return (
                 <>
-                  <rect
-                    x={x}
-                    y={y}
-                    width={bw}
-                    height={Math.max(0, h)}
-                    rx={2}
-                    class="fill-primary"
-                  >
-                    <title>
-                      {day.day}: {formatNumber(day.totalTokens)} tokens
-                      {day.hasCost ? `, ${formatCost(day.cost, true)}` : ''}
-                    </title>
-                  </rect>
+                  <For each={segments}>
+                    {(seg) => {
+                      const modelKey = `${seg.providerId}/${seg.modelId}`;
+                      const rawH = (seg.totalTokens / dayTotal) * usableH;
+                      const h = Math.max(minSegH, rawH);
+                      const y = cursorY - h;
+                      cursorY = y;
+                      const color =
+                        colorByModel().get(modelKey) ?? FILL_OVERFLOW;
+                      const pct = (
+                        (seg.totalTokens / dayTotal) *
+                        100
+                      ).toFixed(1);
+                      return (
+                        <rect x={x} y={y} width={bw} height={h} class={color}>
+                          <title>
+                            {day.day} · {modelKey}:{' '}
+                            {formatNumber(seg.totalTokens)} tokens ({pct}% of
+                            day)
+                          </title>
+                        </rect>
+                      );
+                    }}
+                  </For>
                   <Show when={showLabel}>
                     <text
                       x={x + bw / 2}
@@ -100,6 +202,30 @@ function DailyChart(props: { byDay: UsageByDay[] }) {
           </For>
         </svg>
       </div>
+      {/* Legend — one row per model in rank order, color swatch + key +
+          total tokens across the range. Wraps on narrow viewports. */}
+      <Show when={props.byModel.length > 0}>
+        <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+          <For each={props.byModel}>
+            {(row) => {
+              const key = `${row.providerId}/${row.modelId}`;
+              const color = colorByModel().get(key) ?? FILL_OVERFLOW;
+              return (
+                <li class="flex items-center gap-1.5">
+                  <span
+                    class={`inline-block w-3 h-3 rounded-sm ${color}`}
+                    aria-hidden="true"
+                  />
+                  <span class="tabular-nums">{key}</span>
+                  <span class="text-text-tertiary tabular-nums">
+                    {formatNumber(row.totalTokens)}
+                  </span>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </Show>
     </Show>
   );
 }
@@ -210,9 +336,13 @@ export function UsagePage() {
           {/* Daily usage chart */}
           <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 mb-4">
             <h2 class="text-sm font-medium text-text-primary mb-3">
-              Tokens per day
+              Tokens per day, by model
             </h2>
-            <DailyChart byDay={report()?.byDay ?? []} />
+            <StackedDailyChart
+              byDay={report()?.byDay ?? []}
+              byDayByModel={report()?.byDayByModel ?? []}
+              byModel={report()?.byModel ?? []}
+            />
           </div>
 
           {/* Breakdown by model (doubles as the accessible table view) */}
