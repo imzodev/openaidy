@@ -97,6 +97,7 @@ export class SessionMessageService {
   private readonly workspaceBaseDir: string | undefined;
   private readonly attachments: AttachmentService | undefined;
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
+  private readonly maxToolRounds: number;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -124,6 +125,7 @@ export class SessionMessageService {
     this.workspaceBaseDir = options.workspaceBaseDir;
     this.attachments = options.attachments;
     this.modelPricing = options.modelPricing;
+    this.maxToolRounds = options.maxToolRounds ?? 25;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -1184,12 +1186,37 @@ export class SessionMessageService {
     );
 
     try {
-      const MAX_TOOL_ROUNDS = 10;
+      // Cap the agentic tool-call loop. Exploratory tasks legitimately chain
+      // many tool calls (read files, search, fetch), so keep this generous —
+      // a low cap makes the agent run out of rounds mid-task and stop.
+      const MAX_TOOL_ROUNDS = this.maxToolRounds;
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        // On the final permitted round, stop offering tools so the model is
+        // forced to turn what it has gathered into a text answer. Without this,
+        // a task that exhausts the round budget ends right after the last
+        // round's tool calls execute — the loop exits before the model can
+        // respond, persisting an EMPTY assistant message and marking the run
+        // "succeeded" with finish_reason `tool_calls`. To the user that looks
+        // like the agent silently stalled mid-task, forcing them to re-prompt
+        // "continue" (which starts a fresh run that then finishes). Reserving
+        // the final round for a forced text response guarantees the run always
+        // ends with a real, non-empty answer instead. (See run Ozpbnm8Y…)
+        const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+        const offerTools = allTools.length > 0 && !isFinalRound;
+        if (isFinalRound && allTools.length > 0) {
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              maxRounds: MAX_TOOL_ROUNDS,
+            },
+            'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
+          );
+        }
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,
-          ...(allTools.length > 0 && { tools: allTools, toolChoice: 'auto' }),
+          ...(offerTools && { tools: allTools, toolChoice: 'auto' }),
           // Run-level cancel: aborting this signal cancels the provider fetch.
           signal: runController.signal,
         };
@@ -1729,7 +1756,26 @@ export class SessionMessageService {
         };
       }
 
-      // 7. Persist assistant message with accumulated content
+      // 7. Persist assistant message with accumulated content.
+      // Defense in depth: the forced final round (above) should always yield a
+      // text answer, but if the model still returns nothing usable, never
+      // persist a blank assistant bubble — that's the exact symptom that reads
+      // as "the agent silently stopped". Substitute an honest, actionable note.
+      if (accumulatedContent.trim() === '') {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            finishReason: finalFinishReason,
+          },
+          'Run produced an empty final assistant message — substituting fallback',
+        );
+        accumulatedContent =
+          finalFinishReason === 'tool_calls'
+            ? 'I reached my step limit for this turn before finishing. Reply "continue" and I’ll pick up where I left off.'
+            : 'I wasn’t able to produce a response for this turn. Reply "continue" to have me try again.';
+      }
+
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
         runId: run.id,
