@@ -20,7 +20,7 @@ import {
   type Agent,
   type SessionRun,
 } from './lib/ws-api';
-import { ThemeProvider } from './lib/theme';
+import { ThemeProvider, useTheme } from './lib/theme';
 import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
@@ -60,6 +60,16 @@ import type { ChoicesEvent } from '@openaidy/shared-types';
 import { ChoicesCard } from './components/ChoicesCard';
 import { PausedRunNotice } from './components/PausedRunNotice';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import {
+  CommandPalette,
+  useCommandPaletteHotkey,
+} from './components/ui/CommandPalette';
+import type { CommandContext } from './components/ui/command-registry';
+import {
+  initRecentItems,
+  recordRecentSession,
+  recordRecentAgent,
+} from './stores/recent-items';
 import './index.css';
 
 // Create a client
@@ -77,6 +87,10 @@ type AppContentProps = {
 };
 
 function AppContent(props: AppContentProps) {
+  // Load recent-items once on mount so the command palette can render
+  // persisted recents before the user types anything.
+  initRecentItems();
+
   // Use the router hook
   const { currentView, currentAddonId, navigate, navigateToAddon } =
     createRouter();
@@ -156,6 +170,13 @@ function AppContent(props: AppContentProps) {
     null,
   );
   const [isDeletingSession, setIsDeletingSession] = createSignal(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = createSignal(false);
+
+  // Theme context for the "Toggle Theme" command.
+  const { theme, setTheme } = useTheme();
+
+  // ⌘K / Ctrl+K opens the palette.
+  useCommandPaletteHotkey(setIsCommandPaletteOpen);
 
   // ── Stream watchdog ────────────────────────────────────────────────────────
   // `isStreaming` is a single app-wide flag that gates ALL sends and is only
@@ -872,6 +893,61 @@ function AppContent(props: AppContentProps) {
   // Current view for conditional rendering
   const view = () => currentView();
 
+  // Record a session visit for the command palette "Recent" section.
+  // Lookup the session title from the cached list so the palette can show
+  // human-readable labels instead of bare ids.
+  const rememberSession = (id: string) => {
+    const session = sessionsQuery.data?.items.find((s) => s.id === id);
+    recordRecentSession({
+      id,
+      title: session?.title ?? `Session ${id.slice(0, 6)}`,
+    });
+  };
+
+  const rememberAgent = (id: string) => {
+    const agent = agents().find((a) => a.id === id);
+    recordRecentAgent({ id, name: agent?.name ?? id });
+  };
+
+  // Re-run recent-tracking whenever the selected session changes. Effect
+  // intentionally runs only when the id actually changes; reading
+  // `selectedSessionId()` is the trigger.
+  createEffect(() => {
+    const sid = selectedSessionId();
+    if (sid) rememberSession(sid);
+  });
+
+  createEffect(() => {
+    const aid = effectiveAgentId();
+    if (aid) rememberAgent(aid);
+  });
+
+  // Command palette context. Built inline so each callback closes over the
+  // freshest signal values when the user invokes a command.
+  const commandCtx: CommandContext = {
+    navigate,
+    navigateToAddon,
+    newSession: handleCreateSession,
+    toggleTheme: () => {
+      // Cycle light → dark → system → light, matching ThemeToggle.
+      const next =
+        theme() === 'light' ? 'dark' : theme() === 'dark' ? 'system' : 'light';
+      setTheme(next);
+    },
+    toggleSidebar: () => setIsSidebarCollapsed((prev) => !prev),
+    stopAgent: isStreaming() ? handleCancelRun : undefined,
+    focusChatInput: () => focusChatInput()?.(),
+    getCurrentMessages: () => messages(),
+    notify: (message) => setSubmitError(message),
+    openRecentSession: (id) => {
+      setSelectedSessionId(id);
+      navigate('chat');
+    },
+    openRecentAgent: (id) => {
+      void handleStartChatWithAgent(id);
+    },
+  };
+
   return (
     <div class="h-dvh flex overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
@@ -1149,6 +1225,15 @@ function AppContent(props: AppContentProps) {
         isPending={isDeletingSession()}
         onConfirm={handleConfirmDelete}
         onCancel={() => setSessionToDelete(null)}
+      />
+
+      {/* Command palette (⌘K / Ctrl+K). Mounted at the top of the tree so
+          the modal overlay covers everything and its keyboard handlers
+          stay focused regardless of which sub-view is active. */}
+      <CommandPalette
+        ctx={commandCtx}
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
       />
     </div>
   );
