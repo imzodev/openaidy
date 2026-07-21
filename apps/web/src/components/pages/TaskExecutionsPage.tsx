@@ -5,14 +5,20 @@
  * the Schedule tab "View execution history" link.
  */
 
-import { createResource, createSignal, For, Show } from 'solid-js';
+import { createResource, createSignal, createMemo, For, Show } from 'solid-js';
 import { listTaskExecutions, getTaskSchedule } from '../../lib/api-tasks';
+import { getUsageBySessionIds } from '../../lib/api';
+import {
+  formatTokensCompact,
+  formatCost,
+  formatNumber,
+} from '../../lib/usage-format';
 import type {
   TaskExecutionHistoryStatus,
   ExecutionSubtaskSummary,
 } from '../../lib/types';
 import { ScheduleDisplay } from '../common/ScheduleDisplay';
-import { ArrowLeft, AlertCircle, ExternalLink } from 'lucide-solid';
+import { ArrowLeft, AlertCircle, ExternalLink, Zap } from 'lucide-solid';
 
 const STATUS_COLORS: Record<TaskExecutionHistoryStatus, string> = {
   planned: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -63,6 +69,25 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
         offset: page * PAGE_SIZE,
         ...(status ? { status } : {}),
       });
+    },
+  );
+
+  // Collect all session IDs from the visible execution rows so we can
+  // fetch their usage in a single batched call (avoids N+1).
+  const visibleSessionIds = createMemo(() => {
+    const items = data()?.items ?? [];
+    const ids: string[] = [];
+    for (const ex of items) {
+      if (ex.sessionId) ids.push(ex.sessionId);
+    }
+    return ids;
+  });
+
+  const [usageMap] = createResource(
+    () => visibleSessionIds(),
+    async (ids) => {
+      if (ids.length === 0) return {};
+      return getUsageBySessionIds(ids);
     },
   );
 
@@ -226,17 +251,38 @@ export function TaskExecutionsPage(props: TaskExecutionsPageProps) {
                           </span>
                         }
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            ex.sessionId && props.onOpenSession?.(ex.sessionId)
-                          }
-                          class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-xs"
-                          title="View session"
-                        >
-                          <ExternalLink class="w-3.5 h-3.5" />
-                          View
-                        </button>
+                        {(sid) => {
+                          const usage = () => usageMap()?.[sid()] ?? null;
+                          return (
+                            <div class="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => props.onOpenSession?.(sid())}
+                                class="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-xs"
+                                title="View session"
+                              >
+                                <ExternalLink class="w-3.5 h-3.5" />
+                                View
+                              </button>
+                              <Show when={usage()}>
+                                {(u) => (
+                                  <span
+                                    class="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400"
+                                    title={`${formatNumber(u().totalTokens)} tokens across ${u().runCount} run(s)${u().hasCost ? ` · ~$${u().cost.toFixed(4)}` : ''}`}
+                                  >
+                                    <Zap class="w-3 h-3" />
+                                    {formatTokensCompact(u().totalTokens)}{' '}
+                                    tokens
+                                    <Show when={u().hasCost}>
+                                      <span aria-hidden="true">·</span>
+                                      {formatCost(u().cost, u().hasCost)}
+                                    </Show>
+                                  </span>
+                                )}
+                              </Show>
+                            </div>
+                          );
+                        }}
                       </Show>
                     </td>
                     <td class="px-4 py-3">

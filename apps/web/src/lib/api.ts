@@ -589,6 +589,27 @@ export async function getUsageBySession(): Promise<
 }
 
 /**
+ * Fetch usage totals for a specific set of session IDs. Avoids fetching
+ * the full usage map when only a few sessions are needed (e.g. for task
+ * execution history rows). Gracefully degrades to an empty map on error.
+ */
+export async function getUsageBySessionIds(
+  sessionIds: string[],
+): Promise<Record<string, import('./types').UsageTotals>> {
+  if (sessionIds.length === 0) return {};
+  const params = new URLSearchParams();
+  params.set('sessionIds', sessionIds.join(','));
+  const response = await apiFetch(
+    `${API_BASE}/api/usage/sessions?${params.toString()}`,
+  );
+  if (!response.ok) return {};
+  const body = (await response.json()) as {
+    usageBySession?: Record<string, import('./types').UsageTotals>;
+  };
+  return body.usageBySession ?? {};
+}
+
+/**
  * Fetch aggregated usage across all sessions, optionally within a date
  * range (ISO strings; `to` exclusive).
  */
