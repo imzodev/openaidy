@@ -638,12 +638,16 @@ export class SessionMessageService {
    * Per-session usage totals for every session with succeeded runs, in one
    * query. Used to show usage on the sessions list without an N+1 fan-out.
    * Empty when no DB store.
+   *
+   * @param sessionIds Optional list to filter to specific sessions only.
    */
-  async getUsageBySession(): Promise<
+  async getUsageBySession(
+    sessionIds?: string[],
+  ): Promise<
     Array<import('@openaidy/db').SessionUsageTotals & { sessionId: string }>
   > {
     if (this.runsRepo) {
-      return this.runsRepo.getUsageBySession();
+      return this.runsRepo.getUsageBySession(sessionIds);
     }
     return [];
   }

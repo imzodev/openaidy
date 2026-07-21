@@ -51,9 +51,22 @@ export const usageRoutes: FastifyPluginAsync<UsageRoutesOptions> = async (
    * request — so the sessions list can show usage without an N+1 fan-out of
    * `/sessions/:id/usage`. Returned as a map keyed by session id; sessions
    * with no usage yet are simply absent.
+   *
+   * Query params:
+   *   sessionIds — optional comma-separated list to filter to specific
+   *   sessions (avoids fetching the full map when only a few are needed,
+   *   e.g. for task execution history rows).
    */
-  app.get('/usage/sessions', async () => {
-    const rows = await sessionService.getUsageBySession();
+  app.get('/usage/sessions', async (request) => {
+    const query = request.query as { sessionIds?: string };
+    const sessionIds = query.sessionIds
+      ? query.sessionIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
+
+    const rows = await sessionService.getUsageBySession(sessionIds);
     const usageBySession: Record<
       string,
       import('@openaidy/db').SessionUsageTotals

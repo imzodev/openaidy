@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lt, sql } from 'drizzle-orm';
+import { eq, and, desc, gte, lt, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/sessions';
@@ -401,10 +401,17 @@ export class SessionRunsRepository {
    * Postgres. Sessions with no succeeded runs are simply absent from the
    * result. Lets the UI show per-session usage on the whole list without an
    * N+1 fan-out of {@link getSessionUsage} calls.
+   *
+   * @param sessionIds Optional — when provided, only these sessions are
+   * included (useful for task execution history rows etc.).
    */
-  async getUsageBySession(): Promise<
-    Array<SessionUsageTotals & { sessionId: string }>
-  > {
+  async getUsageBySession(
+    sessionIds?: string[],
+  ): Promise<Array<SessionUsageTotals & { sessionId: string }>> {
+    const conditions = [eq(schema.sessionRuns.status, 'succeeded')];
+    if (sessionIds && sessionIds.length > 0) {
+      conditions.push(inArray(schema.sessionRuns.sessionId, sessionIds));
+    }
     const rows = await this.db
       .select({
         sessionId: schema.sessionRuns.sessionId,
@@ -416,7 +423,7 @@ export class SessionRunsRepository {
         cost: schema.sessionRuns.cost,
       })
       .from(schema.sessionRuns)
-      .where(eq(schema.sessionRuns.status, 'succeeded'));
+      .where(and(...conditions));
 
     type Row = {
       sessionId: string;
