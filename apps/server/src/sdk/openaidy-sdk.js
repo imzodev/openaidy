@@ -15,7 +15,7 @@
 (function (global) {
   'use strict';
 
-  var SDK_VERSION = '0.3.0';
+  var SDK_VERSION = '0.3.1';
   console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
 
   let _apiBase = null;
@@ -83,8 +83,18 @@
     }
   });
 
-  // Send a proxied API request through the parent
-  function request(method, path, body) {
+  // Default timeout for quick proxied calls (list/get/storage). Kept short so
+  // a genuinely lost response surfaces fast rather than hanging the UI.
+  var DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+  // Timeout for agent-invoking calls (invokeAgent, sendMessage). These block on
+  // a full LLM run server-side and routinely take 30s–150s+, so the short
+  // default would reject a request that actually succeeds. A generous ceiling
+  // still guards against a truly hung run / lost response.
+  var AGENT_REQUEST_TIMEOUT_MS = 300000; // 5 minutes
+
+  // Send a proxied API request through the parent. `timeoutMs` overrides the
+  // default for long-running calls.
+  function request(method, path, body, timeoutMs) {
     return new Promise(function (resolve, reject) {
       if (!_ready) {
         return reject(
@@ -106,13 +116,12 @@
         },
         '*',
       );
-      // Timeout after 15s
       setTimeout(function () {
         if (_pendingRequests.has(requestId)) {
           _pendingRequests.delete(requestId);
           reject(new Error('[OpenAidy SDK] Request timed out: ' + path));
         }
-      }, 15000);
+      }, timeoutMs || DEFAULT_REQUEST_TIMEOUT_MS);
     });
   }
 
@@ -301,10 +310,12 @@
       return request('GET', '/api/addon-proxy/sessions');
     },
     sendMessage: function (sessionId, content, agentId) {
+      // Runs the agent to completion server-side — allow the long timeout.
       return request(
         'POST',
         '/api/addon-proxy/sessions/' + sessionId + '/messages',
         { content: content, agentId: agentId },
+        AGENT_REQUEST_TIMEOUT_MS,
       );
     },
     getSession: function (sessionId) {
@@ -316,10 +327,16 @@
       return request('GET', '/api/addon-proxy/agents');
     },
     invokeAgent: function (agentId, input, context) {
-      return request('POST', '/api/addon-proxy/agents/' + agentId + '/invoke', {
-        input: input,
-        context: context ?? {},
-      });
+      // Blocks on a full LLM run server-side — allow the long timeout.
+      return request(
+        'POST',
+        '/api/addon-proxy/agents/' + agentId + '/invoke',
+        {
+          input: input,
+          context: context ?? {},
+        },
+        AGENT_REQUEST_TIMEOUT_MS,
+      );
     },
 
     // ── Config ────────────────────────────────────────────────────────────
@@ -1668,8 +1685,10 @@
     },
 
     // ── Raw request (escape hatch) ────────────────────────────────────────
-    request: function (method, path, body) {
-      return request(method, path, body);
+    // `timeoutMs` is optional; omit for the default. Pass a larger value for
+    // any custom endpoint that runs an agent / other long operation.
+    request: function (method, path, body, timeoutMs) {
+      return request(method, path, body, timeoutMs);
     },
   };
 
