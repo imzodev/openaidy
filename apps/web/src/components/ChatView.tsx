@@ -17,6 +17,7 @@ import { AttachmentList } from './AttachmentList';
 import { QueuedMessageCard } from './QueuedMessageCard';
 import { RunActivityBadge } from './RunActivityBadge';
 import type { RunActivityPhase } from './RunActivityBadge';
+import { CopyButton } from './ui/CopyButton';
 
 type StreamingToolCall = {
   id: string;
@@ -219,6 +220,11 @@ export function ChatView(props: ChatViewProps) {
                     <span class="text-xs text-text-tertiary">
                       {new Date(message.createdAt).toLocaleTimeString()}
                     </span>
+                    <Show when={message.content}>
+                      <span class="ml-auto">
+                        <CopyButton text={message.content} />
+                      </span>
+                    </Show>
                   </div>
                   <Show
                     when={

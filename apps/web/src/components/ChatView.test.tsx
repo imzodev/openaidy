@@ -20,6 +20,7 @@ vi.mock('lucide-solid', () => ({
   Pencil: () => <span data-testid="pencil" />,
   X: () => <span data-testid="x" />,
   Check: () => <span data-testid="check" />,
+  Copy: () => <span data-testid="copy" />,
   CircleStop: () => <span data-testid="circle-stop" />,
   Ban: () => <span data-testid="ban" />,
 }));
@@ -55,6 +56,37 @@ describe('ChatView', () => {
     expect(
       screen.getByText('Hello, user! How can I help?'),
     ).toBeInTheDocument();
+  });
+
+  describe('message copy buttons', () => {
+    it('renders a copy button for every non-empty message', () => {
+      render(() => <ChatView messages={mockMessages} isLoading={false} />);
+      const buttons = screen.getAllByRole('button', { name: 'Copy' });
+      expect(buttons).toHaveLength(mockMessages.length);
+    });
+
+    it('omits the copy button for empty messages', () => {
+      render(() => (
+        <ChatView
+          messages={[{ ...mockMessages[0], content: '' }, mockMessages[1]]}
+          isLoading={false}
+        />
+      ));
+      const buttons = screen.getAllByRole('button', { name: 'Copy' });
+      expect(buttons).toHaveLength(1);
+    });
+
+    it('copies the full message content when the button is clicked', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+      render(() => <ChatView messages={mockMessages} isLoading={false} />);
+      const buttons = screen.getAllByRole('button', { name: 'Copy' });
+      fireEvent.click(buttons[0]);
+      expect(writeText).toHaveBeenCalledWith('Hello, assistant!');
+    });
   });
 
   it('should show loading state', () => {

@@ -12,6 +12,8 @@ vi.mock('lucide-solid', () => ({
   Brain: () => <span data-testid="brain" />,
   ChevronDown: () => <span data-testid="chevron-down" />,
   ChevronRight: () => <span data-testid="chevron-right" />,
+  Copy: () => <span data-testid="copy" />,
+  Check: () => <span data-testid="check" />,
 }));
 
 describe('parseThinking', () => {
@@ -137,5 +139,18 @@ describe('MessageContent', () => {
     expect(buttons).toHaveLength(2);
     expect(screen.getByText('mid')).toBeInTheDocument();
     expect(screen.getByText('end')).toBeInTheDocument();
+  });
+
+  it('renders fenced code blocks via the CodeBlock wrapper with a copy button', () => {
+    const { container } = render(() => (
+      <MessageContent content={'```js\nconsole.log("hi");\n```'} />
+    ));
+    expect(container.querySelector('pre code')?.textContent).toBe(
+      'console.log("hi");',
+    );
+    expect(
+      container.querySelector('button[aria-label="Copy code"]'),
+    ).toBeInTheDocument();
+    expect(container).toHaveTextContent('js');
   });
 });
