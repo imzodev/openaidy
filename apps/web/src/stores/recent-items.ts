@@ -9,7 +9,7 @@
  * decoupled from API caching state.
  */
 
-import { createSignal } from 'solid-js';
+import { createSignal, untrack } from 'solid-js';
 
 export type RecentSession = {
   id: string;
@@ -86,18 +86,30 @@ export function recentAgentsSignal() {
   return recentAgents();
 }
 
-/** Record a session visit and persist. De-duplicates by id. */
+/**
+ * Record a session visit and persist. De-duplicates by id.
+ *
+ * The whole body runs `untrack`ed: these functions read the recents signals and
+ * then write them, so if the read were tracked by a calling `createEffect` (as
+ * the command palette does — recording the selected session on change), the
+ * effect would depend on a signal it mutates and re-run forever (stack
+ * overflow). `untrack` keeps them safe to call from any reactive context.
+ */
 export function recordRecentSession(item: RecentSession): void {
-  const next = pushRecent(recentSessions(), item);
-  setRecentSessionsInternal(next);
-  writeState({ sessions: next, agents: recentAgents() });
+  untrack(() => {
+    const next = pushRecent(recentSessions(), item);
+    setRecentSessionsInternal(next);
+    writeState({ sessions: next, agents: recentAgents() });
+  });
 }
 
-/** Record an agent visit and persist. De-duplicates by id. */
+/** Record an agent visit and persist. De-duplicates by id. See {@link recordRecentSession} re: `untrack`. */
 export function recordRecentAgent(item: RecentAgent): void {
-  const next = pushRecent(recentAgents(), item);
-  setRecentAgentsInternal(next);
-  writeState({ sessions: recentSessions(), agents: next });
+  untrack(() => {
+    const next = pushRecent(recentAgents(), item);
+    setRecentAgentsInternal(next);
+    writeState({ sessions: recentSessions(), agents: next });
+  });
 }
 
 /** Test/utility helper: wipe both lists. */

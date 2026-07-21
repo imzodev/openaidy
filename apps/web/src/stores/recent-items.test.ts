@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createRoot, createSignal, createEffect } from 'solid-js';
 import {
   initRecentItems,
   recordRecentSession,
@@ -94,5 +95,50 @@ describe('recent-items store', () => {
     initRecentItems();
     expect(recentSessionsSignal()).toEqual([]);
     expect(recentAgentsSignal()).toEqual([]);
+  });
+
+  // Regression: the command palette records the selected session/agent from a
+  // createEffect. record* reads then writes the recents signal, so if the read
+  // is tracked by the caller the effect re-runs forever (RangeError: Maximum
+  // call stack size exceeded). untrack inside record* must keep it to one run.
+  it('does not create a reactive cycle when called from an effect', async () => {
+    const runs = await new Promise<number>((resolve) => {
+      createRoot((dispose) => {
+        const [id] = createSignal('a1');
+        let count = 0;
+        createEffect(() => {
+          const current = id();
+          count++;
+          recordRecentAgent({ id: current, name: 'Helper' });
+        });
+        // Effects run deferred; flush, then read the run count. Without untrack
+        // this recurses until the stack overflows; with it the effect depends
+        // only on `id` and runs exactly once.
+        setTimeout(() => {
+          dispose();
+          resolve(count);
+        }, 0);
+      });
+    });
+    expect(runs).toBe(1);
+    expect(recentAgentsSignal()).toHaveLength(1);
+  });
+
+  it('recordRecentSession is also safe inside an effect', async () => {
+    const runs = await new Promise<number>((resolve) => {
+      createRoot((dispose) => {
+        const [id] = createSignal('s1');
+        let count = 0;
+        createEffect(() => {
+          recordRecentSession({ id: id(), title: 'Proj' });
+          count++;
+        });
+        setTimeout(() => {
+          dispose();
+          resolve(count);
+        }, 0);
+      });
+    });
+    expect(runs).toBe(1);
   });
 });
