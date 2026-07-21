@@ -7,13 +7,13 @@
  * @see https://modelcontextprotocol.io
  */
 
-import { spawn, ChildProcess } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpServerConfig } from '@openaidy/config';
+import { EnvPlaceholderResolver } from './placeholder-resolver';
 
 /**
  * Tool definition from an MCP server
@@ -53,7 +53,6 @@ export type McpToolResult = {
 type McpConnection = {
   client: Client;
   transport: StdioClientTransport | StreamableHTTPClientTransport | null;
-  process: ChildProcess | null;
   tools: McpToolDefinition[];
   config: McpServerConfig; // Store original config for reconnection
   manuallyDisconnected: boolean; // Track if disconnect was intentional
@@ -64,6 +63,11 @@ type McpConnection = {
  */
 export type McpClientServiceOptions = {
   logger?: FastifyBaseLogger | undefined;
+  /**
+   * Resolves `${VAR}` placeholders in server `env`/`headers`. Injectable for
+   * testing; defaults to reading from `process.env`.
+   */
+  resolver?: EnvPlaceholderResolver | undefined;
 };
 
 /**
@@ -74,10 +78,12 @@ export type McpClientServiceOptions = {
 export class McpClientService {
   private connections = new Map<string, McpConnection>();
   private logger: FastifyBaseLogger | undefined;
+  private resolver: EnvPlaceholderResolver;
   private shutdownHandlersRegistered = false;
 
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
+    this.resolver = options?.resolver ?? new EnvPlaceholderResolver();
     this.registerShutdownHandlers();
   }
 
@@ -101,6 +107,22 @@ export class McpClientService {
   }
 
   /**
+   * Names of `${VAR}` placeholders in this server's secret-bearing fields
+   * (`env` for stdio, `headers` for http) that are not yet set in the
+   * environment. Empty when the server is fully configured and ready to
+   * connect. Lets callers skip a doomed connect — and its misleading
+   * "connection failed" warning — for a server that is simply awaiting its
+   * API key (e.g. a preinstalled GitHub server before a token is pasted in).
+   */
+  missingSecrets(serverConfig: McpServerConfig): string[] {
+    const record =
+      serverConfig.transport === 'http'
+        ? serverConfig.headers
+        : serverConfig.env;
+    return this.resolver.findMissingVars(record);
+  }
+
+  /**
    * Connect to an MCP server
    */
   async connect(serverConfig: McpServerConfig): Promise<void> {
@@ -121,40 +143,13 @@ export class McpClientService {
   }
 
   /**
-   * Validate environment variable placeholders in config
-   * Checks for placeholders like ${VAR_NAME} and ensures they exist in process.env
-   */
-  private validateEnvPlaceholders(
-    env: Record<string, string> | undefined,
-    serverId: string,
-  ): void {
-    if (!env) return;
-
-    const placeholderPattern = /\$\{([^}]+)\}/g;
-    const missingVars: string[] = [];
-
-    for (const [key, value] of Object.entries(env)) {
-      const matches = value.match(placeholderPattern);
-      if (matches) {
-        for (const match of matches) {
-          const varName = match.slice(2, -1); // Extract VAR_NAME from ${VAR_NAME}
-          if (!process.env[varName]) {
-            missingVars.push(`${key}: ${varName}`);
-          }
-        }
-      }
-    }
-
-    if (missingVars.length > 0) {
-      throw new Error(
-        `MCP server ${serverId}: Missing required environment variables: ${missingVars.join(', ')}. ` +
-          `Please set these environment variables before starting the server.`,
-      );
-    }
-  }
-
-  /**
    * Connect to a stdio-based MCP server
+   *
+   * The {@link StdioClientTransport} owns the spawned child process — it
+   * resolves the right launcher on each platform (e.g. `npx.cmd` on Windows)
+   * and terminates the child on `close()`. Spawning a second process here
+   * previously produced misleading `MCP process error` logs and a redundant
+   * process that was never wired to the protocol.
    */
   private async connectStdio(serverConfig: McpServerConfig): Promise<void> {
     const { id, command, args, env } = serverConfig;
@@ -163,32 +158,44 @@ export class McpClientService {
       throw new Error(`stdio transport requires command for server ${id}`);
     }
 
-    // Validate environment variable placeholders before spawning
-    this.validateEnvPlaceholders(env, id);
+    // Resolve ${VAR} placeholders from the environment before spawning; throws
+    // MissingEnvVarsError listing any unset variables.
+    const resolvedEnv = this.resolver.resolveRecord(
+      env,
+      `MCP server ${id} env`,
+    );
 
     this.logger?.info(
       { serverId: id, command },
       'Connecting to MCP server via stdio',
     );
 
-    // Spawn the MCP server process (note: env is not logged to prevent sensitive data exposure)
-    const childProcess = spawn(command, args || [], {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
+    // Create the stdio transport. `stderr: 'pipe'` yields a PassThrough
+    // available immediately (before start()), so we can attach a listener
+    // and never miss early stderr from the child. env is not logged to
+    // avoid leaking sensitive values.
+    const transport = new StdioClientTransport({
+      command,
+      args: args ?? [],
+      ...(resolvedEnv ? { env: resolvedEnv } : {}),
+      stderr: 'pipe',
     });
-    childProcess.unref();
 
-    childProcess.on('error', (error) => {
-      this.logger?.error(
-        { serverId: id, error: error.message },
-        'MCP process error',
+    // Surface the server's stderr for debugging. onData is buffered by the
+    // PassThrough, so this is safe to attach post-construction.
+    const stderrStream = transport.stderr;
+    stderrStream?.on('data', (data: Buffer) => {
+      this.logger?.warn(
+        { serverId: id, stderr: data.toString() },
+        'MCP server stderr',
       );
-      this.cleanup(id);
     });
 
-    childProcess.on('exit', (code, signal) => {
-      this.logger?.info({ serverId: id, code, signal }, 'MCP process exited');
-      // Attempt reconnection if not manually disconnected
+    // Trigger reconnection when the child exits unexpectedly. The Client
+    // preserves a transport.onclose set before connect(), so install it
+    // here — it fires once the transport observes process 'close'.
+    transport.onclose = () => {
+      this.logger?.info({ serverId: id }, 'MCP process exited');
       this.attemptReconnection(id).catch((error) => {
         this.logger?.error(
           { serverId: id, error: error.message },
@@ -196,29 +203,7 @@ export class McpClientService {
         );
         this.cleanup(id);
       });
-    });
-
-    // Capture stderr from MCP server for debugging
-    childProcess.stderr?.on('data', (data) => {
-      this.logger?.warn(
-        { serverId: id, stderr: data.toString() },
-        'MCP server stderr',
-      );
-    });
-
-    // Create the stdio transport - use a partial type to avoid strict optional issues
-    const transportOptions: {
-      command: string;
-      args?: string[];
-      env?: Record<string, string>;
-    } = {
-      command,
-      args: args || [],
     };
-    if (env) {
-      transportOptions.env = env as Record<string, string>;
-    }
-    const transport = new StdioClientTransport(transportOptions);
 
     // Create the MCP client
     const client = new Client(
@@ -232,14 +217,14 @@ export class McpClientService {
       this.logger?.error({ serverId: id, error }, 'MCP client error');
     };
 
-    // Connect the client
+    // Connect the client. This spawns the child via cross-spawn (which
+    // handles Windows .cmd/.bat launchers), so failures surface here.
     await client.connect(transport);
 
     // Store the connection with config for reconnection
     this.connections.set(id, {
       client,
       transport,
-      process: childProcess,
       tools: [],
       config: serverConfig,
       manuallyDisconnected: false,
@@ -261,6 +246,15 @@ export class McpClientService {
       throw new Error(`http transport requires url for server ${id}`);
     }
 
+    // Resolve ${VAR} placeholders (e.g. `Bearer ${TOKEN}`) before connecting;
+    // throws MissingEnvVarsError listing any unset variables. Done outside the
+    // try below so the failure surfaces directly rather than as a generic
+    // connection error.
+    const resolvedHeaders = this.resolver.resolveRecord(
+      headers,
+      `MCP server ${id} headers`,
+    );
+
     this.logger?.info(
       { serverId: id, url },
       'Connecting to MCP server via HTTP',
@@ -269,9 +263,9 @@ export class McpClientService {
     try {
       // Create Streamable HTTP transport with optional headers via requestInit
       const httpTransportOptions: { requestInit?: RequestInit } = {};
-      if (headers && Object.keys(headers).length > 0) {
+      if (resolvedHeaders && Object.keys(resolvedHeaders).length > 0) {
         httpTransportOptions.requestInit = {
-          headers,
+          headers: resolvedHeaders,
         };
       }
       const transport = new StreamableHTTPClientTransport(
@@ -297,11 +291,10 @@ export class McpClientService {
       // Connect the client
       await client.connect(transport as Transport);
 
-      // Store the connection (no process for HTTP)
+      // Store the connection (no child process for HTTP transport)
       this.connections.set(id, {
         client,
         transport: transport,
-        process: null,
         tools: [],
         config: serverConfig,
         manuallyDisconnected: false,
@@ -515,6 +508,8 @@ export class McpClientService {
     connection.manuallyDisconnected = true;
 
     try {
+      // client.close() propagates to transport.close(), which terminates
+      // the child process (SIGTERM → SIGKILL) when present.
       await connection.client.close();
     } catch (error) {
       this.logger?.warn(
@@ -524,10 +519,6 @@ export class McpClientService {
         },
         'Error closing MCP client',
       );
-    }
-
-    if (connection.process) {
-      connection.process.kill();
     }
 
     this.connections.delete(serverId);
@@ -545,14 +536,6 @@ export class McpClientService {
    * Clean up connection state
    */
   private cleanup(serverId: string): void {
-    const connection = this.connections.get(serverId);
-    if (connection?.process) {
-      try {
-        connection.process.kill();
-      } catch {
-        // Ignore errors during cleanup
-      }
-    }
     this.connections.delete(serverId);
   }
 }

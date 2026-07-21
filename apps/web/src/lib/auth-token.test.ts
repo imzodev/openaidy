@@ -21,6 +21,7 @@ Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
 import {
   getTokenFromUrl,
+  consumeTokenFromUrl,
   getStoredToken,
   storeToken,
   clearToken,
@@ -67,6 +68,69 @@ describe('auth-token', () => {
 
     it('returns undefined when no token stored', () => {
       expect(getStoredToken()).toBeUndefined();
+    });
+  });
+
+  describe('consumeTokenFromUrl', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('returns the URL token and strips it from the address bar', () => {
+      const replaceState = vi.fn();
+      vi.stubGlobal('window', {
+        location: {
+          href: 'http://localhost:3001/?token=abc123',
+          search: '?token=abc123',
+        },
+        history: { replaceState },
+      });
+      vi.stubGlobal('document', { title: 'OpenAidy' });
+
+      expect(consumeTokenFromUrl()).toBe('abc123');
+      expect(replaceState).toHaveBeenCalledTimes(1);
+      const args = replaceState.mock.calls[0] as [unknown, string, string];
+      const cleaned = args[2];
+      expect(cleaned).toBe('/');
+    });
+
+    it('returns undefined when no token is present', () => {
+      const replaceState = vi.fn();
+      vi.stubGlobal('window', {
+        location: {
+          href: 'http://localhost:3001/',
+          search: '',
+        },
+        history: { replaceState },
+      });
+      vi.stubGlobal('document', { title: 'OpenAidy' });
+
+      expect(consumeTokenFromUrl()).toBeUndefined();
+      expect(replaceState).not.toHaveBeenCalled();
+    });
+
+    it('preserves other query params when stripping the token', () => {
+      const replaceState = vi.fn();
+      vi.stubGlobal('window', {
+        location: {
+          href: 'http://localhost:3001/?foo=bar&token=abc123&baz=qux',
+          search: '?foo=bar&token=abc123&baz=qux',
+        },
+        history: { replaceState },
+      });
+      vi.stubGlobal('document', { title: 'OpenAidy' });
+
+      expect(consumeTokenFromUrl()).toBe('abc123');
+      const args = replaceState.mock.calls[0] as [unknown, string, string];
+      const cleaned = args[2];
+      expect(cleaned).toContain('foo=bar');
+      expect(cleaned).toContain('baz=qux');
+      expect(cleaned).not.toContain('token=abc123');
+    });
+
+    it('returns undefined when window is undefined', () => {
+      vi.stubGlobal('window', undefined);
+      expect(consumeTokenFromUrl()).toBeUndefined();
     });
   });
 

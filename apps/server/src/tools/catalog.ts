@@ -123,8 +123,59 @@ export const execRunMeta: ToolMeta = {
   category: 'Execution',
   description:
     'Run a shell command inside the agent workspace and return its stdout, stderr, and exit code. ' +
-    'Supports pipes and redirects (executed via /bin/sh -c). ' +
+    'On Unix, executed via /bin/sh -c; on Windows via cmd.exe /c. ' +
     'Times out after 30 seconds. The working directory is always confined to the agent workspace.',
+};
+
+// ── Code ──────────────────────────────────────────────────────────────────────
+//
+// Code-specific tools — separate from `workspace_*` (which is generic file
+// ops). Use these when editing source code; they're optimized for token
+// efficiency (line numbers, surgical edits, targeted search).
+
+export const codeReadMeta: ToolMeta = {
+  name: 'code_read',
+  category: 'Code',
+  description:
+    'Read a source file with line numbers (cat -n style: "<n>\\t<content>"). ' +
+    'Use start_line/end_line to read a slice instead of the whole file. ' +
+    'Output is capped at max_lines (default 500) with a truncation notice when exceeded. ' +
+    'Prefer this over workspace_read when you need to reference specific lines in a later code_edit call.',
+};
+
+export const codeEditMeta: ToolMeta = {
+  name: 'code_edit',
+  category: 'Code',
+  description:
+    'Apply one or more surgical edits to a single file in one read/write cycle. ' +
+    'Pass `edits: [{old_text, new_text, global_replace?}, ...]`; edits apply in order so later ones can target text from earlier ones. ' +
+    'By default each edit fails when old_text is ambiguous (matches multiple places) — the response shows 2 lines of context around each match so you can pick more surrounding text. ' +
+    'Set global_replace: true on a specific edit to opt into mass-rewriting that occurrence. ' +
+    'Response shows a unified-diff-style block (- old / + new) for every successful edit so you can verify the change without re-reading the file. ' +
+    'Whitespace and line endings in old_text must match the file exactly.',
+};
+
+export const codeSearchMeta: ToolMeta = {
+  name: 'code_search',
+  category: 'Code',
+  description:
+    'Recursive regex search across the workspace, backed by ripgrep (rg --json). ' +
+    'Output is "path:line:content" for matches and "path-line:content" for context — same shape as rg itself. ' +
+    'Use include/exclude globs to scope the search (ripgrep -g syntax, e.g. "**/*.ts"). ' +
+    'Returns up to max_results matches (default 100). By default excludes node_modules, .git, dist, build, .next. ' +
+    'Pattern is a ripgrep / Rust regex; prefix with (?i) for case-insensitive. ' +
+    'Requires ripgrep on PATH (installed by setup scripts).',
+};
+
+export const codeGlobMeta: ToolMeta = {
+  name: 'code_glob',
+  category: 'Code',
+  description:
+    'Find files via ripgrep glob matching (rg --files). Much faster than recursive readdir + JS glob matching on large trees. ' +
+    'Pattern is a ripgrep glob: "*.ts", "**/*.test.ts", "src/**/index.*". ' +
+    'Returns paths relative to the workspace root, one per line. ' +
+    'By default excludes node_modules, .git, dist, build, .next. ' +
+    'Requires ripgrep on PATH (installed by setup scripts).',
 };
 
 // ── Skills ────────────────────────────────────────────────────────────────────
@@ -157,7 +208,34 @@ export const addonCreateMeta: ToolMeta = {
   category: 'Addons',
   description:
     'Scaffold a new OpenAidy addon, register it in the database, and enable it. ' +
-    'The addon appears in the sidebar immediately — no restart needed.',
+    'The addon appears in the sidebar immediately — no restart needed. ' +
+    'This is the ONLY way to create an addon — never use workspace_write, code_edit, or exec_run to scaffold addon files (addons live in a separate directory the loader will not see otherwise).',
+};
+
+export const addonUpdateMeta: ToolMeta = {
+  name: 'addon_update',
+  category: 'Addons',
+  description:
+    'Modify an existing OpenAidy addon: overwrite/add/delete its UI files and/or ' +
+    'change manifest fields (name, description, version, permissions, externalDomains). ' +
+    'Keeps the on-disk addon.json and the database record in sync. ' +
+    'This is the ONLY way to update an addon — never use workspace_write, code_edit, or exec_run to patch addon files (the loader will not see changes made outside this tool).',
+};
+
+export const addonListQueriesMeta: ToolMeta = {
+  name: 'addon_list_queries',
+  category: 'Addons',
+  description:
+    'Discover the named data queries an addon exposes to agents. Returns, per addon that opted in, its addon_id and a catalog of queries (name, description, typed params, read/write). Call this before addon_run to find the right query — never guess a query name or write raw SQL.',
+};
+
+export const addonRunMeta: ToolMeta = {
+  name: 'addon_run',
+  category: 'Addons',
+  description:
+    "Run a named query an addon exposes to agents (see addon_list_queries) against that addon's private storage. " +
+    'You supply the addon_id, the query name, and its declared parameters — never raw SQL. ' +
+    'Read queries return rows; write queries return the number of changes (and require the addon to grant agent write access).',
 };
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -282,6 +360,88 @@ export const jobsDeleteMeta: ToolMeta = {
     'Requires confirm=true to prevent accidental deletion.',
 };
 
+// ── Task Schedules (recurring tasks) ──────────────────────────────────────────
+
+export const taskSchedulesListMeta: ToolMeta = {
+  name: 'task_schedules_list',
+  category: 'Tasks',
+  description:
+    "Read the schedule attached to a task. Pass taskId to get that task's " +
+    'schedule. Schedules are 1:1 with tasks (a task has zero or one). ' +
+    'Returns the schedule human-readable description, next/last run times, ' +
+    'replan policy, and execution count.',
+};
+
+export const taskSchedulesCreateMeta: ToolMeta = {
+  name: 'task_schedules_create',
+  category: 'Tasks',
+  description:
+    'Attach a schedule to an existing task. Each task can have at most one ' +
+    'schedule. Use schedule.every for PRESET intervals (every 15m/30m/1h/6h/12h/1d/1w). ' +
+    'For ANY other interval (e.g. every 5min), use schedule.cron with a cron expression. ' +
+    'Also supports daily times and one-shot datetimes. ' +
+    'replanPolicy controls when the planning agent re-runs: ' +
+    "'never' (default; cheap, reuses subtasks), " +
+    "'on-description-change' (re-plans only when the description changes), " +
+    "or 'always' (re-plans on every run, expensive). " +
+    'maxExecutions caps the total runs (default 9999, no "infinite" option). ' +
+    'Returns the created schedule with its ID and next-run time.',
+};
+
+export const taskSchedulesUpdateMeta: ToolMeta = {
+  name: 'task_schedules_update',
+  category: 'Tasks',
+  description:
+    'Update an existing task schedule. Can change the schedule definition, ' +
+    'replanPolicy, maxExecutions, or status. To pause/resume use the dedicated ' +
+    'task_schedules_pause and task_schedules_resume tools. To stop firing, ' +
+    'use task_schedules_delete. Returns the updated schedule.',
+};
+
+export const taskSchedulesPauseMeta: ToolMeta = {
+  name: 'task_schedules_pause',
+  category: 'Tasks',
+  description:
+    'Pause a task schedule. The scheduler will skip this row until resumed. ' +
+    'The schedule row, its nextRunAt, and execution history are preserved.',
+};
+
+export const taskSchedulesResumeMeta: ToolMeta = {
+  name: 'task_schedules_resume',
+  category: 'Tasks',
+  description:
+    'Resume a previously paused task schedule. The next run happens at ' +
+    'the next cron tick after the resume time (we do not "catch up" missed runs).',
+};
+
+export const taskSchedulesDeleteMeta: ToolMeta = {
+  name: 'task_schedules_delete',
+  category: 'Tasks',
+  description:
+    "Permanently remove a task's schedule. The schedule row and all its " +
+    'execution history are deleted. This action cannot be undone. ' +
+    'Requires confirm=true to prevent accidental deletion.',
+};
+
+export const taskSchedulesTriggerMeta: ToolMeta = {
+  name: 'task_schedules_trigger',
+  category: 'Tasks',
+  description:
+    'Force an immediate run of a task schedule, without affecting nextRunAt ' +
+    'or executionCount. The run is async: returns the new history row ID; ' +
+    'poll task_schedules_list_executions with the same taskId to track progress.',
+};
+
+export const taskSchedulesListExecutionsMeta: ToolMeta = {
+  name: 'task_schedules_list_executions',
+  category: 'Tasks',
+  description:
+    "List execution history for a task's schedule, newest first. " +
+    'Use the status filter to focus on failed runs or currently-executing runs. ' +
+    'Returns for each run: id, status, startedAt, durationMs, didReplan, ' +
+    'sessionId, and any error info if the run failed.',
+};
+
 // ── Master catalog ────────────────────────────────────────────────────────────
 // build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
@@ -299,10 +459,17 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workspaceWriteMeta,
   workspaceListMeta,
   workspaceDeleteMeta,
+  codeReadMeta,
+  codeEditMeta,
+  codeSearchMeta,
+  codeGlobMeta,
   execRunMeta,
   skillCreateMeta,
   webFetchMeta,
   addonCreateMeta,
+  addonUpdateMeta,
+  addonListQueriesMeta,
+  addonRunMeta,
   presentChoicesMeta,
   memorySaveMeta,
   memorySearchMeta,
@@ -316,4 +483,17 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   jobsCreateMeta,
   jobsUpdateMeta,
   jobsDeleteMeta,
+  taskSchedulesListMeta,
+  taskSchedulesCreateMeta,
+  taskSchedulesUpdateMeta,
+  taskSchedulesPauseMeta,
+  taskSchedulesResumeMeta,
+  taskSchedulesDeleteMeta,
+  taskSchedulesTriggerMeta,
+  taskSchedulesListExecutionsMeta,
 ];
+
+/** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */
+export const TOOL_CATEGORY_MAP: Record<string, string> = Object.fromEntries(
+  ALL_TOOL_METAS.map((m) => [m.name, m.category]),
+);

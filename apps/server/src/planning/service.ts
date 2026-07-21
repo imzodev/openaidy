@@ -301,13 +301,17 @@ export class PlanningService {
     subtasks: PlannedSubtask[];
     deliverable: { type: string; description: string } | null;
   } {
-    let parsed: {
-      subtasks: PlannedSubtask[];
-      deliverable?: { type: string; description: string };
-    };
+    // The planning prompt asks the model to "return the subtasks as a JSON
+    // array", while the system prompt shows an object wrapper that may also
+    // carry a `deliverable`. Accept both shapes so the parser is robust to
+    // whichever form the model produces.
+    let parsed: unknown;
 
-    // Try to extract JSON from markdown code block first
-    const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    // Try to extract JSON from a markdown code block first. The block may
+    // contain either a top-level array or an object wrapper.
+    const codeBlockMatch = content.match(
+      /```(?:json)?\s*([[{][\s\S]*[\]}])\s*```/,
+    );
     if (codeBlockMatch && codeBlockMatch[1]) {
       try {
         parsed = JSON.parse(codeBlockMatch[1]);
@@ -318,8 +322,8 @@ export class PlanningService {
       try {
         parsed = JSON.parse(content);
       } catch {
-        // Try to extract JSON object from response using regex
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        // Try to extract a JSON array or object from the response using regex.
+        const jsonMatch = content.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
         if (jsonMatch) {
           try {
             parsed = JSON.parse(jsonMatch[0]);
@@ -332,39 +336,55 @@ export class PlanningService {
       }
     }
 
+    // Normalize to { subtasks, deliverable }. A top-level array is treated as
+    // the list of subtasks with no deliverable; an object is expected to carry
+    // a `subtasks` array and an optional `deliverable`.
+    let rawSubtasks: unknown;
+    let rawDeliverable: { type?: string; description?: string } | undefined;
+    if (Array.isArray(parsed)) {
+      rawSubtasks = parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      rawSubtasks = (parsed as { subtasks?: unknown }).subtasks;
+      rawDeliverable = (
+        parsed as {
+          deliverable?: { type?: string; description?: string };
+        }
+      ).deliverable;
+    }
+
     // Validate subtasks array
-    if (!Array.isArray(parsed.subtasks)) {
-      throw new Error('Planning response must contain a subtasks array');
+    if (!Array.isArray(rawSubtasks)) {
+      throw new Error('Planning response must be an array');
     }
 
     // Validate and limit subtasks
     const maxSubtasks =
       options?.maxSubtasks ?? PLANNING_AGENT_CONFIG.defaults.maxSubtasks;
 
-    const subtasks = parsed.subtasks.slice(0, maxSubtasks).map((s, index) => {
-      const result: PlannedSubtask = {
-        title: s.title || `Subtask ${index + 1}`,
-        description: s.description || '',
-        dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
-      };
+    const subtasks = (rawSubtasks as PlannedSubtask[])
+      .slice(0, maxSubtasks)
+      .map((s, index) => {
+        const result: PlannedSubtask = {
+          title: s.title || `Subtask ${index + 1}`,
+          description: s.description || '',
+          dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
+        };
 
-      if (s.assignedAgentId) {
-        result.assignedAgentId = s.assignedAgentId;
-      }
-      if (s.assignmentReason) {
-        result.assignmentReason = s.assignmentReason;
-      }
+        if (s.assignedAgentId) {
+          result.assignedAgentId = s.assignedAgentId;
+        }
+        if (s.assignmentReason) {
+          result.assignmentReason = s.assignmentReason;
+        }
 
-      return result;
-    });
+        return result;
+      });
 
     const deliverable =
-      parsed.deliverable &&
-      parsed.deliverable.type &&
-      parsed.deliverable.description
+      rawDeliverable && rawDeliverable.type && rawDeliverable.description
         ? {
-            type: parsed.deliverable.type,
-            description: parsed.deliverable.description,
+            type: rawDeliverable.type,
+            description: rawDeliverable.description,
           }
         : null;
 

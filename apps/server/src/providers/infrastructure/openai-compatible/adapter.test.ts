@@ -215,6 +215,98 @@ describe('OpenAICompatibleProvider', () => {
         expect(result.error.code).toBe('provider.unknown');
       }
     });
+
+    it('returns every model for non-OpenAI-cloud baseUrls (Ollama, LM Studio, Groq)', async () => {
+      mockListModels.mockResolvedValueOnce({
+        data: [
+          { id: 'llama3:8b', object: 'model', created: 0, owned_by: 'ollama' },
+          { id: 'mistral:7b', object: 'model', created: 0, owned_by: 'ollama' },
+          {
+            id: 'qwen2.5-coder:7b',
+            object: 'model',
+            created: 0,
+            owned_by: 'ollama',
+          },
+        ],
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'no-key-required',
+        baseUrl: 'http://localhost:11434/v1',
+      });
+      const result = await provider.listModels();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.map((m) => m.id)).toEqual([
+          'llama3:8b',
+          'mistral:7b',
+          'qwen2.5-coder:7b',
+        ]);
+      }
+    });
+
+    it('filters to gpt/o1/chat/glm for api.openai.com baseUrl', async () => {
+      mockListModels.mockResolvedValueOnce({
+        data: [
+          { id: 'gpt-4o', object: 'model', created: 0, owned_by: 'openai' },
+          { id: 'whisper-1', object: 'model', created: 0, owned_by: 'openai' },
+          { id: 'dall-e-3', object: 'model', created: 0, owned_by: 'openai' },
+          {
+            id: 'text-embedding-3-large',
+            object: 'model',
+            created: 0,
+            owned_by: 'openai',
+          },
+        ],
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        baseUrl: 'https://api.openai.com/v1',
+      });
+      const result = await provider.listModels();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.map((m) => m.id)).toEqual(['gpt-4o']);
+      }
+    });
+  });
+
+  describe('empty API key (local providers)', () => {
+    it('falls back to a placeholder so the OpenAI SDK constructor does not throw', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const OpenAI = (await import('openai')).default as any;
+
+      expect(() =>
+        createOpenAICompatibleProvider({
+          apiKey: '',
+          baseUrl: 'http://localhost:11434/v1',
+        }),
+      ).not.toThrow();
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'no-key-required',
+          baseURL: 'http://localhost:11434/v1',
+        }),
+      );
+    });
+
+    it('uses the configured key verbatim when one is provided', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const OpenAI = (await import('openai')).default as any;
+
+      createOpenAICompatibleProvider({
+        apiKey: 'sk-real',
+        baseUrl: 'https://api.openai.com/v1',
+      });
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk-real' }),
+      );
+    });
   });
 
   describe('getModel', () => {
@@ -300,6 +392,43 @@ describe('OpenAICompatibleProvider', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('provider.capability_unsupported');
       }
+    });
+
+    it('should use the configured default model when request.model is an empty string', async () => {
+      // Regression: ModelRequest.model is required, so some callers pass ''
+      // to mean "no preference". `||` (not `??`) must treat that the same as
+      // an unset model and fall back to the provider's defaultModel — `??`
+      // would send an invalid `model: ""` to the wire.
+      mockCreateCompletion.mockResolvedValueOnce({
+        id: 'chatcmpl_123',
+        object: 'chat.completion',
+        created: 1700000000,
+        model: 'configured-default',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'Hello!' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        defaultModel: 'configured-default',
+      });
+      const request: ModelRequest = {
+        model: '',
+        messages: [{ role: 'user', content: 'Hello' }],
+      };
+
+      const result = await provider.invoke(request);
+
+      expect(result.ok).toBe(true);
+      const call = mockCreateCompletion.mock.calls[0];
+      expect(call).toBeDefined();
+      expect((call![0] as { model: string }).model).toBe('configured-default');
     });
 
     it('should normalize API errors', async () => {
@@ -571,6 +700,173 @@ describe('OpenAICompatibleProvider', () => {
       if (events[0]?.ok) {
         expect(events[0].value.type).toBe('stream.started');
       }
+    });
+
+    it('requests usage via stream_options.include_usage', async () => {
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_u',
+          choices: [{ delta: { content: 'Hi' }, finish_reason: 'stop' }],
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      for await (const _ of provider.invokeStream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+      })) {
+        // consume
+      }
+
+      const call = mockCreateCompletion.mock.calls[0];
+      const params = call![0] as {
+        stream_options?: { include_usage?: boolean };
+      };
+      expect(params.stream_options?.include_usage).toBe(true);
+    });
+
+    it('emits a stream.usage event from the final usage-only chunk', async () => {
+      // The last chunk carries usage and no choices (OpenAI's shape when
+      // stream_options.include_usage is set).
+      const mockStream = (async function* () {
+        yield {
+          id: 'chatcmpl_u2',
+          choices: [{ delta: { content: 'Hello' }, finish_reason: 'stop' }],
+        };
+        yield {
+          id: 'chatcmpl_u2',
+          choices: [],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 4,
+            total_tokens: 16,
+            prompt_tokens_details: { cached_tokens: 8 },
+          },
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const events = [];
+      for await (const event of provider.invokeStream({
+        model: 'gpt-4',
+        messages: [{ role: 'user', content: 'Hello' }],
+      })) {
+        events.push(event);
+      }
+
+      const usageEvent = events.find(
+        (e) => e.ok && e.value.type === 'stream.usage',
+      );
+      expect(usageEvent).toBeDefined();
+      if (usageEvent?.ok && usageEvent.value.type === 'stream.usage') {
+        expect(usageEvent.value.usage.promptTokens).toBe(12);
+        expect(usageEvent.value.usage.completionTokens).toBe(4);
+        expect(usageEvent.value.usage.totalTokens).toBe(16);
+        expect(usageEvent.value.usage.cacheReadTokens).toBe(8);
+      }
+    });
+  });
+
+  // Pins the streaming tool-call parse behavior (issue #439 audit). The
+  // adapter accumulates `delta.tool_calls` by index and emits them before
+  // stream.finished; a `finish_reason: tool_calls` with no tool-call deltas
+  // correctly yields NO tool_call event (a genuine provider quirk the session
+  // loop recovers from via retry, not a parser bug).
+  describe('invokeStream tool-call parsing', () => {
+    const request: ModelRequest = {
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'weather in SF?' }],
+      tools: [
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+    };
+
+    async function collect(chunks: unknown[]) {
+      const mockStream = (async function* () {
+        for (const c of chunks) yield c;
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+      const provider = createOpenAICompatibleProvider({ apiKey: 'test-key' });
+      const events: Array<{ type: string; [k: string]: unknown }> = [];
+      for await (const event of provider.invokeStream(request)) {
+        if (event.ok) events.push(event.value as { type: string });
+      }
+      return events;
+    }
+
+    it('assembles incremental tool-call deltas into one tool_call', async () => {
+      const events = await collect([
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'get_weather', arguments: '{"ci' },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  { index: 0, function: { arguments: 'ty":"SF"}' } },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+        },
+      ]);
+
+      const toolCalls = events.filter((e) => e.type === 'stream.tool_call');
+      expect(toolCalls).toHaveLength(1);
+      const tc = toolCalls[0]!.toolCall as { name: string; arguments: string };
+      expect(tc.name).toBe('get_weather');
+      expect(tc.arguments).toBe('{"city":"SF"}');
+      const finished = events.find((e) => e.type === 'stream.finished');
+      expect(finished?.finishReason).toBe('tool_calls');
+    });
+
+    it('emits no tool_call when finish_reason is tool_calls but no deltas arrive (degenerate turn)', async () => {
+      const events = await collect([
+        {
+          id: 'c',
+          model: 'gpt-4',
+          choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+        },
+      ]);
+
+      expect(events.filter((e) => e.type === 'stream.tool_call')).toHaveLength(
+        0,
+      );
+      const finished = events.find((e) => e.type === 'stream.finished');
+      expect(finished?.finishReason).toBe('tool_calls');
     });
   });
 });

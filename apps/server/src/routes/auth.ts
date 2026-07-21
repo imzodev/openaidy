@@ -19,7 +19,7 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
   opts,
 ) => {
   app.post<{ Body: AuthVerifyRequest; Reply: AuthVerifyResponse }>(
-    '/api/auth/verify',
+    '/auth/verify',
     async (request, reply) => {
       const { token } = request.body;
 
@@ -39,12 +39,10 @@ export const authRoutes: FastifyPluginAsync<AuthRoutesOptions> = async (
         const tokenRecord = await opts.accessTokenService.verifyToken(token);
 
         if (!tokenRecord) {
-          return reply
-            .code(401)
-            .send({
-              valid: false,
-              error: 'Invalid, revoked, or expired access token',
-            });
+          return reply.code(401).send({
+            valid: false,
+            error: 'Invalid, revoked, or expired access token',
+          });
         }
 
         const jwt = await opts.authMiddleware.generateToken({

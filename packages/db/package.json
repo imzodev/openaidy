@@ -10,12 +10,8 @@
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
   },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
-  },
   "dependencies": {
     "@openaidy/shared-types": "workspace:*",
-    "better-sqlite3": "^12.8.0",
     "drizzle-orm": "^0.41.0",
     "nanoid": "^5.0.9",
     "pg": "^8.20.0",

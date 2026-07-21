@@ -79,7 +79,15 @@ export function createExecRunTool(
         resolvedCwd = workspaceRoot;
       }
 
-      const result = await exec.run(command, resolvedCwd);
+      const result = await exec.run(command, resolvedCwd, {
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+        ...(ctx.onOutput ? { onOutput: ctx.onOutput } : {}),
+      });
+
+      // User hit Stop — report a normal tool error so the agent can react.
+      if (result.cancelled) {
+        return { ok: false, error: 'cancelled by user' };
+      }
 
       const lines: string[] = [];
       if (result.timedOut) {

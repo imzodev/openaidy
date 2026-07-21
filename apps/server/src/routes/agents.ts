@@ -85,7 +85,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
       reply.code(404);
       return { error: 'Agent not found', agentId };
     }
-    personalityService?.deleteWorkspace(agentId).catch(() => {});
+    await personalityService?.deleteWorkspace(agentId).catch(() => {});
     return { deleted };
   });
 

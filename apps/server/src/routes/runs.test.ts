@@ -25,10 +25,15 @@ describe('Run Stream Routes', () => {
 
     app = Fastify({ logger: false });
 
-    await app.register(runStreamRoutes, {
-      runEvents,
-      authMiddleware: mockAuthMiddleware,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(runStreamRoutes, {
+          runEvents,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -42,7 +47,7 @@ describe('Run Stream Routes', () => {
 
       const responsePromise = app.inject({
         method: 'GET',
-        url: '/sessions/test-session/runs/test-run/stream',
+        url: '/api/sessions/test-session/runs/test-run/stream',
         signal: controller.signal,
       });
 

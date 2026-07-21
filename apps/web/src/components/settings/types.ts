@@ -6,7 +6,7 @@ export type ConfigResponse =
 
 export { type ConfigStatus };
 
-export type ConfigTab = 'defaults' | 'providers' | 'agents' | 'raw';
+export type ConfigTab = 'defaults' | 'providers' | 'agents' | 'raw' | 'about';
 
 export type SaveMessage = {
   type: 'success' | 'error';

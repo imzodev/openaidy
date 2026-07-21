@@ -22,6 +22,7 @@
 
 import { BuiltinToolRegistry } from './registry';
 import { createWorkspaceTools } from './workspace';
+import { createCodeTools } from './code';
 import { createExecTools } from './exec';
 import { createSkillTools } from './skills';
 import { createAddonTools } from './addons';
@@ -35,15 +36,18 @@ import { presentChoicesTool } from './present-choices';
 import { createTaskTools } from './tasks';
 import type { PulseToolDeps } from './pulses';
 import { createPulseTools } from './pulses';
+import { createTaskScheduleTools } from './task-schedules';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
 import type { AddonToolDeps } from './addons';
 import type { SessionMessageService } from '../sessions/service';
 import type { TaskService } from '../tasks/service';
+import type { TaskScheduleService } from '../tasks/schedule-service.js';
 
 export { BuiltinToolRegistry } from './registry';
 export { createWorkspaceTools } from './workspace';
+export { createCodeTools } from './code';
 export { createExecTools } from './exec';
 export { createSkillTools } from './skills';
 export { createAddonTools } from './addons';
@@ -56,6 +60,8 @@ export { createMemoryTools } from './memory';
 export type { MemoryToolDeps } from './memory';
 export { createPulseTools } from './pulses';
 export type { PulseToolDeps } from './pulses';
+export { createTaskScheduleTools } from './task-schedules';
+export type { TaskScheduleToolDeps } from './task-schedules';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
@@ -69,6 +75,14 @@ export type BuiltinToolRegistryDeps = {
   getTaskService?: () => TaskService | undefined;
   getPlanningService?: () => import('../planning').PlanningService | undefined;
   pulses?: PulseToolDeps;
+  /**
+   * Optional. When provided, the recurring-tasks agent tools
+   * (task_schedules_*) are registered. The getter pattern matches
+   * the rest of the registry: the service is constructed in
+   * app.ts and looked up lazily so the tools degrade gracefully when
+   * the database is not configured.
+   */
+  getTaskScheduleService?: () => TaskScheduleService | undefined;
 };
 
 /**
@@ -85,6 +99,10 @@ export function createBuiltinToolRegistry(
   const registry = new BuiltinToolRegistry();
 
   for (const tool of createWorkspaceTools(deps.workspace)) {
+    registry.register(tool);
+  }
+
+  for (const tool of createCodeTools(deps.workspace)) {
     registry.register(tool);
   }
 
@@ -141,6 +159,14 @@ export function createBuiltinToolRegistry(
 
   if (deps.pulses) {
     for (const tool of createPulseTools(deps.pulses)) {
+      registry.register(tool);
+    }
+  }
+
+  if (deps.getTaskScheduleService) {
+    for (const tool of createTaskScheduleTools({
+      getTaskScheduleService: deps.getTaskScheduleService,
+    })) {
       registry.register(tool);
     }
   }

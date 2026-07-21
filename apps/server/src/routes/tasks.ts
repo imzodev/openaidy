@@ -7,6 +7,49 @@ import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 
 // Validation schemas
+
+// Nested `schedule` schema for createTask. Matches the public
+// CreateTaskScheduleInput shape, with `replanPolicy` and
+// `maxExecutions` as optional fields. Server-side defaults:
+// `replanPolicy='never'`, `maxExecutions=9999`.
+// API input for a task's schedule. Mirrors the canonical
+// `ScheduleInput` discriminated union from
+// `packages/shared-types/src/pulses.ts`:
+//   - one-level `cron: string` (plus optional `tz`),
+//   - `every: preset`, `daily: { hour, minute }`, `at: ISO datetime`.
+//
+// The `ScheduleEditor` in the web client produces this shape
+// directly, and the same shape is also produced by the
+// `pulses_create` / `pulses_update` / `task_schedules_create` /
+// `task_schedules_update` tools (we unified them on this canonical
+// shape in Phase 5).
+const taskScheduleInputSchema = z.object({
+  schedule: z.union([
+    z.object({
+      every: z.enum(['15m', '30m', '1h', '6h', '12h', '1d', '1w']),
+    }),
+    z.object({
+      daily: z.object({
+        hour: z.number().int().min(0).max(23),
+        minute: z.number().int().min(0).max(59),
+      }),
+    }),
+    z.object({
+      cron: z.string().min(1),
+      tz: z.string().optional(),
+    }),
+    z.object({
+      at: z.string().datetime(),
+    }),
+  ]),
+  replanPolicy: z.enum(['never', 'on-description-change', 'always']).optional(),
+  /**
+   * Positive integer. Defaults to 9999 when omitted. There is no
+   * "infinite" option.
+   */
+  maxExecutions: z.number().int().positive().optional(),
+});
+
 const createTaskSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().min(1),
@@ -20,6 +63,14 @@ const createTaskSchema = z.object({
       }),
     )
     .optional(),
+  /**
+   * Optional schedule attached to the task on creation. When
+   * present, the TaskService calls TaskScheduleService.createSchedule
+   * internally after the task row is inserted. The same `schedule`
+   * shape is accepted on the dedicated POST /api/tasks/:taskId/schedule
+   * endpoint for adding a schedule to an existing task.
+   */
+  schedule: taskScheduleInputSchema.optional(),
 });
 
 const updateTaskSchema = z.object({
@@ -27,6 +78,12 @@ const updateTaskSchema = z.object({
   description: z.string().min(1).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   planningEnabled: z.boolean().optional(),
+  // Schedule fields are NOT updated through PATCH /tasks/:id. Use
+  // the dedicated endpoints under /api/tasks/:taskId/schedule to
+  // create/update/pause/resume/remove/trigger/list history of the
+  // schedule. This keeps the surface area of PATCH /tasks/:id
+  // small and avoids ambiguous bodies ("does `schedule: {...}` mean
+  // create or update?").
 });
 
 const updateTaskStatusSchema = z.object({
@@ -133,6 +190,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         agentId: string;
         role?: 'primary' | 'secondary' | 'reviewer';
       }>;
+      schedule?: import('@openaidy/shared-types').CreateTaskScheduleInput;
     } = {
       title: derivedTitle,
       description: parsed.description,
@@ -148,6 +206,30 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         agentId: a.agentId,
         ...(a.role !== undefined && { role: a.role }),
       }));
+    }
+    if (parsed.schedule !== undefined) {
+      // The schema accepts the canonical ScheduleInput shape (one
+      // level deep: `cron: string`, `every: preset`, `daily: ...`,
+      // `at: ISO`). Pass it through to the service as-is.
+      //
+      // The Zod-inferred type allows `tz: string | undefined` while
+      // ScheduleInput is `tz?: string` (omittable, not explicitly
+      // undefined) under exactOptionalPropertyTypes. We cast through
+      // `unknown` to coerce — safe because the Zod schema and
+      // ScheduleInput both accept the same shape (the same union
+      // variants, just different optional semantics).
+      const createScheduleInput: import('@openaidy/shared-types').CreateTaskScheduleInput =
+        {
+          schedule: parsed.schedule
+            .schedule as unknown as import('@openaidy/shared-types').ScheduleInput,
+        };
+      if (parsed.schedule.replanPolicy !== undefined) {
+        createScheduleInput.replanPolicy = parsed.schedule.replanPolicy;
+      }
+      if (parsed.schedule.maxExecutions !== undefined) {
+        createScheduleInput.maxExecutions = parsed.schedule.maxExecutions;
+      }
+      createInput.schedule = createScheduleInput;
     }
 
     const result = await taskService.createTask(createInput);
@@ -606,6 +688,104 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     }
   });
 
+  /**
+   * PATCH /subtasks/:id
+   * Edit a subtask's title / description / order after planning. Any subset
+   * of the three fields may be supplied; the corresponding DB row is
+   * updated and the updated record is returned. Used by the web UI's
+   * SubtaskList inline edit affordance.
+   */
+  app.patch<{
+    Params: { id: string };
+    Body: { title?: string; description?: string; orderIndex?: number };
+  }>('/subtasks/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body ?? {};
+    const input: { title?: string; description?: string; orderIndex?: number } =
+      {};
+    if (typeof body.title === 'string') input.title = body.title;
+    if (typeof body.description === 'string')
+      input.description = body.description;
+    if (typeof body.orderIndex === 'number') input.orderIndex = body.orderIndex;
+
+    if (
+      input.title === undefined &&
+      input.description === undefined &&
+      input.orderIndex === undefined
+    ) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.empty_patch',
+          message:
+            'At least one of title, description, or orderIndex must be supplied',
+        },
+      };
+    }
+    if (input.description !== undefined && input.description.trim() === '') {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.empty_description',
+          message: 'description must not be empty',
+        },
+      };
+    }
+
+    const result = await taskService.updateSubtask(id, input);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /subtasks/:id/assign
+   * (Re)assign an agent to a subtask. Used by the web UI's SubtaskList
+   * agent-picker dropdown. Body: `{ agentId: string }`.
+   */
+  app.post<{ Params: { id: string }; Body: { agentId?: string } }>(
+    '/subtasks/:id/assign',
+    async (request, reply) => {
+      const { id } = request.params;
+      const agentId = request.body?.agentId;
+      if (typeof agentId !== 'string' || agentId.trim() === '') {
+        reply.code(400);
+        return {
+          ok: false,
+          error: {
+            code: 'validation.missing_agent_id',
+            message: 'agentId is required',
+          },
+        };
+      }
+
+      const result = await taskService.assignSubtaskAgent(id, agentId);
+
+      if (result.ok) {
+        return { ok: true, data: result.data };
+      } else {
+        if (result.error.code === 'subtask.not_found') {
+          reply.code(404);
+        } else if (result.error.code === 'agent.not_found') {
+          reply.code(400);
+        } else {
+          reply.code(500);
+        }
+        return { ok: false, error: result.error };
+      }
+    },
+  );
+
   // ── Deliverables ────────────────────────────────────────────────────────────
 
   /**
@@ -696,14 +876,14 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
       const updateInput: Parameters<typeof deliverablesRepo.update>[1] = {};
       if (body.type)
-        updateInput.type = body.type as Parameters<
-          typeof deliverablesRepo.update
-        >[1]['type'];
+        updateInput.type = body.type as NonNullable<
+          Parameters<typeof deliverablesRepo.update>[1]['type']
+        >;
       if (body.description) updateInput.description = body.description;
       if (body.status)
-        updateInput.status = body.status as Parameters<
-          typeof deliverablesRepo.update
-        >[1]['status'];
+        updateInput.status = body.status as NonNullable<
+          Parameters<typeof deliverablesRepo.update>[1]['status']
+        >;
       if (body.format) updateInput.format = body.format;
       if (body.size) updateInput.size = body.size;
       if (body.path) updateInput.path = body.path;

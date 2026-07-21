@@ -1,5 +1,5 @@
 import type { AgentRegistry } from '../agents/registry';
-import type { Agent, WorkspacePermissions } from '../agents/schema';
+import type { WorkspacePermissions } from '../agents/schema';
 import { createLogger } from '../lib/logger';
 
 const log = createLogger('workspace-permissions');
@@ -47,11 +47,20 @@ export function validateWorkspaceAccess(
     if (!sourceAgent.workspace?.enabled) {
       return { allowed: false, reason: 'Source agent workspace is disabled' };
     }
-    if (!sourceAgent.workspace.workspaces || sourceAgent.workspace.workspaces.length === 0) {
-      return { allowed: false, reason: 'Source agent has no workspaces configured' };
+    if (
+      !sourceAgent.workspace.workspaces ||
+      sourceAgent.workspace.workspaces.length === 0
+    ) {
+      return {
+        allowed: false,
+        reason: 'Source agent has no workspaces configured',
+      };
     }
     // Check effective permissions for the requested mode
-    const effectivePerms = getEffectivePermissions(sourceAgentId, agentRegistry);
+    const effectivePerms = getEffectivePermissions(
+      sourceAgentId,
+      agentRegistry,
+    );
     if (!effectivePerms || !effectivePerms[mode]) {
       return { allowed: false, reason: `Self-access denied for mode: ${mode}` };
     }
@@ -75,9 +84,11 @@ export function validateWorkspaceAccess(
     return { allowed: false, reason: 'Source agent workspace is disabled' };
   }
 
-  // Check if source has the target workspace in its config
+  // Check if source has the target workspace in its config.
+  // Exact match only — a substring match (e.g. `.includes`) would let an
+  // entry for "code-assistant" grant access to "code", over-broadening grants.
   const targetWorkspace = sourceAgent.workspace.workspaces.find(
-    (ws) => ws.path === targetAgentId || ws.path.includes(targetAgentId),
+    (ws) => ws.path === targetAgentId,
   );
 
   if (!targetWorkspace) {
@@ -163,10 +174,11 @@ export function hasCrossWorkspaceAccess(
     .filter((a) => a.id !== agentId && a.workspace?.enabled)
     .map((a) => a.id);
 
-  // Check if any workspace entry references another agent
+  // Check if any workspace entry references another agent (exact match only —
+  // see validateWorkspaceAccess for why substring matching is unsafe).
   for (const ws of agent.workspace.workspaces) {
     for (const otherId of otherAgentIds) {
-      if (ws.path === otherId || ws.path.includes(otherId)) {
+      if (ws.path === otherId) {
         return true;
       }
     }
@@ -265,5 +277,10 @@ export function canAccessWorkspace(
   mode: PermissionMode,
   agentRegistry: AgentRegistry,
 ): boolean {
-  return validateWorkspaceAccess(sourceAgentId, targetAgentId, mode, agentRegistry).allowed;
+  return validateWorkspaceAccess(
+    sourceAgentId,
+    targetAgentId,
+    mode,
+    agentRegistry,
+  ).allowed;
 }

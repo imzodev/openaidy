@@ -48,6 +48,20 @@ export function updateSessionTitleRecord(
   return updated;
 }
 
+export function deleteSessionRecord(id: string): boolean {
+  const record = sessions.get(id);
+  if (!record) return false;
+  sessions.delete(id);
+  // Cascade-delete the session's messages and runs.
+  for (const [messageId, message] of messages) {
+    if (message.sessionId === id) messages.delete(messageId);
+  }
+  for (const [runId, run] of runs) {
+    if (run.sessionId === id) runs.delete(runId);
+  }
+  return true;
+}
+
 // Message operations
 export function appendMessageRecord(
   input: AppendMessageInput,
@@ -134,6 +148,10 @@ export function markRunSucceeded(
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+    cost?: number | null;
+    firstMessageId?: string;
     metadata?: Record<string, unknown>;
   },
 ): SessionRunRecord | undefined {
@@ -150,6 +168,13 @@ export function markRunSucceeded(
   if (input.completionTokens !== undefined)
     updates.completionTokens = input.completionTokens;
   if (input.totalTokens !== undefined) updates.totalTokens = input.totalTokens;
+  if (input.cacheReadTokens !== undefined)
+    updates.cacheReadTokens = input.cacheReadTokens;
+  if (input.cacheCreationTokens !== undefined)
+    updates.cacheCreationTokens = input.cacheCreationTokens;
+  if (input.cost !== undefined) updates.cost = input.cost;
+  if (input.firstMessageId !== undefined)
+    updates.firstMessageId = input.firstMessageId;
   if (input.metadata !== undefined) updates.metadata = input.metadata;
 
   return updateRunRecord(id, updates);
@@ -176,6 +201,13 @@ export function markRunFailed(
   if (input.metadata !== undefined) updates.metadata = input.metadata;
 
   return updateRunRecord(id, updates);
+}
+
+export function markRunCancelled(id: string): SessionRunRecord | undefined {
+  return updateRunRecord(id, {
+    status: 'cancelled',
+    finishedAt: new Date().toISOString(),
+  });
 }
 
 export function listSessionRunRecords(sessionId: string): SessionRunRecord[] {

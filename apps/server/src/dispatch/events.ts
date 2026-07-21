@@ -8,6 +8,11 @@ export type RunEventType =
   | 'run.queued'
   | 'run.started'
   | 'run.delta'
+  | 'run.tool_call'
+  | 'run.exec_output'
+  | 'run.tool_cancelled'
+  | 'run.cancelled'
+  | 'run.activity'
   | 'run.completed'
   | 'run.failed'
   | 'session.run.choices';
@@ -174,13 +179,103 @@ export class RunEventEmitter {
     toolCall: { id: string; name: string; arguments: Record<string, unknown> };
   }): void {
     this.emit({
-      type: 'run.delta',
+      type: 'run.tool_call',
       runId: params.runId,
       sessionId: params.sessionId,
       agentId: params.agentId,
       timestamp: new Date().toISOString(),
       data: {
         toolCall: params.toolCall,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.exec_output event (live stdout/stderr chunk from a tool).
+   */
+  emitExecOutput(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    toolCallId: string;
+    stream: 'stdout' | 'stderr';
+    chunk: string;
+  }): void {
+    this.emit({
+      type: 'run.exec_output',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        toolCallId: params.toolCallId,
+        stream: params.stream,
+        chunk: params.chunk,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.tool_cancelled event (a tool call was aborted by the user).
+   */
+  emitToolCancelled(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    toolCallId: string;
+  }): void {
+    this.emit({
+      type: 'run.tool_cancelled',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        toolCallId: params.toolCallId,
+      },
+    });
+  }
+
+  /**
+   * Emit a run.cancelled event (the whole run was aborted by the user).
+   */
+  emitRunCancelled(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+  }): void {
+    this.emit({
+      type: 'run.cancelled',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {},
+    });
+  }
+
+  /**
+   * Emit a run.activity heartbeat (server-driven liveness indicator). Lets the
+   * UI show "Thinking…" / "Running <tool>… 12s" between other events (#378).
+   */
+  emitActivity(params: {
+    runId: string;
+    sessionId: string;
+    agentId: string;
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  }): void {
+    this.emit({
+      type: 'run.activity',
+      runId: params.runId,
+      sessionId: params.sessionId,
+      agentId: params.agentId,
+      timestamp: new Date().toISOString(),
+      data: {
+        phase: params.phase,
+        elapsedMs: params.elapsedMs,
+        ...(params.toolName !== undefined && { toolName: params.toolName }),
       },
     });
   }
@@ -197,7 +292,10 @@ export class RunEventEmitter {
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
     };
+    cost?: number | null;
   }): void {
     this.emit({
       type: 'run.completed',
@@ -208,6 +306,8 @@ export class RunEventEmitter {
       data: {
         finishReason: params.finishReason,
         usage: params.usage,
+        ...(params.cost !== undefined &&
+          params.cost !== null && { cost: params.cost }),
       },
     });
   }

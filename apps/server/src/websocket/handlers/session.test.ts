@@ -352,6 +352,15 @@ describe('SessionHandler', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
+        runId: null,
+        reasoningContent: null,
+        firstMessageId: null,
+        metadata: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        title: 'Mock Session',
+        type: 'chat',
+        archivedAt: null,
       });
 
       const userMessage: SessionMessage = {
@@ -363,6 +372,8 @@ describe('SessionHandler', () => {
         toolCallId: null,
         sequence: 1,
         metadata: null,
+        runId: null,
+        reasoningContent: null,
       };
 
       const assistantMessage: SessionMessage = {
@@ -374,6 +385,8 @@ describe('SessionHandler', () => {
         toolCallId: null,
         sequence: 2,
         metadata: null,
+        runId: null,
+        reasoningContent: null,
       };
 
       const run: SessionRun = {
@@ -387,12 +400,16 @@ describe('SessionHandler', () => {
         promptTokens: 10,
         completionTokens: 20,
         totalTokens: 30,
+        cacheReadTokens: null,
+        cacheCreationTokens: null,
+        cost: null,
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         metadata: null,
         startedAt: null,
         finishedAt: new Date('2024-01-01T00:00:01.000Z'),
         errorCode: null,
         errorMessage: null,
+        firstMessageId: null,
       };
 
       mockSessionService.submitMessageStreaming.mockResolvedValue({
@@ -508,6 +525,15 @@ describe('SessionHandler', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
+        runId: null,
+        reasoningContent: null,
+        firstMessageId: null,
+        metadata: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        title: 'Mock Session',
+        type: 'chat',
+        archivedAt: null,
       });
 
       mockSessionService.submitMessageStreaming.mockResolvedValue({
@@ -559,7 +585,11 @@ describe('registerSessionHandlers', () => {
 
     registerSessionHandlers(mockRouter, handler);
 
-    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(7);
+    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(10);
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.stream.resume',
+      expect.any(Function),
+    );
     expect(mockRouter.registerHandler).toHaveBeenCalledWith(
       'session.create',
       expect.any(Function),
@@ -586,6 +616,14 @@ describe('registerSessionHandlers', () => {
     );
     expect(mockRouter.registerHandler).toHaveBeenCalledWith(
       'session.runs',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.tool.cancel',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.run.cancel',
       expect.any(Function),
     );
   });
@@ -667,6 +705,15 @@ describe('SessionHandler Streaming', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
+        runId: null,
+        reasoningContent: null,
+        firstMessageId: null,
+        metadata: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        title: 'Mock Session',
+        type: 'chat',
+        archivedAt: null,
       });
 
       mockSessionService.submitMessageStreaming.mockResolvedValue({
@@ -731,6 +778,15 @@ describe('SessionHandler Streaming', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
+        runId: null,
+        reasoningContent: null,
+        firstMessageId: null,
+        metadata: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        title: 'Mock Session',
+        type: 'chat',
+        archivedAt: null,
       });
 
       const request = createWSMessage('session.message', {
@@ -777,6 +833,15 @@ describe('SessionHandler Streaming', () => {
       mockSessionService.getSession.mockResolvedValue({
         id: 'session-123',
         status: 'active',
+        runId: null,
+        reasoningContent: null,
+        firstMessageId: null,
+        metadata: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        title: 'Mock Session',
+        type: 'chat',
+        archivedAt: null,
       });
 
       mockSessionService.submitMessageStreaming.mockResolvedValue({

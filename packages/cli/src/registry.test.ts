@@ -176,27 +176,31 @@ describe('CLI Command Registry', () => {
   });
 
   describe('Exit codes', () => {
+    // These spawn a real `tsx` subprocess (runCli's own timeout allows up to
+    // 10s for that). The test-level timeout must be at least as generous —
+    // otherwise vitest's 5s default can fail the test purely because tsx
+    // startup was slow under load, before the process itself timed out.
     it('returns exit code 0 for help', async () => {
       const { stdout, code } = await runCli(['--help']);
       expect(stdout).toBeTruthy();
       expect(code).toBe(0);
-    });
+    }, 15000);
 
     it('returns exit code 0 for version', async () => {
       const { stdout, code } = await runCli(['--version']);
       expect(stdout).toBeTruthy();
       expect(code).toBe(0);
-    });
+    }, 15000);
 
     it('returns non-zero exit code for unknown command', async () => {
       const { code } = await runCli(['unknown']);
       expect(code).not.toBe(0);
-    });
+    }, 15000);
 
     it('returns non-zero exit code for missing argument', async () => {
       const { code } = await runCli(['devices', 'approve']);
       expect(code).not.toBe(0);
-    });
+    }, 15000);
   });
 });
 

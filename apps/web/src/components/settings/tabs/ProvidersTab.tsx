@@ -2,12 +2,18 @@ import { createSignal, Show, For } from 'solid-js';
 import { Settings2, Sparkles, X } from 'lucide-solid';
 import { PresetProviderCard } from '../PresetProviderCard';
 import { PresetProviderModal } from '../PresetProviderModal';
+import { DialogConnectProvider } from '../../providers/DialogConnectProvider';
 import {
   DynamicConfigForm,
   getProvidersSectionSchemaWithModels,
 } from '../../../config';
-import { CollapsibleCard } from '../../ui';
-import type { AppConfig, ProviderConfig } from '../../../lib/api';
+import { CollapsibleCard, ConfirmDialog } from '../../ui';
+import {
+  disconnectProvider,
+  type AppConfig,
+  type ProviderConfig,
+  type RewiredAgentNotice,
+} from '../../../lib/api';
 import type { ProviderPreset, ProviderPresetId } from '@openaidy/shared-types';
 import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 
@@ -19,12 +25,37 @@ interface ProvidersTabProps {
   onAddProvider: (provider: ProviderConfig) => void;
   onDeleteProvider: (providerId: string) => void;
   onUpdateProvider: (providerId: string, provider: ProviderConfig) => void;
+  /**
+   * Persist an arbitrary `AppConfig`. Used by the disconnect flow,
+   * which has to rewire affected agents in the same write so the
+   * server-side config schema (which rejects an agent that points
+   * at a non-existent provider) accepts the change.
+   */
+  onSaveConfig: (newConfig: AppConfig) => Promise<unknown>;
+  /**
+   * Called after a successful disconnect with one notice per
+   * agent that was auto-rewired to the project default model.
+   * The parent (SettingsView) surfaces these as per-agent banners
+   * in the Agents tab so the user can see *why* the model value
+   * changed.
+   */
+  onAgentsRewired: (notices: RewiredAgentNotice[]) => void;
 }
 
 export function ProvidersTab(props: ProvidersTabProps) {
   const [selectedPreset, setSelectedPreset] =
     createSignal<ProviderPreset | null>(null);
   const [showCustomModal, setShowCustomModal] = createSignal(false);
+  const [connectingProvider, setConnectingProvider] =
+    createSignal<ProviderPreset | null>(null);
+  // When set, the ConfirmDialog is shown. The card icon and the
+  // modal footer link both flow into this single state.
+  const [disconnectTarget, setDisconnectTarget] =
+    createSignal<ProviderPreset | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = createSignal(false);
+  const [disconnectError, setDisconnectError] = createSignal<string | null>(
+    null,
+  );
 
   const getCustomProviders = (): ProviderConfig[] => {
     return (
@@ -38,16 +69,153 @@ export function ProvidersTab(props: ProvidersTabProps) {
 
   const hasCustomProviders = () => getCustomProviders().length > 0;
 
-  const handleSavePreset = (provider: ProviderConfig) => {
-    const existing = props
-      .config()
-      ?.providers?.find((p) => p.id === provider.id);
-    if (existing) {
-      props.onUpdateProvider(provider.id, provider);
-    } else {
-      props.onAddProvider(provider);
+  const handleSavePreset = (providers: ProviderConfig[]) => {
+    for (const provider of providers) {
+      const existing = props
+        .config()
+        ?.providers?.find((p) => p.id === provider.id);
+      if (existing) {
+        props.onUpdateProvider(provider.id, provider);
+      } else {
+        props.onAddProvider(provider);
+      }
     }
     setSelectedPreset(null);
+  };
+
+  // Request to disconnect — opens the confirmation dialog. Wired
+  // from both the inline card icon and the "Disconnect" link in
+  // the management modal's footer so there's one chokepoint.
+  const requestDisconnect = (preset: ProviderPreset) => {
+    setDisconnectError(null);
+    setDisconnectTarget(preset);
+    // Close the management modal if it's open, so the user isn't
+    // looking at a stale "configured" state behind the confirm.
+    setSelectedPreset(null);
+  };
+
+  // ── Disconnect impact analysis ─────────────────────────────────
+  //
+  // Removing a provider breaks every agent whose `model` field
+  // references it ("<providerId>/<modelId>"). The server-side config
+  // schema rejects such a state, so `buildRewiredConfig` rewires the
+  // affected agents in the same write that removes the provider. This
+  // helper just lists them so the confirm dialog can name them.
+
+  const computeDisconnectImpact = (
+    targetId: string,
+  ): { affectedAgents: { id: string; name: string }[] } => {
+    const cfg = props.config();
+    const affectedAgents =
+      cfg?.agents
+        .filter((a) => a.model?.split('/')[0] === targetId)
+        .map((a) => ({ id: a.id, name: a.name })) ?? [];
+    return { affectedAgents };
+  };
+
+  // Build a new AppConfig with the target provider removed, the project
+  // default reassigned, and every affected agent (one whose model references
+  // the removed provider) rewired. Three outcomes:
+  //   • Default still valid  → keep it; affected agents point at it.
+  //   • Default removed, others remain → promote the first remaining provider
+  //     with an enabled model to default; affected agents point at it.
+  //   • No providers remain → clear the default and make affected agents
+  //     model-less, returning the install to its unconfigured state so the
+  //     onboarding gate reappears.
+  // Always returns a valid config (never null unless config hasn't loaded).
+  const buildRewiredConfig = (targetId: string): AppConfig | null => {
+    const cfg = props.config();
+    if (!cfg) return null;
+
+    const remaining = cfg.providers.filter((p) => p.id !== targetId);
+
+    let defaults = cfg.defaults;
+    let replacementModel: string | undefined;
+
+    const defaultStillValid =
+      !!defaults.providerId &&
+      defaults.providerId !== targetId &&
+      remaining.some((p) => p.id === defaults.providerId);
+
+    if (defaultStillValid) {
+      replacementModel = `${defaults.providerId}/${defaults.modelId}`;
+    } else {
+      const next = remaining.find(
+        (p) =>
+          p.enabled !== false && p.models?.some((m) => m.enabled !== false),
+      );
+      if (next) {
+        const model =
+          next.models.find((m) => m.enabled !== false) ?? next.models[0];
+        defaults = { ...defaults, providerId: next.id, modelId: model?.id };
+        replacementModel = model ? `${next.id}/${model.id}` : undefined;
+      } else {
+        // Back to unconfigured — drop the default provider/model entirely.
+        defaults = { agentId: defaults.agentId };
+        replacementModel = undefined;
+      }
+    }
+
+    return {
+      ...cfg,
+      providers: remaining,
+      defaults,
+      agents: cfg.agents.map((a) => {
+        if (a.model?.split('/')[0] !== targetId) return a;
+        if (replacementModel) return { ...a, model: replacementModel };
+        // No provider left to point at: strip the model so the agent falls
+        // back to the (now empty) default and the config stays schema-valid.
+        const { model: _removed, ...rest } = a;
+        return rest;
+      }),
+    } as AppConfig;
+  };
+
+  // Confirmed disconnect — order matters:
+  //   1. Persist the rewired config (provider removed, default reassigned or
+  //      cleared, affected agents rewired accordingly) so the server-side
+  //      schema accepts the write.
+  //   2. Clear the encrypted credential server-side. The OpenAI-
+  //      compatible adapter's in-memory cache is invalidated by the
+  //      repository's `onChange` hook on the credential write.
+  //   3. Emit one RewiredAgentNotice per affected agent so the
+  //      Agents tab can flag the change for the user.
+  const confirmDisconnect = async () => {
+    const target = disconnectTarget();
+    if (!target) return;
+    const cfg = props.config();
+    const rewired = buildRewiredConfig(target.id);
+    if (!rewired || !cfg) return;
+
+    // Derive one notice per affected agent by comparing its model before and
+    // after the rewire. `toModel` is empty when the agent was made model-less
+    // (the last provider was removed), which the Agents tab renders as "no
+    // model set".
+    const newAgentById = new Map(rewired.agents.map((a) => [a.id, a]));
+    const notices: RewiredAgentNotice[] = cfg.agents
+      .filter((a) => a.model?.split('/')[0] === target.id)
+      .map((a) => ({
+        agentId: a.id,
+        fromProviderId: target.id,
+        fromModel: a.model ?? '',
+        toModel: newAgentById.get(a.id)?.model ?? '',
+        rewiredAt: new Date().toISOString(),
+      }));
+
+    setIsDisconnecting(true);
+    setDisconnectError(null);
+    try {
+      await props.onSaveConfig(rewired);
+      await disconnectProvider(target.id);
+      props.onAgentsRewired(notices);
+      setDisconnectTarget(null);
+    } catch (err) {
+      setDisconnectError(
+        err instanceof Error ? err.message : 'Failed to disconnect',
+      );
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   return (
@@ -75,17 +243,32 @@ export function ProvidersTab(props: ProvidersTabProps) {
           <Sparkles class="w-4 h-4 text-primary" />
           <h3 class="text-sm font-medium text-text-primary">Ready Providers</h3>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-2">
           <For each={PROVIDER_PRESETS as ProviderPreset[]}>
             {(preset) => {
               const isConfigured = () =>
                 props.config()?.providers?.some((p) => p.id === preset.id) ??
                 false;
+              const isThisDisconnecting = () =>
+                isDisconnecting() && disconnectTarget()?.id === preset.id;
+              const handleSelect = () => {
+                if (isConfigured() || preset.local) {
+                  // Configured providers — and local providers, which need no
+                  // API key — go straight to the model-config modal. Only
+                  // remote, unconfigured providers open the credential dialog.
+                  setSelectedPreset(preset);
+                } else {
+                  // If not configured, show connection dialog
+                  setConnectingProvider(preset);
+                }
+              };
               return (
                 <PresetProviderCard
                   preset={preset}
                   isConfigured={isConfigured()}
-                  onSelect={() => setSelectedPreset(preset)}
+                  onSelect={handleSelect}
+                  onDisconnect={requestDisconnect}
+                  isDisconnectPending={isThisDisconnecting()}
                 />
               );
             }}
@@ -159,9 +342,88 @@ export function ProvidersTab(props: ProvidersTabProps) {
           }
           onClose={() => setSelectedPreset(null)}
           onSave={handleSavePreset}
+          onDisconnect={requestDisconnect}
           isPending={props.isPending}
         />
       </Show>
+
+      {/* Disconnect confirmation — single chokepoint for both the
+          card icon and the modal footer link. */}
+      <ConfirmDialog
+        isOpen={disconnectTarget() !== null}
+        title={
+          disconnectTarget()
+            ? `Disconnect from ${disconnectTarget()!.name}?`
+            : ''
+        }
+        tone="danger"
+        confirmLabel="Disconnect"
+        isPending={isDisconnecting()}
+        onConfirm={confirmDisconnect}
+        onCancel={() => {
+          if (!isDisconnecting()) setDisconnectTarget(null);
+        }}
+        body={
+          <Show when={disconnectTarget()} keyed>
+            {(target) => {
+              const impact = computeDisconnectImpact(target.id);
+              const rewired = buildRewiredConfig(target.id);
+              // After removal, is the install left with no configured default
+              // (i.e. this was the only provider)? Then we return to setup.
+              const becomesUnconfigured = !rewired?.defaults.providerId;
+              const newDefault = rewired?.defaults.providerId
+                ? `${rewired.defaults.providerId}/${rewired.defaults.modelId}`
+                : '';
+              return (
+                <div class="space-y-2">
+                  <p>
+                    This will sign you out of {target.name} and remove the
+                    provider from your configuration.
+                  </p>
+                  <Show when={impact.affectedAgents.length > 0}>
+                    <div class="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-2 text-xs text-amber-800 dark:text-amber-200">
+                      <p class="font-medium">
+                        {impact.affectedAgents.length === 1
+                          ? '1 agent uses this provider'
+                          : `${impact.affectedAgents.length} agents use this provider`}
+                        :
+                      </p>
+                      <ul class="mt-1 list-disc list-inside">
+                        <For each={impact.affectedAgents}>
+                          {(a) => <li>{a.name}</li>}
+                        </For>
+                      </ul>
+                      <p class="mt-1">
+                        <Show
+                          when={!becomesUnconfigured}
+                          fallback="They will be left without a model until you connect another provider."
+                        >
+                          They will be re-pointed at{' '}
+                          <code class="font-mono">{newDefault}</code>.
+                        </Show>
+                      </p>
+                    </div>
+                  </Show>
+                  <Show when={becomesUnconfigured}>
+                    <div class="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2 text-xs text-blue-700 dark:text-blue-300">
+                      This is your only configured provider. Disconnecting takes
+                      you back to the setup screen to connect another.
+                    </div>
+                  </Show>
+                  <Show when={disconnectError()}>
+                    <p class="text-red-600 dark:text-red-400 text-xs">
+                      {disconnectError()}
+                    </p>
+                  </Show>
+                  <p class="text-xs text-text-tertiary">
+                    You can reconnect at any time.
+                  </p>
+                </div>
+              );
+            }}
+          </Show>
+        }
+      />
 
       {/* Custom Provider Modal */}
       <Show when={showCustomModal()}>
@@ -174,6 +436,20 @@ export function ProvidersTab(props: ProvidersTabProps) {
           isPending={props.isPending}
         />
       </Show>
+
+      {/* Connect Provider Dialog */}
+      <DialogConnectProvider
+        provider={connectingProvider()}
+        onClose={() => setConnectingProvider(null)}
+        onConnected={(providerId, _authMethod) => {
+          setConnectingProvider(null);
+          // Find the preset and open the preset modal to configure
+          const preset = PROVIDER_PRESETS.find((p) => p.id === providerId);
+          if (preset) {
+            setSelectedPreset(preset);
+          }
+        }}
+      />
     </div>
   );
 }

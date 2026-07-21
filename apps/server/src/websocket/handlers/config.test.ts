@@ -4,13 +4,22 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { ConfigHandler, registerConfigHandlers } from './config';
+import type { Mock } from 'vitest';
+import {
+  ConfigHandler,
+  registerConfigHandlers,
+  type ConfigWatchRequest,
+  type ConfigUnwatchRequest,
+} from './config';
 import type { AppConfigService } from '../../config/service';
 import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
+import type { MessageRouter } from '../message-router';
 import {
   createWSMessage,
   WS_ERROR_CODES,
+  type ConfigGetRequest,
+  type ConfigUpdateRequest,
 } from '@openaidy/shared-types';
 
 // ============================================================================
@@ -24,7 +33,7 @@ const createMockLogger = () =>
     error: vi.fn(),
     debug: vi.fn(),
     child: vi.fn(() => createMockLogger()),
-  } as unknown as FastifyBaseLogger);
+  }) as unknown as FastifyBaseLogger;
 
 const createMockConfigService = (): AppConfigService =>
   ({
@@ -37,7 +46,7 @@ const createMockConfigService = (): AppConfigService =>
     getStatus: vi.fn().mockReturnValue({ issues: [] }),
     load: vi.fn(),
     save: vi.fn(),
-  } as unknown as AppConfigService);
+  }) as unknown as AppConfigService;
 
 const createMockConnectionManager = (): ConnectionManager =>
   ({
@@ -52,7 +61,7 @@ const createMockConnectionManager = (): ConnectionManager =>
     getConnectionCount: vi.fn().mockReturnValue(0),
     getAllConnections: vi.fn().mockReturnValue([]),
     closeAll: vi.fn(),
-  } as unknown as ConnectionManager);
+  }) as unknown as ConnectionManager;
 
 // ============================================================================
 // Tests
@@ -78,7 +87,7 @@ describe('ConfigHandler', () => {
 
     handlerContext = {
       connectionManager: mockConnectionManager,
-      services: {} as any,
+      services: {},
       logger: mockLogger,
     };
   });
@@ -89,9 +98,13 @@ describe('ConfigHandler', () => {
 
   describe('handleGet', () => {
     it('should return full config when no path specified', async () => {
-      const request = createWSMessage('config.get', {}) as any;
+      const request = createWSMessage('config.get', {}) as ConfigGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.get');
       if ('config' in response.payload) {
@@ -102,9 +115,15 @@ describe('ConfigHandler', () => {
     });
 
     it('should return specific path from config', async () => {
-      const request = createWSMessage('config.get', { path: 'app.name' }) as any;
+      const request = createWSMessage('config.get', {
+        path: 'app.name',
+      }) as ConfigGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.get');
       if ('config' in response.payload) {
@@ -113,21 +132,33 @@ describe('ConfigHandler', () => {
     });
 
     it('should return undefined for non-existent path', async () => {
-      const request = createWSMessage('config.get', { path: 'nonexistent.path' }) as any;
+      const request = createWSMessage('config.get', {
+        path: 'nonexistent.path',
+      }) as ConfigGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.get');
     });
 
     it('should handle config service errors', async () => {
-      (mockConfigService.getConfig as any).mockImplementation(() => {
-        throw new Error('Config not loaded');
-      });
+      (mockConfigService.getConfig as unknown as Mock).mockImplementation(
+        () => {
+          throw new Error('Config not loaded');
+        },
+      );
 
-      const request = createWSMessage('config.get', {}) as any;
+      const request = createWSMessage('config.get', {}) as ConfigGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
       if ('error' in response.payload) {
@@ -144,9 +175,13 @@ describe('ConfigHandler', () => {
     it('should update config with valid updates', async () => {
       const request = createWSMessage('config.update', {
         updates: { 'app.name': 'NewAppName' },
-      }) as any;
+      }) as ConfigUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.update');
       if ('success' in response.payload) {
@@ -158,24 +193,32 @@ describe('ConfigHandler', () => {
     it('should return error for invalid updates', async () => {
       const request = createWSMessage('config.update', {
         updates: {},
-      }) as any;
+      }) as ConfigUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       // Empty updates should still succeed
       expect(response.type).toBe('config.update');
     });
 
     it('should handle save errors', async () => {
-      (mockConfigService.save as any).mockImplementation(() => {
+      (mockConfigService.save as unknown as Mock).mockImplementation(() => {
         throw new Error('Failed to save');
       });
 
       const request = createWSMessage('config.update', {
         updates: { 'app.name': 'NewName' },
-      }) as any;
+      }) as ConfigUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
     });
@@ -183,7 +226,7 @@ describe('ConfigHandler', () => {
     it('should log update operation', async () => {
       const request = createWSMessage('config.update', {
         updates: { 'app.name': 'NewName' },
-      }) as any;
+      }) as ConfigUpdateRequest;
 
       await handler.handleUpdate('conn-1', request, handlerContext);
 
@@ -197,9 +240,13 @@ describe('ConfigHandler', () => {
 
   describe('handleWatch', () => {
     it('should register watcher for all paths', async () => {
-      const request = createWSMessage('config.watch', {}) as any;
+      const request = createWSMessage('config.watch', {}) as ConfigWatchRequest;
 
-      const response = await handler.handleWatch('conn-1', request, handlerContext);
+      const response = await handler.handleWatch(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.watch');
       if ('watching' in response.payload) {
@@ -210,19 +257,26 @@ describe('ConfigHandler', () => {
     it('should register watcher for specific paths', async () => {
       const request = createWSMessage('config.watch', {
         paths: ['app.name', 'defaults.agentId'],
-      }) as any;
+      }) as ConfigWatchRequest;
 
-      const response = await handler.handleWatch('conn-1', request, handlerContext);
+      const response = await handler.handleWatch(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.watch');
       if ('watching' in response.payload) {
         expect(response.payload.watching).toBe(true);
-        expect(response.payload.paths).toEqual(['app.name', 'defaults.agentId']);
+        expect(response.payload.paths).toEqual([
+          'app.name',
+          'defaults.agentId',
+        ]);
       }
     });
 
     it('should log watch registration', async () => {
-      const request = createWSMessage('config.watch', {}) as any;
+      const request = createWSMessage('config.watch', {}) as ConfigWatchRequest;
 
       await handler.handleWatch('conn-1', request, handlerContext);
 
@@ -237,12 +291,22 @@ describe('ConfigHandler', () => {
   describe('handleUnwatch', () => {
     it('should remove watcher', async () => {
       // First, add a watcher
-      const watchRequest = createWSMessage('config.watch', {}) as any;
+      const watchRequest = createWSMessage(
+        'config.watch',
+        {},
+      ) as ConfigWatchRequest;
       await handler.handleWatch('conn-1', watchRequest, handlerContext);
 
       // Then, remove it
-      const unwatchRequest = createWSMessage('config.unwatch', {}) as any;
-      const response = await handler.handleUnwatch('conn-1', unwatchRequest, handlerContext);
+      const unwatchRequest = createWSMessage(
+        'config.unwatch',
+        {},
+      ) as ConfigUnwatchRequest;
+      const response = await handler.handleUnwatch(
+        'conn-1',
+        unwatchRequest,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.unwatch');
       if ('watching' in response.payload) {
@@ -251,9 +315,16 @@ describe('ConfigHandler', () => {
     });
 
     it('should return watching: false when not watching', async () => {
-      const request = createWSMessage('config.unwatch', {}) as any;
+      const request = createWSMessage(
+        'config.unwatch',
+        {},
+      ) as ConfigUnwatchRequest;
 
-      const response = await handler.handleUnwatch('conn-2', request, handlerContext);
+      const response = await handler.handleUnwatch(
+        'conn-2',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.unwatch');
       if ('watching' in response.payload) {
@@ -262,7 +333,10 @@ describe('ConfigHandler', () => {
     });
 
     it('should log unwatch operation', async () => {
-      const request = createWSMessage('config.unwatch', {}) as any;
+      const request = createWSMessage(
+        'config.unwatch',
+        {},
+      ) as ConfigUnwatchRequest;
 
       await handler.handleUnwatch('conn-1', request, handlerContext);
 
@@ -276,9 +350,15 @@ describe('ConfigHandler', () => {
 
   describe('resolveConfigPath', () => {
     it('should resolve nested paths', async () => {
-      const request = createWSMessage('config.get', { path: 'defaults.agentId' }) as any;
+      const request = createWSMessage('config.get', {
+        path: 'defaults.agentId',
+      }) as ConfigGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('config.get');
     });
@@ -293,13 +373,13 @@ describe('ConfigHandler', () => {
       // Add watcher
       const watchRequest = createWSMessage('config.watch', {
         paths: ['app.name'],
-      }) as any;
+      }) as ConfigWatchRequest;
       await handler.handleWatch('conn-1', watchRequest, handlerContext);
 
       // Update config
       const updateRequest = createWSMessage('config.update', {
         updates: { 'app.name': 'NewName' },
-      }) as any;
+      }) as ConfigUpdateRequest;
       await handler.handleUpdate('conn-1', updateRequest, handlerContext);
 
       // Verify update was processed
@@ -325,12 +405,24 @@ describe('registerConfigHandlers', () => {
       handleUnwatch: vi.fn(),
     } as unknown as ConfigHandler;
 
-    registerConfigHandlers(mockRouter as any, mockHandler);
+    registerConfigHandlers(mockRouter as unknown as MessageRouter, mockHandler);
 
     expect(mockRouter.registerHandler).toHaveBeenCalledTimes(4);
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('config.get', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('config.update', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('config.watch', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('config.unwatch', expect.any(Function));
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'config.get',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'config.update',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'config.watch',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'config.unwatch',
+      expect.any(Function),
+    );
   });
 });

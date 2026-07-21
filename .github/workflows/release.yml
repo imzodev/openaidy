@@ -1,0 +1,112 @@
+name: Release
+
+# Cut a release by pushing a semver tag:
+#   git tag v0.2.0 && git push origin v0.2.0
+# Gates on the same checks as CI, publishes the prebuilt `openaidy` package to
+# npm, then publishes a GitHub Release. The installer runs `npm i -g openaidy`,
+# so a green publish here is what users install.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. v0.2.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CI: 'true'
+
+jobs:
+  gate:
+    name: Gate (lint, build, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint
+        run: pnpm -r lint
+      - name: Build (includes typecheck)
+        run: pnpm -r build
+      - name: Test
+        run: pnpm -r test
+
+  publish-npm:
+    name: Publish @openaidy/app to npm
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC trusted publishing: npm exchanges this short-lived GitHub identity
+      # for publish rights (no long-lived NPM_TOKEN). Requires a Trusted
+      # Publisher configured on the package pointing at this repo + workflow.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      # Node 24 ships a modern npm (>= 11.5.1, with sigstore) that supports OIDC
+      # trusted publishing + provenance. We do NOT `npm install -g npm@latest`:
+      # upgrading npm in-place corrupts its bundled deps, which is what caused
+      # provenance to fail with "Cannot find module 'sigstore'".
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build web bundle
+        run: pnpm --filter web build
+      - name: Build npm package
+        run: pnpm build:npm
+      - name: Publish (skip if this version is already on npm)
+        working-directory: build/npm
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$NAME@$VER" version >/dev/null 2>&1; then
+            echo "$NAME@$VER already published — skipping."
+          else
+            npm publish
+          fi
+
+  release:
+    name: Publish GitHub Release
+    needs: [gate, publish-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so release-note generation can diff against the
+          # previous tag.
+          fetch-depth: 0
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — skipping."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag

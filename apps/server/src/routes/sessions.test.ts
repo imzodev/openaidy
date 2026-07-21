@@ -178,7 +178,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should create a new session', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Test Session' },
       });
 
@@ -191,7 +191,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should reject empty title', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: '' },
       });
 
@@ -204,13 +204,13 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Create a session first
       await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Session 1' },
       });
 
       const response = await app.inject({
         method: 'GET',
-        url: '/sessions',
+        url: '/api/sessions',
       });
 
       expect(response.statusCode).toBe(200);
@@ -220,12 +220,46 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     });
   });
 
+  describe('DELETE /sessions/:sessionId', () => {
+    it('should delete an existing session and return 204', async () => {
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Session to delete' },
+      });
+      const session = createResponse.json();
+
+      const deleteResponse = await app.inject({
+        method: 'DELETE',
+        url: `/api/sessions/${session.id}`,
+      });
+
+      expect(deleteResponse.statusCode).toBe(204);
+
+      // Confirm it's gone on subsequent GET
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/${session.id}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+    });
+
+    it('should return 404 when deleting a non-existent session', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/sessions/does-not-exist',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe('POST /sessions/:sessionId/messages', () => {
     it('should submit a message and return assistant response', async () => {
       // Create a session
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Chat Session' },
       });
       const session = createResponse.json();
@@ -233,7 +267,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Submit a message
       const response = await app.inject({
         method: 'POST',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
         payload: {
           role: 'user',
           content: 'Hello!',
@@ -258,14 +292,14 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should reject invalid role', async () => {
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Session' },
       });
       const session = createResponse.json();
 
       const response = await app.inject({
         method: 'POST',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
         payload: {
           role: 'invalid-role',
           content: 'Hello',
@@ -278,14 +312,14 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should reject empty content', async () => {
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Session' },
       });
       const session = createResponse.json();
 
       const response = await app.inject({
         method: 'POST',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
         payload: {
           role: 'user',
           content: '',
@@ -298,7 +332,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent session', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/sessions/non-existent-session/messages',
+        url: '/api/sessions/non-existent-session/messages',
         payload: {
           role: 'user',
           content: 'Hello',
@@ -317,7 +351,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Create a session
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Chat' },
       });
       const session = createResponse.json();
@@ -325,7 +359,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Submit a message
       await app.inject({
         method: 'POST',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
         payload: {
           role: 'user',
           content: 'First message',
@@ -336,7 +370,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // List messages
       const response = await app.inject({
         method: 'GET',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
       });
 
       expect(response.statusCode).toBe(200);
@@ -348,7 +382,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent session', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/sessions/non-existent/messages',
+        url: '/api/sessions/non-existent/messages',
       });
 
       expect(response.statusCode).toBe(404);
@@ -360,7 +394,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Create a session
       const createResponse = await app.inject({
         method: 'POST',
-        url: '/sessions',
+        url: '/api/sessions',
         payload: { title: 'Chat' },
       });
       const session = createResponse.json();
@@ -368,7 +402,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // Submit a message (creates a run)
       await app.inject({
         method: 'POST',
-        url: `/sessions/${session.id}/messages`,
+        url: `/api/sessions/${session.id}/messages`,
         payload: {
           role: 'user',
           content: 'Test',
@@ -379,7 +413,7 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       // List runs
       const response = await app.inject({
         method: 'GET',
-        url: `/sessions/${session.id}/runs`,
+        url: `/api/sessions/${session.id}/runs`,
       });
 
       expect(response.statusCode).toBe(200);
@@ -429,14 +463,14 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Create two sessions
     const session1Response = await app.inject({
       method: 'POST',
-      url: '/sessions',
+      url: '/api/sessions',
       payload: { title: 'Session 1' },
     });
     const session1 = session1Response.json();
 
     const session2Response = await app.inject({
       method: 'POST',
-      url: '/sessions',
+      url: '/api/sessions',
       payload: { title: 'Session 2' },
     });
     const session2 = session2Response.json();
@@ -444,7 +478,7 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Submit messages to both sessions
     await app.inject({
       method: 'POST',
-      url: `/sessions/${session1.id}/messages`,
+      url: `/api/sessions/${session1.id}/messages`,
       payload: {
         role: 'user',
         content: 'Message to session 1',
@@ -454,7 +488,7 @@ describe('Session isolation', { timeout: 15000 }, () => {
 
     await app.inject({
       method: 'POST',
-      url: `/sessions/${session2.id}/messages`,
+      url: `/api/sessions/${session2.id}/messages`,
       payload: {
         role: 'user',
         content: 'Message to session 2',
@@ -465,13 +499,13 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Check messages are isolated
     const messages1Response = await app.inject({
       method: 'GET',
-      url: `/sessions/${session1.id}/messages`,
+      url: `/api/sessions/${session1.id}/messages`,
     });
     const messages1 = messages1Response.json().items;
 
     const messages2Response = await app.inject({
       method: 'GET',
-      url: `/sessions/${session2.id}/messages`,
+      url: `/api/sessions/${session2.id}/messages`,
     });
     const messages2 = messages2Response.json().items;
 
@@ -488,14 +522,14 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Create two sessions
     const session1Response = await app.inject({
       method: 'POST',
-      url: '/sessions',
+      url: '/api/sessions',
       payload: { title: 'Session 1' },
     });
     const session1 = session1Response.json();
 
     const session2Response = await app.inject({
       method: 'POST',
-      url: '/sessions',
+      url: '/api/sessions',
       payload: { title: 'Session 2' },
     });
     const session2 = session2Response.json();
@@ -503,7 +537,7 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Submit messages to both sessions
     await app.inject({
       method: 'POST',
-      url: `/sessions/${session1.id}/messages`,
+      url: `/api/sessions/${session1.id}/messages`,
       payload: {
         role: 'user',
         content: 'Test 1',
@@ -513,7 +547,7 @@ describe('Session isolation', { timeout: 15000 }, () => {
 
     await app.inject({
       method: 'POST',
-      url: `/sessions/${session2.id}/messages`,
+      url: `/api/sessions/${session2.id}/messages`,
       payload: {
         role: 'user',
         content: 'Test 2',
@@ -524,13 +558,13 @@ describe('Session isolation', { timeout: 15000 }, () => {
     // Check runs are isolated
     const runs1Response = await app.inject({
       method: 'GET',
-      url: `/sessions/${session1.id}/runs`,
+      url: `/api/sessions/${session1.id}/runs`,
     });
     const runs1 = runs1Response.json().items;
 
     const runs2Response = await app.inject({
       method: 'GET',
-      url: `/sessions/${session2.id}/runs`,
+      url: `/api/sessions/${session2.id}/runs`,
     });
     const runs2 = runs2Response.json().items;
 

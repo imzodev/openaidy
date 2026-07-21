@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MessageRouter, type MessageHandler, type HandlerContext } from './message-router';
-import { createWSMessage, WS_ERROR_CODES, type WSResponse } from '@openaidy/shared-types';
+import type { FastifyBaseLogger } from 'fastify';
+import {
+  MessageRouter,
+  type MessageHandler,
+  type HandlerContext,
+} from './message-router';
+import { createWSMessage, type WSResponse } from '@openaidy/shared-types';
 import { ConnectionManager } from './connection-manager';
 
 // Mock logger
@@ -23,7 +28,10 @@ const mockConnectionManager = {
   getSubscribers: () => [],
   send: () => true,
   broadcast: () => 0,
-  checkRateLimit: () => ({ allowed: true, info: { remaining: 100, reset: 0, limit: 100 } }),
+  checkRateLimit: () => ({
+    allowed: true,
+    info: { remaining: 100, reset: 0, limit: 100 },
+  }),
   recordRequest: () => {},
 } as unknown as ConnectionManager;
 
@@ -31,14 +39,14 @@ const mockConnectionManager = {
 const handlerContext: HandlerContext = {
   connectionManager: mockConnectionManager,
   services: mockServices,
-  logger: mockLogger as unknown as any,
+  logger: mockLogger as unknown as FastifyBaseLogger,
 };
 
 describe('MessageRouter', () => {
   let router: MessageRouter;
 
   beforeEach(() => {
-    router = new MessageRouter(mockLogger as unknown as any);
+    router = new MessageRouter(mockLogger as unknown as FastifyBaseLogger);
     vi.clearAllMocks();
   });
 
@@ -58,7 +66,9 @@ describe('MessageRouter', () => {
       router.registerHandler('test.message', handler);
 
       expect(router.hasHandler('test.message')).toBe(true);
-      expect(mockLogger.info).toHaveBeenCalledWith('Registered handler for message type: test.message');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Registered handler for message type: test.message',
+      );
     });
 
     it('should allow multiple handlers', () => {
@@ -96,7 +106,9 @@ describe('MessageRouter', () => {
       router.registerHandler('test.message', async () => undefined);
       router.unregisterHandler('test.message');
 
-      expect(mockLogger.info).toHaveBeenCalledWith('Unregistered handler for message type: test.message');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Unregistered handler for message type: test.message',
+      );
     });
   });
 
@@ -148,7 +160,9 @@ describe('MessageRouter', () => {
 
       const handler: MessageHandler = async (connId, msg) => {
         received = { connId, msg };
-        return createWSMessage('test.response', { echo: msg.payload }) as unknown as WSResponse;
+        return createWSMessage('test.response', {
+          echo: msg.payload,
+        }) as unknown as WSResponse;
       };
 
       router.registerHandler('test.message', handler);
@@ -166,7 +180,9 @@ describe('MessageRouter', () => {
       const result = await router.route('conn-1', message, handlerContext);
 
       expect(result?.type).toBe('error');
-      expect(mockLogger.warn).toHaveBeenCalledWith('No handler registered for message type: unknown.type');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'No handler registered for message type: unknown.type',
+      );
     });
 
     it('should handle handler errors', async () => {
@@ -251,7 +267,10 @@ describe('MessageRouter', () => {
       const requestId = router.createRequestId();
       const promise = router.trackRequest(requestId, 'conn-1');
       // Complete it to avoid hanging promise
-      router.completeRequest(requestId, createWSMessage('response', {}) as any);
+      router.completeRequest(
+        requestId,
+        createWSMessage('response', {}) as unknown as WSResponse,
+      );
 
       expect(router.getPendingCount()).toBe(0);
       await promise;
@@ -263,15 +282,23 @@ describe('MessageRouter', () => {
 
       expect(promise).toBeInstanceOf(Promise);
       // Complete to avoid hanging
-      router.completeRequest(requestId, createWSMessage('response', {}) as any);
+      router.completeRequest(
+        requestId,
+        createWSMessage('response', {}) as unknown as WSResponse,
+      );
       await promise;
     });
 
     it('should timeout after configured time', async () => {
-      const fastRouter = new MessageRouter(mockLogger as unknown as any, 10); // 10ms
+      const fastRouter = new MessageRouter(
+        mockLogger as unknown as FastifyBaseLogger,
+        10,
+      ); // 10ms
       const requestId = fastRouter.createRequestId();
 
-      await expect(fastRouter.trackRequest(requestId, 'conn-1')).rejects.toThrow('Request timeout');
+      await expect(
+        fastRouter.trackRequest(requestId, 'conn-1'),
+      ).rejects.toThrow('Request timeout');
     });
   });
 
@@ -281,7 +308,10 @@ describe('MessageRouter', () => {
       const promise = router.trackRequest(requestId, 'conn-1');
 
       const response = createWSMessage('response', { data: 'result' });
-      const completed = router.completeRequest(requestId, response as any);
+      const completed = router.completeRequest(
+        requestId,
+        response as unknown as WSResponse,
+      );
 
       expect(completed).toBe(true);
       await expect(promise).resolves.toBe(response);
@@ -292,7 +322,7 @@ describe('MessageRouter', () => {
       const promise = router.trackRequest(requestId, 'conn-1');
 
       const response = createWSMessage('response', {});
-      router.completeRequest(requestId, response as any);
+      router.completeRequest(requestId, response as unknown as WSResponse);
 
       expect(router.getPendingCount()).toBe(0);
       await promise;
@@ -300,7 +330,9 @@ describe('MessageRouter', () => {
 
     it('should return false for unknown request', () => {
       const response = createWSMessage('response', {});
-      expect(router.completeRequest('unknown', response as any)).toBe(false);
+      expect(
+        router.completeRequest('unknown', response as unknown as WSResponse),
+      ).toBe(false);
     });
   });
 
@@ -327,7 +359,9 @@ describe('MessageRouter', () => {
     });
 
     it('should return false for unknown request', () => {
-      expect(router.failRequest('unknown', { code: 'ERROR', message: 'Error' })).toBe(false);
+      expect(
+        router.failRequest('unknown', { code: 'ERROR', message: 'Error' }),
+      ).toBe(false);
     });
   });
 
@@ -344,8 +378,8 @@ describe('MessageRouter', () => {
       expect(router.getPendingCount()).toBe(2);
 
       // Clean up
-      router.completeRequest(id1, {} as any);
-      router.completeRequest(id2, {} as any);
+      router.completeRequest(id1, {} as unknown as WSResponse);
+      router.completeRequest(id2, {} as unknown as WSResponse);
       await Promise.all([p1, p2]);
     });
   });
@@ -368,9 +402,9 @@ describe('MessageRouter', () => {
       expect(pending).not.toContain(id3);
 
       // Clean up
-      router.completeRequest(id1, {} as any);
-      router.completeRequest(id2, {} as any);
-      router.completeRequest(id3, {} as any);
+      router.completeRequest(id1, {} as unknown as WSResponse);
+      router.completeRequest(id2, {} as unknown as WSResponse);
+      router.completeRequest(id3, {} as unknown as WSResponse);
       await Promise.all([p1, p2, p3]);
     });
 
@@ -412,7 +446,7 @@ describe('MessageRouter', () => {
       expect(router.getPendingCount()).toBe(1);
 
       // Clean up remaining - p1 gets rejected, p2 gets completed
-      router.completeRequest(id2, {} as any);
+      router.completeRequest(id2, {} as unknown as WSResponse);
       await expect(p1).rejects.toThrow('Connection closed');
       await p2;
     });

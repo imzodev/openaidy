@@ -84,9 +84,12 @@ export const AgentSchema = z.object({
   name: z.string().min(1),
   enabled: z.boolean(),
   systemPrompt: z.string().min(1),
-  model: z.string().min(1), // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
 
   // Optional fields
+  // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini". Optional so a
+  // fresh install can ship an agent with no model; it inherits the config
+  // default at runtime (set once the first provider is connected).
+  model: z.string().min(1).optional(),
   description: z.string().optional(),
 
   // MCP server references - tools from external MCP server processes
@@ -132,7 +135,7 @@ export type AgentSummary = {
   tools: string[] | undefined;
   skills: string[] | undefined;
   mcpServers: McpServerRef[] | undefined;
-  model: string; // Format: "providerId/modelId"
+  model: string | undefined; // Format: "providerId/modelId"; undefined = inherit config default
   workspace?: WorkspaceConfig | undefined;
 };
 

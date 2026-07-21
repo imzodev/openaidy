@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_SERVER_PORT, resolveJwtSecret } from '@openaidy/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -11,6 +12,15 @@ const defaultAppConfigTemplatePath = resolve(
   workspaceRoot,
   'config/openaidy.template.json',
 );
+// Source of bundled pre-installed skills. In dev the source is the repo's
+// `config/skills/`; the packaged `openaidy` CLI injects
+// `<pkgRoot>/assets/skills` so the same code path serves both. The server
+// reads from here on every start and seeds `SKILLS_DIR` from it — without
+// this override a packaged install used to look at
+// `dirname(OPENAIDY_HOME)/config/skills`, which resolves to
+// `$HOME/config/skills` for normal installs and silently produced an empty
+// Skills page.
+const defaultBundledSkillsDir = resolve(workspaceRoot, 'config/skills');
 const resolveOpenAidyPath = (
   openAidyHome: string,
   relativePath: string,
@@ -18,9 +28,21 @@ const resolveOpenAidyPath = (
 
 const envSchema = z
   .object({
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
     HOST: z.string().default('0.0.0.0'),
-    PORT: z.coerce.number().int().positive().default(3001),
-    CORS_ORIGIN: z.string().default('http://localhost:5173'),
+    // Default port the HTTP server binds to. Same-origin architecture:
+    // the WebSocket gateway rides on this same port (see WS_PORT alias
+    // below). Override via OPENAIDY_PORT to use a different port.
+    OPENAIDY_PORT: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(DEFAULT_SERVER_PORT),
+    // Default CORS origin permits the local Vite dev server (apps/web).
+    // Override for production or remote dev.
+    OPENAIDY_CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),
@@ -33,7 +55,6 @@ const envSchema = z
       .string()
       .transform((val) => val === 'true')
       .default('true'),
-    WS_PORT: z.coerce.number().int().positive().default(3001),
     WS_PATH: z.string().default('/ws'),
     WS_MAX_CONNECTIONS: z.coerce.number().int().positive().default(1000),
     WS_HEARTBEAT_INTERVAL: z.coerce.number().positive().default(30000),
@@ -42,7 +63,7 @@ const envSchema = z
       .transform((val) => val === 'true')
       .default('true'),
     WS_TOKEN_EXPIRY: z.coerce.number().positive().default(86400000),
-    WS_TOKEN_SECRET: z.string().default('change-me-in-production'),
+    WS_TOKEN_SECRET: z.string().optional(),
     WS_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     WS_RATE_LIMIT_WINDOW: z.coerce.number().positive().default(60000),
     // Pairing configuration
@@ -67,10 +88,33 @@ const envSchema = z
       .number()
       .positive()
       .default(31536000000),
+    // Optional override for the master key used to encrypt provider
+    // credentials at rest (AES-256-GCM). When unset, a unique random key is
+    // generated and persisted per install (see lib/encryption.ts), so the app
+    // stays zero-config. Set this for containerized/rotated/shared-key deploys.
+    // Must be >= 32 chars when provided.
+    CREDENTIALS_MASTER_KEY: z.string().optional(),
     // Workspace configuration
     WORKSPACE_BASE_DIR: z.string().optional(),
     // Skills configuration
     SKILLS_DIR: z.string().optional(),
+    /**
+     * Source directory of the bundled pre-installed skills. Defaults to
+     * `<repo>/config/skills` in development (where the source files
+     * actually live); the packaged CLI overrides this with
+     * `<pkgRoot>/assets/skills` so a fresh `npm install -g openaidy` finds
+     * the bundled skills next to the bundled server. See env.ts top
+     * comment for the full rationale.
+     */
+    BUNDLED_SKILLS_DIR: z.string().default(defaultBundledSkillsDir),
+    // Recurring tasks feature flag. Default: off in all envs — this is
+    // a v1 feature and we're shipping behind a flag until Phase 7's
+    // regression sweep. Production should explicitly opt in once the
+    // integration tests pass.
+    RECURRING_TASKS_ENABLED: z
+      .string()
+      .transform((val) => val === 'true')
+      .default('false'),
   })
   .superRefine((value, ctx) => {
     if (value.DB_KIND === 'postgres' && !value.DATABASE_URL) {
@@ -83,8 +127,26 @@ const envSchema = z
   })
   .transform((value) => {
     const openAidyHome = value.OPENAIDY_HOME;
+
+    // Resolve WS_TOKEN_SECRET via the shared helper. The install script
+    // persists the secret to $OPENAIDY_HOME/state/install.json so manual
+    // restarts (without the install script's env) still sign JWTs with
+    // the same secret — otherwise BootstrapAdminManager.ensureToken()
+    // would silently regenerate the admin JWT on every restart because
+    // signature validation would fail against the env-default unsafe
+    // secret, logging the user out of the UI.
+    const wsTokenSecret = resolveJwtSecret(value.WS_TOKEN_SECRET, openAidyHome);
+
     return {
       ...value,
+      WS_TOKEN_SECRET: wsTokenSecret,
+      // Internal aliases — `PORT`, `CORS_ORIGIN`, and `WS_PORT` are kept as
+      // names consumers (app.ts, websocket gateway, tests) can read without
+      // caring which source-of-truth env var produced them. `WS_PORT` rides
+      // on `OPENAIDY_PORT` because the WS gateway shares the same listener.
+      PORT: value.OPENAIDY_PORT,
+      CORS_ORIGIN: value.OPENAIDY_CORS_ORIGIN,
+      WS_PORT: value.OPENAIDY_PORT,
       APP_CONFIG_PATH:
         value.APP_CONFIG_PATH ??
         resolveOpenAidyPath(openAidyHome, 'openaidy.json'),
@@ -107,7 +169,10 @@ export function parseEnv(source: NodeJS.ProcessEnv): AppEnv {
   if (parsed.DB_KIND === 'sqlite' && !parsed.SQLITE_PATH) {
     return {
       ...parsed,
-      SQLITE_PATH: './data/openaidy.db',
+      SQLITE_PATH: resolveOpenAidyPath(
+        parsed.OPENAIDY_HOME,
+        'data/openaidy.db',
+      ),
     };
   }
 

@@ -8,7 +8,8 @@ import {
   rename,
   open,
 } from 'node:fs/promises';
-import { join, resolve, relative, dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { join, resolve, relative, dirname, isAbsolute } from 'node:path';
 import { createLogger } from '../lib/logger';
 import type { Agent } from '../agents/schema';
 
@@ -244,6 +245,96 @@ export class WorkspaceService {
   }
 
   /**
+   * File extensions whose media type can't be reliably sniffed from content
+   * (SVG is XML text; some formats share/omit magic bytes). Used by
+   * {@link resolveMediaType} to pick a Content-Type for raw serving.
+   */
+  private static readonly MIME_BY_EXTENSION: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    bmp: 'image/bmp',
+    ico: 'image/x-icon',
+    avif: 'image/avif',
+    pdf: 'application/pdf',
+  };
+
+  /**
+   * Best-effort media type for raw serving: prefer the file extension (the
+   * name is authoritative for e.g. SVG, which sniffs as text), then fall back
+   * to content-signature detection.
+   */
+  private resolveMediaType(filePath: string, buffer: Buffer): string {
+    const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+    return (
+      WorkspaceService.MIME_BY_EXTENSION[ext] ??
+      this.detectMimeTypeFromContent(buffer)
+    );
+  }
+
+  /**
+   * Read a file's raw bytes for serving/preview (e.g. images), together with a
+   * best-effort media type. Unlike {@link readFileWithType} — which returns
+   * empty content for binary files — this returns the actual bytes.
+   *
+   * Enforces `maxBytes` (when given) so a huge file can't be pulled into
+   * memory; throws a `FILE_TOO_LARGE` {@link WorkspaceError} in that case.
+   */
+  async readRawFile(
+    agentId: string,
+    filePath: string,
+    options: { maxBytes?: number } = {},
+  ): Promise<{ buffer: Buffer; mimeType: string; size: number }> {
+    const absolutePath = this.validatePath(agentId, filePath);
+    log.debug('Reading raw file:', { agentId, filePath, absolutePath });
+
+    try {
+      const stats = await stat(absolutePath);
+      if (stats.isDirectory()) {
+        throw new WorkspaceError(
+          `Path is a directory: ${filePath}`,
+          'NOT_A_FILE',
+        );
+      }
+
+      if (options.maxBytes !== undefined && stats.size > options.maxBytes) {
+        throw new WorkspaceError(
+          `File is too large to serve (${stats.size} bytes)`,
+          'FILE_TOO_LARGE',
+        );
+      }
+
+      const buffer = await readFile(absolutePath);
+      return {
+        buffer,
+        mimeType: this.resolveMediaType(filePath, buffer),
+        size: buffer.length,
+      };
+    } catch (error) {
+      if (error instanceof WorkspaceError) {
+        throw error;
+      }
+      const err = error instanceof Error ? error : new Error(String(error));
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new WorkspaceError(
+          `File not found: ${filePath}`,
+          'FILE_NOT_FOUND',
+          err,
+        );
+      }
+      log.error('Failed to read raw file:', { agentId, filePath }, err);
+      throw new WorkspaceError(
+        `Failed to read file: ${filePath}`,
+        'READ_FILE_FAILED',
+        err,
+      );
+    }
+  }
+
+  /**
    * Validate that a requested path is within the agent's workspace.
    * Returns the validated absolute path or throws an error.
    */
@@ -251,9 +342,7 @@ export class WorkspaceService {
     const workspacePath = this.getWorkspacePath(agentId);
     const absolutePath = resolve(workspacePath, requestedPath);
 
-    // Check if the resolved path is within the workspace
-    const relativePath = relative(workspacePath, absolutePath);
-    if (relativePath.startsWith('..') || relativePath.startsWith('/')) {
+    const blocked = () => {
       log.warn('Path traversal attempt blocked:', {
         agentId,
         requestedPath,
@@ -264,9 +353,51 @@ export class WorkspaceService {
         'Path traversal attempt blocked: path escapes workspace',
         'PATH_TRAVERSAL_BLOCKED',
       );
+    };
+
+    // 1. Lexical check — fast, catches `../` and absolute-path escapes.
+    const relativePath = relative(workspacePath, absolutePath);
+    if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
+      blocked();
+    }
+
+    // 2. Symlink-aware check — the lexical check can't see through a symlink
+    // *inside* the workspace that points elsewhere (e.g. one created via
+    // exec_run: `ln -s /etc link`). Resolve the real path of the deepest
+    // existing ancestor and confirm it is still within the real workspace
+    // root. Skipped when the workspace dir doesn't exist yet (no symlinks
+    // can exist, so the lexical check is sufficient).
+    let realWorkspaceRoot: string;
+    try {
+      realWorkspaceRoot = realpathSync(workspacePath);
+    } catch {
+      return absolutePath;
+    }
+    const realTarget = this.realpathExistingAncestor(absolutePath);
+    const realRelative = relative(realWorkspaceRoot, realTarget);
+    if (realRelative.startsWith('..') || isAbsolute(realRelative)) {
+      blocked();
     }
 
     return absolutePath;
+  }
+
+  /**
+   * Resolve the real (symlink-followed) path of the deepest ancestor of `p`
+   * that exists on disk. Used so containment checks work even when the target
+   * file doesn't exist yet (e.g. a create) but a parent symlink might escape.
+   */
+  private realpathExistingAncestor(p: string): string {
+    let current = p;
+    for (;;) {
+      try {
+        return realpathSync(current);
+      } catch {
+        const parent = dirname(current);
+        if (parent === current) return current;
+        current = parent;
+      }
+    }
   }
 
   /**
@@ -312,6 +443,50 @@ export class WorkspaceService {
         err,
       );
     }
+  }
+
+  /**
+   * Options for walkFiles. Default `excludeDirs` matches the
+   * typical noise in a JS/TS workspace: dependencies, build
+   * output, and VCS metadata.
+   */
+  async walkFiles(
+    agentId: string,
+    path: string = '.',
+    options: { excludeDirs?: string[]; maxFiles?: number } = {},
+  ): Promise<string[]> {
+    const rootPath = this.validatePath(agentId, path);
+    const workspaceRoot = this.getWorkspacePath(agentId);
+    const excludeDirs = new Set(
+      options.excludeDirs ?? ['node_modules', '.git', 'dist', 'build', '.next'],
+    );
+    const maxFiles = options.maxFiles ?? 10_000;
+
+    const results: string[] = [];
+    const stack: string[] = [rootPath];
+
+    while (stack.length > 0) {
+      if (results.length >= maxFiles) break;
+      const current = stack.pop()!;
+      let entries;
+      try {
+        entries = await readdir(current, { withFileTypes: true });
+      } catch {
+        // Directory gone, permission denied, etc. — skip silently.
+        continue;
+      }
+      for (const entry of entries) {
+        if (results.length >= maxFiles) break;
+        if (entry.isDirectory()) {
+          if (excludeDirs.has(entry.name)) continue;
+          stack.push(join(current, entry.name));
+        } else if (entry.isFile()) {
+          results.push(relative(workspaceRoot, join(current, entry.name)));
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -365,6 +540,49 @@ export class WorkspaceService {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       log.error('Failed to write file:', { agentId, filePath }, err);
+      throw new WorkspaceError(
+        `Failed to write file: ${filePath}`,
+        'WRITE_FILE_FAILED',
+        err,
+      );
+    }
+  }
+
+  /**
+   * Write binary content (e.g. an image) to a file in the workspace.
+   *
+   * Mirrors {@link writeFile} but takes a Buffer and writes raw bytes rather
+   * than UTF-8 text — used to persist MCP tool artifacts such as screenshots.
+   * Returns the absolute path of the written file.
+   */
+  async writeBinaryFile(
+    agentId: string,
+    filePath: string,
+    data: Buffer,
+  ): Promise<string> {
+    const absolutePath = this.validatePath(agentId, filePath);
+    log.debug('Writing binary file:', {
+      agentId,
+      filePath,
+      absolutePath,
+      bytes: data.length,
+    });
+
+    try {
+      // Ensure parent directory exists
+      const parentDir = dirname(absolutePath);
+      await mkdir(parentDir, { recursive: true });
+
+      await writeFile(absolutePath, data);
+      log.info('Binary file written:', {
+        agentId,
+        filePath,
+        bytes: data.length,
+      });
+      return absolutePath;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      log.error('Failed to write binary file:', { agentId, filePath }, err);
       throw new WorkspaceError(
         `Failed to write file: ${filePath}`,
         'WRITE_FILE_FAILED',

@@ -7,7 +7,7 @@ import type { SessionSearchResult } from '../types/index.js';
 type Database = DatabaseClient;
 
 /**
- * Helper to access raw better-sqlite3 instance from a Drizzle client.
+ * Helper to access the raw sqlite instance from a Drizzle client.
  */
 function getRawSqlite(db: DatabaseClient) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,13 +25,17 @@ export class SessionsRepository {
   /**
    * Create a new session
    */
-  async create(input: { title: string }): Promise<schema.Session> {
+  async create(input: {
+    title: string;
+    type?: 'chat' | 'task' | 'subtask';
+  }): Promise<schema.Session> {
     const now = new Date();
     const [session] = await this.db
       .insert(schema.sessions)
       .values({
         id: nanoid(),
         title: input.title,
+        type: input.type ?? 'chat',
         status: 'active',
         createdAt: now,
         updatedAt: now,

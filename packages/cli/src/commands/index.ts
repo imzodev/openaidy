@@ -304,6 +304,26 @@ registerCommand(
   },
 );
 
+// ============================================================================
+// Init Command (PR1)
+// ============================================================================
+
+registerCommand(
+  'init',
+  async (args: string[]) => {
+    const { initHandler } = await import('./init.js');
+    return initHandler(args);
+  },
+  {
+    description: 'Generate or refresh the bootstrap-admin token',
+    usage: 'openaidy init',
+    examples: [
+      'WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init',
+      'openaidy init',
+    ],
+  },
+);
+
 registerCommand(
   'tokens create',
   async (args: string[]) => {
@@ -331,6 +351,66 @@ registerCommand(
     description: 'Revoke an access token by ID',
     usage: 'openaidy tokens revoke <id>',
     examples: ['pnpm openaidy tokens revoke abc123'],
+  },
+);
+
+// ============================================================================
+// Server Lifecycle Commands (PR2)
+// ============================================================================
+
+registerCommand(
+  'start',
+  async (args: string[]) => {
+    const { startHandler } = await import('./start.js');
+    return startHandler(args);
+  },
+  {
+    description: 'Start the OpenAidy server as a background process',
+    usage: 'openaidy start',
+    examples: ['openaidy start'],
+  },
+);
+
+registerCommand(
+  'stop',
+  async (args: string[]) => {
+    const { stopHandler } = await import('./stop.js');
+    return stopHandler(args);
+  },
+  {
+    description: 'Stop the OpenAidy server',
+    usage: 'openaidy stop',
+    examples: ['openaidy stop'],
+  },
+);
+
+registerCommand(
+  'restart',
+  async (args: string[]) => {
+    const { restartHandler } = await import('./restart.js');
+    return restartHandler(args);
+  },
+  {
+    description: 'Restart the OpenAidy server (stop + start, port preserved)',
+    usage: 'openaidy restart [--port <N>] [--server-only] [--integrated]',
+    examples: [
+      'openaidy restart',
+      'openaidy restart --port 3001',
+      'openaidy restart --integrated',
+    ],
+  },
+);
+
+registerCommand(
+  'status',
+  async (args: string[]) => {
+    const { statusHandler } = await import('./status.js');
+    return statusHandler(args);
+  },
+  {
+    description: 'Show the current server status',
+    usage: 'openaidy status',
+    examples: ['openaidy status'],
   },
 );
 
@@ -554,7 +634,8 @@ registerGroup({
     },
     'tasks create': {
       description: 'Create a new task',
-      usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+      usage:
+        'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
       examples: [
         'pnpm openaidy tasks create "Fix login bug" --priority high',
         'pnpm openaidy tasks create --description "Implement the new API"',
@@ -562,7 +643,8 @@ registerGroup({
     },
     'tasks update': {
       description: 'Update a task (title, description, priority, status)',
-      usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+      usage:
+        'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
       examples: [
         'pnpm openaidy tasks update abc123 --priority high',
         'pnpm openaidy tasks update abc123 --status done',
@@ -637,7 +719,8 @@ registerCommand(
   },
   {
     description: 'Create a new task',
-    usage: 'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+    usage:
+      'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
   },
 );
 
@@ -650,7 +733,8 @@ registerCommand(
   },
   {
     description: 'Update a task (title, description, priority, status)',
-    usage: 'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+    usage:
+      'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
   },
 );
 
@@ -697,7 +781,8 @@ registerCommand(
 registerCommand(
   'subtasks complete',
   async (args: string[]) => {
-    const { subtasksCompleteHandler } = await import('./tasks/subtasks/complete.js');
+    const { subtasksCompleteHandler } =
+      await import('./tasks/subtasks/complete.js');
     return subtasksCompleteHandler(args);
   },
   {
@@ -716,6 +801,119 @@ registerCommand(
   {
     description: 'Mark a subtask as failed',
     usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+  },
+);
+
+// ============================================================================
+// Sessions Command Group
+// ============================================================================
+
+registerGroup({
+  name: 'sessions',
+  description: 'Manage chat sessions',
+  commands: {
+    'sessions list': {
+      description: 'List all sessions',
+      usage: 'openaidy sessions list [--limit <n>]',
+      examples: [
+        'pnpm openaidy sessions list',
+        'pnpm openaidy sessions list --limit 20',
+      ],
+    },
+    'sessions create': {
+      description: 'Create a new session',
+      usage: 'openaidy sessions create [title]',
+      examples: [
+        'pnpm openaidy sessions create',
+        'pnpm openaidy sessions create "My Chat"',
+      ],
+    },
+    'sessions get': {
+      description: 'Get session details by ID',
+      usage: 'openaidy sessions get <sessionId>',
+      examples: ['pnpm openaidy sessions get sess_abc123'],
+    },
+    'sessions messages': {
+      description: 'List all messages in a session',
+      usage: 'openaidy sessions messages <sessionId>',
+      examples: ['pnpm openaidy sessions messages sess_abc123'],
+    },
+    'sessions runs': {
+      description: 'List all runs for a session',
+      usage: 'openaidy sessions runs <sessionId>',
+      examples: ['pnpm openaidy sessions runs sess_abc123'],
+    },
+  },
+});
+
+registerCommand(
+  'sessions list',
+  async (args: string[]) => {
+    const { sessionsListHandler } = await import('./sessions/list.js');
+    return sessionsListHandler(args);
+  },
+  {
+    description: 'List all sessions',
+    usage: 'openaidy sessions list [--limit <n>]',
+    examples: [
+      'pnpm openaidy sessions list',
+      'pnpm openaidy sessions list --limit 20',
+    ],
+  },
+);
+
+registerCommand(
+  'sessions create',
+  async (args: string[]) => {
+    const { sessionsCreateHandler } = await import('./sessions/create.js');
+    return sessionsCreateHandler(args);
+  },
+  {
+    description: 'Create a new session',
+    usage: 'openaidy sessions create [title]',
+    examples: [
+      'pnpm openaidy sessions create',
+      'pnpm openaidy sessions create "My Chat"',
+    ],
+  },
+);
+
+registerCommand(
+  'sessions get',
+  async (args: string[]) => {
+    const { sessionsGetHandler } = await import('./sessions/get.js');
+    return sessionsGetHandler(args);
+  },
+  {
+    description: 'Get session details by ID',
+    usage: 'openaidy sessions get <sessionId>',
+    examples: ['pnpm openaidy sessions get sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions messages',
+  async (args: string[]) => {
+    const { sessionsMessagesHandler } = await import('./sessions/messages.js');
+    return sessionsMessagesHandler(args);
+  },
+  {
+    description: 'List all messages in a session',
+    usage: 'openaidy sessions messages <sessionId>',
+    examples: ['pnpm openaidy sessions messages sess_abc123'],
+  },
+);
+
+registerCommand(
+  'sessions runs',
+  async (args: string[]) => {
+    const { sessionsRunsHandler } = await import('./sessions/runs.js');
+    return sessionsRunsHandler(args);
+  },
+  {
+    description: 'List all runs for a session',
+    usage: 'openaidy sessions runs <sessionId>',
+    examples: ['pnpm openaidy sessions runs sess_abc123'],
   },
 );
 
@@ -766,5 +964,92 @@ registerCommand(
     description: 'Deny a pending device pairing request',
     usage: 'openaidy devices deny <request-id>',
     examples: ['pnpm openaidy devices deny abc123'],
+  },
+);
+
+// Provider commands
+registerCommand(
+  'providers list',
+  async (args: string[]) => {
+    const { providersListHandler } = await import('./providers/list.js');
+    return providersListHandler(args);
+  },
+  {
+    description: 'List all available providers',
+    usage: 'openaidy providers list',
+    examples: ['pnpm openaidy providers list'],
+  },
+);
+
+registerCommand(
+  'providers connect',
+  async (args: string[]) => {
+    const { providersConnectHandler } = await import('./providers/connect.js');
+    return providersConnectHandler(args);
+  },
+  {
+    description: 'Connect to a provider',
+    usage: 'openaidy providers connect <provider-id> [--api-key <key>]',
+    examples: ['pnpm openaidy providers connect openai --api-key sk-...'],
+  },
+);
+
+registerCommand(
+  'providers disconnect',
+  async (args: string[]) => {
+    const { providersDisconnectHandler } =
+      await import('./providers/disconnect.js');
+    return providersDisconnectHandler(args);
+  },
+  {
+    description: 'Disconnect from a provider',
+    usage: 'openaidy providers disconnect <provider-id>',
+    examples: ['pnpm openaidy providers disconnect openai'],
+  },
+);
+
+// MCP commands
+registerGroup({
+  name: 'mcp',
+  description: 'Manage Model Context Protocol servers',
+  commands: {
+    'mcp import': {
+      description: 'Import MCP servers from a standard config file or stdin',
+      usage: 'openaidy mcp import [file]',
+      examples: [
+        'openaidy mcp import ./mcp.json',
+        'cat ~/.config/mcp.json | openaidy mcp import',
+      ],
+    },
+  },
+});
+
+registerCommand(
+  'mcp import',
+  async (args: string[]) => {
+    const { mcpImportHandler } = await import('./mcp/import.js');
+    return mcpImportHandler(args);
+  },
+  {
+    description: 'Import MCP servers from a standard config file or stdin',
+    usage: 'openaidy mcp import [file]',
+    examples: ['openaidy mcp import ./mcp.json'],
+  },
+);
+
+registerCommand(
+  'mcp migrate-secrets',
+  async (args: string[]) => {
+    const { mcpMigrateSecretsHandler } =
+      await import('./mcp/migrate-secrets.js');
+    return mcpMigrateSecretsHandler(args);
+  },
+  {
+    description: 'Encrypt plaintext MCP inline secrets at rest (issue #401)',
+    usage: 'openaidy mcp migrate-secrets [--dry-run]',
+    examples: [
+      'openaidy mcp migrate-secrets --dry-run',
+      'openaidy mcp migrate-secrets',
+    ],
   },
 );

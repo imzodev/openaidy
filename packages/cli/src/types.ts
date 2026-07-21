@@ -138,9 +138,40 @@ export interface CommandOptions {
   help: boolean;
 }
 
-// ============================================================================
-// Devices command option / result types
-// ============================================================================
+export interface BuildOptions {
+  sourcemap?: boolean;
+}
+
+export interface BuildResult {
+  success: boolean;
+  message: string;
+  outputPath?: string;
+  warnings?: string[];
+}
+
+export interface DevOptions {
+  port?: number;
+  host?: string;
+}
+
+export interface DevResult {
+  success: boolean;
+  message: string;
+  port?: number;
+  host?: string;
+}
+
+export interface PublishOptions {
+  registry?: string;
+}
+
+export interface PublishResult {
+  success: boolean;
+  message: string;
+  addonId?: string;
+  version?: string;
+  registryUrl?: string;
+}
 
 export interface DevicesListOptions {
   status?: 'pending' | 'approved' | 'denied' | 'expired' | 'all';
@@ -221,3 +252,20 @@ export interface DocsResult {
   message: string;
   outputPath?: string;
 }
+
+// ============================================================================
+// Sessions command types
+// ============================================================================
+
+/**
+ * A run record returned by GET /sessions/:id/runs
+ */
+export type SessionRun = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  providerId?: string;
+  modelId?: string;
+  durationMs?: number;
+  error?: string;
+  createdAt: string;
+};

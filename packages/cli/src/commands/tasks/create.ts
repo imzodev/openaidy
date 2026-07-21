@@ -77,7 +77,8 @@ Exit Codes:
   }
 
   if (!positionalTitle && !description) {
-    const msg = 'Either a task title or --description is required.\nUsage: openaidy tasks create [title] [--description <desc>]';
+    const msg =
+      'Either a task title or --description is required.\nUsage: openaidy tasks create [title] [--description <desc>]';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }
@@ -91,7 +92,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/tasks`, {
+    res = await fetch(`${config.httpUrl}/tasks`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${tokenResult.token}`,
@@ -106,13 +107,19 @@ Exit Codes:
   }
 
   if (!res.ok) {
-    const errBody = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
+    const errBody = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as {
+      error?: { message?: string };
+    };
     const msg = `Server returned ${res.status}: ${errBody.error?.message ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };
   }
 
-  const { data } = (await res.json()) as { data: { id: string; title: string } };
+  const { data } = (await res.json()) as {
+    data: { id: string; title: string };
+  };
   p.log.success(`Task created: ${data.title} [${data.id}]`);
   return { exitCode: 0 };
 }

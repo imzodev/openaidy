@@ -52,6 +52,7 @@ import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
 import { PresenceManager } from './presence-manager';
 import { StreamManager } from './streaming';
+import { RunStreamBuffer } from './run-stream-buffer';
 import { SubscriptionManager } from './subscriptions';
 import { AuthMiddleware } from './middleware/auth';
 
@@ -80,8 +81,13 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'session.list': [WS_CAPABILITIES.SESSIONS_READ],
   'session.delete': [WS_CAPABILITIES.SESSIONS_DELETE],
   'session.message': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.messages': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.runs': [WS_CAPABILITIES.SESSIONS_READ],
   'session.subscribe': [WS_CAPABILITIES.SESSIONS_READ],
   'session.unsubscribe': [WS_CAPABILITIES.SESSIONS_READ],
+  'session.tool.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.run.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.stream.resume': [WS_CAPABILITIES.SESSIONS_READ],
   'agent.list': [WS_CAPABILITIES.AGENTS_READ],
   'agent.get': [WS_CAPABILITIES.AGENTS_READ],
   'provider.list': [WS_CAPABILITIES.PROVIDERS_READ],
@@ -103,10 +109,46 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'presence.getAll': [WS_CAPABILITIES.SYSTEM_NOTIFY],
   'presence.subscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
   'presence.unsubscribe': [WS_CAPABILITIES.SYSTEM_NOTIFY],
+  // Managing MCP servers runs arbitrary local processes / dials out with
+  // stored credentials, so it requires admin — matching the REST routes.
+  'mcp.connect': [WS_CAPABILITIES.ADMIN],
+  'mcp.disconnect': [WS_CAPABILITIES.ADMIN],
+  'mcp.call': [WS_CAPABILITIES.ADMIN],
 };
+
+/**
+ * Authenticated-only message types: permitted for any authenticated connection
+ * with no specific capability. These are infrastructure (keepalive, node RPC
+ * responses from paired nodes) and admin/diagnostic surfaces that don't yet
+ * have a dedicated capability in WS_CAPABILITIES. Listing them explicitly is
+ * what keeps the authorization model default-deny — a newly registered handler
+ * is rejected until it is intentionally added here or to MESSAGE_CAPABILITIES.
+ *
+ * TODO: give logs / mcp / channels first-class capabilities and move them into
+ * MESSAGE_CAPABILITIES so they can be granted to non-admin tokens granularly.
+ */
+const AUTHENTICATED_ONLY_MESSAGE_TYPES = new Set<string>([
+  'ping',
+  'node.rpc.response',
+  'node.rpc.error',
+  'log.query',
+  'log.stats',
+  'log.subscribe',
+  'log.unsubscribe',
+  // mcp.list is a read-only listing of connected servers + tool names (no
+  // secrets); the powerful mcp.connect/disconnect/call require admin and live
+  // in MESSAGE_CAPABILITIES instead.
+  'mcp.list',
+  'channel.subscribe',
+  'channel.unsubscribe',
+]);
 
 function isPublicMessageType(type: string): boolean {
   return PUBLIC_MESSAGE_TYPES.has(type);
+}
+
+function isAuthenticatedOnlyMessageType(type: string): boolean {
+  return AUTHENTICATED_ONLY_MESSAGE_TYPES.has(type);
 }
 
 function getRequiredCapabilities(type: string): string[] {
@@ -150,6 +192,7 @@ export type WebSocketGateway = {
   configHandler: ConfigHandler;
   presenceHandler: PresenceHandler;
   streamManager: StreamManager;
+  runStreamBuffer: RunStreamBuffer;
   subscriptionManager: SubscriptionManager;
   nodeRegistry: NodeRegistry;
   pairingService: PairingService;
@@ -206,6 +249,9 @@ function createGateway(
     connectionManager,
     fastify.log,
   );
+  // Accumulates in-progress run stream state so reconnecting/foregrounded
+  // clients can resume instead of seeing a stalled UI (issue #450).
+  const runStreamBuffer = new RunStreamBuffer(fastify.services.runEvents);
 
   // Create handlers with streaming support
   const sessionHandler = new SessionHandler(
@@ -214,6 +260,7 @@ function createGateway(
     streamManager,
     fastify.services.runEvents,
     subscriptionManager,
+    runStreamBuffer,
   );
   const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
   const providerHandler = new ProviderHandler(
@@ -257,31 +304,76 @@ function createGateway(
   );
 
   // Register channel handlers with the message router
-  registerChannelHandlers(messageRouter, channelHandler);
+  registerChannelHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    channelHandler,
+  );
 
   // Register session handlers with the message router
-  registerSessionHandlers(messageRouter, sessionHandler);
+  registerSessionHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    sessionHandler,
+  );
 
   // Register agent handlers with the message router
-  registerAgentHandlers(messageRouter, agentHandler);
+  registerAgentHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    agentHandler,
+  );
 
   // Register provider handlers with the message router
-  registerProviderHandlers(messageRouter, providerHandler);
+  registerProviderHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    providerHandler,
+  );
 
   // Register node handlers with the message router
-  registerNodeHandlers(messageRouter, nodeHandler);
+  registerNodeHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    nodeHandler,
+  );
 
   // Register pairing handlers with the message router
-  registerPairingHandlers(messageRouter, pairingHandler);
+  registerPairingHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    pairingHandler,
+  );
 
   // Register config handlers with the message router
-  registerConfigHandlers(messageRouter, configHandler);
+  registerConfigHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    configHandler,
+  );
 
   // Register presence handlers with the message router
-  registerPresenceHandlers(messageRouter, presenceHandler);
+  registerPresenceHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    presenceHandler,
+  );
 
   // Register logs handlers with the message router
-  registerLogsHandlers(messageRouter, logsHandler);
+  registerLogsHandlers(
+    messageRouter as unknown as {
+      registerHandler: (type: string, handler: unknown) => void;
+    },
+    logsHandler,
+  );
 
   // Wire up log buffer to broadcast to subscribers
   // getLogBuffer from lib/logger, getLogSubscriptionManager from handlers/logs
@@ -533,12 +625,14 @@ function createGateway(
     configHandler,
     presenceHandler,
     streamManager,
+    runStreamBuffer,
     subscriptionManager,
     nodeRegistry,
     pairingService,
     presenceManager,
     shutdown: async () => {
       streamManager.stop();
+      runStreamBuffer.stop();
       subscriptionManager.cleanup();
       nodeRegistry.clear();
       pairingService.destroy();
@@ -593,6 +687,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
 
   // Start the stream manager
   gateway.streamManager.start();
+  // Start buffering in-progress run streams for resume-on-reconnect (#450).
+  gateway.runStreamBuffer.start();
 
   // Store gateway in app
   fastify.decorate('websocketGateway', gateway);
@@ -767,17 +863,31 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
         return;
       }
 
-      const requiredCapabilities = getRequiredCapabilities(message.type);
-      if (requiredCapabilities.length > 0) {
-        const hasAllCapabilities = requiredCapabilities.every((capability) =>
-          gateway.connectionManager.hasCapability(connectionId, capability),
-        );
+      // Authorization gate — default-deny. Public types are open; mapped types
+      // require their capabilities; an explicit allowlist needs only
+      // authentication; everything else is rejected, so a newly registered
+      // handler can never be silently exposed without an explicit policy.
+      if (!isPublicMessageType(message.type)) {
+        const requiredCapabilities = getRequiredCapabilities(message.type);
+        if (requiredCapabilities.length > 0) {
+          const hasAllCapabilities = requiredCapabilities.every((capability) =>
+            gateway.connectionManager.hasCapability(connectionId, capability),
+          );
 
-        if (!hasAllCapabilities) {
+          if (!hasAllCapabilities) {
+            const errorMsg = createErrorResponse(
+              message.id,
+              WS_ERROR_CODES.FORBIDDEN,
+              `Missing required capabilities: ${requiredCapabilities.join(', ')}`,
+            );
+            socket.send(JSON.stringify(errorMsg));
+            return;
+          }
+        } else if (!isAuthenticatedOnlyMessageType(message.type)) {
           const errorMsg = createErrorResponse(
             message.id,
             WS_ERROR_CODES.FORBIDDEN,
-            `Missing required capabilities: ${requiredCapabilities.join(', ')}`,
+            `Message type not permitted: ${message.type}`,
           );
           socket.send(JSON.stringify(errorMsg));
           return;
@@ -802,7 +912,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
         handlerContext,
       );
 
-      // Send response if any
+      // Send response if unknown
       if (response) {
         socket.send(JSON.stringify(response));
       }

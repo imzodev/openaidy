@@ -1,13 +1,17 @@
 /**
  * DeepSeek Provider Profile
  *
- * Handles DeepSeek's thinking/reasoning block streaming and
- * request injection for the thinking mode feature.
+ * Reads `id`, `name`, `baseUrl`, and the model list from
+ * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * source of truth.
  *
- * Replaces the inline `isDeepSeek` checks that were scattered in the
+ * Handles DeepSeek's thinking/reasoning block streaming and
+ * request injection for the thinking mode feature. Replaces the
+ * inline `isDeepSeek` checks that were scattered in the
  * OpenAI-compatible adapter.
  */
 
+import { PROVIDER_PRESETS } from '@openaidy/shared-types';
 import { ProviderProfile } from '../types';
 import { type HookContext, type StreamChunk } from '../hooks';
 
@@ -25,48 +29,21 @@ export function stripThinkingBlocks(text: string): string {
 
 // ── DeepSeekProfile ───────────────────────────────────────────────────────────
 
+const PRESET = PROVIDER_PRESETS.find((p) => p.id === 'deepseek');
+if (!PRESET) {
+  throw new Error(
+    "PROVIDER_PRESETS is missing the 'deepseek' entry — keep shared-types and providers in sync.",
+  );
+}
+
 export class DeepSeekProfile extends ProviderProfile {
   constructor() {
-    super({
-      id: 'deepseek',
-      name: 'DeepSeek',
-      baseUrl: 'https://api.deepseek.com',
-      aliases: ['deepseek-chat'],
-      apiMode: 'openai-compatible',
-      vendorFamily: 'openai-compatible',
-      displayName: 'DeepSeek',
-      description: 'DeepSeek models with reasoning support',
-      signupUrl: 'https://platform.deepseek.com/',
-      defaultModel: 'deepseek-chat',
-      models: [
-        {
-          id: 'deepseek-chat',
-          name: 'DeepSeek Chat',
-          capabilities: ['text_generation', 'streaming', 'tool_calls'],
-          contextWindow: 64_000,
-          maxOutputTokens: 8_000,
-        },
-        {
-          id: 'deepseek-coder',
-          name: 'DeepSeek Coder',
-          capabilities: ['text_generation', 'streaming', 'tool_calls'],
-          contextWindow: 64_000,
-          maxOutputTokens: 4_000,
-        },
-        {
-          id: 'deepseek-v4-flash',
-          name: 'DeepSeek V4 Flash',
-          capabilities: [
-            'text_generation',
-            'streaming',
-            'tool_calls',
-            'vision',
-          ],
-          contextWindow: 64_000,
-          maxOutputTokens: 8_192,
-        },
-      ],
-    });
+    super(
+      ProviderProfile.fromPreset(PRESET!, {
+        aliases: ['deepseek-chat'],
+        signupUrl: 'https://platform.deepseek.com/',
+      }),
+    );
   }
 
   // ── Overrides ──────────────────────────────────────────────────────────────
@@ -156,9 +133,3 @@ function resolveEffortToBudget(effort: string): number {
       return 4096;
   }
 }
-
-// ── Register ───────────────────────────────────────────────────────────────────
-
-import { registry } from '../registry';
-
-registry.register(new DeepSeekProfile());

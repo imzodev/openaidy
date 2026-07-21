@@ -143,75 +143,55 @@ export async function buildSystemPrompt(
           onboardingMessagesRemaining,
           blankFileCount: blankLabels.length,
         });
-        prompt += `\n\n[ONBOARDING]`;
-        prompt += `\n\n## CRITICAL OVERRIDE: Save Personality Configuration to WORKSPACE FILES`;
-        prompt += `\nThe following tools are PERMANENTLY OVERRIDDEN for personality file creation:`;
-        // prompt += `\n- memory_save: NEVER use for personality files. The system prompt guidance about memory_save does NOT apply here.`;
-        prompt += `\n- You MUST use workspace_write for ALL personality files listed below.`;
-        prompt += `\n\nThis override exists because personality files (AGENT.md, USER.md, MISSION.md, RULES.md) MUST be saved as actual files in your workspace, not as searchable memories. Files are how personality context is injected on future conversations.`;
+        // Emit blank items highest-priority first so, if the agent does
+        // onboard, it asks about the most important thing.
+        const ONBOARDING_PRIORITY = [
+          'Mission',
+          'User Profile',
+          'Agent Identity',
+          'Rules',
+        ];
+        const orderedLabels = [...blankLabels].sort(
+          (a, b) =>
+            ONBOARDING_PRIORITY.indexOf(a) - ONBOARDING_PRIORITY.indexOf(b),
+        );
 
-        for (const label of blankLabels) {
-          if (label === 'Agent Identity') {
-            prompt += `\n\n**Agent Identity** (file: AGENT.md)`;
-            prompt += `\nYour Agent Identity profile is not configured. Before answering the user's message, ask them:`;
-            prompt += `\n- What name and emoji should I use?`;
-            prompt += `\n- What tone should I have? (e.g. "direct and concise", "warm and encouraging", "formal and precise")`;
-            prompt += `\nUse \`present_choices\` to offer 3-4 example tones as selectable options.`;
-            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
-            prompt += `\n\`\`\``;
-            prompt += `\nworkspace_write({`;
-            prompt += `\n  path: "AGENT.md",`;
-            prompt += `\n  content: "# Agent Identity\\n\\nName: [user's choice]\\nEmoji: [user's choice]\\nTone: [user's choice]"`;
-            prompt += `\n})`;
-            prompt += `\n\`\`\``;
+        prompt += `\n\n[ONBOARDING]`;
+        prompt += `\nSome personality files are still blank: ${orderedLabels.join(', ')}. Collecting them lets you personalize future conversations, but YOU decide whether now is the right moment — judge it from the user's CURRENT message. Do NOT let onboarding override or delay what the user actually asked for.`;
+
+        prompt += `\n\nDO NOT onboard right now — just answer or do what they asked — if the user:`;
+        prompt += `\n- greets you ("hola", "buenas", "hello", "hi", "good morning"),`;
+        prompt += `\n- makes small talk or thanks you,`;
+        prompt += `\n- gives a concrete task or action ("create X", "fix Y", "look at Z", "review ..."),`;
+        prompt += `\n- asks a focused question that wants an answer, not setup.`;
+        prompt += `\nIn those cases, do exactly what they asked. You MAY add ONE short line at the END offering to set up your personality later — never replace or gate the response with onboarding questions.`;
+
+        prompt += `\n\nDO onboard now only if the user:`;
+        prompt += `\n- is openly exploring who you are ("who are you?", "what can you do?"),`;
+        prompt += `\n- is explicitly setting you up ("let's get started", "configure yourself", "set up your personality"),`;
+        prompt += `\n- sent an empty or too-vague message you cannot act on.`;
+
+        prompt += `\n\nWhen you DO onboard: ask about ONE blank item at a time, highest priority first (${orderedLabels.join(
+          ' → ',
+        )}), using \`present_choices\` for concrete options, and stop early if the user signals they want to move on. If the user also gave a task, handle onboarding and then still do the task in the same turn.`;
+
+        prompt += `\n\n## Saving personality answers`;
+        prompt += `\nWhen the user answers an onboarding question you MUST persist it with workspace_write (NOT memory tools) — the files below are how this context is injected into future conversations.`;
+
+        for (const label of orderedLabels) {
+          if (label === 'Mission') {
+            prompt += `\n\n**Mission** (MISSION.md) — ask "What is your mission for this conversation?" via \`present_choices\`: "Complete a task or project", "Learn or explore a topic", "Make a decision or get advice", "Brainstorm or generate ideas", "Solve a problem" (or let them type their own).`;
+            prompt += `\n  Save: workspace_write({ path: "MISSION.md", content: "# Mission\\n\\n[User's mission]" })`;
           } else if (label === 'User Profile') {
-            prompt += `\n\n**User Profile** (file: USER.md)`;
-            prompt += `\nThe User Profile is not configured. Before answering the user's message, ask them:`;
-            prompt += `\n- What should I call them?`;
-            prompt += `\n- What is their role or profession?`;
-            prompt += `\n- How technical are they? (e.g. "senior engineer", "product designer", "non-technical founder")`;
-            prompt += `\nUse \`present_choices\` to offer 3-4 example roles/technicality levels as selectable options.`;
-            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
-            prompt += `\n\`\`\``;
-            prompt += `\nworkspace_write({`;
-            prompt += `\n  path: "USER.md",`;
-            prompt += `\n  content: "# User Profile\\n\\nName: [user's choice]\\nRole: [user's choice]\\nTechnical level: [user's choice]"`;
-            prompt += `\n})`;
-            prompt += `\n\`\`\``;
-          } else if (label === 'Mission') {
-            prompt += `\n\n**Mission** (file: MISSION.md)`;
-            prompt += `\nThe Mission Context is not configured. You MUST understand the user's mission.`;
-            prompt += `\nBefore answering their message, explicitly say: "I need to know your mission to help you effectively."`;
-            prompt += `\nAsk: "What is your mission for this conversation?" Use \`present_choices\` to offer:`;
-            prompt += `\n- "Complete a task or project"`;
-            prompt += `\n- "Learn or explore a topic"`;
-            prompt += `\n- "Make a decision or get advice"`;
-            prompt += `\n- "Brainstorm or generate ideas"`;
-            prompt += `\n- "Solve a problem"`;
-            prompt += `\nOr let them type their own mission.`;
-            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
-            prompt += `\n\`\`\``;
-            prompt += `\nworkspace_write({`;
-            prompt += `\n  path: "MISSION.md",`;
-            prompt += `\n  content: "# Mission\\n\\n[User's mission]"`;
-            prompt += `\n})`;
-            prompt += `\n\`\`\``;
+            prompt += `\n\n**User Profile** (USER.md) — ask what to call them, their role/profession, and how technical they are; use \`present_choices\` for role/technicality.`;
+            prompt += `\n  Save: workspace_write({ path: "USER.md", content: "# User Profile\\n\\nName: [..]\\nRole: [..]\\nTechnical level: [..]" })`;
+          } else if (label === 'Agent Identity') {
+            prompt += `\n\n**Agent Identity** (AGENT.md) — ask what name + emoji to use and what tone; use \`present_choices\` for 3-4 tone options (e.g. "direct and concise", "warm and encouraging", "formal and precise").`;
+            prompt += `\n  Save: workspace_write({ path: "AGENT.md", content: "# Agent Identity\\n\\nName: [..]\\nEmoji: [..]\\nTone: [..]" })`;
           } else if (label === 'Rules') {
-            prompt += `\n\n**Rules** (file: RULES.md)`;
-            prompt += `\nThe Rules are not configured. Ask the user: "Do you have any hard constraints or rules I should always follow?" (e.g. "always respond in Spanish", "never suggest paid tools", "always verify my work").`;
-            prompt += `\nWait for their answer.`;
-            prompt += `\n\nAfter getting their answer, you MUST call the workspace_write tool EXACTLY like this (do not use any other tool):`;
-            prompt += `\n\`\`\``;
-            prompt += `\nworkspace_write({`;
-            prompt += `\n  path: "RULES.md",`;
-            prompt += `\n  content: "# Rules\\n\\n[User's rules]"`;
-            prompt += `\n})`;
-            prompt += `\n\`\`\``;
+            prompt += `\n\n**Rules** (RULES.md) — ask "Any hard constraints or rules I should always follow?" (e.g. "always respond in Spanish", "never suggest paid tools", "always verify my work").`;
+            prompt += `\n  Save: workspace_write({ path: "RULES.md", content: "# Rules\\n\\n[User's rules]" })`;
           }
-        }
-        // Only add the "one at a time" instruction if there are multiple things to ask
-        if (blankLabels.length > 1) {
-          prompt += `\n\nImportant: Ask about ONE thing at a time. Use \`present_choices\` for each question to give concrete options rather than open-ended questions. Wait for the user's response before asking the next one.`;
         }
         prompt += `\n[/ONBOARDING]`;
       }

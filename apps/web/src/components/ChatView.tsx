@@ -1,10 +1,32 @@
 import { Show, For, createEffect } from 'solid-js';
-import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
+import {
+  User,
+  Bot,
+  AlertCircle,
+  Wrench,
+  Server,
+  CircleStop,
+} from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
+import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
-import { ToolResultBlock } from './ToolBlocks';
+import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
+import { AttachmentList } from './AttachmentList';
+import { QueuedMessageCard } from './QueuedMessageCard';
+import { RunActivityBadge } from './RunActivityBadge';
+import type { RunActivityPhase } from './RunActivityBadge';
+
+type StreamingToolCall = {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  /** Live stdout/stderr streamed while the tool runs (e.g. exec_run). */
+  output?: string;
+  /** True once the user cancelled this tool call. */
+  cancelled?: boolean;
+};
 
 type ChatViewProps = {
   messages: SessionMessage[];
@@ -12,6 +34,23 @@ type ChatViewProps = {
   error?: string;
   streamingContent?: string;
   isStreaming?: boolean;
+  streamingToolCalls?: StreamingToolCall[];
+  /** Messages queued while the agent is responding; sent when it finishes. */
+  queuedMessages?: QueuedMessage[];
+  onEditQueued?: (id: string, content: string) => void;
+  onRemoveQueued?: (id: string) => void;
+  /** Ask the server to cancel an in-flight tool call. */
+  onCancelTool?: (toolCallId: string) => void;
+  /** Ask the server to cancel the whole in-flight run ("Stop agent"). */
+  onCancelRun?: () => void;
+  /** Server-driven activity heartbeat for the in-flight run (#378). */
+  runActivity?: {
+    phase: RunActivityPhase;
+    toolName?: string;
+    elapsedMs: number;
+  };
+  /** Message ID to scroll to (e.g. from clicking a run) */
+  scrollToMessageId?: string;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -29,8 +68,32 @@ export function ChatView(props: ChatViewProps) {
   createEffect(() => {
     void props.messages.length;
     void props.streamingContent;
-    if (!isUserScrolledUp) {
-      bottomRef?.scrollIntoView({ behavior: 'smooth' });
+    void props.queuedMessages?.length;
+    if (!isUserScrolledUp && scrollContainerRef) {
+      // Scroll the chat container directly. scrollIntoView on a nested
+      // overflow-auto element inside an overflow-hidden parent can bubble up
+      // to the document on mobile, dragging the sticky header (which lives
+      // outside the chat container) off-screen.
+      scrollContainerRef.scrollTo({
+        top: scrollContainerRef.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  });
+
+  // Scroll to a specific message when scrollToMessageId is set (e.g. from clicking a run).
+  // Same reason as above: keep the scroll inside the chat container.
+  createEffect(() => {
+    const targetId = props.scrollToMessageId;
+    if (!targetId || !scrollContainerRef) return;
+    const el = scrollContainerRef.querySelector(
+      `[data-message-id="${targetId}"]`,
+    );
+    if (el) {
+      scrollContainerRef.scrollTo({
+        top: (el as HTMLElement).offsetTop,
+        behavior: 'smooth',
+      });
     }
   });
 
@@ -96,7 +159,7 @@ export function ChatView(props: ChatViewProps) {
     <div
       ref={scrollContainerRef}
       onScroll={handleScroll}
-      class="flex-1 overflow-y-auto p-4 space-y-4"
+      class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4"
     >
       {/* Loading state */}
       <Show when={props.isLoading}>
@@ -140,7 +203,10 @@ export function ChatView(props: ChatViewProps) {
       <Show when={!props.isLoading && props.messages.length > 0}>
         <For each={props.messages}>
           {(message) => (
-            <div class={`rounded-lg p-4 ${getRoleClass(message)}`}>
+            <div
+              class={`rounded-lg p-4 ${getRoleClass(message)}`}
+              data-message-id={message.id}
+            >
               <div class="flex items-start gap-3">
                 <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
                   {getRoleIcon(message)}
@@ -170,6 +236,9 @@ export function ChatView(props: ChatViewProps) {
                       isMcp={isMcpTool(message)}
                     />
                   </Show>
+                  <Show when={message.attachments?.length}>
+                    <AttachmentList attachments={message.attachments!} />
+                  </Show>
                 </div>
               </div>
             </div>
@@ -192,21 +261,88 @@ export function ChatView(props: ChatViewProps) {
                 <span class="inline-flex items-center gap-1.5">
                   <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                   <span class="text-xs text-text-tertiary">
-                    {props.streamingContent ? 'Streaming...' : 'Thinking...'}
+                    {props.streamingContent
+                      ? 'Streaming...'
+                      : (props.streamingToolCalls?.length ?? 0) > 0
+                        ? 'Using tools...'
+                        : 'Thinking...'}
                   </span>
                 </span>
+                {/* Stop agent — aborts the whole run (provider stream + tools) */}
+                <Show when={props.onCancelRun}>
+                  <button
+                    type="button"
+                    onClick={() => props.onCancelRun?.()}
+                    aria-label="Stop agent"
+                    class="ml-auto inline-flex items-center gap-1 rounded border border-red-200 dark:border-red-800 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <CircleStop class="w-3.5 h-3.5" />
+                    Stop agent
+                  </button>
+                </Show>
               </div>
-              <Show
-                when={props.streamingContent}
-                fallback={<TypingIndicator />}
-              >
-                <div class="text-text-secondary">
+              <Show when={props.streamingContent}>
+                <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />
                   <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
                 </div>
               </Show>
+              {/* Live activity heartbeat — what the agent is doing right now */}
+              <Show when={props.runActivity}>
+                <div class="mb-2">
+                  <RunActivityBadge
+                    phase={props.runActivity!.phase}
+                    toolName={props.runActivity!.toolName}
+                    elapsedMs={props.runActivity!.elapsedMs}
+                  />
+                </div>
+              </Show>
+              <Show when={(props.streamingToolCalls?.length ?? 0) > 0}>
+                <div class="space-y-1">
+                  <For each={props.streamingToolCalls}>
+                    {(tc) => (
+                      <ToolCallBlock
+                        name={tc.name}
+                        input={tc.input}
+                        isActive={!tc.cancelled}
+                        output={tc.output}
+                        cancelled={tc.cancelled}
+                        onStop={
+                          props.onCancelTool
+                            ? () => props.onCancelTool?.(tc.id)
+                            : undefined
+                        }
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show
+                when={
+                  !props.streamingContent &&
+                  (props.streamingToolCalls?.length ?? 0) === 0
+                }
+              >
+                <TypingIndicator />
+              </Show>
             </div>
           </div>
+        </div>
+      </Show>
+
+      {/* Queued messages — awaiting send after the current run completes */}
+      <Show when={(props.queuedMessages?.length ?? 0) > 0}>
+        <div class="space-y-2" aria-label="Queued messages">
+          <For each={props.queuedMessages}>
+            {(queued, index) => (
+              <QueuedMessageCard
+                message={queued}
+                position={index() + 1}
+                onEdit={(id, content) => props.onEditQueued?.(id, content)}
+                onRemove={(id) => props.onRemoveQueued?.(id)}
+              />
+            )}
+          </For>
         </div>
       </Show>
 

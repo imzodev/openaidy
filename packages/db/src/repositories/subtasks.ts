@@ -189,6 +189,31 @@ export class SubtasksRepository {
   }
 
   /**
+   * Reset all subtasks for a task so a recurring run can execute them again.
+   *
+   * Clears previous results, session links, retry counts and pending
+   * verification state, and moves every subtask back to `pending`. This is
+   * used by the recurring-task executor when `replanPolicy` is `never` or
+   * `on-description-change` and the description has not changed — the existing
+   * plan is reused, but each run must start from scratch.
+   */
+  async resetByTask(taskId: string): Promise<schema.Subtask[]> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        status: 'pending',
+        result: null,
+        sessionId: null,
+        retryCount: 0,
+        pendingVerificationResult: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.taskId, taskId))
+      .returning();
+    return results;
+  }
+
+  /**
    * Delete all subtasks for a task
    */
   async deleteByTask(taskId: string): Promise<schema.Subtask[]> {

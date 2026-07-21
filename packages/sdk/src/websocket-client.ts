@@ -502,6 +502,35 @@ export class WebSocketClient {
   }
 
   /**
+   * Cancel an in-flight tool call (user hit Stop). Fire-and-forget: the server
+   * aborts the tool and the UI reacts to the resulting
+   * `session.stream.tool_cancelled` event, so we don't await a response.
+   */
+  cancelTool(sessionId: string, runId: string, toolCallId: string): void {
+    void this.sendRequest('session.tool.cancel', {
+      sessionId,
+      runId,
+      toolCallId,
+    }).catch(() => {
+      /* best-effort — cancellation is confirmed via the stream event */
+    });
+  }
+
+  /**
+   * Cancel an in-flight run (user hit "Stop agent"). Fire-and-forget: the
+   * server aborts the run and the UI reacts to the resulting
+   * `session.stream.run_cancelled` event, so we don't await a response.
+   */
+  cancelRun(sessionId: string, runId: string): void {
+    void this.sendRequest('session.run.cancel', {
+      sessionId,
+      runId,
+    }).catch(() => {
+      /* best-effort — cancellation is confirmed via the stream event */
+    });
+  }
+
+  /**
    * Subscribe to session events
    */
   async subscribeToSession(

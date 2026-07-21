@@ -7,13 +7,20 @@ export type ProviderPresetId =
   | 'anthropic'
   | 'google'
   | 'groq'
-  | 'deepseek';
+  | 'deepseek'
+  | 'minimax'
+  | 'opencode-go'
+  | 'opencode-go-anthropic'
+  | 'opencode-zen'
+  | 'ollama'
+  | 'lmstudio';
 
 export type ModelPreset = {
   id: string;
   name: string;
   description?: string;
   contextWindow?: number;
+  maxOutputTokens?: number;
 };
 
 export type ProviderPreset = {
@@ -26,6 +33,13 @@ export type ProviderPreset = {
   websiteUrl: string;
   documentationUrl: string;
   icon: string;
+  /**
+   * A local provider (e.g. Ollama, LM Studio) reachable at a localhost base
+   * URL and requiring no API key. The UI skips the credential/connect dialog
+   * for these and configures them directly (base URL + discovered models);
+   * the adapter sends a placeholder key the local server ignores.
+   */
+  local?: boolean;
 };
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -124,6 +138,18 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         description: 'Long context understanding',
         contextWindow: 2000000,
       },
+      {
+        id: 'gemini-3.5-flash',
+        name: 'Gemini 3.5 Flash',
+        description: 'Latest flash (preview)',
+        contextWindow: 1000000,
+      },
+      {
+        id: 'gemini-3.1-flash-lite',
+        name: 'Gemini 3.1 Flash-Lite',
+        description: 'High-volume, low-cost flash (larger free-tier limits)',
+        contextWindow: 1048576,
+      },
     ],
   },
   {
@@ -170,14 +196,324 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
         id: 'deepseek-v4-pro',
         name: 'DeepSeek V4 Pro',
         description: 'Most capable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
       {
         id: 'deepseek-v4-flash',
         name: 'DeepSeek V4 Flash',
         description: 'Fast and affordable',
-        contextWindow: 640000,
+        contextWindow: 1000000,
+        maxOutputTokens: 384000,
       },
     ],
   },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://api.minimax.io/v1',
+    websiteUrl: 'https://platform.minimax.io',
+    documentationUrl: 'https://platform.minimax.io/docs',
+    recommendedModel: 'MiniMax-M3',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'MiniMax-M3',
+        name: 'MiniMax M3',
+        description:
+          'Latest M-series for agentic reasoning, tool use, coding, and long-context tasks',
+        contextWindow: 1000000,
+        maxOutputTokens: 16384,
+      },
+      {
+        id: 'MiniMax-M2.7',
+        name: 'MiniMax M2.7',
+        description: 'Recursive self-improvement, ~60 tps output',
+        contextWindow: 204800,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: 'MiniMax-M2.7-highspeed',
+        name: 'MiniMax M2.7 Highspeed',
+        description: 'Same as M2.7, ~100 tps output',
+        contextWindow: 204800,
+        maxOutputTokens: 8192,
+      },
+    ],
+  },
+  {
+    id: 'opencode-go',
+    name: 'OpenCode Go',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    websiteUrl: 'https://opencode.ai/auth',
+    documentationUrl: 'https://opencode.ai/docs/go',
+    recommendedModel: 'kimi-k2.7',
+    icon: 'bi-stars',
+    models: [
+      // OpenAI-compatible subset (8 models served via
+      // /v1/chat/completions).
+      {
+        id: 'glm-5.1',
+        name: 'GLM-5.1',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'glm-5',
+        name: 'GLM-5',
+        description: 'Open coding model',
+      },
+      {
+        id: 'kimi-k2.7',
+        name: 'Kimi K2.7 Code',
+        description: 'Strong open coding model',
+      },
+      {
+        id: 'kimi-k2.6',
+        name: 'Kimi K2.6',
+        description: 'Open coding model',
+      },
+      {
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        description: 'Fast and affordable',
+      },
+      {
+        id: 'mimo-v2.5',
+        name: 'MiMo V2.5',
+        description: 'High-volume open model',
+      },
+      {
+        id: 'mimo-v2.5-pro',
+        name: 'MiMo V2.5 Pro',
+        description: 'Reasoning open model',
+      },
+      // Anthropic-compatible subset (5 models served via
+      // /v1/messages). Surfaced under the same "OpenCode Go" card
+      // in the UI; the frontend re-maps the providerId to
+      // `opencode-go-anthropic` when the user picks one of these
+      // because the gateway explicitly rejects them on the OpenAI
+      // endpoint (verified empirically).
+      {
+        id: 'minimax-m3',
+        name: 'MiniMax M3',
+        description: 'Latest, strong reasoning',
+      },
+      {
+        id: 'minimax-m2.7',
+        name: 'MiniMax M2.7',
+        description: 'Fast reasoning model',
+      },
+      {
+        id: 'minimax-m2.5',
+        name: 'MiniMax M2.5',
+        description: 'Reasoning model',
+      },
+      {
+        id: 'qwen3.7-max',
+        name: 'Qwen3.7 Max',
+        description: 'Strongest Qwen open model',
+      },
+      {
+        id: 'qwen3.7-plus',
+        name: 'Qwen3.7 Plus',
+        description: 'Balanced Qwen open model',
+      },
+      {
+        id: 'qwen3.6-plus',
+        name: 'Qwen3.6 Plus',
+        description: 'Previous-gen Qwen open model',
+      },
+    ],
+  },
+  {
+    id: 'opencode-zen',
+    name: 'OpenCode Zen',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    websiteUrl: 'https://opencode.ai/zen',
+    documentationUrl: 'https://opencode.ai/docs/zen',
+    recommendedModel: 'mimo-v2.5-free',
+    icon: 'bi-stars',
+    models: [
+      {
+        id: 'mimo-v2.5-free',
+        name: 'MiMo V2.5 Free',
+        description: 'Free tier — high-volume open model',
+      },
+      {
+        id: 'north-mini-code-free',
+        name: 'North Mini Code Free',
+        description: 'Free tier — coding-specialized open model',
+      },
+      {
+        id: 'nemotron-3-ultra-free',
+        name: 'Nemotron 3 Ultra Free',
+        description: 'Free tier — NVIDIA open coding model',
+      },
+      {
+        id: 'deepseek-v4-flash-free',
+        name: 'DeepSeek V4 Flash Free',
+        description: 'Free tier — fast and affordable reasoning',
+      },
+    ],
+  },
+  {
+    id: 'ollama',
+    name: 'Ollama',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'http://localhost:11434/v1',
+    websiteUrl: 'https://ollama.com',
+    documentationUrl:
+      'https://github.com/ollama/ollama/blob/main/docs/openai.md',
+    recommendedModel: '',
+    icon: 'bi-cpu',
+    local: true,
+    // Installed models are host-specific — populated via "Discover models".
+    models: [],
+  },
+  {
+    id: 'lmstudio',
+    name: 'LM Studio',
+    vendorFamily: 'openai-compatible',
+    baseUrl: 'http://localhost:1234/v1',
+    websiteUrl: 'https://lmstudio.ai',
+    documentationUrl: 'https://lmstudio.ai/docs/app/api/endpoints/openai',
+    recommendedModel: '',
+    icon: 'bi-pc-display',
+    local: true,
+    // Loaded models are host-specific — populated via "Discover models".
+    models: [],
+  },
 ];
+
+/**
+ * Model IDs that OpenCode Go serves via the Anthropic-compatible
+ * endpoint (`/v1/messages`) instead of the OpenAI-compatible one
+ * (`/v1/chat/completions`). Used by:
+ *
+ * - the frontend to re-map the `providerId` from `opencode-go` to
+ *   `opencode-go-anthropic` when the user picks one of these
+ *   models in a single-dropdown UI;
+ * - the `opencode-go-anthropic` provider profile to know which of
+ *   the 13 models in the unified preset belong to it.
+ *
+ * Source of truth: the Endpoints table at
+ * https://opencode.ai/docs/go, cross-checked with a live probe of
+ * the gateway (the `oa-compat` endpoint returns
+ * `Model <id> is not supported for format oa-compat` for these
+ * models).
+ */
+export const OPENCODE_GO_ANTHROPIC_MODEL_IDS: ReadonlySet<string> = new Set([
+  'minimax-m3',
+  'minimax-m2.7',
+  'minimax-m2.5',
+  'qwen3.7-max',
+  'qwen3.7-plus',
+  'qwen3.6-plus',
+]);
+
+/**
+ * OpenCode Zen — free tier models served via OpenAI-compatible endpoint.
+ *
+ * Docs: https://opencode.ai/docs/zen
+ * Endpoint: https://opencode.ai/zen/v1/chat/completions
+ *
+ * Auth: Bearer API key (sign up at opencode.ai/zen, add billing, get key).
+ * No OAuth. Free to use — no per-request charges for the free-tier models.
+ *
+ * Only the free-tier models are included here. The full Zen catalog
+ * (GPT-5, Claude, Gemini, DeepSeek V4 Pro, etc.) requires a paid plan
+ * and is available via OpenCode Go (`opencode-go`) instead.
+ */
+export const OPENCODE_ZEN_PRESET: ProviderPreset = {
+  id: 'opencode-zen',
+  name: 'OpenCode Zen',
+  vendorFamily: 'openai-compatible',
+  baseUrl: 'https://opencode.ai/zen/v1',
+  websiteUrl: 'https://opencode.ai/zen',
+  documentationUrl: 'https://opencode.ai/docs/zen',
+  recommendedModel: 'mimo-v2.5-free',
+  icon: 'bi-stars',
+  models: [
+    {
+      id: 'mimo-v2.5-free',
+      name: 'MiMo V2.5 Free',
+      description: 'Free tier — high-volume open model',
+    },
+    {
+      id: 'north-mini-code-free',
+      name: 'North Mini Code Free',
+      description: 'Free tier — coding-specialized open model',
+    },
+    {
+      id: 'nemotron-3-ultra-free',
+      name: 'Nemotron 3 Ultra Free',
+      description: 'Free tier — NVIDIA open coding model',
+    },
+    {
+      id: 'deepseek-v4-flash-free',
+      name: 'DeepSeek V4 Flash Free',
+      description: 'Free tier — fast and affordable reasoning',
+    },
+  ],
+};
+
+/**
+ * Hidden preset for the Anthropic-compatible subset of OpenCode
+ * Go. Used by the `OpenCodeGoAnthropicProfile` class to register
+ * itself in the provider registry, but deliberately NOT included
+ * in `PROVIDER_PRESETS` so it doesn't show up as a separate card
+ * in the UI. The frontend surfaces all 13 models under the single
+ * "OpenCode Go" card and re-maps the `providerId` to
+ * `opencode-go-anthropic` when the chosen model is in
+ * `OPENCODE_GO_ANTHROPIC_MODEL_IDS`.
+ */
+export const OPENCODE_GO_ANTHROPIC_PRESET: ProviderPreset = {
+  id: 'opencode-go-anthropic',
+  name: 'OpenCode Go (Anthropic)',
+  vendorFamily: 'anthropic',
+  baseUrl: 'https://opencode.ai/zen/go/v1',
+  websiteUrl: 'https://opencode.ai/auth',
+  documentationUrl: 'https://opencode.ai/docs/go',
+  recommendedModel: 'minimax-m2.7',
+  icon: 'bi-stars',
+  models: [
+    {
+      id: 'minimax-m3',
+      name: 'MiniMax M3',
+      description: 'Latest, strong reasoning',
+    },
+    {
+      id: 'minimax-m2.7',
+      name: 'MiniMax M2.7',
+      description: 'Fast reasoning model',
+    },
+    {
+      id: 'minimax-m2.5',
+      name: 'MiniMax M2.5',
+      description: 'Reasoning model',
+    },
+    {
+      id: 'qwen3.7-max',
+      name: 'Qwen3.7 Max',
+      description: 'Strongest Qwen open model',
+    },
+    {
+      id: 'qwen3.7-plus',
+      name: 'Qwen3.7 Plus',
+      description: 'Balanced Qwen open model',
+    },
+    {
+      id: 'qwen3.6-plus',
+      name: 'Qwen3.6 Plus',
+      description: 'Previous-gen Qwen open model',
+    },
+  ],
+};

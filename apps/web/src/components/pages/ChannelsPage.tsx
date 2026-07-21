@@ -15,10 +15,20 @@ import {
   AlertCircle,
   CheckCircle,
   QrCode,
+  Plus,
+  Trash2,
+  X,
 } from 'lucide-solid';
 import { Layout } from './Layout';
 import type { ChannelStatusResponse } from '@openaidy/shared-types';
-import { listChannels, connectChannel, disconnectChannel } from '../../lib/api';
+import {
+  listChannels,
+  connectChannel,
+  disconnectChannel,
+  addWhatsAppChannel,
+  removeChannel,
+  listAgents,
+} from '../../lib/api';
 import { useWebSocketContext } from '../../lib/ws-provider';
 
 function StatusBadge(props: { status: ChannelStatusResponse['status'] }) {
@@ -147,10 +157,162 @@ function QrPanel(props: { channelId: string; onConnected: () => void }) {
   );
 }
 
+function AddChannelDialog(props: {
+  onClose: () => void;
+  onAdded: (id: string) => void;
+}) {
+  const [agents] = createResource(async () => (await listAgents()).items);
+  const [id, setId] = createSignal('');
+  const [agentId, setAgentId] = createSignal('');
+  const [allowlist, setAllowlist] = createSignal('');
+  const [saving, setSaving] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const canSave = () => id().trim().length > 0 && agentId().length > 0;
+
+  const handleSave = async () => {
+    if (!canSave()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const allowlistArr = allowlist()
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      await addWhatsAppChannel({
+        id: id().trim(),
+        agentId: agentId(),
+        ...(allowlistArr.length > 0 ? { allowlist: allowlistArr } : {}),
+      });
+      props.onAdded(id().trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add channel');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4">
+        <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Add WhatsApp channel
+          </h2>
+          <button
+            onClick={props.onClose}
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            aria-label="Close"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <div class="p-4 space-y-4">
+          <Show when={error()}>
+            <div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
+              {error()}
+            </div>
+          </Show>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Channel ID <span class="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={id()}
+              onInput={(e) => setId(e.currentTarget.value)}
+              placeholder="e.g. personal"
+              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p class="mt-1 text-xs text-text-tertiary">
+              A unique name for this WhatsApp connection.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Agent <span class="text-red-500">*</span>
+            </label>
+            <select
+              value={agentId()}
+              onChange={(e) => setAgentId(e.currentTarget.value)}
+              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Select an agent…</option>
+              <For each={agents() ?? []}>
+                {(agent) => <option value={agent.id}>{agent.name}</option>}
+              </For>
+            </select>
+            <p class="mt-1 text-xs text-text-tertiary">
+              The agent that replies to messages on this channel.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Allowlist
+            </label>
+            <input
+              type="text"
+              value={allowlist()}
+              onInput={(e) => setAllowlist(e.currentTarget.value)}
+              placeholder="e.g. 15551234567, 15559876543"
+              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p class="mt-1 text-xs text-text-tertiary">
+              Optional. Comma-separated phone numbers allowed to message this
+              channel. Leave empty to allow everyone.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 p-4 border-t dark:border-gray-700">
+          <button
+            onClick={props.onClose}
+            class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => void handleSave()}
+            disabled={saving() || !canSave()}
+            class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+          >
+            {saving() ? 'Adding…' : 'Add channel'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ChannelsPage() {
   const [channels, { refetch }] = createResource(listChannels);
   const [pending, setPending] = createSignal<string | null>(null);
   const [qrOpen, setQrOpen] = createSignal<string | null>(null);
+  const [showAdd, setShowAdd] = createSignal(false);
+  const [confirmRemove, setConfirmRemove] = createSignal<string | null>(null);
+
+  const handleAdded = (id: string) => {
+    setShowAdd(false);
+    void refetch();
+    // Jump straight into linking the freshly-added channel.
+    void handleConnect(id);
+  };
+
+  const handleRemove = async (id: string) => {
+    setPending(id);
+    try {
+      await removeChannel(id);
+      setConfirmRemove(null);
+      if (qrOpen() === id) setQrOpen(null);
+      void refetch();
+    } finally {
+      setPending(null);
+    }
+  };
 
   const handleConnect = async (id: string) => {
     setPending(id);
@@ -175,11 +337,29 @@ export function ChannelsPage() {
     }
   };
 
+  const addButton = (
+    <button
+      onClick={() => setShowAdd(true)}
+      class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
+    >
+      <Plus class="w-4 h-4" />
+      Add WhatsApp
+    </button>
+  );
+
   return (
     <Layout
       title="Channels"
       description="Connect WhatsApp, Telegram, Discord, Slack"
+      actions={addButton}
     >
+      <Show when={showAdd()}>
+        <AddChannelDialog
+          onClose={() => setShowAdd(false)}
+          onAdded={handleAdded}
+        />
+      </Show>
+
       <Show when={channels.loading}>
         <div class="flex items-center justify-center h-48">
           <p class="text-text-tertiary">Loading channels...</p>
@@ -201,21 +381,17 @@ export function ChannelsPage() {
               <h3 class="text-lg font-medium text-text-primary mb-2">
                 No channels configured
               </h3>
-              <p class="text-sm text-text-secondary mb-4">
-                Add a channel to{' '}
-                <code class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs font-mono">
-                  openaidy.json
-                </code>{' '}
-                to get started.
+              <p class="text-sm text-text-secondary mb-4 max-w-sm">
+                Connect a WhatsApp number so an agent can chat with you there.
+                Add a channel, then scan the QR code from your phone.
               </p>
-              <pre class="text-xs text-left bg-gray-100 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700 text-text-secondary font-mono">{`"channels": [
-  {
-    "type": "whatsapp",
-    "id": "personal",
-    "agentId": "my-agent",
-    "enabled": true
-  }
-]`}</pre>
+              <button
+                onClick={() => setShowAdd(true)}
+                class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
+              >
+                <Plus class="w-4 h-4" />
+                Add WhatsApp channel
+              </button>
             </div>
           }
         >
@@ -277,6 +453,36 @@ export function ChannelsPage() {
                             ? 'Disconnecting...'
                             : 'Disconnect'}
                         </button>
+                      </Show>
+                      <Show
+                        when={confirmRemove() === channel.id}
+                        fallback={
+                          <button
+                            onClick={() => setConfirmRemove(channel.id)}
+                            class="inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 class="w-3.5 h-3.5" />
+                            Remove
+                          </button>
+                        }
+                      >
+                        <div class="flex items-center gap-2">
+                          <button
+                            disabled={pending() === channel.id}
+                            onClick={() => handleRemove(channel.id)}
+                            class="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                          >
+                            {pending() === channel.id
+                              ? 'Removing…'
+                              : 'Confirm remove'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmRemove(null)}
+                            class="text-xs text-text-tertiary hover:text-text-secondary"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </Show>
                     </div>
                   </div>

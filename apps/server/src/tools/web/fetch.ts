@@ -189,6 +189,11 @@ export const webFetchTool: BuiltinTool = {
     try {
       const text = convert(cleanedHtml, {
         selectors: [
+          // Preserve the original casing of headings — html-to-text
+          // uppercases <h1>/<h2> headings by default, which mangles
+          // titles like "Hello World" into "HELLO WORLD".
+          { selector: 'h1', options: { uppercase: false } },
+          { selector: 'h2', options: { uppercase: false } },
           { selector: 'script', format: 'skip' },
           { selector: 'style', format: 'skip' },
           { selector: 'noscript', format: 'skip' },

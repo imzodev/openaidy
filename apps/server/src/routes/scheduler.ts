@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { SchedulerService } from '../scheduler/service';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import {
   validateCronExpression,
@@ -70,7 +69,6 @@ const listRunsSchema = z.object({
  * Scheduler routes options
  */
 export type SchedulerRoutesOptions = {
-  schedulerService: SchedulerService;
   jobsRepo: JobsStore;
   jobRunsRepo: JobRunsStore;
   sessionsRepo: SessionsStore;
@@ -81,17 +79,17 @@ export type SchedulerRoutesOptions = {
  * Scheduler routes
  *
  * Provides REST API for managing scheduled jobs and viewing execution history.
+ *
+ * The route layer is intentionally repo-only. It does not call into
+ * `SchedulerService` directly — the scheduler runs in the background
+ * and picks up due jobs on its own tick. If you need to observe or
+ * control the scheduler itself, expose it via a separate admin route
+ * (not part of the public job-management surface).
  */
 export const schedulerRoutes: FastifyPluginAsync<
   SchedulerRoutesOptions
 > = async (app, options) => {
-  const {
-    schedulerService,
-    jobsRepo,
-    jobRunsRepo,
-    sessionsRepo,
-    authMiddleware,
-  } = options;
+  const { jobsRepo, jobRunsRepo, sessionsRepo, authMiddleware } = options;
 
   app.addHook(
     'preHandler',
@@ -102,7 +100,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * POST /api/jobs
    * Create a new scheduled job
    */
-  app.post('/api/jobs', async (request, reply) => {
+  app.post('/jobs', async (request, reply) => {
     let parsed;
     try {
       parsed = createJobSchema.parse(request.body);
@@ -210,7 +208,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * GET /api/jobs
    * List jobs with optional filters
    */
-  app.get('/api/jobs', async (request, reply) => {
+  app.get('/jobs', async (request, reply) => {
     let parsed;
     try {
       parsed = listJobsSchema.parse(request.query);
@@ -265,7 +263,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * GET /api/jobs/:id
    * Get job details
    */
-  app.get('/api/jobs/:id', async (request, reply) => {
+  app.get('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     const job = await jobsRepo.findById(id);
@@ -284,7 +282,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * PATCH /api/jobs/:id
    * Update job (pause/resume, update metadata)
    */
-  app.patch('/api/jobs/:id', async (request, reply) => {
+  app.patch('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;
@@ -330,7 +328,7 @@ export const schedulerRoutes: FastifyPluginAsync<
    * DELETE /api/jobs/:id
    * Delete job (cascade deletes runs)
    */
-  app.delete('/api/jobs/:id', async (request, reply) => {
+  app.delete('/jobs/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     // Check job exists
@@ -342,45 +340,16 @@ export const schedulerRoutes: FastifyPluginAsync<
         message: 'Job not found',
       };
     }
-
     await jobsRepo.delete(id);
     reply.code(204);
     return;
   });
 
   /**
-   * POST /api/jobs/:id/trigger
-   * Manually trigger job execution
-   */
-  app.post('/api/jobs/:id/trigger', async (request, reply) => {
-    const { id } = request.params as { id: string };
-
-    try {
-      const run = await schedulerService.triggerJob(id);
-
-      // Fetch the updated run to get final status
-      const updatedRun = await jobRunsRepo.findById(run.id);
-
-      return { run: updatedRun || run };
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Job not found') {
-        reply.code(404);
-        return {
-          error: 'job.not_found',
-          message: 'Job not found',
-        };
-      }
-
-      // Re-throw other errors to be handled by Fastify error handler
-      throw error;
-    }
-  });
-
-  /**
    * GET /api/jobs/:id/runs
    * List job runs (execution history)
    */
-  app.get('/api/jobs/:id/runs', async (request, reply) => {
+  app.get('/jobs/:id/runs', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;

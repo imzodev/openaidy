@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ExecService } from '../../exec/service';
 import { createWorkspaceService } from '../../workspace/service';
 import { createExecRunTool, createExecTools } from './index';
 
 const CTX = { agentId: 'test-agent', sessionId: 'test-session' };
+
+// Some cases exercise the shell with POSIX-only commands (pwd, wc, sleep).
+// On Windows ExecService correctly spawns cmd.exe, where those commands don't
+// exist, so we skip them there; they run in full on the Linux CI runner.
+const itUnix = it.skipIf(process.platform === 'win32');
 
 describe('exec tools', () => {
   let testBaseDir: string;
@@ -69,7 +74,7 @@ describe('exec tools', () => {
       );
     });
 
-    it('supports pipes', async () => {
+    itUnix('supports pipes', async () => {
       const tool = createExecRunTool(exec, workspace);
       const result = await tool.execute(
         { command: 'echo "foo bar baz" | wc -w' },
@@ -82,18 +87,24 @@ describe('exec tools', () => {
       expect(content).toContain('exit code: 0');
     });
 
-    it('defaults cwd to the agent workspace root', async () => {
+    itUnix('defaults cwd to the agent workspace root', async () => {
       const tool = createExecRunTool(exec, workspace);
       const result = await tool.execute({ command: 'pwd' }, CTX);
 
       expect(result.ok).toBe(true);
-      const workspaceRoot = workspace.getWorkspacePath(CTX.agentId);
-      expect((result as { ok: true; content: string }).content).toContain(
-        workspaceRoot,
+      // `pwd` reports the cwd using the shell's native path style (which can
+      // differ from Node's OS-native separators, e.g. POSIX-style under Git
+      // Bash on Windows). Normalize separators and compare on the stable
+      // trailing segments: <unique-base-dir>/<agentId>.
+      const content = (result as { ok: true; content: string }).content.replace(
+        /\\/g,
+        '/',
       );
+      const expectedTail = `${basename(testBaseDir)}/${CTX.agentId}`;
+      expect(content).toContain(expectedTail);
     });
 
-    it('accepts a relative cwd inside the workspace', async () => {
+    itUnix('accepts a relative cwd inside the workspace', async () => {
       const tool = createExecRunTool(exec, workspace);
       const workspaceRoot = workspace.getWorkspacePath(CTX.agentId);
       await mkdir(join(workspaceRoot, 'subdir'), { recursive: true });
@@ -146,7 +157,7 @@ describe('exec tools', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('times out and marks result as timed out', async () => {
+    itUnix('times out and marks result as timed out', async () => {
       const fastExec = new ExecService({ timeoutMs: 100 });
       const tool = createExecRunTool(fastExec, workspace);
       const result = await tool.execute({ command: 'sleep 10' }, CTX);

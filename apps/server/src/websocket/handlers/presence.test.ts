@@ -2,15 +2,26 @@
  * Presence Handler Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import { PresenceHandler, registerPresenceHandlers } from './presence';
-import { PresenceManager } from '../presence-manager';
-import type { ConnectionManager } from '../connection-manager';
+import {
+  PresenceHandler,
+  registerPresenceHandlers,
+  type PresenceGetRequest,
+  type PresenceSubscribeRequest,
+  type PresenceUnsubscribeRequest,
+} from './presence';
+import { PresenceManager, type PresenceInfo } from '../presence-manager';
+import type {
+  ConnectionContext,
+  ConnectionManager,
+} from '../connection-manager';
 import type { HandlerContext } from '../index';
 import {
   createWSMessage,
   WS_ERROR_CODES,
+  type WSMessage,
+  type PresenceUpdateRequest,
 } from '@openaidy/shared-types';
 
 // ============================================================================
@@ -24,7 +35,7 @@ const createMockLogger = () =>
     error: vi.fn(),
     debug: vi.fn(),
     child: vi.fn(() => createMockLogger()),
-  } as unknown as FastifyBaseLogger);
+  }) as unknown as FastifyBaseLogger;
 
 const createMockConnectionManager = (): ConnectionManager =>
   ({
@@ -40,7 +51,7 @@ const createMockConnectionManager = (): ConnectionManager =>
     getConnectionCount: vi.fn().mockReturnValue(0),
     getAllConnections: vi.fn().mockReturnValue([]),
     closeAll: vi.fn(),
-  } as unknown as ConnectionManager);
+  }) as unknown as ConnectionManager;
 
 // ============================================================================
 // Tests
@@ -66,7 +77,7 @@ describe('PresenceHandler', () => {
 
     handlerContext = {
       connectionManager: mockConnectionManager,
-      services: {} as any,
+      services: {},
       logger: mockLogger,
     };
   });
@@ -79,9 +90,13 @@ describe('PresenceHandler', () => {
     it('should update presence to online', async () => {
       const request = createWSMessage('presence.update', {
         status: 'online',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.update');
       if ('success' in response.payload) {
@@ -93,9 +108,13 @@ describe('PresenceHandler', () => {
     it('should update presence to away', async () => {
       const request = createWSMessage('presence.update', {
         status: 'away',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.update');
       if ('success' in response.payload) {
@@ -106,9 +125,13 @@ describe('PresenceHandler', () => {
     it('should update presence to busy', async () => {
       const request = createWSMessage('presence.update', {
         status: 'busy',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.update');
       if ('success' in response.payload) {
@@ -119,9 +142,13 @@ describe('PresenceHandler', () => {
     it('should update presence to offline', async () => {
       const request = createWSMessage('presence.update', {
         status: 'offline',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.update');
       if ('success' in response.payload) {
@@ -133,9 +160,13 @@ describe('PresenceHandler', () => {
       const request = createWSMessage('presence.update', {
         status: 'online',
         metadata: { device: 'iPhone', location: 'US' },
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.update');
       if ('success' in response.payload) {
@@ -149,20 +180,26 @@ describe('PresenceHandler', () => {
     it('should return error for invalid status', async () => {
       const request = createWSMessage('presence.update', {
         status: 'invalid-status',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
-      const response = await handler.handleUpdate('conn-1', request, handlerContext);
+      const response = await handler.handleUpdate(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
       if ('error' in response.payload) {
-        expect(response.payload.error.code).toBe(WS_ERROR_CODES.INVALID_REQUEST);
+        expect(response.payload.error.code).toBe(
+          WS_ERROR_CODES.INVALID_REQUEST,
+        );
       }
     });
 
     it('should log update operation', async () => {
       const request = createWSMessage('presence.update', {
         status: 'online',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
       await handler.handleUpdate('conn-1', request, handlerContext);
 
@@ -179,13 +216,17 @@ describe('PresenceHandler', () => {
       // Set up presence first
       presenceManager.updatePresence('conn-1', 'online');
 
-      const request = createWSMessage('presence.get', {}) as any;
+      const request = createWSMessage('presence.get', {}) as PresenceGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.get');
       if ('presence' in response.payload) {
-        const p = response.payload.presence as any;
+        const p = response.payload.presence as PresenceInfo;
         expect(p.status).toBe('online');
       }
     });
@@ -195,26 +236,36 @@ describe('PresenceHandler', () => {
 
       const request = createWSMessage('presence.get', {
         connectionId: 'conn-2',
-      }) as any;
+      }) as PresenceGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.get');
       if ('presence' in response.payload) {
-        const p = response.payload.presence as any;
+        const p = response.payload.presence as PresenceInfo;
         expect(p.connectionId).toBe('conn-2');
         expect(p.status).toBe('busy');
       }
     });
 
     it('should get presence by clientId', async () => {
-      presenceManager.updatePresence('conn-2', 'away', { clientId: 'client-xyz' });
+      presenceManager.updatePresence('conn-2', 'away', {
+        clientId: 'client-xyz',
+      });
 
       const request = createWSMessage('presence.get', {
         clientId: 'client-xyz',
-      }) as any;
+      }) as PresenceGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.get');
     });
@@ -222,9 +273,13 @@ describe('PresenceHandler', () => {
     it('should return error for non-existent presence', async () => {
       const request = createWSMessage('presence.get', {
         connectionId: 'conn-999',
-      }) as any;
+      }) as PresenceGetRequest;
 
-      const response = await handler.handleGet('conn-1', request, handlerContext);
+      const response = await handler.handleGet(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('error');
       if ('error' in response.payload) {
@@ -243,9 +298,16 @@ describe('PresenceHandler', () => {
       presenceManager.updatePresence('conn-2', 'away');
       presenceManager.updatePresence('conn-3', 'busy');
 
-      const request = createWSMessage('presence.getAll', {}) as any;
+      const request = createWSMessage('presence.getAll', {}) as WSMessage<
+        'presence.getAll',
+        Record<string, never>
+      >;
 
-      const response = await handler.handleGetAll('conn-1', request, handlerContext);
+      const response = await handler.handleGetAll(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.getAll');
       if ('presence' in response.payload) {
@@ -255,9 +317,16 @@ describe('PresenceHandler', () => {
     });
 
     it('should return empty array when no presence', async () => {
-      const request = createWSMessage('presence.getAll', {}) as any;
+      const request = createWSMessage('presence.getAll', {}) as WSMessage<
+        'presence.getAll',
+        Record<string, never>
+      >;
 
-      const response = await handler.handleGetAll('conn-1', request, handlerContext);
+      const response = await handler.handleGetAll(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.getAll');
       if ('presence' in response.payload) {
@@ -273,9 +342,16 @@ describe('PresenceHandler', () => {
 
   describe('handleSubscribe', () => {
     it('should subscribe to presence events', async () => {
-      const request = createWSMessage('presence.subscribe', {}) as any;
+      const request = createWSMessage(
+        'presence.subscribe',
+        {},
+      ) as PresenceSubscribeRequest;
 
-      const response = await handler.handleSubscribe('conn-1', request, handlerContext);
+      const response = await handler.handleSubscribe(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.subscribe');
       if ('subscribed' in response.payload) {
@@ -285,7 +361,10 @@ describe('PresenceHandler', () => {
     });
 
     it('should log subscription', async () => {
-      const request = createWSMessage('presence.subscribe', {}) as any;
+      const request = createWSMessage(
+        'presence.subscribe',
+        {},
+      ) as PresenceSubscribeRequest;
 
       await handler.handleSubscribe('conn-1', request, handlerContext);
 
@@ -301,9 +380,16 @@ describe('PresenceHandler', () => {
     it('should unsubscribe from presence events', async () => {
       presenceManager.subscribe('conn-1');
 
-      const request = createWSMessage('presence.unsubscribe', {}) as any;
+      const request = createWSMessage(
+        'presence.unsubscribe',
+        {},
+      ) as PresenceUnsubscribeRequest;
 
-      const response = await handler.handleUnsubscribe('conn-1', request, handlerContext);
+      const response = await handler.handleUnsubscribe(
+        'conn-1',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.unsubscribe');
       if ('subscribed' in response.payload) {
@@ -313,9 +399,16 @@ describe('PresenceHandler', () => {
     });
 
     it('should handle unsubscribing non-existent subscriber', async () => {
-      const request = createWSMessage('presence.unsubscribe', {}) as any;
+      const request = createWSMessage(
+        'presence.unsubscribe',
+        {},
+      ) as PresenceUnsubscribeRequest;
 
-      const response = await handler.handleUnsubscribe('conn-999', request, handlerContext);
+      const response = await handler.handleUnsubscribe(
+        'conn-999',
+        request,
+        handlerContext,
+      );
 
       expect(response.type).toBe('presence.unsubscribe');
       if ('subscribed' in response.payload) {
@@ -348,22 +441,24 @@ describe('PresenceHandler', () => {
     it('should broadcast presence change to subscribers', async () => {
       // Set up subscriber with a mock socket
       const mockSend = vi.fn();
-      (mockConnectionManager.getConnection as any).mockImplementation((id: string) => {
-        if (id === 'conn-2') {
+      (mockConnectionManager.getConnection as Mock).mockImplementation(
+        (id: string): ConnectionContext => {
+          if (id === 'conn-2') {
+            return {
+              id: 'conn-2',
+              socket: { readyState: 1, send: mockSend },
+              authenticated: true,
+            } as unknown as ConnectionContext;
+          }
           return {
-            id: 'conn-2',
-            socket: { readyState: 1, send: mockSend },
+            id: 'conn-1',
+            socket: { readyState: 1, send: vi.fn() },
             authenticated: true,
-          };
-        }
-        return {
-          id: 'conn-1',
-          socket: { readyState: 1, send: vi.fn() },
-          authenticated: true,
-          capabilities: ['presence.read', 'presence.write'],
-          clientId: 'client-abc',
-        };
-      });
+            capabilities: ['presence.read', 'presence.write'],
+            clientId: 'client-abc',
+          } as unknown as ConnectionContext;
+        },
+      );
 
       // Subscribe conn-2 to presence events
       presenceManager.subscribe('conn-2');
@@ -371,7 +466,7 @@ describe('PresenceHandler', () => {
       // Update presence from conn-1
       const request = createWSMessage('presence.update', {
         status: 'away',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
       await handler.handleUpdate('conn-1', request, handlerContext);
 
@@ -383,13 +478,13 @@ describe('PresenceHandler', () => {
 
     it('should not broadcast to sender', async () => {
       const mockSend = vi.fn();
-      (mockConnectionManager.getConnection as any).mockReturnValue({
+      (mockConnectionManager.getConnection as Mock).mockReturnValue({
         id: 'conn-1',
         socket: { readyState: 1, send: mockSend },
         authenticated: true,
         capabilities: ['presence.read', 'presence.write'],
         clientId: 'client-abc',
-      });
+      } as unknown as ConnectionContext);
 
       // Subscribe conn-1 to presence events
       presenceManager.subscribe('conn-1');
@@ -397,7 +492,7 @@ describe('PresenceHandler', () => {
       // Update presence from conn-1
       const request = createWSMessage('presence.update', {
         status: 'online',
-      }) as any;
+      }) as unknown as PresenceUpdateRequest;
 
       await handler.handleUpdate('conn-1', request, handlerContext);
 
@@ -425,13 +520,31 @@ describe('registerPresenceHandlers', () => {
       handleUnsubscribe: vi.fn(),
     } as unknown as PresenceHandler;
 
-    registerPresenceHandlers(mockRouter as any, mockHandler);
+    registerPresenceHandlers(
+      mockRouter as unknown as Parameters<typeof registerPresenceHandlers>[0],
+      mockHandler,
+    );
 
     expect(mockRouter.registerHandler).toHaveBeenCalledTimes(5);
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('presence.update', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('presence.get', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('presence.getAll', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('presence.subscribe', expect.any(Function));
-    expect(mockRouter.registerHandler).toHaveBeenCalledWith('presence.unsubscribe', expect.any(Function));
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'presence.update',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'presence.get',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'presence.getAll',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'presence.subscribe',
+      expect.any(Function),
+    );
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'presence.unsubscribe',
+      expect.any(Function),
+    );
   });
 });

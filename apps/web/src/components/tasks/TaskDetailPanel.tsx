@@ -2,11 +2,11 @@
  * Task Detail Panel Component
  *
  * Displays full task information including assigned agents, subtasks,
- * progress, and allows editing.
+ * progress, schedule, and allows editing.
  */
 
 import { createSignal, createEffect, Show, For } from 'solid-js';
-import { X, Edit2, Trash2 } from 'lucide-solid';
+import { X, Edit2, Trash2, History, Pause, Play, Square } from 'lucide-solid';
 import {
   getTask,
   updateTask,
@@ -17,11 +17,17 @@ import {
   replanTask,
   listDeliverables,
   updateDeliverable,
+  getTaskSchedule,
+  pauseTaskSchedule,
+  resumeTaskSchedule,
+  removeTaskSchedule,
   type Deliverable,
 } from '../../lib/api-tasks';
 import { readWorkspaceFile } from '../../lib/api';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
+import { ScheduleDisplay } from '../common/ScheduleDisplay';
+import type { TaskSchedule } from '../../lib/api-tasks';
 import type {
   Task,
   TaskStatus,
@@ -56,6 +62,12 @@ export type TaskDetailPanelProps = {
   onClose: () => void;
   onTaskUpdated: () => void;
   onTaskDeleted: () => void;
+  /**
+   * Optional: called when the user clicks the "View execution history"
+   * button. Only rendered when the task has a recurring schedule.
+   * Parents typically use this to navigate to a TaskExecutionsPage.
+   */
+  onViewExecutions?: () => void;
 };
 
 /**
@@ -88,6 +100,9 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [subtasks, setSubtasks] = createSignal<Subtask[]>([]);
   const [progress, setProgress] = createSignal<TaskProgress | null>(null);
   const [deliverables, setDeliverables] = createSignal<Deliverable[]>([]);
+  // Null when the task has no schedule. The "View execution history"
+  // button only renders when this is non-null.
+  const [schedule, setSchedule] = createSignal<TaskSchedule | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [isEditing, setIsEditing] = createSignal(false);
@@ -95,6 +110,8 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [editDescription, setEditDescription] = createSignal('');
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [isReplanning, setIsReplanning] = createSignal(false);
+  const [isPausingResuming, setIsPausingResuming] = createSignal(false);
+  const [isStopping, setIsStopping] = createSignal(false);
   const [deliverableModal, setDeliverableModal] = createSignal<{
     isOpen: boolean;
     content: string;
@@ -139,6 +156,17 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
       const deliverablesResult = await listDeliverables(props.taskId);
       if (deliverablesResult.ok) {
         setDeliverables(deliverablesResult.data.items);
+      }
+
+      // Load the schedule (if any). Best-effort: a 404 (no schedule)
+      // is the common case and we just leave `schedule()` as null. Any
+      // other failure logs to the console but doesn't break the panel.
+      try {
+        const s = await getTaskSchedule(props.taskId);
+        setSchedule(s);
+      } catch (err) {
+        console.warn('[TaskDetailPanel] failed to load schedule', err);
+        setSchedule(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load task');
@@ -276,11 +304,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
             ? pathParts.slice(workspaceIndex + 2).join('/')
             : d.path;
 
-        const response = await readWorkspaceFile(
-          agentId,
-          relativePath,
-          agentId, // requestingAgentId - using same agent for simplicity
-        );
+        const response = await readWorkspaceFile(agentId, relativePath);
 
         if ('error' in response) {
           setError(`Failed to read file: ${response.error}`);
@@ -321,6 +345,46 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
       setError(err instanceof Error ? err.message : 'Failed to re-plan task');
     } finally {
       setIsReplanning(false);
+    }
+  }
+
+  /**
+   * Pause or resume the recurring schedule
+   */
+  async function handlePauseResume() {
+    if (!schedule()) return;
+    setIsPausingResuming(true);
+    try {
+      const isPaused = schedule()!.status === 'paused';
+      const updated = isPaused
+        ? await resumeTaskSchedule(props.taskId)
+        : await pauseTaskSchedule(props.taskId);
+      setSchedule(updated);
+    } catch (err) {
+      console.error('[TaskDetailPanel] failed to pause/resume schedule', err);
+      setError(
+        `Failed to ${schedule()!.status === 'paused' ? 'resume' : 'pause'} schedule`,
+      );
+    } finally {
+      setIsPausingResuming(false);
+    }
+  }
+
+  /**
+   * Stop (remove) the recurring schedule
+   */
+  async function handleStopSchedule() {
+    if (!schedule()) return;
+    if (!confirm('Stop this recurring task? This cannot be undone.')) return;
+    setIsStopping(true);
+    try {
+      await removeTaskSchedule(props.taskId);
+      setSchedule(null);
+    } catch (err) {
+      console.error('[TaskDetailPanel] failed to stop schedule', err);
+      setError('Failed to stop schedule');
+    } finally {
+      setIsStopping(false);
     }
   }
 
@@ -452,6 +516,112 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
               <p class="text-gray-900 dark:text-gray-100">
                 {task()?.description}
               </p>
+            </div>
+          </Show>
+
+          {/* Schedule — only rendered when the task has a recurring
+              schedule. The "View execution history" button appears
+              here so the user can see all the past runs of a
+              recurring task (the panel itself only shows the most
+              recent session). */}
+          <Show when={schedule()}>
+            <div class="rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Recurring schedule
+                </h3>
+                <Show when={props.onViewExecutions}>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                    onClick={() => props.onViewExecutions?.()}
+                    title="See every past run of this recurring task"
+                  >
+                    <History class="w-3.5 h-3.5" />
+                    View execution history
+                  </button>
+                </Show>
+              </div>
+              <ScheduleDisplay
+                schedule={schedule()!}
+                size="md"
+                showStatus={true}
+              />
+              {/* Action buttons for the schedule */}
+              <div class="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  onClick={handlePauseResume}
+                  disabled={isPausingResuming() || isStopping()}
+                  title={
+                    schedule()!.status === 'paused'
+                      ? 'Resume the schedule'
+                      : 'Pause the schedule'
+                  }
+                >
+                  <Show
+                    when={isPausingResuming()}
+                    fallback={
+                      schedule()!.status === 'paused' ? (
+                        <Play class="w-3.5 h-3.5" />
+                      ) : (
+                        <Pause class="w-3.5 h-3.5" />
+                      )
+                    }
+                  >
+                    <span class="w-3.5 h-3.5 inline-block animate-spin">⟳</span>
+                  </Show>
+                  {schedule()!.status === 'paused' ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-red-300 dark:border-red-600 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  onClick={handleStopSchedule}
+                  disabled={isPausingResuming() || isStopping()}
+                  title="Stop and remove this recurring schedule"
+                >
+                  <Show
+                    when={isStopping()}
+                    fallback={<Square class="w-3.5 h-3.5" />}
+                  >
+                    <span class="w-3.5 h-3.5 inline-block animate-spin">⟳</span>
+                  </Show>
+                  Stop
+                </button>
+              </div>
+              <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <div>
+                  <span class="text-gray-500 dark:text-gray-500">
+                    Next run:
+                  </span>{' '}
+                  <span class="font-mono">
+                    {new Date(schedule()!.nextRunAt).toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span class="text-gray-500 dark:text-gray-500">
+                    Runs so far:
+                  </span>{' '}
+                  <span class="font-mono">{schedule()!.executionCount}</span>
+                  {' / '}
+                  <span class="font-mono">
+                    {schedule()!.maxExecutions === 9999
+                      ? '∞'
+                      : schedule()!.maxExecutions}
+                  </span>
+                </div>
+                <Show when={schedule()!.lastRunAt}>
+                  <div class="col-span-2">
+                    <span class="text-gray-500 dark:text-gray-500">
+                      Last run:
+                    </span>{' '}
+                    <span class="font-mono">
+                      {new Date(schedule()!.lastRunAt!).toLocaleString()}
+                    </span>
+                  </div>
+                </Show>
+              </div>
             </div>
           </Show>
 

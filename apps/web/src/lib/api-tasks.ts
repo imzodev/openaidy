@@ -4,6 +4,16 @@
 
 import { API_BASE } from './api';
 import { getStoredToken } from './auth-token';
+import type {
+  ScheduleInput,
+  ReplanPolicy,
+  TaskScheduleDto,
+  TaskExecutionHistoryDto,
+  CreateTaskScheduleInput,
+} from './types';
+
+type TaskSchedule = TaskScheduleDto;
+type TaskExecutionHistoryItem = TaskExecutionHistoryDto;
 
 function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   const token = getStoredToken();
@@ -121,13 +131,21 @@ export type KanbanBoard = {
 };
 
 /**
- * Create task input
+ * Create task input.
+ *
+ * `schedule` uses the same `CreateTaskScheduleInput` shape as the
+ * dedicated `POST /api/tasks/:taskId/schedule` endpoint. The server
+ * expects an envelope, not the bare `ScheduleInput` discriminated
+ * union, so the `TaskModal` wraps the editor's `ScheduleInput` in
+ * `{ schedule: ... }` before posting. See
+ * `packages/shared-types/src/task-schedules.ts`.
  */
 export type CreateTaskInput = {
   title?: string;
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
+  schedule?: CreateTaskScheduleInput;
   agents?: Array<{
     agentId: string;
     role?: AgentRole;
@@ -183,7 +201,7 @@ type ApiResult<T> = ApiSuccess<T> | ApiError;
  * Fetch Kanban board (tasks grouped by status)
  */
 export async function fetchTasksKanban(): Promise<KanbanBoard> {
-  const response = await apiFetch(`${API_BASE}/tasks/kanban`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/kanban`);
   if (!response.ok) {
     throw new Error(`Failed to fetch kanban board: ${response.statusText}`);
   }
@@ -197,8 +215,8 @@ export async function listTasks(
   status?: TaskStatus,
 ): Promise<{ items: Task[] }> {
   const url = status
-    ? `${API_BASE}/tasks?status=${status}`
-    : `${API_BASE}/tasks`;
+    ? `${API_BASE}/api/tasks?status=${status}`
+    : `${API_BASE}/api/tasks`;
   const response = await apiFetch(url);
   if (!response.ok) {
     throw new Error(`Failed to list tasks: ${response.statusText}`);
@@ -210,7 +228,7 @@ export async function listTasks(
  * Get a task by ID with details
  */
 export async function getTask(id: string): Promise<ApiResult<TaskWithDetails>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`);
   return response.json();
 }
 
@@ -220,7 +238,7 @@ export async function getTask(id: string): Promise<ApiResult<TaskWithDetails>> {
 export async function createTask(
   input: CreateTaskInput,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -235,7 +253,7 @@ export async function updateTask(
   id: string,
   input: UpdateTaskInput,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -250,7 +268,7 @@ export async function updateTaskStatus(
   id: string,
   status: TaskStatus,
 ): Promise<ApiResult<Task>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}/status`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -262,7 +280,7 @@ export async function updateTaskStatus(
  * Delete a task
  */
 export async function deleteTask(id: string): Promise<ApiResult<true>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${id}`, {
     method: 'DELETE',
   });
   return response.json();
@@ -275,7 +293,7 @@ export async function assignAgents(
   taskId: string,
   agents: Array<{ agentId: string; role?: AgentRole }>,
 ): Promise<ApiResult<TaskAgent[]>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/agents`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ agents }),
@@ -291,7 +309,7 @@ export async function removeAgent(
   agentId: string,
 ): Promise<ApiResult<true>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${taskId}/agents/${agentId}`,
+    `${API_BASE}/api/tasks/${taskId}/agents/${agentId}`,
     {
       method: 'DELETE',
     },
@@ -311,7 +329,7 @@ export async function getTaskProgress(taskId: string): Promise<
     pending: number;
   }>
 > {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/progress`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/progress`);
   return response.json();
 }
 
@@ -321,7 +339,7 @@ export async function getTaskProgress(taskId: string): Promise<
 export async function listSubtasks(
   taskId: string,
 ): Promise<{ items: Subtask[] }> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/subtasks`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/subtasks`);
   if (!response.ok) {
     throw new Error(`Failed to list subtasks: ${response.statusText}`);
   }
@@ -336,7 +354,7 @@ export async function createSubtask(
   input: CreateSubtaskInput,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${input.taskId}/subtasks`,
+    `${API_BASE}/api/tasks/${input.taskId}/subtasks`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -353,10 +371,40 @@ export async function updateSubtaskStatus(
   id: string,
   status: SubtaskStatus,
 ): Promise<ApiResult<Subtask>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${id}/status`, {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
+  });
+  return response.json();
+}
+
+/**
+ * Edit a subtask's title/description/order after planning.
+ */
+export async function updateSubtask(
+  id: string,
+  updates: { title?: string; description?: string; orderIndex?: number },
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  return response.json();
+}
+
+/**
+ * (Re)assign an agent to a subtask.
+ */
+export async function assignSubtaskAgent(
+  id: string,
+  agentId: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId }),
   });
   return response.json();
 }
@@ -367,7 +415,7 @@ export async function updateSubtaskStatus(
 export async function executeTask(
   taskId: string,
 ): Promise<ApiResult<{ sessionId: string }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/execute`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/execute`, {
     method: 'POST',
   });
   return response.json();
@@ -379,9 +427,12 @@ export async function executeTask(
 export async function executeSubtask(
   subtaskId: string,
 ): Promise<ApiResult<{ sessionId: string }>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${subtaskId}/execute`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/execute`,
+    {
+      method: 'POST',
+    },
+  );
   return response.json();
 }
 
@@ -391,7 +442,7 @@ export async function executeSubtask(
 export async function getTaskSession(
   taskId: string,
 ): Promise<ApiResult<{ sessionId: string | null }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/session`);
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/session`);
   return response.json();
 }
 
@@ -403,7 +454,7 @@ export async function completeSubtask(
   result?: string,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(
-    `${API_BASE}/subtasks/${subtaskId}/complete`,
+    `${API_BASE}/api/subtasks/${subtaskId}/complete`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -419,7 +470,9 @@ export async function completeSubtask(
 export async function getSubtaskSession(
   subtaskId: string,
 ): Promise<ApiResult<{ sessionId: string | null }>> {
-  const response = await apiFetch(`${API_BASE}/subtasks/${subtaskId}/session`);
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/session`,
+  );
   return response.json();
 }
 
@@ -430,7 +483,7 @@ export async function getSubtaskSession(
 export async function planTask(
   taskId: string,
 ): Promise<ApiResult<{ subtasks: Subtask[] }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/plan`, {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/plan`, {
     method: 'POST',
   });
   return response.json();
@@ -444,6 +497,156 @@ export async function replanTask(
   taskId: string,
 ): Promise<ApiResult<{ subtasks: Subtask[] }>> {
   return planTask(taskId);
+}
+
+// ── Recurring Task Schedules ──────────────────────────────────────────────────
+//
+// All schedule-related types are re-exported from `./types` (which
+// re-exports them from `@openaidy/shared-types`). Do NOT redeclare them
+// here — the API contract and the web client share the same source.
+export type {
+  ScheduleInput,
+  SchedulePreset,
+  TaskScheduleStatus,
+  ReplanPolicy,
+  TaskScheduleDto as TaskSchedule,
+  TaskExecutionHistoryStatus,
+  TaskExecutionHistoryDto as TaskExecutionHistoryItem,
+  UpdateTaskScheduleInput,
+  ListTaskExecutionsFilters,
+  PaginatedTaskExecutions,
+} from './types';
+
+/**
+ * Get the schedule for a task. Returns null when no schedule exists.
+ */
+export async function getTaskSchedule(
+  taskId: string,
+): Promise<TaskSchedule | null> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`);
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(`Failed to fetch task schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Create or update a task schedule. Uses POST when no schedule exists,
+ * PATCH when one already does.
+ */
+export async function createOrUpdateTaskSchedule(
+  taskId: string,
+  input: {
+    schedule: ScheduleInput;
+    maxExecutions?: number;
+    replanPolicy?: ReplanPolicy;
+    status?: 'active' | 'paused';
+  },
+): Promise<TaskSchedule> {
+  const existing = await getTaskSchedule(taskId);
+  const method = existing ? 'PATCH' : 'POST';
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to ${existing ? 'update' : 'create'} task schedule: ${response.status}`,
+    );
+  }
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Remove a task's schedule (DELETE, idempotent).
+ */
+export async function removeTaskSchedule(taskId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/schedule`, {
+    method: 'DELETE',
+  });
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Failed to remove schedule: ${response.status}`);
+  }
+}
+
+/**
+ * Pause a task schedule. Returns the updated schedule.
+ */
+export async function pauseTaskSchedule(taskId: string): Promise<TaskSchedule> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/pause`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to pause schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Resume a paused task schedule. Returns the updated schedule.
+ */
+export async function resumeTaskSchedule(
+  taskId: string,
+): Promise<TaskSchedule> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/resume`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to resume schedule: ${response.status}`);
+  const json = await response.json();
+  return json.schedule;
+}
+
+/**
+ * Trigger an immediate execution of a scheduled task.
+ * Returns the new history row ID.
+ */
+export async function triggerTaskNow(
+  taskId: string,
+): Promise<{ historyId: string }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/trigger`,
+    { method: 'POST' },
+  );
+  if (!response.ok)
+    throw new Error(`Failed to trigger task: ${response.status}`);
+  return response.json();
+}
+
+/**
+ * List execution history for a task schedule, newest first.
+ */
+export async function listTaskExecutions(
+  taskId: string,
+  filters: { status?: string; limit?: number; offset?: number } = {},
+): Promise<{
+  items: TaskExecutionHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.limit !== undefined) params.set('limit', String(filters.limit));
+  if (filters.offset !== undefined)
+    params.set('offset', String(filters.offset));
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/schedule/executions?${params.toString()}`,
+  );
+  if (!response.ok)
+    throw new Error(`Failed to list executions: ${response.status}`);
+  const json = await response.json();
+  return {
+    items: (json.executions ?? []) as TaskExecutionHistoryItem[],
+    total: json.total as number,
+    limit: json.limit as number,
+    offset: json.offset as number,
+  };
 }
 
 // ── Deliverables ──────────────────────────────────────────────────────────────
@@ -490,7 +693,9 @@ export type Deliverable = {
 export async function listDeliverables(
   taskId: string,
 ): Promise<ApiResult<{ items: Deliverable[] }>> {
-  const response = await apiFetch(`${API_BASE}/tasks/${taskId}/deliverables`);
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/deliverables`,
+  );
   return response.json();
 }
 
@@ -512,7 +717,7 @@ export async function updateDeliverable(
   }>,
 ): Promise<ApiResult<Deliverable>> {
   const response = await apiFetch(
-    `${API_BASE}/tasks/${taskId}/deliverables/${id}`,
+    `${API_BASE}/api/tasks/${taskId}/deliverables/${id}`,
     {
       method: 'PATCH',
       body: JSON.stringify(input),

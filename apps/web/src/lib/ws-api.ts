@@ -55,6 +55,7 @@ export async function listSessions(): Promise<{ items: Session[] }> {
         items: response.payload.sessions.map((session) => ({
           id: session.id,
           title: session.title ?? 'Untitled Session',
+          type: session.type,
           status: session.status,
           agentId: session.agentId,
           createdAt: session.createdAt,
@@ -126,6 +127,7 @@ export async function listMessages(
             createdAt: string;
             metadata?: Record<string, unknown>;
             reasoningContent?: string;
+            attachments?: SessionMessage['attachments'];
           }) => ({
             id: msg.id,
             sessionId: msg.sessionId,
@@ -136,6 +138,9 @@ export async function listMessages(
             metadata: msg.metadata,
             ...(msg.reasoningContent
               ? { reasoningContent: msg.reasoningContent }
+              : {}),
+            ...(msg.attachments?.length
+              ? { attachments: msg.attachments }
               : {}),
           }),
         ),
@@ -156,6 +161,9 @@ export async function submitMessage(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.attachmentIds?.length
+          ? { attachmentIds: input.attachmentIds }
+          : {}),
       });
 
       if (response.type !== 'session.message') {
@@ -227,6 +235,9 @@ export async function submitMessageStreaming(
         agentId: input.agentId,
         providerId: input.providerId,
         modelId: input.modelId,
+        ...(input.attachmentIds?.length
+          ? { attachmentIds: input.attachmentIds }
+          : {}),
       });
 
       if (
@@ -282,6 +293,52 @@ export async function submitMessageStreaming(
     },
     () => submitMessageRest(sessionId, input),
   );
+}
+
+/**
+ * Snapshot of an in-progress run's live stream, returned by
+ * {@link resumeSessionStream}. `active: false` means there is nothing to resume.
+ */
+export type ResumeStreamResult = {
+  active: boolean;
+  runId?: string;
+  agentId?: string;
+  providerId?: string;
+  modelId?: string;
+  content?: string;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
+  activity?: {
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  };
+};
+
+/**
+ * Ask the server for the live state of any in-progress run on this session so a
+ * reconnected / re-foregrounded client can resume streaming instead of showing
+ * a stalled UI (issue #450). WS-only — returns null if there's no live socket
+ * (the caller then falls back to refetching persisted messages).
+ */
+export async function resumeSessionStream(
+  sessionId: string,
+): Promise<ResumeStreamResult | null> {
+  const client = activeClient;
+  if (!client || !client.isConnected()) return null;
+  try {
+    const response = await client.sendRequest<{
+      type: string;
+      payload: ResumeStreamResult & { sessionId: string };
+    }>('session.stream.resume', { sessionId });
+    if (response?.type !== 'session.stream.resume') return null;
+    return response.payload;
+  } catch {
+    return null;
+  }
 }
 
 export async function listAgents(): Promise<{ items: Agent[] }> {
@@ -343,6 +400,7 @@ export async function listRuns(
             errorCode?: string;
             errorMessage?: string;
             createdAt: string;
+            firstMessageId?: string;
           }) => ({
             id: run.id,
             sessionId: run.sessionId,
@@ -354,6 +412,9 @@ export async function listRuns(
             ...(run.finishReason ? { finishReason: run.finishReason } : {}),
             ...(run.errorCode ? { errorCode: run.errorCode } : {}),
             ...(run.errorMessage ? { errorMessage: run.errorMessage } : {}),
+            ...(run.firstMessageId
+              ? { firstMessageId: run.firstMessageId }
+              : {}),
           }),
         ),
       };

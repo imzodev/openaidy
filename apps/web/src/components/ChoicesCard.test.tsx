@@ -4,8 +4,10 @@ import { ChoicesCard } from './ChoicesCard';
 
 afterEach(() => cleanup());
 
+// Stub the icons ChoicesCard renders. Plain-object factory
+// (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
-  X: () => <span data-testid="dismiss-icon" />,
+  X: () => <span data-testid="x" />,
 }));
 
 describe('ChoicesCard', () => {

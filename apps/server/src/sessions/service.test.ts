@@ -3,6 +3,7 @@ import { SessionMessageService } from './service';
 import { BuiltinToolRegistry } from '../tools/registry';
 import { AgentRegistry } from '../agents/registry';
 import type { BuiltinTool } from '@openaidy/runtime';
+import { ok } from '@openaidy/runtime';
 import type {
   ProviderRegistryService,
   ProviderSelectionService,
@@ -179,12 +180,10 @@ describe('SessionMessageService — builtin tool execution guard', () => {
 function makeServiceWithInvokeResult(content: string | null) {
   const invoke =
     content === null
-      ? vi
-          .fn()
-          .mockResolvedValue({
-            ok: false,
-            error: { code: 'provider.error', message: 'fail' },
-          })
+      ? vi.fn().mockResolvedValue({
+          ok: false,
+          error: { code: 'provider.error', message: 'fail' },
+        })
       : vi.fn().mockResolvedValue({ ok: true, value: { content } });
 
   return {
@@ -335,5 +334,546 @@ describe('SessionMessageService.updateSessionTitle', () => {
       'Any title',
     );
     expect(result).toBeNull();
+  });
+});
+
+// ============================================================================
+// Agentic tool-call loop — round-exhaustion handling
+//
+// Regression coverage for the "agent silently stops mid-task, user must say
+// 'continue'" bug: when the loop exhausted MAX_TOOL_ROUNDS right after the last
+// round's tool calls, it exited before the model could turn those results into
+// an answer and persisted an EMPTY assistant message with finish_reason
+// `tool_calls`. (Diagnosed from run Ozpbnm8Y… — exactly 10 tool-call rounds
+// then a blank final message.)
+// ============================================================================
+
+/** Build a streaming-capable service wired to a scripted invokeStream mock. */
+function makeStreamingService(opts: {
+  maxToolRounds: number;
+  maxToolOutputChars?: number;
+  maxContextTokens?: number;
+  historyToolResultsKept?: number;
+  /** Custom executor for the 'echo' tool (e.g. to return an oversized result). */
+  echoExecute?: () => Promise<{ ok: true; content: string }>;
+  invokeStream: (request: {
+    tools?: unknown[];
+  }) => AsyncGenerator<unknown, void, unknown>;
+}) {
+  const agents = new AgentRegistry();
+  agents.replaceAll([makeAgent(['echo'])]);
+  const builtinTools = new BuiltinToolRegistry();
+  builtinTools.register(makeTool('echo', opts.echoExecute));
+
+  const invokeStream = vi.fn(opts.invokeStream);
+
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+
+  const service = new SessionMessageService({
+    providers: {
+      registry: {
+        getDefault: vi.fn(),
+        getEntry: vi.fn(),
+      } as unknown as ProviderRegistryService,
+      selection: {} as unknown as ProviderSelectionService,
+      invocation: {
+        invoke: vi.fn(),
+        invokeStream,
+      } as unknown as ModelInvocationService,
+    },
+    logger: logger as unknown as import('fastify').FastifyBaseLogger,
+    agents,
+    builtinTools,
+    maxToolRounds: opts.maxToolRounds,
+    ...(opts.maxToolOutputChars !== undefined && {
+      maxToolOutputChars: opts.maxToolOutputChars,
+    }),
+    ...(opts.maxContextTokens !== undefined && {
+      maxContextTokens: opts.maxContextTokens,
+    }),
+    ...(opts.historyToolResultsKept !== undefined && {
+      historyToolResultsKept: opts.historyToolResultsKept,
+    }),
+  });
+
+  return { service, invokeStream, logger };
+}
+
+async function submit(
+  service: SessionMessageService,
+  sessionId: string,
+  content = 'do the thing',
+) {
+  return service.submitMessageStreaming({
+    sessionId,
+    role: 'user',
+    content,
+    agentId: 'agent1',
+    providerId: 'mock',
+    modelId: 'mock',
+    onStreamEvent: () => {},
+  });
+}
+
+describe('SessionMessageService — agentic loop round exhaustion', () => {
+  it('forces a final text answer (tools withheld on the last round) instead of ending empty', async () => {
+    // Model asks for a tool on every round where tools are offered. Without the
+    // fix, all rounds would be tool calls and the run would end with a blank
+    // assistant message. With the fix, the final round is invoked WITHOUT tools,
+    // forcing a text response.
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 3,
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: {},
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'FINAL_ANSWER' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Loop');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Non-empty, real answer — not a blank bubble.
+    expect(result.assistantMessage.content).toBe('FINAL_ANSWER');
+    // Exactly maxToolRounds invocations; the last one withheld tools.
+    expect(invokeStream).toHaveBeenCalledTimes(3);
+    const lastReq = invokeStream.mock.calls[2]![0] as { tools?: unknown[] };
+    expect(lastReq.tools ?? []).toHaveLength(0);
+    const firstReq = invokeStream.mock.calls[0]![0] as { tools?: unknown[] };
+    expect((firstReq.tools ?? []).length).toBeGreaterThan(0);
+  });
+
+  it('substitutes a fallback message when the model reports finish_reason tool_calls but emits no tool call and no content', async () => {
+    // Reproduces the exact seq-33 degenerate turn: finish_reason `tool_calls`
+    // with zero parsed tool calls and empty content. Must never persist a blank
+    // assistant message.
+    const { service } = makeStreamingService({
+      maxToolRounds: 5,
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+      },
+    });
+
+    const session = await service.createSession('Empty turn');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.assistantMessage.content.trim().length).toBeGreaterThan(0);
+    expect(result.assistantMessage.content.toLowerCase()).toContain('continue');
+  });
+});
+
+// ============================================================================
+// Agentic tool-call loop — tool-output context cap (issue #436)
+// ============================================================================
+
+describe('SessionMessageService — tool-output context cap', () => {
+  it('truncates an oversized tool result in the model context but persists it in full', async () => {
+    const HUGE = 'X'.repeat(500);
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      maxToolOutputChars: 100,
+      echoExecute: async () => ({ ok: true as const, content: HUGE }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          // Final round: capture what the model actually sees, then answer.
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Cap');
+    const sessionId = (session as { id: string }).id;
+    const result = await submit(service, sessionId);
+    expect(result.ok).toBe(true);
+
+    // The context copy the model received is truncated with a notice.
+    const contextToolMsg = finalRoundMessages.find((m) => m.role === 'tool');
+    expect(contextToolMsg).toBeDefined();
+    expect(contextToolMsg!.content).toContain('truncated for context');
+    expect(contextToolMsg!.content).not.toContain(HUGE);
+    // Cap (100) + the notice — well under the raw 500 chars.
+    expect(contextToolMsg!.content.length).toBeLessThan(HUGE.length);
+
+    // The persisted transcript keeps the full, untruncated result.
+    const persisted = await service.listMessages(sessionId);
+    const persistedToolMsg = (
+      persisted as Array<{ role: string; content: string }>
+    ).find((m) => m.role === 'tool');
+    expect(persistedToolMsg).toBeDefined();
+    expect(persistedToolMsg!.content).toBe(HUGE);
+  });
+
+  it('leaves a tool result under the cap untouched', async () => {
+    const SMALL = 'ok';
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      maxToolOutputChars: 100,
+      echoExecute: async () => ({ ok: true as const, content: SMALL }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('No cap');
+    await submit(service, (session as { id: string }).id);
+
+    const toolMsg = finalRoundMessages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe(SMALL);
+    expect(toolMsg?.content).not.toContain('truncated');
+  });
+});
+
+// ============================================================================
+// Agentic tool-call loop — context-window compaction (issue #437)
+// ============================================================================
+
+describe('SessionMessageService — context-window compaction', () => {
+  it('elides older tool-result bodies in the model context when over the token budget', async () => {
+    const BIG = 'Y'.repeat(400); // > the 200-char elide threshold
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      // Tiny budget so accumulated tool output must be compacted…
+      maxContextTokens: 20,
+      // …but the per-result cap is high, so #436 truncation is NOT what fires.
+      maxToolOutputChars: 100_000,
+      echoExecute: async () => ({ ok: true as const, content: BIG }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: {},
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Compact');
+    const sessionId = (session as { id: string }).id;
+    const result = await submit(service, sessionId);
+    expect(result.ok).toBe(true);
+
+    // At least one older tool result was collapsed to the elision notice…
+    const toolMsgs = finalRoundMessages.filter((m) => m.role === 'tool');
+    const elided = toolMsgs.filter((m) =>
+      m.content.includes('elided to fit context'),
+    );
+    expect(elided.length).toBeGreaterThan(0);
+    // …and elided by #437 (compaction), not #436 (per-result truncation).
+    expect(elided[0]!.content).not.toContain('truncated for context');
+
+    // The persisted transcript keeps every tool result in full.
+    const persisted = (await service.listMessages(sessionId)) as Array<{
+      role: string;
+      content: string;
+    }>;
+    const persistedTool = persisted.filter((m) => m.role === 'tool');
+    expect(persistedTool.length).toBeGreaterThan(0);
+    for (const m of persistedTool) expect(m.content).toBe(BIG);
+  });
+
+  it('leaves history untouched when under the token budget', async () => {
+    const SMALL = 'z'.repeat(300);
+    let finalRoundMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      maxContextTokens: 1_000_000, // effectively unlimited
+      maxToolOutputChars: 100_000,
+      echoExecute: async () => ({ ok: true as const, content: SMALL }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          finalRoundMessages =
+            (request as { messages?: Array<{ role: string; content: string }> })
+              .messages ?? [];
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('No compact');
+    await submit(service, (session as { id: string }).id);
+
+    const toolMsg = finalRoundMessages.find((m) => m.role === 'tool');
+    expect(toolMsg?.content).toBe(SMALL);
+    expect(toolMsg?.content).not.toContain('elided');
+  });
+});
+
+// ============================================================================
+// Cross-run history — stale tool-output trimming (issue #438)
+// ============================================================================
+
+describe('SessionMessageService — stale history tool-output trimming', () => {
+  it('summarizes older prior-run tool results on replay but keeps the most recent full', async () => {
+    const BIG = 'H'.repeat(600); // > the 500-char summarize threshold
+    let replayedMessages: Array<{ role: string; content: string }> = [];
+
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      historyToolResultsKept: 1, // keep only the most recent tool result full
+      maxContextTokens: 10_000_000, // don't let #437 (budget) interfere
+      maxToolOutputChars: 100_000, // don't let #436 (per-result cap) interfere
+      echoExecute: async () => ({ ok: true as const, content: BIG }),
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        const msgs =
+          (request as { messages?: Array<{ role: string; content: string }> })
+            .messages ?? [];
+        const lastUser = [...msgs].reverse().find((m) => m.role === 'user');
+        // Second submit: capture the replayed history and answer immediately.
+        if (lastUser?.content.includes('inspect')) {
+          replayedMessages = msgs;
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+          return;
+        }
+        // First submit: chain tool calls to populate two prior tool results.
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: {},
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('History');
+    const sessionId = (session as { id: string }).id;
+
+    // Submit 1: produces two tool results (rounds 0 and 1), persisted.
+    await submit(service, sessionId, 'populate the task');
+    // Submit 2: replays history — trimming should apply.
+    await submit(service, sessionId, 'inspect now');
+
+    const toolMsgs = replayedMessages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(2);
+    // Oldest is summarized…
+    expect(toolMsgs[0]!.content).toContain('Prior tool result elided');
+    expect(toolMsgs[0]!.content).not.toBe(BIG);
+    // …most recent kept full.
+    expect(toolMsgs[1]!.content).toBe(BIG);
+
+    // Transcript keeps both results in full regardless.
+    const persisted = (await service.listMessages(sessionId)) as Array<{
+      role: string;
+      content: string;
+    }>;
+    const persistedTool = persisted.filter((m) => m.role === 'tool');
+    expect(persistedTool.length).toBe(2);
+    for (const m of persistedTool) expect(m.content).toBe(BIG);
+  });
+});
+
+// ============================================================================
+// Agentic loop — degenerate empty-turn retry (issue #439)
+// ============================================================================
+
+describe('SessionMessageService — degenerate empty-turn retry', () => {
+  it('retries a finish_reason=tool_calls turn that emits no tool call and no content, then recovers', async () => {
+    let calls = 0;
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 3,
+      invokeStream: async function* () {
+        const n = calls++;
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (n === 0) {
+          // Degenerate: signals tool_calls but streams nothing parseable.
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'recovered' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Retry');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Recovered on the retry — a real answer, not the fallback message.
+    expect(result.assistantMessage.content).toBe('recovered');
+    // Original + one retry (retry does not consume a tool round).
+    expect(invokeStream).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back after exhausting retries when the turn stays degenerate', async () => {
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 5,
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+      },
+    });
+
+    const session = await service.createSession('Retry exhausted');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Never loops forever: original + MAX_EMPTY_TURN_RETRIES (2) = 3 calls.
+    expect(invokeStream).toHaveBeenCalledTimes(3);
+    // Then the #435 fallback keeps the user unblocked.
+    expect(result.assistantMessage.content.toLowerCase()).toContain('continue');
+  });
+});
+
+// ============================================================================
+// Agentic loop — context observability (issue #440)
+// ============================================================================
+
+describe('SessionMessageService — context observability', () => {
+  it('logs per-round context size and a per-run context summary', async () => {
+    const { service, logger } = makeStreamingService({
+      maxToolRounds: 3,
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: { id: 'tc_1', name: 'echo', arguments: {} },
+          });
+          yield ok({
+            type: 'stream.usage',
+            usage: { promptTokens: 123, completionTokens: 5, totalTokens: 128 },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Obs');
+    const result = await submit(service, (session as { id: string }).id);
+    expect(result.ok).toBe(true);
+
+    // Per-round debug log fired at least once.
+    const roundLogs = logger.debug.mock.calls.filter(
+      (c) => c[1] === 'Agentic loop round context size',
+    );
+    expect(roundLogs.length).toBeGreaterThan(0);
+    expect(roundLogs[0]![0]).toMatchObject({
+      round: expect.any(Number),
+      estTokens: expect.any(Number),
+      messageCount: expect.any(Number),
+    });
+
+    // Exactly one per-run summary, with the fields needed to tune the caps.
+    const summaryLogs = logger.info.mock.calls.filter(
+      (c) => c[1] === 'Agentic run context summary',
+    );
+    expect(summaryLogs).toHaveLength(1);
+    const summary = summaryLogs[0]![0] as {
+      roundsUsed: number;
+      peakPromptTokens: number;
+      peakEstTokens: number;
+      compactionFired: boolean;
+    };
+    expect(summary.roundsUsed).toBeGreaterThan(0);
+    expect(summary.peakPromptTokens).toBe(123); // captured from stream.usage
+    expect(summary.peakEstTokens).toBeGreaterThan(0);
+    expect(summary.compactionFired).toBe(false);
+  });
+
+  it('warns when a round nears the token budget', async () => {
+    const { service, logger } = makeStreamingService({
+      maxToolRounds: 2,
+      maxContextTokens: 10, // tiny, so even the system prompt is "near" it
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.content_delta', delta: 'done' });
+        yield ok({ type: 'stream.finished', finishReason: 'stop' });
+      },
+    });
+
+    const session = await service.createSession('Near budget');
+    await submit(service, (session as { id: string }).id);
+
+    const nearWarnings = logger.warn.mock.calls.filter(
+      (c) => c[1] === 'Agentic loop request nearing the context token budget',
+    );
+    expect(nearWarnings.length).toBeGreaterThan(0);
   });
 });

@@ -6,11 +6,12 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   appConfigSchema,
   envSecret,
   type AppProviderConfig,
+  type ChannelConfig,
   type McpServerConfig,
   type OpenAidyAppConfig,
   type ProviderConfig,
@@ -20,38 +21,51 @@ import type { AgentRegistry } from '../agents';
 import type { Agent } from '../agents';
 import type { ProviderServices } from '../providers';
 import { createProviderConfigService } from '../providers/config-service';
-
-export type AppConfigIssue = {
-  scope: 'provider';
-  id: string;
-  code: string;
-  message: string;
-};
-
-export type AppConfigStatus = {
-  issues: AppConfigIssue[];
-};
-
-export type AppConfigServiceOptions = {
-  configPath: string;
-  templatePath: string;
-  providers: ProviderServices;
-  agents: AgentRegistry;
-};
+import type {
+  AppConfigIssue,
+  AppConfigServiceOptions,
+  AppConfigStatus,
+} from './types';
+import type { CredentialProvider } from '@openaidy/shared-types';
+import {
+  MCP_SEED_MANIFEST_FILE,
+  reconcilePreinstalledMcpServers,
+  readMcpSeedManifest,
+  writeMcpSeedManifest,
+} from '../mcp/preinstall';
 
 export class AppConfigService {
   private readonly configPath: string;
   private readonly templatePath: string;
   private readonly providers: ProviderServices;
   private readonly agents: AgentRegistry;
+  private readonly credentialProvider: CredentialProvider | undefined;
   private currentConfig: OpenAidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
+  private channelReconciler:
+    | ((channels: ChannelConfig[] | undefined) => void | Promise<void>)
+    | undefined;
 
   constructor(options: AppConfigServiceOptions) {
     this.configPath = options.configPath;
     this.templatePath = options.templatePath;
     this.providers = options.providers;
     this.agents = options.agents;
+    this.credentialProvider = options.credentialProvider;
+  }
+
+  /**
+   * Register a callback that syncs the live channel registry to the persisted
+   * `config.channels` after every {@link save}. Set once at startup (the
+   * registry is built after this service is constructed, hence a setter rather
+   * than a constructor option). Without it, a channel added/removed via the
+   * config PUT would not take effect until a restart. Kept as an injected
+   * callback so this config module stays free of channel/WhatsApp internals.
+   */
+  setChannelReconciler(
+    reconcile: (channels: ChannelConfig[] | undefined) => void | Promise<void>,
+  ): void {
+    this.channelReconciler = reconcile;
   }
 
   getConfig(): OpenAidyAppConfig {
@@ -82,6 +96,66 @@ export class AppConfigService {
     };
   }
 
+  /**
+   * Add any preinstalled MCP servers from the config template that this install
+   * doesn't have yet. The template is only copied on first run, so without this
+   * a server added to the template later would never reach existing installs.
+   *
+   * A newly shipped server is added; a preinstalled server whose template
+   * definition changed is updated **only if the user hasn't modified it**;
+   * servers the user deleted are remembered and not re-added; user-created or
+   * user-edited servers are never clobbered. Persists the config when a server
+   * is added or updated, and the manifest whenever it changes. Returns the ids
+   * touched. Must be called after {@link load}.
+   */
+  async reconcilePreinstalledMcpServers(): Promise<{
+    added: string[];
+    updated: string[];
+  }> {
+    const templateServers = this.readTemplateMcpServers();
+    if (templateServers.length === 0) return { added: [], updated: [] };
+
+    const manifestPath = join(dirname(this.configPath), MCP_SEED_MANIFEST_FILE);
+    const manifest = readMcpSeedManifest(manifestPath);
+
+    const result = reconcilePreinstalledMcpServers(
+      this.getMcpServers(),
+      templateServers,
+      manifest,
+    );
+
+    if (result.added.length > 0 || result.updated.length > 0) {
+      // Persist directly rather than via save(): load() already ran
+      // applyConfig (providers, agents), and only mcpServers changed — which
+      // applyConfig doesn't touch — so a second full apply would be wasted work
+      // at startup. Validate, write, and refresh the in-memory config.
+      const nextConfig = appConfigSchema.parse({
+        ...this.getConfig(),
+        mcpServers: result.servers,
+      });
+      this.writeConfigFile(nextConfig);
+      this.currentConfig = nextConfig;
+    }
+    if (result.changed) {
+      writeMcpSeedManifest(manifestPath, result.manifest);
+    }
+
+    return { added: result.added, updated: result.updated };
+  }
+
+  /** Read the `mcpServers` shipped in the config template, if any. */
+  private readTemplateMcpServers(): McpServerConfig[] {
+    if (!existsSync(this.templatePath)) return [];
+    try {
+      const parsed = appConfigSchema.parse(
+        JSON.parse(readFileSync(this.templatePath, 'utf-8')),
+      );
+      return parsed.mcpServers ?? [];
+    } catch {
+      return [];
+    }
+  }
+
   getPaths(): { configPath: string; templatePath: string } {
     return {
       configPath: this.configPath,
@@ -102,6 +176,14 @@ export class AppConfigService {
     this.writeConfigFile(parsed);
     await this.applyConfig(parsed);
     this.currentConfig = parsed;
+    // Sync runtime channels to the freshly-saved config (registers new
+    // channels, disconnects+removes deleted ones) so UI changes take effect
+    // without a restart. applyConfig handles agents/providers; channels are
+    // reconciled here via the injected callback to keep this module decoupled
+    // from channel internals.
+    if (this.channelReconciler) {
+      await this.channelReconciler(parsed.channels);
+    }
     return parsed;
   }
 
@@ -149,7 +231,11 @@ export class AppConfigService {
     this.providers.registry.clear();
     this.issues = [];
 
-    const configService = createProviderConfigService();
+    const configService = createProviderConfigService(
+      this.credentialProvider
+        ? { credentialProvider: this.credentialProvider }
+        : {},
+    );
 
     for (const provider of config.providers) {
       if (!provider.enabled) {
@@ -184,7 +270,9 @@ export class AppConfigService {
       }
 
       const routeConfig: Record<string, unknown> = {
-        modelIds: provider.models.map((model) => model.id),
+        modelIds: provider.models
+          .filter((model) => model.enabled !== false)
+          .map((model) => model.id),
       };
       if (provider.baseUrl !== undefined) {
         routeConfig.baseUrl = provider.baseUrl;
@@ -197,10 +285,18 @@ export class AppConfigService {
       this.providers.registry.register(result.provider, registrationOptions);
     }
 
-    if (this.providers.registry.has(config.defaults.providerId)) {
+    // On a fresh (unconfigured) install both are undefined; only set a default
+    // once a default provider is configured and actually registered.
+    const { providerId: defaultProviderId, modelId: defaultModelId } =
+      config.defaults;
+    if (
+      defaultProviderId !== undefined &&
+      defaultModelId !== undefined &&
+      this.providers.registry.has(defaultProviderId)
+    ) {
       this.providers.registry.setDefault({
-        providerId: config.defaults.providerId,
-        modelId: config.defaults.modelId,
+        providerId: defaultProviderId,
+        modelId: defaultModelId,
       });
     }
   }

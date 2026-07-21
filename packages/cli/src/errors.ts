@@ -1,12 +1,11 @@
 /**
  * CLI Error Model
- * 
+ *
  * Centralized error handling with consistent categories, messages, and exit codes.
  * Designed to support future JSON output while providing clear human-readable messages.
  */
 
 import type { CommandResult } from './types.js';
-import { ExitCodes } from './types.js';
 
 // ============================================================================
 // Error Categories
@@ -20,27 +19,27 @@ export type CLIErrorCategory =
   // Configuration errors
   | 'CONFIG_MISSING'
   | 'CONFIG_INVALID'
-  
+
   // Bootstrap admin errors
   | 'BOOTSTRAP_DISABLED'
   | 'BOOTSTRAP_TOKEN_MISSING'
   | 'BOOTSTRAP_TOKEN_MALFORMED'
   | 'BOOTSTRAP_TOKEN_INVALID'
   | 'BOOTSTRAP_TOKEN_EXPIRED'
-  
+
   // Pairing request errors
   | 'REQUEST_NOT_FOUND'
   | 'REQUEST_ALREADY_APPROVED'
   | 'REQUEST_ALREADY_DENIED'
   | 'REQUEST_EXPIRED'
   | 'REQUEST_NOT_PENDING'
-  
+
   // Argument errors
   | 'ARGUMENT_MISSING'
   | 'ARGUMENT_INVALID'
   | 'COMMAND_UNKNOWN'
   | 'SUBCOMMAND_UNKNOWN'
-  
+
   // System errors
   | 'SERVICE_UNAVAILABLE'
   | 'PERSISTENCE_FAILURE'
@@ -68,10 +67,13 @@ export interface CLIErrorInfo {
 /**
  * Error definitions with default messages and exit codes.
  */
-const ErrorDefinitions: Record<CLIErrorCategory, {
-  defaultMessage: string;
-  exitCode: number;
-}> = {
+const ErrorDefinitions: Record<
+  CLIErrorCategory,
+  {
+    defaultMessage: string;
+    exitCode: number;
+  }
+> = {
   // Configuration errors (exit 5)
   CONFIG_MISSING: {
     defaultMessage: 'Configuration file not found',
@@ -81,7 +83,7 @@ const ErrorDefinitions: Record<CLIErrorCategory, {
     defaultMessage: 'Configuration is invalid',
     exitCode: 5,
   },
-  
+
   // Bootstrap admin errors (exit 1)
   BOOTSTRAP_DISABLED: {
     defaultMessage: 'Bootstrap admin is disabled',
@@ -103,7 +105,7 @@ const ErrorDefinitions: Record<CLIErrorCategory, {
     defaultMessage: 'Bootstrap admin token has expired',
     exitCode: 1,
   },
-  
+
   // Pairing request errors (exit 1)
   REQUEST_NOT_FOUND: {
     defaultMessage: 'Pairing request not found',
@@ -125,7 +127,7 @@ const ErrorDefinitions: Record<CLIErrorCategory, {
     defaultMessage: 'Pairing request is not in pending state',
     exitCode: 1,
   },
-  
+
   // Argument errors (exit 2)
   ARGUMENT_MISSING: {
     defaultMessage: 'Required argument missing',
@@ -143,7 +145,7 @@ const ErrorDefinitions: Record<CLIErrorCategory, {
     defaultMessage: 'Unknown subcommand',
     exitCode: 2,
   },
-  
+
   // System errors (exit 1)
   SERVICE_UNAVAILABLE: {
     defaultMessage: 'Service is unavailable',
@@ -189,9 +191,9 @@ export function createCLIError(
  */
 export function formatCLIError(error: CLIErrorInfo): string {
   const lines: string[] = [];
-  
+
   lines.push(`Error: ${error.message}`);
-  
+
   if (error.details) {
     const hint = getHintFromDetails(error.category, error.details);
     if (hint) {
@@ -199,7 +201,7 @@ export function formatCLIError(error: CLIErrorInfo): string {
       lines.push(hint);
     }
   }
-  
+
   return lines.join('\n');
 }
 
@@ -261,28 +263,32 @@ export function cliError(
  * Create argument missing error.
  */
 export function argMissing(argName: string, usage?: string): CommandResult {
-  return cliError(
-    'ARGUMENT_MISSING',
-    `Missing required argument: ${argName}`,
-    { argument: argName, usage },
-  );
+  return cliError('ARGUMENT_MISSING', `Missing required argument: ${argName}`, {
+    argument: argName,
+    usage,
+  });
 }
 
 /**
  * Create unknown command error.
  */
-export function unknownCommand(command: string, suggestion?: string): CommandResult {
-  return cliError(
-    'COMMAND_UNKNOWN',
-    `Unknown command: ${command}`,
-    { command, suggestion },
-  );
+export function unknownCommand(
+  command: string,
+  suggestion?: string,
+): CommandResult {
+  return cliError('COMMAND_UNKNOWN', `Unknown command: ${command}`, {
+    command,
+    suggestion,
+  });
 }
 
 /**
  * Create unknown subcommand error.
  */
-export function unknownSubcommand(group: string, subcommand: string): CommandResult {
+export function unknownSubcommand(
+  group: string,
+  subcommand: string,
+): CommandResult {
   return cliError(
     'SUBCOMMAND_UNKNOWN',
     `Unknown subcommand: ${group} ${subcommand}`,
@@ -326,17 +332,17 @@ export function mapWorkflowError(code: string, message?: string): CLIErrorInfo {
     BOOTSTRAP_ADMIN_TOKEN_MALFORMED: 'BOOTSTRAP_TOKEN_MALFORMED',
     BOOTSTRAP_ADMIN_TOKEN_INVALID: 'BOOTSTRAP_TOKEN_INVALID',
     BOOTSTRAP_ADMIN_TOKEN_EXPIRED: 'BOOTSTRAP_TOKEN_EXPIRED',
-    
+
     // Pairing errors
     PAIRING_REQUEST_NOT_FOUND: 'REQUEST_NOT_FOUND',
     PAIRING_REQUEST_EXPIRED: 'REQUEST_EXPIRED',
     PAIRING_REQUEST_ALREADY_PROCESSED: 'REQUEST_NOT_PENDING',
-    
+
     // General errors
     INTERNAL_ERROR: 'INTERNAL_ERROR',
     INVALID_INPUT: 'ARGUMENT_INVALID',
   };
-  
+
   const category = mapping[code] || 'INTERNAL_ERROR';
   return createCLIError(category, message);
 }

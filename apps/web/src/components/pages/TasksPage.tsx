@@ -10,6 +10,7 @@ import { Layout } from './Layout';
 import { KanbanBoard } from '../tasks/KanbanBoard';
 import { TaskModal } from '../tasks/TaskModal';
 import { TaskDetailPanel } from '../tasks/TaskDetailPanel';
+import { TaskExecutionsPage } from './TaskExecutionsPage';
 import {
   type Task,
   type TaskStatus,
@@ -18,12 +19,17 @@ import {
   executeTask,
   getTask,
   type CreateTaskInput,
+  type UpdateTaskInput,
   type AgentRole,
 } from '../../lib/api-tasks';
 import { listAgents, type Agent } from '../../lib/api';
 import { useEscapeKey } from '../settings/hooks';
 
-export function TasksPage() {
+export type TasksPageProps = {
+  onOpenSession: (sessionId: string) => void;
+};
+
+export function TasksPage(props: TasksPageProps) {
   const [refreshTrigger, setRefreshTrigger] = createSignal(0);
   const [error, setError] = createSignal<string | null>(null);
   const [isModalOpen, setIsModalOpen] = createSignal(false);
@@ -36,6 +42,12 @@ export function TasksPage() {
     new Set(),
   );
   const [detailTaskId, setDetailTaskId] = createSignal<string | null>(null);
+  // Sub-view inside the task detail overlay. When the user clicks
+  // "View execution history" we switch to `executions` (still bound
+  // to the same `detailTaskId`). Going back returns to `detail`.
+  const [detailView, setDetailView] = createSignal<'detail' | 'executions'>(
+    'detail',
+  );
   // Track tasks with planning in progress for polling
   const [planningTasks, setPlanningTasks] = createSignal<Set<string>>(
     new Set(),
@@ -107,15 +119,24 @@ export function TasksPage() {
   const handleSubmit = async (input: CreateTaskInput) => {
     const task = selectedTask();
     if (task) {
-      // Update existing task
-      const result = await updateTask(task.id, input);
+      // Update existing task. PATCH /tasks/:id does NOT accept
+      // `schedule` — the server silently strips it, which would
+      // give the false impression the schedule was removed from
+      // the task view. Schedules have their own endpoints
+      // (POST/PATCH/DELETE /api/tasks/:taskId/schedule).
+      const updateInput: UpdateTaskInput = {
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+      };
+      const result = await updateTask(task.id, updateInput);
       if (result.ok) {
         handleTaskUpdated(result.data);
       } else {
         throw new Error(result.error.message);
       }
     } else {
-      // Create new task
+      // Create new task (with optional schedule attached on creation).
       const result = await createTask(input);
       if (result.ok) {
         handleTaskCreated(result.data);
@@ -133,6 +154,7 @@ export function TasksPage() {
 
   const handleCloseDetail = () => {
     setDetailTaskId(null);
+    setDetailView('detail');
   };
 
   const handleDetailTaskUpdated = () => {
@@ -141,7 +163,25 @@ export function TasksPage() {
 
   const handleDetailTaskDeleted = () => {
     setDetailTaskId(null);
+    setDetailView('detail');
     setRefreshTrigger((prev) => prev + 1);
+  };
+
+  /**
+   * Switch the detail overlay from the task view to the executions
+   * view. The same `detailTaskId` is reused so we keep the task
+   * context. The TaskDetailPanel renders the "View execution history"
+   * button that calls this.
+   */
+  const handleViewExecutions = () => {
+    setDetailView('executions');
+  };
+
+  /**
+   * Return from the executions view back to the task detail panel.
+   */
+  const handleBackToDetail = () => {
+    setDetailView('detail');
   };
 
   /**
@@ -294,7 +334,9 @@ export function TasksPage() {
         onSubmit={handleSubmit}
       />
 
-      {/* Task Detail Panel (view + subtasks) */}
+      {/* Task Detail Panel (view + subtasks) — and the nested
+          Executions sub-view for recurring tasks. The same overlay
+          is used for both; `detailView` decides which renders. */}
       <Show when={detailTaskId()}>
         <div
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -302,13 +344,25 @@ export function TasksPage() {
             if (e.target === e.currentTarget) handleCloseDetail();
           }}
         >
-          <TaskDetailPanel
-            taskId={detailTaskId()!}
-            agents={agents()}
-            onClose={handleCloseDetail}
-            onTaskUpdated={handleDetailTaskUpdated}
-            onTaskDeleted={handleDetailTaskDeleted}
-          />
+          <Show when={detailView() === 'detail'}>
+            <TaskDetailPanel
+              taskId={detailTaskId()!}
+              agents={agents()}
+              onClose={handleCloseDetail}
+              onTaskUpdated={handleDetailTaskUpdated}
+              onTaskDeleted={handleDetailTaskDeleted}
+              onViewExecutions={handleViewExecutions}
+            />
+          </Show>
+          <Show when={detailView() === 'executions'}>
+            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+              <TaskExecutionsPage
+                taskId={detailTaskId()!}
+                onBack={handleBackToDetail}
+                onOpenSession={props.onOpenSession}
+              />
+            </div>
+          </Show>
         </div>
       </Show>
     </Layout>

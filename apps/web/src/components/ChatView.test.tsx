@@ -1,13 +1,27 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@solidjs/testing-library';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent } from '@solidjs/testing-library';
 import { ChatView } from './ChatView';
 import type { SessionMessage } from '../lib/api';
+import type { QueuedMessage } from '../lib/types';
 
-// Mock lucide-solid
+// Stub the icons ChatView and its child blocks render. Plain-object factory
+// (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
-  User: () => <span data-testid="user-icon">U</span>,
-  Bot: () => <span data-testid="bot-icon">B</span>,
-  AlertCircle: () => <span data-testid="alert-icon">A</span>,
+  User: () => <span data-testid="user" />,
+  Bot: () => <span data-testid="bot" />,
+  AlertCircle: () => <span data-testid="alert-circle" />,
+  Wrench: () => <span data-testid="wrench" />,
+  Server: () => <span data-testid="server" />,
+  Brain: () => <span data-testid="brain" />,
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  ChevronRight: () => <span data-testid="chevron-right" />,
+  Loader: () => <span data-testid="loader" />,
+  Clock: () => <span data-testid="clock" />,
+  Pencil: () => <span data-testid="pencil" />,
+  X: () => <span data-testid="x" />,
+  Check: () => <span data-testid="check" />,
+  CircleStop: () => <span data-testid="circle-stop" />,
+  Ban: () => <span data-testid="ban" />,
 }));
 
 describe('ChatView', () => {
@@ -38,7 +52,9 @@ describe('ChatView', () => {
   it('should render messages', () => {
     render(() => <ChatView messages={mockMessages} isLoading={false} />);
     expect(screen.getByText('Hello, assistant!')).toBeInTheDocument();
-    expect(screen.getByText('Hello, user! How can I help?')).toBeInTheDocument();
+    expect(
+      screen.getByText('Hello, user! How can I help?'),
+    ).toBeInTheDocument();
   });
 
   it('should show loading state', () => {
@@ -47,7 +63,207 @@ describe('ChatView', () => {
   });
 
   it('should show error state', () => {
-    render(() => <ChatView messages={[]} isLoading={false} error="Failed to load" />);
+    render(() => (
+      <ChatView messages={[]} isLoading={false} error="Failed to load" />
+    ));
     expect(screen.getByText('Failed to load')).toBeInTheDocument();
+  });
+
+  describe('queued messages', () => {
+    const queued: QueuedMessage[] = [
+      { id: 'q1', content: 'First queued' },
+      { id: 'q2', content: 'Second queued' },
+    ];
+
+    it('renders queued messages with their position', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          queuedMessages={queued}
+        />
+      ));
+      expect(screen.getByText('First queued')).toBeInTheDocument();
+      expect(screen.getByText('Second queued')).toBeInTheDocument();
+      expect(screen.getByText('Queued · #1')).toBeInTheDocument();
+      expect(screen.getByText('Queued · #2')).toBeInTheDocument();
+    });
+
+    it('invokes onRemoveQueued when remove is clicked', () => {
+      const onRemoveQueued = vi.fn();
+      const { container } = render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          queuedMessages={[queued[0]]}
+          onRemoveQueued={onRemoveQueued}
+        />
+      ));
+      const removeBtn = container.querySelector(
+        'button[aria-label="Remove queued message"]',
+      ) as HTMLButtonElement;
+      fireEvent.click(removeBtn);
+      expect(onRemoveQueued).toHaveBeenCalledWith('q1');
+    });
+
+    it('invokes onEditQueued after editing and saving', () => {
+      const onEditQueued = vi.fn();
+      const { container } = render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          queuedMessages={[queued[0]]}
+          onEditQueued={onEditQueued}
+        />
+      ));
+      fireEvent.click(
+        container.querySelector(
+          'button[aria-label="Edit queued message"]',
+        ) as HTMLButtonElement,
+      );
+      const textarea = container.querySelector(
+        'textarea',
+      ) as HTMLTextAreaElement;
+      fireEvent.input(textarea, { target: { value: 'Edited content' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(onEditQueued).toHaveBeenCalledWith('q1', 'Edited content');
+    });
+  });
+
+  describe('auto-scroll containment', () => {
+    beforeEach(() => {
+      vi.mocked(Element.prototype.scrollTo).mockClear();
+      vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    });
+    afterEach(() => {
+      vi.mocked(Element.prototype.scrollTo).mockClear();
+      vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    });
+
+    it('scrolls the chat container, not the document, when messages change', () => {
+      const { container } = render(() => (
+        <ChatView messages={mockMessages} isLoading={false} />
+      ));
+      // The scroll container is the first child div (the ref div with
+      // overflow-y-auto). After mount + initial render, the auto-scroll
+      // effect must have called scrollTo on it — never scrollIntoView on
+      // any descendant.
+      const scrollContainer = container.firstElementChild as HTMLElement;
+      expect(scrollContainer).toBeTruthy();
+      expect(vi.mocked(Element.prototype.scrollTo).mock.instances).toContain(
+        scrollContainer,
+      );
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('scrolls to a specific message inside the chat container', () => {
+      const { container } = render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          scrollToMessageId="1"
+        />
+      ));
+      const scrollContainer = container.firstElementChild as HTMLElement;
+      // The scrollTo for the run click should also land on the chat
+      // container — never the document or a descendant element.
+      expect(scrollContainer).toBeTruthy();
+      const instances = vi.mocked(Element.prototype.scrollTo).mock.instances;
+      expect(instances).toContain(scrollContainer);
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('streaming tool calls', () => {
+    const toolCall = {
+      id: 'tc-1',
+      name: 'exec_run',
+      input: { command: 'npm test' },
+    };
+
+    it('renders live output for an in-flight tool call', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[{ ...toolCall, output: 'running tests...' }]}
+        />
+      ));
+      expect(screen.getByText('running tests...')).toBeInTheDocument();
+    });
+
+    it('shows a Stop button and invokes onCancelTool with the tool id', () => {
+      const onCancelTool = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[toolCall]}
+          onCancelTool={onCancelTool}
+        />
+      ));
+      fireEvent.click(screen.getByText('Stop'));
+      expect(onCancelTool).toHaveBeenCalledWith('tc-1');
+    });
+
+    it('shows a cancelled badge and no Stop button once cancelled', () => {
+      const onCancelTool = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          streamingToolCalls={[{ ...toolCall, cancelled: true }]}
+          onCancelTool={onCancelTool}
+        />
+      ));
+      expect(screen.getByText('Cancelled by user')).toBeInTheDocument();
+      expect(screen.queryByText('Stop')).not.toBeInTheDocument();
+    });
+
+    it('shows a Stop agent button that invokes onCancelRun', () => {
+      const onCancelRun = vi.fn();
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          onCancelRun={onCancelRun}
+        />
+      ));
+      fireEvent.click(screen.getByRole('button', { name: 'Stop agent' }));
+      expect(onCancelRun).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits the Stop agent button when onCancelRun is not provided', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+        />
+      ));
+      expect(
+        screen.queryByRole('button', { name: 'Stop agent' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the activity badge from runActivity', () => {
+      render(() => (
+        <ChatView
+          messages={mockMessages}
+          isLoading={false}
+          isStreaming={true}
+          runActivity={{
+            phase: 'running_tool',
+            toolName: 'exec_run',
+            elapsedMs: 7000,
+          }}
+        />
+      ));
+      expect(screen.getByText('Running exec_run…')).toBeInTheDocument();
+    });
   });
 });

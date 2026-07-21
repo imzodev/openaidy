@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { SchedulerService } from '../scheduler/service';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { SessionMessageService } from '../sessions/service';
+import { triggerPulseNow } from '../scheduler';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { PulseService } from '../pulses/service.js';
@@ -117,7 +118,7 @@ export type PulseRoutesOptions = {
   jobsRepo: JobsStore;
   jobRunsRepo: JobRunsStore;
   sessionsRepo: SessionsStore;
-  schedulerService: SchedulerService;
+  sessionMessageService: SessionMessageService;
   authMiddleware: AuthMiddleware;
 };
 
@@ -129,7 +130,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   app,
   options,
 ) => {
-  const { schedulerService, authMiddleware } = options;
+  const { authMiddleware } = options;
 
   const service = new PulseService(
     options.jobsRepo,
@@ -143,7 +144,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   );
 
   // POST /api/pulses
-  app.post('/api/pulses', async (request, reply) => {
+  app.post('/pulses', async (request, reply) => {
     let parsed;
     try {
       parsed = createPulseSchema.parse(request.body);
@@ -182,7 +183,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses
-  app.get('/api/pulses', async (request, reply) => {
+  app.get('/pulses', async (request, reply) => {
     let parsed;
     try {
       parsed = listPulsesSchema.parse(request.query);
@@ -213,7 +214,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses/:id
-  app.get('/api/pulses/:id', async (request, reply) => {
+  app.get('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -227,7 +228,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // PATCH /api/pulses/:id
-  app.patch('/api/pulses/:id', async (request, reply) => {
+  app.patch('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;
@@ -262,7 +263,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // DELETE /api/pulses/:id
-  app.delete('/api/pulses/:id', async (request, reply) => {
+  app.delete('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
@@ -277,12 +278,18 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // POST /api/pulses/:id/trigger
-  app.post('/api/pulses/:id/trigger', async (request, reply) => {
+  app.post('/pulses/:id/trigger', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     try {
       const run = await service.triggerPulse(id, (jobId) =>
-        schedulerService.triggerJob(jobId),
+        triggerPulseNow(jobId, {
+          jobsRepo: options.jobsRepo,
+          jobRunsRepo: options.jobRunsRepo,
+          sessionsStore: options.sessionsRepo,
+          sessionMessageService: options.sessionMessageService,
+          logger: app.log,
+        }),
       );
       const updatedRun = await options.jobRunsRepo.findById(run.id);
       return { run: updatedRun || run };
@@ -296,7 +303,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
   });
 
   // GET /api/pulses/:id/history
-  app.get('/api/pulses/:id/history', async (request, reply) => {
+  app.get('/pulses/:id/history', async (request, reply) => {
     const { id } = request.params as { id: string };
 
     let parsed;

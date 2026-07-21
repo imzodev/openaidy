@@ -11,9 +11,7 @@ import { formatTaskList } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
 import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
 
-export async function tasksListHandler(
-  args: string[],
-): Promise<CommandResult> {
+export async function tasksListHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
       `Usage: openaidy tasks list [--status <status>] [--limit <n>]
@@ -70,7 +68,7 @@ Exit Codes:
     return { exitCode: 2, error: msg };
   }
 
-  const url = new URL(`${config.httpUrl}/api/tasks`);
+  const url = new URL(`${config.httpUrl}/tasks`);
   if (statusFilter) url.searchParams.set('status', statusFilter);
 
   let res: Response;
@@ -85,14 +83,22 @@ Exit Codes:
   }
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as { error?: string };
     const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };
   }
 
   const { items } = (await res.json()) as {
-    items: Array<{ id: string; title: string; status: TaskStatus; priority: TaskPriority; createdAt: string }>;
+    items: Array<{
+      id: string;
+      title: string;
+      status: TaskStatus;
+      priority: TaskPriority;
+      createdAt: string;
+    }>;
   };
   const slice = items.slice(0, limit);
   p.note(formatTaskList(slice), 'Tasks');

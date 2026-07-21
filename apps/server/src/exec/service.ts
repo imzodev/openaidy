@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createLogger } from '../lib/logger';
+import { buildScrubbedEnv } from './env';
 
 const log = createLogger('exec');
 
@@ -8,6 +9,12 @@ export interface ExecServiceOptions {
   timeoutMs?: number;
   /** Maximum bytes captured from stdout + stderr. Default: 1 MB */
   maxOutputBytes?: number;
+  /**
+   * Extra environment variable names to expose to spawned commands, on top of
+   * the non-secret baseline allowlist. Use sparingly — anything added here is
+   * readable by every command the agent runs.
+   */
+  envAllowlist?: string[];
 }
 
 export interface ExecResult {
@@ -15,6 +22,18 @@ export interface ExecResult {
   stderr: string;
   exitCode: number;
   timedOut: boolean;
+  /**
+   * True when the run was aborted via the caller's AbortSignal (user Stop).
+   * `exitCode` is 130 (conventional "terminated by signal") in that case.
+   */
+  cancelled?: boolean;
+}
+
+export interface ExecRunOptions {
+  /** Abort the run (SIGTERM, then SIGKILL after a short grace period). */
+  signal?: AbortSignal;
+  /** Called for each captured stdout/stderr chunk as it arrives (live output). */
+  onOutput?: (chunk: { stream: 'stdout' | 'stderr'; data: string }) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -47,20 +66,27 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   },
 ];
 
+const IS_WINDOWS = process.platform === 'win32';
+const SHELL = IS_WINDOWS ? 'cmd.exe' : '/bin/sh';
+const SHELL_FLAG = IS_WINDOWS ? '/c' : '-c';
+
 /**
  * ExecService
  *
  * Runs a shell command in a subprocess and returns captured output.
- * Commands are spawned via /bin/sh -c to support pipes and redirects,
- * but callers are responsible for only exposing this to trusted agents.
+ * On Unix, commands are spawned via /bin/sh -c; on Windows via cmd.exe /c.
+ * Callers are responsible for only exposing this to trusted agents.
  */
 export class ExecService {
   private readonly timeoutMs: number;
   private readonly maxOutputBytes: number;
+  /** Scrubbed environment handed to every spawned command (no secrets). */
+  private readonly env: NodeJS.ProcessEnv;
 
   constructor(options: ExecServiceOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    this.env = buildScrubbedEnv(process.env, options.envAllowlist ?? []);
   }
 
   /**
@@ -76,7 +102,11 @@ export class ExecService {
     return undefined;
   }
 
-  run(command: string, cwd?: string): Promise<ExecResult> {
+  run(
+    command: string,
+    cwd?: string,
+    options?: ExecRunOptions,
+  ): Promise<ExecResult> {
     const blocked = this.checkCommand(command);
     if (blocked) {
       return Promise.resolve({
@@ -87,17 +117,35 @@ export class ExecService {
       });
     }
 
+    const signal = options?.signal;
+    const onOutput = options?.onOutput;
+
+    // Already-cancelled before we even spawn.
+    if (signal?.aborted) {
+      return Promise.resolve({
+        stdout: '',
+        stderr: 'Cancelled by user',
+        exitCode: 130,
+        timedOut: false,
+        cancelled: true,
+      });
+    }
+
     return new Promise((resolve) => {
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
       let totalBytes = 0;
       let timedOut = false;
+      let cancelled = false;
+      let settled = false;
 
       log.debug('exec: spawning command', { command, cwd });
 
-      const child = spawn('/bin/sh', ['-c', command], {
+      const child = spawn(SHELL, [SHELL_FLAG, command], {
         cwd,
-        env: process.env,
+        // Scrubbed env — never the server's full process.env (which holds
+        // DB creds, JWT secret, credential master key, provider API keys).
+        env: this.env,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -106,27 +154,64 @@ export class ExecService {
         child.kill('SIGKILL');
       }, this.timeoutMs);
 
-      const collect = (chunks: Buffer[]) => (data: Buffer) => {
-        if (totalBytes >= this.maxOutputBytes) return;
-        const remaining = this.maxOutputBytes - totalBytes;
-        const slice =
-          data.length > remaining ? data.subarray(0, remaining) : data;
-        chunks.push(slice);
-        totalBytes += slice.length;
+      // User cancel: SIGTERM, then SIGKILL after a 2s grace period (mirrors the
+      // timeout escalation). We never skip SIGTERM, even on an explicit Stop.
+      let graceTimer: NodeJS.Timeout | undefined;
+      const onAbort = () => {
+        cancelled = true;
+        child.kill('SIGTERM');
+        graceTimer = setTimeout(() => child.kill('SIGKILL'), 2_000);
+      };
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        if (graceTimer) clearTimeout(graceTimer);
+        if (signal) signal.removeEventListener('abort', onAbort);
       };
 
-      child.stdout.on('data', collect(stdoutChunks));
-      child.stderr.on('data', collect(stderrChunks));
+      const collect =
+        (chunks: Buffer[], stream: 'stdout' | 'stderr') => (data: Buffer) => {
+          if (totalBytes >= this.maxOutputBytes) return;
+          const remaining = this.maxOutputBytes - totalBytes;
+          const slice =
+            data.length > remaining ? data.subarray(0, remaining) : data;
+          chunks.push(slice);
+          totalBytes += slice.length;
+          if (onOutput) onOutput({ stream, data: slice.toString('utf-8') });
+        };
+
+      child.stdout.on('data', collect(stdoutChunks, 'stdout'));
+      child.stderr.on('data', collect(stderrChunks, 'stderr'));
+
+      child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({
+          stdout: '',
+          stderr: `Failed to spawn command: ${err.message}`,
+          exitCode: 1,
+          timedOut: false,
+        });
+      });
 
       child.on('close', (code) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         const stdout = Buffer.concat(stdoutChunks).toString('utf-8');
         const stderr = Buffer.concat(stderrChunks).toString('utf-8');
-        const exitCode = code ?? (timedOut ? 124 : 1);
+        const exitCode = cancelled ? 130 : (code ?? (timedOut ? 124 : 1));
 
-        log.debug('exec: command finished', { command, exitCode, timedOut });
+        log.debug('exec: command finished', {
+          command,
+          exitCode,
+          timedOut,
+          cancelled,
+        });
 
-        resolve({ stdout, stderr, exitCode, timedOut });
+        resolve({ stdout, stderr, exitCode, timedOut, cancelled });
       });
     });
   }

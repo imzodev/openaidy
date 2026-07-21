@@ -1,9 +1,15 @@
 import { createSignal, Show, createEffect } from 'solid-js';
 import { Save } from 'lucide-solid';
-import type { AppConfig } from '../../lib/api';
+import type { AppConfig, RewiredAgentNotice } from '../../lib/api';
 import { useConfig } from './hooks/useConfig';
 import { SaveMessage, Tabs, type Tab } from '../ui';
-import { DefaultsTab, ProvidersTab, AgentsTab, RawJsonTab } from './tabs';
+import {
+  DefaultsTab,
+  ProvidersTab,
+  AgentsTab,
+  RawJsonTab,
+  AboutTab,
+} from './tabs';
 import type { ConfigTab } from './types';
 
 const tabs: { id: ConfigTab; label: string }[] = [
@@ -11,6 +17,7 @@ const tabs: { id: ConfigTab; label: string }[] = [
   { id: 'providers', label: 'Providers' },
   { id: 'agents', label: 'Agents' },
   { id: 'raw', label: 'Raw JSON' },
+  { id: 'about', label: 'About' },
 ];
 
 export function SettingsView() {
@@ -18,6 +25,22 @@ export function SettingsView() {
   // Local state for editing - only saved to server when Save button is clicked
   const [localConfig, setLocalConfig] = createSignal<AppConfig | undefined>();
   const [hasChanges, setHasChanges] = createSignal(false);
+  // Per-agent notices for agents whose `model` was auto-rewired to
+  // the project default during a provider disconnect. Stays visible
+  // in the Agents tab until the user explicitly dismisses it or
+  // edits the agent.
+  const [rewiredNotices, setRewiredNotices] = createSignal<
+    RewiredAgentNotice[]
+  >([]);
+
+  const addRewiredNotices = (notices: RewiredAgentNotice[]) => {
+    if (notices.length === 0) return;
+    setRewiredNotices((prev) => [...notices, ...prev]);
+  };
+
+  const dismissRewiredNotice = (agentId: string) => {
+    setRewiredNotices((prev) => prev.filter((n) => n.agentId !== agentId));
+  };
 
   // Config hook - handles data fetching and mutations
   const {
@@ -28,6 +51,7 @@ export function SettingsView() {
     rawJson,
     setRawJson,
     saveMessage,
+    setSaveMessage,
     showSaveError,
   } = useConfig();
 
@@ -250,6 +274,28 @@ export function SettingsView() {
                 onAddProvider={handleAddProvider}
                 onDeleteProvider={handleDeleteProvider}
                 onUpdateProvider={handleUpdateProvider}
+                onSaveConfig={async (cfg) => {
+                  // `updateConfigData` only persists to the server
+                  // and invalidates the query — it does NOT touch
+                  // `localConfig`. The disconnect flow uses
+                  // `onSaveConfig` (not `handleDeleteProvider`), so
+                  // without this sync the UI keeps showing the
+                  // just-removed provider as configured until a
+                  // full reload. Mirror the saved config into local
+                  // state on success.
+                  await updateConfigData(cfg);
+                  setLocalConfig(cfg);
+                }}
+                onAgentsRewired={(notices) => {
+                  addRewiredNotices(notices);
+                  setSaveMessage({
+                    type: 'success',
+                    text:
+                      notices.length === 0
+                        ? 'Configuration saved successfully'
+                        : `Disconnected. ${notices.length === 1 ? '1 agent was' : `${notices.length} agents were`} re-pointed at the project default.`,
+                  });
+                }}
               />
             </Show>
 
@@ -261,7 +307,15 @@ export function SettingsView() {
                 isPending={updateMutation.isPending}
                 onAddAgent={handleAddAgent}
                 onDeleteAgent={handleDeleteAgent}
-                onUpdateAgent={handleUpdateAgent}
+                onUpdateAgent={(agentId, agent) => {
+                  // Any user edit clears any pending rewire notice
+                  // for that agent — the value is no longer
+                  // "auto-set", so the notice is stale.
+                  dismissRewiredNotice(agentId);
+                  handleUpdateAgent(agentId, agent);
+                }}
+                rewiredNotices={rewiredNotices()}
+                onDismissRewireNotice={dismissRewiredNotice}
               />
             </Show>
 
@@ -274,6 +328,11 @@ export function SettingsView() {
                   setHasChanges(true);
                 }}
               />
+            </Show>
+
+            {/* About Tab */}
+            <Show when={activeTab() === 'about'}>
+              <AboutTab />
             </Show>
           </Show>
         </div>

@@ -17,45 +17,58 @@ export const configRoutes: FastifyPluginAsync<ConfigRoutesOptions> = async (
 ) => {
   const { configService, authMiddleware } = options;
 
-  app.addHook(
-    'preHandler',
-    requireAuth({ authMiddleware, requiredScope: 'config.read' }),
-  );
-
-  app.get('/config', async () => {
-    return {
-      config: configService.getConfig(),
-      status: configService.getStatus(),
-    };
-  });
-
-  app.put('/config', async (request, reply) => {
-    let body: unknown;
-
-    try {
-      body = putConfigSchema.parse(request.body);
-    } catch (error) {
-      reply.code(400);
+  // Reading config requires config.read; mutating it requires config.write.
+  // Scoped per-route (not a blanket hook) so a read-only token cannot save
+  // config and a write-only token isn't forced to also hold read.
+  app.get(
+    '/config',
+    {
+      preHandler: requireAuth({ authMiddleware, requiredScope: 'config.read' }),
+    },
+    async () => {
       return {
-        error: 'validation.invalid_request',
-        message:
-          error instanceof Error ? error.message : 'Invalid request body',
-      };
-    }
-
-    try {
-      const config = await configService.save(body);
-      return {
-        config,
+        config: configService.getConfig(),
         status: configService.getStatus(),
       };
-    } catch (error) {
-      reply.code(400);
-      return {
-        error: 'config.invalid',
-        message:
-          error instanceof Error ? error.message : 'Invalid configuration',
-      };
-    }
-  });
+    },
+  );
+
+  app.put(
+    '/config',
+    {
+      preHandler: requireAuth({
+        authMiddleware,
+        requiredScope: 'config.write',
+      }),
+    },
+    async (request, reply) => {
+      let body: unknown;
+
+      try {
+        body = putConfigSchema.parse(request.body);
+      } catch (error) {
+        reply.code(400);
+        return {
+          error: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        };
+      }
+
+      try {
+        const config = await configService.save(body);
+        return {
+          config,
+          status: configService.getStatus(),
+        };
+      } catch (error) {
+        reply.code(400);
+        return {
+          error: 'config.invalid',
+          message:
+            error instanceof Error ? error.message : 'Invalid configuration',
+        };
+      }
+    },
+  );
 };

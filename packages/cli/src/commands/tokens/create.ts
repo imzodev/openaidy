@@ -8,10 +8,7 @@ import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-
-type BootstrapAdminRecord = {
-  token: string;
-};
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 type CreateResponse = {
   key: {

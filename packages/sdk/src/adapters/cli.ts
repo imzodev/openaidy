@@ -11,9 +11,15 @@ export class CLIAdapter implements ClientAdapter<CLIAdapterOptions> {
   readonly clientType = 'cli' as const;
 
   createClient(options: CLIAdapterOptions): WebSocketClient {
+    // No hardcoded default. The caller must supply either `url` or `baseUrl`.
     const url =
       options.url ??
-      this.resolveUrl(options.baseUrl ?? 'ws://localhost:3000/ws');
+      (options.baseUrl ? this.resolveUrl(options.baseUrl) : undefined);
+    if (!url) {
+      throw new Error(
+        'CLIAdapter requires either `url` or `baseUrl` to be provided.',
+      );
+    }
 
     return createWebSocketClient({
       url,

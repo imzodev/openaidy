@@ -105,6 +105,49 @@ openaidy/
 | `pnpm lint`       | Lint all packages                 |
 | `pnpm format`     | Format all files with Prettier    |
 
+## Providers
+
+OpenAidy talks to LLMs through a pluggable `Provider` abstraction. Configure providers through the UI (Settings → Providers) or via the config file. Presets ship in `packages/shared-types/src/providers-preset.ts`:
+
+| Provider      | Type               | Auth                                    |
+| ------------- | ------------------ | --------------------------------------- |
+| OpenAI        | OpenAI-compatible  | API key                                 |
+| Anthropic     | Anthropic          | API key                                 |
+| Google Gemini | Gemini             | API key                                 |
+| Groq          | OpenAI-compatible  | API key                                 |
+| DeepSeek      | OpenAI-compatible  | API key                                 |
+| MiniMax       | OpenAI-compatible  | API key                                 |
+| OpenCode Go   | OpenAI / Anthropic | API key                                 |
+| Ollama        | OpenAI-compatible  | **none — local** (`localhost:11434/v1`) |
+| LM Studio     | OpenAI-compatible  | **none — local** (`localhost:1234/v1`)  |
+
+### Local providers (Ollama, LM Studio)
+
+Local providers expose an OpenAI-compatible endpoint on `localhost` and ignore the `Authorization` header. OpenAidy's UI:
+
+- Skips the credential dialog when you pick a local preset card.
+- Auto-discovers installed/loaded models by probing `{baseUrl}/models` (click **Discover models** in the provider modal).
+- Sends a placeholder `Bearer` header that the local server ignores.
+
+Before configuring, make sure the local server is running and has at least one model loaded:
+
+```bash
+# Ollama — https://ollama.com
+ollama serve                # default port 11434
+ollama pull llama3.2        # pull a model into the local store
+
+# LM Studio — https://lmstudio.ai
+# Start the local server from the LM Studio "Developer" tab (default port 1234).
+```
+
+Then in OpenAidy: **Settings → Providers → Ollama (or LM Studio) → Discover models → Save**.
+
+If you run a local server on a non-default port or behind a tunnel, use **Add Custom** with `vendorFamily: openai-compatible` and your full base URL (e.g. `http://localhost:11435/v1`).
+
+### Custom providers
+
+Any OpenAI-compatible, Anthropic, or Gemini endpoint can be added through the **Add Custom** dialog in Settings → Providers. Provide a unique ID, display name, base URL, and (optionally) the name of an env var holding the API key.
+
 ## Skills
 
 Skills are reusable system-prompt instructions attached to agents. Bundled skills from `config/skills/` are automatically seeded to `OPENAIDY_HOME/skills/` on server startup.
@@ -133,6 +176,38 @@ Your skill instructions here.
 ## MCP integration
 
 OpenAidy connects to external MCP servers via stdio or HTTP transport. Configure servers through the UI or the REST API at `POST /api/mcp/servers`.
+
+### Preinstalled servers
+
+The following MCP servers ship preinstalled (reconciled into every install on startup from `config/openaidy.template.json`):
+
+| Server              | Transport | Auth                              | Notes                                                                                                          |
+| ------------------- | --------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| GitHub              | http      | `${GITHUB_PERSONAL_ACCESS_TOKEN}` | [PAT](https://github.com/settings/tokens) with `repo` + `read:user` scopes                                     |
+| Sequential Thinking | stdio     | none                              | step-by-step reasoning                                                                                         |
+| Time                | stdio     | none                              | time + timezone conversion (`@guanxiong/mcp-server-time`)                                                      |
+| Playwright Browser  | stdio     | none                              | Microsoft-maintained browser automation                                                                        |
+| Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}` |
+| Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
+| Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
+
+#### Setting API keys
+
+Servers that require a secret reference it as `${VAR_NAME}` in `headers` (http) or `env` (stdio). Two ways to satisfy:
+
+1. **Set the env var before starting the server** — recommended. Secrets stay out of the config file:
+   ```bash
+   export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
+   export BRAVE_API_KEY=…
+   openaidy start
+   ```
+2. **Edit the server via the UI** (`MCP` page → Edit) and replace `${VAR}` with the literal key. This persists the key in `~/.openaidy/config.json` — convenient but less secure.
+
+A server whose `${VAR}` is unset sits in "Awaiting configuration" instead of trying (and failing) to connect — set the env var or paste the key to activate it.
+
+#### Adding or removing preinstalled servers
+
+Edit `config/openaidy.template.json` and add/remove entries. On the next server start, `apps/server/src/mcp/preinstall.ts` reconciles: new entries are added, updated entries replace pristine ones, and servers the user has deleted are not resurrected. User-edited entries are never clobbered.
 
 ## Architecture
 

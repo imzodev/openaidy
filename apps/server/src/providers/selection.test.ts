@@ -14,7 +14,7 @@ import { ProviderSelectionService, createProviderSelection } from './selection';
  */
 function createMockProvider(
   id: string = 'test-provider',
-  capabilities: string[] = ['text_generation', 'streaming']
+  capabilities: string[] = ['text_generation', 'streaming'],
 ): ModelProvider {
   const descriptor: ProviderDescriptor = {
     id,
@@ -26,7 +26,8 @@ function createMockProvider(
   return {
     descriptor,
     listModels: async () => ok([]),
-    getModel: async () => err(createProviderError('provider.model_not_found', 'Not found')),
+    getModel: async () =>
+      err(createProviderError('provider.model_not_found', 'Not found')),
     hasCapability: (cap) => descriptor.capabilities.includes(cap),
     invoke: async () =>
       ok({
@@ -137,9 +138,28 @@ describe('ProviderSelectionService', () => {
       }
     });
 
+    it('should fall back to the provider default when modelId is an empty string', () => {
+      // Regression: ModelRequest.model is a required string, so some callers
+      // (e.g. auto-fill-personality) pass '' to mean "no preference". `??`
+      // would leave '' unresolved (it's not null/undefined); `||` correctly
+      // falls through to the provider's default model.
+      const provider = createMockProvider('openai');
+      registry.register(provider, { defaultModel: 'gpt-4' });
+
+      const result = selection.select({ providerId: 'openai', modelId: '' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.modelId).toBe('gpt-4');
+      }
+    });
+
     it('should never use capability flags as model ID fallback', () => {
       // This test ensures we don't regress to using capabilities[0] as model ID
-      const provider = createMockProvider('test-provider', ['text_generation', 'streaming']);
+      const provider = createMockProvider('test-provider', [
+        'text_generation',
+        'streaming',
+      ]);
       registry.register(provider); // No defaultModel
 
       const result = selection.select({ providerId: 'test-provider' });
@@ -159,7 +179,15 @@ describe('ProviderSelectionService', () => {
       if (resultWithModel.ok) {
         expect(resultWithModel.modelId).toBe('gpt-4');
         // Ensure it's not a capability string
-        expect(['text_generation', 'streaming', 'tool_calls', 'vision', 'audio_input', 'audio_output', 'embedding']).not.toContain(resultWithModel.modelId);
+        expect([
+          'text_generation',
+          'streaming',
+          'tool_calls',
+          'vision',
+          'audio_input',
+          'audio_output',
+          'embedding',
+        ]).not.toContain(resultWithModel.modelId);
       }
     });
   });
@@ -168,7 +196,10 @@ describe('ProviderSelectionService', () => {
     it('should select default provider when no explicit provider', () => {
       const provider = createMockProvider('default-provider');
       registry.register(provider);
-      registry.setDefault({ providerId: 'default-provider', modelId: 'default-model' });
+      registry.setDefault({
+        providerId: 'default-provider',
+        modelId: 'default-model',
+      });
 
       const result = selection.select({});
 
@@ -186,6 +217,24 @@ describe('ProviderSelectionService', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('provider.config_invalid');
         expect(result.error.message).toContain('No default provider');
+      }
+    });
+
+    it('should fall back to the default modelId when modelId is an empty string', () => {
+      // Same regression as the explicit-provider case: '' is a "no
+      // preference" sentinel some callers pass for the required model field.
+      const provider = createMockProvider('default-provider');
+      registry.register(provider);
+      registry.setDefault({
+        providerId: 'default-provider',
+        modelId: 'default-model',
+      });
+
+      const result = selection.select({ modelId: '' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.modelId).toBe('default-model');
       }
     });
 
@@ -218,7 +267,9 @@ describe('ProviderSelectionService', () => {
 
   describe('capability validation', () => {
     it('should reject selection when provider lacks required capability', () => {
-      const provider = createMockProvider('basic-provider', ['text_generation']);
+      const provider = createMockProvider('basic-provider', [
+        'text_generation',
+      ]);
       registry.register(provider);
 
       const result = selection.select({
@@ -250,7 +301,9 @@ describe('ProviderSelectionService', () => {
     });
 
     it('should validate capabilities for default provider', () => {
-      const provider = createMockProvider('default-provider', ['text_generation']);
+      const provider = createMockProvider('default-provider', [
+        'text_generation',
+      ]);
       registry.register(provider);
       registry.setDefault({ providerId: 'default-provider', modelId: 'model' });
 
@@ -267,12 +320,15 @@ describe('ProviderSelectionService', () => {
 
   describe('hasCapabilities', () => {
     it('should return true when provider has all capabilities', () => {
-      const provider = createMockProvider('test', ['text_generation', 'streaming']);
+      const provider = createMockProvider('test', [
+        'text_generation',
+        'streaming',
+      ]);
       registry.register(provider);
 
       expect(selection.hasCapabilities('test', ['text_generation'])).toBe(true);
       expect(
-        selection.hasCapabilities('test', ['text_generation', 'streaming'])
+        selection.hasCapabilities('test', ['text_generation', 'streaming']),
       ).toBe(true);
     });
 
@@ -284,13 +340,18 @@ describe('ProviderSelectionService', () => {
     });
 
     it('should return false for non-existent provider', () => {
-      expect(selection.hasCapabilities('non-existent', ['text_generation'])).toBe(false);
+      expect(
+        selection.hasCapabilities('non-existent', ['text_generation']),
+      ).toBe(false);
     });
   });
 
   describe('findProvidersWithCapabilities', () => {
     it('should find providers with required capabilities', () => {
-      const provider1 = createMockProvider('p1', ['text_generation', 'streaming']);
+      const provider1 = createMockProvider('p1', [
+        'text_generation',
+        'streaming',
+      ]);
       const provider2 = createMockProvider('p2', ['text_generation', 'vision']);
       const provider3 = createMockProvider('p3', ['embedding']);
 
@@ -298,7 +359,9 @@ describe('ProviderSelectionService', () => {
       registry.register(provider2);
       registry.register(provider3);
 
-      const providers = selection.findProvidersWithCapabilities(['text_generation']);
+      const providers = selection.findProvidersWithCapabilities([
+        'text_generation',
+      ]);
 
       expect(providers).toHaveLength(2);
       expect(providers.map((p) => p.descriptor.id)).toContain('p1');
@@ -312,7 +375,9 @@ describe('ProviderSelectionService', () => {
       registry.register(provider1);
       registry.register(provider2, { enabled: false });
 
-      const providers = selection.findProvidersWithCapabilities(['text_generation']);
+      const providers = selection.findProvidersWithCapabilities([
+        'text_generation',
+      ]);
 
       expect(providers).toHaveLength(1);
       expect(providers[0]?.descriptor.id).toBe('p1');

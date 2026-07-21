@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -42,12 +42,17 @@ describe('workspace routes', () => {
 
     // Create Fastify app
     app = Fastify();
-    await app.register(workspaceRoutes, {
-      agentRegistry: registry,
-      workspaceService,
-      workspaceBaseDir: testBaseDir,
-      authMiddleware: mockAuthMiddleware,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(workspaceRoutes, {
+          agentRegistry: registry,
+          workspaceService,
+          workspaceBaseDir: testBaseDir,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -71,24 +76,37 @@ describe('workspace routes', () => {
   }
 
   describe('GET /workspace/:agentId/files', () => {
-    it('should return 401 without X-Agent-Id header', async () => {
+    it('does not require an X-Agent-Id header (identity is server-derived)', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+        workspace: {
+          enabled: true,
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+      await workspaceService.writeFile('agent-1', 'a.txt', 'hi');
+
+      // No X-Agent-Id header at all — access is evaluated as the target
+      // agent's own (self) workspace permissions.
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/test-agent/files',
+        url: '/api/workspace/agent-1/files',
       });
 
-      expect(response.statusCode).toBe(401);
-      expect(response.json()).toEqual({
-        error: 'Missing X-Agent-Id header',
-        code: 'UNAUTHORIZED',
-      });
+      expect(response.statusCode).toBe(200);
     });
 
-    it('should return 403 when source agent not found', async () => {
+    it('should return 403 when target agent not found', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/test-agent/files',
-        headers: { 'X-Agent-Id': 'unknown-agent' },
+        url: '/api/workspace/test-agent/files',
       });
 
       expect(response.statusCode).toBe(403);
@@ -115,7 +133,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files',
+        url: '/api/workspace/agent-1/files',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -146,7 +164,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files/test.txt',
+        url: '/api/workspace/agent-1/files/test.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -160,7 +178,8 @@ describe('workspace routes', () => {
       });
     });
 
-    it('should return 403 for unauthorized access', async () => {
+    it('ignores a spoofed X-Agent-Id and cannot escalate beyond the target agent permissions', async () => {
+      // Target agent-1 has read/list only (fallback — no write).
       const agent1: Agent = {
         id: 'agent-1',
         name: 'Agent 1',
@@ -173,6 +192,7 @@ describe('workspace routes', () => {
           workspaces: [{ path: '/project' }],
         },
       };
+      // Attacker-controlled agent-2 has full write/delete permissions.
       const agent2: Agent = {
         id: 'agent-2',
         name: 'Agent 2',
@@ -182,17 +202,103 @@ describe('workspace routes', () => {
         version: 1,
         workspace: {
           enabled: true,
+          defaultPermissions: {
+            read: true,
+            write: true,
+            delete: true,
+            list: true,
+          },
           workspaces: [{ path: '/project' }],
         },
       };
       addAgents([agent1, agent2]);
       await workspaceService.ensureWorkspace('agent-1');
-      await workspaceService.writeFile('agent-1', 'secret.txt', 'secret');
+
+      // Attempt to WRITE into agent-1's workspace while claiming, via the
+      // spoofable header, to be the privileged agent-2. The header must be
+      // ignored: identity is the target (agent-1), which lacks write.
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/workspace/agent-1/files/evil.txt',
+        headers: { 'X-Agent-Id': 'agent-2' },
+        payload: { content: 'pwned' },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+  });
+
+  describe('GET /workspace/:agentId/raw/*', () => {
+    const readableAgent = (id: string): Agent => ({
+      id,
+      name: id,
+      enabled: true,
+      systemPrompt: 'test',
+      model: 'openai/gpt-4o-mini',
+      version: 1,
+      workspace: {
+        enabled: true,
+        workspaces: [{ path: '/project' }],
+      },
+    });
+
+    it('serves raw image bytes with a media type', async () => {
+      addAgent(readableAgent('agent-1'));
+      await workspaceService.ensureWorkspace('agent-1');
+      const wsPath = workspaceService.getWorkspacePath('agent-1');
+      await mkdir(join(wsPath, 'screenshots'), { recursive: true });
+      const png = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01, 0x02, 0x03,
+      ]);
+      await writeFile(join(wsPath, 'screenshots', 'shot.png'), png);
 
       const response = await app.inject({
         method: 'GET',
-        url: '/workspace/agent-1/files/secret.txt',
-        headers: { 'X-Agent-Id': 'agent-2' },
+        url: '/api/workspace/agent-1/raw/screenshots/shot.png',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('image/png');
+      expect(response.rawPayload.equals(png)).toBe(true);
+    });
+
+    it('returns 404 for a missing file', async () => {
+      addAgent(readableAgent('agent-1'));
+      await workspaceService.ensureWorkspace('agent-1');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/workspace/agent-1/raw/missing.png',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('returns 403 when the agent lacks read permission', async () => {
+      const agent: Agent = {
+        id: 'agent-1',
+        name: 'Agent 1',
+        enabled: true,
+        systemPrompt: 'test',
+        model: 'openai/gpt-4o-mini',
+        version: 1,
+        workspace: {
+          enabled: true,
+          defaultPermissions: {
+            read: false,
+            write: false,
+            delete: false,
+            list: true,
+          },
+          workspaces: [{ path: '/project' }],
+        },
+      };
+      addAgent(agent);
+      await workspaceService.ensureWorkspace('agent-1');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/workspace/agent-1/raw/anything.png',
       });
 
       expect(response.statusCode).toBe(403);
@@ -223,7 +329,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/new-file.txt',
+        url: '/api/workspace/agent-1/files/new-file.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'new content' },
       });
@@ -253,7 +359,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/',
+        url: '/api/workspace/agent-1/files/',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -278,7 +384,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/workspace/agent-1/files/unauthorized.txt',
+        url: '/api/workspace/agent-1/files/unauthorized.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -313,7 +419,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/existing.txt',
+        url: '/api/workspace/agent-1/files/existing.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'updated' },
       });
@@ -345,7 +451,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/nonexistent.txt',
+        url: '/api/workspace/agent-1/files/nonexistent.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'content' },
       });
@@ -383,7 +489,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'PUT',
-        url: '/workspace/agent-1/files/binary.bin',
+        url: '/api/workspace/agent-1/files/binary.bin',
         headers: { 'X-Agent-Id': 'agent-1' },
         payload: { content: 'attempted text overwrite' },
       });
@@ -421,7 +527,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/to-delete.txt',
+        url: '/api/workspace/agent-1/files/to-delete.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -458,7 +564,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/protected.txt',
+        url: '/api/workspace/agent-1/files/protected.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 
@@ -488,7 +594,7 @@ describe('workspace routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/workspace/agent-1/files/nonexistent.txt',
+        url: '/api/workspace/agent-1/files/nonexistent.txt',
         headers: { 'X-Agent-Id': 'agent-1' },
       });
 

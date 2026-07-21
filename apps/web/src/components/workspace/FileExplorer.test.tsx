@@ -49,9 +49,7 @@ describe('FileExplorer', () => {
       () => new Promise(() => {}),
     ); // Never resolves
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     expect(screen.getByText('Loading files...')).toBeInTheDocument();
   });
@@ -61,9 +59,7 @@ describe('FileExplorer', () => {
       items: mockFiles,
     });
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     // Wait for files to load
     await screen.findByText('folder1');
@@ -77,9 +73,7 @@ describe('FileExplorer', () => {
       code: 'ACCESS_DENIED',
     });
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     await screen.findByText('Access denied');
     expect(screen.getByText('Access denied')).toBeInTheDocument();
@@ -90,9 +84,7 @@ describe('FileExplorer', () => {
       items: [],
     });
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     await screen.findByText('Empty folder');
     expect(screen.getByText('Empty folder')).toBeInTheDocument();
@@ -106,11 +98,7 @@ describe('FileExplorer', () => {
     const onFileSelect = vi.fn();
 
     render(() => (
-      <FileExplorer
-        agentId="test-agent"
-        requestingAgentId="requester"
-        onFileSelect={onFileSelect}
-      />
+      <FileExplorer agentId="test-agent" onFileSelect={onFileSelect} />
     ));
 
     await screen.findByText('file1.txt');
@@ -134,7 +122,6 @@ describe('FileExplorer', () => {
     render(() => (
       <FileExplorer
         agentId="test-agent"
-        requestingAgentId="requester"
         onDirectorySelect={onDirectorySelect}
       />
     ));
@@ -147,7 +134,6 @@ describe('FileExplorer', () => {
     expect(api.listWorkspaceFiles).toHaveBeenNthCalledWith(
       2,
       'test-agent',
-      'requester',
       'folder1',
     );
   });
@@ -157,9 +143,7 @@ describe('FileExplorer', () => {
       items: mockFiles,
     });
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     await screen.findByText('folder1');
     const refreshButton = screen.getByTitle('Refresh');
@@ -190,13 +174,7 @@ describe('FileExplorer', () => {
 
     const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('new.txt');
 
-    render(() => (
-      <FileExplorer
-        agentId="test-agent"
-        requestingAgentId="requester"
-        canWrite={true}
-      />
-    ));
+    render(() => <FileExplorer agentId="test-agent" canWrite={true} />);
 
     await screen.findByText('folder1');
     fireEvent.click(screen.getByTitle('Create file'));
@@ -205,7 +183,6 @@ describe('FileExplorer', () => {
       'test-agent',
       'new.txt',
       '',
-      'requester',
     );
 
     promptSpy.mockRestore();
@@ -240,9 +217,7 @@ describe('FileExplorer', () => {
       items: unsortedFiles,
     });
 
-    render(() => (
-      <FileExplorer agentId="test-agent" requestingAgentId="requester" />
-    ));
+    render(() => <FileExplorer agentId="test-agent" />);
 
     await screen.findByText('a-folder');
 

@@ -8,6 +8,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
 import type { StreamManager } from '../streaming';
 import type { SubscriptionManager } from '../subscriptions';
+import type { RunStreamBuffer } from '../run-stream-buffer';
 import type { RunEventEmitter } from '../../dispatch/events';
 import type { HandlerContext } from '../index';
 import {
@@ -23,6 +24,10 @@ import {
   type SessionMessageRequest,
   type SessionMessagesRequest,
   type SessionRunsRequest,
+  type SessionToolCancelRequest,
+  type SessionRunCancelRequest,
+  type SessionStreamResumeRequest,
+  type SessionStreamResumeResponse,
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessagesResponse,
@@ -50,6 +55,7 @@ export class SessionHandler {
     private streamManager?: StreamManager,
     private runEvents?: RunEventEmitter,
     private subscriptionManager?: SubscriptionManager,
+    private runStreamBuffer?: RunStreamBuffer,
   ) {}
 
   /**
@@ -183,6 +189,7 @@ export class SessionHandler {
             return {
               id: session.id,
               title: session.title,
+              type: session.type,
               status: session.status ?? 'active',
               agentId: (session as { agentId?: string }).agentId,
               createdAt: new Date(session.createdAt).toISOString(),
@@ -263,10 +270,15 @@ export class SessionHandler {
         request.payload.sessionId,
       )) as SessionMessage[];
 
-      // Apply pagination
+      // Apply pagination. `messages` is chronological (oldest first), so with
+      // no explicit offset we want the most recent `limit` messages, not the
+      // oldest ones — otherwise sessions past `limit` total messages would
+      // never surface anything newer.
       const offset = request.payload.offset ?? 0;
       const limit = request.payload.limit ?? 50;
-      const paginated = messages.slice(offset, offset + limit);
+      const end = Math.max(0, messages.length - offset);
+      const start = Math.max(0, end - limit);
+      const paginated = messages.slice(start, end);
 
       this.logger.info(
         {
@@ -285,6 +297,18 @@ export class SessionHandler {
           messages: paginated.map((msg) => {
             const reasoningContent = (msg as { reasoningContent?: string })
               .reasoningContent;
+            const attachments = (
+              msg as {
+                attachments?: Array<{
+                  id: string;
+                  kind: string;
+                  source: string;
+                  name: string | null;
+                  mimeType: string;
+                  sizeBytes: number;
+                }>;
+              }
+            ).attachments;
             return {
               id: msg.id,
               sessionId: msg.sessionId,
@@ -294,6 +318,18 @@ export class SessionHandler {
               createdAt: new Date(msg.createdAt).toISOString(),
               metadata: msg.metadata as Record<string, unknown> | undefined,
               ...(reasoningContent ? { reasoningContent } : {}),
+              ...(attachments?.length
+                ? {
+                    attachments: attachments.map((a) => ({
+                      id: a.id,
+                      kind: a.kind as 'image' | 'audio',
+                      source: a.source as 'user_upload' | 'tool_output',
+                      name: a.name,
+                      mimeType: a.mimeType,
+                      sizeBytes: a.sizeBytes,
+                    })),
+                  }
+                : {}),
             };
           }),
           total: messages.length,
@@ -353,6 +389,7 @@ export class SessionHandler {
             errorCode: run.errorCode ?? undefined,
             errorMessage: run.errorMessage ?? undefined,
             createdAt: new Date(run.createdAt).toISOString(),
+            firstMessageId: run.firstMessageId ?? undefined,
           })),
           total: runs.length,
         },
@@ -366,6 +403,89 @@ export class SessionHandler {
         'Failed to list runs',
       );
     }
+  }
+
+  /**
+   * Handle session.tool.cancel — the user hit Stop on an in-flight tool call.
+   * Aborts the matching tool's AbortSignal; the UI reacts to the resulting
+   * run.tool_cancelled event, so no response is returned.
+   */
+  async handleToolCancel(
+    _connectionId: string,
+    request: SessionToolCancelRequest,
+    _context: HandlerContext,
+  ): Promise<void> {
+    const { runId, toolCallId } = request.payload;
+    this.sessionService.cancelTool(runId, toolCallId);
+  }
+
+  /**
+   * Handle session.run.cancel — the user hit "Stop agent". Aborts the whole
+   * run (provider stream + any running tool); the UI reacts to the resulting
+   * run.cancelled event, so no response is returned.
+   */
+  async handleRunCancel(
+    _connectionId: string,
+    request: SessionRunCancelRequest,
+    _context: HandlerContext,
+  ): Promise<void> {
+    const { runId } = request.payload;
+    this.sessionService.cancelRun(runId);
+  }
+
+  /**
+   * Handle session.stream.resume — a reconnected / re-foregrounded client asks
+   * for the live state of any in-progress run on this session (issue #450).
+   *
+   * If a run is in flight we (a) subscribe this connection to its live events
+   * and (b) return a snapshot of what has streamed so far. This is done
+   * synchronously (no await between the snapshot read and the return) so no
+   * delta can interleave: the snapshot is delivered before any subsequent live
+   * delta, and the client rehydrates by *replacing* its content with the
+   * snapshot and then appending live deltas as usual. If no run is active,
+   * `active: false` tells the client to fall back to refetching persisted
+   * messages.
+   */
+  handleResumeStream(
+    connectionId: string,
+    request: SessionStreamResumeRequest,
+    _context: HandlerContext,
+  ): SessionStreamResumeResponse {
+    const { sessionId } = request.payload;
+
+    const snapshot = this.runStreamBuffer?.getActiveForSession(sessionId);
+    if (!snapshot || !this.streamManager) {
+      return createWSMessage(
+        'session.stream.resume',
+        { sessionId, active: false },
+        request.id,
+      ) as SessionStreamResumeResponse;
+    }
+
+    // Subscribe first so every delta emitted after this synchronous block is
+    // delivered live; the snapshot below captures everything up to now.
+    this.streamManager.subscribeToRun(snapshot.runId, connectionId);
+
+    this.logger.info(
+      { sessionId, runId: snapshot.runId, connectionId },
+      'Resumed in-progress run stream',
+    );
+
+    return createWSMessage(
+      'session.stream.resume',
+      {
+        sessionId,
+        active: true,
+        runId: snapshot.runId,
+        agentId: snapshot.agentId,
+        providerId: snapshot.providerId,
+        modelId: snapshot.modelId,
+        content: snapshot.content,
+        toolCalls: snapshot.toolCalls,
+        ...(snapshot.activity && { activity: snapshot.activity }),
+      },
+      request.id,
+    ) as SessionStreamResumeResponse;
   }
 
   /**
@@ -403,6 +523,9 @@ export class SessionHandler {
         ...(resolvedAgentId != null && { agentId: resolvedAgentId }),
         ...(resolvedProviderId != null && { providerId: resolvedProviderId }),
         ...(resolvedModelId != null && { modelId: resolvedModelId }),
+        ...(request.payload.attachmentIds?.length && {
+          attachmentIds: request.payload.attachmentIds,
+        }),
         onStreamEvent: () => {},
       });
 
@@ -589,8 +712,12 @@ export class SessionHandler {
         role: request.payload.role,
         content: request.payload.content,
         agentId,
+        runId,
         ...(providerId != null && { providerId }),
         ...(modelId != null && { modelId }),
+        ...(request.payload.attachmentIds?.length && {
+          attachmentIds: request.payload.attachmentIds,
+        }),
         onStreamEvent: (event) => {
           switch (event.type) {
             case 'delta':
@@ -608,6 +735,24 @@ export class SessionHandler {
                 sessionId,
                 agentId,
                 toolCall: event.toolCall!,
+              });
+              break;
+            case 'exec_output':
+              this.runEvents?.emitExecOutput({
+                runId,
+                sessionId,
+                agentId,
+                toolCallId: event.toolCallId,
+                stream: event.stream,
+                chunk: event.data,
+              });
+              break;
+            case 'tool_cancelled':
+              this.runEvents?.emitToolCancelled({
+                runId,
+                sessionId,
+                agentId,
+                toolCallId: event.toolCallId,
               });
               break;
             case 'usage':
@@ -655,6 +800,11 @@ export class SessionHandler {
         const assistantMessage = result.assistantMessage as SessionMessage;
 
         // Emit completion with final usage
+        const runWithUsage = run as SessionRun & {
+          cacheReadTokens?: number | null;
+          cacheCreationTokens?: number | null;
+          cost?: number | null;
+        };
         this.runEvents?.emitCompleted({
           runId,
           sessionId,
@@ -665,14 +815,35 @@ export class SessionHandler {
               promptTokens: run.promptTokens,
               completionTokens: run.completionTokens ?? 0,
               totalTokens: run.totalTokens ?? 0,
+              ...(runWithUsage.cacheReadTokens != null && {
+                cacheReadTokens: runWithUsage.cacheReadTokens,
+              }),
+              ...(runWithUsage.cacheCreationTokens != null && {
+                cacheCreationTokens: runWithUsage.cacheCreationTokens,
+              }),
             },
           }),
+          ...(runWithUsage.cost != null && { cost: runWithUsage.cost }),
         });
 
         this.logger.info(
           { sessionId, runId, messageId: assistantMessage.id },
           'Streaming run completed',
         );
+
+        // Bump the session's last-activity timestamp so the chat list re-sorts
+        // this session to the top. updateSessionAgentId already writes a fresh
+        // updatedAt on the row — we just need to tell subscribers to refetch.
+        // (Without this, session.updated is only broadcast on first-run rename,
+        // so subsequent runs don't reorder the list live.)
+        if (this.subscriptionManager) {
+          const activityEvent = createWSMessage('session.updated', {
+            sessionId,
+            updates: {},
+            updatedAt: new Date().toISOString(),
+          });
+          this.subscriptionManager.broadcastToSession(sessionId, activityEvent);
+        }
 
         // Auto-rename session on the first run
         this.maybeRenameSession(
@@ -686,6 +857,12 @@ export class SessionHandler {
             'Auto-rename session failed (non-fatal)',
           );
         });
+      } else if (result.error.code === 'cancelled') {
+        // User hit "Stop agent" — deliver a clean run.cancelled on the
+        // WS-level run channel the client is subscribed to (issue #376), not a
+        // generic stream error. (The service also marks the run cancelled and
+        // emits on its own run.id channel for any run-id subscribers.)
+        this.runEvents?.emitRunCancelled({ runId, sessionId, agentId });
       } else {
         // Emit failure
         this.runEvents?.emitFailed({
@@ -790,6 +967,7 @@ export function createSessionHandler(
   streamManager?: StreamManager,
   runEvents?: RunEventEmitter,
   subscriptionManager?: SubscriptionManager,
+  runStreamBuffer?: RunStreamBuffer,
 ): SessionHandler {
   return new SessionHandler(
     sessionService,
@@ -797,6 +975,7 @@ export function createSessionHandler(
     streamManager,
     runEvents,
     subscriptionManager,
+    runStreamBuffer,
   );
 }
 
@@ -887,6 +1066,26 @@ export function registerSessionHandlers(
         connId,
         msg as SessionRunsRequest,
         ctx,
+      ) as Promise<WSResponse>,
+  );
+
+  router.registerHandler('session.tool.cancel', (connId, msg, ctx) =>
+    handler.handleToolCancel(connId, msg as SessionToolCancelRequest, ctx),
+  );
+
+  router.registerHandler('session.run.cancel', (connId, msg, ctx) =>
+    handler.handleRunCancel(connId, msg as SessionRunCancelRequest, ctx),
+  );
+
+  router.registerHandler(
+    'session.stream.resume',
+    (connId, msg, ctx) =>
+      Promise.resolve(
+        handler.handleResumeStream(
+          connId,
+          msg as SessionStreamResumeRequest,
+          ctx,
+        ),
       ) as Promise<WSResponse>,
   );
 }

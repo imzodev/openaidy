@@ -6,7 +6,7 @@
  */
 
 import type { ChoicesEvent } from './choices.js';
-import type { SessionStatus } from './sessions.js';
+import type { SessionStatus, SessionType } from './sessions.js';
 
 // ============================================================================
 // Message Envelope
@@ -201,6 +201,19 @@ export type SessionDeleteRequest = WSMessage<
   }
 >;
 
+/**
+ * Attachment metadata surfaced on session messages (bytes are fetched
+ * separately via GET /api/attachments/:id/raw).
+ */
+export type SessionMessageAttachment = {
+  id: string;
+  kind: 'image' | 'audio';
+  source: 'user_upload' | 'tool_output';
+  name?: string | null;
+  mimeType: string;
+  sizeBytes: number;
+};
+
 export type SessionMessageRequest = WSMessage<
   'session.message',
   {
@@ -211,6 +224,8 @@ export type SessionMessageRequest = WSMessage<
     agentId?: string;
     providerId?: string;
     modelId?: string;
+    /** Ids of previously-uploaded attachments to link to this message */
+    attachmentIds?: string[];
     metadata?: Record<string, unknown>;
   }
 >;
@@ -227,6 +242,25 @@ export type SessionUnsubscribeRequest = WSMessage<
   'session.unsubscribe',
   {
     sessionId: string;
+  }
+>;
+
+/** Client → server: cancel an in-flight tool call (user hit Stop). */
+export type SessionToolCancelRequest = WSMessage<
+  'session.tool.cancel',
+  {
+    sessionId: string;
+    runId: string;
+    toolCallId: string;
+  }
+>;
+
+/** Client → server: cancel an in-flight run (user hit "Stop agent"). */
+export type SessionRunCancelRequest = WSMessage<
+  'session.run.cancel',
+  {
+    sessionId: string;
+    runId: string;
   }
 >;
 
@@ -260,6 +294,7 @@ export type SessionMessagesResponse = WSMessage<
       sequence: number;
       createdAt: string;
       metadata?: Record<string, unknown>;
+      attachments?: SessionMessageAttachment[];
     }>;
     total: number;
   }
@@ -280,6 +315,7 @@ export type SessionRunsResponse = WSMessage<
       errorCode?: string;
       errorMessage?: string;
       createdAt: string;
+      firstMessageId?: string;
     }>;
     total: number;
   }
@@ -330,6 +366,7 @@ export type SessionListResponse = WSMessage<
     sessions: Array<{
       id: string;
       title?: string;
+      type?: SessionType;
       status: SessionStatus;
       agentId?: string;
       createdAt: string;
@@ -471,6 +508,8 @@ export type SessionStreamUsage = WSMessage<
       promptTokens: number;
       completionTokens: number;
       totalTokens: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
     };
   }
 >;
@@ -496,6 +535,53 @@ export type SessionStreamError = WSMessage<
   }
 >;
 
+/** Live stdout/stderr chunk from an in-flight tool (e.g. exec_run). */
+export type SessionStreamExecOutput = WSMessage<
+  'session.stream.exec_output',
+  {
+    sessionId: string;
+    runId: string;
+    toolCallId: string;
+    stream: 'stdout' | 'stderr';
+    data: string;
+  }
+>;
+
+/** A tool call was cancelled by the user. */
+export type SessionStreamToolCancelled = WSMessage<
+  'session.stream.tool_cancelled',
+  {
+    sessionId: string;
+    runId: string;
+    toolCallId: string;
+  }
+>;
+
+/** The whole run was cancelled by the user ("Stop agent"). */
+export type SessionStreamRunCancelled = WSMessage<
+  'session.stream.run_cancelled',
+  {
+    sessionId: string;
+    runId: string;
+  }
+>;
+
+/**
+ * Server-driven liveness heartbeat so the UI can show what the agent is doing
+ * between other events ("Thinking…" / "Running <tool>… 12s"). At most one per
+ * second per run (#378).
+ */
+export type SessionStreamActivity = WSMessage<
+  'session.stream.activity',
+  {
+    sessionId: string;
+    runId: string;
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  }
+>;
+
 export type SessionRunChoicesEvent = WSMessage<
   'session.run.choices',
   ChoicesEvent
@@ -505,6 +591,10 @@ export type SessionStreamEvent =
   | SessionStreamStart
   | SessionStreamDelta
   | SessionStreamToolCall
+  | SessionStreamExecOutput
+  | SessionStreamToolCancelled
+  | SessionStreamRunCancelled
+  | SessionStreamActivity
   | SessionStreamUsage
   | SessionStreamEnd
   | SessionStreamError
@@ -523,6 +613,49 @@ export type SessionMessageStreamAck = WSMessage<
     sessionId: string;
     runId: string;
     status: 'streaming';
+  }
+>;
+
+/**
+ * Request to resume the live stream of an in-progress run after a dropped or
+ * backgrounded connection. The client sends the sessionId; the server looks up
+ * any active run for that session and replies with a snapshot of what has
+ * streamed so far, then continues delivering live `session.stream.*` events.
+ */
+export type SessionStreamResumeRequest = WSMessage<
+  'session.stream.resume',
+  {
+    sessionId: string;
+  }
+>;
+
+/**
+ * Snapshot response for a resume request. `active: false` means there is no
+ * in-progress run to resume (the client should fall back to refetching
+ * persisted messages). When `active: true`, the remaining fields describe the
+ * run's streamed state so far, which the client uses to rehydrate its
+ * streaming UI (content is the full accumulated text, NOT a delta).
+ */
+export type SessionStreamResumeResponse = WSMessage<
+  'session.stream.resume',
+  {
+    sessionId: string;
+    active: boolean;
+    runId?: string;
+    agentId?: string;
+    providerId?: string;
+    modelId?: string;
+    content?: string;
+    toolCalls?: Array<{
+      id: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }>;
+    activity?: {
+      phase: 'thinking' | 'running_tool';
+      toolName?: string;
+      elapsedMs: number;
+    };
   }
 >;
 
@@ -905,6 +1038,9 @@ export type WSRequest =
   | SessionMessageRequest
   | SessionSubscribeRequest
   | SessionUnsubscribeRequest
+  | SessionToolCancelRequest
+  | SessionRunCancelRequest
+  | SessionStreamResumeRequest
   | SessionMessagesRequest
   | SessionRunsRequest
   | AgentListRequest
@@ -933,6 +1069,7 @@ export type WSResponse =
   | SessionCreatedResponse
   | SessionMessageResponse
   | SessionMessageStreamAck
+  | SessionStreamResumeResponse
   | SessionMessagesResponse
   | SessionRunsResponse
   | SessionGetResponse
@@ -980,6 +1117,9 @@ const REQUEST_TYPES: Set<string> = new Set([
   'session.runs',
   'session.subscribe',
   'session.unsubscribe',
+  'session.tool.cancel',
+  'session.run.cancel',
+  'session.stream.resume',
   'agent.list',
   'agent.get',
   'provider.list',
@@ -1011,9 +1151,14 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.start',
   'session.stream.delta',
   'session.stream.tool_call',
+  'session.stream.exec_output',
+  'session.stream.tool_cancelled',
+  'session.stream.run_cancelled',
+  'session.stream.activity',
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
+  'session.stream.resume',
   'session.updated',
   'agent.list',
   'agent.get',
@@ -1040,6 +1185,10 @@ const STREAM_EVENT_TYPES: Set<string> = new Set([
   'session.stream.start',
   'session.stream.delta',
   'session.stream.tool_call',
+  'session.stream.exec_output',
+  'session.stream.tool_cancelled',
+  'session.stream.run_cancelled',
+  'session.stream.activity',
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',

@@ -2,23 +2,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@solidjs/testing-library';
 import { AgentsPage } from './AgentsPage';
 
-// Mock lucide-solid icons used in AgentsPage
+// Stub the icons the AgentsPage render tree imports from lucide-solid.
+// Plain-object factory — a Proxy module mock hangs vitest collection here.
 vi.mock('lucide-solid', () => ({
-  Bot: () => <span data-testid="bot-icon">B</span>,
-  Folder: () => <span data-testid="folder-icon">F</span>,
-  FileText: () => <span data-testid="file-icon">T</span>,
-  Wrench: () => <span data-testid="wrench-icon">W</span>,
-  Lightbulb: () => <span data-testid="lightbulb-icon">L</span>,
-  Power: () => <span data-testid="power-icon">P</span>,
-  PowerOff: () => <span data-testid="power-off-icon">PO</span>,
-  Plus: () => <span data-testid="plus-icon">+</span>,
-  Server: () => <span data-testid="server-icon">S</span>,
-  UserCircle: () => <span data-testid="user-icon">U</span>,
-  Save: () => <span data-testid="save-icon">SA</span>,
-  ChevronDown: () => <span data-testid="chevron-down">VD</span>,
-  ChevronUp: () => <span data-testid="chevron-up">VU</span>,
-  Trash2: () => <span data-testid="trash-icon">X</span>,
-  MessageSquare: () => <span data-testid="message-icon">M</span>,
+  Bot: () => <span data-testid="bot" />,
+  Folder: () => <span data-testid="folder" />,
+  FileText: () => <span data-testid="file-text" />,
+  Wrench: () => <span data-testid="wrench" />,
+  Power: () => <span data-testid="power" />,
+  PowerOff: () => <span data-testid="power-off" />,
+  Lightbulb: () => <span data-testid="lightbulb" />,
+  Plus: () => <span data-testid="plus" />,
+  MessageSquare: () => <span data-testid="message-square" />,
+  Server: () => <span data-testid="server" />,
+  UserCircle: () => <span data-testid="user-circle" />,
+  Save: () => <span data-testid="save" />,
+  ChevronDown: () => <span data-testid="chevron-down" />,
+  ChevronUp: () => <span data-testid="chevron-up" />,
+  ChevronLeft: () => <span data-testid="chevron-left" />,
+  Trash2: () => <span data-testid="trash-2" />,
+  X: () => <span data-testid="x" />,
 }));
 
 // Mock workspace components

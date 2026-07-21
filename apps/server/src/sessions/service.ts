@@ -1,14 +1,27 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
-import type { McpClientService } from '../mcp/client';
+import type { McpClientService, McpToolResult } from '../mcp/client';
+import type { WorkspaceService } from '../workspace/service';
+import {
+  isScreenshotTool,
+  stripScreenshotFilename,
+  persistScreenshotImages,
+  extractInlineImages,
+  MEDIA_WORKSPACE_DIR,
+  type PersistedImage,
+} from '../mcp/screenshot-capture';
 import type { BuiltinToolRegistry } from '../tools';
+import type { AttachmentService } from '../attachments/service';
 import type {
   ToolDefinition,
   Message,
+  MessageAttachment as RuntimeMessageAttachment,
   ModelRequest,
   ModelResponse,
+  ToolCallRequest,
 } from '@openaidy/runtime';
+import type { MessageAttachment as DbMessageAttachment } from '@openaidy/db';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -19,7 +32,8 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import type { SessionType } from '@openaidy/shared-types';
+import type { SessionType, ModelPricing } from '@openaidy/shared-types';
+import { estimateCost } from '@openaidy/shared-types';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -31,7 +45,9 @@ import {
   markRunRunning,
   markRunSucceeded,
   markRunFailed,
+  markRunCancelled,
   listSessionRunRecords,
+  deleteSessionRecord,
 } from './store';
 import type {
   SubmitMessageInput,
@@ -69,6 +85,7 @@ export class SessionMessageService {
   private readonly logger: FastifyBaseLogger | undefined;
   private readonly agents: AgentRegistry | undefined;
   private readonly mcp: McpClientService | undefined;
+  private readonly workspace: WorkspaceService | undefined;
   private readonly builtinTools: BuiltinToolRegistry | undefined;
   private readonly getDefaultAgentId: (() => string | undefined) | undefined;
   private readonly sessionsRepo: SessionsStore | undefined;
@@ -78,21 +95,43 @@ export class SessionMessageService {
   private readonly personalityService: AgentPersonalityService | undefined;
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly workspaceBaseDir: string | undefined;
+  private readonly attachments: AttachmentService | undefined;
+  private readonly modelPricing: Record<string, ModelPricing> | undefined;
+  private readonly maxToolRounds: number;
+  private readonly maxToolOutputChars: number;
+  private readonly maxContextTokens: number;
+  private readonly historyToolResultsKept: number;
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
+
+  // In-flight tool AbortControllers so a user "Stop" can cancel a running tool
+  // (issue #375). Key: `${runId}:${toolCallId}`.
+  private readonly inflightTools = new Map<string, AbortController>();
+
+  // In-flight run-level AbortControllers so a user "Stop agent" can abort the
+  // whole turn — the provider stream and any running tools (issue #376).
+  // Key: runId (the WS-level run id the client addresses).
+  private readonly inflightRuns = new Map<string, AbortController>();
 
   constructor(options: SessionMessageServiceOptions) {
     this.providers = options.providers;
     this.logger = options.logger;
     this.agents = options.agents;
     this.mcp = options.mcp;
+    this.workspace = options.workspace;
     this.builtinTools = options.builtinTools;
     this.getDefaultAgentId = options.getDefaultAgentId;
     this.skillRegistry = options.skills;
     this.personalityService = options.personality;
     this.runEvents = options.runEvents;
     this.workspaceBaseDir = options.workspaceBaseDir;
+    this.attachments = options.attachments;
+    this.modelPricing = options.modelPricing;
+    this.maxToolRounds = options.maxToolRounds ?? 25;
+    this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
+    this.maxContextTokens = options.maxContextTokens ?? 100_000;
+    this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -106,6 +145,157 @@ export class SessionMessageService {
    */
   get isDbBacked(): boolean {
     return !!this.sessionsRepo;
+  }
+
+  /**
+   * Cancel an in-flight tool call (user hit Stop). Aborts the tool's
+   * AbortSignal; the tool resolves with an error and the streaming loop
+   * continues. Returns true if a matching in-flight tool was found.
+   */
+  cancelTool(runId: string, toolCallId: string): boolean {
+    const controller = this.inflightTools.get(`${runId}:${toolCallId}`);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+
+  /**
+   * Cap the copy of a tool result that is fed back into the model context.
+   *
+   * A single oversized tool result (broad MCP search responses are the usual
+   * culprit — builtin read/fetch already self-cap) can balloon the request to
+   * the model's context limit, which degrades tool-calling and causes the run
+   * to stall (see the agentic-loop round-exhaustion analysis). We truncate the
+   * *context* copy only; the full result is still persisted to the DB so the
+   * UI and history keep it intact. Cross-run history replay is trimmed
+   * separately.
+   */
+  private capToolOutputForContext(content: string, toolName: string): string {
+    const cap = this.maxToolOutputChars;
+    if (content.length <= cap) return content;
+    const omitted = content.length - cap;
+    this.logger?.warn(
+      { toolName, originalChars: content.length, cap },
+      'Tool output exceeded context cap — truncated the copy sent to the model',
+    );
+    return (
+      content.slice(0, cap) +
+      `\n\n[Tool output truncated for context: showing ${cap} of ` +
+      `${content.length} characters (${omitted} omitted). The full result is ` +
+      `preserved in the transcript. If you need more, narrow the query, ` +
+      `request a specific section/line range, or paginate.]`
+    );
+  }
+
+  /**
+   * Rough token estimate for a set of messages (~4 chars/token plus a small
+   * per-message and per-tool-call overhead). Good enough to decide *when* to
+   * compact; we deliberately avoid a real tokenizer dependency on the hot path.
+   */
+  private estimateTokens(messages: Message[]): number {
+    let chars = 0;
+    for (const m of messages) {
+      chars += (m.content?.length ?? 0) + 8; // + role/framing overhead
+      const toolCalls = (
+        m as { toolCalls?: Array<{ arguments?: string; name?: string }> }
+      ).toolCalls;
+      if (toolCalls) {
+        for (const tc of toolCalls) {
+          chars += (tc.arguments?.length ?? 0) + (tc.name?.length ?? 0) + 16;
+        }
+      }
+    }
+    return Math.ceil(chars / 4);
+  }
+
+  /**
+   * Keep the loop history within `maxContextTokens` by eliding the *bodies* of
+   * the oldest tool results (issue #437). Recent tool results — the model's
+   * working set — are preserved; only prior, already-consumed outputs are
+   * collapsed to a short notice. Assistant/user/system turns and the
+   * tool_call↔tool_result pairing are never touched (only a tool message's
+   * `content` shrinks), so the request stays provider-valid. Mutates in place
+   * so the elision persists across subsequent rounds. Returns the count elided.
+   *
+   * The full results remain in the persisted transcript; this only shapes what
+   * is re-sent to the model.
+   */
+  /**
+   * When rebuilding a session's history for a new run, summarize the bodies of
+   * older tool results so a long multi-run session doesn't re-send every large
+   * tool output on every turn (issue #438). Unlike the per-round budget guard
+   * (#437, which only fires when *over* the token budget), this always keeps
+   * the request lean — the most-recent `historyToolResultsKept` tool results
+   * stay full (the model's likely working set on a "continue"), older ones are
+   * collapsed to a short notice. Only a tool message's `content` shrinks, so
+   * the tool_call↔tool_result pairing stays provider-valid; the full result
+   * remains in the persisted transcript. Mutates in place; returns count.
+   *
+   * The short summaries it writes fall under the #437 elide threshold, so the
+   * two passes compose without re-processing each other's output.
+   */
+  private trimStaleHistoryToolOutputs(messages: Message[]): number {
+    const keepRecent = this.historyToolResultsKept;
+    const MIN_SUMMARIZE_CHARS = 500; // leave small results alone
+    const PREFIX = '[Prior tool result elided from context:';
+
+    const toolIndexes: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i]!.role === 'tool') toolIndexes.push(i);
+    }
+    if (toolIndexes.length <= keepRecent) return 0;
+
+    const oldCount = toolIndexes.length - keepRecent;
+    let trimmed = 0;
+    for (let j = 0; j < oldCount; j++) {
+      const m = messages[toolIndexes[j]!]!;
+      const content = m.content ?? '';
+      if (content.startsWith(PREFIX)) continue;
+      if (content.length <= MIN_SUMMARIZE_CHARS) continue;
+      (m as { content: string }).content =
+        `${PREFIX} ${content.length} characters from an earlier turn omitted. ` +
+        `The full result is preserved in the transcript.]`;
+      trimmed++;
+    }
+    return trimmed;
+  }
+
+  private compactContextInPlace(messages: Message[]): number {
+    const budget = this.maxContextTokens;
+    if (this.estimateTokens(messages) <= budget) return 0;
+
+    const ELISION_PREFIX = '[Earlier tool output elided to fit context:';
+    const MIN_ELIDE_CHARS = 200; // not worth collapsing tiny results
+    let elided = 0;
+
+    // Oldest-first: the earliest tool results are the least likely to still
+    // matter to the current step.
+    for (const m of messages) {
+      if (this.estimateTokens(messages) <= budget) break;
+      if (m.role !== 'tool') continue;
+      const content = m.content ?? '';
+      if (content.startsWith(ELISION_PREFIX)) continue; // already elided
+      if (content.length <= MIN_ELIDE_CHARS) continue;
+      (m as { content: string }).content =
+        `${ELISION_PREFIX} ${content.length} characters omitted. The full ` +
+        `result is preserved in the transcript.]`;
+      elided++;
+    }
+    return elided;
+  }
+
+  /**
+   * Cancel an in-flight run (user hit "Stop agent"). Aborts the run-level
+   * AbortSignal, which cancels the provider stream and any tool currently
+   * running under this run. The streaming loop marks the run `cancelled` and
+   * emits `run.cancelled` without persisting a final assistant message.
+   * Returns true if a matching in-flight run was found.
+   */
+  cancelRun(runId: string): boolean {
+    const controller = this.inflightRuns.get(runId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   /**
@@ -254,21 +444,144 @@ export class SessionMessageService {
       return result !== null;
     }
 
-    // For in-memory store, we need to implement delete
-    // Since store.ts doesn't have deleteSessionRecord, we'll return true
-    // The session exists (checked above) but we can't actually delete from in-memory
-    // This is a limitation of the in-memory store for testing
-    return true;
+    // In-memory store: actually remove the session (and its messages/runs).
+    return deleteSessionRecord(id);
   }
 
   /**
-   * List messages for a session
+   * Search sessions by title or message content using FTS5.
+   * Falls back to in-memory filtering if DB is not available.
+   */
+  async searchSessions(
+    query: string,
+    options?: { limit?: number; currentSessionId?: string },
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      status: string;
+      createdAt: string;
+      updatedAt?: string;
+      archivedAt?: string;
+      matchType: 'title' | 'content';
+      rank: number;
+      matchCount?: number;
+      snippet?: string;
+    }>
+  > {
+    const limit = options?.limit ?? 10;
+
+    if (this.sessionsRepo) {
+      const byTitle = await this.sessionsRepo.searchByTitle(
+        query,
+        limit,
+        options?.currentSessionId,
+      );
+
+      let sessions = byTitle;
+      if (sessions.length === 0) {
+        sessions = await this.sessionsRepo.searchByContent(
+          query,
+          limit,
+          options?.currentSessionId,
+        );
+      }
+
+      return sessions.map((s) => {
+        const base = {
+          id: s.id,
+          title: s.title,
+          status: s.status,
+          createdAt:
+            s.createdAt instanceof Date
+              ? s.createdAt.toISOString()
+              : s.createdAt,
+          matchType: s.matchType,
+          rank: s.rank,
+        };
+        const optionals: Record<string, string | number | undefined> = {};
+        if (s.updatedAt) {
+          optionals.updatedAt =
+            s.updatedAt instanceof Date
+              ? s.updatedAt.toISOString()
+              : s.updatedAt;
+        }
+        if (s.archivedAt) {
+          optionals.archivedAt =
+            s.archivedAt instanceof Date
+              ? s.archivedAt.toISOString()
+              : s.archivedAt;
+        }
+        if (s.matchCount !== undefined) optionals.matchCount = s.matchCount;
+        if (s.snippet) optionals.snippet = s.snippet;
+        return Object.assign({}, base, optionals);
+      });
+    }
+
+    // In-memory fallback: filter by title substring (no ranking)
+    // Cast to the shape we know the in-memory store returns
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const records = (await this.listSessions()) as any[];
+    const normalized = query.toLowerCase();
+    return records
+      .filter(
+        (s) =>
+          s.title?.toLowerCase().includes(normalized) &&
+          s.id !== options?.currentSessionId,
+      )
+      .slice(0, limit)
+      .map((s, i) => {
+        const result: {
+          id: string;
+          title: string;
+          status: string;
+          createdAt: string;
+          matchType: 'title';
+          rank: number;
+          updatedAt?: string;
+          archivedAt?: string;
+        } = {
+          id: s.id as string,
+          title: s.title as string,
+          status: String(s.status ?? 'active'),
+          createdAt: String(
+            s.createdAt instanceof Date
+              ? s.createdAt.toISOString()
+              : s.createdAt,
+          ),
+          matchType: 'title',
+          rank: i,
+        };
+        if (s.updatedAt) {
+          result.updatedAt = String(
+            s.updatedAt instanceof Date
+              ? s.updatedAt.toISOString()
+              : s.updatedAt,
+          );
+        }
+        return result;
+      });
+  }
+
+  /**
+   * List messages for a session.
+   *
+   * When attachment storage is configured, each message additionally
+   * carries an `attachments` array (metadata only — no bytes) so both the
+   * UI and the model-request builder know what media belongs to it.
    */
   async listMessages(
     sessionId: string,
   ): Promise<SessionMessageRecord[] | SessionMessage[]> {
     if (this.messagesRepo) {
-      return this.messagesRepo.listBySession(sessionId);
+      const messages = await this.messagesRepo.listBySession(sessionId);
+      if (!this.attachments) return messages;
+      const grouped = await this.attachments.listBySessionGrouped(sessionId);
+      if (grouped.size === 0) return messages;
+      return messages.map((m) => {
+        const atts = grouped.get(m.id);
+        return atts ? { ...m, attachments: atts } : m;
+      }) as SessionMessage[];
     }
     return listSessionMessageRecords(sessionId);
   }
@@ -283,6 +596,60 @@ export class SessionMessageService {
       return this.runsRepo.listBySession(sessionId);
     }
     return listSessionRunRecords(sessionId);
+  }
+
+  /**
+   * Cumulative usage totals for a session (succeeded runs). Returns zeroed
+   * totals when no DB-backed run store is configured.
+   */
+  async getSessionUsage(
+    sessionId: string,
+  ): Promise<import('@openaidy/db').SessionUsageTotals> {
+    if (this.runsRepo) {
+      return this.runsRepo.getSessionUsage(sessionId);
+    }
+    return {
+      runCount: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      cost: 0,
+      hasCost: false,
+    };
+  }
+
+  /**
+   * Raw per-run usage rows (succeeded runs) for aggregation, optionally
+   * filtered by an ISO created-at range. Empty when no DB store.
+   */
+  async listUsageRows(options?: {
+    from?: string;
+    to?: string;
+  }): Promise<import('@openaidy/db').UsageRunRow[]> {
+    if (this.runsRepo) {
+      return this.runsRepo.listUsageRows(options ?? {});
+    }
+    return [];
+  }
+
+  /**
+   * Per-session usage totals for every session with succeeded runs, in one
+   * query. Used to show usage on the sessions list without an N+1 fan-out.
+   * Empty when no DB store.
+   *
+   * @param sessionIds Optional list to filter to specific sessions only.
+   */
+  async getUsageBySession(
+    sessionIds?: string[],
+  ): Promise<
+    Array<import('@openaidy/db').SessionUsageTotals & { sessionId: string }>
+  > {
+    if (this.runsRepo) {
+      return this.runsRepo.getUsageBySession(sessionIds);
+    }
+    return [];
   }
 
   /**
@@ -621,12 +988,34 @@ export class SessionMessageService {
       content: input.content,
     });
 
+    // Link any pending uploads to the persisted user message so they show
+    // up in the transcript and flow into the model request below.
+    if (input.attachmentIds?.length && this.attachments) {
+      try {
+        await this.attachments.linkToMessage(
+          input.attachmentIds,
+          input.sessionId,
+          userMessage.id,
+        );
+      } catch (e) {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            attachmentIds: input.attachmentIds,
+            error: e instanceof Error ? e.message : String(e),
+          },
+          'Failed to link attachments to message',
+        );
+      }
+    }
+
     // 3. Create run record
-    // Track how many more messages should receive ONBOARDING.
-    // Starts at 2 (first message + first user response).
-    // Decremented each message, stops at 0.
+    // Track how many more messages may include the (discretion-based) ONBOARDING
+    // guidance. Starts at 2 (first message + first user response); decremented
+    // each message, stops at 0. The block itself now lets the agent decide
+    // whether to actually onboard, so it never gatekeeps a greeting or a task.
     if (isFirstMessage) {
-      this.onboardingCounter.set(input.sessionId, 5);
+      this.onboardingCounter.set(input.sessionId, 2);
     }
     const onboardingMessagesRemaining =
       this.onboardingCounter.get(input.sessionId) ?? 0;
@@ -686,9 +1075,66 @@ export class SessionMessageService {
     // 4. Mark run as running
     await this.markRunRunning(run.id);
 
+    // Run-level AbortController: a user "Stop agent" aborts this, which cancels
+    // the provider stream and any tool running under this run (issue #376).
+    // Registered under the WS-level runId the client uses to address a cancel.
+    const runController = new AbortController();
+    if (input.runId) {
+      this.inflightRuns.set(input.runId, runController);
+    }
+
+    // Server-driven activity heartbeat (issue #378): emit a `run.activity`
+    // event (at most 1/s) while the run is idle between other events, so the
+    // UI can show "Thinking…" / "Running <tool>… 12s". Emitted under the
+    // WS-level runId so it reaches the subscribed client; skipped for non-WS
+    // callers (no runId). `lastActivityAt` is bumped whenever we produce a
+    // real event, so a continuously-streaming run stays quiet.
+    const activityRunId = input.runId;
+    const runStartAt = Date.now();
+    let lastActivityAt = runStartAt;
+    let activityPhase: 'thinking' | 'running_tool' = 'thinking';
+    let activityToolName: string | undefined;
+    const heartbeat =
+      activityRunId && this.runEvents
+        ? setInterval(() => {
+            const now = Date.now();
+            // Already busy (event within the last 500ms) — stay quiet.
+            if (now - lastActivityAt < 500) return;
+            this.runEvents!.emitActivity({
+              runId: activityRunId,
+              sessionId: input.sessionId,
+              agentId,
+              phase: activityPhase,
+              elapsedMs: now - runStartAt,
+              ...(activityToolName !== undefined && {
+                toolName: activityToolName,
+              }),
+            });
+          }, 1000)
+        : undefined;
+
+    // Model media capabilities — decide whether image/audio attachments are
+    // embedded natively as provider content blocks or degraded to a
+    // file-path note (so the model can reach for a vision-capable tool).
+    // Unknown capabilities are treated as capable (optimistic): a provider
+    // that can't handle the block will surface its own error.
+    let modelSupportsVision = true;
+    let modelSupportsAudio = true;
+    if (this.attachments && providerEntry) {
+      const modelResult = await providerEntry.provider
+        .getModel(modelId)
+        .catch(() => null);
+      if (modelResult?.ok && modelResult.value.capabilities.length > 0) {
+        modelSupportsVision = modelResult.value.capabilities.includes('vision');
+        modelSupportsAudio =
+          modelResult.value.capabilities.includes('audio_input');
+      }
+    }
+
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
-    const historyMessages: Message[] = history.map((m) => {
+    const historyMessages: Message[] = [];
+    for (const m of history) {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
       const msgToolCallId = (m as { toolCallId?: string }).toolCallId;
@@ -696,31 +1142,103 @@ export class SessionMessageService {
         .metadata;
 
       if (msgRole === 'tool') {
-        return {
+        historyMessages.push({
           role: 'tool' as const,
           content: msgContent,
           toolCallId: msgToolCallId ?? '',
-        };
+        });
+        continue;
       }
       if (msgRole === 'assistant') {
+        // The DB row's `metadata.toolCalls` is an untyped JSON blob;
+        // cast it to the canonical `readonly ToolCallRequest[]`
+        // shape. The `thoughtSignature` field (Gemini-specific)
+        // rides along on the same object and is consumed by the
+        // gemini request mapper when serializing the next turn.
         const storedToolCalls = msgMetadata?.['toolCalls'] as
-          | Array<{ id: string; name: string; arguments: string }>
+          | readonly ToolCallRequest[]
           | undefined;
         const msgReasoningContent = m.reasoningContent ?? undefined;
-        return {
+        historyMessages.push({
           role: 'assistant' as const,
           content: msgContent,
           ...(storedToolCalls?.length ? { toolCalls: storedToolCalls } : {}),
           ...(msgReasoningContent
             ? { reasoningContent: msgReasoningContent }
             : {}),
-        } as Message;
+        } as Message);
+        continue;
       }
-      return {
+
+      // User messages may carry attachments (linked above / in prior turns).
+      const msgAttachments = (m as { attachments?: DbMessageAttachment[] })
+        .attachments;
+      if (msgRole === 'user' && msgAttachments?.length && this.attachments) {
+        const inline: RuntimeMessageAttachment[] = [];
+        const degradedNotes: string[] = [];
+        for (const att of msgAttachments) {
+          if (att.kind !== 'image' && att.kind !== 'audio') continue;
+          const supported =
+            att.kind === 'image' ? modelSupportsVision : modelSupportsAudio;
+          if (!supported) {
+            degradedNotes.push(
+              `[Attached ${att.kind}${att.name ? ` "${att.name}"` : ''} (${att.mimeType}) is saved at ${att.storagePath} — this model cannot process it natively; use an available tool to analyze the file.]`,
+            );
+            continue;
+          }
+          try {
+            const { buffer } = await this.attachments.readBytes(att);
+            inline.push({
+              kind: att.kind,
+              mimeType: att.mimeType,
+              data: buffer.toString('base64'),
+              ...(att.name ? { name: att.name } : {}),
+            });
+          } catch (e) {
+            this.logger?.warn(
+              {
+                attachmentId: att.id,
+                error: e instanceof Error ? e.message : String(e),
+              },
+              'Failed to read attachment bytes for model request',
+            );
+            degradedNotes.push(
+              `[Attachment ${att.name ?? att.id} could not be read.]`,
+            );
+          }
+        }
+        const contentWithNotes = degradedNotes.length
+          ? [msgContent, ...degradedNotes].filter(Boolean).join('\n')
+          : msgContent;
+        historyMessages.push({
+          role: 'user' as const,
+          content: contentWithNotes,
+          ...(inline.length ? { attachments: inline } : {}),
+        } as Message);
+        continue;
+      }
+
+      historyMessages.push({
         role: msgRole as 'system' | 'user',
         content: msgContent,
-      } as Message;
-    });
+      } as Message);
+    }
+
+    // Summarize older tool-result bodies from prior turns so a long session
+    // doesn't re-send every large output each run (issue #438). Keeps the most
+    // recent results full; the full bodies stay in the persisted transcript.
+    const trimmedHistory = this.trimStaleHistoryToolOutputs(historyMessages);
+    if (trimmedHistory > 0) {
+      this.logger?.info(
+        {
+          sessionId: input.sessionId,
+          runId: run.id,
+          trimmed: trimmedHistory,
+          keptRecent: this.historyToolResultsKept,
+        },
+        'Trimmed stale tool outputs from replayed history',
+      );
+    }
 
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
@@ -790,7 +1308,16 @@ export class SessionMessageService {
     };
 
     let accumulatedContent = '';
-    let finalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    // Usage accumulated across all tool-call rounds — each round is a
+    // separate billable provider call, so cache/cost totals sum them.
+    const finalUsage = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+    };
+    let sawCacheTokens = false;
     let finalFinishReason: string | undefined;
     let finalReasoningContent: string | undefined;
     let finalProviderId = providerId;
@@ -810,19 +1337,130 @@ export class SessionMessageService {
     );
 
     try {
-      const MAX_TOOL_ROUNDS = 10;
+      // Cap the agentic tool-call loop. Exploratory tasks legitimately chain
+      // many tool calls (read files, search, fetch), so keep this generous —
+      // a low cap makes the agent run out of rounds mid-task and stop.
+      const MAX_TOOL_ROUNDS = this.maxToolRounds;
+      // Bounded recovery for degenerate turns: some providers (MiniMax under
+      // heavy context) occasionally report finish_reason `tool_calls` while
+      // emitting no parseable tool call and no content. That would otherwise
+      // fall straight through to the empty-message fallback and stall the run.
+      // Retry the turn a few times first — it's usually transient. Counted
+      // across the whole run so a persistently-broken turn can't loop forever.
+      const MAX_EMPTY_TURN_RETRIES = 2;
+      let emptyTurnRetries = 0;
+      // Per-run observability (#440): track how close each round runs to the
+      // token budget and whether the safety mechanisms fired, so the caps
+      // (#436/#437) can be tuned from real data rather than guesswork.
+      const SOFT_BUDGET_FRACTION = 0.8;
+      let roundsUsed = 0;
+      let peakEstTokens = 0;
+      let peakPromptTokens = 0;
+      let compactionFired = false;
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        // On the final permitted round, stop offering tools so the model is
+        // forced to turn what it has gathered into a text answer. Without this,
+        // a task that exhausts the round budget ends right after the last
+        // round's tool calls execute — the loop exits before the model can
+        // respond, persisting an EMPTY assistant message and marking the run
+        // "succeeded" with finish_reason `tool_calls`. To the user that looks
+        // like the agent silently stalled mid-task, forcing them to re-prompt
+        // "continue" (which starts a fresh run that then finishes). Reserving
+        // the final round for a forced text response guarantees the run always
+        // ends with a real, non-empty answer instead. (See run Ozpbnm8Y…)
+        const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+        const offerTools = allTools.length > 0 && !isFinalRound;
+        if (isFinalRound && allTools.length > 0) {
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              maxRounds: MAX_TOOL_ROUNDS,
+            },
+            'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
+          );
+        }
+
+        // Keep the request within the input-token budget: elide the oldest
+        // tool-result bodies before sending (issue #437). Unbounded history is
+        // the root cause behind the round-exhaustion/stall symptom — a single
+        // run here reached ~1M prompt tokens on MiniMax-M3 and degraded.
+        const elided = this.compactContextInPlace(loopMessages);
+        if (elided > 0) {
+          compactionFired = true;
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              elided,
+              budgetTokens: this.maxContextTokens,
+              estTokens: this.estimateTokens(loopMessages),
+            },
+            'Compacted context — elided oldest tool outputs to fit the token budget',
+          );
+        }
+
+        // Per-round context observability (#440). Logged at debug (frequent);
+        // a warn fires only when the request is nearing the budget, so tuning
+        // signals stand out in the logs.
+        roundsUsed = round + 1;
+        const roundEstTokens = this.estimateTokens(loopMessages);
+        if (roundEstTokens > peakEstTokens) peakEstTokens = roundEstTokens;
+        let largestToolResultChars = 0;
+        for (const m of loopMessages) {
+          if (m.role === 'tool') {
+            const len = m.content?.length ?? 0;
+            if (len > largestToolResultChars) largestToolResultChars = len;
+          }
+        }
+        this.logger?.debug(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            round,
+            estTokens: roundEstTokens,
+            messageCount: loopMessages.length,
+            largestToolResultChars,
+            budgetTokens: this.maxContextTokens,
+          },
+          'Agentic loop round context size',
+        );
+        if (roundEstTokens > this.maxContextTokens * SOFT_BUDGET_FRACTION) {
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              estTokens: roundEstTokens,
+              budgetTokens: this.maxContextTokens,
+            },
+            'Agentic loop request nearing the context token budget',
+          );
+        }
+
         const modelRequest: ModelRequest = {
           model: modelId,
           messages: loopMessages,
-          ...(allTools.length > 0 && { tools: allTools, toolChoice: 'auto' }),
+          ...(offerTools && { tools: allTools, toolChoice: 'auto' }),
+          // Run-level cancel: aborting this signal cancels the provider fetch.
+          signal: runController.signal,
         };
 
-        const toolCalls: Array<{
-          id: string;
-          name: string;
-          arguments: Record<string, unknown>;
-        }> = [];
+        // Local accumulator for the tool calls the model
+        // returned this turn. The shape is a `Pick` of the
+        // canonical `ToolCallRequest` so the `thoughtSignature`
+        // (Gemini-specific) and any other future fields ride
+        // along automatically — no inline duplication. Note
+        // that `arguments` here is an object (the JSON is
+        // stringified later by `mappedToolCalls`); we override
+        // the type to reflect the in-loop reality rather than
+        // the stringified `ToolCallRequest.arguments` shape.
+        type LocalToolCall = Pick<
+          ToolCallRequest,
+          'id' | 'name' | 'thoughtSignature'
+        > & { arguments: Record<string, unknown> };
+        const toolCalls: LocalToolCall[] = [];
         let hasError = false;
         let errorCode = '';
         let errorMessage = '';
@@ -849,6 +1487,11 @@ export class SessionMessageService {
           switch (value.type) {
             case 'stream.content_delta': {
               accumulatedContent += value.delta;
+              // Content is flowing — mark busy so the heartbeat stays quiet
+              // and the phase reads as thinking/streaming (#378).
+              lastActivityAt = Date.now();
+              activityPhase = 'thinking';
+              activityToolName = undefined;
               onStreamEvent({ type: 'delta', content: value.delta });
               break;
             }
@@ -873,12 +1516,37 @@ export class SessionMessageService {
               break;
             }
             case 'stream.usage': {
-              finalUsage = {
-                promptTokens: value.usage.promptTokens,
-                completionTokens: value.usage.completionTokens,
-                totalTokens: value.usage.totalTokens,
-              };
-              onStreamEvent({ type: 'usage', usage: finalUsage });
+              finalUsage.promptTokens += value.usage.promptTokens;
+              finalUsage.completionTokens += value.usage.completionTokens;
+              finalUsage.totalTokens += value.usage.totalTokens;
+              // Track the largest single-round *actual* prompt size (#440) —
+              // the provider's count, more accurate than our char estimate.
+              if (value.usage.promptTokens > peakPromptTokens) {
+                peakPromptTokens = value.usage.promptTokens;
+              }
+              if (value.usage.cacheReadTokens !== undefined) {
+                finalUsage.cacheReadTokens += value.usage.cacheReadTokens;
+                sawCacheTokens = true;
+              }
+              if (value.usage.cacheCreationTokens !== undefined) {
+                finalUsage.cacheCreationTokens +=
+                  value.usage.cacheCreationTokens;
+                sawCacheTokens = true;
+              }
+              onStreamEvent({
+                type: 'usage',
+                usage: {
+                  promptTokens: value.usage.promptTokens,
+                  completionTokens: value.usage.completionTokens,
+                  totalTokens: value.usage.totalTokens,
+                  ...(value.usage.cacheReadTokens !== undefined && {
+                    cacheReadTokens: value.usage.cacheReadTokens,
+                  }),
+                  ...(value.usage.cacheCreationTokens !== undefined && {
+                    cacheCreationTokens: value.usage.cacheCreationTokens,
+                  }),
+                },
+              });
               break;
             }
             case 'stream.started': {
@@ -904,12 +1572,45 @@ export class SessionMessageService {
           );
         }
 
+        // Degenerate-turn recovery (#439): the model signaled it wanted tools
+        // but emitted no parseable tool call AND no text. Nothing was appended
+        // to loopMessages, so re-invoking replays the same request — usually
+        // enough to recover, since sampling varies. Doesn't consume a tool
+        // round (round is restored); bounded by MAX_EMPTY_TURN_RETRIES.
+        const degenerateEmptyTurn =
+          finalFinishReason === 'tool_calls' &&
+          toolCalls.length === 0 &&
+          accumulatedContent.trim() === '';
+        if (degenerateEmptyTurn && emptyTurnRetries < MAX_EMPTY_TURN_RETRIES) {
+          emptyTurnRetries++;
+          this.logger?.warn(
+            {
+              sessionId: input.sessionId,
+              runId: run.id,
+              round,
+              retry: emptyTurnRetries,
+            },
+            'Model signaled tool_calls but returned none — retrying the turn',
+          );
+          round--; // retry this round without consuming the budget
+          continue;
+        }
+
         // If the model made tool calls, execute them and continue the loop
         if (toolCalls.length > 0 && (this.mcp || this.builtinTools)) {
           const mappedToolCalls = toolCalls.map((tc) => ({
             id: tc.id,
             name: tc.name,
             arguments: JSON.stringify(tc.arguments),
+            // Gemini-specific thought signature; the gemini
+            // request mapper reads it back when serializing the
+            // assistant turn for the next request. Required by
+            // the Gemini API on the first functionCall part of
+            // a multi-call turn — see
+            // https://ai.google.dev/gemini-api/docs/thought-signatures.
+            ...(tc.thoughtSignature
+              ? { thoughtSignature: tc.thoughtSignature }
+              : {}),
           }));
 
           // Extract consulted skills from workspace_read/workspace_list calls
@@ -957,7 +1658,11 @@ export class SessionMessageService {
 
           for (const tc of toolCalls) {
             let toolContent: string | undefined;
+            let toolIsError = false;
             let absolutePathFromTool: string | undefined;
+            // Inline images a tool returned and we persisted to disk —
+            // registered as attachments on the tool result message below.
+            let persistedImages: PersistedImage[] = [];
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session).
@@ -966,12 +1671,61 @@ export class SessionMessageService {
               ? this.builtinTools?.get(tc.name)
               : undefined;
             if (builtinTool) {
+              // Register an AbortController so the user can cancel this tool
+              // (issue #375). Keyed by (runId, toolCallId); cleaned up when the
+              // tool settles.
+              const cancelKey = input.runId
+                ? `${input.runId}:${tc.id}`
+                : undefined;
+              const controller = new AbortController();
+              if (cancelKey) this.inflightTools.set(cancelKey, controller);
+              // A run-level "Stop agent" also aborts the tool in flight (#376).
+              if (runController.signal.aborted) {
+                controller.abort();
+              } else {
+                runController.signal.addEventListener(
+                  'abort',
+                  () => controller.abort(),
+                  { once: true },
+                );
+              }
+
+              // Reflect the running tool in the activity heartbeat (#378).
+              activityPhase = 'running_tool';
+              activityToolName = tc.name;
+              lastActivityAt = Date.now();
+
               const builtinResult = await builtinTool
-                .execute(tc.arguments, { agentId, sessionId: input.sessionId })
+                .execute(tc.arguments, {
+                  agentId,
+                  sessionId: input.sessionId,
+                  signal: controller.signal,
+                  onOutput: (chunk) =>
+                    onStreamEvent({
+                      type: 'exec_output',
+                      toolCallId: tc.id,
+                      stream: chunk.stream,
+                      data: chunk.data,
+                    }),
+                })
                 .catch((e: unknown) => ({
                   ok: false as const,
                   error: `Tool error: ${e instanceof Error ? e.message : String(e)}`,
-                }));
+                }))
+                .finally(() => {
+                  if (cancelKey) this.inflightTools.delete(cancelKey);
+                });
+
+              // Tool settled — back to thinking until the next tool runs (#378).
+              activityPhase = 'thinking';
+              activityToolName = undefined;
+              lastActivityAt = Date.now();
+
+              // If the user cancelled this tool, tell the UI so it can mark the
+              // block "Cancelled by user".
+              if (controller.signal.aborted) {
+                onStreamEvent({ type: 'tool_cancelled', toolCallId: tc.id });
+              }
 
               // Check for INTERRUPT_CHOICES sentinel from present_choices tool
               if (builtinResult.ok) {
@@ -990,6 +1744,10 @@ export class SessionMessageService {
                       promptTokens: finalUsage.promptTokens,
                       completionTokens: finalUsage.completionTokens,
                       totalTokens: finalUsage.totalTokens,
+                      ...(sawCacheTokens && {
+                        cacheReadTokens: finalUsage.cacheReadTokens,
+                        cacheCreationTokens: finalUsage.cacheCreationTokens,
+                      }),
                       metadata: {
                         providerId: finalProviderId,
                         model: finalModelId,
@@ -998,6 +1756,42 @@ export class SessionMessageService {
                         choicesCount: (parsed.choices as string[]).length,
                       },
                     }).catch(() => {});
+                    // Persist a synthetic tool result message so the conversation
+                    // history stays well-formed for the next turn. OpenAI-
+                    // compatible APIs (MiniMax, OpenAI, DeepSeek, etc.) require
+                    // every assistant message with `tool_calls` to be followed
+                    // by a matching `role: 'tool'` message — without it, the
+                    // next request errors with "tool call result does not
+                    // follow tool call" the moment the user replies.
+                    // The user-facing semantics are: present_choices paused the
+                    // loop and surfaced the choices to the UI; the "result"
+                    // here is just a marker that the tool is waiting on user
+                    // input. The user's next message will arrive as a regular
+                    // `role: 'user'` turn that resumes the conversation.
+                    await this.appendMessage({
+                      sessionId: input.sessionId,
+                      runId: run.id,
+                      role: 'tool',
+                      content: JSON.stringify({
+                        _type: 'INTERRUPT_CHOICES',
+                        status: 'awaiting_user_choice',
+                        question: parsed.question ?? null,
+                        choices: parsed.choices,
+                      }),
+                      toolCallId: tc.id,
+                      metadata: {
+                        toolName: tc.name,
+                        interrupt: 'awaiting_user_choice',
+                      },
+                    }).catch((err: unknown) => {
+                      // Non-fatal: if persisting fails the next turn will
+                      // surface the provider error, which is the same outcome
+                      // we had before this fix.
+                      this.logger?.warn(
+                        { err, sessionId: input.sessionId, toolCallId: tc.id },
+                        'Failed to persist synthetic INTERRUPT_CHOICES tool result',
+                      );
+                    });
                     return {
                       ok: true,
                       userMessage,
@@ -1014,12 +1808,8 @@ export class SessionMessageService {
                 // Store the error message (not raw HTML) for failed tool calls
                 // This ensures all tool calls are persisted and shown in the UI
                 const errorMessage = `Error: ${builtinResult.error}`;
-                loopMessages.push({
-                  role: 'tool',
-                  content: errorMessage,
-                  toolCallId: tc.id,
-                } as Message);
                 toolContent = errorMessage; // Persist error message instead of raw content
+                toolIsError = true;
               } else {
                 toolContent = builtinResult.content;
                 // workspace_write returns absolutePath but the BuiltinTool type
@@ -1035,27 +1825,88 @@ export class SessionMessageService {
               }
             } else {
               // Fall back to MCP tool
-              const mcpResult = await this.mcp
-                ?.callTool(
-                  tc.name.split('::')[0]!,
-                  tc.name.split('::')[1] ?? tc.name,
-                  tc.arguments,
-                )
-                .catch((e: unknown) => ({
-                  content: [
+              const mcpServerId = tc.name.split('::')[0]!;
+              const mcpToolName = tc.name.split('::')[1] ?? tc.name;
+
+              // Screenshot tools save images to a directory chosen at the
+              // server's launch — not per-agent. Strip `filename` so the
+              // server returns the image inline, then we persist those bytes
+              // into this agent's workspace `screenshots/` folder below.
+              const captureScreenshot =
+                !!this.workspace && isScreenshotTool(mcpToolName);
+              const { forwardedArgs, requestedFilename } = captureScreenshot
+                ? stripScreenshotFilename(tc.arguments)
+                : { forwardedArgs: tc.arguments, requestedFilename: undefined };
+
+              let mcpResult = await this.mcp
+                ?.callTool(mcpServerId, mcpToolName, forwardedArgs)
+                .catch((e: unknown) => {
+                  toolIsError = true;
+                  return {
+                    content: [
+                      {
+                        type: 'text',
+                        text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                      },
+                    ],
+                  };
+                });
+
+              // Persist any inline image the tool returned into the agent
+              // workspace — screenshots keep their dedicated folder, other
+              // tool media goes to `media/`. The saved files are registered
+              // as attachments on the tool result message below so they
+              // render inline in chat. Best-effort: a failure here must not
+              // fail the tool call.
+              if (
+                this.workspace &&
+                mcpResult &&
+                !toolIsError &&
+                extractInlineImages(mcpResult as McpToolResult).length > 0
+              ) {
+                try {
+                  const persisted = await persistScreenshotImages({
+                    result: mcpResult as McpToolResult,
+                    workspace: this.workspace,
+                    agentId,
+                    requestedFilename,
+                    ...(captureScreenshot
+                      ? {}
+                      : { targetDir: MEDIA_WORKSPACE_DIR }),
+                    logger: this.logger,
+                  });
+                  mcpResult = persisted.result;
+                  persistedImages = persisted.saved;
+                } catch (e) {
+                  this.logger?.warn(
                     {
-                      type: 'text',
-                      text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                      agentId,
+                      tool: mcpToolName,
+                      error: e instanceof Error ? e.message : String(e),
                     },
-                  ],
-                }));
-              toolContent = Array.isArray(
+                    'Failed to persist tool image to workspace',
+                  );
+                }
+              }
+              const mcpText = Array.isArray(
                 (mcpResult as { content?: unknown[] } | undefined)?.content,
               )
                 ? (mcpResult as { content: Array<{ text?: string }> }).content
                     .map((c) => c.text ?? '')
                     .join('')
                 : JSON.stringify(mcpResult ?? { error: 'MCP not available' });
+              // MCP responses can also surface errors via `isError: true`
+              // on the result object itself (per MCP spec) — honor that
+              // so the gemini mapper wraps the content as an error.
+              if (
+                !toolIsError &&
+                mcpResult &&
+                typeof mcpResult === 'object' &&
+                (mcpResult as { isError?: unknown }).isError === true
+              ) {
+                toolIsError = true;
+              }
+              toolContent = mcpText;
               // Try to extract absolutePath from MCP result if present
               if (mcpResult && typeof mcpResult === 'object') {
                 const mcpResultObj = mcpResult as {
@@ -1073,24 +1924,57 @@ export class SessionMessageService {
               // Extract absolutePath from tool result if present (for workspace_write etc.)
               const toolMetadata: Record<string, unknown> = {
                 toolName: tc.name,
+                ...(toolIsError ? { isError: true } : {}),
               };
               if (absolutePathFromTool) {
                 toolMetadata.absolutePath = absolutePathFromTool;
               }
               // Persist tool result message
-              await this.appendMessage({
+              const toolMessage = await this.appendMessage({
                 sessionId: input.sessionId,
                 runId: run.id,
                 role: 'tool',
                 content: toolContent,
                 toolCallId: tc.id,
+                ...(toolIsError ? { isError: true } : {}),
                 metadata: toolMetadata,
               });
 
+              // Register tool-produced images as attachments on the tool
+              // result message so the chat renders them inline (instead of
+              // only leaving a workspace-path breadcrumb).
+              if (persistedImages.length > 0 && this.attachments) {
+                for (const img of persistedImages) {
+                  await this.attachments
+                    .registerToolOutput({
+                      sessionId: input.sessionId,
+                      messageId: toolMessage.id,
+                      mimeType: img.mimeType,
+                      storagePath: img.absolutePath,
+                      name:
+                        img.relativePath.split('/').pop() ?? img.relativePath,
+                    })
+                    .catch((e: unknown) => {
+                      this.logger?.warn(
+                        {
+                          messageId: toolMessage.id,
+                          path: img.absolutePath,
+                          error: e instanceof Error ? e.message : String(e),
+                        },
+                        'Failed to register tool image attachment',
+                      );
+                    });
+                }
+              }
+
+              // Feed the model a size-capped copy (the full result was just
+              // persisted above). Keeps one broad tool result from ballooning
+              // the context and stalling the run (issue #436).
               loopMessages.push({
                 role: 'tool',
-                content: toolContent,
+                content: this.capToolOutputForContext(toolContent, tc.name),
                 toolCallId: tc.id,
+                ...(toolIsError ? { isError: true } : {}),
               } as Message);
 
               // If agent saved a personality file via workspace_write, stop onboarding
@@ -1120,7 +2004,36 @@ export class SessionMessageService {
         break;
       }
 
-      // 7. Persist assistant message with accumulated content
+      // If the user hit "Stop agent", mark the run cancelled and bail without
+      // persisting a final assistant message (issue #376).
+      if (runController.signal.aborted) {
+        await this.markRunCancelled(run);
+        return {
+          ok: false,
+          error: { code: 'cancelled', message: 'Run cancelled by user' },
+        };
+      }
+
+      // 7. Persist assistant message with accumulated content.
+      // Defense in depth: the forced final round (above) should always yield a
+      // text answer, but if the model still returns nothing usable, never
+      // persist a blank assistant bubble — that's the exact symptom that reads
+      // as "the agent silently stopped". Substitute an honest, actionable note.
+      if (accumulatedContent.trim() === '') {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            finishReason: finalFinishReason,
+          },
+          'Run produced an empty final assistant message — substituting fallback',
+        );
+        accumulatedContent =
+          finalFinishReason === 'tool_calls'
+            ? 'I reached my step limit for this turn before finishing. Reply "continue" and I’ll pick up where I left off.'
+            : 'I wasn’t able to produce a response for this turn. Reply "continue" to have me try again.';
+      }
+
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
         runId: run.id,
@@ -1141,6 +2054,11 @@ export class SessionMessageService {
         promptTokens: finalUsage.promptTokens,
         completionTokens: finalUsage.completionTokens,
         totalTokens: finalUsage.totalTokens,
+        ...(sawCacheTokens && {
+          cacheReadTokens: finalUsage.cacheReadTokens,
+          cacheCreationTokens: finalUsage.cacheCreationTokens,
+        }),
+        firstMessageId: assistantMessage.id,
         metadata: { providerId: finalProviderId, model: finalModelId },
       });
 
@@ -1148,8 +2066,33 @@ export class SessionMessageService {
       // This allows the session to "remember" which agent was last used
       await this.updateSessionAgentId(input.sessionId, agentId);
 
+      // Per-run context summary (#440): one line to see how hard this run
+      // pushed the budget and whether the safety mechanisms engaged.
+      this.logger?.info(
+        {
+          sessionId: input.sessionId,
+          runId: run.id,
+          roundsUsed,
+          maxRounds: this.maxToolRounds,
+          peakEstTokens,
+          peakPromptTokens,
+          budgetTokens: this.maxContextTokens,
+          compactionFired,
+        },
+        'Agentic run context summary',
+      );
+
       return { ok: true, userMessage, assistantMessage, run: updatedRun! };
     } catch (error) {
+      // A user "Stop agent" aborts the provider fetch, which surfaces here as
+      // an AbortError. Treat that as a cancellation, not a failure (issue #376).
+      if (runController.signal.aborted) {
+        await this.markRunCancelled(run);
+        return {
+          ok: false,
+          error: { code: 'cancelled', message: 'Run cancelled by user' },
+        };
+      }
       const errorMsg =
         error instanceof Error ? error.message : 'Streaming failed';
       return this.handleFailure(
@@ -1158,6 +2101,9 @@ export class SessionMessageService {
         'streaming_error',
         errorMsg,
       );
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      if (input.runId) this.inflightRuns.delete(input.runId);
     }
   }
 
@@ -1204,7 +2150,7 @@ export class SessionMessageService {
     input: AppendMessageInput,
   ): Promise<SessionMessageRecord | SessionMessage> {
     if (this.messagesRepo) {
-      return this.messagesRepo.append({
+      const result = await this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
         content: input.content,
@@ -1215,6 +2161,7 @@ export class SessionMessageService {
         }),
         ...(input.metadata !== undefined && { metadata: input.metadata }),
       });
+      return result;
     }
     return appendMessageRecord(input);
   }
@@ -1257,88 +2204,91 @@ export class SessionMessageService {
       promptTokens?: number;
       completionTokens?: number;
       totalTokens?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      firstMessageId?: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
+    // Estimate cost from the run's model + usage (null when pricing unknown).
+    const cost =
+      input.promptTokens !== undefined
+        ? estimateCost(
+            run.modelId,
+            {
+              promptTokens: input.promptTokens,
+              completionTokens: input.completionTokens ?? 0,
+              ...(input.cacheReadTokens !== undefined && {
+                cacheReadTokens: input.cacheReadTokens,
+              }),
+              ...(input.cacheCreationTokens !== undefined && {
+                cacheCreationTokens: input.cacheCreationTokens,
+              }),
+            },
+            this.modelPricing,
+          )
+        : null;
+
+    // Shared usage object for both persistence and the run.completed event.
+    const usage =
+      input.promptTokens !== undefined
+        ? {
+            promptTokens: input.promptTokens,
+            completionTokens: input.completionTokens ?? 0,
+            totalTokens: input.totalTokens ?? 0,
+            ...(input.cacheReadTokens !== undefined && {
+              cacheReadTokens: input.cacheReadTokens,
+            }),
+            ...(input.cacheCreationTokens !== undefined && {
+              cacheCreationTokens: input.cacheCreationTokens,
+            }),
+          }
+        : undefined;
+
     if (this.runsRepo) {
       const successInput: {
         finishReason: DbFinishReason;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
+        usage?: NonNullable<typeof usage>;
+        cost?: number | null;
+        firstMessageId?: string;
         metadata?: Record<string, unknown>;
       } = {
         finishReason: input.finishReason as DbFinishReason,
       };
-      if (input.promptTokens !== undefined) {
-        successInput.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
+      if (usage) successInput.usage = usage;
+      if (cost !== null) successInput.cost = cost;
+      if (input.firstMessageId !== undefined) {
+        successInput.firstMessageId = input.firstMessageId;
       }
       if (input.metadata !== undefined) {
         successInput.metadata = input.metadata;
       }
       const updated = await this.runsRepo.markSucceeded(run.id, successInput);
-      // Emit run.completed event
       if (this.runEvents && updated) {
-        const eventData: {
-          runId: string;
-          sessionId: string;
-          agentId: string;
-          finishReason: string;
-          usage?: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-          };
-        } = {
+        this.runEvents.emitCompleted({
           runId: run.id,
           sessionId: run.sessionId,
           agentId: run.agentId,
           finishReason: input.finishReason,
-        };
-        if (input.promptTokens !== undefined) {
-          eventData.usage = {
-            promptTokens: input.promptTokens,
-            completionTokens: input.completionTokens ?? 0,
-            totalTokens: input.totalTokens ?? 0,
-          };
-        }
-        this.runEvents.emitCompleted(eventData);
+          ...(usage && { usage }),
+          ...(cost !== null && { cost }),
+        });
       }
       return updated;
     }
-    const updated = markRunSucceeded(run.id, input);
-    // Emit run.completed event for in-memory runs too
+    const updated = markRunSucceeded(run.id, {
+      ...input,
+      ...(cost !== null && { cost }),
+    });
     if (this.runEvents && updated) {
-      const eventData: {
-        runId: string;
-        sessionId: string;
-        agentId: string;
-        finishReason: string;
-        usage?: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        };
-      } = {
+      this.runEvents.emitCompleted({
         runId: run.id,
         sessionId: run.sessionId,
         agentId: run.agentId,
         finishReason: input.finishReason,
-      };
-      if (input.promptTokens !== undefined) {
-        eventData.usage = {
-          promptTokens: input.promptTokens,
-          completionTokens: input.completionTokens ?? 0,
-          totalTokens: input.totalTokens ?? 0,
-        };
-      }
-      this.runEvents.emitCompleted(eventData);
+        ...(usage && { usage }),
+        ...(cost !== null && { cost }),
+      });
     }
     return updated ?? null;
   }
@@ -1358,6 +2308,25 @@ export class SessionMessageService {
       return this.runsRepo.markFailed(id, input);
     }
     return markRunFailed(id, input) ?? null;
+  }
+
+  /**
+   * Mark a run as cancelled (user hit "Stop agent") and emit run.cancelled.
+   */
+  private async markRunCancelled(
+    run: SessionRunRecord | SessionRun,
+  ): Promise<SessionRunRecord | SessionRun | null> {
+    const updated = this.runsRepo
+      ? await this.runsRepo.markCancelled(run.id)
+      : (markRunCancelled(run.id) ?? null);
+    if (this.runEvents && updated) {
+      this.runEvents.emitRunCancelled({
+        runId: run.id,
+        sessionId: run.sessionId,
+        agentId: run.agentId,
+      });
+    }
+    return updated;
   }
 
   /**
@@ -1387,6 +2356,12 @@ export class SessionMessageService {
       promptTokens: response.usage.promptTokens,
       completionTokens: response.usage.completionTokens,
       totalTokens: response.usage.totalTokens,
+      ...(response.usage.cacheReadTokens !== undefined && {
+        cacheReadTokens: response.usage.cacheReadTokens,
+      }),
+      ...(response.usage.cacheCreationTokens !== undefined && {
+        cacheCreationTokens: response.usage.cacheCreationTokens,
+      }),
       metadata: {
         providerId: response.providerId,
         model: response.model,

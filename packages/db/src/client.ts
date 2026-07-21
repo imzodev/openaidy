@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
-import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import Database from './node-sqlite';
+import { drizzleNodeSqlite } from './drizzle-node-sqlite';
 import { drizzle as drizzlePostgres } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as accessTokenSchema from './schema/access-tokens';
@@ -10,12 +10,16 @@ import * as addonSchema from './schema/addons';
 import * as jobSchema from './schema/jobs';
 import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
+import * as providerCredentialsSchema from './schema/provider-credentials';
+import * as oauthFlowStateSchema from './schema/oauth-flow-state';
 
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
   typeof pairingSchema &
   typeof accessTokenSchema &
-  typeof addonSchema;
+  typeof addonSchema &
+  typeof providerCredentialsSchema &
+  typeof oauthFlowStateSchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -40,6 +44,8 @@ const schema: DatabaseSchema = {
   ...pairingSchema,
   ...accessTokenSchema,
   ...addonSchema,
+  ...providerCredentialsSchema,
+  ...oauthFlowStateSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -83,12 +89,32 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       prompt_tokens INTEGER,
       completion_tokens INTEGER,
       total_tokens INTEGER,
+      cache_read_tokens INTEGER,
+      cache_creation_tokens INTEGER,
+      cost REAL,
       started_at TEXT,
       finished_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       metadata TEXT,
+      first_message_id TEXT,
       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id           TEXT PRIMARY KEY,
+      session_id   TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      message_id   TEXT REFERENCES session_messages(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,
+      source       TEXT NOT NULL DEFAULT 'user_upload',
+      name         TEXT,
+      mime_type    TEXT NOT NULL,
+      size_bytes   INTEGER NOT NULL,
+      storage_path TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS message_attachments_message_id_idx ON message_attachments(message_id);
+    CREATE INDEX IF NOT EXISTS message_attachments_session_id_idx ON message_attachments(session_id);
 
     CREATE TABLE IF NOT EXISTS scheduled_jobs (
       id TEXT PRIMARY KEY NOT NULL,
@@ -227,6 +253,54 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS task_agents_task_id_idx ON task_agents(task_id);
     CREATE INDEX IF NOT EXISTS task_agents_agent_id_idx ON task_agents(agent_id);
 
+    -- ------------------------------------------------------------
+    -- Recurring tasks (Phase 1): task_schedules + task_execution_history
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS task_schedules (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+      cron_expression TEXT,
+      preset TEXT,
+      schedule_date TEXT,
+      next_run_at TEXT NOT NULL,
+      last_run_at TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      replan_policy TEXT NOT NULL DEFAULT 'never',
+      max_executions INTEGER NOT NULL DEFAULT 9999,
+      execution_count INTEGER NOT NULL DEFAULT 0,
+      description_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS task_schedules_next_run_at_idx ON task_schedules(next_run_at);
+    CREATE INDEX IF NOT EXISTS task_schedules_status_idx ON task_schedules(status);
+    CREATE INDEX IF NOT EXISTS task_schedules_task_id_idx ON task_schedules(task_id);
+
+    CREATE TABLE IF NOT EXISTS task_execution_history (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      schedule_id TEXT NOT NULL REFERENCES task_schedules(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'planned',
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TEXT,
+      duration_ms INTEGER,
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      task_title TEXT NOT NULL,
+      task_description TEXT NOT NULL,
+      did_replan INTEGER NOT NULL DEFAULT 0,
+      error_code TEXT,
+      error_message TEXT,
+      attempt_number INTEGER NOT NULL DEFAULT 1,
+      subtask_summary TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS task_execution_history_task_id_idx ON task_execution_history(task_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_schedule_id_idx ON task_execution_history(schedule_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_session_id_idx ON task_execution_history(session_id);
+    CREATE INDEX IF NOT EXISTS task_execution_history_started_at_idx ON task_execution_history(started_at);
+
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -298,6 +372,42 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS memories_agent_id_idx  ON memories(agent_id);
     CREATE INDEX IF NOT EXISTS memories_importance_idx ON memories(importance);
     CREATE INDEX IF NOT EXISTS memories_created_at_idx ON memories(created_at);
+
+    -- ------------------------------------------------------------
+    -- OAuth flow state (Phase 1 of provider-byok-oauth):
+    -- Short-lived storage for in-flight PKCE flows between
+    -- /start and /callback. Rows are cleaned up by created_at TTL.
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS oauth_flow_state (
+      state          TEXT PRIMARY KEY,
+      provider_id    TEXT NOT NULL,
+      code_verifier  TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      region         TEXT,
+      redirect_uri   TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS oauth_flow_state_created_at_idx  ON oauth_flow_state(created_at);
+    CREATE INDEX IF NOT EXISTS oauth_flow_state_provider_id_idx ON oauth_flow_state(provider_id);
+
+    -- ------------------------------------------------------------
+    -- Provider credentials (storage for encrypted API keys + OAuth tokens)
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS provider_credentials (
+      id           TEXT PRIMARY KEY,
+      provider_id  TEXT NOT NULL,
+      auth_method  TEXT NOT NULL,
+      encrypted_credentials TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'connected',
+      last_used_at TEXT,
+      error_message TEXT,
+      created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS provider_credentials_provider_id_idx ON provider_credentials(provider_id);
+    CREATE INDEX IF NOT EXISTS provider_credentials_status_idx ON provider_credentials(status);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       title,
@@ -503,6 +613,52 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       `CREATE INDEX IF NOT EXISTS deliverables_status_idx ON deliverables(status)`,
     );
   }
+
+  // Migration: Add first_message_id to session_runs if not exists
+  const sessionRunsInfo = sqlite.pragma('table_info(session_runs)') as Array<{
+    name: string;
+  }>;
+  const hasFirstMessageId = sessionRunsInfo.some(
+    (col) => col.name === 'first_message_id',
+  );
+  if (!hasFirstMessageId) {
+    sqlite.exec(`ALTER TABLE session_runs ADD COLUMN first_message_id TEXT`);
+  }
+
+  // Migration: Add cache/cost usage columns to session_runs if not exist
+  const hasCacheReadTokens = sessionRunsInfo.some(
+    (col) => col.name === 'cache_read_tokens',
+  );
+  if (!hasCacheReadTokens) {
+    sqlite.exec(
+      `ALTER TABLE session_runs ADD COLUMN cache_read_tokens INTEGER`,
+    );
+  }
+  const hasCacheCreationTokens = sessionRunsInfo.some(
+    (col) => col.name === 'cache_creation_tokens',
+  );
+  if (!hasCacheCreationTokens) {
+    sqlite.exec(
+      `ALTER TABLE session_runs ADD COLUMN cache_creation_tokens INTEGER`,
+    );
+  }
+  const hasCost = sessionRunsInfo.some((col) => col.name === 'cost');
+  if (!hasCost) {
+    sqlite.exec(`ALTER TABLE session_runs ADD COLUMN cost REAL`);
+  }
+
+  // Migration: Add subtask_summary to task_execution_history if not exists
+  const historyInfo = sqlite.pragma(
+    'table_info(task_execution_history)',
+  ) as Array<{ name: string }>;
+  const hasSubtaskSummary = historyInfo.some(
+    (col) => col.name === 'subtask_summary',
+  );
+  if (!hasSubtaskSummary) {
+    sqlite.exec(
+      `ALTER TABLE task_execution_history ADD COLUMN subtask_summary TEXT`,
+    );
+  }
 }
 
 export async function createDatabaseClient(
@@ -516,7 +672,9 @@ export async function createDatabaseClient(
     initializeSqliteSchema(sqlite);
     runSqliteMigrations(sqlite);
 
-    const db = drizzleSqlite(sqlite, { schema }) as DatabaseClient;
+    const db = drizzleNodeSqlite(sqlite, {
+      schema,
+    }) as unknown as DatabaseClient;
     return {
       db,
       kind: 'sqlite',
@@ -535,16 +693,34 @@ export async function createDatabaseClient(
 
   const pool = new Pool({ connectionString: config.connectionString });
 
+  // OPENAIDY_DRIZZLE_DIR lets a packaged (bundled) install point at the SQL
+  // migrations shipped in the package; dev/source falls back to the sibling
+  // `drizzle/` dir resolved from this module's location.
+  const drizzleDir = process.env['OPENAIDY_DRIZZLE_DIR']
+    ? resolve(process.env['OPENAIDY_DRIZZLE_DIR'])
+    : resolve(fileURLToPath(import.meta.url), '../../drizzle');
   const migrationSql = readFileSync(
-    resolve(
-      fileURLToPath(import.meta.url),
-      '../../drizzle/0001_initial_schema.sql',
-    ),
+    resolve(drizzleDir, '0001_initial_schema.sql'),
+    'utf-8',
+  );
+  const runningStatusMigrationSql = readFileSync(
+    resolve(drizzleDir, '0010_add_running_status.sql'),
+    'utf-8',
+  );
+  const messageAttachmentsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0012_message_attachments.sql'),
+    'utf-8',
+  );
+  const sessionRunsUsageMigrationSql = readFileSync(
+    resolve(drizzleDir, '0013_session_runs_usage.sql'),
     'utf-8',
   );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
+    await client.query(runningStatusMigrationSql);
+    await client.query(messageAttachmentsMigrationSql);
+    await client.query(sessionRunsUsageMigrationSql);
   } finally {
     client.release();
   }

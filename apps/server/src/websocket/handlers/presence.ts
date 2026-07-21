@@ -7,7 +7,11 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { ConnectionManager } from '../connection-manager';
 import type { HandlerContext } from '../index';
-import type { PresenceManager, PresenceInfo, PresenceStatus } from '../presence-manager';
+import type {
+  PresenceManager,
+  PresenceInfo,
+  PresenceStatus,
+} from '../presence-manager';
 import {
   type WSMessage,
   type WSResponse,
@@ -71,7 +75,7 @@ export type PresenceGetAllResponse = WSMessage<
  */
 export type PresenceSubscribeRequest = WSMessage<
   'presence.subscribe',
-  {}
+  Record<string, never>
 >;
 
 /**
@@ -89,7 +93,7 @@ export type PresenceSubscribeResponse = WSMessage<
  */
 export type PresenceUnsubscribeRequest = WSMessage<
   'presence.unsubscribe',
-  {}
+  Record<string, never>
 >;
 
 /**
@@ -122,13 +126,18 @@ export class PresenceHandler {
   async handleUpdate(
     connectionId: string,
     request: PresenceUpdateRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<PresenceUpdateResponse | ErrorResponse> {
     try {
       const { status } = request.payload;
-      
+
       // Validate status
-      const validStatuses: PresenceStatus[] = ['online', 'away', 'busy', 'offline'];
+      const validStatuses: PresenceStatus[] = [
+        'online',
+        'away',
+        'busy',
+        'offline',
+      ];
       if (!validStatuses.includes(status)) {
         return this.createErrorResponse(
           request.id,
@@ -139,12 +148,20 @@ export class PresenceHandler {
 
       // Get connection info for clientId
       const conn = this.connectionManager.getConnection(connectionId);
-      
+
       // Update presence
-      const presenceOptions: { clientId?: string; metadata?: Record<string, unknown> } = {};
+      const presenceOptions: {
+        clientId?: string;
+        metadata?: Record<string, unknown>;
+      } = {};
       if (conn?.clientId) presenceOptions.clientId = conn.clientId;
-      if (request.payload.metadata) presenceOptions.metadata = request.payload.metadata;
-      const presence = this.presenceManager.updatePresence(connectionId, status, presenceOptions);
+      if (request.payload.metadata)
+        presenceOptions.metadata = request.payload.metadata;
+      const presence = this.presenceManager.updatePresence(
+        connectionId,
+        status,
+        presenceOptions,
+      );
 
       this.logger.info(
         { connectionId, status },
@@ -174,7 +191,7 @@ export class PresenceHandler {
   async handleGet(
     connectionId: string,
     request: PresenceGetRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<PresenceGetResponse | ErrorResponse> {
     try {
       const { connectionId: targetConnId, clientId } = request.payload;
@@ -231,8 +248,8 @@ export class PresenceHandler {
    */
   async handleGetAll(
     connectionId: string,
-    request: WSMessage<'presence.getAll', {}>,
-    context: HandlerContext,
+    request: WSMessage<'presence.getAll', Record<string, never>>,
+    _context: HandlerContext,
   ): Promise<PresenceGetAllResponse | ErrorResponse> {
     try {
       const presence = this.presenceManager.getAllPresence();
@@ -257,7 +274,7 @@ export class PresenceHandler {
   async handleSubscribe(
     connectionId: string,
     request: PresenceSubscribeRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<PresenceSubscribeResponse | ErrorResponse> {
     try {
       this.presenceManager.subscribe(connectionId);
@@ -268,7 +285,10 @@ export class PresenceHandler {
         subscribed: true,
       }) as PresenceSubscribeResponse;
     } catch (error) {
-      this.logger.error({ error, connectionId }, 'Failed to subscribe to presence');
+      this.logger.error(
+        { error, connectionId },
+        'Failed to subscribe to presence',
+      );
       return this.createErrorResponse(
         request.id,
         WS_ERROR_CODES.INTERNAL_ERROR,
@@ -283,7 +303,7 @@ export class PresenceHandler {
   async handleUnsubscribe(
     connectionId: string,
     request: PresenceUnsubscribeRequest,
-    context: HandlerContext,
+    _context: HandlerContext,
   ): Promise<PresenceUnsubscribeResponse | ErrorResponse> {
     try {
       this.presenceManager.unsubscribe(connectionId);
@@ -294,7 +314,10 @@ export class PresenceHandler {
         subscribed: false,
       }) as PresenceUnsubscribeResponse;
     } catch (error) {
-      this.logger.error({ error, connectionId }, 'Failed to unsubscribe from presence');
+      this.logger.error(
+        { error, connectionId },
+        'Failed to unsubscribe from presence',
+      );
       return this.createErrorResponse(
         request.id,
         WS_ERROR_CODES.INTERNAL_ERROR,
@@ -392,36 +415,75 @@ export function createPresenceHandler(
 /**
  * Register presence handlers with message router
  */
+type RegisterableHandler = (
+  connId: string,
+  msg: WSMessage,
+  ctx: HandlerContext,
+) => Promise<WSResponse | void>;
+
 export function registerPresenceHandlers(
   router: {
-    registerHandler: (type: string, handler: (connId: string, msg: WSMessage, ctx: HandlerContext) => Promise<WSResponse | void>) => void;
+    registerHandler: (type: string, handler: RegisterableHandler) => void;
   },
   handler: PresenceHandler,
 ): void {
-  router.registerHandler('presence.update', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleUpdate(connId, msg as PresenceUpdateRequest, ctx) as any,
-  );
+  // The presence.* handlers return local response types that are not part of
+  // the WSResponse union, so each handler is cast through `unknown` to the
+  // router's expected signature.
+  router.registerHandler('presence.update', ((
+    connId: string,
+    msg: WSMessage,
+    ctx: HandlerContext,
+  ) =>
+    handler.handleUpdate(
+      connId,
+      msg as PresenceUpdateRequest,
+      ctx,
+    )) as unknown as RegisterableHandler);
 
-  router.registerHandler('presence.get', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleGet(connId, msg as PresenceGetRequest, ctx) as any,
-  );
+  router.registerHandler('presence.get', ((
+    connId: string,
+    msg: WSMessage,
+    ctx: HandlerContext,
+  ) =>
+    handler.handleGet(
+      connId,
+      msg as PresenceGetRequest,
+      ctx,
+    )) as unknown as RegisterableHandler);
 
-  router.registerHandler('presence.getAll', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleGetAll(connId, msg as WSMessage<'presence.getAll', {}>, ctx) as any,
-  );
+  router.registerHandler('presence.getAll', ((
+    connId: string,
+    msg: WSMessage,
+    ctx: HandlerContext,
+  ) =>
+    handler.handleGetAll(
+      connId,
+      msg as WSMessage<'presence.getAll', Record<string, never>>,
+      ctx,
+    )) as unknown as RegisterableHandler);
 
-  router.registerHandler('presence.subscribe', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleSubscribe(connId, msg as PresenceSubscribeRequest, ctx) as any,
-  );
+  router.registerHandler('presence.subscribe', ((
+    connId: string,
+    msg: WSMessage,
+    ctx: HandlerContext,
+  ) =>
+    handler.handleSubscribe(
+      connId,
+      msg as PresenceSubscribeRequest,
+      ctx,
+    )) as unknown as RegisterableHandler);
 
-  router.registerHandler('presence.unsubscribe', (connId, msg, ctx) =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    handler.handleUnsubscribe(connId, msg as PresenceUnsubscribeRequest, ctx) as any,
-  );
+  router.registerHandler('presence.unsubscribe', ((
+    connId: string,
+    msg: WSMessage,
+    ctx: HandlerContext,
+  ) =>
+    handler.handleUnsubscribe(
+      connId,
+      msg as PresenceUnsubscribeRequest,
+      ctx,
+    )) as unknown as RegisterableHandler);
 }
 
 export default PresenceHandler;

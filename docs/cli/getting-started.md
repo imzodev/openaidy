@@ -43,10 +43,28 @@ The CLI requires a bootstrap-admin token for administrative operations.
 **Token Location:**
 
 ```
+$OPENAIDY_HOME/credentials/bootstrap-admin.json
+# or, when OPENAIDY_HOME is unset:
 .openaidy/credentials/bootstrap-admin.json
 ```
 
-**Generate a token:**
+**Generate a token (the canonical entry point):**
+
+```bash
+# Re-run the installer (Unix/WSL/macOS)
+curl -fsSL https://openaidy.com/install.sh | bash
+
+# Or run the CLI's init command directly (idempotent)
+WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+```
+
+`openaidy init` prints the token to stdout in a parseable format:
+
+```
+Bootstrap admin token: <jwt>
+```
+
+You can paste this token into the web UI's login screen on first use. See the [Installation Guide](./installation.md) for the full turnkey install flow.
 
 ```bash
 # Start the OpenAidy server (generates token on first run)

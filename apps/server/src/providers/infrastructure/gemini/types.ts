@@ -25,13 +25,31 @@ export type GeminiInlineDataPart = {
   };
 };
 /**
- * Gemini function call part
+ * Gemini content part (function call)
  */
 export type GeminiFunctionCallPart = {
   functionCall: {
     name: string;
     args: Record<string, unknown>;
   };
+  /**
+   * Opaque thought-signature token returned by the model. The
+   * Gemini API *requires* a signature on at least the first
+   * functionCall part of a multi-function-call assistant turn when
+   * replayed in a follow-up request — missing signatures cause
+   * "Function call is missing a thought_signature in functionCall
+   * parts" errors and degraded model performance. See
+   * https://ai.google.dev/gemini-api/docs/thought-signatures.
+   */
+  thoughtSignature?: string;
+  /**
+   * Some Gemini models (notably `gemini-3.1-flash-lite`) serialise
+   * the thought signature on the wire as `thought_signature`
+   * (snake_case) instead of the camelCase `thoughtSignature` used
+   * in the docs. The response mapper probes both fields; this
+   * declaration keeps the type honest about the on-the-wire shape.
+   */
+  thought_signature?: string;
 };
 
 /**
@@ -63,6 +81,16 @@ export type GeminiRole = 'user' | 'model';
  */
 export type GeminiContent = {
   role: GeminiRole;
+  parts: GeminiPart[];
+};
+
+/**
+ * Gemini `systemInstruction` payload. Despite the field name, the
+ * API expects a `Content` object (`{ parts: [{ text }] }`), not a
+ * single `Part`. Sending a bare `{ text }` is rejected with
+ * "Unknown name 'text' at 'system_instruction': Cannot find field."
+ */
+export type GeminiSystemInstruction = {
   parts: GeminiPart[];
 };
 
@@ -116,7 +144,7 @@ export type GeminiGenerateContentRequest = {
   };
   safetySettings?: GeminiSafetySetting[];
   generationConfig?: GeminiGenerationConfig;
-  systemInstruction?: GeminiPart;
+  systemInstruction?: GeminiSystemInstruction;
 };
 
 /**
@@ -127,7 +155,13 @@ export type GeminiCandidate = {
     role: 'model';
     parts: GeminiPart[];
   };
-  finishReason: 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'TOOL_CALLS' | 'OTHER';
+  finishReason:
+    | 'STOP'
+    | 'MAX_TOKENS'
+    | 'SAFETY'
+    | 'RECITATION'
+    | 'TOOL_CALLS'
+    | 'OTHER';
   safetyRatings?: Array<{
     category: string;
     probability: string;
@@ -154,7 +188,13 @@ export type GeminiStreamChunk = {
       role?: 'model';
       parts: GeminiPart[];
     };
-    finishReason?: 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'TOOL_CALLS' | 'OTHER';
+    finishReason?:
+      | 'STOP'
+      | 'MAX_TOKENS'
+      | 'SAFETY'
+      | 'RECITATION'
+      | 'TOOL_CALLS'
+      | 'OTHER';
   }>;
   usageMetadata?: {
     promptTokenCount: number;
@@ -238,4 +278,13 @@ export type GeminiAdapterConfig = {
   safetySettings?: GeminiSafetySetting[];
   /** System instruction */
   systemInstruction?: string;
+  /**
+   * Optional callback that returns the current credential (e.g. an
+   * OAuth token or API key persisted to `provider_credentials` after
+   * the adapter was constructed) for the provider. When supplied, the
+   * adapter consults it on every outgoing request so freshly-persisted
+   * credentials are picked up without a server restart. This mirrors
+   * the OpenAI-compatible adapter's `credentialProvider` hook.
+   */
+  credentialProvider?: (providerId: string) => Promise<string | null>;
 };

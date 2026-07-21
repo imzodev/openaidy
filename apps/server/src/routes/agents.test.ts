@@ -126,17 +126,23 @@ describe('Agent Routes', () => {
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      taskSchedules: undefined,
       channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });
     await app.register(sensible);
     await app.register(websocket);
-    await app.register(agentRoutes, {
-      agentRegistry: testRegistry,
-      personalityService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      authMiddleware: mockAuthMiddleware,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(agentRoutes, {
+          agentRegistry: testRegistry,
+          personalityService: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -148,7 +154,7 @@ describe('Agent Routes', () => {
     it('should return list of enabled agents', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/agents',
+        url: '/api/agents',
       });
 
       expect(response.statusCode).toBe(200);
@@ -166,7 +172,7 @@ describe('Agent Routes', () => {
     it('should return agent summaries without systemPrompt', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/agents',
+        url: '/api/agents',
       });
 
       const body = response.json();
@@ -187,7 +193,7 @@ describe('Agent Routes', () => {
     it('should return full agent by id', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/agents/default',
+        url: '/api/agents/default',
       });
 
       expect(response.statusCode).toBe(200);
@@ -205,7 +211,7 @@ describe('Agent Routes', () => {
     it('should return disabled agent by id', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/agents/disabled',
+        url: '/api/agents/disabled',
       });
 
       expect(response.statusCode).toBe(200);
@@ -218,7 +224,7 @@ describe('Agent Routes', () => {
     it('should return 404 for non-existent agent', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/agents/non-existent',
+        url: '/api/agents/non-existent',
       });
 
       expect(response.statusCode).toBe(404);
@@ -233,7 +239,7 @@ describe('Agent Routes', () => {
     it('should update tools for an agent and return updated summary', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/tools',
+        url: '/api/agents/default/tools',
         payload: { tools: ['workspace_read', 'workspace_list'] },
       });
 
@@ -245,7 +251,7 @@ describe('Agent Routes', () => {
     it('should accept an empty tools array to clear tools', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/tools',
+        url: '/api/agents/default/tools',
         payload: { tools: [] },
       });
 
@@ -255,7 +261,7 @@ describe('Agent Routes', () => {
     it('should return 400 when tools is missing from the body', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/tools',
+        url: '/api/agents/default/tools',
         payload: {},
       });
 
@@ -267,7 +273,7 @@ describe('Agent Routes', () => {
     it('should return 400 when tools contains non-string values', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/tools',
+        url: '/api/agents/default/tools',
         payload: { tools: [1, 2, 3] },
       });
 
@@ -277,7 +283,7 @@ describe('Agent Routes', () => {
     it('should return 404 for a non-existent agent', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/ghost/tools',
+        url: '/api/agents/ghost/tools',
         payload: { tools: ['workspace_read'] },
       });
 
@@ -291,7 +297,7 @@ describe('Agent Routes', () => {
     it('should update mcpServers for an agent and return updated summary', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/mcp-servers',
+        url: '/api/agents/default/mcp-servers',
         payload: {
           mcpServers: [
             { id: 'filesystem' },
@@ -312,7 +318,7 @@ describe('Agent Routes', () => {
     it('should accept an empty mcpServers array to clear all servers', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/mcp-servers',
+        url: '/api/agents/default/mcp-servers',
         payload: { mcpServers: [] },
       });
 
@@ -322,7 +328,7 @@ describe('Agent Routes', () => {
     it('should return 400 when mcpServers is missing from the body', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/mcp-servers',
+        url: '/api/agents/default/mcp-servers',
         payload: {},
       });
 
@@ -334,7 +340,7 @@ describe('Agent Routes', () => {
     it('should return 400 when a ref is missing the id field', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/mcp-servers',
+        url: '/api/agents/default/mcp-servers',
         payload: { mcpServers: [{ tools: ['foo'] }] },
       });
 
@@ -344,7 +350,7 @@ describe('Agent Routes', () => {
     it('should return 400 when tools is not an array of strings', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/mcp-servers',
+        url: '/api/agents/default/mcp-servers',
         payload: { mcpServers: [{ id: 'srv', tools: [42] }] },
       });
 
@@ -354,7 +360,7 @@ describe('Agent Routes', () => {
     it('should return 404 for a non-existent agent', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/ghost/mcp-servers',
+        url: '/api/agents/ghost/mcp-servers',
         payload: { mcpServers: [{ id: 'filesystem' }] },
       });
 
@@ -368,7 +374,7 @@ describe('Agent Routes', () => {
     it('returns 200 and the deleted agent summary', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/agents/coder',
+        url: '/api/agents/coder',
       });
 
       expect(response.statusCode).toBe(200);
@@ -378,9 +384,12 @@ describe('Agent Routes', () => {
     });
 
     it('removes the agent from the registry', async () => {
-      await app.inject({ method: 'DELETE', url: '/agents/coder' });
+      await app.inject({ method: 'DELETE', url: '/api/agents/coder' });
 
-      const listResponse = await app.inject({ method: 'GET', url: '/agents' });
+      const listResponse = await app.inject({
+        method: 'GET',
+        url: '/api/agents',
+      });
       const ids = listResponse.json().items.map((a: { id: string }) => a.id);
       expect(ids).not.toContain('coder');
     });
@@ -388,7 +397,7 @@ describe('Agent Routes', () => {
     it('returns 404 for a non-existent agent', async () => {
       const response = await app.inject({
         method: 'DELETE',
-        url: '/agents/ghost',
+        url: '/api/agents/ghost',
       });
 
       expect(response.statusCode).toBe(404);
@@ -470,17 +479,23 @@ describe('DELETE /agents/:agentId — workspace deletion', () => {
         getSkillsForAgent: () => [],
       } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
       personality: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      taskSchedules: undefined,
       channels: undefined as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     });
 
     await app.register(cors, { origin: '*' });
     await app.register(sensible);
     await app.register(websocket);
-    await app.register(agentRoutes, {
-      agentRegistry: registry,
-      personalityService,
-      authMiddleware: mockAuthMiddleware,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(agentRoutes, {
+          agentRegistry: registry,
+          personalityService,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -494,7 +509,7 @@ describe('DELETE /agents/:agentId — workspace deletion', () => {
 
     const response = await app.inject({
       method: 'DELETE',
-      url: '/agents/ws-agent',
+      url: '/api/agents/ws-agent',
     });
 
     expect(response.statusCode).toBe(200);
@@ -527,13 +542,18 @@ describe('DELETE /agents/:agentId — workspace deletion', () => {
     await spyApp.register(cors, { origin: '*' });
     await spyApp.register(sensible);
     await spyApp.register(websocket);
-    await spyApp.register(agentRoutes, {
-      agentRegistry: registry2,
-      personalityService,
-      authMiddleware: mockAuthMiddleware,
-    });
+    await spyApp.register(
+      async (api: FastifyInstance) => {
+        await api.register(agentRoutes, {
+          agentRegistry: registry2,
+          personalityService,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
 
-    await spyApp.inject({ method: 'DELETE', url: '/agents/spy-agent' });
+    await spyApp.inject({ method: 'DELETE', url: '/api/agents/spy-agent' });
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(spy).toHaveBeenCalledOnce();

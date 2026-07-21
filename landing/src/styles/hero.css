@@ -1,0 +1,199 @@
+.hero {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rem 2rem 5rem;
+  text-align: center;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.22);
+  border-radius: 100px;
+  font-size: 0.78rem;
+  color: var(--accent-hover);
+  margin-bottom: 2rem;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.hero-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  margin-bottom: 1.4rem;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 6vw, 4.5rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+  margin-bottom: 1.5rem;
+  max-width: 1000px;
+}
+.hero-title-line {
+  display: block;
+}
+.hero-title-anim {
+  position: relative;
+  min-height: 1.08em;
+}
+
+.typewriter {
+  position: relative;
+  display: inline-block;
+}
+.typewriter-ghost {
+  visibility: hidden;
+  white-space: nowrap;
+}
+.typewriter-live {
+  position: absolute;
+  inset: 0;
+  white-space: nowrap;
+}
+
+.gradient-text {
+  background: linear-gradient(130deg, #6366f1 0%, #a855f7 40%, #ec4899 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 200%;
+  animation: gradientFlow 7s ease-in-out infinite;
+}
+
+@keyframes gradientFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+.cursor {
+  display: inline-block;
+  width: 3px;
+  height: 0.85em;
+  background: var(--accent);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: blink 0.85s step-end infinite;
+  border-radius: 2px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  max-width: 560px;
+  margin-bottom: 2.8rem;
+  line-height: 1.8;
+}
+
+.hero-install {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 4rem;
+}
+
+.hero-install-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.hero-install-tab {
+  padding: 0.35rem 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.hero-install-tab--active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.hero-install-tab:not(.hero-install-tab--active):hover {
+  color: var(--text-primary);
+}
+
+.hero-install-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  background: rgba(15, 15, 20, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  max-width: 100%;
+}
+.hero-install-icon { color: var(--accent); flex-shrink: 0; }
+.hero-install-code code {
+  white-space: nowrap;
+  overflow-x: auto;
+  user-select: all;
+}
+.hero-install-copy {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.hero-install-copy:hover { background: rgba(99, 102, 241, 0.18); }
+.hero-install-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.hero-banner {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  border-radius: 18px;
+  border: 1px solid rgba(99,102,241,0.18);
+  overflow: hidden;
+  box-shadow: var(--shadow-banner);
+}
+.hero-banner img { width: 100%; height: auto; display: block; }
+.banner-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, rgba(8,8,13,0.7) 100%);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .hero { padding: 6rem 1.5rem 3rem; }
+  .hero-install-code { font-size: 0.75rem; padding: 0.55rem 0.8rem; }
+}

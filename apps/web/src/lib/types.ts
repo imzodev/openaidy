@@ -20,11 +20,33 @@ export type {
   PersonalityFile,
   McpServerRecord,
   McpToolWithSchema,
+  McpSecretKind,
+  McpSecretField,
+  McpSecretValue,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
   Session,
   MessageRole,
+  SessionSearchResult,
+  // Pulse types from shared-types — single source of truth.
+  ScheduleInput,
+  // Recurring task schedules (Phase 6). These mirror the
+  // @openaidy/shared-types/task-schedules.ts DTOs — the web client
+  // does NOT redeclare them.
+  SchedulePreset,
+  TaskScheduleStatus,
+  ReplanPolicy,
+  TaskScheduleDto,
+  TaskExecutionHistoryStatus,
+  TaskExecutionHistoryDto,
+  ExecutionSubtaskSummary,
+  ExecutionSubtaskSummaryItem,
+  CreateTaskScheduleInput,
+  UpdateTaskScheduleInput,
+  ListTaskExecutionsFilters,
+  PaginatedTaskExecutions,
 } from '@openaidy/shared-types';
 
 import type {
@@ -34,10 +56,24 @@ import type {
 } from '@openaidy/shared-types';
 
 /**
+ * Attachment metadata on a session message. Bytes are fetched separately
+ * via GET /api/attachments/:id/raw (through the authenticated fetch).
+ */
+export type SessionMessageAttachment = {
+  id: string;
+  kind: 'image' | 'audio';
+  source: 'user_upload' | 'tool_output';
+  name?: string | null;
+  mimeType: string;
+  sizeBytes: number;
+};
+
+/**
  * Session message — extends shared type with UI-only reasoning content field
  */
 export type SessionMessage = SharedSessionMessage & {
   reasoningContent?: string;
+  attachments?: SessionMessageAttachment[];
 };
 
 /**
@@ -105,9 +141,22 @@ export type SessionRun = Omit<
 export type BuiltinToolInfo = {
   name: string;
   description: string;
+  category?: string;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';
+
+/** A single item that can be toggled on/off in a ToolToggleGrid. */
+export type ToggleItem = {
+  id: string;
+  label: string;
+  description?: string;
+  category?: string;
+  badge?: string;
+  badgeVariant?: 'success' | 'neutral' | 'warning';
+  disabled?: boolean;
+  disabledReason?: string;
+};
 
 /**
  * Skill info returned by GET /skills
@@ -134,6 +183,23 @@ export type CreateAgentInput = {
 };
 
 /**
+ * A user message held in the client-side send queue while the agent is
+ * responding. Queued messages are sent automatically, one at a time, once
+ * the active run completes. Owned/managed by the useMessageQueue hook and
+ * rendered by the QueuedMessageCard component.
+ */
+export type QueuedMessage = {
+  /** Stable client-generated id, used as the list key and for edit/remove. */
+  id: string;
+  /** The message body to send when this item is dequeued. */
+  content: string;
+  /** Agent selected at enqueue time, sent with the message. */
+  agentId?: string;
+  /** Attachments uploaded at enqueue time, linked when the message sends. */
+  attachmentIds?: string[];
+};
+
+/**
  * Submit message input
  */
 export type SubmitMessageInput = {
@@ -142,6 +208,62 @@ export type SubmitMessageInput = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
+  /** Ids of previously-uploaded attachments to link to this message */
+  attachmentIds?: string[];
+};
+
+/**
+ * Cumulative token usage totals (per session or overall).
+ */
+export type UsageTotals = {
+  runCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  cost: number;
+  hasCost: boolean;
+};
+
+export type UsageByDay = UsageTotals & { day: string };
+export type UsageByProvider = UsageTotals & { providerId: string };
+export type UsageByModel = UsageTotals & {
+  providerId: string;
+  modelId: string;
+};
+/**
+ * Per-day × per-model rollup. Powers the stacked-bar usage chart on the
+ * dashboard, which needs to know exactly how much each model contributed
+ * on each day (not just the per-day total or the per-model total).
+ *
+ * Mirrors the server type in `apps/server/src/usage/aggregate.ts`.
+ */
+export type UsageByDayAndModel = UsageTotals & {
+  day: string;
+  providerId: string;
+  modelId: string;
+};
+
+/** Aggregated usage report (GET /api/usage). */
+export type UsageReport = {
+  from?: string;
+  to?: string;
+  totals: UsageTotals;
+  byDay: UsageByDay[];
+  byProvider: UsageByProvider[];
+  byModel: UsageByModel[];
+  /**
+   * Per-day × per-model breakdown. Empty when no rows in the selected
+   * range. Powers the stacked-bar chart on the usage page.
+   */
+  byDayByModel: UsageByDayAndModel[];
+};
+
+/** Per-session usage response (GET /api/sessions/:id/usage). */
+export type SessionUsageResponse = {
+  sessionId: string;
+  usage: UsageTotals;
 };
 
 /**
@@ -204,7 +326,10 @@ export type AgentConfig = {
   enabled?: boolean;
   description?: string;
   systemPrompt: string;
-  model: string; // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini"
+  // Format: "providerId/modelId" e.g., "openai/gpt-4o-mini". Optional: a
+  // model-less agent inherits the config default (set once the first provider
+  // is connected during onboarding).
+  model?: string;
   tools?: string[];
   tags?: string[];
   metadata?: Record<string, unknown>;
@@ -215,8 +340,10 @@ export type AgentConfig = {
  * Application defaults
  */
 export type AppDefaults = {
-  providerId: string;
-  modelId: string;
+  // Optional to represent an unconfigured install (no providers yet). Both are
+  // set once the first provider is connected during onboarding.
+  providerId?: string;
+  modelId?: string;
   agentId: string;
 };
 
@@ -334,13 +461,51 @@ export type ProviderConfig =
   | GeminiProviderConfig;
 
 /**
+ * A configured messaging channel. WhatsApp is the only type today; the shape
+ * mirrors `whatsappChannelConfigSchema` in packages/config.
+ */
+export type WhatsAppChannelConfig = {
+  type: 'whatsapp';
+  id: string;
+  agentId: string;
+  allowlist?: string[];
+  enabled?: boolean;
+};
+
+export type ChannelConfig = WhatsAppChannelConfig;
+
+/**
  * Application configuration
+ *
+ * `channels` (and `mcpServers`, not modelled here) round-trip through the raw
+ * config JSON; `channels` is typed so the UI can add/remove entries safely.
  */
 export type AppConfig = {
   version: number;
   defaults: AppDefaults;
   providers: ProviderConfig[];
   agents: AgentConfig[];
+  channels?: ChannelConfig[];
+};
+
+/**
+ * Per-agent notice shown when the agent's `model` field was
+ * rewritten to the project default because the provider it pointed
+ * at was disconnected. The notice stays visible until the user
+ * edits the agent or explicitly dismisses it, so the user always
+ * understands *why* the model value changed.
+ */
+export type RewiredAgentNotice = {
+  /** The agent whose `model` was auto-rewired. */
+  agentId: string;
+  /** The provider that was disconnected, for context in the UI. */
+  fromProviderId: string;
+  /** The model value the agent used before the rewire. */
+  fromModel: string;
+  /** The model value the agent was re-pointed to. */
+  toModel: string;
+  /** ISO timestamp of the rewire, for ordering / debugging. */
+  rewiredAt: string;
 };
 
 /**
@@ -446,25 +611,21 @@ export type PulseRun = {
   errorMessage: string | null;
 };
 
-export type ScheduleInput =
-  | { every: '15m' | '30m' | '1h' | '6h' | '12h' | '1d' | '1w' }
-  | { daily: { hour: number; minute: number } }
-  | { cron: string; tz?: string }
-  | { at: string };
+export type {
+  CreatePulseInput as CreatePulseBody,
+  UpdatePulseInput as UpdatePulseBody,
+} from '@openaidy/shared-types';
 
-export type CreatePulseBody = {
-  name: string;
-  prompt: string;
-  schedule: ScheduleInput;
-  agentId?: string;
-  sessionId?: string;
-};
-
-export type UpdatePulseBody = {
-  name?: string;
-  prompt?: string;
-  schedule?: ScheduleInput;
-  status?: 'active' | 'paused' | 'completed' | 'failed';
-  agentId?: string;
-  sessionId?: string;
+/**
+ * Build / runtime info exposed by GET /api/info.
+ * `version` is semver ("0.3.0", no "v"). The UI prepends "v" for display.
+ */
+export type AppInfo = {
+  version: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  pid: number;
+  startedAt: string;
+  uptimeMs: number;
 };

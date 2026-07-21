@@ -14,6 +14,7 @@ import {
   type EnableAddonResult,
   type DisableAddonRequest,
   type UpdateAddonConfigRequest,
+  type UpdateAddonRequest,
   type ListAddonsFilters,
   AddonServiceError,
   createAddonNotFoundError,
@@ -283,6 +284,79 @@ export class AddonService {
     if (!updatedAddon) {
       throw new AddonServiceError(
         'Failed to update addon config',
+        AddonErrorCodes.INSTALLATION_FAILED,
+      );
+    }
+
+    return updatedAddon;
+  }
+
+  /**
+   * Update an installed addon's manifest (name, version, permissions,
+   * externalDomains, …). Keeps the DB record in sync after the on-disk
+   * addon.json has been edited (e.g. by the `addon_update` tool).
+   *
+   * Does NOT change the addon's status. When the permission set changes the
+   * change is recorded in the audit log and the DB `permissions` column is
+   * updated to the new manifest set (auto-approved, matching how
+   * agent-created addons are enabled). Note that an already-issued client
+   * token still carries the OLD permissions until the addon is reloaded /
+   * re-enabled.
+   */
+  async updateAddon(request: UpdateAddonRequest): Promise<Addon> {
+    const { addonId, manifest, updatedBy } = request;
+
+    // Validate the new manifest. Pass no existing ids so the duplicate-id
+    // check does not flag the addon against itself.
+    const validationResult = this.validator.validate(manifest, []);
+    if (!validationResult.valid) {
+      throw createInvalidManifestError(validationResult.errors);
+    }
+
+    // The manifest id must match the addon being updated — renaming the id
+    // would orphan the on-disk directory and DB record.
+    if (manifest.id !== addonId) {
+      throw createInvalidManifestError([
+        {
+          field: 'id',
+          message: `Manifest id "${manifest.id}" does not match addon "${addonId}" — the id cannot be changed`,
+          code: 'IMMUTABLE_ID',
+        },
+      ]);
+    }
+
+    const addon = await this.repository.findByAddonId(addonId);
+    if (!addon) {
+      throw createAddonNotFoundError(addonId);
+    }
+
+    const oldPermissions = (addon.permissions as string[]) ?? [];
+    const newPermissions = manifest.permissions ?? [];
+    const permissionsChanged =
+      oldPermissions.length !== newPermissions.length ||
+      oldPermissions.some((p) => !newPermissions.includes(p)) ||
+      newPermissions.some((p) => !oldPermissions.includes(p));
+
+    if (permissionsChanged) {
+      await this.repository.recordPermissionChange({
+        addonId: addon.id,
+        changedBy: updatedBy,
+        oldPermissions,
+        newPermissions,
+        reason: 'Updated addon manifest',
+      });
+    }
+
+    const updatedAddon = await this.repository.update(addon.id, {
+      name: manifest.name,
+      version: manifest.version,
+      manifest: manifest as unknown as Record<string, unknown>,
+      permissions: newPermissions,
+    });
+
+    if (!updatedAddon) {
+      throw new AddonServiceError(
+        'Failed to update addon',
         AddonErrorCodes.INSTALLATION_FAILED,
       );
     }

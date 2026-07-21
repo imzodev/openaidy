@@ -11,7 +11,7 @@ type Database = NodePgDatabase<typeof schema>;
 
 /**
  * Integration tests for session repositories
- * 
+ *
  * These tests require a PostgreSQL database. Set DATABASE_URL to run.
  */
 describe('Session Repositories (integration)', () => {
@@ -30,7 +30,7 @@ describe('Session Repositories (integration)', () => {
 
     pool = new Pool({ connectionString: databaseUrl });
     db = drizzle(pool, { schema }) as Database;
-    
+
     sessionsRepo = new SessionsRepository(db);
     messagesRepo = new SessionMessagesRepository(db);
     runsRepo = new SessionRunsRepository(db);
@@ -53,7 +53,7 @@ describe('Session Repositories (integration)', () => {
   describe('SessionsRepository', () => {
     test('should create a session', async () => {
       const session = await sessionsRepo!.create({ title: 'Test Session' });
-      
+
       expect(session.id).toBeDefined();
       expect(session.title).toBe('Test Session');
       expect(session.status).toBe('active');
@@ -63,7 +63,7 @@ describe('Session Repositories (integration)', () => {
     test('should find session by id', async () => {
       const created = await sessionsRepo!.create({ title: 'Find Me' });
       const found = await sessionsRepo!.findById(created.id);
-      
+
       expect(found).toBeDefined();
       expect(found?.id).toBe(created.id);
       expect(found?.title).toBe('Find Me');
@@ -72,7 +72,7 @@ describe('Session Repositories (integration)', () => {
     test('should list sessions', async () => {
       await sessionsRepo!.create({ title: 'Session 1' });
       await sessionsRepo!.create({ title: 'Session 2' });
-      
+
       const list = await sessionsRepo!.list();
       expect(list).toHaveLength(2);
     });
@@ -80,7 +80,7 @@ describe('Session Repositories (integration)', () => {
     test('should update session status', async () => {
       const session = await sessionsRepo!.create({ title: 'To Archive' });
       const updated = await sessionsRepo!.updateStatus(session.id, 'archived');
-      
+
       expect(updated?.status).toBe('archived');
       expect(updated?.archivedAt).toBeInstanceOf(Date);
     });
@@ -117,29 +117,47 @@ describe('Session Repositories (integration)', () => {
 
     test('should get latest message', async () => {
       await messagesRepo!.append({ sessionId, role: 'user', content: 'First' });
-      await messagesRepo!.append({ sessionId, role: 'assistant', content: 'Second' });
-      
+      await messagesRepo!.append({
+        sessionId,
+        role: 'assistant',
+        content: 'Second',
+      });
+
       const latest = await messagesRepo!.getLatest(sessionId);
       expect(latest?.content).toBe('Second');
     });
 
     test('should count messages', async () => {
       await messagesRepo!.append({ sessionId, role: 'user', content: 'A' });
-      await messagesRepo!.append({ sessionId, role: 'assistant', content: 'B' });
-      
+      await messagesRepo!.append({
+        sessionId,
+        role: 'assistant',
+        content: 'B',
+      });
+
       const count = await messagesRepo!.countBySession(sessionId);
       expect(count).toBe(2);
     });
 
     test('should isolate messages between sessions', async () => {
       const otherSession = await sessionsRepo!.create({ title: 'Other' });
-      
-      await messagesRepo!.append({ sessionId, role: 'user', content: 'Session 1' });
-      await messagesRepo!.append({ sessionId: otherSession.id, role: 'user', content: 'Session 2' });
-      
+
+      await messagesRepo!.append({
+        sessionId,
+        role: 'user',
+        content: 'Session 1',
+      });
+      await messagesRepo!.append({
+        sessionId: otherSession.id,
+        role: 'user',
+        content: 'Session 2',
+      });
+
       const session1Messages = await messagesRepo!.listBySession(sessionId);
-      const session2Messages = await messagesRepo!.listBySession(otherSession.id);
-      
+      const session2Messages = await messagesRepo!.listBySession(
+        otherSession.id,
+      );
+
       expect(session1Messages).toHaveLength(1);
       expect(session2Messages).toHaveLength(1);
       expect(session1Messages[0]?.content).toBe('Session 1');
@@ -213,20 +231,70 @@ describe('Session Repositories (integration)', () => {
 
     test('should get active run', async () => {
       // Create multiple runs
-      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
-      const runningRun = await runsRepo!.create({ sessionId, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
-      
+      await runsRepo!.create({
+        sessionId,
+        agentId: 'agent1',
+        providerId: 'p1',
+        modelId: 'm1',
+      });
+      const runningRun = await runsRepo!.create({
+        sessionId,
+        agentId: 'agent2',
+        providerId: 'p2',
+        modelId: 'm2',
+      });
+
       await runsRepo!.markRunning(runningRun.id);
-      
+
       const active = await runsRepo!.getActive(sessionId);
       expect(active?.id).toBe(runningRun.id);
       expect(active?.status).toBe('running');
     });
 
+    test('listRunning returns only runs in the running state', async () => {
+      const queued = await runsRepo!.create({
+        sessionId,
+        agentId: 'a1',
+        providerId: 'p1',
+        modelId: 'm1',
+      });
+      const stuck = await runsRepo!.create({
+        sessionId,
+        agentId: 'a2',
+        providerId: 'p2',
+        modelId: 'm2',
+      });
+      const done = await runsRepo!.create({
+        sessionId,
+        agentId: 'a3',
+        providerId: 'p3',
+        modelId: 'm3',
+      });
+      await runsRepo!.markRunning(stuck.id);
+      await runsRepo!.markRunning(done.id);
+      await runsRepo!.markSucceeded(done.id, { finishReason: 'stop' });
+
+      const running = await runsRepo!.listRunning();
+      const ids = running.map((r) => r.id);
+      expect(ids).toContain(stuck.id);
+      expect(ids).not.toContain(queued.id);
+      expect(ids).not.toContain(done.id);
+    });
+
     test('should list runs for session with agentId', async () => {
-      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
-      await runsRepo!.create({ sessionId, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
-      
+      await runsRepo!.create({
+        sessionId,
+        agentId: 'agent1',
+        providerId: 'p1',
+        modelId: 'm1',
+      });
+      await runsRepo!.create({
+        sessionId,
+        agentId: 'agent2',
+        providerId: 'p2',
+        modelId: 'm2',
+      });
+
       const runs = await runsRepo!.listBySession(sessionId);
       expect(runs).toHaveLength(2);
       expect(runs[0]?.agentId).toBe('agent2');
@@ -235,19 +303,95 @@ describe('Session Repositories (integration)', () => {
 
     test('should isolate runs between sessions', async () => {
       const otherSession = await sessionsRepo!.create({ title: 'Other' });
-      
-      await runsRepo!.create({ sessionId, agentId: 'agent1', providerId: 'p1', modelId: 'm1' });
-      await runsRepo!.create({ sessionId: otherSession.id, agentId: 'agent2', providerId: 'p2', modelId: 'm2' });
-      
+
+      await runsRepo!.create({
+        sessionId,
+        agentId: 'agent1',
+        providerId: 'p1',
+        modelId: 'm1',
+      });
+      await runsRepo!.create({
+        sessionId: otherSession.id,
+        agentId: 'agent2',
+        providerId: 'p2',
+        modelId: 'm2',
+      });
+
       const session1Runs = await runsRepo!.listBySession(sessionId);
       const session2Runs = await runsRepo!.listBySession(otherSession.id);
-      
+
       expect(session1Runs).toHaveLength(1);
       expect(session2Runs).toHaveLength(1);
       expect(session1Runs[0]?.providerId).toBe('p1');
       expect(session1Runs[0]?.agentId).toBe('agent1');
       expect(session2Runs[0]?.providerId).toBe('p2');
       expect(session2Runs[0]?.agentId).toBe('agent2');
+    });
+
+    test('getUsageBySession aggregates succeeded runs per session', async () => {
+      const other = await sessionsRepo!.create({ title: 'Other' });
+
+      // Two succeeded runs on `sessionId`, one on `other`.
+      const r1 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r1.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        cost: 0.01,
+      });
+      const r2 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r2.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+        cost: 0.02,
+      });
+      const r3 = await runsRepo!.create({
+        sessionId: other.id,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markSucceeded(r3.id, {
+        finishReason: 'stop',
+        usage: { promptTokens: 7, completionTokens: 3, totalTokens: 10 },
+      });
+      // A failed run must NOT be counted.
+      const r4 = await runsRepo!.create({
+        sessionId,
+        agentId: 'a',
+        providerId: 'p',
+        modelId: 'm',
+      });
+      await runsRepo!.markFailed(r4.id, {
+        errorCode: 'provider.error',
+        errorMessage: 'boom',
+      });
+
+      const rows = await runsRepo!.getUsageBySession();
+      const byId = new Map(rows.map((row) => [row.sessionId, row]));
+
+      const main = byId.get(sessionId);
+      expect(main).toBeDefined();
+      expect(main!.runCount).toBe(2);
+      expect(main!.totalTokens).toBe(45);
+      expect(main!.promptTokens).toBe(30);
+      expect(main!.cost).toBeCloseTo(0.03);
+      expect(main!.hasCost).toBe(true);
+
+      const otherUsage = byId.get(other.id);
+      expect(otherUsage!.runCount).toBe(1);
+      expect(otherUsage!.totalTokens).toBe(10);
+      // No cost recorded for that run.
+      expect(otherUsage!.hasCost).toBe(false);
     });
   });
 });

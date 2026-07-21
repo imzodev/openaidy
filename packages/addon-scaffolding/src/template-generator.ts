@@ -68,9 +68,11 @@ function writeManifest(
     dependencies: {},
     ...extra,
   };
-  if (opts.externalDomains && opts.externalDomains.length > 0) {
-    manifest['externalDomains'] = opts.externalDomains;
-  }
+  // Every addon gets the Tailwind CDN <script> above (informational here —
+  // enforcement is a fixed platform script-src allowance, see routes/addons.ts).
+  manifest['externalDomains'] = Array.from(
+    new Set([...(opts.externalDomains ?? []), 'cdn.tailwindcss.com']),
+  );
   if (opts.externalImageDomains && opts.externalImageDomains.length > 0) {
     manifest['externalImageDomains'] = opts.externalImageDomains;
   }
@@ -93,6 +95,12 @@ function writeReadme(projectPath: string, opts: TemplateOptions): void {
     `# ${opts.name}\n\n${opts.description ?? `${opts.name} addon for OpenAidy`}\n\n## Development\n\nEdit \`app/index.html\` and \`app/index.js\` directly — no build step needed.\n\n## Validate\n\n\`\`\`bash\nopenaidy addon validate\n\`\`\`\n`,
   );
 }
+
+// Every addon gets Tailwind CSS for free — see apps/server/src/tools/addons/create.ts
+// for the matching injection on the agent-tool path (which overwrites this
+// template's index.html with agent-supplied content, so both places need it).
+const TAILWIND_CDN_TAG =
+  '  <script src="https://cdn.tailwindcss.com"></script>';
 
 // Shared CSS for both templates
 const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -220,6 +228,7 @@ function generateBasicTemplate(
   <style>
 ${SHARED_CSS}
   </style>
+${TAILWIND_CDN_TAG}
 </head>
 <body>
   <main>
@@ -298,6 +307,7 @@ function generateAgentTemplate(
   <style>
 ${SHARED_CSS}
   </style>
+${TAILWIND_CDN_TAG}
 </head>
 <body>
   <main>

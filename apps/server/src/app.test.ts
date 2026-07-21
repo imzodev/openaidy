@@ -143,7 +143,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
     // Now check that the route can see this provider
     const response = await app.inject({
       method: 'GET',
-      url: '/providers',
+      url: '/api/providers',
     });
 
     expect(response.statusCode).toBe(200);
@@ -169,7 +169,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
     // Verify it's visible via routes
     const listResponse1 = await app.inject({
       method: 'GET',
-      url: '/providers',
+      url: '/api/providers',
     });
     const testProvider1 = listResponse1
       .json()
@@ -179,7 +179,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
     // Disable via route
     const disableResponse = await app.inject({
       method: 'POST',
-      url: '/providers/test-toggle-provider/disable',
+      url: '/api/providers/test-toggle-provider/disable',
     });
     expect(disableResponse.statusCode).toBe(200);
     expect(disableResponse.json().enabled).toBe(false);
@@ -190,7 +190,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
     // Verify routes see the disabled state
     const listResponse2 = await app.inject({
       method: 'GET',
-      url: '/providers',
+      url: '/api/providers',
     });
     const disabledProvider = listResponse2
       .json()
@@ -200,7 +200,7 @@ describe('App services lifecycle', { timeout: 15000 }, () => {
     // Re-enable via route
     const enableResponse = await app.inject({
       method: 'POST',
-      url: '/providers/test-toggle-provider/enable',
+      url: '/api/providers/test-toggle-provider/enable',
     });
     expect(enableResponse.statusCode).toBe(200);
     expect(enableResponse.json().enabled).toBe(true);

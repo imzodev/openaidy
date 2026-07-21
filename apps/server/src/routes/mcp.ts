@@ -5,20 +5,145 @@
  * - Config CRUD (stored in config/openaidy.json)
  * - Runtime connect/disconnect
  * - Tool discovery
+ * - One-shot inline-secret migration (issue #401)
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { McpClientService } from '../mcp/client';
 import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig, McpSecretValue } from '@openaidy/config';
 import {
-  type McpServerRecord,
   type McpToolWithSchema,
   type CreateMcpServerRequest,
   type UpdateMcpServerRequest,
 } from '@openaidy/shared-types';
 import { requireAuth } from '../middleware/require-auth';
+import {
+  toMcpServerRecord,
+  unmaskRecord,
+  type McpRuntimeStatus,
+} from '../mcp/server-record';
+import {
+  normalizeMcpServerMap,
+  McpConfigImportError,
+  type RawMcpServerMap,
+} from '../mcp/config-import';
+import {
+  encryptSecret,
+  ensureEncryptionKey,
+  isEncryptedSecret,
+} from '../mcp/secret-crypto';
+import { migrateAllInlineSecrets } from '../mcp/migrate-secrets';
+
+/**
+ * Managing MCP servers means running arbitrary local processes (stdio) or
+ * dialling out with stored credentials (http), so all write/lifecycle
+ * operations require the admin scope — matching access-token and addon
+ * management.
+ */
+const ADMIN_SCOPE = '*';
+
+/**
+ * JSON schema for a single `env`/`headers` value: a legacy plain string
+ * (backward-compatible with existing configs and import formats), or the
+ * structured `{ kind, value }` shape the MCP form UI sends — `kind: 'env'`
+ * for a `${VAR}` reference, `kind: 'inline'` for a secret encrypted at rest.
+ */
+const secretValueSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      required: ['kind', 'value'],
+      properties: {
+        kind: { type: 'string', enum: ['env', 'inline'] },
+        value: { type: 'string' },
+      },
+    },
+  ],
+};
+
+/**
+ * Result of validating that any newly-supplied inline secret in a request
+ * can actually be encrypted by the current process. {@link ensureEncryptionKey}
+ * surfaces most failures (no master key, unwritable key file) at startup;
+ * this probe catches anything that slipped past — and doubles as a smoke
+ * test of the full encrypt path so a misconfigured `CREDENTIALS_MASTER_KEY`
+ * override fails the request cleanly rather than on the way to disk.
+ */
+type InlineEncryptionCheck =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      statusCode: number;
+      error: string;
+      message: string;
+    };
+
+/**
+ * Verify the at-rest encryption pipeline can encrypt a fresh inline secret.
+ * Only call this for payloads that *introduce* new inline values (so a
+ * pure-placeholder patch is never blocked by a transient crypto outage).
+ */
+function ensureInlineEncryptionAvailable(): InlineEncryptionCheck {
+  try {
+    ensureEncryptionKey();
+    // Round-trip a probe value — catches cases where the master key exists
+    // but AES-256-GCM is unavailable (e.g. a stripped Node build).
+    const probe = encryptSecret('__openaidy_probe__');
+    if (!isEncryptedSecret(probe)) {
+      return {
+        ok: false,
+        statusCode: 500,
+        error: 'ENCRYPTION_UNAVAILABLE',
+        message:
+          'Inline-secret encryption is misconfigured: encrypt() did not produce the expected prefix',
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'ENCRYPTION_UNAVAILABLE',
+      message: `Could not initialise at-rest encryption for inline MCP secrets: ${
+        error instanceof Error ? error.message : String(error)
+      }. Set CREDENTIALS_MASTER_KEY or ensure OPENAIDY_HOME is writable.`,
+    };
+  }
+}
+
+/**
+ * Whether a patch actually introduces a *new* inline secret (one that
+ * needs encrypting). An incoming `{ kind: 'inline', value: MASKED_VALUE }`
+ * is not new — it's the client echoing back the redacted display — and
+ * a legacy plain string that passes the `isSafeToShow` heuristic is
+ * stored as a plain env reference. Only "needs encrypt" patches require
+ * the encryption service to be live.
+ */
+function patchIntroducesNewInlineSecret(
+  record: Record<string, McpSecretValue> | undefined,
+): boolean {
+  if (!record) return false;
+  for (const value of Object.values(record)) {
+    if (typeof value === 'string') {
+      // Legacy plain string that would be normalized to inline. Skip if
+      // the string is purely a ${VAR} reference — those stay plaintext.
+      if (/\$\{[^}]+\}/.test(value.trim())) {
+        const literal = value.trim().replace(/\$\{[^}]+\}/g, ' ');
+        if (/^[A-Za-z \t-]*$/.test(literal)) continue;
+      }
+      return true;
+    }
+    if (value.kind === 'inline' && value.value !== '••••••') {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * MCP routes options
@@ -39,41 +164,69 @@ export async function registerMcpRoutes(
   const { mcpService, configService, authMiddleware } = options;
 
   /**
+   * Live connection state for a server, used to enrich the persisted config
+   * into an API record. Also reports any `${VAR}` secrets the server still
+   * needs (so the UI can flag it as "awaiting configuration" rather than a
+   * plain disconnected server).
+   */
+  const runtimeStatus = (config: McpServerConfig): McpRuntimeStatus => {
+    const connected = mcpService.isConnected(config.id);
+    const tools = connected
+      ? mcpService.getTools(config.id).map((t) => ({
+          name: t.name,
+          description: t.description,
+        }))
+      : [];
+    return {
+      connected,
+      tools,
+      missingSecrets: mcpService.missingSecrets(config),
+    };
+  };
+
+  /**
+   * Connect a freshly saved/imported server unless it's still awaiting its
+   * secrets. A server with unresolved `${VAR}` placeholders (e.g. a
+   * preinstalled GitHub server before the user pastes a token) is left
+   * disconnected without a warning — that's an awaiting-configuration state,
+   * not a failure. `failureContext` is the log message used only when a
+   * genuinely-configured server fails to connect.
+   */
+  const connectIfReady = async (
+    serverConfig: McpServerConfig,
+    failureContext: string,
+  ): Promise<void> => {
+    if (mcpService.missingSecrets(serverConfig).length > 0) {
+      return;
+    }
+    try {
+      await mcpService.connect(serverConfig);
+    } catch (error) {
+      fastify.log.warn(
+        {
+          serverId: serverConfig.id,
+          err: error instanceof Error ? error.message : String(error),
+        },
+        failureContext,
+      );
+    }
+  };
+
+  /**
    * GET /mcp/servers
    *
    * List all configured MCP servers (from config) with their live runtime status.
-   * Shows both persisted config and current connection state.
+   * Shows both persisted config and current connection state. Secret values in
+   * env/headers are redacted (see toMcpServerRecord).
    */
   fastify.get(
     '/mcp/servers',
     async (_request: FastifyRequest, _reply: FastifyReply) => {
-      const configuredServers = configService.getMcpServers();
-
-      const servers: McpServerRecord[] = configuredServers.map(
-        (serverConfig) => {
-          const connected = mcpService.isConnected(serverConfig.id);
-          const tools = connected
-            ? mcpService.getTools(serverConfig.id).map((t) => ({
-                name: t.name,
-                description: t.description,
-              }))
-            : [];
-
-          return {
-            id: serverConfig.id,
-            name: serverConfig.name,
-            transport: serverConfig.transport,
-            command: serverConfig.command,
-            args: serverConfig.args,
-            env: serverConfig.env,
-            url: serverConfig.url,
-            headers: serverConfig.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
-          };
-        },
-      );
+      const servers = configService
+        .getMcpServers()
+        .map((serverConfig) =>
+          toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
+        );
 
       return { servers };
     },
@@ -99,29 +252,9 @@ export async function registerMcpRoutes(
         });
       }
 
-      const connected = mcpService.isConnected(id);
-      const tools = connected
-        ? mcpService.getTools(id).map((t) => ({
-            name: t.name,
-            description: t.description,
-          }))
-        : [];
-
-      const record: McpServerRecord = {
-        id: serverConfig.id,
-        name: serverConfig.name,
-        transport: serverConfig.transport,
-        command: serverConfig.command,
-        args: serverConfig.args,
-        env: serverConfig.env,
-        url: serverConfig.url,
-        headers: serverConfig.headers,
-        connected,
-        toolCount: tools.length,
-        tools,
+      return {
+        server: toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
       };
-
-      return { server: record };
     },
   );
 
@@ -162,7 +295,7 @@ export async function registerMcpRoutes(
   await fastify.register(async (authRequired) => {
     authRequired.addHook(
       'preHandler',
-      requireAuth({ authMiddleware, requiredScope: 'agents.list' }),
+      requireAuth({ authMiddleware, requiredScope: ADMIN_SCOPE }),
     );
 
     /**
@@ -192,12 +325,12 @@ export async function registerMcpRoutes(
                   args: { type: 'array', items: { type: 'string' } },
                   env: {
                     type: 'object',
-                    additionalProperties: { type: 'string' },
+                    additionalProperties: secretValueSchema,
                   },
                   url: { type: 'string' },
                   headers: {
                     type: 'object',
-                    additionalProperties: { type: 'string' },
+                    additionalProperties: secretValueSchema,
                   },
                 },
               },
@@ -219,51 +352,228 @@ export async function registerMcpRoutes(
           });
         }
 
+        // Fail fast (with a clean 503) if this request introduces inline
+        // secrets but encryption is unavailable — better than crashing in
+        // encryptSecret() halfway through the save.
+        if (
+          patchIntroducesNewInlineSecret(config.env) ||
+          patchIntroducesNewInlineSecret(config.headers)
+        ) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+
+        // Route env/headers through unmaskRecord (no existing record to
+        // merge against) so any inline secrets are encrypted before they
+        // ever reach disk.
+        const newConfig: McpServerConfig = {
+          ...(config as McpServerConfig),
+          env: unmaskRecord(config.env, undefined),
+          headers: unmaskRecord(config.headers, undefined),
+        };
+
         // Persist to config
         const fullConfig = configService.getConfig();
-        const newServers = [
-          ...(fullConfig.mcpServers ?? []),
-          config as McpServerConfig,
-        ];
+        const newServers = [...(fullConfig.mcpServers ?? []), newConfig];
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        // Attempt connection (non-fatal if it fails)
-        let connected = false;
-        try {
-          await mcpService.connect(config as McpServerConfig);
-          connected = true;
-        } catch (error) {
-          fastify.log.warn(
-            {
-              serverId: config.id,
-              err: error instanceof Error ? error.message : String(error),
+        // Connect now unless the server is still awaiting its secrets (a
+        // server with unset ${VAR} placeholders isn't broken, just
+        // unconfigured — so no connection is attempted and no warning logged).
+        await connectIfReady(
+          newConfig,
+          'MCP server saved but initial connection failed',
+        );
+
+        return reply.status(201).send({
+          server: toMcpServerRecord(newConfig, runtimeStatus(newConfig)),
+        });
+      },
+    );
+
+    /**
+     * POST /mcp/servers/import
+     *
+     * Import one or more servers from the standard keyed-map config format
+     * (Claude Desktop / VS Code / Cursor), e.g.:
+     *
+     *   { "mcpServers": { "github": { "type": "http", "url": "…",
+     *     "headers": { "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" } } } }
+     *
+     * Atomic: if any entry is invalid or any id already exists, nothing is
+     * imported. Each imported server is then connected (non-fatal on failure).
+     */
+    authRequired.post<{ Body: { mcpServers: RawMcpServerMap } }>(
+      '/mcp/servers/import',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['mcpServers'],
+            properties: {
+              mcpServers: {
+                type: 'object',
+                minProperties: 1,
+                additionalProperties: {
+                  type: 'object',
+                  properties: {
+                    type: { type: 'string' },
+                    transport: { type: 'string' },
+                    name: { type: 'string' },
+                    command: { type: 'string' },
+                    args: { type: 'array', items: { type: 'string' } },
+                    env: {
+                      type: 'object',
+                      additionalProperties: secretValueSchema,
+                    },
+                    url: { type: 'string' },
+                    headers: {
+                      type: 'object',
+                      additionalProperties: secretValueSchema,
+                    },
+                  },
+                },
+              },
             },
-            'MCP server saved but initial connection failed',
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{ Body: { mcpServers: RawMcpServerMap } }>,
+        reply: FastifyReply,
+      ) => {
+        // Normalise the keyed-map format into our flat config shape.
+        let normalized;
+        try {
+          normalized = normalizeMcpServerMap(request.body.mcpServers);
+        } catch (error) {
+          if (error instanceof McpConfigImportError) {
+            return reply
+              .status(400)
+              .send({ error: 'INVALID_CONFIG', message: error.message });
+          }
+          throw error;
+        }
+
+        // Same fast-fail guard as POST/PATCH: if any imported server
+        // introduces an inline secret but encryption is unavailable, return
+        // a clean 503 instead of letting encryptSecret() crash mid-import.
+        const anyNewInlineSecret = normalized.some(
+          (s) =>
+            patchIntroducesNewInlineSecret(s.env) ||
+            patchIntroducesNewInlineSecret(s.headers),
+        );
+        if (anyNewInlineSecret) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+
+        // Imported configs use the plain-string wire format (Claude Desktop
+        // / VS Code / Cursor). Route env/headers through unmaskRecord so an
+        // inlined credential pasted straight into the import JSON — the
+        // exact scenario from issue #401 — is encrypted before it ever
+        // reaches disk, same as the structured form UI.
+        const servers: McpServerConfig[] = normalized.map((server) => ({
+          ...server,
+          env: unmaskRecord(server.env, undefined),
+          headers: unmaskRecord(server.headers, undefined),
+        }));
+
+        // All-or-nothing: reject the whole import if any id already exists.
+        const existingIds = new Set(
+          configService.getMcpServers().map((s) => s.id),
+        );
+        const conflicts = servers
+          .map((s) => s.id)
+          .filter((id) => existingIds.has(id));
+        if (conflicts.length > 0) {
+          return reply.status(409).send({
+            error: 'CONFLICT',
+            message: `MCP server(s) already exist in config: ${conflicts.join(', ')}`,
+          });
+        }
+
+        // Persist all in a single save.
+        const fullConfig = configService.getConfig();
+        await configService.save({
+          ...fullConfig,
+          mcpServers: [...(fullConfig.mcpServers ?? []), ...servers],
+        });
+
+        // Connect each (non-fatal), skipping any still awaiting secrets, then
+        // build redacted records. An imported server that references an unset
+        // ${VAR} (e.g. a token the user hasn't pasted yet) is saved and
+        // reported as awaiting configuration rather than a failed connection.
+        const records = [];
+        for (const serverConfig of servers) {
+          await connectIfReady(
+            serverConfig,
+            'MCP server imported but initial connection failed',
+          );
+          records.push(
+            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
           );
         }
 
-        const tools = connected
-          ? mcpService.getTools(config.id).map((t) => ({
-              name: t.name,
-              description: t.description,
-            }))
-          : [];
+        return reply.status(201).send({ servers: records });
+      },
+    );
 
-        return reply.status(201).send({
-          server: {
-            id: config.id,
-            name: config.name,
-            transport: config.transport,
-            command: config.command,
-            args: config.args,
-            env: config.env,
-            url: config.url,
-            headers: config.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
+    /**
+     * POST /mcp/servers/migrate-secrets
+     *
+     * One-shot migration: walk every persisted MCP server's env/headers
+     * and encrypt plaintext inline secrets in-place (issue #401). Idempotent
+     * — re-running on an already-migrated config is a no-op. With
+     * `dryRun: true` returns the plan without writing.
+     *
+     * Wired to the `openaidy mcp migrate-secrets` CLI command and also
+     * callable by any admin tool. Returns the per-server plan so the CLI
+     * can show what changed.
+     */
+    authRequired.post<{
+      Body: { dryRun?: boolean };
+    }>(
+      '/mcp/servers/migrate-secrets',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            properties: {
+              dryRun: { type: 'boolean', default: false },
+            },
           },
-        });
+        },
+      },
+      async (
+        request: FastifyRequest<{ Body: { dryRun?: boolean } }>,
+        reply: FastifyReply,
+      ) => {
+        const dryRun = request.body?.dryRun === true;
+        try {
+          const report = await migrateAllInlineSecrets({
+            configService,
+            dryRun,
+          });
+          return reply.send({ ...report, dryRun });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          return reply.status(500).send({
+            error: 'MIGRATION_FAILED',
+            message: `Failed to migrate inline secrets: ${message}`,
+          });
+        }
       },
     );
 
@@ -292,11 +602,11 @@ export async function registerMcpRoutes(
               transport: { type: 'string', enum: ['stdio', 'http'] },
               command: { type: 'string' },
               args: { type: 'array', items: { type: 'string' } },
-              env: { type: 'object', additionalProperties: { type: 'string' } },
+              env: { type: 'object', additionalProperties: secretValueSchema },
               url: { type: 'string' },
               headers: {
                 type: 'object',
-                additionalProperties: { type: 'string' },
+                additionalProperties: secretValueSchema,
               },
             },
           },
@@ -320,7 +630,25 @@ export async function registerMcpRoutes(
           });
         }
 
-        // Build updated config (merge patch into existing)
+        // Same fast-fail guard as POST: only when the patch actually
+        // introduces a new inline secret (so a pure-${VAR} patch or a
+        // MASKED_VALUE echo isn't blocked by a transient crypto outage).
+        if (
+          patchIntroducesNewInlineSecret(patch.env) ||
+          patchIntroducesNewInlineSecret(patch.headers)
+        ) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+
+        // Build updated config (merge patch into existing). env/headers go
+        // through unmaskRecord so a client that echoes back redacted values
+        // (MASKED_VALUE) keeps the stored secret instead of overwriting it.
         const updated: McpServerConfig = {
           ...existing,
           ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -329,9 +657,13 @@ export async function registerMcpRoutes(
             : {}),
           ...(patch.command !== undefined ? { command: patch.command } : {}),
           ...(patch.args !== undefined ? { args: patch.args } : {}),
-          ...(patch.env !== undefined ? { env: patch.env } : {}),
+          ...(patch.env !== undefined
+            ? { env: unmaskRecord(patch.env, existing.env) }
+            : {}),
           ...(patch.url !== undefined ? { url: patch.url } : {}),
-          ...(patch.headers !== undefined ? { headers: patch.headers } : {}),
+          ...(patch.headers !== undefined
+            ? { headers: unmaskRecord(patch.headers, existing.headers) }
+            : {}),
         };
 
         // Persist to config
@@ -341,29 +673,7 @@ export async function registerMcpRoutes(
         );
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        const connected = mcpService.isConnected(id);
-        const tools = connected
-          ? mcpService.getTools(id).map((t) => ({
-              name: t.name,
-              description: t.description,
-            }))
-          : [];
-
-        return {
-          server: {
-            id: updated.id,
-            name: updated.name,
-            transport: updated.transport,
-            command: updated.command,
-            args: updated.args,
-            env: updated.env,
-            url: updated.url,
-            headers: updated.headers,
-            connected,
-            toolCount: tools.length,
-            tools,
-          },
-        };
+        return { server: toMcpServerRecord(updated, runtimeStatus(updated)) };
       },
     );
 

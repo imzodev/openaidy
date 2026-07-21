@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 
 vi.mock('../lib/env', () => ({
@@ -87,22 +87,24 @@ describe('Provider Routes', { timeout: 15000 }, () => {
   });
 
   describe('GET /providers', () => {
-    it('should return providers from config template', async () => {
+    it('should return an empty provider list on a fresh install', async () => {
+      // The shipped template configures no providers — a fresh install starts
+      // unconfigured and the user connects a provider via onboarding.
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body).toHaveProperty('providers');
-      expect(body.providers.length).toBeGreaterThanOrEqual(3);
+      expect(body.providers).toHaveLength(0);
     });
 
     it('should return providers list with enabled filter', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=true',
+        url: '/api/providers?enabled=true',
       });
 
       expect(response.statusCode).toBe(200);
@@ -115,7 +117,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return health status', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
@@ -126,15 +128,17 @@ describe('Provider Routes', { timeout: 15000 }, () => {
       expect(['healthy', 'degraded', 'unhealthy']).toContain(body.status);
     });
 
-    it('should return health status from config template providers', async () => {
+    it('should report unhealthy on a fresh install with no providers', async () => {
+      // With no providers configured, there is nothing to be healthy.
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
       const body = response.json();
-      expect(['healthy', 'degraded']).toContain(body.status);
+      expect(body.status).toBe('unhealthy');
+      expect(body.providers).toHaveLength(0);
     });
   });
 
@@ -142,7 +146,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid request payload', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           // Missing required 'messages' field
           providerId: 'test-provider',
@@ -155,7 +159,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject empty messages array', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [],
         },
@@ -167,7 +171,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid message role', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [
             {
@@ -184,7 +188,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should reject invalid temperature', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [
             {
@@ -202,7 +206,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return error when provider not configured', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'unconfigured-provider',
           messages: [
@@ -223,7 +227,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return error for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-provider',
           messages: [
@@ -245,7 +249,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should accept valid request with all optional fields', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'test-provider',
           modelId: 'test-model',
@@ -277,7 +281,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/non-existent-provider',
+        url: '/api/providers/non-existent-provider',
       });
 
       expect(response.statusCode).toBe(404);
@@ -291,7 +295,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/non-existent-provider/enable',
+        url: '/api/providers/non-existent-provider/enable',
       });
 
       expect(response.statusCode).toBe(404);
@@ -302,7 +306,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 404 for non-existent provider', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/non-existent-provider/disable',
+        url: '/api/providers/non-existent-provider/disable',
       });
 
       expect(response.statusCode).toBe(404);
@@ -313,7 +317,7 @@ describe('Provider Routes', { timeout: 15000 }, () => {
     it('should return 501 not implemented', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/register',
+        url: '/api/providers/register',
         payload: {},
       });
 
@@ -341,7 +345,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
       // First, we need to test the error response format
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'disabled-provider',
           messages: [
@@ -365,7 +369,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return normalized error for capability mismatch', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'test-provider',
           messages: [
@@ -389,7 +393,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return providers in correct format', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
@@ -414,7 +418,7 @@ describe('Provider Routes with registered provider', { timeout: 15000 }, () => {
     it('should return health in correct format', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers/health',
+        url: '/api/providers/health',
       });
 
       expect(response.statusCode).toBe(200);
@@ -458,7 +462,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid system message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'system', content: 'You are helpful' }],
@@ -472,7 +476,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid assistant message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [
@@ -490,7 +494,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept valid tool message', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [
@@ -506,7 +510,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject negative maxTokens', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           maxTokens: -10,
@@ -519,7 +523,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject zero maxTokens', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           maxTokens: 0,
@@ -532,7 +536,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject negative temperature', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           temperature: -0.5,
@@ -545,7 +549,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept temperature at boundary (0)', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'user', content: 'Hi' }],
@@ -560,7 +564,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept temperature at boundary (2)', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           providerId: 'non-existent-test-provider',
           messages: [{ role: 'user', content: 'Hi' }],
@@ -575,7 +579,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject non-boolean stream', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 'Hi' }],
           stream: 'yes',
@@ -588,7 +592,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject non-string content', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user', content: 123 }],
         },
@@ -600,7 +604,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject missing content', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ role: 'user' }],
         },
@@ -612,7 +616,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should reject missing role', async () => {
       const response = await app.inject({
         method: 'POST',
-        url: '/providers/test-invoke',
+        url: '/api/providers/test-invoke',
         payload: {
           messages: [{ content: 'Hello' }],
         },
@@ -626,7 +630,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept enabled=true', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=true',
+        url: '/api/providers?enabled=true',
       });
 
       expect(response.statusCode).toBe(200);
@@ -635,7 +639,7 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should accept enabled=false', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers?enabled=false',
+        url: '/api/providers?enabled=false',
       });
 
       expect(response.statusCode).toBe(200);
@@ -644,10 +648,227 @@ describe('Input validation with Zod', { timeout: 15000 }, () => {
     it('should work without query params', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/providers',
+        url: '/api/providers',
       });
 
       expect(response.statusCode).toBe(200);
+    });
+  });
+
+  describe('POST /providers/discover-models', () => {
+    let originalFetch: typeof globalThis.fetch;
+
+    const installFetch = (impl: typeof globalThis.fetch) => {
+      globalThis.fetch = impl;
+    };
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    const okResponse = (body: unknown) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => body,
+    });
+
+    it('resolves the base URL from the preset id and returns the model list', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        okResponse({
+          data: [{ id: 'llama3:8b' }, { id: 'mistral:7b' }],
+        }),
+      );
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'ollama' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        models: [
+          { id: 'llama3:8b', name: 'llama3:8b' },
+          { id: 'mistral:7b', name: 'mistral:7b' },
+        ],
+      });
+      // Base URL comes from the preset, not the client.
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:11434/v1/models',
+        expect.objectContaining({ signal: expect.anything() }),
+      );
+    });
+
+    it('filters out non-string ids from the response', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        okResponse({
+          data: [
+            { id: 'good' },
+            { id: 42 },
+            { id: null },
+            { notId: 'ignored' },
+          ],
+        }),
+      );
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'ollama' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().models).toEqual([{ id: 'good', name: 'good' }]);
+    });
+
+    it('returns an empty model list when the response body has no data field', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({}));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'ollama' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ models: [] });
+    });
+
+    it('resolves the LM Studio preset base URL', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'lmstudio' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:1234/v1/models',
+        expect.any(Object),
+      );
+    });
+
+    it('returns 400 when id is missing', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for an unknown provider id', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'not-a-provider' },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 for a non-local provider id (discovery is local-only)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'openai' },
+      });
+
+      expect(response.statusCode).toBe(400);
+      // Must not probe the cloud provider's endpoint. (The shared global fetch
+      // also sees unrelated MCP-client traffic, so assert on the URL, not the
+      // total call count.)
+      const probedOpenAi = fetchMock.mock.calls.some(([u]) =>
+        String(u).includes('api.openai.com'),
+      );
+      expect(probedOpenAi).toBe(false);
+    });
+
+    it('does not read process.env or send an Authorization header (no secret exfiltration)', async () => {
+      process.env['TEST_DISCOVERY_SECRET'] = 'super-secret';
+      const fetchMock = vi.fn().mockResolvedValue(okResponse({ data: [] }));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/providers/discover-models',
+          // A malicious client tries the old shape: arbitrary baseUrl + env var.
+          payload: {
+            id: 'ollama',
+            baseUrl: 'https://attacker.example/v1',
+            apiKeyEnv: 'TEST_DISCOVERY_SECRET',
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        // Extra fields are ignored. The server must NOT probe the
+        // client-supplied attacker URL, and the real probe (the preset's
+        // localhost URL) must carry no Authorization header — so the env
+        // secret never leaves the process. (Filter by URL: the shared global
+        // fetch also sees unrelated MCP-client traffic.)
+        const probedAttacker = fetchMock.mock.calls.some(([u]) =>
+          String(u).includes('attacker.example'),
+        );
+        expect(probedAttacker).toBe(false);
+        const probe = fetchMock.mock.calls.find(
+          ([u]) => u === 'http://localhost:11434/v1/models',
+        );
+        expect(probe).toBeDefined();
+        expect((probe![1] as { headers?: unknown }).headers).toBeUndefined();
+      } finally {
+        delete process.env['TEST_DISCOVERY_SECRET'];
+      }
+    });
+
+    it('returns 502 when the provider responds with non-2xx', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        json: async () => ({}),
+      });
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'ollama' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const body = response.json();
+      expect(body.error).toBe('Provider returned an error');
+      expect(body.message).toContain('401');
+    });
+
+    it('returns 502 when the fetch itself throws (server unreachable)', async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+      installFetch(fetchMock as unknown as typeof globalThis.fetch);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/providers/discover-models',
+        payload: { id: 'ollama' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      expect(response.json().message).toContain('ECONNREFUSED');
     });
   });
 });

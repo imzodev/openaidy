@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { BuiltinToolRegistry } from '../tools/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
+import { TOOL_CATEGORY_MAP } from '../tools/catalog.js';
 
 export type ToolRoutesOptions = {
   builtinTools: BuiltinToolRegistry;
@@ -27,6 +28,7 @@ export const toolRoutes: FastifyPluginAsync<ToolRoutesOptions> = async (
     const items = builtinTools.getAllDefinitions().map((t) => ({
       name: t.name,
       description: t.description,
+      category: TOOL_CATEGORY_MAP[t.name] ?? 'Other',
     }));
     return { items };
   });

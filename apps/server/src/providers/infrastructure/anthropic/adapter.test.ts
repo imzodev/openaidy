@@ -186,7 +186,10 @@ describe('AnthropicProvider', () => {
       });
 
       const provider = createAnthropicProvider({ apiKey: 'my-api-key' });
-      await provider.invoke({ model: 'claude-sonnet-4-20250514', messages: [{ role: 'user', content: 'Hi' }] });
+      await provider.invoke({
+        model: 'claude-sonnet-4-20250514',
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -195,7 +198,7 @@ describe('AnthropicProvider', () => {
             'x-api-key': 'my-api-key',
             'anthropic-version': expect.any(String),
           }),
-        })
+        }),
       );
     });
 
@@ -208,7 +211,9 @@ describe('AnthropicProvider', () => {
       const request: ModelRequest = {
         model: 'claude-sonnet-4-20250514',
         messages: [{ role: 'user', content: 'Hello' }],
-        tools: [{ name: 'test', description: 'Test', parameters: { type: 'object' } }],
+        tools: [
+          { name: 'test', description: 'Test', parameters: { type: 'object' } },
+        ],
       };
 
       const result = await provider.invoke(request);
@@ -229,8 +234,8 @@ describe('AnthropicProvider', () => {
             status: 429,
             statusText: 'Too Many Requests',
             headers: { 'Content-Type': 'application/json' },
-          }
-        )
+          },
+        ),
       );
 
       const provider = createAnthropicProvider({ apiKey: 'test-key' });
@@ -253,7 +258,12 @@ describe('AnthropicProvider', () => {
           type: 'message',
           role: 'assistant',
           content: [
-            { type: 'tool_use', id: 'toolu_1', name: 'get_weather', input: { city: 'Berlin' } },
+            {
+              type: 'tool_use',
+              id: 'toolu_1',
+              name: 'get_weather',
+              input: { city: 'Berlin' },
+            },
           ],
           model: 'claude-sonnet-4-20250514',
           stop_reason: 'tool_use',
@@ -298,6 +308,68 @@ describe('AnthropicProvider', () => {
       if (firstEvent && !firstEvent.ok) {
         expect(firstEvent.error.code).toBe('provider.capability_unsupported');
       }
+    });
+
+    it('aborts the fetch when the external request signal aborts (#376)', async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        body: stream,
+        headers: new Headers(),
+      });
+
+      const provider = createAnthropicProvider({ apiKey: 'test-key' });
+      const external = new AbortController();
+
+      const events = [];
+      for await (const event of provider.invokeStream({
+        model: 'claude-sonnet-4-20250514',
+        messages: [{ role: 'user', content: 'Hello' }],
+        signal: external.signal,
+      })) {
+        events.push(event);
+      }
+
+      // The signal handed to fetch is a combined signal, distinct from the
+      // external one, but aborting the external must propagate to it.
+      const passedSignal = mockFetch.mock.calls[0]?.[1]?.signal as AbortSignal;
+      expect(passedSignal).toBeInstanceOf(AbortSignal);
+      expect(passedSignal.aborted).toBe(false);
+      external.abort();
+      expect(passedSignal.aborted).toBe(true);
+    });
+
+    it('passes an already-aborted external signal through to fetch (#376)', async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        body: stream,
+        headers: new Headers(),
+      });
+
+      const provider = createAnthropicProvider({ apiKey: 'test-key' });
+      const external = new AbortController();
+      external.abort();
+
+      const events = [];
+      for await (const event of provider.invokeStream({
+        model: 'claude-sonnet-4-20250514',
+        messages: [{ role: 'user', content: 'Hello' }],
+        signal: external.signal,
+      })) {
+        events.push(event);
+      }
+
+      const passedSignal = mockFetch.mock.calls[0]?.[1]?.signal as AbortSignal;
+      expect(passedSignal.aborted).toBe(true);
     });
 
     it('should stream model output', async () => {
@@ -354,7 +426,10 @@ describe('Factory functions', () => {
   });
 
   it('createClaudeModelProvider should create provider with specific model', () => {
-    const provider = createClaudeModelProvider('test-key', 'claude-opus-4-20250514');
+    const provider = createClaudeModelProvider(
+      'test-key',
+      'claude-opus-4-20250514',
+    );
 
     expect(provider.descriptor.id).toBe('anthropic-claude-opus-4-20250514');
     expect(provider.descriptor.name).toBe('Anthropic claude-opus-4-20250514');

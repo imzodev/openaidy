@@ -4,7 +4,11 @@
  * Maps Gemini API responses to normalized internal format.
  */
 
-import type { ToolCallRequest, UsageInfo, FinishReason } from '@openaidy/runtime';
+import type {
+  ToolCallRequest,
+  UsageInfo,
+  FinishReason,
+} from '@openaidy/runtime';
 import type {
   GeminiGenerateContentResponse,
   GeminiCandidate,
@@ -12,6 +16,8 @@ import type {
   GeminiPart,
   GeminiFunctionCallPart,
 } from './types';
+import { restoreGeminiFunctionName } from './name-mapping';
+import type { GeminiFunctionNameMap } from './name-mapping.types';
 
 // =====================
 // Type Guards
@@ -27,7 +33,9 @@ export function isTextPart(part: GeminiPart): part is { text: string } {
 /**
  * Checks if a part is a function call part
  */
-export function isFunctionCallPart(part: GeminiPart): part is GeminiFunctionCallPart {
+export function isFunctionCallPart(
+  part: GeminiPart,
+): part is GeminiFunctionCallPart {
   return 'functionCall' in part;
 }
 
@@ -39,7 +47,7 @@ export function isFunctionCallPart(part: GeminiPart): part is GeminiFunctionCall
  * Maps Gemini usage metadata to normalized usage info
  */
 export function mapUsage(
-  usageMetadata?: GeminiGenerateContentResponse['usageMetadata']
+  usageMetadata?: GeminiGenerateContentResponse['usageMetadata'],
 ): UsageInfo {
   if (!usageMetadata) {
     return {
@@ -48,7 +56,7 @@ export function mapUsage(
       totalTokens: 0,
     };
   }
-  
+
   return {
     promptTokens: usageMetadata.promptTokenCount,
     completionTokens: usageMetadata.candidatesTokenCount,
@@ -64,7 +72,7 @@ export function mapUsage(
  * Maps Gemini finish reason to normalized finish reason
  */
 export function mapFinishReason(
-  finishReason?: GeminiCandidate['finishReason']
+  finishReason?: GeminiCandidate['finishReason'],
 ): FinishReason {
   switch (finishReason) {
     case 'STOP':
@@ -86,30 +94,56 @@ export function mapFinishReason(
 // =====================
 
 /**
- * Maps a Gemini function call to normalized tool call
+ * Maps a Gemini function call to normalized tool call. The
+ * `nameMap` (built from the request's tool list) is used to
+ * translate the sanitized function name (`github:create_or_update_file`)
+ * back to the internal MCP-style name (`github::create_or_update_file`).
+ *
+ * The `part` (not just the functionCall) is passed in so the
+ * caller can also pull `thoughtSignature` off the part. The
+ * signature is required by the Gemini API on the first
+ * functionCall part of a multi-function-call assistant turn when
+ * that turn is replayed in a follow-up request — see
+ * https://ai.google.dev/gemini-api/docs/thought-signatures.
  */
 export function mapFunctionCall(
-  functionCall: GeminiFunctionCallPart['functionCall']
+  part: GeminiFunctionCallPart,
+  nameMap: GeminiFunctionNameMap = new Map(),
 ): ToolCallRequest {
+  const { functionCall } = part;
+  // Probe both field names — the docs use `thoughtSignature`
+  // (camelCase) but some Gemini models (notably
+  // `gemini-3.1-flash-lite`) serialise the field as
+  // `thought_signature` (snake_case) on the wire. The Gemini
+  // API accepts both on the request side; the response side
+  // round-trip must capture whichever the server sent. See
+  // https://ai.google.dev/gemini-api/docs/thought-signatures.
+  const signature = part.thoughtSignature ?? part.thought_signature;
   return {
     id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-    name: functionCall.name,
+    name: restoreGeminiFunctionName(functionCall.name, nameMap),
     arguments: JSON.stringify(functionCall.args),
+    ...(signature !== undefined && signature !== ''
+      ? { thoughtSignature: signature }
+      : {}),
   };
 }
 
 /**
  * Extracts tool calls from Gemini parts
  */
-export function extractToolCalls(parts: GeminiPart[]): ToolCallRequest[] {
+export function extractToolCalls(
+  parts: GeminiPart[],
+  nameMap: GeminiFunctionNameMap = new Map(),
+): ToolCallRequest[] {
   const toolCalls: ToolCallRequest[] = [];
-  
+
   for (const part of parts) {
     if (isFunctionCallPart(part)) {
-      toolCalls.push(mapFunctionCall(part.functionCall));
+      toolCalls.push(mapFunctionCall(part, nameMap));
     }
   }
-  
+
   return toolCalls;
 }
 
@@ -122,13 +156,13 @@ export function extractToolCalls(parts: GeminiPart[]): ToolCallRequest[] {
  */
 export function extractTextContent(parts: GeminiPart[]): string {
   const textParts: string[] = [];
-  
+
   for (const part of parts) {
     if (isTextPart(part)) {
       textParts.push(part.text);
     }
   }
-  
+
   return textParts.join('');
 }
 
@@ -137,7 +171,8 @@ export function extractTextContent(parts: GeminiPart[]): string {
  */
 export function mapResponse(
   response: GeminiGenerateContentResponse,
-  providerId: string
+  providerId: string,
+  nameMap: GeminiFunctionNameMap = new Map(),
 ): {
   id: string;
   model: string;
@@ -149,7 +184,7 @@ export function mapResponse(
   created: string;
 } {
   const candidate = response.candidates[0];
-  
+
   if (!candidate) {
     return {
       id: `gemini_${Date.now()}`,
@@ -161,10 +196,10 @@ export function mapResponse(
       created: new Date().toISOString(),
     };
   }
-  
+
   const parts = candidate.content.parts;
   const content = extractTextContent(parts);
-  const toolCalls = extractToolCalls(parts);
+  const toolCalls = extractToolCalls(parts, nameMap);
 
   const result = {
     id: `gemini_${Date.now()}`,
@@ -194,17 +229,28 @@ export function mapResponse(
 export function* mapStreamChunk(
   chunk: GeminiStreamChunk,
   providerId: string,
-  streamId: string
+  streamId: string,
+  nameMap: GeminiFunctionNameMap = new Map(),
 ): Generator<
-  | { type: 'stream.content_delta'; timestamp: string; id: string; delta: string }
-  | { type: 'stream.tool_call'; timestamp: string; id: string; toolCall: ToolCallRequest }
+  | {
+      type: 'stream.content_delta';
+      timestamp: string;
+      id: string;
+      delta: string;
+    }
+  | {
+      type: 'stream.tool_call';
+      timestamp: string;
+      id: string;
+      toolCall: ToolCallRequest;
+    }
   | { type: 'stream.usage'; timestamp: string; id: string; usage: UsageInfo }
 > {
   const candidate = chunk.candidates[0];
   if (!candidate) return;
-  
+
   const timestamp = new Date().toISOString();
-  
+
   // Handle content deltas
   if (candidate.content.parts) {
     for (const part of candidate.content.parts) {
@@ -220,12 +266,12 @@ export function* mapStreamChunk(
           type: 'stream.tool_call',
           timestamp,
           id: streamId,
-          toolCall: mapFunctionCall(part.functionCall),
+          toolCall: mapFunctionCall(part, nameMap),
         };
       }
     }
   }
-  
+
   // Handle usage metadata
   if (chunk.usageMetadata) {
     yield {

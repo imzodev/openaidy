@@ -57,7 +57,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/tasks/${taskId}/subtasks`, {
+    res = await fetch(`${config.httpUrl}/tasks/${taskId}/subtasks`, {
       headers: { Authorization: `Bearer ${tokenResult.token}` },
     });
   } catch (err) {
@@ -67,20 +67,30 @@ Exit Codes:
   }
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as { error?: string };
     const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };
   }
 
-  const { items } = (await res.json()) as {
-    items: Array<{
-      id: string; taskId: string; title: string;
-      status: import('@openaidy/shared-types').SubtaskStatus;
-      assignedAgentId: string | null; result: string | null;
-      retryCount: number; createdAt: string; updatedAt: string;
-    }>;
+  const { data } = (await res.json()) as {
+    data: {
+      items: Array<{
+        id: string;
+        taskId: string;
+        title: string;
+        status: import('@openaidy/shared-types').SubtaskStatus;
+        assignedAgentId: string | null;
+        result: string | null;
+        retryCount: number;
+        createdAt: string;
+        updatedAt: string;
+      }>;
+    };
   };
+  const { items } = data;
   p.note(formatSubtaskList(items), `Subtasks for ${taskId}`);
   return { exitCode: 0 };
 }

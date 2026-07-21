@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Tests run without a real database; the app's DB layer is optional.
+  CI: 'true'
+
+jobs:
+  # Full checks — only on PRs. Turborepo caches per-package outputs, so an
+  # unaffected package is a cache hit instead of a re-run.
+  lint:
+    name: Lint & format
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-lint-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-lint-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-lint-${{ github.job }}-
+      # Prettier is enforced on commit via husky/lint-staged; CI gates on ESLint.
+      - name: ESLint
+        run: pnpm lint
+
+  test:
+    name: Test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-test-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-test-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-test-${{ github.job }}-
+      - name: Run tests
+        run: pnpm test
+
+  # Typecheck & build — runs on every PR (part of the full check set) AND on
+  # every push to main (as main's smoke check). This is intentionally the one
+  # job that isn't gated to pull_request only: pushing to main skips lint/test
+  # and only re-verifies that everything still typechecks and builds, since
+  # the PR that produced this commit already passed the full suite. Its only
+  # job is to catch the case two independently-passing PRs don't actually
+  # compile together once merged.
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Restore turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-build-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-build-${{ github.job }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-build-${{ github.job }}-
+      # Each package's build runs `tsc -b`/`tsc -p` (typecheck) before bundling.
+      - name: Build (includes typecheck)
+        run: pnpm build

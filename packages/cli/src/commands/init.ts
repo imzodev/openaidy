@@ -1,112 +1,176 @@
 /**
- * Init Command - Initialize existing addon project
+ * openaidy init - Generate or refresh the bootstrap-admin token.
+ *
+ * PR1 (installation-onboarding). This handler replaces the legacy
+ * `initAddon` / `updateConfig` exports that were never wired into the
+ * command registry and had no real importers (see T1.7 verification:
+ * `rg 'initAddon|updateConfig' packages/` returns zero real hits).
+ *
+ * Behavior (per PR1 spec R-1, R-2, R-3, R-6):
+ *  - First run: mints a JWT via {@link BootstrapAdminWorkflow.ensureToken}
+ *    and persists to `resolveCLIConfig().tokenPath` (mode 0o600 on POSIX).
+ *  - Valid existing token: reuses without rewriting the file.
+ *  - Expired / corrupt / missing-field record: regenerates.
+ *  - JWT secret is the unsafe default: exits 1 with remediation message
+ *    (R-2 / CC-3). The unsafe default is `UNSAFE_DEFAULT_JWT_SECRET`
+ *    exported from `@openaidy/config`; resolveCLIConfig returns it when
+ *    neither `WS_TOKEN_SECRET` nor `$OPENAIDY_HOME/state/install.json`
+ *    provides a real secret.
+ *  - `BOOTSTRAP_ADMIN_ENABLED=false`: exits 1.
+ *  - Prints exactly one parseable line `Bootstrap admin token: <jwt>`
+ *    on success so the install scripts can grep it.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import {
-  detectAddonProject,
-  readAddonManifest,
-  validateProjectStructure,
-} from '../utils/project.js';
-import type { InitOptions, InitResult } from '../types.js';
+  createBootstrapAdminWorkflow,
+  type BootstrapAdminContext,
+} from '@openaidy/control-plane';
+import { UNSAFE_DEFAULT_JWT_SECRET } from '@openaidy/config';
+import type { CommandResult } from '../types.js';
+import { createCLIError, formatCLIError } from '../errors.js';
+import { resolveCLIConfig } from '../lib/config.js';
 
 /**
- * Initialize existing addon project
+ * Default bootstrap-admin client ID — must match the server's
+ * `BootstrapAdminManager` default at `apps/server/src/bootstrap-admin.ts`.
  */
-export async function initAddon(
-  projectPath: string = process.cwd(),
-  options: InitOptions = {},
-): Promise<InitResult> {
-  const { force = false } = options;
+const DEFAULT_BOOTSTRAP_CLIENT_ID = 'bootstrap-admin';
 
-  // Check if project exists
-  if (!fs.existsSync(projectPath)) {
-    return {
-      success: false,
-      message: `Project directory not found: ${projectPath}`,
-    };
-  }
+/**
+ * Default token expiry: 30 days in milliseconds (matches server default).
+ */
+const DEFAULT_TOKEN_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 
-  // Check if it's already an addon project
-  const isExisting = detectAddonProject(projectPath);
+/**
+ * Help text for `openaidy init --help`.
+ */
+const HELP_TEXT = `
+Usage: openaidy init [options]
 
-  if (isExisting && !force) {
-    return {
-      success: true,
-      message: 'Project is already an addon. Use --force to reinitialize.',
-      isNew: false,
-    };
-  }
+Generate or refresh the bootstrap-admin token.
 
-  // Validate project structure
-  const validation = validateProjectStructure(projectPath);
+This command:
+  - Mints a fresh admin JWT if no token file exists (or the existing
+    one is expired, corrupt, or missing required fields).
+  - Reuses an existing valid token without rewriting the file.
+  - Persists the token to $OPENAIDY_HOME/credentials/bootstrap-admin.json
+    (POSIX mode 0o600).
+  - Prints the token value to stdout on success.
 
-  if (!validation.valid) {
-    return {
-      success: false,
-      message: `Invalid project structure: ${validation.errors.join(', ')}`,
-    };
-  }
+The token is required on first browser login. Open the URL printed by
+the installer and paste the token into the login screen.
 
-  // Read manifest
-  const manifest = readAddonManifest(projectPath);
+The JWT signing secret is resolved with the same precedence as the
+server: explicit WS_TOKEN_SECRET env var > $OPENAIDY_HOME/state/install.json
+(persisted by the install script) > refusal. Running on a fresh
+install without the manifest will exit 1.
 
-  if (!manifest) {
-    return {
-      success: false,
-      message:
-        'addon.json not found. Create an addon project first with "openaidy create".',
-    };
-  }
+Options:
+  -h, --help          Show this help message
 
-  // Check for package.json and install dependencies
-  const packageJsonPath = path.join(projectPath, 'package.json');
-  if (fs.existsSync(packageJsonPath)) {
-    // In a real implementation, we would run npm install here
-    return {
-      success: true,
-      message: `Initialized addon: ${manifest.name || path.basename(projectPath)}`,
-      isNew: false,
-    };
-  }
+Environment:
+  WS_TOKEN_SECRET       JWT signing secret (overrides the manifest)
+  OPENAIDY_HOME         Install root (default: ~/.openaidy)
+  BOOTSTRAP_ADMIN_ENABLED   Set to 'false' to disable (default: true)
+
+Exit Codes:
+  0  Token generated or reused successfully
+  1  JWT secret is the unsafe default / bootstrap admin disabled /
+     persistence failure
+
+Examples:
+  openaidy init
+  WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+`;
+
+/**
+ * Build the {@link BootstrapAdminContext} by deferring to
+ * `resolveCLIConfig(env)` so this command and the server agree on the
+ * same JWT secret resolution precedence (env > manifest > refusal). The
+ * test-only `envOverride` parameter keeps unit tests free of global
+ * `process.env` mutation.
+ */
+function buildContext(env: NodeJS.ProcessEnv): BootstrapAdminContext {
+  const cfg = resolveCLIConfig(env);
 
   return {
-    success: true,
-    message: 'Project initialized successfully',
-    isNew: true,
+    enabled: cfg.bootstrapAdminEnabled,
+    tokenPath: cfg.tokenPath,
+    jwtSecret: cfg.jwtSecret,
+    clientId: DEFAULT_BOOTSTRAP_CLIENT_ID,
+    tokenExpiryMs: DEFAULT_TOKEN_EXPIRY_MS,
   };
 }
 
 /**
- * Update addon configuration
+ * The `openaidy init` command handler.
+ *
+ * Accepts the test-only `envOverride` parameter so unit tests can
+ * drive env resolution without mutating real `process.env`. The runtime
+ * call from `commands/index.ts` passes no second arg, so the default
+ * `process.env` is used.
  */
-export async function updateConfig(
-  projectPath: string,
-  updates: Record<string, unknown>,
-): Promise<InitResult> {
-  const manifestPath = path.join(projectPath, 'addon.json');
-
-  if (!fs.existsSync(manifestPath)) {
-    return {
-      success: false,
-      message: 'addon.json not found',
-    };
+export async function initHandler(
+  args: string[],
+  envOverride?: NodeJS.ProcessEnv,
+): Promise<CommandResult> {
+  if (args.includes('-h') || args.includes('--help')) {
+    process.stdout.write(HELP_TEXT);
+    return { exitCode: 0 };
   }
 
+  const env = envOverride ?? process.env;
+  const ctx = buildContext(env);
+
+  if (!ctx.enabled) {
+    const err = createCLIError(
+      'BOOTSTRAP_DISABLED',
+      'Bootstrap admin is disabled. Set BOOTSTRAP_ADMIN_ENABLED=true and re-run.',
+    );
+    return { exitCode: err.exitCode, error: formatCLIError(err) };
+  }
+
+  if (ctx.jwtSecret === UNSAFE_DEFAULT_JWT_SECRET) {
+    const err = createCLIError(
+      'INTERNAL_ERROR',
+      'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment, or run via the install script which persists the secret to $OPENAIDY_HOME/state/install.json.',
+    );
+    return { exitCode: err.exitCode, error: formatCLIError(err) };
+  }
+
+  let result;
   try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-    const updated = { ...manifest, ...updates };
-    fs.writeFileSync(manifestPath, JSON.stringify(updated, null, 2));
-
-    return {
-      success: true,
-      message: 'Configuration updated successfully',
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to update config: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
+    const wf = createBootstrapAdminWorkflow(ctx);
+    result = await wf.ensureToken();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Map known unsafe-default error from the workflow to the CLI's
+    // own pre-check so the user gets the prescribed remediation hint.
+    if (message.includes('default JWT secret')) {
+      const e = createCLIError(
+        'INTERNAL_ERROR',
+        'Refusing to generate token with default JWT secret. Set WS_TOKEN_SECRET in your environment.',
+      );
+      return { exitCode: e.exitCode, error: formatCLIError(e) };
+    }
+    const cliErr = createCLIError(
+      'PERSISTENCE_FAILURE',
+      `Failed to ensure bootstrap admin token: ${message}`,
+    );
+    return { exitCode: cliErr.exitCode, error: formatCLIError(cliErr) };
   }
+
+  if (!result) {
+    const err = createCLIError(
+      'BOOTSTRAP_DISABLED',
+      'Bootstrap admin is disabled.',
+    );
+    return { exitCode: err.exitCode, error: formatCLIError(err) };
+  }
+
+  process.stdout.write(`Bootstrap admin token: ${result.record.token}\n`);
+  return { exitCode: 0 };
 }
+
+// Re-export for the registry and any future programmatic consumers.
+export default initHandler;

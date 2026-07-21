@@ -18,10 +18,13 @@ import {
   Globe,
 } from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
-import { refreshAddonToken } from '../../lib/api';
+import { refreshAddonToken, getAddonAssetToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
 
-const SERVER_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+// Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
+// and the server's static handler (--integrated mode) both serve addons
+// on the same origin the browser is already on, so a relative URL works.
+const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 
 type Props = {
   addon: AddonRecord;
@@ -36,8 +39,12 @@ export function AddonViewPage(props: Props) {
 
   const entry = () =>
     (manifest().entry as string | undefined) ?? 'app/index.html';
+  // Asset token authenticates the sandboxed iframe's static asset loads.
+  const [assetToken, setAssetToken] = createSignal<string | null>(null);
   const iframeSrc = () =>
-    `${SERVER_BASE}/addons/${props.addon.addonId}/${entry()}`;
+    `${SERVER_BASE}/addons/${props.addon.addonId}/${entry()}?at=${encodeURIComponent(
+      assetToken() ?? '',
+    )}`;
 
   const [loadError, setLoadError] = createSignal(false);
   const [reloading, setReloading] = createSignal(false);
@@ -53,8 +60,21 @@ export function AddonViewPage(props: Props) {
   // Crypto nonce for secure iframe communication (replaces origin check)
   const nonce = crypto.randomUUID();
 
+  // Fetch the short-lived asset token that authenticates the iframe's static
+  // asset loads. The iframe only renders once it's available.
+  const loadAssetToken = async () => {
+    try {
+      const result = await getAddonAssetToken(props.addon.addonId);
+      setAssetToken(result.token);
+    } catch {
+      setLoadError(true);
+    }
+  };
+
   // Auto-fetch addon token if missing (e.g. addon was enabled by CLI, not the UI)
   onMount(async () => {
+    void loadAssetToken();
+
     const key = `openaidy_addon_token:${props.addon.addonId}`;
     if (!localStorage.getItem(key)) {
       try {
@@ -71,13 +91,20 @@ export function AddonViewPage(props: Props) {
   const handleReload = () => {
     setLoadError(false);
     setReloading(true);
+    // The asset token may have expired since the last load — refresh it.
+    void loadAssetToken();
     setTimeout(() => setReloading(false), 50);
   };
 
+  // The iframe never receives the user's auth token — it's a sandboxed,
+  // opaque-origin context that can run arbitrary (including LLM-generated)
+  // script, so anything posted into it must be assumed readable by the
+  // addon itself. All authenticated calls the addon triggers are proxied by
+  // this component (see handleMessage below) using a short-lived,
+  // addon-scoped token that never crosses into the iframe.
   const sendInit = () => {
-    const token = resolveToken();
     iframeRef?.contentWindow?.postMessage(
-      { type: 'OPENAIDY_INIT', token, apiBase: SERVER_BASE, nonce },
+      { type: 'OPENAIDY_INIT', apiBase: SERVER_BASE, nonce },
       '*',
     );
   };
@@ -102,6 +129,12 @@ export function AddonViewPage(props: Props) {
 
   // Bridge: proxy API requests from the iframe to the real backend
   const handleMessage = async (event: MessageEvent) => {
+    // The sandboxed iframe has an opaque origin, so `event.origin` can't be
+    // checked. Compare `event.source` — the iframe's actual window object —
+    // instead: this rejects messages from any other frame/tab up front, for
+    // every message type, including ADDON_READY (which necessarily arrives
+    // before the addon has a nonce to echo back).
+    if (event.source !== iframeRef?.contentWindow) return;
     const msg = event.data as Record<string, unknown>;
     if (typeof msg !== 'object') return;
     // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
@@ -156,13 +189,15 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    // Use addon-scoped token for addon-proxy routes, user token for everything else
-    const isAddonProxy = reqPath.startsWith('/api/addon-proxy/');
+    // Every allowed path is an addon-proxy route (see ALLOWED_ROUTES above),
+    // so this always requires the short-lived, addon-scoped token — never
+    // the user's own auth token. Fail closed if it's missing; there is no
+    // fallback to a broader credential.
     const addonToken = localStorage.getItem(
       `openaidy_addon_token:${props.addon.addonId}`,
     );
 
-    if (isAddonProxy && !addonToken) {
+    if (!addonToken) {
       iframeRef?.contentWindow?.postMessage(
         {
           type: 'OPENAIDY_RESPONSE',
@@ -177,13 +212,12 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    const token = isAddonProxy ? addonToken : resolveToken();
     try {
       const res = await fetch(`${SERVER_BASE}${reqPath}`, {
         method: method ?? 'GET',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${addonToken}`,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
@@ -423,8 +457,9 @@ export function AddonViewPage(props: Props) {
         </div>
       </Show>
 
-      {/* Addon iframe — sandbox blocks localStorage/cookie access from addon */}
-      <Show when={!loadError() && !reloading()}>
+      {/* Addon iframe — sandbox blocks localStorage/cookie access from addon.
+          Gated on the asset token so the iframe URL always carries it. */}
+      <Show when={!loadError() && !reloading() && assetToken()}>
         <iframe
           ref={iframeRef}
           src={iframeSrc()}

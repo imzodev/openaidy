@@ -251,6 +251,26 @@ export class DependencyResolver {
           result.success = false;
         }
       }
+
+      // Detect dependencies that cannot be resolved. These are dropped by
+      // buildGraph (no edge/node is created when no matching version exists),
+      // so they must be inspected here to be reported as missing.
+      for (const dep of node.dependencies) {
+        const depVersion = this.resolveVersion(dep.addonId, dep.versionRange);
+        if (!depVersion && !dep.optional) {
+          const alreadyRecorded = result.missing.some(
+            (m) => m.addonId === dep.addonId,
+          );
+          if (!alreadyRecorded) {
+            result.missing.push({
+              addonId: dep.addonId,
+              requiredBy: node.addonId,
+              versionRange: dep.versionRange,
+            });
+          }
+          result.success = false;
+        }
+      }
     }
 
     return result;

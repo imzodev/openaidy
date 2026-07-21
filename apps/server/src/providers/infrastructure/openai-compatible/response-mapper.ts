@@ -24,11 +24,15 @@ import type {
 /**
  * Maps OpenAI usage to normalized usage info
  */
-export function mapUsage(usage: OpenAIChatCompletionResponse['usage']): UsageInfo {
+export function mapUsage(
+  usage: OpenAIChatCompletionResponse['usage'],
+): UsageInfo {
+  const cachedTokens = usage.prompt_tokens_details?.cached_tokens;
   return {
     promptTokens: usage.prompt_tokens,
     completionTokens: usage.completion_tokens,
     totalTokens: usage.total_tokens,
+    ...(cachedTokens !== undefined && { cacheReadTokens: cachedTokens }),
   };
 }
 
@@ -40,7 +44,7 @@ export function mapUsage(usage: OpenAIChatCompletionResponse['usage']): UsageInf
  * Maps OpenAI finish reason to normalized finish reason
  */
 export function mapFinishReason(
-  reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null
+  reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | null,
 ): FinishReason {
   if (reason === null) {
     return 'stop';
@@ -91,14 +95,15 @@ export function mapToolCalls(toolCalls: OpenAIToolCall[]): ToolCallRequest[] {
  */
 export function mapResponse(
   response: OpenAIChatCompletionResponse,
-  providerId: string
+  providerId: string,
 ): ModelResponse {
   const choice = response.choices[0];
   if (!choice) {
     throw new Error('OpenAI response has no choices');
   }
 
-  const hasToolCalls = choice.message.tool_calls && choice.message.tool_calls.length > 0;
+  const hasToolCalls =
+    choice.message.tool_calls && choice.message.tool_calls.length > 0;
 
   const modelResponse: ModelResponse = {
     id: response.id,
@@ -108,7 +113,9 @@ export function mapResponse(
     usage: mapUsage(response.usage),
     finishReason: mapFinishReason(choice.finish_reason),
     created: new Date(response.created * 1000).toISOString(),
-    ...(hasToolCalls ? { toolCalls: mapToolCalls(choice.message.tool_calls!) } : {}),
+    ...(hasToolCalls
+      ? { toolCalls: mapToolCalls(choice.message.tool_calls!) }
+      : {}),
   };
 
   return modelResponse;
@@ -139,7 +146,7 @@ export function createToolCallAccumulator(): ToolCallAccumulator {
  */
 export function updateToolCallAccumulator(
   accumulator: ToolCallAccumulator,
-  delta: OpenAIStreamChunk['choices'][0]['delta']['tool_calls']
+  delta: OpenAIStreamChunk['choices'][0]['delta']['tool_calls'],
 ): void {
   if (!delta) return;
 
@@ -167,13 +174,13 @@ export function updateToolCallAccumulator(
  * Converts accumulated tool calls to normalized format
  */
 export function finalizeToolCalls(
-  accumulator: ToolCallAccumulator
+  accumulator: ToolCallAccumulator,
 ): ToolCallRequest[] | undefined {
   if (accumulator.size === 0) return undefined;
 
   const toolCalls: ToolCallRequest[] = [];
   for (const [index, tc] of Array.from(accumulator.entries()).sort(
-    ([a], [b]) => a - b
+    ([a], [b]) => a - b,
   )) {
     toolCalls.push({
       id: tc.id || `tool_${index}`,
@@ -191,7 +198,7 @@ export function finalizeToolCalls(
 export function* mapStreamChunk(
   chunk: OpenAIStreamChunk,
   providerId: string,
-  responseId: string
+  responseId: string,
 ): Generator<ModelStreamEvent> {
   const choice = chunk.choices[0];
   if (!choice) return;

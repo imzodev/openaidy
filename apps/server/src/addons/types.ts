@@ -22,6 +22,7 @@ export interface AddonProxyRoutesOptions {
   internalApiBaseUrl: string;
   sessionService?: SessionMessageService;
   agentRegistry?: AgentRegistry;
+  storageEngine?: import('./storage/engine').AddonStorageEngine;
 }
 
 /**
@@ -138,6 +139,18 @@ export interface DisableAddonRequest {
 export interface UpdateAddonConfigRequest {
   addonId: string;
   config: Record<string, unknown>;
+  updatedBy: string;
+}
+
+/**
+ * Update addon request — replaces the stored manifest (name, version,
+ * permissions, etc.) of an already-installed addon. Used by the
+ * `addon_update` tool to keep the DB record in sync with on-disk addon.json
+ * edits.
+ */
+export interface UpdateAddonRequest {
+  addonId: string;
+  manifest: AddonManifest;
   updatedBy: string;
 }
 

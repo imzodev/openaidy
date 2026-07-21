@@ -8,8 +8,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SessionHandler } from './session';
 import { StreamManager } from '../streaming';
 import { ConnectionManager } from '../connection-manager';
+import { RunStreamBuffer } from '../run-stream-buffer';
 import type { SessionMessageService } from '../../sessions/service';
-import type { RunEventEmitter } from '../../dispatch/events';
+import { RunEventEmitter } from '../../dispatch/events';
 import type { SubscriptionManager } from '../subscriptions';
 import type { FastifyBaseLogger } from 'fastify';
 import type { HandlerContext } from '../index';
@@ -507,6 +508,9 @@ describe('SessionHandler - auto-rename session after first run', () => {
       'session-1',
       'Fix login bug',
     );
+    // Two session.updated broadcasts on the first run:
+    //   1. activity bump (empty updates) so the chat list re-sorts
+    //   2. title rename broadcast from maybeRenameSession
     expect(mockBroadcast).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
@@ -546,7 +550,20 @@ describe('SessionHandler - auto-rename session after first run', () => {
 
     expect(sessionService.generateTitle).not.toHaveBeenCalled();
     expect(sessionService.updateSessionTitle).not.toHaveBeenCalled();
-    expect(mockBroadcast).not.toHaveBeenCalled();
+    // The activity-bump session.updated broadcast still fires for the
+    // session list re-sort, but no title-rename broadcast (which carries
+    // updates: { title }) happens on subsequent runs.
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'session.updated',
+        payload: expect.objectContaining({
+          sessionId: 'session-1',
+          updates: {},
+        }),
+      }),
+    );
   });
 
   it('skips rename when generateTitle returns null', async () => {
@@ -578,7 +595,19 @@ describe('SessionHandler - auto-rename session after first run', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(sessionService.updateSessionTitle).not.toHaveBeenCalled();
-    expect(mockBroadcast).not.toHaveBeenCalled();
+    // Only the activity-bump broadcast fires; no title-rename broadcast
+    // because generateTitle returned null.
+    expect(mockBroadcast).toHaveBeenCalledTimes(1);
+    expect(mockBroadcast).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'session.updated',
+        payload: expect.objectContaining({
+          sessionId: 'session-1',
+          updates: {},
+        }),
+      }),
+    );
   });
 
   it('does not broadcast when no subscriptionManager is provided', async () => {
@@ -648,6 +677,107 @@ describe('SessionHandler - auto-rename session after first run', () => {
     expect(mockLoggerForRename.warn).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' }),
       'Auto-rename session failed (non-fatal)',
+    );
+  });
+});
+
+// ============================================================================
+// handleResumeStream — resume an in-progress run after reconnect (issue #450)
+// ============================================================================
+
+describe('SessionHandler.handleResumeStream', () => {
+  const makeContext = (streamManager: StreamManager): HandlerContext =>
+    ({
+      connectionManager: {} as unknown as ConnectionManager,
+      services: {} as unknown,
+      logger: mockLogger,
+      streamManager,
+    }) as unknown as HandlerContext;
+
+  it('returns active: false when there is no in-progress run', () => {
+    const emitter = new RunEventEmitter();
+    const buffer = new RunStreamBuffer(emitter);
+    buffer.start();
+    const streamManager = {
+      subscribeToRun: vi.fn(),
+    } as unknown as StreamManager;
+
+    const handler = new SessionHandler(
+      {} as unknown as SessionMessageService,
+      mockLogger,
+      streamManager,
+      emitter,
+      undefined,
+      buffer,
+    );
+
+    const req = createWSMessage('session.stream.resume', { sessionId: 's1' });
+    const res = handler.handleResumeStream(
+      'conn-1',
+      req as unknown as Parameters<typeof handler.handleResumeStream>[1],
+      makeContext(streamManager),
+    );
+
+    expect(res.type).toBe('session.stream.resume');
+    expect(res.payload.active).toBe(false);
+    expect(streamManager.subscribeToRun).not.toHaveBeenCalled();
+  });
+
+  it('subscribes the connection and returns the live snapshot when a run is in flight', () => {
+    const emitter = new RunEventEmitter();
+    const buffer = new RunStreamBuffer(emitter);
+    buffer.start();
+
+    emitter.emitStarted({
+      runId: 'run-9',
+      sessionId: 's1',
+      agentId: 'default',
+      providerId: 'minimax',
+      modelId: 'MiniMax-M3',
+    });
+    emitter.emitDelta({
+      runId: 'run-9',
+      sessionId: 's1',
+      agentId: 'default',
+      content: 'partial answer',
+    });
+    emitter.emitToolCall({
+      runId: 'run-9',
+      sessionId: 's1',
+      agentId: 'default',
+      toolCall: { id: 'tc1', name: 'search', arguments: {} },
+    });
+
+    const streamManager = {
+      subscribeToRun: vi.fn(),
+    } as unknown as StreamManager;
+
+    const handler = new SessionHandler(
+      {} as unknown as SessionMessageService,
+      mockLogger,
+      streamManager,
+      emitter,
+      undefined,
+      buffer,
+    );
+
+    const req = createWSMessage('session.stream.resume', { sessionId: 's1' });
+    const res = handler.handleResumeStream(
+      'conn-1',
+      req as unknown as Parameters<typeof handler.handleResumeStream>[1],
+      makeContext(streamManager),
+    );
+
+    expect(res.payload.active).toBe(true);
+    expect(res.payload.runId).toBe('run-9');
+    expect(res.payload.content).toBe('partial answer');
+    expect(res.payload.toolCalls).toEqual([
+      { id: 'tc1', name: 'search', arguments: {} },
+    ]);
+    // Subscribed so live deltas continue flowing to this connection.
+    expect(streamManager.subscribeToRun).toHaveBeenCalledWith(
+      'run-9',
+      'conn-1',
     );
   });
 });

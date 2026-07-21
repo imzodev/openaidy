@@ -36,7 +36,7 @@ describe('createDatabaseClient (sqlite)', () => {
       sqlitePath: dbPath,
     });
 
-    // Access the underlying better-sqlite3 instance via drizzle's session
+    // Access the underlying sqlite instance via drizzle's session
     const db = conn.db as unknown as {
       session?: { client: unknown };
       driver: unknown;

@@ -34,12 +34,43 @@ export type AddonToolDeps = {
    * (useful in environments where the DB is not configured).
    */
   addonService?: AddonService;
+  /**
+   * Per-addon storage engine. Required by the addon_run / addon_list_queries
+   * tools; absent when storage is unavailable.
+   */
+  storageEngine?: import('../../addons/storage/engine').AddonStorageEngine;
 };
 
 // ── Validation helpers ────────────────────────────────────────────────────────
 
 function isValidId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]*$/.test(id);
+}
+
+// ── Tailwind CDN auto-injection ────────────────────────────────────────────
+//
+// Every addon gets Tailwind CSS for free — the agent should never have to
+// remember to add it. We inject the plain (unversioned) Play CDN script,
+// which always serves the latest Tailwind v3; a specific release can be
+// pinned later by appending "/<version>" to the URL, once that path format
+// is verified against the currently-shipped version (not done here, since it
+// isn't checkable without network access at authoring time, and a wrong pin
+// would silently 404 every addon's styling).
+const TAILWIND_CDN_URL = 'https://cdn.tailwindcss.com';
+const TAILWIND_CDN_HOST = 'cdn.tailwindcss.com';
+const SDK_SCRIPT_TAG = '<script src="/sdk/openaidy-sdk.js">';
+
+/**
+ * Inject the Tailwind CDN <script> tag into an addon's index.html, right
+ * before the (already-validated) SDK script tag. Idempotent — a no-op if the
+ * agent already included the tag itself.
+ */
+function injectTailwindCdn(html: string): string {
+  if (html.includes(TAILWIND_CDN_HOST)) return html;
+  return html.replace(
+    SDK_SCRIPT_TAG,
+    `<script src="${TAILWIND_CDN_URL}"></script>\n  ${SDK_SCRIPT_TAG}`,
+  );
 }
 
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
@@ -76,6 +107,23 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
     description: [
       'Scaffold a new OpenAidy addon, register it in the database, and enable it.',
       'The addon appears in the sidebar immediately — no restart needed.',
+      '',
+      'WHERE ADDONS LIVE',
+      '─────────────────',
+      'Addons live in a dedicated directory managed by OpenAidy (its addons dir),',
+      'which is SEPARATE from your agent workspace. Your workspace_read /',
+      'workspace_write / code_edit / code_read / exec_run tools operate on the',
+      'workspace and CANNOT create or change an addon in a way the addon loader',
+      'picks up — files written there are simply ignored by the addon system.',
+      '',
+      'ONLY WAY TO CREATE AN ADDON',
+      '───────────────────────────',
+      'Use THIS tool (addon_create). It writes the files in the correct directory',
+      'AND registers + enables the addon in one step. Do NOT use workspace_write,',
+      'code_edit, or exec_run to scaffold addon files — even if a path looks right,',
+      'the loader will not see them and the addon will silently never appear.',
+      'To modify an existing addon, use addon_update (never generic file tools).',
+      '',
       'An addon is a sandboxed HTML/JS UI loaded in an iframe inside the OpenAidy app.',
       'It communicates with the backend exclusively via the OpenAidy SDK (openaidy-sdk.js),',
       'which is loaded as a static <script> tag — you never hardcode the server URL.',
@@ -110,6 +158,18 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       sdkBootstrapSnippet(),
       '',
       '',
+      'STYLING: TAILWIND CSS + sdk.ui.* COMPONENTS',
+      '────────────────────────────────────────────',
+      'Tailwind CSS is auto-injected into every addon — use utility classes freely,',
+      'no setup needed. For common UI (cards, buttons, tables, dialogs, forms, toasts,',
+      'etc.) prefer the built-in sdk.ui.* component library over hand-rolled HTML: it is',
+      'accessible (ARIA, keyboard nav, focus management), responsive, and already styled',
+      'to match the platform. Every sdk.ui.* method returns a real HTMLElement — build it',
+      'and append it, e.g. document.body.appendChild(sdk.ui.card({ title: "Hi" })).',
+      'See the UI section of the reference below for the full list with parameters, or',
+      'fetch GET /sdk/components.json at runtime for a machine-readable manifest.',
+      '',
+      '',
       'EXTERNAL DOMAINS (required when using fetch())',
       '───────────────────────────────────────────────',
       'If your addon calls fetch() on any external URL (anything that is not the OpenAidy',
@@ -134,6 +194,16 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'Only methods whose required permission is listed will work at runtime.',
       '',
       sdkReference,
+      '',
+      'STORAGE (optional — give the addon its own database)',
+      '────────────────────────────────────────────────────',
+      'Pass the `storage` parameter to give the addon a private SQLite database — use it',
+      'for anything that accumulates data (notes, contacts, logs, trackers, caches).',
+      'Declare tables in storage.migrations (applied automatically, so they exist even before',
+      'the UI runs). The UI reads/writes via sdk.storage.* — add "storage.read"/"storage.write"',
+      'to permissions for that. To let AGENTS work with the data, set storage.agentAccess',
+      '("read" or "readwrite") and declare storage.agentQueries: named, parameterized queries',
+      'the agent runs by name via the addon_run tool (agents never write raw SQL).',
       '',
       'AGENT IDS',
       '─────────',
@@ -217,6 +287,36 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'Required. Must contain at minimum "app/index.html" and "app/index.js". ' +
             '"app/index.html" must end with <script src="index.js"></script> just before </body>. ' +
             'Paths must be relative with no ".." segments. Do not include "addon.json".',
+          additionalProperties: { type: 'string' },
+        },
+        storage: {
+          type: 'object',
+          description:
+            'Optional. Gives the addon its own private SQLite database. ' +
+            'Declare the schema in `migrations` (ordered SQL DDL, applied automatically — so tables exist even before the UI runs). ' +
+            "The UI reads/writes it via the storage SDK (sdk.storage.kv.*, sdk.storage.query/exec/search) — add 'storage.read' and/or 'storage.write' to `permissions` for that. " +
+            "To let AGENTS use the data, set `agentAccess` ('read' or 'readwrite') and declare `agentQueries`: named, parameterized queries the agent runs by name (agents never write raw SQL). " +
+            'Example: { "migrations": ["CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT, created_at TEXT DEFAULT (datetime(\'now\')))"], "agentAccess": "readwrite", "agentQueries": [{ "name": "add_note", "description": "Add a note", "params": { "title": "string" }, "access": "write", "sql": "INSERT INTO notes (title) VALUES (:title)" }, { "name": "recent_notes", "description": "Most recent notes", "access": "read", "sql": "SELECT title FROM notes ORDER BY created_at DESC LIMIT 20" }] }',
+          properties: {
+            migrations: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'Ordered SQL DDL statements applied once, by index (CREATE TABLE / INDEX / VIRTUAL TABLE ... USING fts5). No BEGIN/COMMIT; no ATTACH/DETACH.',
+            },
+            agentAccess: {
+              type: 'string',
+              enum: ['read', 'readwrite'],
+              description:
+                "Opt the addon's data into agent access. 'read' allows read queries; 'readwrite' also allows write queries.",
+            },
+            agentQueries: {
+              type: 'array',
+              description:
+                'Named, parameterized queries agents can run via addon_run. Each: { name, description, params?: {name: "string"|"int"|"number"|"boolean"}, access: "read"|"write", sql (use :name for params) }.',
+              items: { type: 'object' },
+            },
+          },
         },
       },
       required: ['id', 'name', 'description', 'permissions', 'files'],
@@ -235,6 +335,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       const externalImageDomains = Array.isArray(args['externalImageDomains'])
         ? (args['externalImageDomains'] as string[])
         : undefined;
+      const storage =
+        args['storage'] && typeof args['storage'] === 'object'
+          ? (args['storage'] as Record<string, unknown>)
+          : undefined;
       const filesArg = args['files'];
 
       // ── Input validation ────────────────────────────────────────────────
@@ -357,7 +461,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             error: `File "${filePath}" must have string content`,
           };
         }
-        extraFiles[filePath] = content;
+        extraFiles[filePath] =
+          filePath === 'app/index.html' ? injectTailwindCdn(content) : content;
       }
 
       // ── Validate externalDomains: detect undeclared external fetch() calls ─
@@ -395,12 +500,19 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
 
       // ── Step 1: scaffold files via shared template generator ─────────────
 
+      // The Tailwind CDN <script> is auto-injected above; document it in the
+      // manifest's externalDomains too (informational — script-src for it is
+      // enforced as a fixed platform allowance, see routes/addons.ts).
+      const externalDomainsWithTailwind = Array.from(
+        new Set([...(externalDomains ?? []), TAILWIND_CDN_HOST]),
+      );
+
       const generated = await generateFromTemplate(template, addonDir, {
         name,
         id,
         description,
         permissions: permissions as string[],
-        ...(externalDomains ? { externalDomains } : {}),
+        externalDomains: externalDomainsWithTailwind,
         ...(externalImageDomains ? { externalImageDomains } : {}),
       });
 
@@ -423,6 +535,20 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           }
           await writeFile(join(addonDir, filePath), content, 'utf-8');
         }
+      }
+
+      // Merge the declared storage block into the scaffolded addon.json so the
+      // on-disk manifest reflects it (and the DB registration below picks it up).
+      // The full storage schema is validated by installAddon's manifest validator.
+      if (storage) {
+        const { readFileSync, writeFileSync } = await import('node:fs');
+        const manifestPath = join(addonDir, 'addon.json');
+        const m = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Record<
+          string,
+          unknown
+        >;
+        m.storage = storage;
+        writeFileSync(manifestPath, JSON.stringify(m, null, 2), 'utf-8');
       }
 
       // ── Step 2: register + enable via AddonService (in-process) ──────────

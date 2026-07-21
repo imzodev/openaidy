@@ -1,13 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  McpHandler,
-  createMcpHandler,
-  registerMcpHandlers,
-} from './mcp';
+import { McpHandler, createMcpHandler, registerMcpHandlers } from './mcp';
 import type { McpClientService } from '../../mcp/client';
 import type { FastifyBaseLogger } from 'fastify';
 import type { HandlerContext } from '../index';
 import { createWSMessage } from '@openaidy/shared-types';
+import type { McpServerConfig } from '@openaidy/config';
 
 describe('McpHandler', () => {
   let handler: McpHandler;
@@ -51,11 +48,21 @@ describe('McpHandler', () => {
         if (id === 'filesystem') {
           return [
             { name: 'read_file', description: 'Read a file', inputSchema: {} },
-            { name: 'write_file', description: 'Write a file', inputSchema: {} },
+            {
+              name: 'write_file',
+              description: 'Write a file',
+              inputSchema: {},
+            },
           ];
         }
         if (id === 'github') {
-          return [{ name: 'search_repos', description: 'Search repositories', inputSchema: {} }];
+          return [
+            {
+              name: 'search_repos',
+              description: 'Search repositories',
+              inputSchema: {},
+            },
+          ];
         }
         return [];
       });
@@ -168,9 +175,13 @@ describe('McpHandler', () => {
         expect(response.payload.tool).toBe('read_file');
         expect(response.payload.result).toBeDefined();
       }
-      expect(mockMcpService.callTool).toHaveBeenCalledWith('filesystem', 'read_file', {
-        path: '/test.txt',
-      });
+      expect(mockMcpService.callTool).toHaveBeenCalledWith(
+        'filesystem',
+        'read_file',
+        {
+          path: '/test.txt',
+        },
+      );
     });
 
     it('should handle tool execution errors', async () => {
@@ -188,7 +199,9 @@ describe('McpHandler', () => {
 
       expect(response.type).toBe('error');
       if (response.type === 'error') {
-        expect(response.payload.error.message).toContain('Tool execution failed');
+        expect(response.payload.error.message).toContain(
+          'Tool execution failed',
+        );
       }
     });
   });
@@ -196,9 +209,13 @@ describe('McpHandler', () => {
   describe('handleConnect', () => {
     it('should require config with id', async () => {
       const request = createWSMessage('mcp.connect', {
-        config: {} as any,
+        config: {} as McpServerConfig,
       });
-      const response = await handler.handleConnect('conn-1', request, mockContext);
+      const response = await handler.handleConnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('error');
       if (response.type === 'error') {
@@ -217,7 +234,11 @@ describe('McpHandler', () => {
           args: [],
         },
       });
-      const response = await handler.handleConnect('conn-1', request, mockContext);
+      const response = await handler.handleConnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('mcp.connect');
       if (response.type === 'mcp.connect') {
@@ -239,7 +260,11 @@ describe('McpHandler', () => {
           args: [],
         },
       });
-      const response = await handler.handleConnect('conn-1', request, mockContext);
+      const response = await handler.handleConnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('mcp.connect');
       if (response.type === 'mcp.connect') {
@@ -263,7 +288,11 @@ describe('McpHandler', () => {
           args: [],
         },
       });
-      const response = await handler.handleConnect('conn-1', request, mockContext);
+      const response = await handler.handleConnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('error');
       if (response.type === 'error') {
@@ -277,7 +306,11 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.disconnect', {
         serverId: '',
       });
-      const response = await handler.handleDisconnect('conn-1', request, mockContext);
+      const response = await handler.handleDisconnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('error');
       if (response.type === 'error') {
@@ -291,7 +324,11 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.disconnect', {
         serverId: 'filesystem',
       });
-      const response = await handler.handleDisconnect('conn-1', request, mockContext);
+      const response = await handler.handleDisconnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('mcp.disconnect');
       if (response.type === 'mcp.disconnect') {
@@ -309,11 +346,17 @@ describe('McpHandler', () => {
       const request = createWSMessage('mcp.disconnect', {
         serverId: 'filesystem',
       });
-      const response = await handler.handleDisconnect('conn-1', request, mockContext);
+      const response = await handler.handleDisconnect(
+        'conn-1',
+        request,
+        mockContext,
+      );
 
       expect(response.type).toBe('error');
       if (response.type === 'error') {
-        expect(response.payload.error.message).toContain('Disconnection failed');
+        expect(response.payload.error.message).toContain(
+          'Disconnection failed',
+        );
       }
     });
   });
@@ -324,7 +367,10 @@ describe('McpHandler', () => {
         registerHandler: vi.fn(),
       };
 
-      registerMcpHandlers(mockRouter as any, handler);
+      registerMcpHandlers(
+        mockRouter as unknown as Parameters<typeof registerMcpHandlers>[0],
+        handler,
+      );
 
       expect(mockRouter.registerHandler).toHaveBeenCalledTimes(4);
       expect(mockRouter.registerHandler).toHaveBeenCalledWith(

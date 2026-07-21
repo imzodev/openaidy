@@ -8,13 +8,19 @@ const createSessionSchema = z.object({
   title: z.string().min(1),
 });
 
-const submitMessageSchema = z.object({
-  role: z.enum(['user', 'system']),
-  content: z.string().min(1),
-  agentId: z.string().optional(),
-  providerId: z.string().optional(),
-  modelId: z.string().optional(),
-});
+const submitMessageSchema = z
+  .object({
+    role: z.enum(['user', 'system']),
+    content: z.string(),
+    agentId: z.string().optional(),
+    providerId: z.string().optional(),
+    modelId: z.string().optional(),
+    attachmentIds: z.array(z.string()).max(10).optional(),
+  })
+  .refine((body) => body.content.length > 0 || body.attachmentIds?.length, {
+    message: 'content is required unless attachments are provided',
+    path: ['content'],
+  });
 
 /**
  * Session routes options
@@ -42,6 +48,38 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
   app.get('/sessions', async () => {
     const items = await sessionService.listSessions();
     return { items };
+  });
+
+  /**
+   * GET /sessions/search
+   * Search sessions by title or message content using FTS5
+   */
+  app.get('/sessions/search', async (request, reply) => {
+    const { q, limit, currentSessionId } = request.query as {
+      q?: string;
+      limit?: string;
+      currentSessionId?: string;
+    };
+
+    if (!q || typeof q !== 'string' || !q.trim()) {
+      reply.code(400);
+      return {
+        error: 'validation.invalid_request',
+        message:
+          'Query parameter "q" is required and must be a non-empty string',
+      };
+    }
+
+    const searchOptions: Record<string, string | number> = {};
+    if (limit) searchOptions['limit'] = parseInt(limit, 10);
+    if (currentSessionId) searchOptions['currentSessionId'] = currentSessionId;
+
+    const results = await sessionService.searchSessions(
+      q.trim(),
+      searchOptions as { limit?: number; currentSessionId?: string },
+    );
+
+    return { items: results };
   });
 
   /**
@@ -136,6 +174,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
       ...(body.agentId !== undefined && { agentId: body.agentId }),
       ...(body.providerId !== undefined && { providerId: body.providerId }),
       ...(body.modelId !== undefined && { modelId: body.modelId }),
+      ...(body.attachmentIds !== undefined && {
+        attachmentIds: body.attachmentIds,
+      }),
     };
 
     const result = await sessionService.submitMessageStreaming({
@@ -186,4 +227,34 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
     const runs = await sessionService.listRuns(sessionId);
     return { items: runs };
   });
+
+  /**
+   * DELETE /sessions/:sessionId
+   * Delete a session and its messages/runs (cascaded by the DB).
+   *
+   * Requires the `sessions.delete` capability. The bootstrap admin token
+   * has `*` and is permitted; per-session tokens must be granted
+   * `sessions.delete` explicitly.
+   */
+  app.delete<{
+    Params: { sessionId: string };
+  }>(
+    '/sessions/:sessionId',
+    {
+      preHandler: requireAuth({
+        authMiddleware,
+        requiredScope: 'sessions.delete',
+      }),
+    },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      const deleted = await sessionService.deleteSession(sessionId);
+      if (!deleted) {
+        return reply.code(404).send({ error: 'Session not found', sessionId });
+      }
+
+      return reply.code(204).send();
+    },
+  );
 };

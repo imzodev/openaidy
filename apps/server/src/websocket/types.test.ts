@@ -42,7 +42,7 @@ describe('websocket types', () => {
       expect(result.path).toBe('/ws');
     });
 
-    it('should apply defaults for missing fields', () => {
+    it('should apply defaults for missing fields, including port (DEFAULT_SERVER_PORT)', () => {
       const config = {};
       const result = webSocketConfigSchema.parse(config);
 
@@ -129,7 +129,10 @@ describe('websocket types', () => {
         autoApproveCapabilities: ['sessions.read', 'sessions.write'],
       };
       const result = pairingConfigSchema.parse(config);
-      expect(result.autoApproveCapabilities).toEqual(['sessions.read', 'sessions.write']);
+      expect(result.autoApproveCapabilities).toEqual([
+        'sessions.read',
+        'sessions.write',
+      ]);
     });
   });
 
@@ -154,7 +157,7 @@ describe('websocket types', () => {
       expect(result.WS_PATH).toBe('/ws');
     });
 
-    it('should apply defaults for missing env vars', () => {
+    it('should apply defaults for missing env vars, including WS_PORT (DEFAULT_SERVER_PORT)', () => {
       const env = {};
       const result = wsEnvSchema.parse(env);
 
@@ -162,6 +165,12 @@ describe('websocket types', () => {
       expect(result.WS_PORT).toBe(3001);
       expect(result.WS_PATH).toBe('/ws');
       expect(result.WS_MAX_CONNECTIONS).toBe(1000);
+    });
+
+    it('should honor an explicit WS_PORT override', () => {
+      const env = { WS_PORT: '8080' };
+      const result = wsEnvSchema.parse(env);
+      expect(result.WS_PORT).toBe(8080);
     });
 
     it('should parse "false" string as boolean false', () => {
@@ -401,7 +410,7 @@ describe('websocket types', () => {
     });
 
     it('should correctly infer WSEnv type', () => {
-      const env: WSEnv = wsEnvSchema.parse({});
+      const env: WSEnv = wsEnvSchema.parse({ WS_PORT: '3001' });
       expect(env.WS_ENABLED).toBeDefined();
       expect(env.WS_PORT).toBeDefined();
       expect(env.WS_PATH).toBeDefined();
@@ -435,8 +444,12 @@ describe('websocket types', () => {
 
     it('should handle zero values correctly', () => {
       // Zero should be rejected for positive numbers
-      expect(() => webSocketConfigSchema.parse({ maxConnections: 0 })).toThrow();
-      expect(() => webSocketConfigSchema.parse({ heartbeatInterval: 0 })).toThrow();
+      expect(() =>
+        webSocketConfigSchema.parse({ maxConnections: 0 }),
+      ).toThrow();
+      expect(() =>
+        webSocketConfigSchema.parse({ heartbeatInterval: 0 }),
+      ).toThrow();
     });
   });
 });

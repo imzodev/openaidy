@@ -1,4 +1,4 @@
-import { Show, For, createSignal } from 'solid-js';
+import { Show, For, createSignal, createResource } from 'solid-js';
 import {
   Clock,
   CheckCircle,
@@ -7,13 +7,24 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  Cpu,
 } from 'lucide-solid';
 import type { SessionRun, RunStatus } from '../lib/api';
+import { getSessionUsage } from '../lib/api';
 
 type RunListProps = {
   runs: SessionRun[];
   isLoading: boolean;
   error?: string;
+  /** Session whose cumulative usage totals are shown in the header. */
+  sessionId?: string;
+  /**
+   * Effective model in use ("providerId/modelId"), shown in the header next to
+   * the usage totals so the provider/model is visible on every viewport.
+   */
+  model?: string;
+  /** Called when user clicks on a run — passes the run's firstMessageId to scroll to */
+  onRunClick?: (firstMessageId: string | undefined) => void;
 };
 
 /**
@@ -73,6 +84,46 @@ function truncateId(id: string): string {
 export function RunList(props: RunListProps) {
   const [isCollapsed, setIsCollapsed] = createSignal(true);
 
+  // Cumulative usage for this session. Re-fetches when the session changes
+  // or a new run count comes in (a completed run updates the totals).
+  const [usage] = createResource(
+    () =>
+      props.sessionId ? ([props.sessionId, props.runs.length] as const) : null,
+    async (key) => {
+      const result = await getSessionUsage(key[0]);
+      if ('error' in result) return null;
+      return result.usage;
+    },
+  );
+
+  const usageSummary = () => {
+    const u = usage();
+    if (!u || u.totalTokens === 0) return null;
+    const tokens = u.totalTokens.toLocaleString('en-US');
+    const cost = u.hasCost
+      ? ` · $${u.cost.toFixed(u.cost > 0 && u.cost < 1 ? 4 : 2)}`
+      : '';
+    return `${tokens} tokens${cost}`;
+  };
+
+  // Provider/model split from "providerId/modelId" for a compact
+  // "provider · model" indicator. Null when unknown so it's simply omitted.
+  const modelLabel = (): {
+    provider?: string;
+    model: string;
+    full: string;
+  } | null => {
+    const raw = props.model;
+    if (!raw) return null;
+    const slash = raw.indexOf('/');
+    if (slash === -1) return { model: raw, full: raw };
+    return {
+      provider: raw.slice(0, slash),
+      model: raw.slice(slash + 1),
+      full: raw,
+    };
+  };
+
   return (
     <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
       {/* Header */}
@@ -89,11 +140,35 @@ export function RunList(props: RunListProps) {
           </Show>
           <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
         </div>
-        <Show when={props.runs.length > 0}>
-          <span class="text-xs text-text-tertiary">
-            {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
-          </span>
-        </Show>
+        <div class="flex items-center gap-2 min-w-0">
+          <Show when={modelLabel()}>
+            {(m) => (
+              <span
+                class="inline-flex items-center gap-1 text-xs text-text-tertiary max-w-[45%] sm:max-w-none truncate"
+                title={`Model in use: ${m().full}`}
+              >
+                <Cpu class="w-3 h-3 opacity-70 shrink-0" />
+                <span class="truncate">
+                  <Show when={m().provider}>
+                    <span class="opacity-70">{m().provider}</span>
+                    {' · '}
+                  </Show>
+                  {m().model}
+                </span>
+              </span>
+            )}
+          </Show>
+          <Show when={usageSummary()}>
+            <span class="text-xs text-text-tertiary tabular-nums">
+              {usageSummary()}
+            </span>
+          </Show>
+          <Show when={props.runs.length > 0}>
+            <span class="text-xs text-text-tertiary whitespace-nowrap">
+              {props.runs.length} run{props.runs.length !== 1 ? 's' : ''}
+            </span>
+          </Show>
+        </div>
       </div>
 
       {/* Content - hidden when collapsed */}
@@ -127,7 +202,12 @@ export function RunList(props: RunListProps) {
           <div class="max-h-48 overflow-y-auto">
             <For each={props.runs}>
               {(run) => (
-                <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors">
+                <div
+                  class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-white dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  onClick={() => {
+                    props.onRunClick?.(run.firstMessageId);
+                  }}
+                >
                   <div class="flex items-center justify-between gap-2">
                     {/* Left side: status and ID */}
                     <div class="flex items-center gap-2">

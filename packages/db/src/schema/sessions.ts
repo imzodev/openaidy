@@ -3,6 +3,7 @@ import {
   text,
   timestamp,
   integer,
+  doublePrecision,
   jsonb,
   pgEnum,
   index,
@@ -112,6 +113,51 @@ export const sessionMessages = pgTable(
 );
 
 /**
+ * Message attachments table
+ *
+ * Binary media (images/audio) associated with session messages. Only
+ * metadata lives here — the bytes are written to local disk and referenced
+ * via `storagePath`. Rows are created unlinked (`messageId` null) when a
+ * user uploads a file, then linked to the user message at submit time;
+ * tool-produced media (e.g. screenshots) is linked directly to the tool
+ * result message.
+ */
+export const messageAttachments = pgTable(
+  'message_attachments',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    // Null until the attachment is linked to a persisted message
+    messageId: text('message_id').references(() => sessionMessages.id, {
+      onDelete: 'cascade',
+    }),
+    // 'image' | 'audio'
+    kind: text('kind').notNull(),
+    // 'user_upload' | 'tool_output'
+    source: text('source').notNull().default('user_upload'),
+    // Original filename (uploads) or generated name (tool output)
+    name: text('name'),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    // Absolute path of the stored bytes on local disk
+    storagePath: text('storage_path').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    messageIdIdx: index('message_attachments_message_id_idx').on(
+      table.messageId,
+    ),
+    sessionIdIdx: index('message_attachments_session_id_idx').on(
+      table.sessionId,
+    ),
+  }),
+);
+
+/**
  * Run status enum
  *
  * Designed to support future async execution:
@@ -154,12 +200,19 @@ export const sessionRuns = pgTable('session_runs', {
   promptTokens: integer('prompt_tokens'),
   completionTokens: integer('completion_tokens'),
   totalTokens: integer('total_tokens'),
+  // Prompt-cache token counts (subset of promptTokens; provider-dependent)
+  cacheReadTokens: integer('cache_read_tokens'),
+  cacheCreationTokens: integer('cache_creation_tokens'),
+  // Estimated cost in USD (null when pricing for the model is unknown)
+  cost: doublePrecision('cost'),
   // Timestamps
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  // ID of the first assistant message produced by this run
+  firstMessageId: text('first_message_id'),
   // Optional metadata
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 });
@@ -171,3 +224,10 @@ export type SessionMessage = typeof sessionMessages.$inferSelect;
 export type NewSessionMessage = typeof sessionMessages.$inferInsert;
 export type SessionRun = typeof sessionRuns.$inferSelect;
 export type NewSessionRun = typeof sessionRuns.$inferInsert;
+export type MessageAttachment = typeof messageAttachments.$inferSelect;
+export type NewMessageAttachment = typeof messageAttachments.$inferInsert;
+
+/** Attachment media kind */
+export type AttachmentKind = 'image' | 'audio';
+/** How the attachment entered the system */
+export type AttachmentSource = 'user_upload' | 'tool_output';

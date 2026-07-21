@@ -131,7 +131,10 @@ describe('GeminiProvider', () => {
         ok: true,
         json: async () => ({
           models: [
-            { name: 'models/gemini-2.0-flash', displayName: 'Gemini 2.0 Flash' },
+            {
+              name: 'models/gemini-2.0-flash',
+              displayName: 'Gemini 2.0 Flash',
+            },
             { name: 'models/gemini-1.5-pro', displayName: 'Gemini 1.5 Pro' },
           ],
         }),
@@ -153,7 +156,7 @@ describe('GeminiProvider', () => {
           status: 401,
           statusText: 'Unauthorized',
           headers: new Headers(),
-        })
+        }),
       );
 
       const provider = createGeminiProvider({ apiKey: 'test-key' });
@@ -224,6 +227,31 @@ describe('GeminiProvider', () => {
         expect(result.value.name).toBe('unknown-model');
       }
     });
+
+    it('should recognise gemini-3.1-flash-lite (added to the high-volume preset)', async () => {
+      // Verified locally on the wire — model card (May 2026) lists
+      // text/image/video/audio/PDF inputs and function-calling
+      // support. Listed as the larger-free-tier alternative to
+      // gemini-3.5-flash for users who hit the 20 RPD cap.
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        json: async () => ({
+          name: 'models/gemini-3.1-flash-lite',
+          displayName: 'Gemini 3.1 Flash-Lite',
+        }),
+      });
+      const provider = createGeminiProvider({ apiKey: 'test-key' });
+      const result = await provider.getModel('gemini-3.1-flash-lite');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.id).toBe('gemini-3.1-flash-lite');
+        expect(result.value.name).toBe('Gemini 3.1 Flash-Lite');
+        expect(result.value.capabilities).toContain('tool_calls');
+      }
+    });
   });
 
   describe('invoke', () => {
@@ -276,16 +304,23 @@ describe('GeminiProvider', () => {
               finishReason: 'STOP',
             },
           ],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
         }),
       });
 
       const provider = createGeminiProvider({ apiKey: 'my-api-key' });
-      await provider.invoke({ model: 'gemini-2.0-flash', messages: [{ role: 'user', content: 'Hi' }] });
+      await provider.invoke({
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('key=my-api-key'),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -299,7 +334,11 @@ describe('GeminiProvider', () => {
               finishReason: 'STOP',
             },
           ],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
         }),
       });
 
@@ -308,7 +347,10 @@ describe('GeminiProvider', () => {
         useVertexAI: true,
       });
 
-      await provider.invoke({ model: 'gemini-2.0-flash', messages: [{ role: 'user', content: 'Hi' }] });
+      await provider.invoke({
+        model: 'gemini-2.0-flash',
+        messages: [{ role: 'user', content: 'Hi' }],
+      });
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -316,7 +358,7 @@ describe('GeminiProvider', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer access-token',
           }),
-        })
+        }),
       );
     });
 
@@ -329,7 +371,9 @@ describe('GeminiProvider', () => {
       const request: ModelRequest = {
         model: 'gemini-2.0-flash',
         messages: [{ role: 'user', content: 'Hello' }],
-        tools: [{ name: 'test', description: 'Test', parameters: { type: 'object' } }],
+        tools: [
+          { name: 'test', description: 'Test', parameters: { type: 'object' } },
+        ],
       };
 
       const result = await provider.invoke(request);
@@ -346,9 +390,13 @@ describe('GeminiProvider', () => {
         status: 429,
         statusText: 'Too Many Requests',
         headers: new Headers({ 'retry-after': '60' }),
-        text: async () => JSON.stringify({
-          error: { message: 'Rate limit exceeded', status: 'RESOURCE_EXHAUSTED' },
-        }),
+        text: async () =>
+          JSON.stringify({
+            error: {
+              message: 'Rate limit exceeded',
+              status: 'RESOURCE_EXHAUSTED',
+            },
+          }),
       });
 
       const provider = createGeminiProvider({ apiKey: 'test-key' });
@@ -373,13 +421,22 @@ describe('GeminiProvider', () => {
               content: {
                 role: 'model',
                 parts: [
-                  { functionCall: { name: 'get_weather', args: { city: 'Berlin' } } },
+                  {
+                    functionCall: {
+                      name: 'get_weather',
+                      args: { city: 'Berlin' },
+                    },
+                  },
                 ],
               },
               finishReason: 'TOOL_CALLS',
             },
           ],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+          },
         }),
       });
 
@@ -488,7 +545,7 @@ describe('GeminiProvider', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('alt=sse'),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
   });
@@ -512,9 +569,13 @@ describe('Factory functions', () => {
   });
 
   it('createVertexAIGeminiProvider should use custom region', () => {
-    const provider = createVertexAIGeminiProvider('access-token', 'my-project', {
-      region: 'europe-west1',
-    });
+    const provider = createVertexAIGeminiProvider(
+      'access-token',
+      'my-project',
+      {
+        region: 'europe-west1',
+      },
+    );
 
     // The baseUrl should contain the custom region
     expect(provider.descriptor.description).toContain('Vertex AI');

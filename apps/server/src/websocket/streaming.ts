@@ -11,6 +11,10 @@ import {
   type SessionStreamStart,
   type SessionStreamDelta,
   type SessionStreamToolCall,
+  type SessionStreamExecOutput,
+  type SessionStreamToolCancelled,
+  type SessionStreamRunCancelled,
+  type SessionStreamActivity,
   type SessionStreamUsage,
   type SessionStreamEnd,
   type SessionStreamError,
@@ -29,6 +33,10 @@ export type SessionStreamEvent =
   | SessionStreamStart
   | SessionStreamDelta
   | SessionStreamToolCall
+  | SessionStreamExecOutput
+  | SessionStreamToolCancelled
+  | SessionStreamRunCancelled
+  | SessionStreamActivity
   | SessionStreamUsage
   | SessionStreamEnd
   | SessionStreamError
@@ -80,6 +88,60 @@ export function mapRunEventToStreamEvent(
         delta: event.data.delta as string,
         content: event.data.content as string,
       }) as SessionStreamDelta;
+    }
+
+    case 'run.tool_call': {
+      const tc = event.data.toolCall as {
+        id: string;
+        name: string;
+        arguments: Record<string, unknown>;
+      };
+      return createWSMessage('session.stream.tool_call', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCall: {
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+        },
+      }) as SessionStreamToolCall;
+    }
+
+    case 'run.exec_output': {
+      return createWSMessage('session.stream.exec_output', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCallId: event.data.toolCallId as string,
+        stream: event.data.stream as 'stdout' | 'stderr',
+        data: event.data.chunk as string,
+      }) as SessionStreamExecOutput;
+    }
+
+    case 'run.tool_cancelled': {
+      return createWSMessage('session.stream.tool_cancelled', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        toolCallId: event.data.toolCallId as string,
+      }) as SessionStreamToolCancelled;
+    }
+
+    case 'run.cancelled': {
+      return createWSMessage('session.stream.run_cancelled', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+      }) as SessionStreamRunCancelled;
+    }
+
+    case 'run.activity': {
+      return createWSMessage('session.stream.activity', {
+        sessionId: event.sessionId,
+        runId: event.runId,
+        phase: event.data.phase as 'thinking' | 'running_tool',
+        elapsedMs: event.data.elapsedMs as number,
+        ...(event.data.toolName !== undefined && {
+          toolName: event.data.toolName as string,
+        }),
+      }) as SessionStreamActivity;
     }
 
     case 'run.completed': {

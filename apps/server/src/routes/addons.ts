@@ -1,17 +1,90 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { env } from '../lib/env';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
+import { signAssetToken, verifyAssetToken } from '../lib/asset-token';
 import { createAddonService } from '../addons/service';
 import type { AddonsRepository } from '@openaidy/db';
 import type { ManifestValidator } from '../addons/manifest-validator';
+import {
+  parseComponentManifest,
+  type ComponentManifest,
+} from '../addons/component-manifest';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ADMIN_SCOPE = '*';
+
+// Asset tokens are short-lived; the addon's static assets all load within
+// seconds of the iframe navigation, so a small window is plenty.
+const ASSET_TOKEN_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The Tailwind Play CDN origin every addon's `index.html` auto-loads (see
+ * `tools/addons/create.ts`). This is a fixed PLATFORM allowance, not derived
+ * from a given addon's `externalDomains` — those only ever feed
+ * `connect-src`/`img-src` (fetch/XHR and images), never `script-src`, and we
+ * deliberately don't widen `script-src` to arbitrary addon-declared domains
+ * (an addon declaring an API host for fetch() should not thereby also be
+ * allowed to load a <script> from that same host). Tailwind is a built-in
+ * platform feature every addon gets, so it gets its own explicit allowance.
+ */
+const TAILWIND_CDN_ORIGIN = 'https://cdn.tailwindcss.com';
+
+/**
+ * Append an asset token to a same-origin subresource URL. External, absolute,
+ * protocol-relative, and special-scheme URLs are left untouched.
+ */
+function appendAssetToken(url: string, token: string): string {
+  if (
+    /^(https?:)?\/\//i.test(url) ||
+    /^(data:|blob:|mailto:|tel:|javascript:|#)/i.test(url)
+  ) {
+    return url;
+  }
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}at=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Rewrite an addon HTML document so the sandboxed iframe can load its
+ * subresources: propagate the asset token onto every local `src`/`href`, and
+ * mark *local* scripts `crossorigin="anonymous"` (CORS mode) so strict dev
+ * servers don't reject the cross-origin no-cors loads. External scripts
+ * (e.g. the Tailwind Play CDN) are deliberately left alone — forcing CORS
+ * mode on a third-party script whose server doesn't send
+ * `Access-Control-Allow-Origin` makes the browser block the load entirely,
+ * where a plain no-cors `<script src>` (the default) would have loaded fine.
+ */
+export function rewriteAddonHtml(html: string, token: string): string {
+  const withTokens = html.replace(
+    /\b(src|href)=("|')(.*?)\2/gi,
+    (_match, attr: string, quote: string, url: string) =>
+      `${attr}=${quote}${appendAssetToken(url, token)}${quote}`,
+  );
+  return withTokens.replace(
+    /<script([^>]*?)\bsrc=("|')(.*?)\2([^>]*)>/gi,
+    (fullMatch, before: string, quote: string, url: string, after: string) => {
+      if (/\bcrossorigin\b/i.test(before) || /\bcrossorigin\b/i.test(after)) {
+        return fullMatch;
+      }
+      const isExternal =
+        /^(https?:)?\/\//i.test(url) || /^(data:|blob:)/i.test(url);
+      if (isExternal) return fullMatch;
+      return `<script crossorigin="anonymous"${before}src=${quote}${url}${quote}${after}>`;
+    },
+  );
+}
+
+/** Extract the `at` asset-token query param from a request. */
+function getAssetToken(request: FastifyRequest): string | null {
+  const query = request.query as Record<string, unknown> | undefined;
+  const at = query?.['at'];
+  return typeof at === 'string' && at.length > 0 ? at : null;
+}
 
 /**
  * Addon routes options
@@ -22,6 +95,7 @@ export type AddonRoutesOptions = {
   jwtSecret: string;
   openAidyVersion: string;
   manifestValidator: ManifestValidator;
+  storageEngine?: import('../addons/storage/engine').AddonStorageEngine;
 };
 
 /**
@@ -208,6 +282,9 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     async (request, reply) => {
       try {
         await addonService.uninstallAddon(request.params.addonId, 'admin');
+        // Close the storage connection and delete the addon's on-disk
+        // directory (source + data) — previously left behind entirely.
+        opts.storageEngine?.destroyAddon(request.params.addonId);
         return reply.code(204).send();
       } catch (error: unknown) {
         const err = error as { code?: string; message?: string };
@@ -302,9 +379,52 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
     },
   );
 
-  // GET /sdk/openaidy-sdk.js - Serve the addon SDK
-  app.get('/sdk/openaidy-sdk.js', async (_request, reply) => {
-    const sdkPath = path.join(__dirname, '../sdk/openaidy-sdk.js');
+  // GET /api/addons/:addonId/asset-token - Mint a short-lived token the web
+  // client puts on the iframe URL so the sandboxed addon (opaque origin, no
+  // header/cookie possible) can authenticate its static asset loads.
+  app.get<{ Params: { addonId: string } }>(
+    '/api/addons/:addonId/asset-token',
+    { preHandler: adminAuth },
+    async (request, reply) => {
+      const token = signAssetToken(
+        request.params.addonId,
+        opts.jwtSecret,
+        ASSET_TOKEN_TTL_MS,
+      );
+      return reply.send({ token, expiresIn: ASSET_TOKEN_TTL_MS });
+    },
+  );
+
+  /** Reject the request unless it carries a valid asset token. */
+  const requireAssetToken = (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    addonId?: string,
+  ): boolean => {
+    const token = getAssetToken(request);
+    if (
+      !token ||
+      !verifyAssetToken(token, opts.jwtSecret, addonId ? { addonId } : {})
+    ) {
+      reply.code(401).send({
+        error: 'UNAUTHORIZED',
+        message: 'Missing or invalid asset token',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  // GET /sdk/openaidy-sdk.js - Serve the addon SDK (asset-token gated)
+  app.get('/sdk/openaidy-sdk.js', async (request, reply) => {
+    // SDK is shared across addons, so the token need not be addon-bound.
+    if (!requireAssetToken(request, reply)) return reply;
+
+    // OPENAIDY_SDK_PATH lets a packaged (bundled) install point at the SDK
+    // shipped in the package; dev/source falls back to the co-located file.
+    const sdkPath =
+      process.env['OPENAIDY_SDK_PATH'] ??
+      path.join(__dirname, '../sdk/openaidy-sdk.js');
     if (!fs.existsSync(sdkPath)) {
       return reply.code(404).send({ error: 'SDK not found' });
     }
@@ -315,11 +435,38 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       .send(fs.readFileSync(sdkPath));
   });
 
+  // GET /sdk/components.json - Serve the sdk.ui.* component manifest, parsed
+  // from @component JSDoc blocks in openaidy-sdk.js. Not asset-token gated —
+  // this is documentation, not a credential, same as GET /info. Cached after
+  // the first parse: the SDK file doesn't change within a server's lifetime.
+  let componentManifestCache: ComponentManifest | null = null;
+  app.get('/sdk/components.json', async (_request, reply) => {
+    if (!componentManifestCache) {
+      const sdkPath =
+        process.env['OPENAIDY_SDK_PATH'] ??
+        path.join(__dirname, '../sdk/openaidy-sdk.js');
+      if (!fs.existsSync(sdkPath)) {
+        return reply.code(404).send({ error: 'SDK not found' });
+      }
+      componentManifestCache = parseComponentManifest(
+        fs.readFileSync(sdkPath, 'utf-8'),
+      );
+    }
+    return reply
+      .header('Access-Control-Allow-Origin', '*')
+      .header('Cache-Control', 'no-cache, no-store, must-revalidate')
+      .send(componentManifestCache);
+  });
+
   // GET /addons/:addonId/* - Serve addon static files
   app.get<{ Params: { addonId: string; '*': string } }>(
     '/addons/:addonId/*',
     async (request, reply) => {
       const { addonId } = request.params;
+
+      // Asset token must be present, valid, and bound to this addon.
+      if (!requireAssetToken(request, reply, addonId)) return reply;
+
       const filePath = request.params['*'] || 'index.html';
       const addonsDir = path.join(env.OPENAIDY_HOME, 'addons');
       const fullPath = path.join(addonsDir, addonId, filePath);
@@ -388,25 +535,64 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         ...normalizeHosts(externalImageDomains),
       ].join(' ');
 
+      // The addon HTML is loaded inside a sandboxed iframe WITHOUT
+      // allow-same-origin, which gives the document an opaque origin.
+      // CSP 'self' does NOT match any URL against an opaque origin, so
+      // script-src 'self' silently blocks every <script> tag.  We must
+      // use the actual request origin (scheme + host + port) instead.
+      // `request.headers.host` reflects the browser-facing origin — in
+      // dev mode it's "localhost:5173" (Vite proxy), in production it's
+      // whatever the client actually hits.  We also include the backend
+      // direct origin as a fallback.
+      const requestHost = request.headers.host;
+      const scriptSrcOrigins = [
+        "'unsafe-inline'",
+        ...(requestHost ? [`http://${requestHost}`] : []),
+        `http://localhost:${env.PORT}`,
+        TAILWIND_CDN_ORIGIN,
+      ];
+      const scriptSrc = scriptSrcOrigins.join(' ');
+
+      const csp = [
+        "default-src 'none'",
+        `script-src ${scriptSrc}`,
+        "style-src 'self' 'unsafe-inline'",
+        `img-src ${imgSrc}`,
+        "font-src 'self'",
+        `connect-src ${connectSrc}`,
+        "frame-src 'none'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ].join('; ');
+
+      // The addon iframe is sandboxed WITHOUT `allow-same-origin`, so its
+      // document has an opaque origin and EVERY subresource request counts
+      // as cross-site. A classic `<script src>` tag is fetched in `no-cors`
+      // mode by default, and strict dev servers reject cross-origin no-cors
+      // script loads with 403 (Vite's rejectNoCorsRequestMiddleware —
+      // GHSA-4v9v-hfq4-rm2v). To let the addon's LOCAL scripts (and the SDK)
+      // load, we rewrite their `<script src>` tags to request in CORS mode by
+      // adding `crossorigin="anonymous"`. Those responses already carry
+      // `Access-Control-Allow-Origin: *`, so the CORS check passes. This is
+      // a no-op in production (the static handler still sends ACAO: *).
+      // EXTERNAL scripts (e.g. the Tailwind Play CDN) are left in the default
+      // no-cors mode instead — cdn.tailwindcss.com doesn't send an ACAO
+      // header, so forcing CORS mode on it would make the browser block the
+      // load outright rather than execute it opaquely.
+      let payload: string | Buffer = fs.readFileSync(resolved);
+      if (ext === '.html') {
+        // Propagate the (validated) asset token onto every local subresource
+        // URL so the iframe's scripts/styles/SDK authenticate too.
+        const token = getAssetToken(request) ?? '';
+        payload = rewriteAddonHtml(payload.toString('utf-8'), token);
+      }
+
       return reply
         .header('Content-Type', contentType)
         .header('Access-Control-Allow-Origin', '*')
-        .header(
-          'Content-Security-Policy',
-          [
-            "default-src 'none'",
-            "script-src 'self' 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline'",
-            `img-src ${imgSrc}`,
-            "font-src 'self'",
-            `connect-src ${connectSrc}`,
-            "frame-src 'none'",
-            "object-src 'none'",
-            "base-uri 'none'",
-            "form-action 'none'",
-          ].join('; '),
-        )
-        .send(fs.readFileSync(resolved));
+        .header('Content-Security-Policy', csp)
+        .send(payload);
     },
   );
 

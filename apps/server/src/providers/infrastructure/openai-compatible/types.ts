@@ -22,9 +22,38 @@ export type OpenAITextContentPart = {
 };
 
 /**
+ * OpenAI message content part (image, as a data: or https: URL)
+ */
+export type OpenAIImageContentPart = {
+  type: 'image_url';
+  image_url: {
+    url: string;
+  };
+};
+
+/**
+ * OpenAI message content part (audio input)
+ */
+export type OpenAIAudioContentPart = {
+  type: 'input_audio';
+  input_audio: {
+    data: string;
+    format: string;
+  };
+};
+
+/**
+ * OpenAI message content part union
+ */
+export type OpenAIContentPart =
+  | OpenAITextContentPart
+  | OpenAIImageContentPart
+  | OpenAIAudioContentPart;
+
+/**
  * OpenAI message content (can be string or array of parts)
  */
-export type OpenAIMessageContent = string | OpenAITextContentPart[];
+export type OpenAIMessageContent = string | OpenAIContentPart[];
 
 /**
  * OpenAI tool call
@@ -68,12 +97,17 @@ export type OpenAIChatCompletionRequest = {
   model: string;
   messages: OpenAIMessage[];
   tools?: OpenAIToolDefinition[];
-  tool_choice?: 'auto' | 'required' | 'none' | { type: 'function'; function: { name: string } };
+  tool_choice?:
+    | 'auto'
+    | 'required'
+    | 'none'
+    | { type: 'function'; function: { name: string } };
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
   stop?: string | string[];
   stream?: boolean;
+  stream_options?: { include_usage?: boolean };
   metadata?: Record<string, unknown>;
 };
 
@@ -98,6 +132,7 @@ export type OpenAIChatCompletionResponse = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 };
 
@@ -130,6 +165,7 @@ export type OpenAIStreamChunk = {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 };
 
@@ -191,4 +227,13 @@ export type OpenAICompatibleAdapterConfig = {
   providerId?: string;
   /** Provider name override */
   providerName?: string;
+  /**
+   * Optional callback that returns the current credential (e.g. an
+   * OAuth access token) for the provider. When supplied, this is
+   * consulted on every outgoing request so freshly-persisted
+   * credentials are picked up without restarting the server. The
+   * returned value overrides the `apiKey` field for the
+   * `Authorization: Bearer …` header.
+   */
+  credentialProvider?: (providerId: string) => Promise<string | null>;
 };

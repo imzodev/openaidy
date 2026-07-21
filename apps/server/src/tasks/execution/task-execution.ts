@@ -3,6 +3,7 @@ import type {
   SubtasksRepository,
   TaskAgentsRepository,
   DeliverablesRepository,
+  TaskExecutionHistoryRepository,
   Subtask,
   SessionMessage,
 } from '@openaidy/db';
@@ -10,7 +11,10 @@ import type { AgentRegistry } from '../../agents';
 import type { SessionMessageService } from '../../sessions/service';
 import type { SubmitMessageStreamingInput } from '../../sessions/types';
 import type { RunEventEmitter } from '../../dispatch/events';
-import type { SessionType } from '@openaidy/shared-types';
+import type {
+  SessionType,
+  ExecutionSubtaskSummary,
+} from '@openaidy/shared-types';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
 import type { SessionMessageRecord, ServiceResult } from '../../types';
@@ -31,6 +35,9 @@ export class TaskExecution {
     private readonly sessionService: SessionMessageService | undefined,
     private readonly runEvents: RunEventEmitter | undefined,
     private readonly workspaceBaseDir: string | undefined,
+    private readonly taskExecutionHistoryRepo:
+      | TaskExecutionHistoryRepository
+      | undefined,
   ) {
     this.logger = createLogger('TaskExecution');
 
@@ -87,6 +94,7 @@ export class TaskExecution {
           await this.completeSubtask(
             pendingSubtask.id,
             pendingSubtask.pendingVerificationResult!,
+            event.sessionId,
           );
         }
         return;
@@ -219,6 +227,7 @@ export class TaskExecution {
 
   async executeTask(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -241,10 +250,20 @@ export class TaskExecution {
       };
     }
 
-    const session = await this.sessionService.createSession(
-      `Task: ${task.title}`,
-      'task',
-    );
+    // Reuse the existing session when the caller (e.g. the
+    // recurring-task executor) has already created one and just needs
+    // us to dispatch the work. Without this, every recurring run
+    // would create a second "Task: <title>" session on top of the
+    // "Task: <title> (run #N)" session the executor created.
+    let session: { id: string };
+    if (options.sessionId) {
+      session = { id: options.sessionId };
+    } else {
+      session = await this.sessionService.createSession(
+        `Task: ${task.title}`,
+        'task',
+      );
+    }
     await this.tasksRepo.update(taskId, { sessionId: session.id });
     await this.tasksRepo.updateStatus(taskId, 'in_progress');
     this.logger.info('Task moved to in_progress', { taskId });
@@ -255,7 +274,13 @@ export class TaskExecution {
         taskId,
         subtaskCount: subtasks.length,
       });
-      const result = await this.executeSubtasks(taskId);
+      // Only pass the session down to subtasks if the caller (e.g. the
+      // recurring-task executor) already created one. For normal API
+      // calls, each subtask should create its own session.
+      const executeSubtasksOptions = options.sessionId
+        ? { sessionId: options.sessionId }
+        : {};
+      const result = await this.executeSubtasks(taskId, executeSubtasksOptions);
       if (!result.ok) return { ok: false, error: result.error };
       return { ok: true, data: { sessionId: session.id } };
     }
@@ -287,6 +312,7 @@ export class TaskExecution {
 
   async executeSubtask(
     subtaskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -336,14 +362,27 @@ export class TaskExecution {
       }
     }
 
-    const session = await this.sessionService.createSession(
-      `Subtask: ${subtask.title}`,
-      'subtask',
+    // Reuse the existing session if the caller (e.g. the recurring-task
+    // executor) already created one. Otherwise create a per-subtask
+    // session like before.
+    let session: { id: string };
+    if (options.sessionId) {
+      session = { id: options.sessionId };
+    } else {
+      session = await this.sessionService.createSession(
+        `Subtask: ${subtask.title}`,
+        'subtask',
+      );
+    }
+    this.logger.info(
+      options.sessionId
+        ? 'Reusing session for subtask (called by recurring executor)'
+        : 'Created session for subtask',
+      {
+        subtaskId,
+        sessionId: session.id,
+      },
     );
-    this.logger.info('Created session for subtask', {
-      subtaskId,
-      sessionId: session.id,
-    });
 
     await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
     await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
@@ -386,6 +425,7 @@ export class TaskExecution {
 
   async executeSubtasks(
     taskId: string,
+    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ startedCount: number }>> {
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
@@ -409,7 +449,11 @@ export class TaskExecution {
 
     let startedCount = 0;
     for (const subtask of executable) {
-      const result = await this.executeSubtask(subtask.id);
+      const result = options.sessionId
+        ? await this.executeSubtask(subtask.id, {
+            sessionId: options.sessionId,
+          })
+        : await this.executeSubtask(subtask.id);
       if (result.ok) startedCount++;
     }
 
@@ -478,6 +522,7 @@ export class TaskExecution {
   async completeSubtask(
     subtaskId: string,
     result: string,
+    taskSessionId?: string,
   ): Promise<ServiceResult<Subtask>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) {
@@ -497,7 +542,7 @@ export class TaskExecution {
       taskId: subtask.taskId,
     });
 
-    await this.checkTaskCompletion(subtask.taskId);
+    await this.checkTaskCompletion(subtask.taskId, taskSessionId);
 
     const executeResult = await this.executeSubtasks(subtask.taskId);
     if (executeResult.ok && executeResult.data.startedCount > 0) {
@@ -600,28 +645,80 @@ export class TaskExecution {
     const taskAgents = await this.taskAgentsRepo.listByTask(subtask.taskId);
     const agentId = taskAgents[0]?.agentId;
 
-    const toolCallsMade: string[] = [];
+    // Toolset of the agent that ACTUALLY executed the subtask. The
+    // verification runs on the task session, which uses a different
+    // agent (taskAgents[0]); that agent's enabled tools are NOT the
+    // tools that were available during execution. We must surface the
+    // executor's toolset so the verifier does not dismiss tool calls
+    // (e.g. exec_run) as "not in my toolset → fabricated".
+    const executorAgentId = (subtask as { assignedAgentId?: string })
+      .assignedAgentId;
+    const executorTools =
+      (executorAgentId && this.agents?.getAgent(executorAgentId)?.tools) || [];
+
+    // Build a map of toolCallId -> result content (truncated) so we
+    // can pair each assistant tool call with the real outcome
+    // persisted in the following role:'tool' message. Without this
+    // evidence the verifier only sees tool NAMES and can hallucinate
+    // that calls were fabricated (see false-INCOMPLETE bug).
+    const toolResultByCallId = new Map<
+      string,
+      { content: string; isError: boolean }
+    >();
+    if (sessionMessages && sessionMessages.length > 0) {
+      for (const m of sessionMessages) {
+        if (m.role === 'tool') {
+          const id = (m as { toolCallId?: string }).toolCallId;
+          if (!id) continue;
+          const md = (m as { metadata?: Record<string, unknown> }).metadata;
+          const isError =
+            (m as { isError?: boolean }).isError === true ||
+            md?.isError === true;
+          const raw = (m as { content?: string }).content ?? '';
+          toolResultByCallId.set(id, { content: raw, isError });
+        }
+      }
+    }
+
     const consultedSkills = new Set<string>();
+    const toolCallsWithResults: string[] = [];
+    let totalResultsBytes = 0;
+    const MAX_PER_RESULT = 1000;
+    const MAX_TOTAL_RESULTS = 8192;
 
     if (sessionMessages && sessionMessages.length > 0) {
       for (const m of sessionMessages) {
-        if (m.role === 'assistant') {
-          const metadata = (m as { metadata?: Record<string, unknown> })
-            .metadata;
-          const toolCalls = metadata?.toolCalls as
-            | Array<{ name: string; arguments: string }>
-            | undefined;
-          if (toolCalls && toolCalls.length > 0) {
-            for (const tc of toolCalls) {
-              toolCallsMade.push(`${tc.name}(${tc.arguments})`);
+        if (m.role !== 'assistant') continue;
+        const metadata = (m as { metadata?: Record<string, unknown> }).metadata;
+        const toolCalls = metadata?.toolCalls as
+          | Array<{ id?: string; name: string; arguments: string }>
+          | undefined;
+        if (toolCalls && toolCalls.length > 0) {
+          for (const tc of toolCalls) {
+            let entry = `- ${tc.name}(${tc.arguments})`;
+            if (tc.id && toolResultByCallId.has(tc.id)) {
+              const result = toolResultByCallId.get(tc.id)!;
+              if (totalResultsBytes < MAX_TOTAL_RESULTS) {
+                const remaining = MAX_TOTAL_RESULTS - totalResultsBytes;
+                const budget = Math.min(MAX_PER_RESULT, remaining);
+                const truncated =
+                  result.content.length > budget
+                    ? result.content.slice(0, budget) +
+                      `…[truncated ${result.content.length - budget} chars]`
+                    : result.content;
+                entry += `\n    → result${
+                  result.isError ? ' (ERROR)' : ''
+                }: ${truncated}`;
+                totalResultsBytes += truncated.length;
+              }
             }
+            toolCallsWithResults.push(entry);
           }
-          // Extract consulted skills from metadata
-          const skills = metadata?.consultedSkills as string[] | undefined;
-          if (skills && skills.length > 0) {
-            for (const skillId of skills) {
-              consultedSkills.add(skillId);
-            }
+        }
+        const skills = metadata?.consultedSkills as string[] | undefined;
+        if (skills && skills.length > 0) {
+          for (const skillId of skills) {
+            consultedSkills.add(skillId);
           }
         }
       }
@@ -629,16 +726,23 @@ export class TaskExecution {
 
     const consultedSkillsList = Array.from(consultedSkills);
 
+    const executorToolsetBlock =
+      executorTools.length > 0
+        ? `**IMPORTANT — toolset context**: This subtask was executed by agent "${executorAgentId}" with these tools enabled: ${executorTools.join(', ')}. The tool calls below were made by THAT agent, not by you. Do NOT judge the work based on your own enabled tools — your toolset is different and irrelevant here. Evaluate based on the tool RESULTS and the agent's final response. A tool name you do not have (e.g. exec_run) is NOT evidence of fabrication; it is expected because a different agent did the work.`
+        : `**IMPORTANT — toolset context**: This subtask was executed by a different agent with its own toolset. Do NOT judge the work based on your own enabled tools. Evaluate based on the tool RESULTS and the agent's final response.`;
+
     const verificationPrompt = [
       `Evaluate whether this subtask was successfully completed.`,
       ``,
       `**Subtask**: ${subtask.title}`,
       `**Objective**: ${subtask.description}`,
       ``,
-      ...(toolCallsMade.length > 0
+      executorToolsetBlock,
+      ``,
+      ...(toolCallsWithResults.length > 0
         ? [
-            `**Tools invoked during execution** (${toolCallsMade.length} calls):`,
-            ...toolCallsMade.map((tc) => `- ${tc}`),
+            `**Tool calls and their results** (${toolCallsWithResults.length} calls; results truncated to ${MAX_PER_RESULT} chars each, ${MAX_TOTAL_RESULTS} chars total):`,
+            ...toolCallsWithResults,
             ``,
           ]
         : [`**No tools were invoked**`, ``]),
@@ -657,7 +761,7 @@ export class TaskExecution {
       `Reply with ONLY a JSON object in this exact format (no markdown, no extra text):`,
       `{"verdict": "COMPLETED|INCOMPLETE", "reason": "brief explanation of why"}`,
       ``,
-      `Use COMPLETED only if the work was actually done and tool usage confirms it. Use INCOMPLETE if the agent failed, encountered errors, or no actual work was performed.`,
+      `Use COMPLETED if the work was actually done. Evidence of success includes: tool results showing successful API responses (post IDs, URLs, created resource identifiers), confirmation messages in the final response, or files written. Use INCOMPLETE only if tool results show errors AND the final response does not claim success with concrete artifacts. Do NOT mark INCOMPLETE solely because a tool name is unfamiliar to you or is not in your own toolset.`,
     ].join('\n');
 
     this.logger.info('Submitting subtask verification to task session', {
@@ -722,12 +826,35 @@ export class TaskExecution {
     });
 
     if (isComplete) {
-      await this.completeSubtask(subtaskId, originalResult);
-    } else {
-      this.logger.info('Verification says incomplete, triggering retry', {
+      await this.completeSubtask(
         subtaskId,
-      });
-      await this.triggerSubtaskRetry(subtaskId);
+        originalResult,
+        verificationSessionId,
+      );
+    } else {
+      // Guard against false-INCOMPLETE verdicts: a verifier LLM can
+      // wrongly mark work as incomplete (e.g. because a tool name is
+      // not in its own toolset). Re-running the subtask would repeat
+      // side effects (duplicate tweets, duplicate API posts, …). If
+      // the executor's final response already reports success with
+      // concrete artifacts (IDs, URLs), override the verdict and
+      // complete the subtask instead of retrying.
+      if (hasConcreteArtifacts(originalResult)) {
+        this.logger.warn(
+          'Verifier said INCOMPLETE but executor response contains concrete success artifacts; overriding to COMPLETED to avoid duplicate side effects',
+          { subtaskId, verdict: parsedVerdict },
+        );
+        await this.completeSubtask(
+          subtaskId,
+          originalResult,
+          verificationSessionId,
+        );
+      } else {
+        this.logger.info('Verification says incomplete, triggering retry', {
+          subtaskId,
+        });
+        await this.triggerSubtaskRetry(subtaskId);
+      }
     }
   }
 
@@ -735,10 +862,24 @@ export class TaskExecution {
   // Internal helpers
   // ========================================
 
-  private async checkTaskCompletion(taskId: string): Promise<void> {
+  private async checkTaskCompletion(
+    taskId: string,
+    taskSessionId?: string,
+  ): Promise<void> {
     const subtasks = await this.subtasksRepo.listByTask(taskId);
     const allComplete =
       subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
+
+    // Snapshot subtask statuses into the execution history row when
+    // all subtasks have reached a terminal state (completed or failed).
+    // Because subtasks are reset between recurring runs, without this
+    // snapshot historical runs would have no subtask data in the UI.
+    const allTerminal =
+      subtasks.length > 0 &&
+      subtasks.every((s) => s.status === 'completed' || s.status === 'failed');
+    if (allTerminal) {
+      await this.snapshotSubtaskSummary(taskId, subtasks, taskSessionId);
+    }
 
     if (allComplete) {
       await this.tasksRepo.updateStatus(taskId, 'review');
@@ -751,6 +892,62 @@ export class TaskExecution {
       // Trigger deliverable verification when all subtasks are complete
       await this.verifyDeliverables(taskId);
     }
+  }
+
+  /**
+   * Write a JSON snapshot of the current subtask statuses into the
+   * `task_execution_history` row for the task's current run.
+   *
+   * The history row is found by its `sessionId`. The caller MUST pass
+   * `taskSessionId` from the verification flow — the task session that
+   * performed the verification. This is critical for recurring tasks:
+   * the next run's executor can change `task.sessionId` BEFORE the
+   * current run's last verification completes, which would cause the
+   * snapshot to be written to the wrong history row (or lost entirely).
+   * When `taskSessionId` is unavailable (e.g. the fallback auto-complete
+   * path with no task session), we fall back to `task.sessionId`.
+   */
+  private async snapshotSubtaskSummary(
+    taskId: string,
+    subtasks: Subtask[],
+    taskSessionId?: string,
+  ): Promise<void> {
+    if (!this.taskExecutionHistoryRepo) return;
+
+    const sessionId =
+      taskSessionId ?? (await this.tasksRepo.findById(taskId))?.sessionId;
+    if (!sessionId) return;
+
+    const history =
+      await this.taskExecutionHistoryRepo.findBySessionId(sessionId);
+    if (!history) return;
+
+    const summary: ExecutionSubtaskSummary = {
+      total: subtasks.length,
+      completed: subtasks.filter((s) => s.status === 'completed').length,
+      failed: subtasks.filter((s) => s.status === 'failed').length,
+      inProgress: subtasks.filter((s) => s.status === 'in_progress').length,
+      pending: subtasks.filter(
+        (s) => s.status === 'pending' || s.status === 'assigned',
+      ).length,
+      items: subtasks.map((s) => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        sessionId: s.sessionId ?? null,
+      })),
+    };
+
+    await this.taskExecutionHistoryRepo.update(history.id, {
+      subtaskSummary: JSON.stringify(summary),
+    });
+    this.logger.info('Subtask summary snapshotted to history row', {
+      taskId,
+      historyId: history.id,
+      total: summary.total,
+      completed: summary.completed,
+      failed: summary.failed,
+    });
   }
 
   // ========================================
@@ -855,4 +1052,26 @@ export class TaskExecution {
       });
     }
   }
+}
+
+/**
+ * Heuristic guard against false-INCOMPLETE verification verdicts.
+ *
+ * Returns true when the executor's final response simultaneously:
+ *   - claims success (published/posted/created/successfully/completed/done…), AND
+ *   - references a concrete artifact: a long hex ID (e.g. Buffer post IDs
+ *     like "6a35942d9513262b4d256b1f") or an http(s):// URL.
+ *
+ * When this returns true, {@link TaskExecution.handleVerificationResult}
+ * overrides an INCOMPLETE verdict and completes the subtask instead of
+ * re-running it, which would repeat side effects (duplicate tweets, etc.).
+ */
+function hasConcreteArtifacts(text: string): boolean {
+  if (!text) return false;
+  const successPattern =
+    /\b(publish(?:ed)?|post(?:ed)?|creat(?:ed|ing)?|sent|updat(?:ed|ing)?|success(?:fully)?|complet(?:ed|ing)?|done|deliver(?:ed|ing)?)\b/i;
+  if (!successPattern.test(text)) return false;
+  const longHexId = /\b[a-f0-9]{20,}\b/i;
+  const url = /https?:\/\/\S+/i;
+  return longHexId.test(text) || url.test(text);
 }

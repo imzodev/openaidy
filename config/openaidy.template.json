@@ -1,91 +1,74 @@
 {
   "version": 1,
   "defaults": {
-    "providerId": "openai",
-    "modelId": "gpt-4o-mini",
     "agentId": "default"
   },
   "mcpServers": [
     {
-      "id": "filesystem",
-      "name": "Filesystem Tools",
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
-      "env": {}
-    },
-    {
       "id": "github",
       "name": "GitHub Tools",
+      "transport": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    {
+      "id": "time",
+      "name": "Time",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@guanxiong/mcp-server-time"]
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright Browser",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    {
+      "id": "context7",
+      "name": "Context7 Docs",
+      "transport": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    {
+      "id": "brave-search",
+      "name": "Brave Search",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@brave/brave-search-mcp-server"],
       "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      }
+    },
+    {
+      "id": "tavily",
+      "name": "Tavily Search",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "tavily-mcp@latest"],
+      "env": {
+        "TAVILY_API_KEY": "${TAVILY_API_KEY}"
       }
     }
   ],
-  "providers": [
-    {
-      "id": "openai",
-      "name": "OpenAI",
-      "vendorFamily": "openai-compatible",
-      "models": [
-        {
-          "id": "gpt-4o-mini",
-          "name": "GPT-4o Mini",
-          "contextWindow": 128000,
-          "maxOutputTokens": 4096
-        },
-        {
-          "id": "gpt-4o",
-          "name": "GPT-4o",
-          "contextWindow": 128000,
-          "maxOutputTokens": 4096
-        }
-      ]
-    },
-    {
-      "id": "anthropic",
-      "name": "Anthropic",
-      "vendorFamily": "anthropic",
-      "models": [
-        {
-          "id": "claude-3-5-sonnet",
-          "name": "Claude 3.5 Sonnet",
-          "contextWindow": 200000,
-          "maxOutputTokens": 8192
-        },
-        {
-          "id": "claude-3-5-haiku",
-          "name": "Claude 3.5 Haiku",
-          "contextWindow": 200000,
-          "maxOutputTokens": 8192
-        }
-      ]
-    },
-    {
-      "id": "google-genai",
-      "name": "Google Generative AI",
-      "vendorFamily": "gemini",
-      "models": [
-        {
-          "id": "gemini-2.0-flash",
-          "name": "Gemini 2.0 Flash",
-          "contextWindow": 1000000,
-          "maxOutputTokens": 8192
-        }
-      ]
-    }
-  ],
+  "providers": [],
   "agents": [
     {
       "id": "default",
       "name": "Default Assistant",
-      "description": "A general-purpose assistant that can read from the code assistant's workspace for context",
+      "description": "A general-purpose assistant. Uses the default provider/model configured after setup.",
       "enabled": true,
       "systemPrompt": "You are an AI assistant. You are helpful, friendly, and knowledgeable. You can assist with a wide range of tasks including answering questions, providing explanations, and helping with various requests.",
-      "model": "openai/gpt-4o-mini",
       "tools": ["tasks_list", "tasks_create", "tasks_update"],
       "tags": ["general", "default"],
       "workspace": {
@@ -103,45 +86,6 @@
               "read": true,
               "write": true,
               "delete": false,
-              "list": true
-            }
-          },
-          {
-            "path": "code-assistant",
-            "permissions": {
-              "read": true,
-              "write": false,
-              "delete": false,
-              "list": true
-            }
-          }
-        ]
-      }
-    },
-    {
-      "id": "code-assistant",
-      "name": "Code Assistant",
-      "description": "An assistant specialized in programming, software development, and code review. Has access to workspace files for reading and modifying code.",
-      "enabled": true,
-      "systemPrompt": "You are an expert code assistant with deep knowledge of software development, programming languages, and best practices. You help with:\n\n1. Writing and editing code\n2. Code review and debugging\n3. Explaining programming concepts\n4. Suggesting improvements and optimizations\n\nWhen working with code:\n- Follow established patterns in the codebase\n- Write clear, well-documented code\n- Consider performance implications\n- Handle edge cases appropriately",
-      "model": "openai/gpt-4o",
-      "tools": [],
-      "tags": ["coding", "development", "technical"],
-      "workspace": {
-        "enabled": true,
-        "defaultPermissions": {
-          "read": true,
-          "write": true,
-          "delete": true,
-          "list": true
-        },
-        "workspaces": [
-          {
-            "path": "code-assistant",
-            "permissions": {
-              "read": true,
-              "write": true,
-              "delete": true,
               "list": true
             }
           }

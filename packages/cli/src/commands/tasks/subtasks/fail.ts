@@ -55,7 +55,8 @@ Exit Codes:
   }
 
   if (positional.length === 0) {
-    const msg = 'Subtask ID is required.\nUsage: openaidy subtasks fail <subtaskId>';
+    const msg =
+      'Subtask ID is required.\nUsage: openaidy subtasks fail <subtaskId>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }
@@ -66,7 +67,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/subtasks/${subtaskId}/fail`, {
+    res = await fetch(`${config.httpUrl}/subtasks/${subtaskId}/fail`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${tokenResult.token}`,
@@ -86,7 +87,11 @@ Exit Codes:
       p.log.error(msg);
       return { exitCode: 1, error: msg };
     }
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as {
+      error?: { message?: string };
+    };
     const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };

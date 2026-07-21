@@ -137,6 +137,74 @@ export const AddonOpenAidySchema = z.object({
 export type AddonOpenAidy = z.infer<typeof AddonOpenAidySchema>;
 
 /**
+ * Addon storage block — declares the addon's own per-addon SQLite storage.
+ *
+ * `migrations` is an ordered list of DDL/DML statements the host applies once,
+ * by index, the first time the addon's DB is opened (and again for any newly
+ * added entries after an upgrade). Declaring the schema here — rather than
+ * having the UI create tables on first load — means the tables exist even when
+ * no addon UI has run (e.g. an agent writing to the store headless). Each entry
+ * must be plain SQL without its own BEGIN/COMMIT; `ATTACH`/`DETACH` are rejected.
+ */
+/** Parameter types an agent-facing named query accepts. */
+export const AddonAgentQueryParamTypeSchema = z.enum([
+  'string',
+  'int',
+  'number',
+  'boolean',
+]);
+
+export type AddonAgentQueryParamType = z.infer<
+  typeof AddonAgentQueryParamTypeSchema
+>;
+
+/**
+ * A named, parameterized query the addon exposes to agents. The agent supplies
+ * only the declared parameters (never SQL), so a query can do exactly — and
+ * only — what its author wrote. `access: "write"` queries additionally require
+ * the addon's `agentAccess` to be `"readwrite"`.
+ */
+export const AddonAgentQuerySchema = z.object({
+  name: z
+    .string()
+    .regex(
+      /^[a-z][a-z0-9_]*$/,
+      'query name must be snake_case (start with a letter)',
+    )
+    .max(64),
+  description: z.string().min(1).max(500),
+  /** Named parameters (`:name` in the SQL) mapped to their type. */
+  params: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_]*$/, 'param name must be snake_case'),
+      AddonAgentQueryParamTypeSchema,
+    )
+    .optional(),
+  access: z.enum(['read', 'write']).default('read'),
+  sql: z.string().min(1).max(20_000),
+});
+
+export type AddonAgentQuery = z.infer<typeof AddonAgentQuerySchema>;
+
+/**
+ * Addon storage block — declares the addon's own per-addon SQLite storage.
+ *
+ * - `migrations`: ordered DDL/DML the host applies once, by index, the first
+ *   time the DB is opened (and again for newly added entries after an upgrade),
+ *   so the schema exists even when no addon UI has run.
+ * - `agentAccess` + `agentQueries`: opt the addon's data into agent access via a
+ *   catalog of named, parameterized queries the agent runs by name.
+ */
+export const AddonStorageConfigSchema = z.object({
+  migrations: z.array(z.string().min(1).max(20_000)).max(200).optional(),
+  /** The ceiling for agent access: reads only, or reads and writes. */
+  agentAccess: z.enum(['read', 'readwrite']).optional(),
+  agentQueries: z.array(AddonAgentQuerySchema).max(100).optional(),
+});
+
+export type AddonStorageConfig = z.infer<typeof AddonStorageConfigSchema>;
+
+/**
  * Main addon manifest structure
  */
 export const AddonManifestSchema = z.object({
@@ -167,6 +235,7 @@ export const AddonManifestSchema = z.object({
   ui: AddonUIConfigSchema.optional(),
   agents: z.array(AddonAgentReferenceSchema).optional(),
   config: AddonConfigBlockSchema.optional(),
+  storage: AddonStorageConfigSchema.optional(),
   dependencies: z.record(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
   /**
@@ -387,6 +456,7 @@ export const PERMISSION_RESOURCES = [
   'mcp',
   'workspace',
   'logs',
+  'storage',
 ] as const;
 
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   validateWorkspaceAccess,
   getEffectivePermissions,
@@ -44,7 +44,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-1', 'read', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-1',
+        'read',
+        registry,
+      );
       expect(result.allowed).toBe(true);
       expect(result.reason).toBe('Self-access allowed');
     });
@@ -66,7 +71,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-1', 'read', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-1',
+        'read',
+        registry,
+      );
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('disabled');
     });
@@ -74,7 +84,12 @@ describe('workspace permissions', () => {
     it('should deny access if source agent not found', () => {
       registry = createMockRegistry([]);
 
-      const result = validateWorkspaceAccess('unknown', 'agent-1', 'read', registry);
+      const result = validateWorkspaceAccess(
+        'unknown',
+        'agent-1',
+        'read',
+        registry,
+      );
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('Source agent not found');
     });
@@ -93,7 +108,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'unknown', 'read', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'unknown',
+        'read',
+        registry,
+      );
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('Target agent not found');
     });
@@ -109,7 +129,17 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            workspaces: [{ path: 'agent-2', permissions: { read: true, write: false, delete: false, list: true } }],
+            workspaces: [
+              {
+                path: 'agent-2',
+                permissions: {
+                  read: true,
+                  write: false,
+                  delete: false,
+                  list: true,
+                },
+              },
+            ],
           },
         },
         {
@@ -124,7 +154,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-2', 'read', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-2',
+        'read',
+        registry,
+      );
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('disabled');
     });
@@ -141,7 +176,15 @@ describe('workspace permissions', () => {
           workspace: {
             enabled: true,
             workspaces: [
-              { path: 'agent-2', permissions: { read: true, write: true, delete: false, list: true } },
+              {
+                path: 'agent-2',
+                permissions: {
+                  read: true,
+                  write: true,
+                  delete: false,
+                  list: true,
+                },
+              },
             ],
           },
         },
@@ -157,7 +200,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-2', 'write', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-2',
+        'write',
+        registry,
+      );
       expect(result.allowed).toBe(true);
     });
 
@@ -173,7 +221,15 @@ describe('workspace permissions', () => {
           workspace: {
             enabled: true,
             workspaces: [
-              { path: 'agent-2', permissions: { read: true, write: false, delete: false, list: true } },
+              {
+                path: 'agent-2',
+                permissions: {
+                  read: true,
+                  write: false,
+                  delete: false,
+                  list: true,
+                },
+              },
             ],
           },
         },
@@ -189,7 +245,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-2', 'write', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-2',
+        'write',
+        registry,
+      );
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('Permission denied');
     });
@@ -205,7 +266,12 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            defaultPermissions: { read: true, write: true, delete: false, list: true },
+            defaultPermissions: {
+              read: true,
+              write: true,
+              delete: false,
+              list: true,
+            },
             workspaces: [],
           },
         },
@@ -221,7 +287,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-2', 'write', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-2',
+        'write',
+        registry,
+      );
       expect(result.allowed).toBe(true);
       expect(result.reason).toContain('Default permission');
     });
@@ -252,7 +323,12 @@ describe('workspace permissions', () => {
       ];
       registry = createMockRegistry(agents);
 
-      const result = validateWorkspaceAccess('agent-1', 'agent-2', 'delete', registry);
+      const result = validateWorkspaceAccess(
+        'agent-1',
+        'agent-2',
+        'delete',
+        registry,
+      );
       expect(result.allowed).toBe(false);
     });
   });
@@ -269,7 +345,12 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            defaultPermissions: { read: true, write: true, delete: true, list: true },
+            defaultPermissions: {
+              read: true,
+              write: true,
+              delete: true,
+              list: true,
+            },
             workspaces: [],
           },
         },
@@ -357,7 +438,12 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            defaultPermissions: { read: true, write: true, delete: false, list: true },
+            defaultPermissions: {
+              read: true,
+              write: true,
+              delete: false,
+              list: true,
+            },
             workspaces: [],
           },
         },
@@ -437,7 +523,15 @@ describe('workspace permissions', () => {
           workspace: {
             enabled: true,
             workspaces: [
-              { path: 'agent-2', permissions: { read: true, write: false, delete: false, list: true } },
+              {
+                path: 'agent-2',
+                permissions: {
+                  read: true,
+                  write: false,
+                  delete: false,
+                  list: true,
+                },
+              },
             ],
           },
         },
@@ -471,7 +565,12 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            defaultPermissions: { read: true, write: true, delete: false, list: true },
+            defaultPermissions: {
+              read: true,
+              write: true,
+              delete: false,
+              list: true,
+            },
             workspaces: [{ path: '/project' }],
           },
         },
@@ -512,7 +611,15 @@ describe('workspace permissions', () => {
           workspace: {
             enabled: true,
             workspaces: [
-              { path: 'agent-2', permissions: { read: true, write: true, delete: false, list: true } },
+              {
+                path: 'agent-2',
+                permissions: {
+                  read: true,
+                  write: true,
+                  delete: false,
+                  list: true,
+                },
+              },
             ],
           },
         },
@@ -545,15 +652,24 @@ describe('workspace permissions', () => {
           version: 1,
           workspace: {
             enabled: true,
-            defaultPermissions: { read: true, write: false, delete: false, list: true },
+            defaultPermissions: {
+              read: true,
+              write: false,
+              delete: false,
+              list: true,
+            },
             workspaces: [{ path: '/project' }],
           },
         },
       ];
       registry = createMockRegistry(agents);
 
-      expect(canAccessWorkspace('agent-1', 'agent-1', 'read', registry)).toBe(true);
-      expect(canAccessWorkspace('agent-1', 'agent-1', 'write', registry)).toBe(false);
+      expect(canAccessWorkspace('agent-1', 'agent-1', 'read', registry)).toBe(
+        true,
+      );
+      expect(canAccessWorkspace('agent-1', 'agent-1', 'write', registry)).toBe(
+        false,
+      );
     });
   });
 });

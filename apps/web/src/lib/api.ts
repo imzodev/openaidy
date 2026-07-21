@@ -10,6 +10,7 @@ export type {
   Session,
   MessageRole,
   SessionMessage,
+  SessionMessageAttachment,
   RunStatus,
   AgentWorkspacePermission,
   AgentWorkspace,
@@ -22,6 +23,9 @@ export type {
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
+  UsageTotals,
+  UsageReport,
+  SessionUsageResponse,
   ModelCapability,
   ModelConfig,
   AgentDefaults,
@@ -34,6 +38,7 @@ export type {
   AppConfig,
   ConfigIssue,
   ConfigStatus,
+  RewiredAgentNotice,
   WorkspaceFileInfo,
   WorkspaceFileListResponse,
   WorkspaceFileContentResponse,
@@ -45,6 +50,7 @@ export type {
   ScheduleInput,
   CreatePulseBody,
   UpdatePulseBody,
+  AppInfo,
 } from './types';
 
 export type {
@@ -62,9 +68,14 @@ export type {
   PersonalityFile,
   McpServerRecord,
   McpToolWithSchema,
+  McpSecretKind,
+  McpSecretField,
+  McpSecretValue,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
+  ChannelConfig,
 } from './types';
 
 export { ApiRequestError } from '@openaidy/shared-types';
@@ -90,6 +101,7 @@ import type {
   PulseRun,
   CreatePulseBody,
   UpdatePulseBody,
+  AppInfo,
 } from './types';
 
 import type {
@@ -109,34 +121,23 @@ import type {
   McpToolWithSchema,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
+  ImportMcpServersRequest,
   ChannelStatusResponse,
+  ChannelConfig,
 } from './types';
 
 /**
- * Get the API base URL
+ * Get the API base URL.
  *
- * Priority:
- * 1. VITE_SERVER_URL environment variable
- * 2. In development: http://localhost:3001 (server default port)
- * 3. In production: throw error if not configured
+ * Resolved once from OPENAIDY_VITE_SERVER_URL. Empty string (the default
+ * when the env var is unset) means same-origin — the browser resolves
+ * relative URLs against the current host. The Vite dev proxy (see
+ * vite.config.ts) forwards same-origin `/api` and `/ws` requests to the
+ * backend, and `--integrated` mode serves the built bundle from the
+ * server on the same origin.
  */
 function getApiBase(): string {
-  const envUrl = import.meta.env.VITE_SERVER_URL;
-
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // Check if we're in development mode
-  if (import.meta.env.DEV) {
-    return 'http://localhost:3001';
-  }
-
-  // Production without VITE_SERVER_URL - throw clear error
-  throw new Error(
-    'VITE_SERVER_URL environment variable is required in production. ' +
-      'Set it in your .env file or build environment.',
-  );
+  return import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 }
 
 /**
@@ -168,9 +169,29 @@ function apiFetch(input: string, init?: RequestInit): Promise<Response> {
  * List sessions
  */
 export async function listSessions(): Promise<{ items: Session[] }> {
-  const response = await apiFetch(`${API_BASE}/sessions`);
+  const response = await apiFetch(`${API_BASE}/api/sessions`);
   if (!response.ok) {
     throw new Error(`Failed to list sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Search sessions by title or message content.
+ * Falls back to title-only search if no DB backend.
+ */
+export async function searchSessions(
+  query: string,
+  options?: { limit?: number; currentSessionId?: string },
+): Promise<{ items: import('@openaidy/shared-types').SessionSearchResult[] }> {
+  const params = new URLSearchParams({ q: query });
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.currentSessionId)
+    params.set('currentSessionId', options.currentSessionId);
+
+  const response = await apiFetch(`${API_BASE}/api/sessions/search?${params}`);
+  if (!response.ok) {
+    throw new Error(`Failed to search sessions: ${response.statusText}`);
   }
   return response.json();
 }
@@ -179,7 +200,7 @@ export async function listSessions(): Promise<{ items: Session[] }> {
  * Create a new session
  */
 export async function createSession(title: string): Promise<Session> {
-  const response = await apiFetch(`${API_BASE}/sessions`, {
+  const response = await apiFetch(`${API_BASE}/api/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
@@ -194,8 +215,24 @@ export async function createSession(title: string): Promise<Session> {
  * Get a session by ID
  */
 export async function getSession(id: string): Promise<Session | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/sessions/${id}`);
   return response.json();
+}
+
+/**
+ * Delete a session.
+ *
+ * Cascades to messages and runs on the server. The caller (typically
+ * a confirmation modal) is responsible for the UX — this just fires
+ * the request and throws on a non-2xx response.
+ */
+export async function deleteSession(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/api/sessions/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete session: ${response.statusText}`);
+  }
 }
 
 /**
@@ -204,7 +241,9 @@ export async function getSession(id: string): Promise<Session | ApiError> {
 export async function listMessages(
   sessionId: string,
 ): Promise<{ items: SessionMessage[] } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/messages`);
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/messages`,
+  );
   return response.json();
 }
 
@@ -214,7 +253,7 @@ export async function listMessages(
 export async function listRuns(
   sessionId: string,
 ): Promise<{ items: SessionRun[] } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/sessions/${sessionId}/runs`);
+  const response = await apiFetch(`${API_BASE}/api/sessions/${sessionId}/runs`);
   return response.json();
 }
 
@@ -224,7 +263,7 @@ export async function listRuns(
 export async function listBuiltinTools(): Promise<{
   items: BuiltinToolInfo[];
 }> {
-  const response = await apiFetch(`${API_BASE}/tools`);
+  const response = await apiFetch(`${API_BASE}/api/tools`);
   if (!response.ok) {
     throw new Error(`Failed to list builtin tools: ${response.statusText}`);
   }
@@ -238,7 +277,7 @@ export async function updateAgentTools(
   agentId: string,
   tools: string[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/tools`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/tools`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tools }),
@@ -255,7 +294,7 @@ export async function updateAgentTools(
 export async function listAgentMcpServers(
   agentId: string,
 ): Promise<{ mcpServers: McpServerRef[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}`);
   if (!response.ok) {
     throw new Error(`Failed to get agent: ${response.statusText}`);
   }
@@ -270,11 +309,14 @@ export async function updateAgentMcpServers(
   agentId: string,
   mcpServers: McpServerRef[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/mcp-servers`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mcpServers }),
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/agents/${agentId}/mcp-servers`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mcpServers }),
+    },
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to update agent MCP servers: ${response.statusText}`,
@@ -287,7 +329,7 @@ export async function updateAgentMcpServers(
  * List all available skills registered on the server
  */
 export async function listSkills(): Promise<{ items: SkillInfo[] }> {
-  const response = await apiFetch(`${API_BASE}/skills`);
+  const response = await apiFetch(`${API_BASE}/api/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list skills: ${response.statusText}`);
   }
@@ -300,7 +342,7 @@ export async function listSkills(): Promise<{ items: SkillInfo[] }> {
 export async function listAgentSkills(
   agentId: string,
 ): Promise<{ items: SkillInfo[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list agent skills: ${response.statusText}`);
   }
@@ -314,7 +356,7 @@ export async function updateAgentSkills(
   agentId: string,
   skills: string[],
 ): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/skills`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}/skills`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skills }),
@@ -329,7 +371,7 @@ export async function updateAgentSkills(
  * List all agents
  */
 export async function listAgents(): Promise<{ items: Agent[] }> {
-  const response = await apiFetch(`${API_BASE}/agents`);
+  const response = await apiFetch(`${API_BASE}/api/agents`);
   if (!response.ok) {
     throw new Error(`Failed to list agents: ${response.statusText}`);
   }
@@ -340,7 +382,7 @@ export async function listAgents(): Promise<{ items: Agent[] }> {
  * Get an agent by ID
  */
 export async function getAgent(id: string): Promise<Agent | ApiError> {
-  const response = await apiFetch(`${API_BASE}/agents/${id}`);
+  const response = await apiFetch(`${API_BASE}/api/agents/${id}`);
   return response.json();
 }
 
@@ -348,7 +390,7 @@ export async function getAgent(id: string): Promise<Agent | ApiError> {
  * Create a new agent
  */
 export async function createAgent(input: CreateAgentInput): Promise<Agent> {
-  const response = await apiFetch(`${API_BASE}/agents`, {
+  const response = await apiFetch(`${API_BASE}/api/agents`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -367,7 +409,7 @@ export async function createAgent(input: CreateAgentInput): Promise<Agent> {
  * Delete an agent by ID (also removes its workspace on the server)
  */
 export async function deleteAgent(agentId: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}`, {
+  const response = await apiFetch(`${API_BASE}/api/agents/${agentId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -385,7 +427,9 @@ export async function deleteAgent(agentId: string): Promise<void> {
 export async function listPersonalityFiles(
   agentId: string,
 ): Promise<{ files: PersonalityFileMeta[] }> {
-  const response = await apiFetch(`${API_BASE}/agents/${agentId}/personality`);
+  const response = await apiFetch(
+    `${API_BASE}/api/agents/${agentId}/personality`,
+  );
   if (!response.ok) {
     throw new Error(`Failed to list personality files: ${response.statusText}`);
   }
@@ -400,7 +444,7 @@ export async function getPersonalityFile(
   fileId: PersonalityFileId,
 ): Promise<PersonalityFile> {
   const response = await apiFetch(
-    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+    `${API_BASE}/api/agents/${agentId}/personality/${fileId}`,
   );
   if (!response.ok) {
     throw new Error(`Failed to get personality file: ${response.statusText}`);
@@ -417,7 +461,7 @@ export async function updatePersonalityFile(
   content: string,
 ): Promise<{ ok: boolean }> {
   const response = await apiFetch(
-    `${API_BASE}/agents/${agentId}/personality/${fileId}`,
+    `${API_BASE}/api/agents/${agentId}/personality/${fileId}`,
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -440,7 +484,7 @@ export async function submitMessage(
   input: SubmitMessageInput,
 ): Promise<SubmitMessageResult> {
   const response = await apiFetch(
-    `${API_BASE}/sessions/${sessionId}/messages`,
+    `${API_BASE}/api/sessions/${sessionId}/messages`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -451,12 +495,143 @@ export async function submitMessage(
 }
 
 /**
+ * Upload an image/audio file as a pending attachment for a session.
+ * Returns the attachment metadata; pass its id in `attachmentIds` when
+ * submitting the message.
+ */
+export async function uploadAttachment(
+  sessionId: string,
+  file: File,
+): Promise<import('./types').SessionMessageAttachment> {
+  const data = await fileToBase64(file);
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/attachments`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mimeType: file.type,
+        name: file.name,
+        data,
+      }),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string;
+      error?: string;
+    };
+    throw new Error(
+      body.message ?? body.error ?? `Upload failed (${response.status})`,
+    );
+  }
+  return response.json();
+}
+
+/** Read a File's bytes as a bare base64 string (no data: URI prefix). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fetch an attachment's raw bytes (authenticated) and return an object URL
+ * suitable for <img src> / <audio src>. Callers must revoke the URL when
+ * done (URL.revokeObjectURL).
+ */
+export async function fetchAttachmentObjectUrl(
+  attachmentId: string,
+): Promise<string> {
+  const response = await apiFetch(
+    `${API_BASE}/api/attachments/${attachmentId}/raw`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to load attachment (${response.status})`);
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+/**
+ * Fetch cumulative token usage + cost for a single session.
+ */
+export async function getSessionUsage(
+  sessionId: string,
+): Promise<import('./types').SessionUsageResponse | ApiError> {
+  const response = await apiFetch(
+    `${API_BASE}/api/sessions/${sessionId}/usage`,
+  );
+  return response.json();
+}
+
+/**
+ * Fetch per-session usage totals for every session with usage, in one request
+ * (keyed by session id). Powers the usage shown on the sessions list without
+ * an N+1 fan-out of getSessionUsage. Returns an empty map on error so the list
+ * still renders.
+ */
+export async function getUsageBySession(): Promise<
+  Record<string, import('./types').UsageTotals>
+> {
+  const response = await apiFetch(`${API_BASE}/api/usage/sessions`);
+  if (!response.ok) return {};
+  const body = (await response.json()) as {
+    usageBySession?: Record<string, import('./types').UsageTotals>;
+  };
+  return body.usageBySession ?? {};
+}
+
+/**
+ * Fetch usage totals for a specific set of session IDs. Avoids fetching
+ * the full usage map when only a few sessions are needed (e.g. for task
+ * execution history rows). Gracefully degrades to an empty map on error.
+ */
+export async function getUsageBySessionIds(
+  sessionIds: string[],
+): Promise<Record<string, import('./types').UsageTotals>> {
+  if (sessionIds.length === 0) return {};
+  const params = new URLSearchParams();
+  params.set('sessionIds', sessionIds.join(','));
+  const response = await apiFetch(
+    `${API_BASE}/api/usage/sessions?${params.toString()}`,
+  );
+  if (!response.ok) return {};
+  const body = (await response.json()) as {
+    usageBySession?: Record<string, import('./types').UsageTotals>;
+  };
+  return body.usageBySession ?? {};
+}
+
+/**
+ * Fetch aggregated usage across all sessions, optionally within a date
+ * range (ISO strings; `to` exclusive).
+ */
+export async function getUsage(options?: {
+  from?: string;
+  to?: string;
+}): Promise<import('./types').UsageReport | ApiError> {
+  const params = new URLSearchParams();
+  if (options?.from) params.set('from', options.from);
+  if (options?.to) params.set('to', options.to);
+  const qs = params.toString();
+  const response = await apiFetch(`${API_BASE}/api/usage${qs ? `?${qs}` : ''}`);
+  return response.json();
+}
+
+/**
  * Get application configuration
  */
 export async function getConfig(): Promise<
   { config: AppConfig; status: ConfigStatus } | ApiError
 > {
-  const response = await apiFetch(`${API_BASE}/config`);
+  const response = await apiFetch(`${API_BASE}/api/config`);
   return response.json();
 }
 
@@ -466,7 +641,7 @@ export async function getConfig(): Promise<
 export async function updateConfig(
   config: AppConfig,
 ): Promise<{ config: AppConfig; status: ConfigStatus } | ApiError> {
-  const response = await apiFetch(`${API_BASE}/config`, {
+  const response = await apiFetch(`${API_BASE}/api/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -489,15 +664,12 @@ export async function updateConfig(
  */
 export async function listWorkspaceFiles(
   agentId: string,
-  requestingAgentId: string,
   path?: string,
 ): Promise<WorkspaceFileListResponse | WorkspaceErrorResponse> {
   const url = path
-    ? `${API_BASE}/workspace/${agentId}/files/${path}`
-    : `${API_BASE}/workspace/${agentId}/files`;
-  const response = await apiFetch(url, {
-    headers: { 'X-Agent-Id': requestingAgentId },
-  });
+    ? `${API_BASE}/api/workspace/${agentId}/files/${path}`
+    : `${API_BASE}/api/workspace/${agentId}/files`;
+  const response = await apiFetch(url);
   return response.json();
 }
 
@@ -507,15 +679,38 @@ export async function listWorkspaceFiles(
 export async function readWorkspaceFile(
   agentId: string,
   filePath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceFileContentResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
-    {
-      headers: { 'X-Agent-Id': requestingAgentId },
-    },
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
   );
   return response.json();
+}
+
+/**
+ * Fetch a workspace file's raw bytes as a Blob (e.g. for image preview).
+ *
+ * Goes through the authenticated fetch wrapper, so the caller should turn the
+ * result into an object URL (`URL.createObjectURL`) for an <img> src — a plain
+ * <img src="/api/..."> can't send the Bearer token.
+ */
+export async function fetchWorkspaceFileBlob(
+  agentId: string,
+  filePath: string,
+): Promise<Blob> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workspace/${agentId}/raw/${filePath}`,
+  );
+  if (!response.ok) {
+    let message = `Failed to load file (${response.status})`;
+    try {
+      const body = (await response.json()) as { error?: string };
+      if (body?.error) message = body.error;
+    } catch {
+      // non-JSON error body — keep the status-based message
+    }
+    throw new Error(message);
+  }
+  return response.blob();
 }
 
 /**
@@ -525,15 +720,13 @@ export async function writeWorkspaceFile(
   agentId: string,
   filePath: string,
   content: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Agent-Id': requestingAgentId,
       },
       body: JSON.stringify({ content }),
     },
@@ -548,16 +741,17 @@ export async function renameWorkspaceFile(
   agentId: string,
   sourcePath: string,
   destinationPath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
-  const response = await apiFetch(`${API_BASE}/workspace/${agentId}/rename`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Id': requestingAgentId,
+  const response = await apiFetch(
+    `${API_BASE}/api/workspace/${agentId}/rename`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ sourcePath, destinationPath }),
     },
-    body: JSON.stringify({ sourcePath, destinationPath }),
-  });
+  );
   return response.json();
 }
 
@@ -568,16 +762,14 @@ export async function updateWorkspaceFile(
   agentId: string,
   filePath: string,
   content: string,
-  requestingAgentId: string,
   expectedModifiedAt?: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Agent-Id': requestingAgentId,
       },
       body: JSON.stringify({ content, expectedModifiedAt }),
     },
@@ -591,13 +783,11 @@ export async function updateWorkspaceFile(
 export async function deleteWorkspaceFile(
   agentId: string,
   filePath: string,
-  requestingAgentId: string,
 ): Promise<WorkspaceWriteResponse | WorkspaceErrorResponse> {
   const response = await apiFetch(
-    `${API_BASE}/workspace/${agentId}/files/${filePath}`,
+    `${API_BASE}/api/workspace/${agentId}/files/${filePath}`,
     {
       method: 'DELETE',
-      headers: { 'X-Agent-Id': requestingAgentId },
     },
   );
   return response.json();
@@ -620,7 +810,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
   if (filter.limit !== undefined) params.set('limit', String(filter.limit));
   if (filter.offset !== undefined) params.set('offset', String(filter.offset));
 
-  const response = await apiFetch(`${API_BASE}/logs?${params.toString()}`);
+  const response = await apiFetch(`${API_BASE}/api/logs?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to query logs: ${response.statusText}`);
   }
@@ -631,7 +821,7 @@ export async function queryLogs(filter: LogFilter): Promise<LogQueryResult> {
  * Get log statistics
  */
 export async function getLogStats(): Promise<LogStats> {
-  const response = await apiFetch(`${API_BASE}/logs/stats`);
+  const response = await apiFetch(`${API_BASE}/api/logs/stats`);
   if (!response.ok) {
     throw new Error(`Failed to get log stats: ${response.statusText}`);
   }
@@ -645,7 +835,7 @@ export async function clearLogs(): Promise<{
   success: boolean;
   cleared: boolean;
 }> {
-  const response = await apiFetch(`${API_BASE}/logs`, {
+  const response = await apiFetch(`${API_BASE}/api/logs`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -661,7 +851,7 @@ export async function clearLogs(): Promise<{
 export async function listMcpServers(): Promise<{
   servers: McpServerRecord[];
 }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers`);
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers`);
   if (!response.ok) {
     throw new Error(`Failed to list MCP servers: ${response.statusText}`);
   }
@@ -674,7 +864,7 @@ export async function listMcpServers(): Promise<{
 export async function createMcpServer(
   config: CreateMcpServerRequest,
 ): Promise<{ server: McpServerRecord }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ config }),
@@ -687,13 +877,33 @@ export async function createMcpServer(
 }
 
 /**
+ * Import one or more MCP servers from the standard keyed-map config format
+ * (Claude Desktop / VS Code / Cursor). Atomic on the server: nothing is
+ * imported if any entry is invalid or any id already exists.
+ */
+export async function importMcpServers(
+  body: ImportMcpServersRequest,
+): Promise<{ servers: McpServerRecord[] }> {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const errBody = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, errBody);
+  }
+  return response.json();
+}
+
+/**
  * Update an existing MCP server config (requires restart to take effect).
  */
 export async function updateMcpServer(
   id: string,
   patch: UpdateMcpServerRequest,
 ): Promise<{ server: McpServerRecord }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
@@ -709,7 +919,7 @@ export async function updateMcpServer(
  * Delete an MCP server config and disconnect it if connected.
  */
 export async function deleteMcpServer(id: string): Promise<void> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}`, {
     method: 'DELETE',
   });
   if (!response.ok && response.status !== 204) {
@@ -724,7 +934,7 @@ export async function deleteMcpServer(id: string): Promise<void> {
 export async function connectMcpServer(
   id: string,
 ): Promise<{ serverId: string; connected: boolean }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/connect`, {
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}/connect`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -740,9 +950,12 @@ export async function connectMcpServer(
 export async function disconnectMcpServer(
   id: string,
 ): Promise<{ serverId: string; disconnected: boolean }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/disconnect`, {
-    method: 'POST',
-  });
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/servers/${id}/disconnect`,
+    {
+      method: 'POST',
+    },
+  );
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ApiError;
     throw new ApiRequestError(response.status, body);
@@ -756,7 +969,7 @@ export async function disconnectMcpServer(
 export async function getMcpServerTools(
   id: string,
 ): Promise<{ tools: McpToolWithSchema[] }> {
-  const response = await apiFetch(`${API_BASE}/mcp/servers/${id}/tools`);
+  const response = await apiFetch(`${API_BASE}/api/mcp/servers/${id}/tools`);
   if (!response.ok) {
     throw new Error(`Failed to get MCP server tools: ${response.statusText}`);
   }
@@ -873,6 +1086,27 @@ export async function refreshAddonToken(
     throw new ApiRequestError(response.status, body);
   }
   return response.json() as Promise<{ accessToken: string }>;
+}
+
+/**
+ * Mint a short-lived, addon-scoped asset token. The sandboxed addon iframe
+ * loads its static assets at an opaque origin (no Authorization header or
+ * cookie possible), so this token is placed on the iframe/asset URLs (`?at=`)
+ * to authenticate those loads.
+ */
+export async function getAddonAssetToken(
+  addonId: string,
+): Promise<{ token: string; expiresIn: number }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/addons/${addonId}/asset-token`,
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json() as Promise<{ token: string; expiresIn: number }>;
 }
 
 export async function disableAddon(
@@ -1046,7 +1280,7 @@ export async function verifyToken(token: string): Promise<AuthVerifyResponse> {
  * List all channels with their current connection status.
  */
 export async function listChannels(): Promise<ChannelStatusResponse[]> {
-  const res = await apiFetch(`${API_BASE}/channels`);
+  const res = await apiFetch(`${API_BASE}/api/channels`);
   if (!res.ok) throw new Error(`listChannels: ${res.status}`);
   return res.json();
 }
@@ -1057,7 +1291,7 @@ export async function listChannels(): Promise<ChannelStatusResponse[]> {
 export async function getChannelStatus(
   id: string,
 ): Promise<ChannelStatusResponse> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/status`);
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/status`);
   if (!res.ok) throw new Error(`getChannelStatus: ${res.status}`);
   return res.json();
 }
@@ -1066,7 +1300,7 @@ export async function getChannelStatus(
  * Trigger a channel connection (initiates QR flow for WhatsApp).
  */
 export async function connectChannel(id: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/connect`, {
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/connect`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`connectChannel: ${res.status}`);
@@ -1076,8 +1310,201 @@ export async function connectChannel(id: string): Promise<void> {
  * Disconnect a channel.
  */
 export async function disconnectChannel(id: string): Promise<void> {
-  const res = await apiFetch(`${API_BASE}/channels/${id}/disconnect`, {
+  const res = await apiFetch(`${API_BASE}/api/channels/${id}/disconnect`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`disconnectChannel: ${res.status}`);
+}
+
+/**
+ * Add a WhatsApp channel to the config. Reads the current config, appends the
+ * new channel entry, and persists it via the config PUT — the server then
+ * reconciles it into the live channel registry, so the caller can immediately
+ * `connectChannel(id)` to start the QR pairing flow without a restart.
+ *
+ * Throws if the id already exists or the config write fails.
+ */
+export async function addWhatsAppChannel(input: {
+  id: string;
+  agentId: string;
+  allowlist?: string[];
+}): Promise<void> {
+  const current = await getConfig();
+  if (!('config' in current)) {
+    throw new Error('Failed to load config');
+  }
+  const config = current.config;
+  const channels = config.channels ?? [];
+  if (channels.some((c) => c.id === input.id)) {
+    throw new Error(`A channel with id "${input.id}" already exists`);
+  }
+  const entry: ChannelConfig = {
+    type: 'whatsapp',
+    id: input.id,
+    agentId: input.agentId,
+    enabled: true,
+    ...(input.allowlist && input.allowlist.length > 0
+      ? { allowlist: input.allowlist }
+      : {}),
+  };
+  const result = await updateConfig({
+    ...config,
+    channels: [...channels, entry],
+  });
+  if ('error' in result) {
+    throw new Error(`Failed to save channel: ${result.error}`);
+  }
+}
+
+/**
+ * Remove a channel from the config by id. The server reconciles the live
+ * registry, disconnecting and dropping the channel.
+ */
+export async function removeChannel(id: string): Promise<void> {
+  const current = await getConfig();
+  if (!('config' in current)) {
+    throw new Error('Failed to load config');
+  }
+  const config = current.config;
+  const channels = (config.channels ?? []).filter((c) => c.id !== id);
+  const result = await updateConfig({ ...config, channels });
+  if ('error' in result) {
+    throw new Error(`Failed to remove channel: ${result.error}`);
+  }
+}
+
+// ============================================================================
+// Provider API functions
+// ============================================================================
+
+export type ConnectProviderResponse =
+  | { success: true; providerId: string }
+  | { success: false; error: string };
+
+export type OAuthStartResponse = {
+  success: boolean;
+  /** URL the user should open in a browser to complete OAuth. */
+  authorizationUrl?: string;
+  /** Internal flow id, used to poll for completion. */
+  flowId?: string;
+  error?: string;
+};
+
+/** Poll the server for the status of an in-flight OAuth flow. */
+export async function getOAuthStatus(flowId: string): Promise<
+  | {
+      ok: true;
+      status: 'pending' | 'authorized' | 'failed';
+      verificationUrl?: string;
+      userCode?: string;
+      error?: string;
+    }
+  | { ok: false; error: 'not_found' | 'expired' }
+> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/minimax/connect/oauth/status?flowId=${encodeURIComponent(flowId)}`,
+  );
+  return res.json();
+}
+
+/**
+ * Connect a provider using an API key.
+ */
+export async function connectProviderWithApiKey(
+  providerId: string,
+  apiKey: string,
+): Promise<ConnectProviderResponse> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/${providerId}/connect/api-key`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Discover the models a local provider currently serves. Takes the provider's
+ * preset id (e.g. `"ollama"`); the server resolves the localhost base URL and
+ * probes its `/models` endpoint. Used to auto-populate a local provider's
+ * (Ollama / LM Studio) model list before it is saved to config. Throws with a
+ * readable message when the server can't be reached so the modal can surface it.
+ */
+export async function discoverProviderModels(
+  id: string,
+): Promise<{ id: string; name: string }[]> {
+  const res = await apiFetch(`${API_BASE}/api/providers/discover-models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  const body = (await res.json()) as {
+    models?: { id: string; name: string }[];
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    throw new Error(
+      body.message || body.error || `Discovery failed (${res.status})`,
+    );
+  }
+  return body.models ?? [];
+}
+
+/**
+ * Start OAuth flow for a provider.
+ *
+ * For MiniMax (the only OAuth-enabled provider in this phase): the
+ * server returns an authorizationUrl the frontend opens in a popup.
+ */
+export async function startProviderOAuth(
+  providerId: string,
+  options: { region?: 'global' | 'cn' },
+): Promise<OAuthStartResponse> {
+  const body: Record<string, string> = {};
+  if (options.region) body.region = options.region;
+
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/${providerId}/connect/oauth/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  return res.json();
+}
+
+/**
+ * Disconnect a provider.
+ *
+ * Clears the encrypted credential row server-side (DELETE
+ * /providers/:providerId/connection). Throws on non-2xx so callers
+ * can use a try/catch for the error path. Use `useQueryClient`'s
+ * `invalidateQueries({ queryKey: ['config'] })` afterwards to
+ * refresh any UI that reads `AppConfig.providers[]`.
+ */
+export async function disconnectProvider(providerId: string): Promise<void> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/${providerId}/connection`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!res.ok) throw new Error(`disconnectProvider: ${res.status}`);
+}
+
+/**
+ * Fetch build / runtime info (version, node, platform, uptime).
+ * Returns the raw AppInfo shape — `version` is semver ("0.3.0", no "v");
+ * callers that want the GitHub-tag display format must prepend "v".
+ */
+export async function fetchAppInfo(): Promise<AppInfo> {
+  const response = await apiFetch(`${API_BASE}/api/info`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch app info: ${response.statusText}`);
+  }
+  return response.json();
 }

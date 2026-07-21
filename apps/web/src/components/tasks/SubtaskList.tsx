@@ -4,10 +4,25 @@
  * Displays a list of subtasks with status indicators and agent assignments.
  */
 
-import { Show, For } from 'solid-js';
-import { CheckCircle, RotateCcw, ExternalLink } from 'lucide-solid';
+import { Show, For, createSignal } from 'solid-js';
+import {
+  CheckCircle,
+  RotateCcw,
+  ExternalLink,
+  Pencil,
+  Check,
+  X,
+} from 'lucide-solid';
 import type { Subtask } from '../../lib/api-tasks';
+import { updateSubtask, assignSubtaskAgent } from '../../lib/api-tasks';
 import type { Agent } from './AgentSelector';
+
+/**
+ * Statuses where a subtask may still be edited/reassigned — after planning but
+ * before it runs, or after a failure (so it can be tweaked and retried).
+ * In-progress and completed subtasks are left alone.
+ */
+const EDITABLE_STATUSES = new Set(['pending', 'assigned', 'failed']);
 
 /**
  * SubtaskList Props
@@ -46,6 +61,59 @@ const STATUS_COLORS: Record<string, string> = {
  * SubtaskList Component
  */
 export function SubtaskList(props: SubtaskListProps) {
+  // Inline edit state. Only one subtask edits at a time, so single draft
+  // signals are enough. `editingId` gates which row shows the editor.
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+  const [draftDescription, setDraftDescription] = createSignal('');
+  const [draftAgentId, setDraftAgentId] = createSignal('');
+  const [saving, setSaving] = createSignal(false);
+  const [editError, setEditError] = createSignal<string | null>(null);
+
+  const canEdit = (subtask: Subtask) => EDITABLE_STATUSES.has(subtask.status);
+
+  function startEdit(subtask: Subtask) {
+    setEditError(null);
+    setDraftDescription(subtask.description);
+    setDraftAgentId(subtask.assignedAgentId ?? '');
+    setEditingId(subtask.id);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditError(null);
+  }
+
+  async function saveEdit(subtask: Subtask) {
+    setSaving(true);
+    setEditError(null);
+    try {
+      const description = draftDescription().trim();
+      const agentId = draftAgentId();
+
+      // Only persist what actually changed. Description must be non-empty
+      // (server requires min length); an unchanged/empty pick is a no-op.
+      if (description && description !== subtask.description) {
+        const res = await updateSubtask(subtask.id, { description });
+        if (!res.ok) {
+          setEditError(res.error.message);
+          return;
+        }
+      }
+      if (agentId && agentId !== (subtask.assignedAgentId ?? '')) {
+        const res = await assignSubtaskAgent(subtask.id, agentId);
+        if (!res.ok) {
+          setEditError(res.error.message);
+          return;
+        }
+      }
+
+      setEditingId(null);
+      props.onSubtaskUpdate?.();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /**
    * Sort subtasks by orderIndex
    */
@@ -93,26 +161,100 @@ export function SubtaskList(props: SubtaskListProps) {
                 <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100">
                   {subtask.title}
                 </h4>
-                <Show when={subtask.description}>
-                  <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {subtask.description}
-                  </p>
-                </Show>
-                <Show when={subtask.assignedAgentId}>
-                  <p class="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                    Assigned to:{' '}
-                    {getAgentName(subtask.assignedAgentId) ??
-                      subtask.assignedAgentId}
-                  </p>
+
+                <Show
+                  when={editingId() === subtask.id}
+                  fallback={
+                    <>
+                      <Show when={subtask.description}>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">
+                          {subtask.description}
+                        </p>
+                      </Show>
+                      <Show when={subtask.assignedAgentId}>
+                        <p class="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                          Assigned to:{' '}
+                          {getAgentName(subtask.assignedAgentId) ??
+                            subtask.assignedAgentId}
+                        </p>
+                      </Show>
+                    </>
+                  }
+                >
+                  {/* Inline editor — description + a small agent quick-selector */}
+                  <div class="mt-1 space-y-2">
+                    <textarea
+                      class="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                      rows={2}
+                      value={draftDescription()}
+                      onInput={(e) =>
+                        setDraftDescription(e.currentTarget.value)
+                      }
+                      placeholder="Subtask description"
+                      disabled={saving()}
+                    />
+                    <div class="flex flex-wrap items-center gap-2">
+                      <select
+                        class="min-w-0 max-w-full sm:max-w-[14rem] text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary"
+                        value={draftAgentId()}
+                        onChange={(e) => setDraftAgentId(e.currentTarget.value)}
+                        disabled={saving()}
+                        aria-label="Assign agent"
+                      >
+                        <option value="">Select agent…</option>
+                        <For each={props.agents ?? []}>
+                          {(agent) => (
+                            <option value={agent.id}>{agent.name}</option>
+                          )}
+                        </For>
+                      </select>
+                      <div class="flex items-center gap-1 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => void saveEdit(subtask)}
+                          disabled={saving()}
+                          class="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-colors disabled:opacity-50"
+                          title="Save changes"
+                        >
+                          <Check class="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          disabled={saving()}
+                          class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors disabled:opacity-50"
+                          title="Cancel"
+                        >
+                          <X class="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <Show when={editError()}>
+                      <p class="text-xs text-red-500">{editError()}</p>
+                    </Show>
+                  </div>
                 </Show>
               </div>
+
+              {/* Edit (description + agent) — minimal icon, only for
+                  editable statuses and when not already editing this row. */}
+              <Show when={canEdit(subtask) && editingId() !== subtask.id}>
+                <button
+                  type="button"
+                  onClick={() => startEdit(subtask)}
+                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors flex-shrink-0"
+                  title="Edit description / assign agent"
+                >
+                  <Pencil class="w-4 h-4" />
+                </button>
+              </Show>
 
               <Show when={subtask.sessionId}>
                 <a
                   href={`/chat?sessionId=${subtask.sessionId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors inline-flex"
+                  class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors inline-flex flex-shrink-0"
                   title="Open session in new tab"
                   onClick={(e) => {
                     // Ensure the link opens properly even if there are event handling issues

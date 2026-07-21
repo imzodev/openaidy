@@ -501,3 +501,175 @@ describe('appConfigSchema defaults model validation', () => {
     }
   });
 });
+
+describe('appConfigSchema disabled model validation', () => {
+  const base = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [
+          { id: 'gpt-4o-mini', name: 'GPT-4o Mini', enabled: false },
+          { id: 'gpt-4o', name: 'GPT-4o', enabled: true },
+        ],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('should reject defaults.modelId pointing to a disabled model', () => {
+    const result = appConfigSchema.safeParse(base);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('modelId') &&
+            i.message.includes(
+              'Default model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject agent model pointing to a disabled model', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      agents: [{ ...base.agents[0], model: 'openai/gpt-4o-mini' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('model') &&
+            i.message.includes(
+              'Model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should reject provider defaultModel pointing to a disabled model', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      providers: [
+        {
+          ...base.providers[0],
+          defaultModel: 'gpt-4o-mini',
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (i) =>
+            i.path.includes('defaultModel') &&
+            i.message.includes(
+              'Default model "gpt-4o-mini" is disabled in provider "openai"',
+            ),
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('should accept config when disabled models are not referenced', () => {
+    const config = {
+      ...base,
+      defaults: { ...base.defaults, modelId: 'gpt-4o' },
+      agents: [{ ...base.agents[0], model: 'openai/gpt-4o' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('appConfigSchema unconfigured (fresh install)', () => {
+  // Mirrors config/openaidy.template.json: no providers, no default
+  // provider/model, and a single model-less agent.
+  const freshInstall = {
+    version: 1,
+    defaults: { agentId: 'default' },
+    providers: [],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default Assistant',
+        systemPrompt: 'You are an AI assistant.',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('accepts an empty providers list with no default provider/model', () => {
+    const result = appConfigSchema.safeParse(freshInstall);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a model-less agent', () => {
+    const result = appConfigSchema.safeParse(freshInstall);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.agents[0]!.model).toBeUndefined();
+    }
+  });
+
+  it('still rejects an agent whose model references an unconfigured provider', () => {
+    const config = {
+      ...freshInstall,
+      agents: [{ ...freshInstall.agents[0], model: 'ghost/model-x' }],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+
+  it('still rejects a default provider that is not configured', () => {
+    const config = {
+      ...freshInstall,
+      defaults: { agentId: 'default', providerId: 'ghost', modelId: 'm' },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a default provider set without a default model', () => {
+    const config = {
+      ...freshInstall,
+      defaults: { agentId: 'default', providerId: 'openai' },
+      providers: [
+        {
+          id: 'openai',
+          name: 'OpenAI',
+          vendorFamily: 'openai-compatible',
+          enabled: true,
+          models: [{ id: 'm', name: 'M' }],
+        },
+      ],
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+});

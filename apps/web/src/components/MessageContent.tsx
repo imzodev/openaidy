@@ -36,7 +36,7 @@ export function MessageContent(props: MessageContentProps) {
         <Show
           when={part.type === 'thinking'}
           fallback={
-            <div class="text-text-secondary text-md">
+            <div class="text-text-secondary text-md break-words">
               {isMarkdown((part as { type: 'text'; text: string }).text) ? (
                 <div
                   class="prose prose-sm dark:prose-invert max-w-none"

@@ -26,14 +26,18 @@ import type {
 /**
  * Checks if a content block is a text block
  */
-export function isTextBlock(block: AnthropicContentBlock): block is AnthropicTextBlock {
+export function isTextBlock(
+  block: AnthropicContentBlock,
+): block is AnthropicTextBlock {
   return block.type === 'text';
 }
 
 /**
  * Checks if a content block is a tool use block
  */
-export function isToolUseBlock(block: AnthropicContentBlock): block is AnthropicToolUseBlock {
+export function isToolUseBlock(
+  block: AnthropicContentBlock,
+): block is AnthropicToolUseBlock {
   return block.type === 'tool_use';
 }
 
@@ -45,10 +49,22 @@ export function isToolUseBlock(block: AnthropicContentBlock): block is Anthropic
  * Maps Anthropic usage to normalized usage info
  */
 export function mapUsage(usage: AnthropicMessagesResponse['usage']): UsageInfo {
+  // Anthropic reports cache reads/writes separately from input_tokens (which
+  // already excludes cache-read tokens). Total billed prompt tokens is the
+  // sum of fresh input + cache reads + cache creation.
+  const cacheRead = usage.cache_read_input_tokens ?? 0;
+  const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+  const promptTokens = usage.input_tokens + cacheRead + cacheCreation;
   return {
-    promptTokens: usage.input_tokens,
+    promptTokens,
     completionTokens: usage.output_tokens,
-    totalTokens: usage.input_tokens + usage.output_tokens,
+    totalTokens: promptTokens + usage.output_tokens,
+    ...(usage.cache_read_input_tokens !== undefined && {
+      cacheReadTokens: cacheRead,
+    }),
+    ...(usage.cache_creation_input_tokens !== undefined && {
+      cacheCreationTokens: cacheCreation,
+    }),
   };
 }
 
@@ -60,7 +76,7 @@ export function mapUsage(usage: AnthropicMessagesResponse['usage']): UsageInfo {
  * Maps Anthropic stop reason to normalized finish reason
  */
 export function mapStopReason(
-  stopReason: AnthropicMessagesResponse['stop_reason']
+  stopReason: AnthropicMessagesResponse['stop_reason'],
 ): FinishReason {
   switch (stopReason) {
     case 'end_turn':
@@ -94,7 +110,9 @@ export function mapToolUse(toolUse: AnthropicToolUseBlock): ToolCallRequest {
 /**
  * Extracts tool calls from Anthropic content blocks
  */
-export function extractToolCalls(blocks: AnthropicContentBlock[]): ToolCallRequest[] {
+export function extractToolCalls(
+  blocks: AnthropicContentBlock[],
+): ToolCallRequest[] {
   const toolCalls: ToolCallRequest[] = [];
 
   for (const block of blocks) {
@@ -130,7 +148,7 @@ export function extractTextContent(blocks: AnthropicContentBlock[]): string {
  */
 export function mapResponse(
   response: AnthropicMessagesResponse,
-  providerId: string
+  providerId: string,
 ): ModelResponse {
   const content = extractTextContent(response.content);
   const toolCalls = extractToolCalls(response.content);
@@ -178,7 +196,10 @@ export function createToolCallAccumulator(): ToolCallAccumulator {
  */
 export function updateToolCallAccumulator(
   accumulator: ToolCallAccumulator,
-  event: Extract<AnthropicStreamEvent, { type: 'content_block_start' | 'content_block_delta' }>
+  event: Extract<
+    AnthropicStreamEvent,
+    { type: 'content_block_start' | 'content_block_delta' }
+  >,
 ): void {
   if (event.type === 'content_block_start') {
     const block = event.content_block;
@@ -201,13 +222,13 @@ export function updateToolCallAccumulator(
  * Converts accumulated tool calls to normalized format
  */
 export function finalizeToolCalls(
-  accumulator: ToolCallAccumulator
+  accumulator: ToolCallAccumulator,
 ): ToolCallRequest[] | undefined {
   if (accumulator.size === 0) return undefined;
 
   const toolCalls: ToolCallRequest[] = [];
   for (const [index, tc] of Array.from(accumulator.entries()).sort(
-    ([a], [b]) => a - b
+    ([a], [b]) => a - b,
   )) {
     toolCalls.push({
       id: tc.id || `tool_${index}`,
@@ -226,7 +247,18 @@ export function* mapStreamEvent(
   event: AnthropicStreamEvent,
   providerId: string,
   streamId: string,
-  _model: string
+  _model: string,
+  /**
+   * Prompt-side usage captured from the `message_start` event. Anthropic
+   * only reports input/cache tokens there; the closing `message_delta`
+   * carries output tokens. Passing this lets `message_delta` emit a
+   * complete usage figure instead of `promptTokens: 0`.
+   */
+  promptUsage?: {
+    promptTokens: number;
+    cacheReadTokens?: number;
+    cacheCreationTokens?: number;
+  },
 ): Generator<ModelStreamEvent> {
   const timestamp = new Date().toISOString();
 
@@ -254,14 +286,21 @@ export function* mapStreamEvent(
 
     case 'message_delta':
       if (event.usage) {
+        const promptTokens = promptUsage?.promptTokens ?? 0;
         yield {
           type: 'stream.usage',
           timestamp,
           id: streamId,
           usage: {
-            promptTokens: 0, // Not provided in delta
+            promptTokens,
             completionTokens: event.usage.output_tokens,
-            totalTokens: event.usage.output_tokens,
+            totalTokens: promptTokens + event.usage.output_tokens,
+            ...(promptUsage?.cacheReadTokens !== undefined && {
+              cacheReadTokens: promptUsage.cacheReadTokens,
+            }),
+            ...(promptUsage?.cacheCreationTokens !== undefined && {
+              cacheCreationTokens: promptUsage.cacheCreationTokens,
+            }),
           },
         };
       }
@@ -301,8 +340,10 @@ export function* mapStreamEvent(
  * Extracts stop reason from message_delta event
  */
 export function extractStopReasonFromDelta(
-  event: Extract<AnthropicStreamEvent, { type: 'message_delta' }>
+  event: Extract<AnthropicStreamEvent, { type: 'message_delta' }>,
 ): FinishReason | null {
   if (!event.delta.stop_reason) return null;
-  return mapStopReason(event.delta.stop_reason as AnthropicMessagesResponse['stop_reason']);
+  return mapStopReason(
+    event.delta.stop_reason as AnthropicMessagesResponse['stop_reason'],
+  );
 }

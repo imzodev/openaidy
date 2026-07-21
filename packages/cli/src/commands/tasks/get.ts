@@ -11,9 +11,7 @@ import { formatTaskDetail } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
 import type { TaskWithDetails } from '@openaidy/shared-types';
 
-export async function tasksGetHandler(
-  args: string[],
-): Promise<CommandResult> {
+export async function tasksGetHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
       `Usage: openaidy tasks get <id>
@@ -58,7 +56,7 @@ Exit Codes:
 
   let res: Response;
   try {
-    res = await fetch(`${config.httpUrl}/api/tasks/${taskId}`, {
+    res = await fetch(`${config.httpUrl}/tasks/${taskId}`, {
       headers: { Authorization: `Bearer ${tokenResult.token}` },
     });
   } catch (err) {
@@ -73,7 +71,9 @@ Exit Codes:
       p.log.error(msg);
       return { exitCode: 1, error: msg };
     }
-    const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string };
+    const body = (await res
+      .json()
+      .catch(() => ({ error: res.statusText }))) as { error?: string };
     const msg = `Server returned ${res.status}: ${body.error ?? res.statusText}`;
     p.log.error(msg);
     return { exitCode: 1, error: msg };

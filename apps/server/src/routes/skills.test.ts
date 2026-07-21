@@ -137,19 +137,25 @@ describe('Skill Routes', () => {
       mcpService: undefined as unknown as AppServices['mcpService'],
       skills: skillRegistry,
       personality: undefined as unknown as AppServices['personality'],
+      taskSchedules: undefined,
       channels: undefined as unknown as AppServices['channels'],
     });
 
     await app.register(cors, { origin: '*' });
     await app.register(sensible);
     await app.register(websocket);
-    await app.register(skillRoutes, {
-      skillRegistry,
-      agentRegistry,
-      authMiddleware: mockAuthMiddleware,
-      workspace,
-      skillsDir: tempSkillsDir,
-    });
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(skillRoutes, {
+          skillRegistry,
+          agentRegistry,
+          authMiddleware: mockAuthMiddleware,
+          workspace,
+          skillsDir: tempSkillsDir,
+        });
+      },
+      { prefix: '/api' },
+    );
   });
 
   afterEach(async () => {
@@ -163,7 +169,7 @@ describe('Skill Routes', () => {
     it('returns 200 with skill items', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/skills',
+        url: '/api/skills',
       });
 
       expect(response.statusCode).toBe(200);
@@ -178,7 +184,7 @@ describe('Skill Routes', () => {
     it('returns skill summaries with id, name, description', async () => {
       const response = await app.inject({
         method: 'GET',
-        url: '/skills',
+        url: '/api/skills',
       });
 
       const body = response.json();
@@ -222,17 +228,22 @@ describe('Skill Routes', () => {
         skills: emptySkillRegistry,
       } as unknown as AppServices);
 
-      await tempApp.register(skillRoutes, {
-        skillRegistry: emptySkillRegistry,
-        agentRegistry,
-        authMiddleware: mockAuthMiddleware,
-        workspace,
-        skillsDir: tempSkillsDir,
-      });
+      await tempApp.register(
+        async (api: FastifyInstance) => {
+          await api.register(skillRoutes, {
+            skillRegistry: emptySkillRegistry,
+            agentRegistry,
+            authMiddleware: mockAuthMiddleware,
+            workspace,
+            skillsDir: tempSkillsDir,
+          });
+        },
+        { prefix: '/api' },
+      );
 
       const response = await tempApp.inject({
         method: 'GET',
-        url: '/skills',
+        url: '/api/skills',
       });
 
       expect(response.statusCode).toBe(200);
@@ -248,7 +259,7 @@ describe('Skill Routes', () => {
     it('returns 200 when updating agent skills with valid array', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['skill-a'] },
       });
@@ -262,7 +273,7 @@ describe('Skill Routes', () => {
       // First set skills
       await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['skill-a'] },
       });
@@ -270,7 +281,7 @@ describe('Skill Routes', () => {
       // Then clear them
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: [] },
       });
@@ -284,7 +295,7 @@ describe('Skill Routes', () => {
     it('returns 400 when skills is not an array', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: 'not-an-array' },
       });
@@ -297,7 +308,7 @@ describe('Skill Routes', () => {
     it('returns 400 when skills contains non-strings', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['valid', 123, 'also-valid'] },
       });
@@ -310,7 +321,7 @@ describe('Skill Routes', () => {
     it('returns 404 when agent does not exist', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/ghost/skills',
+        url: '/api/agents/ghost/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['skill-a'] },
       });
@@ -323,7 +334,7 @@ describe('Skill Routes', () => {
     it('returns 400 when skills contains unknown skill IDs', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['skill-a', 'nonexistent', 'skill-b'] },
       });
@@ -338,7 +349,7 @@ describe('Skill Routes', () => {
     it('returns 200 when all skills are valid', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: ['skill-a', 'skill-b'] },
       });
@@ -351,7 +362,7 @@ describe('Skill Routes', () => {
     it('allows empty array to clear skills (even with no skills assigned)', async () => {
       const response = await app.inject({
         method: 'PATCH',
-        url: '/agents/default/skills',
+        url: '/api/agents/default/skills',
         headers: { 'content-type': 'application/json' },
         payload: { skills: [] },
       });

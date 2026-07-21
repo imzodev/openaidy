@@ -82,7 +82,10 @@ export type AnthropicMessagesRequest = {
   top_p?: number;
   stop_sequences?: string[];
   tools?: AnthropicToolDefinition[];
-  tool_choice?: { type: 'auto' } | { type: 'any' } | { type: 'tool'; name: string };
+  tool_choice?:
+    | { type: 'auto' }
+    | { type: 'any' }
+    | { type: 'tool'; name: string };
   stream?: boolean;
   metadata?: Record<string, unknown>;
 };
@@ -101,6 +104,8 @@ export type AnthropicMessagesResponse = {
   usage: {
     input_tokens: number;
     output_tokens: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
   };
 };
 
@@ -109,10 +114,24 @@ export type AnthropicMessagesResponse = {
  */
 export type AnthropicStreamEvent =
   | { type: 'message_start'; message: AnthropicMessagesResponse }
-  | { type: 'content_block_start'; index: number; content_block: AnthropicContentBlock }
-  | { type: 'content_block_delta'; index: number; delta: { type: 'text_delta'; text: string } | { type: 'input_json_delta'; partial_json: string } }
+  | {
+      type: 'content_block_start';
+      index: number;
+      content_block: AnthropicContentBlock;
+    }
+  | {
+      type: 'content_block_delta';
+      index: number;
+      delta:
+        | { type: 'text_delta'; text: string }
+        | { type: 'input_json_delta'; partial_json: string };
+    }
   | { type: 'content_block_stop'; index: number }
-  | { type: 'message_delta'; delta: { stop_reason: string; stop_sequence: string | null }; usage: { output_tokens: number } }
+  | {
+      type: 'message_delta';
+      delta: { stop_reason: string; stop_sequence: string | null };
+      usage: { output_tokens: number };
+    }
   | { type: 'message_stop' }
   | { type: 'ping' }
   | { type: 'error'; error: AnthropicErrorResponse['error'] };

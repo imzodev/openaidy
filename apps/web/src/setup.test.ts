@@ -1,5 +1,14 @@
 import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
+import { cleanup } from '@solidjs/testing-library';
+
+// Cleanup the DOM between every test so renders don't accumulate
+// (jsdom persists across tests by default; multiple `render()`
+// calls in the same suite would otherwise leak nodes into the
+// `screen` accessor for the next test).
+afterEach(() => {
+  cleanup();
+});
 
 // Mock window.matchMedia for tests
 Object.defineProperty(window, 'matchMedia', {
@@ -18,3 +27,6 @@ Object.defineProperty(window, 'matchMedia', {
 
 // Mock scrollIntoView for jsdom
 Element.prototype.scrollIntoView = vi.fn();
+// Mock scrollTo for jsdom — used by ChatView's auto-scroll to keep the scroll
+// contained inside the chat container instead of bubbling to the document.
+Element.prototype.scrollTo = vi.fn();

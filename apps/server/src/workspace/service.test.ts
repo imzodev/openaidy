@@ -119,6 +119,32 @@ describe('WorkspaceService', () => {
         service.validatePath('test-agent', '..\\..\\..\\etc\\passwd');
       }).toThrow(WorkspaceError);
     });
+
+    it('should block access through a symlink that escapes the workspace', async () => {
+      const agentId = 'symlink-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      // A directory outside the workspace the attacker wants to reach.
+      const outside = join(testBaseDir, 'outside-secret');
+      await mkdir(outside, { recursive: true });
+      await fsWriteFile(join(outside, 'secret.txt'), 'top secret');
+
+      // Create a symlink INSIDE the workspace pointing at it (as exec_run
+      // could). Skip if the platform/account can't create symlinks.
+      const { symlink } = await import('node:fs/promises');
+      try {
+        await symlink(outside, join(workspacePath, 'escape'), 'dir');
+      } catch {
+        return; // e.g. Windows without symlink privilege — nothing to assert
+      }
+
+      // The lexical path "escape/secret.txt" looks contained, but the real
+      // path resolves outside the workspace and must be rejected.
+      expect(() => {
+        service.validatePath(agentId, 'escape/secret.txt');
+      }).toThrow(WorkspaceError);
+    });
   });
 
   describe('listFiles', () => {
@@ -172,7 +198,8 @@ describe('WorkspaceService', () => {
       const files = await service.listFiles(agentId, 'subdir');
       expect(files).toHaveLength(1);
       expect(files[0]!.name).toBe('nested.txt');
-      expect(files[0]!.path).toBe('subdir/nested.txt');
+      // `path` uses OS-native separators (relative()), so compare with join().
+      expect(files[0]!.path).toBe(join('subdir', 'nested.txt'));
     });
   });
 
@@ -202,6 +229,60 @@ describe('WorkspaceService', () => {
 
       await expect(
         service.readFile(agentId, '../../../etc/passwd'),
+      ).rejects.toThrow(WorkspaceError);
+    });
+  });
+
+  describe('readRawFile', () => {
+    it('returns raw bytes and a media type from the extension', async () => {
+      const agentId = 'raw-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]);
+      await fsWriteFile(join(wsPath, 'a.png'), bytes);
+
+      const result = await service.readRawFile(agentId, 'a.png');
+      expect(result.mimeType).toBe('image/png');
+      expect(result.size).toBe(bytes.length);
+      expect(result.buffer.equals(bytes)).toBe(true);
+    });
+
+    it('uses the extension for types that sniff as text (svg)', async () => {
+      const agentId = 'raw-svg-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      await fsWriteFile(join(wsPath, 'icon.svg'), '<svg></svg>');
+
+      const result = await service.readRawFile(agentId, 'icon.svg');
+      expect(result.mimeType).toBe('image/svg+xml');
+    });
+
+    it('enforces the maxBytes cap', async () => {
+      const agentId = 'raw-big-agent';
+      await service.ensureWorkspace(agentId);
+      const wsPath = service.getWorkspacePath(agentId);
+      await fsWriteFile(join(wsPath, 'big.png'), Buffer.alloc(2048));
+
+      await expect(
+        service.readRawFile(agentId, 'big.png', { maxBytes: 1024 }),
+      ).rejects.toMatchObject({ code: 'FILE_TOO_LARGE' });
+    });
+
+    it('throws FILE_NOT_FOUND for a missing file', async () => {
+      const agentId = 'raw-missing-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.readRawFile(agentId, 'nope.png'),
+      ).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
+    });
+
+    it('blocks path traversal', async () => {
+      const agentId = 'raw-traversal-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.readRawFile(agentId, '../../../etc/hosts'),
       ).rejects.toThrow(WorkspaceError);
     });
   });
@@ -248,6 +329,45 @@ describe('WorkspaceService', () => {
 
       await expect(
         service.writeFile(agentId, '../../../tmp/malicious.txt', 'bad'),
+      ).rejects.toThrow(WorkspaceError);
+    });
+  });
+
+  describe('writeBinaryFile', () => {
+    it('should write raw bytes and return the absolute path', async () => {
+      const agentId = 'binary-agent';
+      await service.ensureWorkspace(agentId);
+
+      // A tiny PNG header — non-UTF-8 bytes that must round-trip exactly.
+      const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x00]);
+      const absolutePath = await service.writeBinaryFile(
+        agentId,
+        'screenshots/shot.png',
+        bytes,
+      );
+
+      expect(absolutePath).toBe(
+        join(service.getWorkspacePath(agentId), 'screenshots', 'shot.png'),
+      );
+
+      const result = await service.readFileWithType(
+        agentId,
+        'screenshots/shot.png',
+      );
+      expect(result.mimeType).toBe('image/png');
+      expect(result.size).toBe(bytes.length);
+    });
+
+    it('should block path traversal in binary write', async () => {
+      const agentId = 'binary-traversal-agent';
+      await service.ensureWorkspace(agentId);
+
+      await expect(
+        service.writeBinaryFile(
+          agentId,
+          '../../../tmp/evil.png',
+          Buffer.from([0x00]),
+        ),
       ).rejects.toThrow(WorkspaceError);
     });
   });

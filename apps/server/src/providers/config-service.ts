@@ -25,28 +25,14 @@ import {
   createDefaultSecretProvider,
   isSecretReference,
 } from '@openaidy/config';
+import type { CredentialProvider } from '@openaidy/shared-types';
 import { createOpenAICompatibleProvider } from './infrastructure/openai-compatible';
 import { createAnthropicProvider } from './infrastructure/anthropic';
 import { createGeminiProvider } from './infrastructure/gemini';
-
-// =====================
-// Types
-// =====================
-
-/**
- * Result of loading and resolving a provider configuration
- */
-export type ConfigLoadResult =
-  | { readonly ok: true; readonly config: ResolvedProviderConfig; readonly provider: ModelProvider }
-  | { readonly ok: false; readonly error: ProviderError };
-
-/**
- * Options for the ProviderConfigService
- */
-export type ProviderConfigServiceOptions = {
-  /** Secret provider to use for resolving secrets */
-  secretProvider?: SecretProvider;
-};
+import type {
+  ConfigLoadResult,
+  ProviderConfigServiceOptions,
+} from './config-service.types';
 
 // =====================
 // Provider Config Service
@@ -60,11 +46,14 @@ export type ProviderConfigServiceOptions = {
  */
 export class ProviderConfigService {
   private readonly secretProvider: SecretProvider;
+  private readonly credentialProvider: CredentialProvider | undefined;
   private readonly resolvedConfigs = new Map<string, ResolvedProviderConfig>();
   private readonly providers = new Map<string, ModelProvider>();
 
   constructor(options?: ProviderConfigServiceOptions) {
-    this.secretProvider = options?.secretProvider ?? createDefaultSecretProvider();
+    this.secretProvider =
+      options?.secretProvider ?? createDefaultSecretProvider();
+    this.credentialProvider = options?.credentialProvider;
   }
 
   /**
@@ -79,9 +68,12 @@ export class ProviderConfigService {
         error: createProviderError(
           'provider.config_invalid',
           `Invalid provider configuration: ${validationResult.error.issues
-            .map((i: { path: (string|number)[]; message: string }) => `${i.path.join('.')}: ${i.message}`)
+            .map(
+              (i: { path: (string | number)[]; message: string }) =>
+                `${i.path.join('.')}: ${i.message}`,
+            )
             .join('; ')}`,
-          { providerId: config.id }
+          { providerId: config.id },
         ),
       };
     }
@@ -97,7 +89,10 @@ export class ProviderConfigService {
       // Map secret resolution error to provider error
       return {
         ok: false,
-        error: this.mapSecretError(resolveResult.error as SecretResolutionError, validConfig.id),
+        error: this.mapSecretError(
+          resolveResult.error as SecretResolutionError,
+          validConfig.id,
+        ),
       };
     }
 
@@ -111,7 +106,7 @@ export class ProviderConfigService {
         error: createProviderError(
           'provider.unavailable',
           `Provider "${resolvedConfig.id}" is disabled`,
-          { providerId: resolvedConfig.id }
+          { providerId: resolvedConfig.id },
         ),
       };
     }
@@ -151,9 +146,14 @@ export class ProviderConfigService {
    * Resolve secrets for a specific API key value
    */
   async resolveApiKey(
-    apiKey: string | ReturnType<typeof isSecretReference> extends true ? never : unknown,
-    providerId: string
-  ): Promise<{ readonly ok: true; readonly value: string } | { readonly ok: false; readonly error: ProviderError }> {
+    apiKey: string | ReturnType<typeof isSecretReference> extends true
+      ? never
+      : unknown,
+    providerId: string,
+  ): Promise<
+    | { readonly ok: true; readonly value: string }
+    | { readonly ok: false; readonly error: ProviderError }
+  > {
     // If it's already a string, return it
     if (typeof apiKey === 'string') {
       return { ok: true, value: apiKey };
@@ -165,7 +165,10 @@ export class ProviderConfigService {
       if (!result.ok) {
         return {
           ok: false,
-          error: this.mapSecretError(result.error as SecretResolutionError, providerId),
+          error: this.mapSecretError(
+            result.error as SecretResolutionError,
+            providerId,
+          ),
         };
       }
       return { ok: true, value: result.value };
@@ -177,7 +180,7 @@ export class ProviderConfigService {
       error: createProviderError(
         'provider.config_invalid',
         `Invalid API key configuration for provider "${providerId}"`,
-        { providerId }
+        { providerId },
       ),
     };
   }
@@ -204,7 +207,9 @@ export class ProviderConfigService {
   /**
    * Create a provider adapter from a resolved configuration
    */
-  private createProviderFromConfig(config: ResolvedProviderConfig): ConfigLoadResult {
+  private createProviderFromConfig(
+    config: ResolvedProviderConfig,
+  ): ConfigLoadResult {
     try {
       const provider = this.createAdapter(config);
       if (!provider) {
@@ -213,7 +218,7 @@ export class ProviderConfigService {
           error: createProviderError(
             'provider.config_invalid',
             `Unsupported vendor family: ${config.vendorFamily}`,
-            { providerId: config.id }
+            { providerId: config.id },
           ),
         };
       }
@@ -224,7 +229,7 @@ export class ProviderConfigService {
         error: createProviderError(
           'provider.config_invalid',
           `Failed to create provider adapter: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          { providerId: config.id, cause: error }
+          { providerId: config.id, cause: error },
         ),
       };
     }
@@ -249,7 +254,9 @@ export class ProviderConfigService {
   /**
    * Create an OpenAI-compatible adapter
    */
-  private createOpenAICompatibleAdapter(config: ResolvedProviderConfig): ModelProvider {
+  private createOpenAICompatibleAdapter(
+    config: ResolvedProviderConfig,
+  ): ModelProvider {
     const adapterConfig: {
       apiKey: string;
       baseUrl?: string;
@@ -259,6 +266,7 @@ export class ProviderConfigService {
       timeoutMs?: number;
       providerId: string;
       providerName: string;
+      credentialProvider?: CredentialProvider;
     } = {
       apiKey: config.apiKey ?? '',
       providerId: config.id,
@@ -281,6 +289,9 @@ export class ProviderConfigService {
     if (config.timeout?.requestMs !== undefined) {
       adapterConfig.timeoutMs = config.timeout.requestMs;
     }
+    if (this.credentialProvider) {
+      adapterConfig.credentialProvider = this.credentialProvider;
+    }
 
     return createOpenAICompatibleProvider(adapterConfig);
   }
@@ -288,7 +299,9 @@ export class ProviderConfigService {
   /**
    * Create an Anthropic adapter
    */
-  private createAnthropicAdapter(config: ResolvedProviderConfig): ModelProvider {
+  private createAnthropicAdapter(
+    config: ResolvedProviderConfig,
+  ): ModelProvider {
     const adapterConfig: {
       apiKey: string;
       baseUrl?: string;
@@ -331,6 +344,7 @@ export class ProviderConfigService {
       timeoutMs?: number;
       providerId: string;
       providerName: string;
+      credentialProvider?: CredentialProvider;
     } = {
       apiKey: config.apiKey ?? '',
       providerId: config.id,
@@ -347,6 +361,9 @@ export class ProviderConfigService {
     if (config.timeout?.requestMs !== undefined) {
       adapterConfig.timeoutMs = config.timeout.requestMs;
     }
+    if (this.credentialProvider) {
+      adapterConfig.credentialProvider = this.credentialProvider;
+    }
 
     return createGeminiProvider(adapterConfig);
   }
@@ -356,7 +373,7 @@ export class ProviderConfigService {
    */
   private mapSecretError(
     error: SecretResolutionError,
-    providerId: string
+    providerId: string,
   ): ProviderError {
     // Map secret error codes to provider error codes
     const errorCodeMap: Record<string, string> = {
@@ -376,7 +393,7 @@ export class ProviderConfigService {
       {
         providerId,
         cause: error.cause,
-      }
+      },
     );
   }
 }
@@ -389,7 +406,7 @@ export class ProviderConfigService {
  * Create a provider configuration service
  */
 export function createProviderConfigService(
-  options?: ProviderConfigServiceOptions
+  options?: ProviderConfigServiceOptions,
 ): ProviderConfigService {
   return new ProviderConfigService(options);
 }

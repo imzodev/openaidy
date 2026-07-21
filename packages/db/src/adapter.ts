@@ -8,11 +8,14 @@ import {
 } from './repositories/pairing';
 import { createSessionsRepository } from './repositories/sessions';
 import { createSessionMessagesRepository } from './repositories/session-messages';
+import { createMessageAttachmentsRepository } from './repositories/message-attachments';
 import { createSessionRunsRepository } from './repositories/session-runs';
 import { createAccessTokensRepository } from './repositories/access-tokens';
 import { createTasksRepository } from './repositories/tasks';
 import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
+import { createTaskSchedulesRepository } from './repositories/task-schedules';
+import { createTaskExecutionHistoryRepository } from './repositories/task-execution-history';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
 import { createDeliverablesRepository } from './repositories/deliverables';
@@ -29,6 +32,7 @@ export async function createDatabaseAdapter(
     sessions: createSessionsRepository(client),
     sessionMessages: createSessionMessagesRepository(client),
     sessionRuns: createSessionRunsRepository(client),
+    messageAttachments: createMessageAttachmentsRepository(client),
     jobs: createJobsRepository(client),
     jobRuns: createJobRunsRepository(client),
     pairingRequests: createPairingRequestsRepository(client),
@@ -37,6 +41,8 @@ export async function createDatabaseAdapter(
     tasks: createTasksRepository(client),
     subtasks: createSubtasksRepository(client),
     taskAgents: createTaskAgentsRepository(client),
+    taskSchedules: createTaskSchedulesRepository(client),
+    taskExecutionHistory: createTaskExecutionHistoryRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
     deliverables: createDeliverablesRepository(client),

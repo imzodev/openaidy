@@ -4,17 +4,30 @@ node_modules
 .env
 .env.*
 dist
+build
+*.tgz
 coverage
 .vite
 .cache
 .temp
 .tmp
+# Playwright MCP screenshot/artifact output dir (created wherever the server runs)
+.playwright-mcp/
 .DS_Store
 *.log
 apps/web/.solid
 apps/server/data/
 .openaidy/
 *.tsbuildinfo
+# gentle-ai
+.codeium/
+.config/
+.atl/
+openspec/
+.windsurf/
+.gga
+AGENTS.md
+.opengraph/
 
 # Agents skills
 .agents/skills

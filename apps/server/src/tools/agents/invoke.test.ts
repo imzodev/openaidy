@@ -435,6 +435,63 @@ describe('agents_invoke_await tool', () => {
     }
   }, 35000); // 35 second timeout for this test
 
+  // ── Cancellation (issue #376) ────────────────────────────────────────────────
+
+  it('bails out immediately when ctx.signal is already aborted', async () => {
+    const svc = makeSessionService({
+      dispatchAgent: vi.fn().mockResolvedValue({
+        ok: true,
+        sessionId: 'sess-abc',
+        done: Promise.resolve({ ok: true }),
+      }),
+      listRuns: vi.fn().mockResolvedValue([{ id: 'run-1', status: 'running' }]),
+    });
+    const tool = makeTool({ sessionSvc: svc });
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await tool.execute(
+      { agentId: 'researcher', content: 'hello' },
+      { agentId: 'test-agent', signal: controller.signal },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Cancelled by user while waiting/);
+    }
+    // The dispatched sub-agent is NOT cancelled — dispatch still happened.
+    expect(svc.dispatchAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it('wakes from the poll backoff and cancels when aborted mid-wait', async () => {
+    const svc = makeSessionService({
+      dispatchAgent: vi.fn().mockResolvedValue({
+        ok: true,
+        sessionId: 'sess-abc',
+        done: Promise.resolve({ ok: true }),
+      }),
+      listRuns: vi.fn().mockResolvedValue([{ id: 'run-1', status: 'running' }]),
+    });
+    const tool = makeTool({ sessionSvc: svc });
+    const controller = new AbortController();
+    // Abort partway through the first 2s backoff interval.
+    setTimeout(() => controller.abort(), 50);
+
+    const start = Date.now();
+    const result = await tool.execute(
+      { agentId: 'researcher', content: 'hello' },
+      { agentId: 'test-agent', signal: controller.signal },
+    );
+    const elapsed = Date.now() - start;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toMatch(/Cancelled by user while waiting/);
+    }
+    // Must have woken well before the full 2s backoff interval elapsed.
+    expect(elapsed).toBeLessThan(1500);
+  }, 10000);
+
   // ── dispatchAgent error propagation ─────────────────────────────────────────
 
   it('propagates dispatchAgent errors', async () => {

@@ -26,11 +26,40 @@ export function mapMessage(message: Message): AnthropicMessage | null {
       // Return null to indicate it should be extracted separately
       return null;
 
-    case 'user':
+    case 'user': {
+      // Attachments become content blocks: text plus base64 image blocks.
+      // Anthropic has no audio input type, so audio attachments degrade to
+      // a text note (the capability check upstream avoids this path for
+      // audio-capable flows).
+      if (message.attachments && message.attachments.length > 0) {
+        const blocks: AnthropicContentBlock[] = [];
+        if (message.content) {
+          blocks.push({ type: 'text', text: message.content });
+        }
+        for (const attachment of message.attachments) {
+          if (attachment.kind === 'image') {
+            blocks.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: attachment.mimeType,
+                data: attachment.data,
+              },
+            });
+          } else {
+            blocks.push({
+              type: 'text',
+              text: `[Audio attachment${attachment.name ? ` "${attachment.name}"` : ''} (${attachment.mimeType}) — this model cannot process audio input natively.]`,
+            });
+          }
+        }
+        return { role: 'user', content: blocks };
+      }
       return {
         role: 'user',
         content: message.content,
       };
+    }
 
     case 'assistant': {
       const blocks: AnthropicContentBlock[] = [];
@@ -67,7 +96,9 @@ export function mapMessage(message: Message): AnthropicMessage | null {
             type: 'tool_result',
             tool_use_id: message.toolCallId,
             content: message.content,
-            ...(message.isError !== undefined ? { is_error: message.isError } : {}),
+            ...(message.isError !== undefined
+              ? { is_error: message.isError }
+              : {}),
           },
         ],
       };
@@ -98,7 +129,9 @@ export function mapMessages(messages: readonly Message[]): AnthropicMessage[] {
 /**
  * Extracts system instruction from messages
  */
-export function extractSystemInstruction(messages: readonly Message[]): string | undefined {
+export function extractSystemInstruction(
+  messages: readonly Message[],
+): string | undefined {
   const systemMessages = messages.filter((msg) => msg.role === 'system');
   if (systemMessages.length === 0) return undefined;
   return systemMessages.map((msg) => msg.content).join('\n\n');
@@ -122,7 +155,9 @@ export function mapTool(tool: ToolDefinition): AnthropicToolDefinition {
 /**
  * Maps all tools to Anthropic format
  */
-export function mapTools(tools: readonly ToolDefinition[]): AnthropicToolDefinition[] {
+export function mapTools(
+  tools: readonly ToolDefinition[],
+): AnthropicToolDefinition[] {
   return tools.map(mapTool);
 }
 
@@ -130,7 +165,7 @@ export function mapTools(tools: readonly ToolDefinition[]): AnthropicToolDefinit
  * Maps tool choice to Anthropic format
  */
 export function mapToolChoice(
-  toolChoice?: 'auto' | 'required' | 'none'
+  toolChoice?: 'auto' | 'required' | 'none',
 ): { type: 'auto' } | { type: 'any' } | undefined {
   if (!toolChoice) return undefined;
 
@@ -160,7 +195,7 @@ export function mapRequest(
     defaultMaxTokens?: number;
     defaultTemperature?: number;
     systemInstruction?: string;
-  }
+  },
 ): AnthropicMessagesRequest {
   // Extract system instruction from messages or use provided one
   const systemFromMessages = extractSystemInstruction(request.messages);

@@ -8,7 +8,8 @@
 import { readFile, access } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
-import type { BootstrapAdminRecord } from './bootstrap-admin';
+import { DEFAULT_SERVER_PORT } from '@openaidy/config';
+import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminInspectStatus =
   | 'disabled'
@@ -125,10 +126,19 @@ export async function inspectBootstrapAdminToken(
     };
   }
 
-  // Create auth middleware for token validation
+  // Create auth middleware for token validation. The port here is only
+  // used internally for AuthMiddleware's config shape — token validation
+  // itself does not depend on the listening port. We read OPENAIDY_PORT
+  // from the environment so the middleware's internal port matches the
+  // running server; falls back to DEFAULT_SERVER_PORT so the script works
+  // out of the box for the standard install.
+  const openAidyPort = parseInt(
+    process.env.OPENAIDY_PORT ?? String(DEFAULT_SERVER_PORT),
+    10,
+  );
   const authMiddleware = new AuthMiddleware({
     enabled: true,
-    port: parseInt(process.env.WS_PORT || '3001', 10),
+    port: openAidyPort,
     path: '/ws',
     maxConnections: 1,
     heartbeatInterval: 0,

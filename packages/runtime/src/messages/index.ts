@@ -19,10 +19,26 @@ export type SystemMessage = BaseMessage & {
 };
 
 /**
+ * Inline media attachment on a user message — bytes are carried as base64
+ * so the per-vendor request mappers can emit provider-specific content
+ * blocks (Anthropic `image`, OpenAI `image_url`/`input_audio`, Gemini
+ * `inlineData`) without touching disk.
+ */
+export type MessageAttachment = {
+  readonly kind: 'image' | 'audio';
+  readonly mimeType: string;
+  /** Base64-encoded bytes (no data: URI prefix) */
+  readonly data: string;
+  readonly name?: string;
+};
+
+/**
  * User message
  */
 export type UserMessage = BaseMessage & {
   readonly role: 'user';
+  /** Inline image/audio media to send alongside the text content */
+  readonly attachments?: readonly MessageAttachment[];
 };
 
 /**
@@ -92,4 +108,14 @@ export type ToolCallRequest = {
   readonly id: string;
   readonly name: string;
   readonly arguments: string; // JSON string
+  /**
+   * Gemini-specific opaque thought-signature token returned by the
+   * model on the original functionCall part. The Gemini API
+   * *requires* a thought signature on at least the first
+   * functionCall part of a multi-function-call assistant turn when
+   * that turn is replayed in a follow-up request — see
+   * https://ai.google.dev/gemini-api/docs/thought-signatures.
+   * Other providers (OpenAI, Anthropic, etc.) ignore this field.
+   */
+  readonly thoughtSignature?: string;
 };

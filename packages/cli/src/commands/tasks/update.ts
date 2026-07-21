@@ -11,7 +11,14 @@ import type { CommandResult } from '../../types.js';
 import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
 
 const VALID_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
-const VALID_STATUSES: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'review', 'done', 'cancelled'];
+const VALID_STATUSES: TaskStatus[] = [
+  'backlog',
+  'todo',
+  'in_progress',
+  'review',
+  'done',
+  'cancelled',
+];
 
 export async function tasksUpdateHandler(
   args: string[],
@@ -96,7 +103,8 @@ Exit Codes:
   const hasStatus = newStatus !== undefined;
 
   if (!hasGeneral && !hasStatus) {
-    const msg = 'No updates provided. Use --title, --description, --priority, or --status.';
+    const msg =
+      'No updates provided. Use --title, --description, --priority, or --status.';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }
@@ -108,13 +116,17 @@ Exit Codes:
 
   try {
     if (hasGeneral) {
-      const res = await fetch(`${config.httpUrl}/api/tasks/${taskId}`, {
+      const res = await fetch(`${config.httpUrl}/tasks/${taskId}`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify(updates),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
+        const body = (await res
+          .json()
+          .catch(() => ({ error: res.statusText }))) as {
+          error?: { message?: string };
+        };
         const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;
         if (res.status === 404) p.log.error(`Task "${taskId}" not found.`);
         else p.log.error(msg);
@@ -123,13 +135,17 @@ Exit Codes:
     }
 
     if (hasStatus) {
-      const res = await fetch(`${config.httpUrl}/api/tasks/${taskId}/status`, {
+      const res = await fetch(`${config.httpUrl}/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: { message?: string } };
+        const body = (await res
+          .json()
+          .catch(() => ({ error: res.statusText }))) as {
+          error?: { message?: string };
+        };
         const msg = `Server returned ${res.status}: ${body.error?.message ?? res.statusText}`;
         if (res.status === 404) p.log.error(`Task "${taskId}" not found.`);
         else p.log.error(msg);
