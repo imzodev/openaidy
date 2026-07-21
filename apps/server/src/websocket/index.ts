@@ -52,6 +52,7 @@ import { PairingService } from './pairing-service';
 import { NodeRegistry } from './node-registry';
 import { PresenceManager } from './presence-manager';
 import { StreamManager } from './streaming';
+import { RunStreamBuffer } from './run-stream-buffer';
 import { SubscriptionManager } from './subscriptions';
 import { AuthMiddleware } from './middleware/auth';
 
@@ -86,6 +87,7 @@ const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'session.unsubscribe': [WS_CAPABILITIES.SESSIONS_READ],
   'session.tool.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
   'session.run.cancel': [WS_CAPABILITIES.SESSIONS_WRITE],
+  'session.stream.resume': [WS_CAPABILITIES.SESSIONS_READ],
   'agent.list': [WS_CAPABILITIES.AGENTS_READ],
   'agent.get': [WS_CAPABILITIES.AGENTS_READ],
   'provider.list': [WS_CAPABILITIES.PROVIDERS_READ],
@@ -190,6 +192,7 @@ export type WebSocketGateway = {
   configHandler: ConfigHandler;
   presenceHandler: PresenceHandler;
   streamManager: StreamManager;
+  runStreamBuffer: RunStreamBuffer;
   subscriptionManager: SubscriptionManager;
   nodeRegistry: NodeRegistry;
   pairingService: PairingService;
@@ -246,6 +249,9 @@ function createGateway(
     connectionManager,
     fastify.log,
   );
+  // Accumulates in-progress run stream state so reconnecting/foregrounded
+  // clients can resume instead of seeing a stalled UI (issue #450).
+  const runStreamBuffer = new RunStreamBuffer(fastify.services.runEvents);
 
   // Create handlers with streaming support
   const sessionHandler = new SessionHandler(
@@ -254,6 +260,7 @@ function createGateway(
     streamManager,
     fastify.services.runEvents,
     subscriptionManager,
+    runStreamBuffer,
   );
   const agentHandler = new AgentHandler(fastify.services.agents, fastify.log);
   const providerHandler = new ProviderHandler(
@@ -618,12 +625,14 @@ function createGateway(
     configHandler,
     presenceHandler,
     streamManager,
+    runStreamBuffer,
     subscriptionManager,
     nodeRegistry,
     pairingService,
     presenceManager,
     shutdown: async () => {
       streamManager.stop();
+      runStreamBuffer.stop();
       subscriptionManager.cleanup();
       nodeRegistry.clear();
       pairingService.destroy();
@@ -678,6 +687,8 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
 
   // Start the stream manager
   gateway.streamManager.start();
+  // Start buffering in-progress run streams for resume-on-reconnect (#450).
+  gateway.runStreamBuffer.start();
 
   // Store gateway in app
   fastify.decorate('websocketGateway', gateway);

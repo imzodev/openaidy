@@ -11,6 +11,7 @@ import {
   createSession,
   listMessages,
   submitMessageStreaming,
+  resumeSessionStream,
   listAgents,
   listRuns,
   getSession,
@@ -372,7 +373,7 @@ function AppContent(props: AppContentProps) {
     // the watchdog.
     wsClient
       .subscribeToSession(sessionId)
-      .then(() => reconcileStreamState())
+      .then(() => void resumeOrReconcile())
       .catch((err: Error) => {
         console.error('Failed to subscribe to session:', err);
         setSubmitError(err.message);
@@ -411,7 +412,7 @@ function AppContent(props: AppContentProps) {
   onMount(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        reconcileStreamState();
+        void resumeOrReconcile();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -647,6 +648,49 @@ function AppContent(props: AppContentProps) {
     queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
     queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
     processQueue();
+  };
+
+  // On reconnect / tab-foreground, first ask the server whether a run is still
+  // streaming for this session (issue #450). If so, rehydrate the live UI from
+  // the server's snapshot — content, tool calls, activity — instead of clearing
+  // to a stalled state; live `session.stream.*` events then continue on the
+  // resubscribed run. Only when there's nothing to resume do we fall back to
+  // the plain clear-and-refetch of `reconcileStreamState`.
+  const resumeOrReconcile = async () => {
+    const sessionId = selectedSessionId();
+    if (!sessionId) return;
+
+    const resume = await resumeSessionStream(sessionId).catch(() => null);
+
+    // Bail if the user switched sessions while we awaited.
+    if (selectedSessionId() !== sessionId) return;
+
+    if (resume?.active && resume.runId) {
+      clearStreamWatchdog();
+      setCurrentRunId(resume.runId);
+      setIsStreaming(true);
+      setStreamingContent(resume.content ?? '');
+      setStreamingToolCalls(
+        (resume.toolCalls ?? []).map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          input: tc.arguments,
+          output: '',
+        })),
+      );
+      setRunActivity(resume.activity ? { ...resume.activity } : undefined);
+      setPendingUserMessage(undefined);
+      // Pull the persisted user message (and any finished prior runs) without
+      // disturbing the live streaming state we just restored; the assistant
+      // message is not persisted until the run ends.
+      queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
+      // Re-arm the idle guard in case we also missed the end event.
+      armStreamWatchdog();
+      return;
+    }
+
+    reconcileStreamState();
   };
 
   // Actually dispatch a message and begin a streaming run.
