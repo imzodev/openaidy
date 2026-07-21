@@ -585,7 +585,11 @@ describe('registerSessionHandlers', () => {
 
     registerSessionHandlers(mockRouter, handler);
 
-    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(9);
+    expect(mockRouter.registerHandler).toHaveBeenCalledTimes(10);
+    expect(mockRouter.registerHandler).toHaveBeenCalledWith(
+      'session.stream.resume',
+      expect.any(Function),
+    );
     expect(mockRouter.registerHandler).toHaveBeenCalledWith(
       'session.create',
       expect.any(Function),

@@ -616,6 +616,49 @@ export type SessionMessageStreamAck = WSMessage<
   }
 >;
 
+/**
+ * Request to resume the live stream of an in-progress run after a dropped or
+ * backgrounded connection. The client sends the sessionId; the server looks up
+ * any active run for that session and replies with a snapshot of what has
+ * streamed so far, then continues delivering live `session.stream.*` events.
+ */
+export type SessionStreamResumeRequest = WSMessage<
+  'session.stream.resume',
+  {
+    sessionId: string;
+  }
+>;
+
+/**
+ * Snapshot response for a resume request. `active: false` means there is no
+ * in-progress run to resume (the client should fall back to refetching
+ * persisted messages). When `active: true`, the remaining fields describe the
+ * run's streamed state so far, which the client uses to rehydrate its
+ * streaming UI (content is the full accumulated text, NOT a delta).
+ */
+export type SessionStreamResumeResponse = WSMessage<
+  'session.stream.resume',
+  {
+    sessionId: string;
+    active: boolean;
+    runId?: string;
+    agentId?: string;
+    providerId?: string;
+    modelId?: string;
+    content?: string;
+    toolCalls?: Array<{
+      id: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }>;
+    activity?: {
+      phase: 'thinking' | 'running_tool';
+      toolName?: string;
+      elapsedMs: number;
+    };
+  }
+>;
+
 // ============================================================================
 // Agent Types
 // ============================================================================
@@ -997,6 +1040,7 @@ export type WSRequest =
   | SessionUnsubscribeRequest
   | SessionToolCancelRequest
   | SessionRunCancelRequest
+  | SessionStreamResumeRequest
   | SessionMessagesRequest
   | SessionRunsRequest
   | AgentListRequest
@@ -1025,6 +1069,7 @@ export type WSResponse =
   | SessionCreatedResponse
   | SessionMessageResponse
   | SessionMessageStreamAck
+  | SessionStreamResumeResponse
   | SessionMessagesResponse
   | SessionRunsResponse
   | SessionGetResponse
@@ -1074,6 +1119,7 @@ const REQUEST_TYPES: Set<string> = new Set([
   'session.unsubscribe',
   'session.tool.cancel',
   'session.run.cancel',
+  'session.stream.resume',
   'agent.list',
   'agent.get',
   'provider.list',
@@ -1112,6 +1158,7 @@ const RESPONSE_TYPES: Set<string> = new Set([
   'session.stream.usage',
   'session.stream.end',
   'session.stream.error',
+  'session.stream.resume',
   'session.updated',
   'agent.list',
   'agent.get',

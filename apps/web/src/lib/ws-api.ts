@@ -295,6 +295,52 @@ export async function submitMessageStreaming(
   );
 }
 
+/**
+ * Snapshot of an in-progress run's live stream, returned by
+ * {@link resumeSessionStream}. `active: false` means there is nothing to resume.
+ */
+export type ResumeStreamResult = {
+  active: boolean;
+  runId?: string;
+  agentId?: string;
+  providerId?: string;
+  modelId?: string;
+  content?: string;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+  }>;
+  activity?: {
+    phase: 'thinking' | 'running_tool';
+    toolName?: string;
+    elapsedMs: number;
+  };
+};
+
+/**
+ * Ask the server for the live state of any in-progress run on this session so a
+ * reconnected / re-foregrounded client can resume streaming instead of showing
+ * a stalled UI (issue #450). WS-only — returns null if there's no live socket
+ * (the caller then falls back to refetching persisted messages).
+ */
+export async function resumeSessionStream(
+  sessionId: string,
+): Promise<ResumeStreamResult | null> {
+  const client = activeClient;
+  if (!client || !client.isConnected()) return null;
+  try {
+    const response = await client.sendRequest<{
+      type: string;
+      payload: ResumeStreamResult & { sessionId: string };
+    }>('session.stream.resume', { sessionId });
+    if (response?.type !== 'session.stream.resume') return null;
+    return response.payload;
+  } catch {
+    return null;
+  }
+}
+
 export async function listAgents(): Promise<{ items: Agent[] }> {
   return withWebSocketFallback(
     async (client) => {

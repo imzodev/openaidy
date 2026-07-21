@@ -43,6 +43,7 @@ const mockServices = {
   },
   runEvents: {
     subscribe: () => () => {},
+    subscribeAll: () => () => {},
     emit: () => {},
   },
   bootstrapAdmin: undefined,

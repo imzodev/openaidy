@@ -8,6 +8,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
 import type { StreamManager } from '../streaming';
 import type { SubscriptionManager } from '../subscriptions';
+import type { RunStreamBuffer } from '../run-stream-buffer';
 import type { RunEventEmitter } from '../../dispatch/events';
 import type { HandlerContext } from '../index';
 import {
@@ -25,6 +26,8 @@ import {
   type SessionRunsRequest,
   type SessionToolCancelRequest,
   type SessionRunCancelRequest,
+  type SessionStreamResumeRequest,
+  type SessionStreamResumeResponse,
   type SessionCreatedResponse,
   type SessionMessageResponse,
   type SessionMessagesResponse,
@@ -52,6 +55,7 @@ export class SessionHandler {
     private streamManager?: StreamManager,
     private runEvents?: RunEventEmitter,
     private subscriptionManager?: SubscriptionManager,
+    private runStreamBuffer?: RunStreamBuffer,
   ) {}
 
   /**
@@ -427,6 +431,61 @@ export class SessionHandler {
   ): Promise<void> {
     const { runId } = request.payload;
     this.sessionService.cancelRun(runId);
+  }
+
+  /**
+   * Handle session.stream.resume — a reconnected / re-foregrounded client asks
+   * for the live state of any in-progress run on this session (issue #450).
+   *
+   * If a run is in flight we (a) subscribe this connection to its live events
+   * and (b) return a snapshot of what has streamed so far. This is done
+   * synchronously (no await between the snapshot read and the return) so no
+   * delta can interleave: the snapshot is delivered before any subsequent live
+   * delta, and the client rehydrates by *replacing* its content with the
+   * snapshot and then appending live deltas as usual. If no run is active,
+   * `active: false` tells the client to fall back to refetching persisted
+   * messages.
+   */
+  handleResumeStream(
+    connectionId: string,
+    request: SessionStreamResumeRequest,
+    _context: HandlerContext,
+  ): SessionStreamResumeResponse {
+    const { sessionId } = request.payload;
+
+    const snapshot = this.runStreamBuffer?.getActiveForSession(sessionId);
+    if (!snapshot || !this.streamManager) {
+      return createWSMessage(
+        'session.stream.resume',
+        { sessionId, active: false },
+        request.id,
+      ) as SessionStreamResumeResponse;
+    }
+
+    // Subscribe first so every delta emitted after this synchronous block is
+    // delivered live; the snapshot below captures everything up to now.
+    this.streamManager.subscribeToRun(snapshot.runId, connectionId);
+
+    this.logger.info(
+      { sessionId, runId: snapshot.runId, connectionId },
+      'Resumed in-progress run stream',
+    );
+
+    return createWSMessage(
+      'session.stream.resume',
+      {
+        sessionId,
+        active: true,
+        runId: snapshot.runId,
+        agentId: snapshot.agentId,
+        providerId: snapshot.providerId,
+        modelId: snapshot.modelId,
+        content: snapshot.content,
+        toolCalls: snapshot.toolCalls,
+        ...(snapshot.activity && { activity: snapshot.activity }),
+      },
+      request.id,
+    ) as SessionStreamResumeResponse;
   }
 
   /**
@@ -908,6 +967,7 @@ export function createSessionHandler(
   streamManager?: StreamManager,
   runEvents?: RunEventEmitter,
   subscriptionManager?: SubscriptionManager,
+  runStreamBuffer?: RunStreamBuffer,
 ): SessionHandler {
   return new SessionHandler(
     sessionService,
@@ -915,6 +975,7 @@ export function createSessionHandler(
     streamManager,
     runEvents,
     subscriptionManager,
+    runStreamBuffer,
   );
 }
 
@@ -1014,6 +1075,18 @@ export function registerSessionHandlers(
 
   router.registerHandler('session.run.cancel', (connId, msg, ctx) =>
     handler.handleRunCancel(connId, msg as SessionRunCancelRequest, ctx),
+  );
+
+  router.registerHandler(
+    'session.stream.resume',
+    (connId, msg, ctx) =>
+      Promise.resolve(
+        handler.handleResumeStream(
+          connId,
+          msg as SessionStreamResumeRequest,
+          ctx,
+        ),
+      ) as Promise<WSResponse>,
   );
 }
 
