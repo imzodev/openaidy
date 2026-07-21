@@ -23,6 +23,7 @@ vi.mock('lucide-solid', () => ({
   Copy: () => <span data-testid="copy" />,
   CircleStop: () => <span data-testid="circle-stop" />,
   Ban: () => <span data-testid="ban" />,
+  ArrowUp: () => <span data-testid="arrow-up" />,
 }));
 
 describe('ChatView', () => {
@@ -296,6 +297,127 @@ describe('ChatView', () => {
         />
       ));
       expect(screen.getByText('Running exec_run…')).toBeInTheDocument();
+    });
+  });
+
+  describe('infinite scroll (load older messages)', () => {
+    const baseMessages: SessionMessage[] = [
+      {
+        id: 'm-latest',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: 'Latest reply',
+        sequence: 100,
+        createdAt: '2024-06-15T10:00:00Z',
+      },
+    ];
+
+    it('renders the "Load older messages" button when hasMore is true', () => {
+      render(() => (
+        <ChatView
+          messages={baseMessages}
+          isLoading={false}
+          hasMore={true}
+          isLoadingMore={false}
+          total={75}
+          onLoadMore={() => {}}
+        />
+      ));
+      expect(screen.getByTestId('load-more')).toBeInTheDocument();
+    });
+
+    it('invokes onLoadMore when the button is clicked', () => {
+      const onLoadMore = vi.fn();
+      render(() => (
+        <ChatView
+          messages={baseMessages}
+          isLoading={false}
+          hasMore={true}
+          isLoadingMore={false}
+          total={75}
+          onLoadMore={onLoadMore}
+        />
+      ));
+      fireEvent.click(screen.getByTestId('load-more'));
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders a skeleton / loading label while isLoadingMore is true', () => {
+      render(() => (
+        <ChatView
+          messages={baseMessages}
+          isLoading={false}
+          hasMore={true}
+          isLoadingMore={true}
+          total={75}
+          onLoadMore={() => {}}
+        />
+      ));
+      expect(screen.getByTestId('loading-more')).toBeInTheDocument();
+      expect(screen.queryByTestId('load-more')).not.toBeInTheDocument();
+    });
+
+    it('hides the load-more control and shows an end-of-history banner when hasMore is false', () => {
+      render(() => (
+        <ChatView
+          messages={baseMessages}
+          isLoading={false}
+          hasMore={false}
+          isLoadingMore={false}
+          total={1}
+          onLoadMore={() => {}}
+        />
+      ));
+      expect(screen.queryByTestId('load-more')).not.toBeInTheDocument();
+      expect(screen.getByTestId('end-of-history')).toHaveTextContent(
+        /1 message/,
+      );
+    });
+
+    it('auto-triggers onLoadMore when the user scrolls to the top', () => {
+      const onLoadMore = vi.fn();
+      const { container } = render(() => (
+        <ChatView
+          messages={baseMessages}
+          isLoading={false}
+          hasMore={true}
+          isLoadingMore={false}
+          total={75}
+          onLoadMore={onLoadMore}
+        />
+      ));
+      // The scroll container is the first child div with overflow classes.
+      const scrollContainer = container.firstElementChild as HTMLElement;
+      scrollContainer.scrollTop = 0;
+      fireEvent.scroll(scrollContainer);
+      expect(onLoadMore).toHaveBeenCalled();
+    });
+
+    it('preserves a date separator when messages cross day boundaries', () => {
+      const messages: SessionMessage[] = [
+        {
+          id: 'm-yesterday',
+          sessionId: 'session-1',
+          role: 'user',
+          content: 'Yesterday message',
+          sequence: 1,
+          createdAt: '2024-06-14T23:30:00Z',
+        },
+        {
+          id: 'm-today',
+          sessionId: 'session-1',
+          role: 'assistant',
+          content: 'Today message',
+          sequence: 2,
+          createdAt: '2024-06-15T10:00:00Z',
+        },
+      ];
+      const { container } = render(() => (
+        <ChatView messages={messages} isLoading={false} />
+      ));
+      // Exactly one date separator should appear between the two messages.
+      const separators = container.querySelectorAll('[data-date-separator]');
+      expect(separators).toHaveLength(1);
     });
   });
 });

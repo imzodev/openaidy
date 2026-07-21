@@ -205,12 +205,51 @@ describe('ws-api', () => {
 
     const result = await listMessages('session-1');
 
-    if ('items' in result) {
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0]?.id).toBe('ws-msg-1');
-      expect(result.items[0]?.content).toBe('hello from ws');
-    }
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.id).toBe('ws-msg-1');
+    expect(result.items[0]?.content).toBe('hello from ws');
+    expect(result.total).toBe(1);
+    expect(result.nextOffset).toBeNull();
     expect(vi.mocked(listMessagesRest)).not.toHaveBeenCalled();
+  });
+
+  it('forwards limit/offset to the websocket client and reports nextOffset when more pages exist', async () => {
+    const listMessagesMock = vi.fn().mockResolvedValue({
+      type: 'session.messages',
+      payload: {
+        sessionId: 'session-1',
+        messages: [
+          {
+            id: 'ws-msg-old-1',
+            sessionId: 'session-1',
+            role: 'user',
+            content: 'older',
+            sequence: 1,
+            createdAt: '2024-01-01T00:00:00Z',
+          },
+        ],
+        total: 50,
+      },
+    });
+    const mockClient = {
+      isConnected: () => true,
+      listMessages: listMessagesMock,
+    } as unknown as WebSocketClient;
+
+    setWebSocketApiClient(mockClient);
+
+    const result = await listMessages('session-1', {
+      limit: 20,
+      offset: 30,
+    });
+
+    expect(listMessagesMock).toHaveBeenCalledWith('session-1', {
+      limit: 20,
+      offset: 30,
+    });
+    expect(result.total).toBe(50);
+    // 30 + 1 returned = 31 < 50 → more pages exist
+    expect(result.nextOffset).toBe(31);
   });
 
   it('should fallback to REST listMessages when websocket is unavailable', async () => {
@@ -219,10 +258,12 @@ describe('ws-api', () => {
     const result = await listMessages('session-1');
 
     expect(vi.mocked(listMessagesRest)).toHaveBeenCalledTimes(1);
-    if ('items' in result) {
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0]?.id).toBe('rest-msg-1');
-    }
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.id).toBe('rest-msg-1');
+    // REST returns everything — nextOffset must be null so the UI hides
+    // the "Load more" button.
+    expect(result.nextOffset).toBeNull();
+    expect(result.total).toBe(1);
   });
 
   it('should fallback to REST listMessages when websocket response type is unexpected', async () => {
@@ -239,9 +280,49 @@ describe('ws-api', () => {
     const result = await listMessages('session-1');
 
     expect(vi.mocked(listMessagesRest)).toHaveBeenCalledTimes(1);
-    if ('items' in result) {
-      expect(result.items[0]?.id).toBe('rest-msg-1');
-    }
+    expect(result.items[0]?.id).toBe('rest-msg-1');
+  });
+
+  it('returns nextOffset=null when the returned page already covers all messages', async () => {
+    const mockClient = {
+      isConnected: () => true,
+      listMessages: vi.fn().mockResolvedValue({
+        type: 'session.messages',
+        payload: {
+          sessionId: 'session-1',
+          messages: [
+            {
+              id: 'ws-msg-1',
+              sessionId: 'session-1',
+              role: 'user',
+              content: 'first',
+              sequence: 1,
+              createdAt: '2024-01-01T00:00:00Z',
+            },
+            {
+              id: 'ws-msg-2',
+              sessionId: 'session-1',
+              role: 'assistant',
+              content: 'second',
+              sequence: 2,
+              createdAt: '2024-01-01T00:00:01Z',
+            },
+          ],
+          total: 2,
+        },
+      }),
+    } as unknown as WebSocketClient;
+
+    setWebSocketApiClient(mockClient);
+
+    const result = await listMessages('session-1', {
+      limit: 50,
+      offset: 0,
+    });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.total).toBe(2);
+    expect(result.nextOffset).toBeNull();
   });
 
   // listRuns tests

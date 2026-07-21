@@ -9,7 +9,6 @@ import { Menu, Settings, MessageSquare, LogOut } from 'lucide-solid';
 import {
   listSessions,
   createSession,
-  listMessages,
   submitMessageStreaming,
   resumeSessionStream,
   listAgents,
@@ -20,6 +19,7 @@ import {
   type Agent,
   type SessionRun,
 } from './lib/ws-api';
+import { useInfiniteMessages } from './lib/use-infinite-messages';
 import { ThemeProvider, useTheme } from './lib/theme';
 import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
@@ -206,7 +206,7 @@ function AppContent(props: AppContentProps) {
       setPendingUserMessage(undefined);
       const sid = selectedSessionId();
       if (sid) {
-        queryClient.invalidateQueries({ queryKey: ['messages', sid] });
+        void messagesState.refresh();
         queryClient.invalidateQueries({ queryKey: ['runs', sid] });
       }
       processQueue();
@@ -309,7 +309,7 @@ function AppContent(props: AppContentProps) {
       setStreamingToolCalls([]);
       setRunActivity(undefined);
       setPendingUserMessage(undefined);
-      queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+      void messagesState.refresh();
       queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
       processQueue();
     };
@@ -322,9 +322,7 @@ function AppContent(props: AppContentProps) {
       setRunActivity(undefined);
       setPendingUserMessage(undefined);
       // Refresh messages to show the completed response
-      queryClient.invalidateQueries({
-        queryKey: ['messages', sessionId],
-      });
+      void messagesState.refresh();
       queryClient.invalidateQueries({
         queryKey: ['runs', sessionId],
       });
@@ -465,13 +463,9 @@ function AppContent(props: AppContentProps) {
     queryFn: listAgents,
   }));
 
-  // Messages query
-  const messagesQuery = createQuery(() => ({
-    queryKey: ['messages', selectedSessionId()],
-    queryFn: () =>
-      selectedSessionId() ? listMessages(selectedSessionId()!) : { items: [] },
-    enabled: !!selectedSessionId(),
-  }));
+  // Paginated messages with "load older" support. The hook owns its own
+  // fetch lifecycle; refetching on session change is handled inside.
+  const messagesState = useInfiniteMessages(selectedSessionId);
 
   // Runs query
   const runsQuery = createQuery(() => ({
@@ -666,7 +660,7 @@ function AppContent(props: AppContentProps) {
       setRunActivity(undefined);
       setPendingUserMessage(undefined);
     }
-    queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+    void messagesState.refresh();
     queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
     processQueue();
   };
@@ -704,7 +698,7 @@ function AppContent(props: AppContentProps) {
       // Pull the persisted user message (and any finished prior runs) without
       // disturbing the live streaming state we just restored; the assistant
       // message is not persisted until the run ends.
-      queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
+      void messagesState.refresh();
       queryClient.invalidateQueries({ queryKey: ['runs', sessionId] });
       // Re-arm the idle guard in case we also missed the end event.
       armStreamWatchdog();
@@ -809,8 +803,7 @@ function AppContent(props: AppContentProps) {
 
   // Data accessors
   const messages = (): SessionMessage[] => {
-    const data = messagesQuery.data;
-    const fetched = !data || 'error' in data ? [] : data.items || [];
+    const fetched = messagesState.messages();
     const pending = pendingUserMessage();
     if (!pending) return fetched;
     // Show pending message only if it's not already in the fetched list
@@ -1139,8 +1132,8 @@ function AppContent(props: AppContentProps) {
             <Show when={selectedSessionId()}>
               <ChatView
                 messages={messages()}
-                isLoading={messagesQuery.isLoading}
-                error={messagesQuery.error?.message}
+                isLoading={messagesState.isLoading()}
+                error={messagesState.error()}
                 isStreaming={isStreaming()}
                 streamingContent={
                   isStreaming() ? streamingContent() : undefined
@@ -1155,6 +1148,10 @@ function AppContent(props: AppContentProps) {
                 onEditQueued={messageQueue.edit}
                 onRemoveQueued={messageQueue.remove}
                 scrollToMessageId={scrollToMessageId()}
+                isLoadingMore={messagesState.isLoadingMore()}
+                hasMore={messagesState.hasMore()}
+                total={messagesState.total()}
+                onLoadMore={() => void messagesState.loadMore()}
               />
               <Show when={currentChoices()}>
                 {(c) => (
