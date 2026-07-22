@@ -1,23 +1,16 @@
-import { Show, For, createEffect } from 'solid-js';
-import {
-  User,
-  Bot,
-  AlertCircle,
-  Wrench,
-  Server,
-  CircleStop,
-} from 'lucide-solid';
+import { Show, For, createEffect, onMount } from 'solid-js';
+import { Bot, CircleStop } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
-import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
-import { ToolCallBlock, ToolResultBlock } from './ToolBlocks';
-import { AttachmentList } from './AttachmentList';
+import { ToolCallBlock } from './ToolBlocks';
 import { QueuedMessageCard } from './QueuedMessageCard';
 import { RunActivityBadge } from './RunActivityBadge';
 import type { RunActivityPhase } from './RunActivityBadge';
-import { CopyButton } from './ui/CopyButton';
+import { MessageListItem } from './MessageListItem';
+import { LoadMoreControl } from './LoadMoreControl';
+import { MessageContent } from './MessageContent';
 
 type StreamingToolCall = {
   id: string;
@@ -52,6 +45,14 @@ type ChatViewProps = {
   };
   /** Message ID to scroll to (e.g. from clicking a run) */
   scrollToMessageId?: string;
+  /** True while a "load older messages" page is being fetched. */
+  isLoadingMore?: boolean;
+  /** True when more pages exist on the server. */
+  hasMore?: boolean;
+  /** Total message count reported by the server (for end-of-history UI). */
+  total?: number;
+  /** Invoked when the user clicks "Load more" or scrolls to the top. */
+  onLoadMore?: () => void;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -59,31 +60,97 @@ export function ChatView(props: ChatViewProps) {
   let scrollContainerRef: HTMLDivElement | undefined;
   let isUserScrolledUp = false;
 
+  // Tracks the id of the oldest loaded message so we can detect when a
+  // "load older" page prepended messages (oldest id changes → scrollHeight
+  // grew → adjust scrollTop to keep the user's view anchored).
+  let oldestLoadedId: string | undefined;
+  let prependedDelta = 0;
+
   const handleScroll = () => {
     if (!scrollContainerRef) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef;
     // Consider "at bottom" if within 80px of the bottom
     isUserScrolledUp = scrollHeight - scrollTop - clientHeight > 80;
+
+    // Auto-trigger loading the previous page once the user reaches the top.
+    // 16px hysteresis avoids re-firing while the user is mid-scroll.
+    if (
+      scrollTop <= 16 &&
+      props.hasMore &&
+      !props.isLoadingMore &&
+      !props.isLoading &&
+      props.onLoadMore
+    ) {
+      void props.onLoadMore();
+    }
   };
 
+  // Auto-scroll to the bottom whenever the message list grows by being
+  // appended (new tail message, streaming content, queue). When the list
+  // grows by being prepended ("load older"), we adjust scrollTop instead
+  // so the user's view stays anchored — see the effect below.
   createEffect(() => {
     void props.messages.length;
     void props.streamingContent;
     void props.queuedMessages?.length;
-    if (!isUserScrolledUp && scrollContainerRef) {
-      // Scroll the chat container directly. scrollIntoView on a nested
-      // overflow-auto element inside an overflow-hidden parent can bubble up
-      // to the document on mobile, dragging the sticky header (which lives
-      // outside the chat container) off-screen.
-      scrollContainerRef.scrollTo({
-        top: scrollContainerRef.scrollHeight,
-        behavior: 'smooth',
+    if (!scrollContainerRef) return;
+    if (prependedDelta > 0) {
+      // Don't snap to bottom; let the dedicated prepend effect adjust.
+      return;
+    }
+    if (isUserScrolledUp) return;
+    // Scroll the chat container directly. scrollIntoView on a nested
+    // overflow-auto element inside an overflow-hidden parent can bubble up
+    // to the document on mobile, dragging the sticky header (which lives
+    // outside the chat container) off-screen.
+    scrollContainerRef.scrollTo({
+      top: scrollContainerRef.scrollHeight,
+      behavior: 'smooth',
+    });
+  });
+
+  // Detect prepends and adjust scroll position so the user's view doesn't
+  // jump when older messages are inserted at the top. Solid effects run
+  // after reactive updates but before the next paint; rAF guarantees the
+  // new DOM height is committed before we adjust scrollTop.
+  createEffect(() => {
+    const list = props.messages;
+    const newOldest = list[0]?.id;
+    if (!newOldest) return;
+    if (oldestLoadedId === undefined) {
+      oldestLoadedId = newOldest;
+      return;
+    }
+    if (newOldest === oldestLoadedId) return;
+    // The first message id changed → a prepend happened.
+    const container = scrollContainerRef;
+    if (!container) return;
+    const before = container.scrollHeight;
+    oldestLoadedId = newOldest;
+    requestAnimationFrame(() => {
+      const after = container.scrollHeight;
+      prependedDelta = Math.max(0, after - before);
+      if (prependedDelta > 0) {
+        container.scrollTop = container.scrollTop + prependedDelta;
+      }
+      // Clear the latch on the next frame so subsequent tail appends can
+      // auto-scroll again.
+      requestAnimationFrame(() => {
+        prependedDelta = 0;
       });
+    });
+  });
+
+  // Reset scroll anchor tracking when switching sessions.
+  createEffect(() => {
+    if (props.messages.length === 0) {
+      oldestLoadedId = undefined;
     }
   });
 
-  // Scroll to a specific message when scrollToMessageId is set (e.g. from clicking a run).
-  // Same reason as above: keep the scroll inside the chat container.
+  // Scroll to a specific message when scrollToMessageId is set (e.g. from
+  // clicking a run). Same reason as above: keep the scroll inside the chat
+  // container.
   createEffect(() => {
     const targetId = props.scrollToMessageId;
     if (!targetId || !scrollContainerRef) return;
@@ -98,63 +165,12 @@ export function ChatView(props: ChatViewProps) {
     }
   });
 
-  const isMcpTool = (message: SessionMessage) =>
-    typeof message.metadata?.toolName === 'string' &&
-    (message.metadata.toolName as string).includes('::');
-
-  const getRoleIcon = (message: SessionMessage) => {
-    switch (message.role) {
-      case 'user':
-        return <User class="w-4 h-4" />;
-      case 'assistant':
-        return <Bot class="w-4 h-4" />;
-      case 'tool':
-        return isMcpTool(message) ? (
-          <Server class="w-4 h-4" />
-        ) : (
-          <Wrench class="w-4 h-4" />
-        );
-      default:
-        return <AlertCircle class="w-4 h-4" />;
+  // Initial scroll-to-bottom once the first messages have rendered.
+  onMount(() => {
+    if (scrollContainerRef && props.messages.length > 0) {
+      scrollContainerRef.scrollTop = scrollContainerRef.scrollHeight;
     }
-  };
-
-  const getRoleLabel = (message: SessionMessage) => {
-    switch (message.role) {
-      case 'user':
-        return 'You';
-      case 'assistant':
-        return 'Assistant';
-      case 'system':
-        return 'System';
-      case 'tool': {
-        const toolName = message.metadata?.toolName;
-        if (typeof toolName !== 'string') return 'tool';
-        if (toolName.includes('::')) {
-          const [serverId, name] = toolName.split('::');
-          return `${serverId} / ${name}`;
-        }
-        return toolName;
-      }
-      default:
-        return message.role;
-    }
-  };
-
-  const getRoleClass = (message: SessionMessage) => {
-    switch (message.role) {
-      case 'user':
-        return 'bg-blue-50 dark:bg-blue-900/20';
-      case 'assistant':
-        return 'bg-gray-50 dark:bg-gray-800';
-      case 'tool':
-        return isMcpTool(message)
-          ? 'bg-purple-50 dark:bg-purple-900/20'
-          : 'bg-yellow-50 dark:bg-yellow-900/20';
-      default:
-        return 'bg-yellow-50 dark:bg-yellow-900/20';
-    }
-  };
+  });
 
   return (
     <div
@@ -184,12 +200,26 @@ export function ChatView(props: ChatViewProps) {
       <Show when={props.error}>
         <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p class="text-red-600 dark:text-red-400 text-sm">{props.error}</p>
+          <Show when={props.onLoadMore}>
+            <button
+              type="button"
+              class="mt-2 text-xs font-medium text-red-700 dark:text-red-300 underline"
+              onClick={() => props.onLoadMore?.()}
+            >
+              Retry
+            </button>
+          </Show>
         </div>
       </Show>
 
       {/* Empty state */}
       <Show
-        when={!props.isLoading && !props.error && props.messages.length === 0}
+        when={
+          !props.isLoading &&
+          !props.error &&
+          props.messages.length === 0 &&
+          !props.isStreaming
+        }
       >
         <div class="flex flex-col items-center justify-center h-full text-text-tertiary">
           <Bot class="w-12 h-12 mb-4 opacity-50" />
@@ -200,54 +230,21 @@ export function ChatView(props: ChatViewProps) {
         </div>
       </Show>
 
-      {/* Messages */}
+      {/* Messages — rendered with date separators and a "load older" control */}
       <Show when={!props.isLoading && props.messages.length > 0}>
+        <LoadMoreControl
+          hasMore={props.hasMore ?? false}
+          isLoadingMore={props.isLoadingMore ?? false}
+          total={props.total}
+          loaded={props.messages.length}
+          onLoadMore={() => props.onLoadMore?.()}
+        />
         <For each={props.messages}>
-          {(message) => (
-            <div
-              class={`rounded-lg p-4 ${getRoleClass(message)}`}
-              data-message-id={message.id}
-            >
-              <div class="flex items-start gap-3">
-                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-                  {getRoleIcon(message)}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="font-medium text-sm text-text-primary">
-                      {getRoleLabel(message)}
-                    </span>
-                    <span class="text-xs text-text-tertiary">
-                      {new Date(message.createdAt).toLocaleTimeString()}
-                    </span>
-                    <Show when={message.content}>
-                      <span class="ml-auto">
-                        <CopyButton text={message.content} />
-                      </span>
-                    </Show>
-                  </div>
-                  <Show
-                    when={
-                      message.role === 'assistant' && message.reasoningContent
-                    }
-                  >
-                    <ThinkingBlock text={message.reasoningContent!} />
-                  </Show>
-                  <Show
-                    when={message.role === 'tool'}
-                    fallback={<MessageContent content={message.content} />}
-                  >
-                    <ToolResultBlock
-                      content={message.content}
-                      isMcp={isMcpTool(message)}
-                    />
-                  </Show>
-                  <Show when={message.attachments?.length}>
-                    <AttachmentList attachments={message.attachments!} />
-                  </Show>
-                </div>
-              </div>
-            </div>
+          {(message, index) => (
+            <MessageListItem
+              message={message}
+              previous={index() > 0 ? props.messages[index() - 1] : undefined}
+            />
           )}
         </For>
       </Show>
@@ -287,6 +284,19 @@ export function ChatView(props: ChatViewProps) {
                   </button>
                 </Show>
               </div>
+              {/* Show the most recent assistant thinking block, if any */}
+              <Show
+                when={
+                  props.messages.length > 0 &&
+                  props.messages[props.messages.length - 1]?.reasoningContent
+                }
+              >
+                <ThinkingBlock
+                  text={
+                    props.messages[props.messages.length - 1]!.reasoningContent!
+                  }
+                />
+              </Show>
               <Show when={props.streamingContent}>
                 <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />

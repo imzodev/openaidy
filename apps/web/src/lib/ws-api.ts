@@ -1,4 +1,5 @@
 import type { WebSocketClient } from '@openaidy/sdk';
+import type { MessagePage } from '@openaidy/shared-types';
 import {
   listSessions as listSessionsRest,
   createSession as createSessionRest,
@@ -106,47 +107,88 @@ export async function getSession(id: string): Promise<Session | ApiError> {
   );
 }
 
+/**
+ * Fetch a single page of messages for a session.
+ *
+ * - The server returns messages in chronological (oldest → newest) order
+ *   regardless of pagination direction — the WS handler slices from the end
+ *   for an initial/newest batch and from earlier offsets for "load older".
+ * - Pass `offset` to skip that many messages from the newest end (i.e.
+ *   `offset=50, limit=20` returns the 20 messages that sit just before the
+ *   initial 50).
+ * - The returned `total` is the full message count for the session and
+ *   `nextOffset` is the offset to use for the *next* (older) page, or `null`
+ *   when the current page already covers everything.
+ *
+ * Errors propagate as thrown rejections — the REST fallback throws on
+ * non-2xx, and `withWebSocketFallback` re-throws any WS error so callers
+ * see a consistent `Promise<MessagePage<SessionMessage>>` shape.
+ */
 export async function listMessages(
   sessionId: string,
-): Promise<{ items: SessionMessage[] } | ApiError> {
+  options: { limit?: number; offset?: number } = {},
+): Promise<MessagePage<SessionMessage>> {
+  const limit = options.limit;
+  const offset = options.offset ?? 0;
   return withWebSocketFallback(
     async (client) => {
-      const response = await client.listMessages(sessionId);
+      const response = await client.listMessages(sessionId, {
+        ...(limit !== undefined ? { limit } : {}),
+        offset,
+      });
       if (response.type !== 'session.messages') {
         throw new Error('Unexpected response type for session.messages');
       }
 
+      const messages = response.payload.messages.map(
+        (msg: {
+          id: string;
+          sessionId: string;
+          role: string;
+          content: string;
+          sequence: number;
+          createdAt: string;
+          metadata?: Record<string, unknown>;
+          reasoningContent?: string;
+          attachments?: SessionMessage['attachments'];
+        }) => ({
+          id: msg.id,
+          sessionId: msg.sessionId,
+          role: msg.role as SessionMessage['role'],
+          content: msg.content,
+          sequence: msg.sequence,
+          createdAt: msg.createdAt,
+          metadata: msg.metadata,
+          ...(msg.reasoningContent
+            ? { reasoningContent: msg.reasoningContent }
+            : {}),
+          ...(msg.attachments?.length ? { attachments: msg.attachments } : {}),
+        }),
+      );
+      const total = response.payload.total;
+      const fetchedUpTo = offset + messages.length;
       return {
-        items: response.payload.messages.map(
-          (msg: {
-            id: string;
-            sessionId: string;
-            role: string;
-            content: string;
-            sequence: number;
-            createdAt: string;
-            metadata?: Record<string, unknown>;
-            reasoningContent?: string;
-            attachments?: SessionMessage['attachments'];
-          }) => ({
-            id: msg.id,
-            sessionId: msg.sessionId,
-            role: msg.role as SessionMessage['role'],
-            content: msg.content,
-            sequence: msg.sequence,
-            createdAt: msg.createdAt,
-            metadata: msg.metadata,
-            ...(msg.reasoningContent
-              ? { reasoningContent: msg.reasoningContent }
-              : {}),
-            ...(msg.attachments?.length
-              ? { attachments: msg.attachments }
-              : {}),
-          }),
-        ),
+        items: messages,
+        total,
+        nextOffset: fetchedUpTo >= total ? null : fetchedUpTo,
       };
     },
-    () => listMessagesRest(sessionId),
+    // REST fallback: the REST endpoint doesn't yet support pagination, so
+    // it always returns the full list. Surface that as a single page whose
+    // `nextOffset` reflects we've loaded everything.
+    async () => {
+      const result = await listMessagesRest(sessionId);
+      if (!('items' in result)) {
+        throw new Error('Unexpected REST response for session.messages');
+      }
+      const items = result.items;
+      const total = items.length;
+      return {
+        items,
+        total,
+        nextOffset: offset + items.length >= total ? null : total,
+      };
+    },
   );
 }
 

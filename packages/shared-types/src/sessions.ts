@@ -181,3 +181,28 @@ export type SessionSearchResult = {
   matchCount?: number;
   snippet: string | null;
 };
+
+// ========================================
+// Paginated session message types
+// ========================================
+
+/**
+ * Page of session messages returned by paginated loads.
+ *
+ * - `items` is always ordered oldest → newest (chronological), matching the
+ *   server's natural message order. Prepending a fetched page to a client-
+ *   side list therefore just concatenates.
+ * - `total` is the total number of messages the session has on the server.
+ *   When `items.length` reaches `total`, no more pages exist.
+ * - `nextOffset` is the offset to pass to the next request to get the *next*
+ *   (older, when paging backward through history) batch. `null` indicates
+ *   there is nothing more to load.
+ *
+ * `MessagePage<T>` is generic so the same shape works for the raw
+ * `SessionMessage` type (REST) and any future wire variants.
+ */
+export type MessagePage<T> = {
+  items: T[];
+  total: number;
+  nextOffset: number | null;
+};
