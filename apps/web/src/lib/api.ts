@@ -4,6 +4,7 @@
  */
 
 import { ApiRequestError } from '@openaidy/shared-types';
+import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
 import { getStoredToken } from './auth-token';
 
 export type {
@@ -79,6 +80,7 @@ export type {
 } from './types';
 
 export { ApiRequestError } from '@openaidy/shared-types';
+export type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
 
 import type {
   Session,
@@ -1505,6 +1507,47 @@ export async function fetchAppInfo(): Promise<AppInfo> {
   const response = await apiFetch(`${API_BASE}/api/info`);
   if (!response.ok) {
     throw new Error(`Failed to fetch app info: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Self-update API Functions (issue #456)
+// ============================================================================
+
+/**
+ * Check the npm registry for a newer version. Throws on network/registry
+ * failure (the server returns 502) so callers can show "Unable to check".
+ * Requires admin scope; a non-admin token yields a 401/403 (also a throw).
+ */
+export async function checkForUpdates(): Promise<UpdateCheckResult> {
+  const response = await apiFetch(`${API_BASE}/api/update/check`);
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Trigger a self-update (admin-only). The server installs the latest version
+ * and restarts; this resolves with the initial `installing` state (HTTP 202).
+ * Throws `ApiRequestError` on 400/409/502 (e.g. dev install can't self-update,
+ * already up to date, or an update is already running).
+ */
+export async function triggerUpdate(): Promise<UpdateState> {
+  const response = await apiFetch(`${API_BASE}/api/update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
   }
   return response.json();
 }

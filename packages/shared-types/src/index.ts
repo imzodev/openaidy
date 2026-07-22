@@ -20,3 +20,4 @@ export * from './task-schedules.js';
 export * from './bootstrap-admin.js';
 export * from './model-pricing.js';
 export * from './backups.js';
+export * from './update.js';

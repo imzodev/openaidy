@@ -44,6 +44,8 @@ import { addonRoutes } from './routes/addons';
 import { addonProxyRoutes } from './addons/proxy-routes';
 import { backupRoutes } from './backups/routes';
 import { createBackupService } from './backups/service';
+import { updateRoutes } from './routes/update';
+import { createUpdateService } from './update/service';
 import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
@@ -562,6 +564,16 @@ export async function buildApp() {
           },
           openAidyVersion,
         ),
+        authMiddleware,
+      });
+
+      // In-app self-update (admin-only). Checks the npm registry and, for a
+      // packaged global install, runs `npm install -g @openaidy/app@latest`
+      // then restarts via the CLI. `canSelfUpdate` auto-detects packaged mode.
+      await api.register(updateRoutes, {
+        updateService: createUpdateService({
+          currentVersion: openAidyVersion,
+        }),
         authMiddleware,
       });
 
