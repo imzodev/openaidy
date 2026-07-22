@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, createSignal } from 'solid-js';
-import { render, cleanup } from '@solidjs/testing-library';
+import { cleanup } from '@solidjs/testing-library';
 import { useInfiniteMessages } from './use-infinite-messages';
 import * as wsApi from './ws-api';
 import type { SessionMessage } from './api';
@@ -48,7 +48,6 @@ describe('useInfiniteMessages', () => {
 
   afterEach(() => {
     cleanup();
-    vi.useRealTimers();
   });
 
   it('fetches the initial page on mount when a session is provided', async () => {
@@ -219,11 +218,8 @@ describe('useInfiniteMessages', () => {
   });
 
   it('discards stale responses when the session changes mid-flight', async () => {
-    // Use fake timers to control the async flow deterministically.
-    vi.useFakeTimers();
-
-    // First call (session-1) resolves slowly; second call (session-2)
-    // resolves fast. The first response must NOT overwrite session-2's data.
+    // Deferred promise that we control externally — lets session-1's request
+    // stay pending while session-2's request resolves first.
     let resolveFirst: (value: unknown) => void = () => {};
     const firstCall = new Promise((res) => {
       resolveFirst = res;
@@ -247,36 +243,34 @@ describe('useInfiniteMessages', () => {
 
     await new Promise<void>((resolve, reject) => {
       createRoot((dispose) => {
-        const { unmount } = render(() => {
-          const [sid, setSid] = createSignal<string | undefined>('session-1');
-          const state = useInfiniteMessages(sid);
+        const [sid, setSid] = createSignal<string | undefined>('session-1');
+        const state = useInfiniteMessages(sid);
+
+        // After the initial effect fires (fetching session-1), switch
+        // sessions so session-2's fast response lands first.
+        queueMicrotask(() => {
+          setSid('session-2');
+
+          // Wait for session-2's fetch to resolve and its signals to settle.
           queueMicrotask(() => {
-            // Switch sessions before the first request resolves
-            setSid('session-2');
-            // Advance timers to let session-2's fast response resolve
-            vi.advanceTimersByTime(10);
+            try {
+              // Now let the stale session-1 request resolve.
+              resolveFirst(undefined);
+
+              // Wait for the stale response to be processed (should be
+              // discarded because inflightFor is now 'session-2').
+              queueMicrotask(() => {
+                expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
+                dispose();
+                resolve();
+              });
+            } catch (err) {
+              reject(err);
+            }
           });
-          return null;
         });
-
-        // Wait for initial render and session switch
-        vi.advanceTimersByTime(20);
-
-        // Now let the stale session-1 request resolve
-        resolveFirst(undefined);
-        vi.advanceTimersByTime(50);
-
-        // Check that we have fresh data, not stale
-        expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
-
-        unmount();
-        dispose();
-        resolve();
       });
     });
-
-    // Restore real timers after this test
-    vi.useRealTimers();
   });
 
   it('captures fetch errors into the error signal', async () => {
