@@ -238,23 +238,38 @@ describe('useInfiniteMessages', () => {
       };
     });
 
+    // Use createRoot to ensure proper disposal of the rendered component.
+    // The render() from @solidjs/testing-library must be unmounted.
     await new Promise<void>((resolve) => {
-      render(() => {
-        const [sid, setSid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(() => {
-          // Switch sessions before the first request resolves
-          setSid('session-2');
-          setTimeout(() => {
-            // Now let the first (stale) request resolve
-            resolveFirst(undefined);
+      let Helpers: { unmount: () => void } | null = null;
+      createRoot((disposeRoot) => {
+        const result = render(() => {
+          const [sid, setSid] = createSignal<string | undefined>('session-1');
+          const state = useInfiniteMessages(sid);
+          // Track the render result so we can unmount it
+          Helpers = {
+            unmount: () => {
+              // We need to unmount the render, not dispose the root
+              result.unmount();
+            },
+          };
+          queueMicrotask(() => {
+            // Switch sessions before the first request resolves
+            setSid('session-2');
             setTimeout(() => {
-              expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
-              resolve();
-            }, 50);
-          }, 20);
+              // Now let the first (stale) request resolve
+              resolveFirst(undefined);
+              setTimeout(() => {
+                expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
+                // Properly unmount before disposing root
+                Helpers?.unmount();
+                disposeRoot();
+                resolve();
+              }, 50);
+            }, 20);
+          });
+          return null;
         });
-        return null;
       });
     });
   });
