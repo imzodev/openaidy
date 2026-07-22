@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile, chmod } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
 import type { BootstrapAdminRecord } from '@openaidy/shared-types';
@@ -141,7 +142,12 @@ export class BootstrapAdminManager {
   private async persistRecord(record: BootstrapAdminRecord): Promise<void> {
     await mkdir(dirname(this.options.tokenPath), { recursive: true });
 
-    const tempPath = `${this.options.tokenPath}.tmp`;
+    // Unique temp name per write. A fixed `${tokenPath}.tmp` is a race: two
+    // managers pointed at the same token path (e.g. concurrent buildApp()s in
+    // tests) would each write the same temp file, and one's rename() pulls it
+    // out from under the other's chmod(), throwing ENOENT. A per-write suffix
+    // keeps the write atomic and isolated.
+    const tempPath = `${this.options.tokenPath}.${randomUUID()}.tmp`;
     const contents = `${JSON.stringify(record, null, 2)}\n`;
 
     await writeFile(tempPath, contents, { encoding: 'utf-8', mode: 0o600 });
