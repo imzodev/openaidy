@@ -21,6 +21,7 @@ import {
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
 import type { Session, AddonRecord } from '../lib/api';
+import { updateBadgeVisible } from '../stores/update-notice';
 
 export type ViewType =
   | 'chat'
@@ -334,9 +335,25 @@ export function Sidebar(props: SidebarProps) {
               }`}
               title="Settings"
             >
-              <Settings class="w-5 h-5 flex-shrink-0" />
+              <span class="relative flex-shrink-0">
+                <Settings class="w-5 h-5" />
+                {/* Update-available indicator (issue #456). Shown in both
+                    collapsed and expanded states so the nudge isn't lost when
+                    the sidebar is narrow. */}
+                <Show when={updateBadgeVisible()}>
+                  <span
+                    class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-white dark:ring-gray-800"
+                    aria-label="Update available"
+                  />
+                </Show>
+              </span>
               <Show when={!props.isCollapsed}>
-                <span>Settings</span>
+                <span class="flex-1 text-left">Settings</span>
+              </Show>
+              <Show when={!props.isCollapsed && updateBadgeVisible()}>
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Update
+                </span>
               </Show>
             </button>
           </div>

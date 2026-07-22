@@ -8,9 +8,22 @@ import {
 } from '@solidjs/testing-library';
 import { AboutTab } from './AboutTab';
 import * as api from '../../../lib/api';
+import { resetUpdateNotice } from '../../../stores/update-notice';
 
 vi.mock('../../../lib/api', () => ({
   fetchAppInfo: vi.fn(),
+  checkForUpdates: vi.fn(),
+  triggerUpdate: vi.fn(),
+  // Minimal stand-in for the real error class so `instanceof` checks work.
+  ApiRequestError: class ApiRequestError extends Error {
+    status: number;
+    body: { error: string; message?: string };
+    constructor(status: number, body: { error: string; message?: string }) {
+      super(body.message ?? body.error);
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 const sampleInfo: api.AppInfo = {
@@ -23,9 +36,19 @@ const sampleInfo: api.AppInfo = {
   uptimeMs: 12_345,
 };
 
+const noUpdate: api.UpdateCheckResult = {
+  currentVersion: '0.3.0',
+  latestVersion: '0.3.0',
+  updateAvailable: false,
+  canSelfUpdate: false,
+};
+
 describe('AboutTab', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetUpdateNotice();
+    // Default: no update available. Individual tests override as needed.
+    vi.mocked(api.checkForUpdates).mockResolvedValue(noUpdate);
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
@@ -104,5 +127,59 @@ describe('AboutTab', () => {
     expect(api.fetchAppInfo).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
     await waitFor(() => expect(api.fetchAppInfo).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows an "Update to vX" button and triggers the update when confirmed', async () => {
+    vi.mocked(api.fetchAppInfo).mockResolvedValue(sampleInfo);
+    vi.mocked(api.checkForUpdates).mockResolvedValue({
+      currentVersion: '0.3.0',
+      latestVersion: '0.4.0',
+      updateAvailable: true,
+      canSelfUpdate: true,
+      releaseNotes: 'Bug fixes and improvements',
+    });
+    vi.mocked(api.triggerUpdate).mockResolvedValue({
+      status: 'installing',
+      newVersion: '0.4.0',
+    });
+
+    render(() => <AboutTab />);
+    const updateBtn = await screen.findByRole('button', {
+      name: /update to v0\.4\.0/i,
+    });
+    fireEvent.click(updateBtn);
+
+    // Confirm dialog opens with a restart warning; confirm it.
+    const confirmBtn = await screen.findByRole('button', {
+      name: /update & restart/i,
+    });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => expect(api.triggerUpdate).toHaveBeenCalledOnce());
+    expect(
+      await screen.findByText(/the server is installing the new version/i),
+    ).toBeInTheDocument();
+  });
+
+  it('guides a manual update when the install cannot self-update', async () => {
+    vi.mocked(api.fetchAppInfo).mockResolvedValue(sampleInfo);
+    vi.mocked(api.checkForUpdates).mockResolvedValue({
+      currentVersion: '0.3.0',
+      latestVersion: '0.4.0',
+      updateAvailable: true,
+      canSelfUpdate: false,
+    });
+
+    render(() => <AboutTab />);
+    await waitFor(() =>
+      expect(screen.getAllByText('v0.3.0').length).toBeGreaterThan(0),
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /update to v0\.4\.0/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/npm install -g @openaidy\/app@latest/i),
+    ).toBeInTheDocument();
   });
 });

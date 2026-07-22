@@ -53,6 +53,7 @@ import {
   uploadAttachment,
   getConfig,
   getUsageBySession,
+  checkForUpdates,
   type AddonRecord,
 } from './lib/api';
 import { ProviderOnboarding } from './components/onboarding/ProviderOnboarding';
@@ -70,6 +71,7 @@ import {
   recordRecentSession,
   recordRecentAgent,
 } from './stores/recent-items';
+import { initUpdateNotice, recordUpdateCheck } from './stores/update-notice';
 import './index.css';
 
 // Create a client
@@ -90,6 +92,16 @@ function AppContent(props: AppContentProps) {
   // Load recent-items once on mount so the command palette can render
   // persisted recents before the user types anything.
   initRecentItems();
+
+  // Hydrate the dismissed-update marker, then run a best-effort update check so
+  // the Settings sidebar badge can show without the user opening Settings.
+  // Fails silently offline or for non-admin tokens (the check is admin-scoped).
+  initUpdateNotice();
+  void checkForUpdates()
+    .then(recordUpdateCheck)
+    .catch(() => {
+      /* offline / non-admin — no badge */
+    });
 
   // Use the router hook
   const { currentView, currentAddonId, navigate, navigateToAddon } =
