@@ -983,7 +983,16 @@ export async function buildApp() {
     // startup with FST_ERR_HOOK_TIMEOUT. Connect in the background and
     // log the outcome; a slow or unavailable MCP server must not take
     // down the HTTP API (routes already tolerate unconnected servers).
-    const mcpServers = configService.getMcpServers();
+    //
+    // Skip entirely under test: every route test spins up buildApp(), and
+    // auto-connecting the bundled template servers (github, playwright,
+    // sequential-thinking, …) floods the test output with "failed to
+    // connect"/"awaiting configuration" logs and wastes seconds on npx/HTTP
+    // timeouts. Read process.env directly (not env.NODE_ENV) because tests
+    // mock ../lib/env without a NODE_ENV field. Tests that exercise MCP
+    // connect do so against the client/service directly, not this hook.
+    const mcpServers =
+      process.env.NODE_ENV === 'test' ? [] : configService.getMcpServers();
     for (const serverConfig of mcpServers) {
       // A server whose ${VAR} secrets aren't set yet (e.g. a preinstalled
       // GitHub server before the user pastes a token) isn't broken — it's
