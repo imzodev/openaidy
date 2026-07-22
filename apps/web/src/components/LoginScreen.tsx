@@ -39,9 +39,13 @@ export function LoginScreen(props: LoginScreenProps) {
 
   return (
     <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <div class="w-full max-w-md">
+      <div class="w-full max-w-md md:max-w-2xl">
         <div class="text-center mb-8">
-          <h1 class="text-2xl font-bold text-text-primary">OpenAidy</h1>
+          <img
+            src="/logo.webp"
+            alt="OpenAidy"
+            class="h-32 md:h-56 w-auto mx-auto mb-8"
+          />
           <p class="mt-2 text-sm text-text-secondary">
             {token()
               ? 'Token pre-filled. Press Connect to continue.'
