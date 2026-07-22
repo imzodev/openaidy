@@ -20,3 +20,25 @@ try {
   logger.error('Server failed to start', error);
   process.exit(1);
 }
+
+// Graceful shutdown. The CLI (`openaidy stop` / `openaidy restart`) sends
+// SIGTERM to this process; the self-update flow hands off to a detached
+// `openaidy restart` which does the same. Close Fastify (runs onClose hooks:
+// scheduler stop, DB close, WAL checkpoint) so we don't drop in-flight work or
+// leave a half-flushed database behind. Escalation to SIGKILL after 10s is
+// handled by the CLI stop path, so a hung close can't wedge a restart.
+let shuttingDown = false;
+const shutdown = (signal: NodeJS.Signals) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`Received ${signal}, shutting down gracefully`);
+  app
+    .close()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      logger.error('Error during graceful shutdown', error);
+      process.exit(1);
+    });
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
