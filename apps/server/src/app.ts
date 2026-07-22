@@ -42,6 +42,8 @@ import { logRoutes } from './routes/logs';
 import { createMcpRoutesPlugin } from './routes/mcp';
 import { addonRoutes } from './routes/addons';
 import { addonProxyRoutes } from './addons/proxy-routes';
+import { backupRoutes } from './backups/routes';
+import { createBackupService } from './backups/service';
 import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
@@ -538,6 +540,28 @@ export async function buildApp() {
       // Usage tracking endpoints (per-session + aggregated)
       await api.register(usageRoutes, {
         sessionService: services.sessions,
+        authMiddleware,
+      });
+
+      // Backup export/import (admin-only). Sections map to files/dirs under
+      // OPENAIDY_HOME; paths are resolved from env with sensible fallbacks.
+      await api.register(backupRoutes, {
+        backupService: createBackupService(
+          {
+            dbPath:
+              env.SQLITE_PATH ??
+              path.join(env.OPENAIDY_HOME, 'data', 'openaidy.db'),
+            configPath:
+              env.APP_CONFIG_PATH ??
+              path.join(env.OPENAIDY_HOME, 'openaidy.json'),
+            workspacesDir:
+              env.WORKSPACE_BASE_DIR ??
+              path.join(env.OPENAIDY_HOME, 'workspaces'),
+            skillsDir: env.SKILLS_DIR ?? path.join(env.OPENAIDY_HOME, 'skills'),
+            addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+          },
+          openAidyVersion,
+        ),
         authMiddleware,
       });
 
