@@ -46,7 +46,10 @@ describe('useInfiniteMessages', () => {
     vi.mocked(wsApi.listMessages).mockReset();
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it('fetches the initial page on mount when a session is provided', async () => {
     mockedListMessages({
@@ -216,12 +219,16 @@ describe('useInfiniteMessages', () => {
   });
 
   it('discards stale responses when the session changes mid-flight', async () => {
+    // Use fake timers to control the async flow deterministically.
+    vi.useFakeTimers();
+
     // First call (session-1) resolves slowly; second call (session-2)
     // resolves fast. The first response must NOT overwrite session-2's data.
-    let resolveFirst!: (value: unknown) => void;
+    let resolveFirst: (value: unknown) => void = () => {};
     const firstCall = new Promise((res) => {
       resolveFirst = res;
     });
+
     vi.mocked(wsApi.listMessages).mockImplementation(async (sid) => {
       if (sid === 'session-1') {
         await firstCall;
@@ -238,40 +245,38 @@ describe('useInfiniteMessages', () => {
       };
     });
 
-    // Use createRoot to ensure proper disposal of the rendered component.
-    // The render() from @solidjs/testing-library must be unmounted.
-    await new Promise<void>((resolve) => {
-      let Helpers: { unmount: () => void } | null = null;
-      createRoot((disposeRoot) => {
-        const result = render(() => {
+    await new Promise<void>((resolve, reject) => {
+      createRoot((dispose) => {
+        const { unmount } = render(() => {
           const [sid, setSid] = createSignal<string | undefined>('session-1');
           const state = useInfiniteMessages(sid);
-          // Track the render result so we can unmount it
-          Helpers = {
-            unmount: () => {
-              // We need to unmount the render, not dispose the root
-              result.unmount();
-            },
-          };
           queueMicrotask(() => {
             // Switch sessions before the first request resolves
             setSid('session-2');
-            setTimeout(() => {
-              // Now let the first (stale) request resolve
-              resolveFirst(undefined);
-              setTimeout(() => {
-                expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
-                // Properly unmount before disposing root
-                Helpers?.unmount();
-                disposeRoot();
-                resolve();
-              }, 50);
-            }, 20);
+            // Advance timers to let session-2's fast response resolve
+            vi.advanceTimersByTime(10);
           });
           return null;
         });
+
+        // Wait for initial render and session switch
+        vi.advanceTimersByTime(20);
+
+        // Now let the stale session-1 request resolve
+        resolveFirst(undefined);
+        vi.advanceTimersByTime(50);
+
+        // Check that we have fresh data, not stale
+        expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
+
+        unmount();
+        dispose();
+        resolve();
       });
     });
+
+    // Restore real timers after this test
+    vi.useRealTimers();
   });
 
   it('captures fetch errors into the error signal', async () => {
