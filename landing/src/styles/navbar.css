@@ -19,6 +19,7 @@
   color: var(--text-primary);
 }
 .navbar-logo span { color: var(--accent); }
+.navbar-logo-img { height: 1.4rem; width: auto; display: block; }
 
 .navbar-links {
   display: flex;

@@ -43,7 +43,7 @@ export default function Navbar() {
         transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       >
         <Link to="/" className="navbar-logo" onClick={closeMobile}>
-          Open<span>Aidy</span>
+          <img src="/logo.webp" alt="OpenAidy" className="navbar-logo-img" />
         </Link>
 
         <div className="navbar-links">

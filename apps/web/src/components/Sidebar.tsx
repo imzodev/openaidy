@@ -152,9 +152,7 @@ export function Sidebar(props: SidebarProps) {
           }`}
         >
           <Show when={!props.isCollapsed}>
-            <h1 class="text-xl font-bold text-text-primary truncate tracking-tight">
-              OpenAidy
-            </h1>
+            <img src="/logo.webp" alt="OpenAidy" class="h-7 w-auto" />
           </Show>
           <button
             onClick={props.onToggleCollapse}
