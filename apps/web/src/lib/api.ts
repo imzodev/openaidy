@@ -1551,3 +1551,19 @@ export async function triggerUpdate(): Promise<UpdateState> {
   }
   return response.json();
 }
+
+/**
+ * Poll the in-memory state of any in-flight update. Callers should expect
+ * this to reject with a network error while the server is mid-restart —
+ * that's the expected signal to keep polling, not a real failure.
+ */
+export async function fetchUpdateStatus(): Promise<UpdateState> {
+  const response = await apiFetch(`${API_BASE}/api/update/status`);
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({
+      error: 'request.failed',
+    }))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}

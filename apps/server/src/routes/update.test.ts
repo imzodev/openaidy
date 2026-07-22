@@ -144,6 +144,30 @@ describe('Update Routes', () => {
       });
       expect(res.statusCode).toBe(401);
     });
+
+    it('returns 403 when the token lacks admin scope', async () => {
+      const auth = new AuthMiddleware({
+        enabled: false,
+        port: 3001,
+        path: '/ws',
+        maxConnections: 1000,
+        heartbeatInterval: 30000,
+        auth: { required: true, secret: 'test-secret', tokenExpiry: 86400000 },
+        rateLimit: { max: 100, window: 60000 },
+      });
+      const limitedToken = await auth.generateToken({
+        clientId: 'limited-user',
+        type: 'access',
+        scopes: ['sessions.read'],
+        expiresIn: 86400000,
+      });
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/update/check',
+        headers: { authorization: `Bearer ${limitedToken}` },
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 
   describe('GET /api/update/check', () => {
@@ -206,6 +230,17 @@ describe('Update Routes', () => {
         url: '/api/update',
         headers: auth(),
         payload: { version: 123 },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_BODY');
+    });
+
+    it('rejects a non-semver version string with 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/update',
+        headers: auth(),
+        payload: { version: '9.9.9 && rm -rf /' },
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('INVALID_BODY');

@@ -9,6 +9,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import semver from 'semver';
 import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
@@ -17,8 +18,17 @@ import type { UpdateService } from '../update/service';
 const ADMIN_SCOPE = '*';
 
 const triggerSchema = z.object({
-  /** Optional explicit target; defaults to the latest published version. */
-  version: z.string().min(1).optional(),
+  // Optional explicit target; defaults to the latest published version. Must
+  // be a valid semver string — this value is passed straight to `npm install
+  // -g <pkg>@<version>`, so anything else is rejected before it gets near
+  // spawn().
+  version: z
+    .string()
+    .min(1)
+    .refine((v) => semver.valid(v) != null, {
+      message: 'version must be a valid semver string',
+    })
+    .optional(),
 });
 
 export type UpdateRoutesOptions = {
@@ -66,7 +76,7 @@ export const updateRoutes: FastifyPluginAsync<UpdateRoutesOptions> = async (
     if (!parsed.success) {
       return reply.code(400).send({
         error: 'INVALID_BODY',
-        message: 'version, if provided, must be a non-empty string',
+        message: 'version, if provided, must be a valid semver string',
       });
     }
 
