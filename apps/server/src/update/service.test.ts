@@ -1,5 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createUpdateService, detectSelfUpdatable } from './service';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'node:events';
+
+const spawnMock = vi.fn();
+vi.mock('node:child_process', () => ({ spawn: spawnMock }));
+
+const {
+  createUpdateService,
+  detectSelfUpdatable,
+  defaultInstall,
+  defaultRestart,
+} = await import('./service');
+
+/** A fake ChildProcess: an EventEmitter with the bits defaultInstall/defaultRestart touch. */
+function fakeChild() {
+  const child = new EventEmitter() as EventEmitter & { unref: () => void };
+  child.unref = vi.fn();
+  return child;
+}
 
 /**
  * Build a fake `fetch` that answers the npm registry `/latest` endpoint with
@@ -155,6 +172,27 @@ describe('UpdateService.startUpdate', () => {
     expect(state.error).toContain('EACCES');
   });
 
+  it('reports an error when the restart hand-off throws', async () => {
+    const install = vi.fn().mockResolvedValue(undefined);
+    const restart = vi.fn().mockImplementation(() => {
+      throw new Error('spawn openaidy ENOENT');
+    });
+    const svc = createUpdateService({
+      currentVersion: '0.3.8',
+      canSelfUpdate: true,
+      installFn: install,
+      restartFn: restart,
+    });
+
+    svc.startUpdate('0.4.0');
+    await flush();
+
+    expect(restart).toHaveBeenCalledOnce();
+    const state = svc.getState();
+    expect(state.status).toBe('error');
+    expect(state.error).toContain('ENOENT');
+  });
+
   it('rejects a second update while one is in progress', async () => {
     const gate = deferred<void>();
     const install = vi.fn().mockReturnValue(gate.promise);
@@ -181,5 +219,47 @@ describe('detectSelfUpdatable', () => {
     // Walking up from this test file lands on the repo-root package.json,
     // whose name is "openaidy", not the published "@openaidy/app".
     expect(detectSelfUpdatable('@openaidy/app')).toBe(false);
+  });
+});
+
+describe('defaultInstall / defaultRestart (real spawn wiring)', () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+  });
+
+  it('passes the version as a single argv element, never shell-concatenated', async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+
+    const install = defaultInstall('@openaidy/app', '1.2.3');
+    const [cmd, args, opts] = spawnMock.mock.calls[0]!;
+    expect(cmd).toBe('npm');
+    // The version reaches spawn as one argv element — no shell string is built
+    // out of it, so it can't be split into extra shell tokens even if malformed.
+    expect(args).toEqual(['install', '-g', '@openaidy/app@1.2.3']);
+    expect((opts as { shell?: boolean }).shell).toBe(false);
+
+    child.emit('exit', 0);
+    await expect(install).resolves.toBeUndefined();
+  });
+
+  it('defaultInstall rejects (not throws) on a spawn error event', async () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+
+    const install = defaultInstall('@openaidy/app', '1.2.3');
+    child.emit('error', new Error('ENOENT'));
+    await expect(install).rejects.toThrow('ENOENT');
+  });
+
+  it('defaultRestart does not throw when the spawned process errors', () => {
+    const child = fakeChild();
+    spawnMock.mockReturnValue(child);
+
+    // Before the fix, an unhandled 'error' event on a fire-and-forget spawn
+    // crashes the process with an uncaught exception — assert it no longer does.
+    expect(() => defaultRestart()).not.toThrow();
+    expect(() => child.emit('error', new Error('ENOENT'))).not.toThrow();
+    expect(child.unref).toHaveBeenCalled();
   });
 });

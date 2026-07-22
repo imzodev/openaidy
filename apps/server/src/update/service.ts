@@ -83,7 +83,7 @@ export function detectSelfUpdatable(
 }
 
 /** Default install: `npm install -g <pkg>@<version>`, rejecting on non-zero exit. */
-const defaultInstall: InstallFn = (packageName, version) =>
+export const defaultInstall: InstallFn = (packageName, version) =>
   new Promise<void>((resolvePromise, reject) => {
     const child = spawn('npm', ['install', '-g', `${packageName}@${version}`], {
       stdio: 'ignore',
@@ -97,11 +97,17 @@ const defaultInstall: InstallFn = (packageName, version) =>
   });
 
 /** Default restart: detached `openaidy restart` that outlives this process. */
-const defaultRestart: RestartFn = () => {
+export const defaultRestart: RestartFn = () => {
   const child = spawn('openaidy', ['restart'], {
     detached: true,
     stdio: 'ignore',
     shell: process.platform === 'win32',
+  });
+  // spawn() errors (e.g. ENOENT if `openaidy` isn't on PATH) arrive as an async
+  // 'error' event; without a listener Node throws an uncaught exception that
+  // would crash this process right after it committed to restarting.
+  child.on('error', (err) => {
+    logger.error('Failed to spawn restart process', { error: err.message });
   });
   child.unref();
 };

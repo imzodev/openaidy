@@ -4,6 +4,7 @@ import {
   fetchAppInfo,
   checkForUpdates,
   triggerUpdate,
+  fetchUpdateStatus,
   ApiRequestError,
   type AppInfo,
 } from '../../../lib/api';
@@ -17,8 +18,10 @@ import {
 
 const RELEASES_URL = 'https://github.com/imzodev/openaidy/releases';
 
-/** Seconds to wait for the server to come back after a self-update, then reload. */
-const RELOAD_AFTER_UPDATE_MS = 15_000;
+/** How often to poll /update/status while waiting for the server to restart. */
+const POLL_INTERVAL_MS = 2_000;
+/** Give up and ask the user to refresh manually after this many failed polls (~2 min). */
+const MAX_POLL_ATTEMPTS = 60;
 
 /**
  * Format an uptime duration (ms) as a compact human string.
@@ -102,9 +105,7 @@ export function AboutTab() {
         type: 'success',
         text: 'Updating… the server is installing the new version and will restart. This page will reload automatically.',
       });
-      // Give the server time to install + restart, then reload to pick up the
-      // new bundle. If it isn't back yet the reload simply retries the load.
-      setTimeout(() => window.location.reload(), RELOAD_AFTER_UPDATE_MS);
+      void pollForRestart();
     } catch (err) {
       setUpdateInProgress(false);
       setConfirmOpen(false);
@@ -113,6 +114,46 @@ export function AboutTab() {
           ? (err.body?.message ?? err.body?.error ?? 'Update failed.')
           : 'Update failed. The server may be unreachable.';
       setMessage({ type: 'error', text });
+    }
+  };
+
+  /**
+   * Poll /update/status until the server comes back on the new version. A
+   * network failure means the old process is mid-restart (expected — keep
+   * waiting). A reachable 'installing'/'restarting' state means the old
+   * process is still up (keep waiting). A reachable 'error' means the install
+   * or restart failed before the process went down — surface it rather than
+   * reloading onto the still-running old version. Anything else reachable
+   * (i.e. 'idle') means a fresh process answered, since its in-memory state
+   * resets on boot — safe to reload.
+   */
+  const pollForRestart = async (attempt = 0): Promise<void> => {
+    if (attempt >= MAX_POLL_ATTEMPTS) {
+      setUpdateInProgress(false);
+      setMessage({
+        type: 'error',
+        text: 'The server did not come back after the update. Refresh the page manually, or check the server logs.',
+      });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    try {
+      const status = await fetchUpdateStatus();
+      if (status.status === 'error') {
+        setUpdateInProgress(false);
+        setMessage({
+          type: 'error',
+          text: status.message ?? status.error ?? 'Update failed.',
+        });
+        return;
+      }
+      if (status.status === 'installing' || status.status === 'restarting') {
+        void pollForRestart(attempt + 1);
+        return;
+      }
+      window.location.reload();
+    } catch {
+      void pollForRestart(attempt + 1);
     }
   };
 
