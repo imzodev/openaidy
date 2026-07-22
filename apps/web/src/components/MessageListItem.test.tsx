@@ -3,14 +3,24 @@ import { render, cleanup, screen } from '@solidjs/testing-library';
 import { MessageListItem } from './MessageListItem';
 import type { SessionMessage } from '../lib/api';
 
+// Plain-object factory — Proxy module mocks hang vitest's collector.
 vi.mock('lucide-solid', () => {
   const Stub = () => null;
-  return new Proxy(
-    {},
-    {
-      get: (_t, prop: string) => (typeof prop === 'string' ? Stub : undefined),
-    },
-  );
+  return {
+    User: Stub,
+    Bot: Stub,
+    AlertCircle: Stub,
+    Wrench: Stub,
+    Server: Stub,
+    Copy: Stub,
+    Check: Stub,
+    // Icons used by ToolBlocks (rendered inside MessageListItem for tool messages)
+    ChevronRight: Stub,
+    ChevronDown: Stub,
+    Loader: Stub,
+    CircleStop: Stub,
+    Ban: Stub,
+  };
 });
 
 afterEach(() => cleanup());

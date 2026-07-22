@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createRoot, createSignal } from 'solid-js';
-import { cleanup } from '@solidjs/testing-library';
+import { createSignal } from 'solid-js';
+import { renderHook, cleanup } from '@solidjs/testing-library';
 import { useInfiniteMessages } from './use-infinite-messages';
 import * as wsApi from './ws-api';
 import type { SessionMessage } from './api';
@@ -41,6 +41,11 @@ function mockedListMessages(
   });
 }
 
+/** Yield control so Solid's scheduler and any async fetches can settle. */
+function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('useInfiniteMessages', () => {
   beforeEach(() => {
     vi.mocked(wsApi.listMessages).mockReset();
@@ -59,20 +64,20 @@ describe('useInfiniteMessages', () => {
       },
     });
 
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const [sid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(() => {
-          expect(state.messages()).toHaveLength(1);
-          expect(state.total()).toBe(25);
-          expect(state.hasMore()).toBe(false);
-          expect(state.isLoading()).toBe(false);
-          dispose();
-          resolve();
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid] = createSignal<string | undefined>('session-1');
+      return useInfiniteMessages(sid);
     });
+
+    // Wait for the effect to fire and the async fetch to complete.
+    await tick();
+
+    expect(result.messages()).toHaveLength(1);
+    expect(result.total()).toBe(25);
+    expect(result.hasMore()).toBe(false);
+    expect(result.isLoading()).toBe(false);
+
+    cleanup();
   });
 
   it('loadMore fetches the next page and prepends it without duplicating', async () => {
@@ -95,31 +100,30 @@ describe('useInfiniteMessages', () => {
       },
     });
 
-    await new Promise<void>((resolve, reject) => {
-      createRoot((dispose) => {
-        const [sid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(async () => {
-          try {
-            await state.loadMore();
-            const ids = state.messages().map((m) => m.id);
-            // Oldest → newest after prepending
-            expect(ids).toEqual(['m1', 'm2', 'm51', 'm52']);
-            expect(state.total()).toBe(70);
-            expect(state.hasMore()).toBe(true);
-            expect(state.isLoadingMore()).toBe(false);
-            // A second loadMore should fetch the next page
-            await state.loadMore();
-            expect(state.messages()).toHaveLength(4);
-            expect(state.hasMore()).toBe(true);
-            dispose();
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid] = createSignal<string | undefined>('session-1');
+      return useInfiniteMessages(sid);
     });
+
+    // Wait for initial fetch.
+    await tick();
+    expect(result.messages()).toHaveLength(2);
+
+    await result.loadMore();
+
+    const ids = result.messages().map((m) => m.id);
+    // Oldest → newest after prepending
+    expect(ids).toEqual(['m1', 'm2', 'm51', 'm52']);
+    expect(result.total()).toBe(70);
+    expect(result.hasMore()).toBe(true);
+    expect(result.isLoadingMore()).toBe(false);
+
+    // A second loadMore should fetch the next page
+    await result.loadMore();
+    expect(result.messages()).toHaveLength(4);
+    expect(result.hasMore()).toBe(true);
+
+    cleanup();
   });
 
   it('loadMore is a no-op when there are no more pages', async () => {
@@ -131,18 +135,16 @@ describe('useInfiniteMessages', () => {
       },
     });
 
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const [sid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(async () => {
-          await state.loadMore();
-          expect(vi.mocked(wsApi.listMessages)).toHaveBeenCalledTimes(1);
-          dispose();
-          resolve();
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid] = createSignal<string | undefined>('session-1');
+      return useInfiniteMessages(sid);
     });
+
+    await tick();
+    await result.loadMore();
+    expect(vi.mocked(wsApi.listMessages)).toHaveBeenCalledTimes(1);
+
+    cleanup();
   });
 
   it('does not refetch when switching to an already-loaded session', async () => {
@@ -154,25 +156,20 @@ describe('useInfiniteMessages', () => {
       },
     });
 
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const [sid, setSid] = createSignal<string | undefined>('session-1');
-        useInfiniteMessages(sid);
-        queueMicrotask(() => {
-          // Force a re-render by toggling the signal without changing value
-          // — Solid effects re-fire only when the dependency's value changes,
-          // but we want to be sure no extra fetches happen when the id is
-          // identical.
-          setSid('session-1');
-          // Wait another tick.
-          setTimeout(() => {
-            expect(vi.mocked(wsApi.listMessages)).toHaveBeenCalledTimes(1);
-            dispose();
-            resolve();
-          }, 50);
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid, setSid] = createSignal<string | undefined>('session-1');
+      return { state: useInfiniteMessages(sid), setSid };
     });
+
+    await tick();
+    expect(vi.mocked(wsApi.listMessages)).toHaveBeenCalledTimes(1);
+
+    // Toggling the signal to the same value should NOT trigger a refetch.
+    result.setSid('session-1');
+    await tick();
+    expect(vi.mocked(wsApi.listMessages)).toHaveBeenCalledTimes(1);
+
+    cleanup();
   });
 
   it('resets state when switching sessions', async () => {
@@ -192,29 +189,23 @@ describe('useInfiniteMessages', () => {
       },
     });
 
-    await new Promise<void>((resolve, reject) => {
-      createRoot((dispose) => {
-        const [sid, setSid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(() => {
-          try {
-            expect(state.messages().map((m) => m.id)).toEqual(['s1-m1']);
-            setSid('session-2');
-            queueMicrotask(() => {
-              expect(state.messages().map((m) => m.id)).toEqual([
-                's2-m1',
-                's2-m2',
-              ]);
-              expect(state.total()).toBe(2);
-              dispose();
-              resolve();
-            });
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid, setSid] = createSignal<string | undefined>('session-1');
+      return { state: useInfiniteMessages(sid), setSid };
     });
+
+    await tick();
+    expect(result.state.messages().map((m) => m.id)).toEqual(['s1-m1']);
+
+    result.setSid('session-2');
+    await tick();
+    expect(result.state.messages().map((m) => m.id)).toEqual([
+      's2-m1',
+      's2-m2',
+    ]);
+    expect(result.state.total()).toBe(2);
+
+    cleanup();
   });
 
   it('discards stale responses when the session changes mid-flight', async () => {
@@ -241,52 +232,45 @@ describe('useInfiniteMessages', () => {
       };
     });
 
-    await new Promise<void>((resolve, reject) => {
-      createRoot((dispose) => {
-        const [sid, setSid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-
-        // After the initial effect fires (fetching session-1), switch
-        // sessions so session-2's fast response lands first.
-        queueMicrotask(() => {
-          setSid('session-2');
-
-          // Wait for session-2's fetch to resolve and its signals to settle.
-          queueMicrotask(() => {
-            try {
-              // Now let the stale session-1 request resolve.
-              resolveFirst(undefined);
-
-              // Wait for the stale response to be processed (should be
-              // discarded because inflightFor is now 'session-2').
-              queueMicrotask(() => {
-                expect(state.messages().map((m) => m.id)).toEqual(['fresh']);
-                dispose();
-                resolve();
-              });
-            } catch (err) {
-              reject(err);
-            }
-          });
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid, setSid] = createSignal<string | undefined>('session-1');
+      return { state: useInfiniteMessages(sid), setSid };
     });
+
+    // Let the initial effect fire (session-1 fetch starts, but is deferred).
+    await tick();
+
+    // Switch sessions before the first request resolves.
+    result.setSid('session-2');
+
+    // Wait for session-2's fetch to complete (it resolves immediately).
+    await tick();
+    expect(result.state.messages().map((m) => m.id)).toEqual(['fresh']);
+
+    // Now let the stale session-1 request resolve.
+    resolveFirst(undefined);
+
+    // Wait for the stale response to be processed (should be discarded).
+    await tick();
+    // State must still be session-2's data.
+    expect(result.state.messages().map((m) => m.id)).toEqual(['fresh']);
+
+    cleanup();
   });
 
   it('captures fetch errors into the error signal', async () => {
     vi.mocked(wsApi.listMessages).mockRejectedValue(new Error('boom'));
 
-    await new Promise<void>((resolve) => {
-      createRoot((dispose) => {
-        const [sid] = createSignal<string | undefined>('session-1');
-        const state = useInfiniteMessages(sid);
-        queueMicrotask(() => {
-          expect(state.error()).toBe('boom');
-          expect(state.isLoading()).toBe(false);
-          dispose();
-          resolve();
-        });
-      });
+    const { result, cleanup } = renderHook(() => {
+      const [sid] = createSignal<string | undefined>('session-1');
+      return useInfiniteMessages(sid);
     });
+
+    await tick();
+
+    expect(result.error()).toBe('boom');
+    expect(result.isLoading()).toBe(false);
+
+    cleanup();
   });
 });

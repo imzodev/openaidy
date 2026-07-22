@@ -415,9 +415,10 @@ describe('ChatView', () => {
       const { container } = render(() => (
         <ChatView messages={messages} isLoading={false} />
       ));
-      // Exactly one date separator should appear between the two messages.
+      // The first message always gets a separator (no previous message).
+      // The second message gets a separator because it's on a different UTC day.
       const separators = container.querySelectorAll('[data-date-separator]');
-      expect(separators).toHaveLength(1);
+      expect(separators).toHaveLength(2);
     });
   });
 });
