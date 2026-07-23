@@ -58,6 +58,29 @@ describe('handleInboundWhatsAppMessage', () => {
     expect(reply).toBe('Hello human!');
   });
 
+  it('allows sender when any candidate id matches the allowlist (LID addressing)', async () => {
+    const reply = await handleInboundWhatsAppMessage({
+      ...baseParams,
+      waId: '15551234567',
+      // Message arrived via LID; phone number is one of the candidate ids.
+      candidateIds: ['111222333', '15551234567'],
+      allowlist: ['15551234567'],
+    });
+    expect(reply).toBe('Hello human!');
+    expect(mockSessionService.submitMessageNonStreaming).toHaveBeenCalled();
+  });
+
+  it('rejects message when no candidate id matches the allowlist', async () => {
+    const reply = await handleInboundWhatsAppMessage({
+      ...baseParams,
+      waId: '111222333',
+      candidateIds: ['111222333'],
+      allowlist: ['15551234567'],
+    });
+    expect(reply).toBeNull();
+    expect(mockSessionService.submitMessageNonStreaming).not.toHaveBeenCalled();
+  });
+
   it('rejects message when sender not in allowlist', async () => {
     const reply = await handleInboundWhatsAppMessage({
       ...baseParams,

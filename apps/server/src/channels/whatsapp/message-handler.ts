@@ -77,6 +77,11 @@ async function findOrCreateSession(
  */
 export async function handleInboundWhatsAppMessage(params: {
   waId: string;
+  /**
+   * All id forms the sender may be matched against in the allowlist (phone
+   * number and/or LID). Defaults to `[waId]` when omitted.
+   */
+  candidateIds?: string[];
   text: string;
   channelId: string;
   agentId: string;
@@ -89,14 +94,24 @@ export async function handleInboundWhatsAppMessage(params: {
 }): Promise<string | null> {
   const { waId, text, channelId, agentId, allowlist, sessionService, logger } =
     params;
+  const candidateIds = params.candidateIds?.length
+    ? params.candidateIds
+    : [waId];
   logger.debug(
-    { waId, text, channelId, agentId, allowlist },
+    { waId, candidateIds, text, channelId, agentId, allowlist },
     'whatsapp: message received',
   );
-  // 1. Allowlist check (empty or missing = reject all)
-  if (!allowlist?.length || !allowlist.includes(waId)) {
-    logger.debug(
-      { waId, channelId },
+  // 1. Allowlist check (empty or missing = reject all). Match against any of
+  //    the sender's id forms so a phone-number allowlist works even when the
+  //    message arrives via LID addressing.
+  if (
+    !allowlist?.length ||
+    !candidateIds.some((id) => allowlist.includes(id))
+  ) {
+    // Logged at info (not debug) so an operator can see exactly which id
+    // arrived and add it to the allowlist if a message is being dropped.
+    logger.info(
+      { waId, candidateIds, channelId },
       'whatsapp: message rejected by allowlist',
     );
     return null;

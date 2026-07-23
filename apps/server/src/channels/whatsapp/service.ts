@@ -12,6 +12,7 @@ import type { WhatsAppChannelConfig } from '@openaidy/config';
 import type { WhatsAppChannelDeps } from './types.js';
 import { createWhatsAppAuthStore } from './auth-store.js';
 import { handleInboundWhatsAppMessage } from './message-handler.js';
+import { extractText, resolveSenderIds } from './inbound.js';
 
 /**
  * WhatsApp channel implementation using Baileys.
@@ -153,26 +154,33 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
       if (type !== 'notify') return;
 
       for (const msg of messages) {
-        const text =
-          msg.message?.conversation ?? msg.message?.extendedTextMessage?.text;
+        if (msg.key.fromMe) continue;
+
+        const text = extractText(msg.message);
         if (!text) continue;
 
-        const participant = msg.key.participant?.replace('@s.whatsapp.net', '');
-        const remoteJid = msg.key.remoteJid?.replace('@s.whatsapp.net', '');
-        const remoteJidAlt = msg.key.remoteJidAlt?.replace(
-          '@s.whatsapp.net',
-          '',
+        // WhatsApp may address the sender by phone number (PN) or Linked
+        // Identity (LID). Resolve every id form — including the PN behind a
+        // LID — so phone-number allowlists and pre-LID session keys still work.
+        const { primary: waId, candidates } = await resolveSenderIds(
+          msg.key,
+          (lidJid) =>
+            this.socket?.signalRepository?.lidMapping?.getPNForLID(lidJid) ??
+            Promise.resolve(null),
         );
 
-        let waId = participant || remoteJid || remoteJidAlt || '';
-        if (remoteJid?.includes('@lid')) {
-          waId = remoteJidAlt || participant || '';
+        if (!waId) {
+          this.deps.logger.warn(
+            { channelId: this.id, key: msg.key },
+            'whatsapp: could not resolve sender id for inbound message, skipping',
+          );
+          continue;
         }
-        if (!waId) continue;
 
         try {
           const reply = await handleInboundWhatsAppMessage({
             waId,
+            candidateIds: candidates,
             text,
             channelId: this.id,
             agentId: this.config.agentId,
