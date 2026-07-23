@@ -1,7 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
-  type SocketConfig,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -12,7 +11,7 @@ import type { WhatsAppChannelConfig } from '@openaidy/config';
 import type { WhatsAppChannelDeps } from './types.js';
 import { createWhatsAppAuthStore } from './auth-store.js';
 import { handleInboundWhatsAppMessage } from './message-handler.js';
-import { extractText, resolveSenderIds } from './inbound.js';
+import { bareId, extractText, resolveSenderIds } from './inbound.js';
 
 /**
  * WhatsApp channel implementation using Baileys.
@@ -29,6 +28,8 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
   private status: ChannelStatus = 'disconnected';
   private qr: string | null = null;
   private socket: ReturnType<typeof makeWASocket> | null = null;
+  /** Ids of replies we sent, so their echoes don't re-trigger the handler. */
+  private readonly sentMessageIds = new Set<string>();
 
   constructor(
     private readonly config: WhatsAppChannelConfig,
@@ -80,12 +81,17 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
     );
     const { version } = await fetchLatestBaileysVersion();
 
-    const socketConfig: SocketConfig = {
+    const socketConfig: Parameters<typeof makeWASocket>[0] = {
       version,
       auth: state,
       printQRInTerminal: false,
       browser: ['OpenAidy', '1.0.0', 'Ubuntu'],
-    } as SocketConfig;
+      // A reply bot has no use for chat history. Skip syncing it so the socket
+      // isn't busy downloading the full history on every (re)connect — that
+      // flood can starve live message processing.
+      syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
+    };
 
     this.socket = makeWASocket(socketConfig);
 
@@ -154,7 +160,19 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
       if (type !== 'notify') return;
 
       for (const msg of messages) {
-        if (msg.key.fromMe) continue;
+        // Skip our own outbound replies echoing back — prevents reply loops
+        // (a bot reply in the self-chat re-arrives as a fromMe message).
+        if (msg.key.id && this.sentMessageIds.has(msg.key.id)) {
+          this.sentMessageIds.delete(msg.key.id);
+          continue;
+        }
+
+        // fromMe messages are the account owner's own. Only action them in the
+        // self-chat ("Message Yourself"), so the bot works as a personal
+        // assistant there without hijacking messages the user sends to other
+        // people. Messages from others arrive with fromMe=false and are always
+        // processed.
+        if (msg.key.fromMe && !this.isSelfChat(msg.key)) continue;
 
         const text = extractText(msg.message);
         if (!text) continue;
@@ -164,9 +182,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
         // LID — so phone-number allowlists and pre-LID session keys still work.
         const { primary: waId, candidates } = await resolveSenderIds(
           msg.key,
-          (lidJid) =>
-            this.socket?.signalRepository?.lidMapping?.getPNForLID(lidJid) ??
-            Promise.resolve(null),
+          (lidJid) => this.resolvePnForLid(lidJid),
         );
 
         if (!waId) {
@@ -190,7 +206,11 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
           });
 
           if (reply && this.socket) {
-            await this.socket.sendMessage(msg.key.remoteJid!, { text: reply });
+            const sent = await this.socket.sendMessage(msg.key.remoteJid!, {
+              text: reply,
+            });
+            // Remember the id so the echo of our own reply is ignored above.
+            if (sent?.key?.id) this.sentMessageIds.add(sent.key.id);
           }
         } catch (err) {
           this.deps.logger.error(
@@ -217,5 +237,43 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
   private setStatus(s: ChannelStatus): void {
     this.status = s;
     this.emit('status', s);
+  }
+
+  /**
+   * True when a message key belongs to the self-chat ("Message Yourself") —
+   * i.e. the conversation is with our own account (matched on either the PN or
+   * LID form of our identity).
+   */
+  private isSelfChat(key: {
+    remoteJid?: string | null;
+    remoteJidAlt?: string | null;
+  }): boolean {
+    const me = [this.socket?.user?.id, this.socket?.user?.lid]
+      .map((j) => bareId(j))
+      .filter(Boolean);
+    if (!me.length) return false;
+    const chat = [key.remoteJid, key.remoteJidAlt]
+      .map((j) => bareId(j))
+      .filter(Boolean);
+    return chat.some((c) => me.includes(c));
+  }
+
+  /**
+   * Resolve the phone number behind a LID, bounded by a short timeout so a
+   * slow/blocked signal-store lookup can never stall inbound processing.
+   * Returns null on timeout, error, or when no mapping is known.
+   */
+  private async resolvePnForLid(lidJid: string): Promise<string | null> {
+    const lookup =
+      this.socket?.signalRepository?.lidMapping?.getPNForLID(lidJid);
+    if (!lookup) return null;
+    const timeout = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 2000),
+    );
+    try {
+      return await Promise.race([lookup, timeout]);
+    } catch {
+      return null;
+    }
   }
 }

@@ -101,13 +101,11 @@ export async function handleInboundWhatsAppMessage(params: {
     { waId, candidateIds, text, channelId, agentId, allowlist },
     'whatsapp: message received',
   );
-  // 1. Allowlist check (empty or missing = reject all). Match against any of
-  //    the sender's id forms so a phone-number allowlist works even when the
-  //    message arrives via LID addressing.
-  if (
-    !allowlist?.length ||
-    !candidateIds.some((id) => allowlist.includes(id))
-  ) {
+  // 1. Allowlist gate. An empty/absent allowlist allows everyone — matching
+  //    the channel UI ("leave empty to allow everyone"). A non-empty allowlist
+  //    restricts to the listed ids, matched against any of the sender's id
+  //    forms so a phone-number allowlist works even under LID addressing.
+  if (allowlist?.length && !candidateIds.some((id) => allowlist.includes(id))) {
     // Logged at info (not debug) so an operator can see exactly which id
     // arrived and add it to the allowlist if a message is being dropped.
     logger.info(
