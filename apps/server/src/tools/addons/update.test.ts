@@ -186,6 +186,50 @@ describe('addon_update tool', () => {
     );
   });
 
+  it('re-injects the Tailwind CDN when overwriting index.html without it', async () => {
+    // Regression: the agent never authors the Tailwind tag (create injects it),
+    // so an update that rewrites index.html must re-inject it or styling breaks.
+    const result = await tool.execute(
+      {
+        id: 'demo',
+        files: {
+          'app/index.html':
+            '<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>',
+        },
+      },
+      CTX,
+    );
+    expect(result.ok).toBe(true);
+    const html = fs.readFileSync(
+      path.join(addonsDir, 'demo', 'app', 'index.html'),
+      'utf-8',
+    );
+    expect(html).toContain('https://cdn.tailwindcss.com');
+    // Injected before the SDK script, so ordering is preserved.
+    expect(html.indexOf('cdn.tailwindcss.com')).toBeLessThan(
+      html.indexOf('/sdk/openaidy-sdk.js'),
+    );
+  });
+
+  it('does not duplicate the Tailwind CDN tag when already present', async () => {
+    const result = await tool.execute(
+      {
+        id: 'demo',
+        files: {
+          'app/index.html':
+            '<!DOCTYPE html><html><body><script src="https://cdn.tailwindcss.com"></script><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>',
+        },
+      },
+      CTX,
+    );
+    expect(result.ok).toBe(true);
+    const html = fs.readFileSync(
+      path.join(addonsDir, 'demo', 'app', 'index.html'),
+      'utf-8',
+    );
+    expect(html.match(/cdn\.tailwindcss\.com/g)?.length).toBe(1);
+  });
+
   it('rejects undeclared external fetch() domains', async () => {
     expectError(
       await tool.execute(
