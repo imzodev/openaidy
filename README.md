@@ -1,19 +1,89 @@
 <p align="center">
-  <img src="./docs/assets/banner.png" alt="OpenAidy" width="892" />
+  <img src="./docs/assets/banner.png" alt="OpenAidy — Open Source AI Agent Platform" width="892" />
 </p>
 
 # OpenAidy — OpenAI Do-it Yourself
 
-A plugin-first AI operations platform for running agents, orchestrating automated work, connecting messaging channels, and extending both the backend and UI through stable public APIs.
+> **The open source AI agent platform for self-hosting, automating, and extending your own AI operations.**
+> Plugin-first. Real-time. MCP-native. MIT licensed.
+
+<p align="center">
+  <a href="https://github.com/imzodev/openaidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/openaidy?style=flat-square&color=blue" alt="License: MIT" /></a>
+  <a href="https://github.com/imzodev/openaidy/stargazers"><img src="https://img.shields.io/github/stars/imzodev/openaidy?style=flat-square" alt="GitHub stars" /></a>
+  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imzodev/openaidy?style=flat-square" alt="Open issues" /></a>
+  <a href="https://github.com/imzodev/openaidy/network/members"><img src="https://img.shields.io/github/forks/imzodev/openaidy?style=flat-square" alt="Forks" /></a>
+  <a href="https://github.com/imzodev/openaidy/commits/main"><img src="https://img.shields.io/github/last-commit/imzodev/openaidy?style=flat-square" alt="Last commit" /></a>
+</p>
+
+---
+
+## Why OpenAidy?
+
+Most agent tooling today falls into one of three traps:
+
+- **Chat-only platforms** that are great at single conversations but can't run real automation, scheduled work, or multi-channel workflows.
+- **Workflow engines** (n8n, Zapier-style) that automate anything but treat the LLM as just another node — no first-class agent runtime, no real-time streaming.
+- **Multi-agent frameworks** (CrewAI, AutoGen-style) that ship great orchestration primitives but ship no platform — no UI, no persistence, no auth, no channels, no scheduler.
+
+**OpenAidy is the fourth option**: an open source, self-hostable AI agent platform that combines all three.
+
+You get persistent sessions with token-by-token streaming, a real cron and event scheduler, plugin-based channels (WhatsApp today; Telegram, Discord, Slack next), MCP as a first-class interoperability layer, and a SolidJS operator UI — all from one `pnpm dev`.
+
+## Quick start
+
+```bash
+git clone https://github.com/imzodev/openaidy.git && cd openaidy
+pnpm install && pnpm dev
+# → API at http://localhost:3001, UI at http://localhost:5173
+```
+
+That's the whole install. SQLite is used by default, so there's no database to provision. Add your provider keys in **Settings → Providers** and you're running agents.
+
+## Who is this for?
+
+✅ **You're a good fit if you want to:**
+
+- Self-host an AI agent runtime with a real UI (no SaaS dependency, no vendor lock-in).
+- Run agents on a schedule, react to events, or trigger them from messaging channels.
+- Stream tokens live to an operator dashboard while keeping full transcripts on disk.
+- Extend a small, stable core with your own tools, channels, providers, and UI panels — without forking.
+- Plug into the MCP ecosystem on either side (consume MCP servers **and** expose your platform as one).
+
+❌ **OpenAidy is probably not for you if you:**
+
+- Just want a chat UI to talk to one model — use OpenAI's playground, Claude.ai, or ChatGPT.
+- Need a no-code visual workflow builder with hundreds of pre-built integrations — use n8n or Zapier.
+- Are building a research-only multi-agent experiment and don't care about persistence, auth, or a UI — CrewAI or AutoGen may be lighter.
+- Want a managed cloud product — OpenAidy is self-hosted by design.
+
+## How OpenAidy compares
+
+| Capability                              | OpenAidy | n8n   | CrewAI | AutoGen |
+| --------------------------------------- | :------: | :---: | :----: | :-----: |
+| **Self-hostable**                       |    ✅    |  ✅   |   ❌   |    ❌   |
+| **Built-in operator UI**                |    ✅    |  ✅   |   ❌   |    ❌   |
+| **Real-time token streaming**           |    ✅    |  🟡   |   ❌   |    ❌   |
+| **Persistent agent sessions**           |    ✅    |  🟡   |   ❌   |    ❌   |
+| **Cron + one-shot scheduler**           |    ✅    |  ✅   |   ❌   |    ❌   |
+| **First-class MCP support**             |    ✅    |  🟡   |   ❌   |    ✅   |
+| **Plugin SDK (tools, channels, UI)**    |    ✅    |  ✅   |   ❌   |    ❌   |
+| **Messaging channels (WhatsApp, etc.)** |    ✅    |  ✅   |   ❌   |    ❌   |
+| **Multi-agent orchestration**           |    ✅    |  🟡   |   ✅   |    ✅   |
+| **Provider-agnostic (OpenAI/Anthropic/Gemini/local)** | ✅ | ✅ | ✅ | ✅ |
+| **License**                             |   MIT    |  ⚖️   |  MIT   |   MIT   |
+
+Legend: ✅ yes &nbsp;&nbsp; 🟡 partial &nbsp;&nbsp; ❌ no &nbsp;&nbsp; ⚖️ "Sustainable Use" (not OSI-open)
+
+This is an honest comparison, not a sales pitch. Choose the tool that fits the job.
 
 ## What it does
 
-- Run AI agents in persistent sessions with real-time streaming
+- Run AI agents in persistent sessions with real-time token streaming
 - Schedule and automate agent work with cron and one-shot jobs
-- Connect agents to messaging channels and external systems
+- Connect agents to messaging channels (WhatsApp ships today; Telegram, Discord, Slack planned)
 - Manage trusted devices and runtime instances through a pairing system
-- Extend the platform with plugins, custom tools, UI panels, and integrations
-- Connect to any MCP server and expose platform capabilities through MCP
+- Extend the platform with plugins: custom tools, UI panels, channels, integrations
+- Connect to any MCP server, and expose selected platform capabilities back through MCP
 
 ## Repository layout
 
@@ -35,6 +105,7 @@ openaidy/
     skills/       # Bundled default skills seeded on first run
   docs/           # Architecture and design documentation
   plugins/        # First-party and example plugins
+  landing/        # Public marketing site (Vite + React)
 ```
 
 ## Prerequisites
@@ -235,4 +306,4 @@ See the [`docs/`](./docs/) directory for detailed documentation:
 
 ## License
 
-MIT
+[MIT](./LICENSE) — do-it-yourself, for real.
