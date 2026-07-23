@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/imzodev/openaidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/openaidy?style=flat-square&color=blue" alt="License: MIT" /></a>
   <a href="https://github.com/imzodev/openaidy/stargazers"><img src="https://img.shields.io/github/stars/imzodev/openaidy?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imenaidy/openaidy?style=flat-square" alt="Open issues" /></a>
+  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imzodev/openaidy?style=flat-square" alt="Open issues" /></a>
   <a href="https://github.com/imzodev/openaidy/network/members"><img src="https://img.shields.io/github/forks/imzodev/openaidy?style=flat-square" alt="Forks" /></a>
   <a href="https://github.com/imzodev/openaidy/commits/main"><img src="https://img.shields.io/github/last-commit/imzodev/openaidy?style=flat-square" alt="Last commit" /></a>
   <a href="https://www.npmjs.com/package/@openaidy/app"><img src="https://img.shields.io/npm/v/@openaidy/app?style=flat-square&color=red" alt="npm: @openaidy/app" /></a>
