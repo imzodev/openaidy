@@ -90,20 +90,22 @@ describe('handleInboundWhatsAppMessage', () => {
     expect(mockSessionService.submitMessageNonStreaming).not.toHaveBeenCalled();
   });
 
-  it('rejects message when allowlist is empty', async () => {
+  it('allows everyone when allowlist is empty (matches UI: leave empty to allow all)', async () => {
     const reply = await handleInboundWhatsAppMessage({
       ...baseParams,
       allowlist: [],
     });
-    expect(reply).toBeNull();
+    expect(reply).toBe('Hello human!');
+    expect(mockSessionService.submitMessageNonStreaming).toHaveBeenCalled();
   });
 
-  it('rejects message when allowlist is undefined', async () => {
+  it('allows everyone when allowlist is undefined', async () => {
     const reply = await handleInboundWhatsAppMessage({
       ...baseParams,
       allowlist: undefined,
     });
-    expect(reply).toBeNull();
+    expect(reply).toBe('Hello human!');
+    expect(mockSessionService.submitMessageNonStreaming).toHaveBeenCalled();
   });
 
   it('returns null and logs error when agent invocation fails', async () => {
