@@ -20,21 +20,13 @@ import type { AddonManifest } from '@openaidy/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import type { AddonToolDeps } from './create.js';
 import { addonUpdateMeta } from '../catalog.js';
-
-// ── Validation helpers ────────────────────────────────────────────────────────
-
-function isValidId(id: string): boolean {
-  return /^[a-z0-9][a-z0-9-]*$/.test(id);
-}
-
-/** Returns an error string if the path is unsafe, otherwise null. */
-function relativePathError(filePath: string): string | null {
-  const parts = filePath.split('/');
-  if (parts.some((p) => p === '..' || p === '.') || filePath.startsWith('/')) {
-    return `File path "${filePath}" must be relative with no ".." segments`;
-  }
-  return null;
-}
+import {
+  isValidId,
+  relativePathError,
+  injectTailwindCdn,
+  validateEntryScripts,
+  extractExternalFetchHosts,
+} from './shared.js';
 
 const MANIFEST_FIELD_KEYS = [
   'name',
@@ -241,33 +233,16 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           filesToWrite[filePath] = content;
         }
 
-        // If overwriting index.html, enforce SDK-before-app-script ordering.
+        // If overwriting index.html, enforce SDK-before-app-script ordering,
+        // then auto-inject the Tailwind CDN — identical to addon_create. The
+        // agent never authors the Tailwind tag (the tooling adds it), so
+        // without re-injecting here an update that rewrites index.html would
+        // strip it and break every utility class in the addon.
         const html = filesToWrite['app/index.html'];
         if (typeof html === 'string') {
-          if (!html.includes('<script src="index.js">')) {
-            return {
-              ok: false,
-              error:
-                'app/index.html must contain <script src="index.js"></script> before </body>',
-            };
-          }
-          if (!html.includes('<script src="/sdk/openaidy-sdk.js">')) {
-            return {
-              ok: false,
-              error:
-                'app/index.html must load the SDK statically: <script src="/sdk/openaidy-sdk.js"></script> must appear before <script src="index.js">',
-            };
-          }
-          if (
-            html.indexOf('<script src="/sdk/openaidy-sdk.js">') >
-            html.indexOf('<script src="index.js">')
-          ) {
-            return {
-              ok: false,
-              error:
-                '<script src="/sdk/openaidy-sdk.js"> must appear before <script src="index.js"> in app/index.html',
-            };
-          }
+          const scriptError = validateEntryScripts(html);
+          if (scriptError) return { ok: false, error: scriptError };
+          filesToWrite['app/index.html'] = injectTailwindCdn(html);
         }
       }
 
@@ -365,35 +340,18 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           : [];
       {
         const newContent = Object.values(filesToWrite).join('\n');
-        const fetchMatches = newContent.match(
-          /fetch\(\s*['"`](https?:\/\/[^'"`\s]+)/g,
+        const undeclared = extractExternalFetchHosts(newContent).filter(
+          (h) => !effectiveExternalDomains.includes(h),
         );
-        if (fetchMatches && fetchMatches.length > 0) {
-          const hosts = fetchMatches
-            .map((m) => {
-              const url = m.replace(/fetch\(\s*['"`]/, '');
-              try {
-                return new URL(url).hostname;
-              } catch {
-                return null;
-              }
-            })
-            .filter((h): h is string => h !== null);
-          const undeclared = [
-            ...new Set(
-              hosts.filter((h) => !effectiveExternalDomains.includes(h)),
-            ),
-          ];
-          if (undeclared.length > 0) {
-            return {
-              ok: false,
-              error:
-                'Your updated files call fetch() on external URLs not in externalDomains. ' +
-                `The browser will block these via CSP. Pass externalDomains including: [${undeclared
-                  .map((h) => `"${h}"`)
-                  .join(', ')}]`,
-            };
-          }
+        if (undeclared.length > 0) {
+          return {
+            ok: false,
+            error:
+              'Your updated files call fetch() on external URLs not in externalDomains. ' +
+              `The browser will block these via CSP. Pass externalDomains including: [${undeclared
+                .map((h) => `"${h}"`)
+                .join(', ')}]`,
+          };
         }
       }
 
