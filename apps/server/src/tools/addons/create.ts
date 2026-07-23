@@ -24,6 +24,13 @@ import type { AddonManifest } from '@openaidy/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import { renderSdkReference, SDK_METHODS } from '../../addons/sdk-reference.js';
 import { addonCreateMeta } from '../catalog.js';
+import {
+  isValidId,
+  injectTailwindCdn,
+  validateEntryScripts,
+  extractExternalFetchHosts,
+  TAILWIND_CDN_HOST,
+} from './shared.js';
 
 export type AddonToolDeps = {
   /** Absolute path to the root addons directory (e.g. .openaidy/addons) */
@@ -40,38 +47,6 @@ export type AddonToolDeps = {
    */
   storageEngine?: import('../../addons/storage/engine').AddonStorageEngine;
 };
-
-// ── Validation helpers ────────────────────────────────────────────────────────
-
-function isValidId(id: string): boolean {
-  return /^[a-z0-9][a-z0-9-]*$/.test(id);
-}
-
-// ── Tailwind CDN auto-injection ────────────────────────────────────────────
-//
-// Every addon gets Tailwind CSS for free — the agent should never have to
-// remember to add it. We inject the plain (unversioned) Play CDN script,
-// which always serves the latest Tailwind v3; a specific release can be
-// pinned later by appending "/<version>" to the URL, once that path format
-// is verified against the currently-shipped version (not done here, since it
-// isn't checkable without network access at authoring time, and a wrong pin
-// would silently 404 every addon's styling).
-const TAILWIND_CDN_URL = 'https://cdn.tailwindcss.com';
-const TAILWIND_CDN_HOST = 'cdn.tailwindcss.com';
-const SDK_SCRIPT_TAG = '<script src="/sdk/openaidy-sdk.js">';
-
-/**
- * Inject the Tailwind CDN <script> tag into an addon's index.html, right
- * before the (already-validated) SDK script tag. Idempotent — a no-op if the
- * agent already included the tag itself.
- */
-function injectTailwindCdn(html: string): string {
-  if (html.includes(TAILWIND_CDN_HOST)) return html;
-  return html.replace(
-    SDK_SCRIPT_TAG,
-    `<script src="${TAILWIND_CDN_URL}"></script>\n  ${SDK_SCRIPT_TAG}`,
-  );
-}
 
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
 
@@ -410,29 +385,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       {
         const html = (filesArg as Record<string, unknown>)['app/index.html'];
         if (typeof html === 'string') {
-          if (!html.includes('<script src="index.js">')) {
-            return {
-              ok: false,
-              error:
-                'app/index.html must contain <script src="index.js"></script> before </body>',
-            };
-          }
-          if (!html.includes('<script src="/sdk/openaidy-sdk.js">')) {
-            return {
-              ok: false,
-              error:
-                'app/index.html must load the SDK statically: <script src="/sdk/openaidy-sdk.js"></script> must appear before <script src="index.js">',
-            };
-          }
-          const sdkPos = html.indexOf('<script src="/sdk/openaidy-sdk.js">');
-          const jsPos = html.indexOf('<script src="index.js">');
-          if (sdkPos > jsPos) {
-            return {
-              ok: false,
-              error:
-                '<script src="/sdk/openaidy-sdk.js"> must appear before <script src="index.js"> in app/index.html',
-            };
-          }
+          const scriptError = validateEntryScripts(html);
+          if (scriptError) return { ok: false, error: scriptError };
         }
       }
       for (const [filePath, content] of Object.entries(
@@ -468,33 +422,17 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       // ── Validate externalDomains: detect undeclared external fetch() calls ─
       {
         const allContent = Object.values(extraFiles).join('\n');
-        const fetchMatches = allContent.match(
-          /fetch\(\s*['"`](https?:\/\/[^'"`\s]+)/g,
+        const undeclared = extractExternalFetchHosts(allContent).filter(
+          (h) => !externalDomains || !externalDomains.includes(h),
         );
-        if (fetchMatches && fetchMatches.length > 0) {
-          const mentionedHosts = fetchMatches
-            .map((m) => {
-              const url = m.replace(/fetch\(\s*['"`]/, '');
-              try {
-                return new URL(url).hostname;
-              } catch {
-                return null;
-              }
-            })
-            .filter((h): h is string => h !== null);
-          const undeclared = mentionedHosts.filter(
-            (h) => !externalDomains || !externalDomains.includes(h),
-          );
-          if (undeclared.length > 0) {
-            const unique = [...new Set(undeclared)];
-            return {
-              ok: false,
-              error:
-                `Your addon calls fetch() on external URLs but externalDomains is missing or incomplete. ` +
-                `The browser will block these requests via CSP. ` +
-                `Add the following to externalDomains: [${unique.map((h) => `"${h}"`).join(', ')}]`,
-            };
-          }
+        if (undeclared.length > 0) {
+          return {
+            ok: false,
+            error:
+              `Your addon calls fetch() on external URLs but externalDomains is missing or incomplete. ` +
+              `The browser will block these requests via CSP. ` +
+              `Add the following to externalDomains: [${undeclared.map((h) => `"${h}"`).join(', ')}]`,
+          };
         }
       }
 
