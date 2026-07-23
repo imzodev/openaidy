@@ -10,9 +10,10 @@
 <p align="center">
   <a href="https://github.com/imzodev/openaidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/openaidy?style=flat-square&color=blue" alt="License: MIT" /></a>
   <a href="https://github.com/imzodev/openaidy/stargazers"><img src="https://img.shields.io/github/stars/imzodev/openaidy?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imzodev/openaidy?style=flat-square" alt="Open issues" /></a>
+  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imenaidy/openaidy?style=flat-square" alt="Open issues" /></a>
   <a href="https://github.com/imzodev/openaidy/network/members"><img src="https://img.shields.io/github/forks/imzodev/openaidy?style=flat-square" alt="Forks" /></a>
   <a href="https://github.com/imzodev/openaidy/commits/main"><img src="https://img.shields.io/github/last-commit/imzodev/openaidy?style=flat-square" alt="Last commit" /></a>
+  <a href="https://www.npmjs.com/package/@openaidy/app"><img src="https://img.shields.io/npm/v/@openaidy/app?style=flat-square&color=red" alt="npm: @openaidy/app" /></a>
 </p>
 
 ---
@@ -27,9 +28,34 @@ Most agent tooling today falls into one of three traps:
 
 **OpenAidy is the fourth option**: an open source, self-hostable AI agent platform that combines all three.
 
-You get persistent sessions with token-by-token streaming, a real cron and event scheduler, plugin-based channels (WhatsApp today; Telegram, Discord, Slack next), MCP as a first-class interoperability layer, and a SolidJS operator UI — all from one `pnpm dev`.
+You get persistent sessions with token-by-token streaming, a real cron and event scheduler, plugin-based channels (WhatsApp today; Telegram, Discord, Slack next), MCP as a first-class interoperability layer, and a SolidJS operator UI — all from one command.
 
 ## Quick start
+
+The fastest way to run OpenAidy — no git clone, no build step. The installer provisions a managed Node.js 22 runtime (only if your system Node is too old for `node:sqlite`), installs ripgrep, pulls the prebuilt `@openaidy/app` from npm, generates a bootstrap admin token, and opens your browser to the login screen with the token pre-filled.
+
+**macOS / Linux / WSL:**
+
+```bash
+curl -fsSL https://openaidy.com/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iex (irm https://openaidy.com/install.ps1)
+```
+
+Then you have a clean, tiny CLI:
+
+```bash
+openaidy start    # boot the server + UI on http://localhost:3001
+openaidy stop     # shut it down
+openaidy status   # check whether it's running
+openaidy init     # regenerate the bootstrap admin token if needed
+```
+
+**For contributors** — building from source:
 
 ```bash
 git clone https://github.com/imzodev/openaidy.git && cd openaidy
@@ -37,7 +63,7 @@ pnpm install && pnpm dev
 # → API at http://localhost:3001, UI at http://localhost:5173
 ```
 
-That's the whole install. SQLite is used by default, so there's no database to provision. Add your provider keys in **Settings → Providers** and you're running agents.
+The dev mode runs the API server and Vite UI separately with hot reload.
 
 ## Who is this for?
 
@@ -108,13 +134,16 @@ openaidy/
   landing/        # Public marketing site (Vite + React)
 ```
 
-## Prerequisites
+## Prerequisites (for building from source)
 
-- [Node.js](https://nodejs.org) v20+
+The installer takes care of Node.js and ripgrep for you. If you want to develop or self-host from a source checkout, install these manually:
+
+- [Node.js](https://nodejs.org) v22.13+ (or v24+) — required for Node's built-in `node:sqlite`
 - [pnpm](https://pnpm.io) v10+
+- [ripgrep](https://github.com/BurntSushi/ripgrep) — required by `code_search` / `code_glob` tools
 - PostgreSQL (optional — SQLite is used by default)
 
-## Setup
+## Setup from source
 
 1. **Clone the repository**
 
