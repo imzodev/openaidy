@@ -9,6 +9,7 @@ vi.mock('../../lib/api', () => ({
   writeWorkspaceFile: vi.fn(),
   renameWorkspaceFile: vi.fn(),
   deleteWorkspaceFile: vi.fn(),
+  downloadWorkspaceFile: vi.fn(),
 }));
 
 describe('FileExplorer', () => {
@@ -186,6 +187,51 @@ describe('FileExplorer', () => {
     );
 
     promptSpy.mockRestore();
+  });
+
+  it('should download a file when the download button is clicked', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({ items: mockFiles });
+    vi.mocked(api.downloadWorkspaceFile).mockResolvedValue(undefined);
+
+    render(() => <FileExplorer agentId="test-agent" />);
+
+    await screen.findByText('file1.txt');
+    fireEvent.click(screen.getByLabelText('Download file1.txt'));
+
+    expect(api.downloadWorkspaceFile).toHaveBeenCalledWith(
+      'test-agent',
+      'file1.txt',
+      'file1.txt',
+    );
+  });
+
+  it('should not select a file when its download button is clicked', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({ items: mockFiles });
+    vi.mocked(api.downloadWorkspaceFile).mockResolvedValue(undefined);
+
+    const onFileSelect = vi.fn();
+    render(() => (
+      <FileExplorer agentId="test-agent" onFileSelect={onFileSelect} />
+    ));
+
+    await screen.findByText('file1.txt');
+    fireEvent.click(screen.getByLabelText('Download file1.txt'));
+
+    expect(onFileSelect).not.toHaveBeenCalled();
+  });
+
+  it('should show a download error in the error banner', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({ items: mockFiles });
+    vi.mocked(api.downloadWorkspaceFile).mockRejectedValue(
+      new Error('Network down'),
+    );
+
+    render(() => <FileExplorer agentId="test-agent" />);
+
+    await screen.findByText('file1.txt');
+    fireEvent.click(screen.getByLabelText('Download file1.txt'));
+
+    expect(await screen.findByText('Network down')).toBeInTheDocument();
   });
 
   it('should sort directories before files', async () => {
