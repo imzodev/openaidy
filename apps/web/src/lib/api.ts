@@ -716,6 +716,38 @@ export async function fetchWorkspaceFileBlob(
 }
 
 /**
+ * Download a workspace file to the user's machine. Streams the file via
+ * the authenticated raw endpoint, then triggers a browser save dialog
+ * with `fileName` as the suggested filename.
+ *
+ * The fetch goes through the Bearer-token wrapper, so a plain
+ * `<a href="/api/...">` won't work (the browser can't attach the auth
+ * header). We pull the bytes, build an object URL, click an anchor
+ * programmatically, and revoke the URL once the save has been kicked
+ * off — keeping the blob alive long enough for the download to start.
+ */
+export async function downloadWorkspaceFile(
+  agentId: string,
+  filePath: string,
+  fileName: string,
+): Promise<void> {
+  const blob = await fetchWorkspaceFileBlob(agentId, filePath);
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    // Firefox requires the anchor to be in the DOM for the click to
+    // be honored; appending/cleaning keeps the side effect invisible.
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
  * Write a file to an agent's workspace
  */
 export async function writeWorkspaceFile(
