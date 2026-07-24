@@ -146,6 +146,7 @@ export type SessionsStore = Pick<
   | 'updateTitle'
   | 'updateAgentId'
   | 'updateStatus'
+  | 'updateFavorite'
   | 'delete'
   | 'searchByTitle'
   | 'searchByContent'
