@@ -1,14 +1,18 @@
 import { For, Show, createMemo } from 'solid-js';
-import { MessageSquare, Trash2 } from 'lucide-solid';
+import { MessageSquare, Star } from 'lucide-solid';
 import type { Session } from '../lib/api';
 
 type SessionListProps = {
   sessions: Session[];
   selectedId: string | undefined;
   onSelect: (id: string) => void;
+  onToggleFavorite?: (id: string, favorited: boolean) => void | Promise<void>;
   isLoading?: boolean;
   isCollapsed: boolean;
+  /** Highlight the selected session (only meaningful while the chat view is open). */
   isActiveView: boolean;
+  /** How many recent (non-favorite) sessions to show. */
+  recentLimit?: number;
 };
 
 // Most recent activity first. Falls back to createdAt for legacy sessions that
@@ -18,67 +22,94 @@ function lastActivityMs(session: Session): number {
   return ts ? new Date(ts).getTime() : 0;
 }
 
+const isFavorite = (session: Session): boolean => !!session.favoritedAt;
+
+/**
+ * Sidebar quick-access list: user-curated Favorites on top, then the most
+ * recently-active sessions (excluding favorites, so nothing appears twice).
+ * Two questions, two sections — recency is automatic, favorites are deliberate.
+ * Hidden when the sidebar is collapsed (it's a text list, not an icon rail).
+ */
 export function SessionList(props: SessionListProps) {
-  const sortedSessions = createMemo(() =>
-    [...props.sessions].sort((a, b) => lastActivityMs(b) - lastActivityMs(a)),
+  const favorites = createMemo(() =>
+    [...props.sessions]
+      .filter(isFavorite)
+      .sort((a, b) => lastActivityMs(b) - lastActivityMs(a)),
   );
+
+  const recent = createMemo(() =>
+    [...props.sessions]
+      .filter((s) => !isFavorite(s))
+      .sort((a, b) => lastActivityMs(b) - lastActivityMs(a))
+      .slice(0, props.recentLimit ?? 5),
+  );
+
+  const renderItem = (session: Session) => (
+    <li>
+      <div
+        onClick={() => props.onSelect(session.id)}
+        class={`w-full text-left py-1.5 px-3 rounded-lg transition-colors group flex items-center gap-2 cursor-pointer ${
+          props.isActiveView && props.selectedId === session.id
+            ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
+        }`}
+        title={session.title}
+      >
+        <MessageSquare class="w-4 h-4 flex-shrink-0" />
+        <span class="truncate flex-1 text-sm">{session.title}</span>
+        <Show when={props.onToggleFavorite}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              void props.onToggleFavorite?.(session.id, !isFavorite(session));
+            }}
+            class={`p-0.5 transition-opacity ${
+              isFavorite(session)
+                ? 'text-amber-400'
+                : 'opacity-0 group-hover:opacity-100 text-text-tertiary hover:text-amber-400'
+            }`}
+            aria-label={
+              isFavorite(session) ? 'Remove from favorites' : 'Add to favorites'
+            }
+          >
+            <Star
+              class={`w-3.5 h-3.5 ${isFavorite(session) ? 'fill-amber-400' : ''}`}
+            />
+          </button>
+        </Show>
+      </div>
+    </li>
+  );
+
+  // The quick-access list is a text list; collapsed rail shows nav icons only.
   return (
-    <div class="h-full flex flex-col">
-      <Show when={props.isLoading}>
-        <div class="p-4 text-center text-text-tertiary">
-          <Show when={!props.isCollapsed}>
-            <span>Loading sessions...</span>
-          </Show>
-          <Show when={props.isCollapsed}>
-            <span class="animate-pulse">...</span>
-          </Show>
-        </div>
-      </Show>
+    <Show when={!props.isCollapsed}>
+      <div class="flex flex-col">
+        <Show when={props.isLoading}>
+          <div class="px-4 py-2 text-xs text-text-tertiary">
+            Loading sessions...
+          </div>
+        </Show>
 
-      <Show when={!props.isLoading && props.sessions.length === 0}>
-        <div
-          class={`p-4 text-center text-text-tertiary ${props.isCollapsed ? 'px-2' : ''}`}
-        >
-          <MessageSquare class="w-6 h-6 mx-auto mb-2 opacity-50" />
-          <Show when={!props.isCollapsed}>
-            <p class="text-sm">No sessions yet</p>
-            <p class="text-xs mt-1">Create one</p>
-          </Show>
-        </div>
-      </Show>
+        <Show when={!props.isLoading && favorites().length > 0}>
+          <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1">
+            <Star class="w-3 h-3 fill-amber-400 text-amber-400" />
+            Favorites
+          </h3>
+          <ul class="space-y-0.5 px-2 mb-1">
+            <For each={favorites()}>{renderItem}</For>
+          </ul>
+        </Show>
 
-      <ul class="space-y-1 p-2 flex-1 overflow-y-auto">
-        <For each={sortedSessions()}>
-          {(session) => (
-            <li>
-              <div
-                onClick={() => props.onSelect(session.id)}
-                class={`w-full text-left py-2 rounded-lg transition-colors group flex items-center cursor-pointer ${
-                  props.isActiveView && props.selectedId === session.id
-                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
-                } ${props.isCollapsed ? 'justify-center px-0' : 'px-3 gap-2'}`}
-                title={props.isCollapsed ? session.title : undefined}
-              >
-                <MessageSquare class="w-4 h-4 flex-shrink-0" />
-                <Show when={!props.isCollapsed}>
-                  <span class="truncate flex-1">{session.title}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // TODO: Implement delete
-                    }}
-                    class="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-opacity"
-                    aria-label="Delete session"
-                  >
-                    <Trash2 class="w-3 h-3" />
-                  </button>
-                </Show>
-              </div>
-            </li>
-          )}
-        </For>
-      </ul>
-    </div>
+        <Show when={!props.isLoading && recent().length > 0}>
+          <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider">
+            Recent
+          </h3>
+          <ul class="space-y-0.5 px-2">
+            <For each={recent()}>{renderItem}</For>
+          </ul>
+        </Show>
+      </div>
+    </Show>
   );
 }
