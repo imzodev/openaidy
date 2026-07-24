@@ -7,12 +7,15 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Download,
+  Loader2,
 } from 'lucide-solid';
 import {
   writeWorkspaceFile,
   deleteWorkspaceFile,
   renameWorkspaceFile,
   listWorkspaceFiles,
+  downloadWorkspaceFile,
   type WorkspaceFileInfo,
   type WorkspaceFileListResponse,
   type WorkspaceWriteResponse,
@@ -59,6 +62,9 @@ export function FileExplorer(props: FileExplorerProps) {
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [selectedFile, setSelectedFile] = createSignal<string | null>(null);
+  const [downloadingPaths, setDownloadingPaths] = createSignal<Set<string>>(
+    new Set(),
+  );
 
   const canWrite = () => props.canWrite ?? true;
 
@@ -227,6 +233,31 @@ export function FileExplorer(props: FileExplorerProps) {
     await fetchFiles(currentPath());
   };
 
+  const handleDownloadFile = async (item: FileNode, event: MouseEvent) => {
+    event.stopPropagation();
+    if (item.isDirectory) {
+      return;
+    }
+
+    setError(null);
+    setDownloadingPaths((prev) => {
+      const next = new Set(prev);
+      next.add(item.path);
+      return next;
+    });
+    try {
+      await downloadWorkspaceFile(props.agentId, item.path, item.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download file');
+    } finally {
+      setDownloadingPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(item.path);
+        return next;
+      });
+    }
+  };
+
   const formatSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -343,6 +374,28 @@ export function FileExplorer(props: FileExplorerProps) {
                   <span class="text-xs text-text-tertiary hidden lg:inline">
                     {formatDate(item.modifiedAt)}
                   </span>
+
+                  {/* Download — available regardless of write access since
+                      the raw route only needs read permission. */}
+                  <Show when={!item.isDirectory}>
+                    <div class="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Download file"
+                        aria-label={`Download ${item.name}`}
+                        disabled={downloadingPaths().has(item.path)}
+                        onClick={(event) => handleDownloadFile(item, event)}
+                      >
+                        <Show
+                          when={downloadingPaths().has(item.path)}
+                          fallback={<Download class="w-3.5 h-3.5" />}
+                        >
+                          <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                        </Show>
+                      </button>
+                    </div>
+                  </Show>
 
                   <Show when={!item.isDirectory && canWrite()}>
                     <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

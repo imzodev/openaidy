@@ -12,6 +12,7 @@ import {
   type PersistedImage,
 } from '../mcp/screenshot-capture';
 import type { BuiltinToolRegistry } from '../tools';
+import type { MediaShareResult } from '../tools/media/share';
 import type { AttachmentService } from '../attachments/service';
 import type {
   ToolDefinition,
@@ -1177,7 +1178,15 @@ export class SessionMessageService {
         const inline: RuntimeMessageAttachment[] = [];
         const degradedNotes: string[] = [];
         for (const att of msgAttachments) {
-          if (att.kind !== 'image' && att.kind !== 'audio') continue;
+          // Video (and any future non-vision/audio kind) never inlines into
+          // provider requests — degrade to a file-path note so the model
+          // knows the file exists and can reach it with tools.
+          if (att.kind !== 'image' && att.kind !== 'audio') {
+            degradedNotes.push(
+              `[Attached ${att.kind}${att.name ? ` "${att.name}"` : ''} (${att.mimeType}) is saved at ${att.storagePath} — this model cannot process it natively; use an available tool to analyze the file.]`,
+            );
+            continue;
+          }
           const supported =
             att.kind === 'image' ? modelSupportsVision : modelSupportsAudio;
           if (!supported) {
@@ -1660,6 +1669,9 @@ export class SessionMessageService {
             let toolContent: string | undefined;
             let toolIsError = false;
             let absolutePathFromTool: string | undefined;
+            // Media a tool asked to share in chat (media_share) — registered
+            // as an attachment on the tool result message below.
+            let mediaShareFromTool: MediaShareResult | undefined;
             // Inline images a tool returned and we persisted to disk —
             // registered as attachments on the tool result message below.
             let persistedImages: PersistedImage[] = [];
@@ -1812,15 +1824,20 @@ export class SessionMessageService {
                 toolIsError = true;
               } else {
                 toolContent = builtinResult.content;
-                // workspace_write returns absolutePath but the BuiltinTool type
-                // doesn't expose it, so we need to cast to access it
+                // workspace_write returns absolutePath and media_share returns
+                // a media payload, but the BuiltinTool type doesn't expose
+                // them, so we need to cast to access them
                 const resultWithPath = builtinResult as {
                   ok: true;
                   content: string;
                   absolutePath?: string;
+                  media?: MediaShareResult;
                 };
                 if (resultWithPath.absolutePath) {
                   absolutePathFromTool = resultWithPath.absolutePath;
+                }
+                if (resultWithPath.media) {
+                  mediaShareFromTool = resultWithPath.media;
                 }
               }
             } else {
@@ -1939,6 +1956,32 @@ export class SessionMessageService {
                 ...(toolIsError ? { isError: true } : {}),
                 metadata: toolMetadata,
               });
+
+              // Register media a tool explicitly shared (media_share) as an
+              // attachment on the tool result message so the chat renders it
+              // inline. The tool already validated the file (exists, supported
+              // type, size cap) — a null return here means it raced a delete.
+              if (mediaShareFromTool && this.attachments) {
+                const shared = mediaShareFromTool;
+                await this.attachments
+                  .registerToolOutput({
+                    sessionId: input.sessionId,
+                    messageId: toolMessage.id,
+                    mimeType: shared.mimeType,
+                    storagePath: shared.absolutePath,
+                    name: shared.name,
+                  })
+                  .catch((e: unknown) => {
+                    this.logger?.warn(
+                      {
+                        messageId: toolMessage.id,
+                        path: shared.absolutePath,
+                        error: e instanceof Error ? e.message : String(e),
+                      },
+                      'Failed to register shared media attachment',
+                    );
+                  });
+              }
 
               // Register tool-produced images as attachments on the tool
               // result message so the chat renders them inline (instead of

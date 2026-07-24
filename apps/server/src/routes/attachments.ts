@@ -40,8 +40,8 @@ export const attachmentRoutes: FastifyPluginAsync<
 
   /**
    * POST /sessions/:sessionId/attachments
-   * Upload an image/audio file for a pending message. The attachment is
-   * stored unlinked; submitting a message with its id links it.
+   * Upload an image/audio/video file for a pending message. The attachment
+   * is stored unlinked; submitting a message with its id links it.
    */
   app.post(
     '/sessions/:sessionId/attachments',
