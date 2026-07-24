@@ -154,6 +154,96 @@ describe('MemoriesRepository', () => {
     });
   });
 
+  describe('update', () => {
+    it('changes only provided fields and refreshes updatedAt', async () => {
+      const created = await repo.create({
+        agentId: 'agent-a',
+        title: 'Original',
+        content: 'Original content',
+        tags: ['one'],
+        importance: 2,
+      });
+
+      const updated = await repo.update(created.id, {
+        title: 'Renamed',
+        importance: 5,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated!.title).toBe('Renamed');
+      expect(updated!.importance).toBe(5);
+      // Untouched fields survive.
+      expect(updated!.content).toBe('Original content');
+      expect(updated!.tags).toEqual(['one']);
+      expect(updated!.createdAt).toBe(created.createdAt);
+    });
+
+    it('replaces tags when provided', async () => {
+      const created = await repo.create({
+        agentId: 'agent-a',
+        title: 'Tagged',
+        content: 'c',
+        tags: ['a', 'b'],
+      });
+      const updated = await repo.update(created.id, { tags: ['c'] });
+      expect(updated!.tags).toEqual(['c']);
+    });
+
+    it('returns null when the memory does not exist', async () => {
+      const updated = await repo.update('missing-id', { title: 'x' });
+      expect(updated).toBeNull();
+    });
+
+    it('agent scoping — wrong agent updates nothing and returns null', async () => {
+      const created = await repo.create({
+        agentId: 'agent-a',
+        title: 'Owned',
+        content: 'c',
+      });
+      const updated = await repo.update(
+        created.id,
+        { title: 'Hacked' },
+        'agent-b',
+      );
+      expect(updated).toBeNull();
+      // Original is untouched.
+      const list = await repo.list('agent-a');
+      expect(list[0]!.title).toBe('Owned');
+    });
+
+    it('keeps FTS in sync — updated title is searchable', async () => {
+      const created = await repo.create({
+        agentId: 'agent-a',
+        title: 'Alpha topic',
+        content: 'body',
+      });
+      await repo.update(created.id, { title: 'Bravo topic' });
+
+      const hitsOld = await repo.search('Alpha');
+      expect(hitsOld.length).toBe(0);
+      const hitsNew = await repo.search('Bravo');
+      expect(hitsNew.some((r) => r.id === created.id)).toBe(true);
+    });
+  });
+
+  describe('countByAgent', () => {
+    it('returns per-agent counts; absent agents are omitted', async () => {
+      await repo.create({ agentId: 'agent-a', title: 'A1', content: 'c' });
+      await repo.create({ agentId: 'agent-a', title: 'A2', content: 'c' });
+      await repo.create({ agentId: 'agent-b', title: 'B1', content: 'c' });
+
+      const counts = await repo.countByAgent();
+      expect(counts['agent-a']).toBe(2);
+      expect(counts['agent-b']).toBe(1);
+      expect(counts['agent-c']).toBeUndefined();
+    });
+
+    it('returns an empty map when there are no memories', async () => {
+      const counts = await repo.countByAgent();
+      expect(counts).toEqual({});
+    });
+  });
+
   describe('delete', () => {
     it('own memory — deletes and returns true', async () => {
       const memory = await repo.create({

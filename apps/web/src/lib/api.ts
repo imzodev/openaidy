@@ -52,6 +52,11 @@ export type {
   CreatePulseBody,
   UpdatePulseBody,
   AppInfo,
+  Memory,
+  MemorySearchResult,
+  MemoryAgentSummary,
+  CreateMemoryInput,
+  UpdateMemoryInput,
 } from './types';
 
 export type {
@@ -104,6 +109,11 @@ import type {
   CreatePulseBody,
   UpdatePulseBody,
   AppInfo,
+  Memory,
+  MemorySearchResult,
+  MemoryAgentSummary,
+  CreateMemoryInput,
+  UpdateMemoryInput,
 } from './types';
 
 import type {
@@ -1647,4 +1657,126 @@ export async function fetchUpdateStatus(): Promise<UpdateState> {
     throw new ApiRequestError(response.status, body);
   }
   return response.json();
+}
+
+// ---------------------------------------------------------------------------
+// Agent memories
+// ---------------------------------------------------------------------------
+
+/**
+ * List agents paired with their memory counts (for the memory page's
+ * left-rail selector), plus the grand total across all agents.
+ */
+export async function listMemoryAgents(): Promise<{
+  items: MemoryAgentSummary[];
+  total: number;
+}> {
+  const response = await apiFetch(`${API_BASE}/api/memories/agents`);
+  if (!response.ok) {
+    throw new Error(`Failed to list memory agents: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * List memories, optionally scoped to an agent. When `q` is provided the
+ * server runs a full-text search instead of a plain listing.
+ */
+export async function listMemories(params?: {
+  agentId?: string;
+  q?: string;
+  limit?: number;
+}): Promise<{ items: Memory[] }> {
+  const query = new URLSearchParams();
+  if (params?.agentId) query.set('agentId', params.agentId);
+  if (params?.q) query.set('q', params.q);
+  if (params?.limit !== undefined) query.set('limit', String(params.limit));
+  const qs = query.toString();
+  const response = await apiFetch(
+    `${API_BASE}/api/memories${qs ? `?${qs}` : ''}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to list memories: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Full-text search memories, optionally scoped to a single agent.
+ * Results carry a BM25 `rank` (lower = better match).
+ */
+export async function searchMemories(
+  q: string,
+  agentId?: string,
+  limit?: number,
+): Promise<{ items: MemorySearchResult[] }> {
+  const query = new URLSearchParams({ q });
+  if (agentId) query.set('agentId', agentId);
+  if (limit !== undefined) query.set('limit', String(limit));
+  const response = await apiFetch(
+    `${API_BASE}/api/memories?${query.toString()}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to search memories: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Create a memory for the given agent.
+ */
+export async function createMemory(
+  input: CreateMemoryInput & { agentId: string },
+): Promise<Memory> {
+  const response = await apiFetch(`${API_BASE}/api/memories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to create memory: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+/**
+ * Update an existing memory. `patch` is a partial — only provided fields change.
+ */
+export async function updateMemory(
+  id: string,
+  patch: UpdateMemoryInput,
+): Promise<Memory> {
+  const response = await apiFetch(`${API_BASE}/api/memories/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to update memory: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+/**
+ * Delete a memory by ID.
+ */
+export async function deleteMemory(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE}/api/memories/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: string }).error ??
+        `Failed to delete memory: ${response.statusText}`,
+    );
+  }
 }

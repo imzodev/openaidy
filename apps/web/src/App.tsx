@@ -35,6 +35,7 @@ import { PulsesPage } from './components/pages/PulsesPage';
 import { ChannelsPage } from './components/pages/ChannelsPage';
 import { WebhooksPage } from './components/pages/WebhooksPage';
 import { AgentsPage } from './components/pages/AgentsPage';
+import { MemoriesPage } from './components/pages/MemoriesPage';
 import { SkillsPage } from './components/pages/SkillsPage';
 import { McpsPage } from './components/pages/McpsPage';
 import { LogsPage } from './components/pages/LogsPage';
@@ -1069,6 +1070,10 @@ function AppContent(props: AppContentProps) {
 
         <Show when={view() === 'agents'}>
           <AgentsPage onStartChat={handleStartChatWithAgent} />
+        </Show>
+
+        <Show when={view() === 'memories'}>
+          <MemoriesPage />
         </Show>
 
         <Show when={view() === 'skills'}>

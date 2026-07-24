@@ -18,6 +18,7 @@ import {
   Layers,
   KeyRound,
   BarChart3,
+  Brain,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
 import type { Session, AddonRecord } from '../lib/api';
@@ -31,6 +32,7 @@ export type ViewType =
   | 'channels'
   | 'webhooks'
   | 'agents'
+  | 'memories'
   | 'skills'
   | 'mcps'
   | 'logs'
@@ -89,6 +91,7 @@ const navSections: NavSection[] = [
     title: 'Build',
     items: [
       { id: 'agents', label: 'Agents', icon: Bot },
+      { id: 'memories', label: 'Memories', icon: Brain },
       { id: 'skills', label: 'Skills', icon: Wrench },
       { id: 'mcps', label: 'MCP Servers', icon: Server },
     ],
