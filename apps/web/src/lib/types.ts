@@ -47,6 +47,12 @@ export type {
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
+  // Agent memory types from shared-types — single source of truth.
+  Memory,
+  CreateMemoryInput,
+  UpdateMemoryInput,
+  MemorySearchResult,
+  MemoryAgentSummary,
 } from '@openaidy/shared-types';
 
 import type {

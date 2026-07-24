@@ -34,6 +34,7 @@ import { usageRoutes } from './routes/usage';
 import { configRoutes } from './routes/config';
 import { providerRoutes } from './routes/providers';
 import { agentRoutes } from './routes/agents';
+import { memoryRoutes } from './routes/memories';
 import { runStreamRoutes } from './routes/runs';
 import { schedulerRoutes } from './routes/scheduler';
 import { pulseRoutes } from './routes/pulses';
@@ -687,6 +688,14 @@ export async function buildApp() {
           taskService,
           planningService,
           deliverablesRepo: dbAdapter.repositories.deliverables,
+          authMiddleware,
+        });
+
+        // Memory management routes (browse/search/create/edit/delete).
+        // Requires a DB — memories live in the `memories` table.
+        await api.register(memoryRoutes, {
+          memoriesRepo: dbAdapter.repositories.memories,
+          agentRegistry: services.agents,
           authMiddleware,
         });
 

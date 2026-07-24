@@ -3,6 +3,7 @@ import type { DatabaseClient } from '../client';
 import type {
   Memory,
   CreateMemoryInput,
+  UpdateMemoryInput,
   MemorySearchResult,
 } from '@openaidy/shared-types';
 
@@ -145,6 +146,101 @@ export class MemoriesRepository {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
+  }
+
+  /**
+   * Update an existing memory. Only the fields present in `patch` are changed;
+   * `updated_at` is always refreshed. When `agentId` is provided the update is
+   * scoped to that owner (a mismatch updates nothing). Returns the updated
+   * Memory, or null when no matching row exists.
+   */
+  async update(
+    id: string,
+    patch: UpdateMemoryInput,
+    agentId?: string,
+  ): Promise<Memory | null> {
+    const sqlite = getRawSqlite(this.db);
+
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    if (patch.title !== undefined) {
+      sets.push('title = ?');
+      values.push(patch.title);
+    }
+    if (patch.content !== undefined) {
+      sets.push('content = ?');
+      values.push(patch.content);
+    }
+    if (patch.tags !== undefined) {
+      sets.push('tags = ?');
+      values.push(JSON.stringify(patch.tags));
+    }
+    if (patch.importance !== undefined) {
+      sets.push('importance = ?');
+      values.push(patch.importance);
+    }
+    // updated_at always bumps, so `sets` is never empty.
+    const now = new Date().toISOString();
+    sets.push('updated_at = ?');
+    values.push(now);
+
+    values.push(id);
+    if (agentId) values.push(agentId);
+
+    const result = sqlite
+      .prepare(
+        `UPDATE memories SET ${sets.join(', ')}
+         WHERE id = ?${agentId ? ' AND agent_id = ?' : ''}`,
+      )
+      .run(...values);
+
+    if (result.changes === 0) return null;
+
+    const rows = sqlite
+      .prepare(
+        `SELECT id, agent_id, title, content, tags, importance, created_at, updated_at
+         FROM memories WHERE id = ?`,
+      )
+      .all(id) as {
+      id: string;
+      agent_id: string;
+      title: string;
+      content: string;
+      tags: string;
+      importance: number;
+      created_at: string;
+      updated_at: string;
+    }[];
+
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      agentId: row.agent_id,
+      title: row.title,
+      content: row.content,
+      tags: JSON.parse(row.tags) as string[],
+      importance: row.importance,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  /**
+   * Count memories grouped by agent. Returns a map of agentId → count;
+   * agents with no memories are simply absent from the map.
+   */
+  async countByAgent(): Promise<Record<string, number>> {
+    const sqlite = getRawSqlite(this.db);
+    const rows = sqlite
+      .prepare(`SELECT agent_id, COUNT(*) AS n FROM memories GROUP BY agent_id`)
+      .all() as { agent_id: string; n: number }[];
+
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[row.agent_id] = row.n;
+    }
+    return counts;
   }
 
   async delete(id: string, agentId?: string): Promise<boolean> {
