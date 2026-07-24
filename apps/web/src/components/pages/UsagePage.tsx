@@ -7,7 +7,11 @@ import type {
   UsageByModel,
   UsageReport,
 } from '../../lib/types';
-import { formatNumber, formatCost } from '../../lib/usage-format';
+import {
+  formatNumber,
+  formatCost,
+  formatTokensCompact,
+} from '../../lib/usage-format';
 
 type RangePreset = '7d' | '30d' | '90d' | 'all';
 
@@ -34,31 +38,37 @@ function fromForPreset(preset: RangePreset): string | undefined {
  * more than 10 models the chart becomes hard to read but stays honest —
  * every model still gets a visible segment and a legend entry.
  *
- * Why Tailwind classes and not raw hex: the rest of this file already
- * uses Tailwind classes for SVG fill (`fill-primary`), and the same
- * classes work for the legend swatches below.
+ * Each entry carries both halves of the color: `fill` for SVG bar
+ * segments and `bg` for HTML swatches (legend dots, table dots) — a
+ * `fill-*` class paints nothing on a non-SVG element, so the two
+ * contexts need separate classes built from the same hue.
  */
-const CHART_PALETTE = [
-  'fill-blue-500',
-  'fill-emerald-500',
-  'fill-amber-500',
-  'fill-violet-500',
-  'fill-rose-500',
-  'fill-cyan-500',
-  'fill-orange-500',
-  'fill-lime-500',
-  'fill-pink-500',
-  'fill-indigo-500',
-] as const;
+type ModelColor = { fill: string; bg: string };
 
-const FILL_OVERFLOW = 'fill-gray-300 dark:fill-gray-600';
+const CHART_PALETTE: readonly ModelColor[] = [
+  { fill: 'fill-blue-500', bg: 'bg-blue-500' },
+  { fill: 'fill-emerald-500', bg: 'bg-emerald-500' },
+  { fill: 'fill-amber-500', bg: 'bg-amber-500' },
+  { fill: 'fill-violet-500', bg: 'bg-violet-500' },
+  { fill: 'fill-rose-500', bg: 'bg-rose-500' },
+  { fill: 'fill-cyan-500', bg: 'bg-cyan-500' },
+  { fill: 'fill-orange-500', bg: 'bg-orange-500' },
+  { fill: 'fill-lime-500', bg: 'bg-lime-500' },
+  { fill: 'fill-pink-500', bg: 'bg-pink-500' },
+  { fill: 'fill-indigo-500', bg: 'bg-indigo-500' },
+];
 
-/** Stable model-key → CSS-class assignment, sorted by totalTokens desc. */
-function buildModelColorMap(byModel: UsageByModel[]): Map<string, string> {
-  const map = new Map<string, string>();
+const COLOR_OVERFLOW: ModelColor = {
+  fill: 'fill-gray-300 dark:fill-gray-600',
+  bg: 'bg-gray-300 dark:bg-gray-600',
+};
+
+/** Stable model-key → color assignment, sorted by totalTokens desc. */
+function buildModelColorMap(byModel: UsageByModel[]): Map<string, ModelColor> {
+  const map = new Map<string, ModelColor>();
   byModel.forEach((row, i) => {
     const key = `${row.providerId}/${row.modelId}`;
-    map.set(key, CHART_PALETTE[i % CHART_PALETTE.length] ?? FILL_OVERFLOW);
+    map.set(key, CHART_PALETTE[i % CHART_PALETTE.length] ?? COLOR_OVERFLOW);
   });
   return map;
 }
@@ -84,12 +94,55 @@ function indexSegmentsByDay(
   return out;
 }
 
+/** Tooltip payload for the chart's floating (non-native) tooltip. */
+type ChartTooltip =
+  | {
+      kind: 'segment';
+      left: number;
+      top: number;
+      day: string;
+      modelKey: string;
+      tokens: number;
+      pct: string;
+      bg: string;
+    }
+  | { kind: 'day'; left: number; top: number; day: string; tokens: number };
+
+/**
+ * Path for a bar silhouette with only the top corners rounded. Used as a
+ * clip path so the stacked segments stay crisp rectangles while the bar
+ * as a whole reads as one rounded column.
+ */
+function roundedTopPath(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): string {
+  const rr = Math.max(0, Math.min(r, w / 2, h));
+  return [
+    `M ${x} ${y + h}`,
+    `L ${x} ${y + rr}`,
+    `Q ${x} ${y} ${x + rr} ${y}`,
+    `L ${x + w - rr} ${y}`,
+    `Q ${x + w} ${y} ${x + w} ${y + rr}`,
+    `L ${x + w} ${y + h}`,
+    'Z',
+  ].join(' ');
+}
+
 /**
  * Stacked daily token-usage chart. Each bar = one day; bar height = that
- * day's total tokens; bar segments = per-model contributions, colored
- * stably by rank (top model = palette[0]). Replaces the previous
- * single-color chart so the dashboard shows *which* models drove usage,
- * not just the magnitude.
+ * day's total tokens, scaled to the largest day in the range so magnitude
+ * is visible at a glance; bar segments = per-model contributions, colored
+ * stably by rank (top model = palette[0]).
+ *
+ * Interactions: hovering a column highlights it and dims the rest;
+ * hovering a legend item highlights that model's segments across every
+ * bar — the fast way to learn which color is which model. Values surface
+ * in a cursor-following tooltip (native <title> is too slow for a dense
+ * chart).
  *
  * Pure inline SVG — no chart dependency, matches the rest of the page.
  */
@@ -101,22 +154,55 @@ function StackedDailyChart(props: {
   const segmentsByDay = () => indexSegmentsByDay(props.byDayByModel);
   const colorByModel = () => buildModelColorMap(props.byModel);
 
+  const [tooltip, setTooltip] = createSignal<ChartTooltip | null>(null);
+  const [hoverDay, setHoverDay] = createSignal<string | null>(null);
+  const [hoverModel, setHoverModel] = createSignal<string | null>(null);
+  let containerRef: HTMLDivElement | undefined;
+
   const width = 720;
-  const height = 180;
+  const height = 200;
   const padBottom = 22;
-  const padTop = 8;
-  const gap = 3;
-  // Minimum visible segment height (px). Keeps tiny contributions
-  // hoverable; the tooltip shows the real (unfloored) value.
-  const minSegH = 0.5;
+  const padTop = 10;
+  // Room on the left for the compact gridline labels.
+  const padLeft = 34;
+  const gap = 4;
+  const barRadius = 3;
+  // Bars for days with any usage never drop below this height, so a small
+  // day still reads as present rather than rounding away to nothing.
+  const minBarH = 2;
+
+  const usableH = height - padBottom - padTop;
+  const chartW = width - padLeft;
+
+  const maxDayTotal = () =>
+    Math.max(1, ...props.byDay.map((d) => d.totalTokens));
 
   const barWidth = () => {
     const n = props.byDay.length || 1;
-    return Math.max(2, (width - gap * (n - 1)) / n);
+    return Math.max(2, (chartW - gap * (n - 1)) / n);
   };
 
   // Show at most ~8 date labels to avoid collisions.
   const labelEvery = () => Math.max(1, Math.ceil(props.byDay.length / 8));
+
+  /** Cursor position relative to the chart container, clamped so the
+   *  tooltip never overflows the card edges. */
+  const pointFromEvent = (e: MouseEvent): { left: number; top: number } => {
+    const rect = containerRef?.getBoundingClientRect();
+    if (!rect) return { left: 0, top: 0 };
+    return {
+      left: Math.min(Math.max(e.clientX - rect.left, 72), rect.width - 72),
+      top: e.clientY - rect.top,
+    };
+  };
+
+  /** Opacity of one segment given the current hover state: the hovered
+   *  day and hovered model stay solid, everything else fades back. */
+  const segmentOpacity = (day: string, modelKey: string): number => {
+    if (hoverModel() !== null) return hoverModel() === modelKey ? 1 : 0.2;
+    if (hoverDay() !== null) return hoverDay() === day ? 1 : 0.35;
+    return 1;
+  };
 
   return (
     <Show
@@ -127,99 +213,262 @@ function StackedDailyChart(props: {
         </div>
       }
     >
-      <div class="overflow-x-auto">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          class="w-full min-w-[480px]"
-          role="img"
-          aria-label="Daily token usage by model"
-        >
-          <For each={props.byDay}>
-            {(day, i) => {
-              const bw = barWidth();
-              const x = i() * (bw + gap);
-              const usableH = height - padBottom - padTop;
-              const dayTotal = Math.max(1, day.totalTokens);
-              const dayMap = segmentsByDay().get(day.day);
-              // Within-day ordering: largest segment at the bottom of the
-              // bar so the total stays anchored and small contributions
-              // sit on top. Tie-break by model key for stable renders.
-              const segments = dayMap
-                ? [...dayMap.values()].sort((a, b) => {
-                    if (b.totalTokens !== a.totalTokens) {
-                      return b.totalTokens - a.totalTokens;
-                    }
-                    return `${a.providerId}/${a.modelId}`.localeCompare(
-                      `${b.providerId}/${b.modelId}`,
-                    );
-                  })
-                : [];
+      <div class="relative" ref={containerRef}>
+        <div class="overflow-x-auto">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            class="w-full min-w-[480px] select-none"
+            role="img"
+            aria-label="Daily token usage by model"
+          >
+            {/* Horizontal gridlines at 50% / 100% of the largest day +
+                the baseline the bars sit on. */}
+            <For each={[0.5, 1]}>
+              {(f) => {
+                const y = padTop + usableH * (1 - f);
+                return (
+                  <>
+                    <line
+                      x1={padLeft}
+                      y1={y}
+                      x2={width}
+                      y2={y}
+                      class="stroke-gray-200 dark:stroke-gray-700"
+                      stroke-width="1"
+                      stroke-dasharray={f === 1 ? undefined : '3 3'}
+                    />
+                    <text
+                      x={padLeft - 5}
+                      y={y + 3}
+                      text-anchor="end"
+                      class="fill-text-tertiary pointer-events-none"
+                      style={{ 'font-size': '8px' }}
+                    >
+                      {formatTokensCompact(Math.round(maxDayTotal() * f))}
+                    </text>
+                  </>
+                );
+              }}
+            </For>
+            <line
+              x1={padLeft}
+              y1={height - padBottom}
+              x2={width}
+              y2={height - padBottom}
+              class="stroke-gray-300 dark:stroke-gray-600"
+              stroke-width="1"
+            />
 
-              // `cursorY` tracks the top edge of the next segment to draw
-              // — we paint from the baseline upward.
-              let cursorY = height - padBottom;
-              const showLabel = i() % labelEvery() === 0;
+            <For each={props.byDay}>
+              {(day, i) => {
+                const bw = barWidth();
+                const x = padLeft + i() * (bw + gap);
+                const dayTotal = Math.max(1, day.totalTokens);
+                const barH =
+                  day.totalTokens > 0
+                    ? Math.max(
+                        minBarH,
+                        (day.totalTokens / maxDayTotal()) * usableH,
+                      )
+                    : 0;
+                const barTop = height - padBottom - barH;
+                const dayMap = segmentsByDay().get(day.day);
+                // Within-day ordering: largest segment at the bottom of the
+                // bar so the total stays anchored and small contributions
+                // sit on top. Tie-break by model key for stable renders.
+                const segments = dayMap
+                  ? [...dayMap.values()].sort((a, b) => {
+                      if (b.totalTokens !== a.totalTokens) {
+                        return b.totalTokens - a.totalTokens;
+                      }
+                      return `${a.providerId}/${a.modelId}`.localeCompare(
+                        `${b.providerId}/${b.modelId}`,
+                      );
+                    })
+                  : [];
+
+                // `cursorY` tracks the top edge of the next segment to draw
+                // — we paint from the baseline upward.
+                let cursorY = height - padBottom;
+                const showLabel = i() % labelEvery() === 0;
+                return (
+                  <g
+                    onMouseOver={() => setHoverDay(day.day)}
+                    onMouseLeave={() => {
+                      setHoverDay(null);
+                      setTooltip(null);
+                    }}
+                  >
+                    {/* Column highlight, shown while the day is hovered.
+                        Painted first so it sits behind the bar. */}
+                    <rect
+                      x={x - gap / 2}
+                      y={padTop}
+                      width={bw + gap}
+                      height={usableH}
+                      rx={4}
+                      class="fill-gray-300 dark:fill-gray-600"
+                      style={{
+                        opacity: hoverDay() === day.day ? 0.18 : 0,
+                        transition: 'opacity 120ms',
+                      }}
+                      onMouseMove={(e) =>
+                        setTooltip({
+                          kind: 'day',
+                          ...pointFromEvent(e),
+                          day: day.day,
+                          tokens: day.totalTokens,
+                        })
+                      }
+                    />
+                    {/* Segments, clipped to the rounded-top silhouette. */}
+                    <clipPath id={`usage-bar-clip-${i()}`}>
+                      <path
+                        d={roundedTopPath(x, barTop, bw, barH, barRadius)}
+                      />
+                    </clipPath>
+                    <g clip-path={`url(#usage-bar-clip-${i()})`}>
+                      <For each={segments}>
+                        {(seg) => {
+                          const modelKey = `${seg.providerId}/${seg.modelId}`;
+                          // Segments split the bar proportionally; the
+                          // bar itself carries the absolute scale, so the
+                          // stack always fills the rounded silhouette.
+                          const h = (seg.totalTokens / dayTotal) * barH;
+                          const y = cursorY - h;
+                          cursorY = y;
+                          const color =
+                            colorByModel().get(modelKey) ?? COLOR_OVERFLOW;
+                          const pct = (
+                            (seg.totalTokens / dayTotal) *
+                            100
+                          ).toFixed(1);
+                          return (
+                            <rect
+                              x={x}
+                              y={y}
+                              width={bw}
+                              height={h}
+                              class={color.fill}
+                              style={{
+                                opacity: segmentOpacity(day.day, modelKey),
+                                transition: 'opacity 120ms',
+                              }}
+                              onMouseMove={(e) =>
+                                setTooltip({
+                                  kind: 'segment',
+                                  ...pointFromEvent(e),
+                                  day: day.day,
+                                  modelKey,
+                                  tokens: seg.totalTokens,
+                                  pct,
+                                  bg: color.bg,
+                                })
+                              }
+                            />
+                          );
+                        }}
+                      </For>
+                    </g>
+                    <Show when={showLabel}>
+                      <text
+                        x={x + bw / 2}
+                        y={height - 6}
+                        text-anchor="middle"
+                        class="fill-text-tertiary pointer-events-none"
+                        style={{ 'font-size': '9px' }}
+                      >
+                        {day.day.slice(5)}
+                      </text>
+                    </Show>
+                  </g>
+                );
+              }}
+            </For>
+          </svg>
+        </div>
+
+        {/* Floating tooltip — follows the cursor, never captures it. */}
+        <Show when={tooltip()}>
+          {(tip) => {
+            // Narrowed once locally so both variants stay type-safe.
+            const body = () => {
+              const t = tip();
+              if (t.kind === 'day') {
+                return (
+                  <>
+                    <div class="font-medium text-text-primary">{t.day}</div>
+                    <div class="mt-0.5 text-text-secondary tabular-nums">
+                      {formatNumber(t.tokens)} tokens
+                    </div>
+                  </>
+                );
+              }
               return (
                 <>
-                  <For each={segments}>
-                    {(seg) => {
-                      const modelKey = `${seg.providerId}/${seg.modelId}`;
-                      const rawH = (seg.totalTokens / dayTotal) * usableH;
-                      const h = Math.max(minSegH, rawH);
-                      const y = cursorY - h;
-                      cursorY = y;
-                      const color =
-                        colorByModel().get(modelKey) ?? FILL_OVERFLOW;
-                      const pct = (
-                        (seg.totalTokens / dayTotal) *
-                        100
-                      ).toFixed(1);
-                      return (
-                        <rect x={x} y={y} width={bw} height={h} class={color}>
-                          <title>
-                            {day.day} · {modelKey}:{' '}
-                            {formatNumber(seg.totalTokens)} tokens ({pct}% of
-                            day)
-                          </title>
-                        </rect>
-                      );
-                    }}
-                  </For>
-                  <Show when={showLabel}>
-                    <text
-                      x={x + bw / 2}
-                      y={height - 6}
-                      text-anchor="middle"
-                      class="fill-text-tertiary"
-                      style={{ 'font-size': '9px' }}
-                    >
-                      {day.day.slice(5)}
-                    </text>
-                  </Show>
+                  <div class="flex items-center gap-1.5 text-text-secondary">
+                    <span class={`inline-block w-2 h-2 rounded-full ${t.bg}`} />
+                    {t.modelKey}
+                  </div>
+                  <div class="mt-0.5 font-medium text-text-primary tabular-nums">
+                    {formatNumber(t.tokens)} tokens{' '}
+                    <span class="font-normal text-text-tertiary">
+                      ({t.pct}% of day)
+                    </span>
+                  </div>
+                  <div class="text-text-tertiary">{t.day}</div>
                 </>
               );
-            }}
-          </For>
-        </svg>
+            };
+            return (
+              <div
+                aria-hidden="true"
+                class="absolute z-10 pointer-events-none rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1.5 text-xs shadow-lg whitespace-nowrap"
+                style={{
+                  left: `${tip().left}px`,
+                  top: `${tip().top}px`,
+                  transform: 'translate(-50%, calc(-100% - 10px))',
+                }}
+              >
+                {body()}
+              </div>
+            );
+          }}
+        </Show>
       </div>
-      {/* Legend — one row per model in rank order, color swatch + key +
-          total tokens across the range. Wraps on narrow viewports. */}
+
+      {/* Legend — one item per model in rank order: color dot + key +
+          total tokens across the range. Hovering an item highlights that
+          model's segments in every bar above. Wraps on narrow viewports. */}
       <Show when={props.byModel.length > 0}>
-        <ul class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+        <ul class="mt-3 flex flex-wrap gap-x-1.5 gap-y-1 text-xs">
           <For each={props.byModel}>
             {(row) => {
               const key = `${row.providerId}/${row.modelId}`;
-              const color = colorByModel().get(key) ?? FILL_OVERFLOW;
+              const color = colorByModel().get(key) ?? COLOR_OVERFLOW;
               return (
-                <li class="flex items-center gap-1.5">
-                  <span
-                    class={`inline-block w-3 h-3 rounded-sm ${color}`}
-                    aria-hidden="true"
-                  />
-                  <span class="tabular-nums">{key}</span>
-                  <span class="text-text-tertiary tabular-nums">
-                    {formatNumber(row.totalTokens)}
-                  </span>
+                <li>
+                  <button
+                    type="button"
+                    class={`flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors ${
+                      hoverModel() === key
+                        ? 'bg-gray-100 dark:bg-gray-700/60 text-text-primary'
+                        : 'text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700/60'
+                    }`}
+                    onMouseEnter={() => setHoverModel(key)}
+                    onMouseLeave={() => setHoverModel(null)}
+                    onFocus={() => setHoverModel(key)}
+                    onBlur={() => setHoverModel(null)}
+                  >
+                    <span
+                      class={`inline-block w-2.5 h-2.5 rounded-full ${color.bg}`}
+                      aria-hidden="true"
+                    />
+                    <span class="tabular-nums">{key}</span>
+                    <span class="text-text-tertiary tabular-nums">
+                      {formatNumber(row.totalTokens)}
+                    </span>
+                  </button>
                 </li>
               );
             }}
@@ -258,6 +507,10 @@ export function UsagePage() {
   );
 
   const totals = () => report()?.totals;
+
+  // Same model→color assignment the chart uses, so the dots in the table
+  // below match the bar segments and legend swatches exactly.
+  const colorByModel = () => buildModelColorMap(report()?.byModel ?? []);
 
   return (
     <Layout
@@ -378,31 +631,43 @@ export function UsagePage() {
                     }
                   >
                     <For each={report()?.byModel ?? []}>
-                      {(row) => (
-                        <tr class="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
-                          <td class="px-4 py-2 text-text-secondary">
-                            {row.providerId}
-                          </td>
-                          <td class="px-4 py-2 text-text-primary">
-                            {row.modelId}
-                          </td>
-                          <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
-                            {formatNumber(row.runCount)}
-                          </td>
-                          <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
-                            {formatNumber(row.promptTokens)}
-                          </td>
-                          <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
-                            {formatNumber(row.completionTokens)}
-                          </td>
-                          <td class="px-4 py-2 text-right tabular-nums text-text-primary">
-                            {formatNumber(row.totalTokens)}
-                          </td>
-                          <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
-                            {formatCost(row.cost, row.hasCost)}
-                          </td>
-                        </tr>
-                      )}
+                      {(row) => {
+                        const color =
+                          colorByModel().get(
+                            `${row.providerId}/${row.modelId}`,
+                          ) ?? COLOR_OVERFLOW;
+                        return (
+                          <tr class="border-b border-gray-100 dark:border-gray-700/50 last:border-0">
+                            <td class="px-4 py-2 text-text-secondary">
+                              {row.providerId}
+                            </td>
+                            <td class="px-4 py-2 text-text-primary">
+                              <span class="inline-flex items-center gap-2">
+                                <span
+                                  class={`inline-block w-2.5 h-2.5 rounded-full ${color.bg}`}
+                                  aria-hidden="true"
+                                />
+                                {row.modelId}
+                              </span>
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
+                              {formatNumber(row.runCount)}
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
+                              {formatNumber(row.promptTokens)}
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
+                              {formatNumber(row.completionTokens)}
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums text-text-primary">
+                              {formatNumber(row.totalTokens)}
+                            </td>
+                            <td class="px-4 py-2 text-right tabular-nums text-text-secondary">
+                              {formatCost(row.cost, row.hasCost)}
+                            </td>
+                          </tr>
+                        );
+                      }}
                     </For>
                   </Show>
                 </tbody>
