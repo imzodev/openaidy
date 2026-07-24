@@ -5,6 +5,7 @@ import type { CreateAgentInput } from '../types';
 import type { McpServerRef, PersonalityFileId } from '@openaidy/shared-types';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import { PERSONALITY_FILES } from '../agents/personality-service';
+import { AGENT_PERSONALITY_PRESETS } from '@openaidy/shared-types';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -26,6 +27,29 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
     'preHandler',
     requireAuth({ authMiddleware, requiredScope: 'agents.list' }),
   );
+
+  /**
+   * Apply a prebuilt personality preset to a freshly-created agent: scaffold
+   * the default personality files, then overwrite the ones the preset defines.
+   * Since scaffold is create-if-missing and writeFile overwrites, the preset
+   * bodies always win. Returns false when the preset id is unknown.
+   */
+  const applyPersonalityPreset = async (
+    agentId: string,
+    presetId: string,
+  ): Promise<boolean> => {
+    const preset = AGENT_PERSONALITY_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return false;
+    await personalityService.scaffold(agentId);
+    for (const [fileId, content] of Object.entries(preset.files ?? {})) {
+      await personalityService.writeFile(
+        agentId,
+        fileId as PersonalityFileId,
+        content,
+      );
+    }
+    return true;
+  };
 
   /**
    * GET /agents
@@ -59,11 +83,40 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
    */
   app.post('/agents', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
+    const presetId =
+      typeof body.personalityPresetId === 'string'
+        ? body.personalityPresetId
+        : undefined;
 
     try {
       const agent = agentRegistry.createAgent(body as CreateAgentInput);
-      // Scaffold personality files for the new agent (fire and forget — non-fatal)
-      personalityService.scaffold(agent.id).catch(() => {});
+
+      if (presetId) {
+        // Apply the chosen personality preset (scaffold + overwrite files).
+        // Awaited so the files are in place before we respond. Falls back to a
+        // plain scaffold if the preset is unknown or writing fails — a bad
+        // preset must never block agent creation.
+        const applied = await applyPersonalityPreset(agent.id, presetId).catch(
+          (err) => {
+            request.log.error(
+              { err, agentId: agent.id, presetId },
+              'failed to apply personality preset',
+            );
+            return false;
+          },
+        );
+        if (!applied) {
+          request.log.warn(
+            { agentId: agent.id, presetId },
+            'unknown personality preset; using default personality files',
+          );
+          await personalityService.scaffold(agent.id).catch(() => {});
+        }
+      } else {
+        // Scaffold personality files for the new agent (fire and forget — non-fatal)
+        personalityService.scaffold(agent.id).catch(() => {});
+      }
+
       reply.code(201);
       return agent;
     } catch (err) {

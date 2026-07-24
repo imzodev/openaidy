@@ -7,6 +7,7 @@ import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import websocket from '@fastify/websocket';
 import { agentRoutes } from './agents';
+import { AGENT_PERSONALITY_PRESETS } from '@openaidy/shared-types';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 import { createAgentRegistry } from '../agents';
 import { createAgentPersonalityService } from '../agents/personality-service';
@@ -560,5 +561,96 @@ describe('DELETE /agents/:agentId — workspace deletion', () => {
     expect(spy).toHaveBeenCalledWith('spy-agent');
 
     await spyApp.close();
+  });
+});
+
+describe('POST /agents — personality presets', () => {
+  let app: FastifyInstance;
+  let workspaceDir: string;
+  const read = (agentId: string, file: string) =>
+    fs.readFileSync(path.join(workspaceDir, agentId, file), 'utf-8');
+
+  beforeEach(async () => {
+    workspaceDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'test-agents-preset-'),
+    );
+    // No configPath → registry.persistConfig() is a no-op; agents live in memory.
+    const registry = createAgentRegistry({ initialAgents: [] });
+    const personalityService = createAgentPersonalityService({
+      workspaceBaseDir: workspaceDir,
+    });
+
+    app = Fastify({ logger: false });
+    await app.register(cors, { origin: '*' });
+    await app.register(sensible);
+    await app.register(websocket);
+    await app.register(
+      async (api: FastifyInstance) => {
+        await api.register(agentRoutes, {
+          agentRegistry: registry,
+          personalityService,
+          authMiddleware: mockAuthMiddleware,
+        });
+      },
+      { prefix: '/api' },
+    );
+  });
+
+  afterEach(async () => {
+    await app.close();
+    fs.rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  const createBody = (overrides: Record<string, unknown> = {}) => ({
+    id: 'p-agent',
+    name: 'Preset Agent',
+    systemPrompt: 'Base prompt.',
+    model: 'openai/gpt-4o-mini',
+    ...overrides,
+  });
+
+  it("writes the preset's personality files after creating the agent", async () => {
+    const preset = AGENT_PERSONALITY_PRESETS.find(
+      (p) => p.id === 'coding-assistant',
+    )!;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      payload: createBody({ personalityPresetId: preset.id }),
+    });
+
+    expect(response.statusCode).toBe(201);
+    // Files defined by the preset are written verbatim.
+    expect(read('p-agent', 'AGENT.md')).toBe(preset.files!.AGENT);
+    expect(read('p-agent', 'MISSION.md')).toBe(preset.files!.MISSION);
+    expect(read('p-agent', 'RULES.md')).toBe(preset.files!.RULES);
+    // USER.md is not in the preset → keeps its scaffolded default.
+    expect(read('p-agent', 'USER.md')).toContain('INSTRUCTIONS');
+  });
+
+  it('falls back to default personality files for an unknown preset id', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      payload: createBody({ personalityPresetId: 'does-not-exist' }),
+    });
+
+    expect(response.statusCode).toBe(201);
+    // Agent still created; files are the untouched scaffold defaults.
+    expect(read('p-agent', 'AGENT.md')).toContain('INSTRUCTIONS');
+  });
+
+  it('scaffolds default files when no preset is given', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents',
+      payload: createBody(),
+    });
+
+    expect(response.statusCode).toBe(201);
+    // Scaffold is fire-and-forget when no preset; give it a tick.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(read('p-agent', 'AGENT.md')).toContain('INSTRUCTIONS');
   });
 });
