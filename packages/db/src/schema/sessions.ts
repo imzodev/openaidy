@@ -228,6 +228,6 @@ export type MessageAttachment = typeof messageAttachments.$inferSelect;
 export type NewMessageAttachment = typeof messageAttachments.$inferInsert;
 
 /** Attachment media kind */
-export type AttachmentKind = 'image' | 'audio';
+export type AttachmentKind = 'image' | 'audio' | 'video';
 /** How the attachment entered the system */
 export type AttachmentSource = 'user_upload' | 'tool_output';

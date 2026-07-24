@@ -21,7 +21,7 @@ type ChatComposerProps = {
 };
 
 /** Mime prefixes accepted as chat attachments. */
-const ACCEPTED_MIME_PREFIXES = ['image/', 'audio/'];
+const ACCEPTED_MIME_PREFIXES = ['image/', 'audio/', 'video/'];
 
 function isAcceptedFile(file: File): boolean {
   return ACCEPTED_MIME_PREFIXES.some((p) => file.type.startsWith(p));
@@ -231,7 +231,7 @@ export function ChatComposer(props: ChatComposerProps) {
           fileInputRef = el;
         }}
         type="file"
-        accept="image/*,audio/*"
+        accept="image/*,audio/*,video/*"
         multiple
         class="hidden"
         onChange={handleFileInputChange}

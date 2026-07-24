@@ -1,12 +1,12 @@
 /**
  * Attachment service
  *
- * Stores and serves image/audio media attached to session messages.
+ * Stores and serves image/audio/video media attached to session messages.
  * Bytes live on local disk under a dedicated attachments directory
  * (`<baseDir>/<sessionId>/<id>.<ext>`); only metadata goes to the DB
  * (`message_attachments` table). Tool-produced media (e.g. screenshots
- * persisted into an agent workspace) is registered here too, pointing at
- * its existing on-disk location.
+ * persisted into an agent workspace, or files shared via media_share) is
+ * registered here too, pointing at its existing on-disk location.
  */
 
 import { mkdir, writeFile, readFile, stat, unlink } from 'node:fs/promises';
@@ -20,6 +20,13 @@ import type {
 
 /** Max upload size (decoded bytes). */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Max size for agent-shared media (tool_output registrations). Higher
+ * than the upload cap because videos are the common case here; still
+ * bounded so a runaway generation can't push a multi-GB file into chat.
+ */
+export const MAX_TOOL_OUTPUT_BYTES = 100 * 1024 * 1024;
 
 /** Allowed mime types by kind. */
 const ALLOWED_MIME_TYPES: Record<AttachmentKind, readonly string[]> = {
@@ -35,6 +42,9 @@ const ALLOWED_MIME_TYPES: Record<AttachmentKind, readonly string[]> = {
     'audio/flac',
     'audio/aac',
   ],
+  // Browser-playable formats only — the UI promise is that shared media
+  // can be viewed or played inline.
+  video: ['video/mp4', 'video/webm', 'video/ogg'],
 };
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -51,13 +61,44 @@ const EXT_BY_MIME: Record<string, string> = {
   'audio/webm': 'webm',
   'audio/flac': 'flac',
   'audio/aac': 'aac',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/ogg': 'ogv',
 };
+
+/**
+ * Extension → mime lookup, derived from {@link EXT_BY_MIME} so the two
+ * directions never drift. Where several mimes share an extension (e.g.
+ * audio/mpeg vs audio/mp3) the first — canonical — entry wins.
+ */
+const MIME_BY_EXT: Record<string, string> = {};
+for (const [mime, ext] of Object.entries(EXT_BY_MIME)) {
+  if (!(ext in MIME_BY_EXT)) {
+    MIME_BY_EXT[ext] = mime;
+  }
+}
+// .webm is ambiguous — the same extension is used for audio-only and
+// video files. Prefer video: a <video> element plays both correctly,
+// while an <audio> element can't show the picture of a video webm.
+MIME_BY_EXT['webm'] = 'video/webm';
 
 /** Derive the attachment kind from a mime type, or null if unsupported. */
 export function kindForMimeType(mimeType: string): AttachmentKind | null {
   if (ALLOWED_MIME_TYPES.image.includes(mimeType)) return 'image';
   if (ALLOWED_MIME_TYPES.audio.includes(mimeType)) return 'audio';
+  if (ALLOWED_MIME_TYPES.video.includes(mimeType)) return 'video';
   return null;
+}
+
+/**
+ * Best-effort mime type for a file path, from its extension. Returns null
+ * for unknown/unsupported extensions. Used by the media_share tool, where
+ * the agent names the file it created — extension is the honest contract.
+ */
+export function mimeTypeForPath(filePath: string): string | null {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  if (!ext || ext === filePath.toLowerCase()) return null;
+  return MIME_BY_EXT[ext] ?? null;
 }
 
 export class AttachmentError extends Error {
@@ -150,6 +191,11 @@ export class AttachmentService {
   /**
    * Register media that already exists on disk (e.g. a screenshot a tool
    * persisted into an agent workspace) as an attachment on a message.
+   *
+   * Returns null when the file can't be registered: unsupported mime
+   * type, vanished file, or over {@link MAX_TOOL_OUTPUT_BYTES}. Callers
+   * that need to surface *why* (like the media_share tool) validate
+   * before calling so they can return an actionable error themselves.
    */
   async registerToolOutput(input: {
     sessionId: string;
@@ -166,6 +212,9 @@ export class AttachmentService {
       sizeBytes = (await stat(input.storagePath)).size;
     } catch {
       return null; // file vanished — nothing to register
+    }
+    if (sizeBytes > MAX_TOOL_OUTPUT_BYTES) {
+      return null; // backstop — the media_share tool checks this first
     }
 
     return this.repo.create({
