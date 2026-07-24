@@ -7,6 +7,13 @@ import { AppConfigService } from './service.js';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
 
+// Deterministic stand-in for the AES secret-crypto so the encryption-on-save
+// tests don't depend on a real master key.
+vi.mock('../mcp/secret-crypto', () => ({
+  encryptSecret: (plaintext: string) => `enc:v1:${plaintext}`,
+  isEncryptedSecret: (value: string) => value.startsWith('enc:v1:'),
+}));
+
 /**
  * Minimal config that passes appConfigSchema without needing any real
  * providers: empty providers list + a model-less agent + no default provider
@@ -106,5 +113,74 @@ describe('AppConfigService channel reconciler', () => {
     const service = makeService();
     await service.load();
     await expect(service.save(baseConfig())).resolves.toBeDefined();
+  });
+
+  it('encrypts an inline discord bot token on save', async () => {
+    const service = makeService();
+    await service.load();
+
+    await service.save({
+      ...baseConfig(),
+      channels: [
+        {
+          type: 'discord',
+          id: 'guild-bot',
+          agentId: 'default',
+          botToken: { kind: 'inline', value: 'super-secret-token' },
+          enabled: true,
+        },
+      ],
+    });
+
+    const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(written.channels[0].botToken).toEqual({
+      kind: 'inline',
+      value: 'enc:v1:super-secret-token',
+    });
+  });
+
+  it('leaves an already-encrypted token unchanged (idempotent)', async () => {
+    const service = makeService();
+    await service.load();
+
+    await service.save({
+      ...baseConfig(),
+      channels: [
+        {
+          type: 'discord',
+          id: 'guild-bot',
+          agentId: 'default',
+          botToken: { kind: 'inline', value: 'enc:v1:already' },
+          enabled: true,
+        },
+      ],
+    });
+
+    const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(written.channels[0].botToken.value).toBe('enc:v1:already');
+  });
+
+  it('does not encrypt an env-var token reference on save', async () => {
+    const service = makeService();
+    await service.load();
+
+    await service.save({
+      ...baseConfig(),
+      channels: [
+        {
+          type: 'discord',
+          id: 'guild-bot',
+          agentId: 'default',
+          botToken: { kind: 'env', value: 'DISCORD_BOT_TOKEN' },
+          enabled: true,
+        },
+      ],
+    });
+
+    const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    expect(written.channels[0].botToken).toEqual({
+      kind: 'env',
+      value: 'DISCORD_BOT_TOKEN',
+    });
   });
 });

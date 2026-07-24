@@ -4,6 +4,7 @@ import type { SessionMessageService } from '../sessions/service';
 import { ChannelRegistry } from './registry.js';
 import type { IChannel } from './interface.js';
 import { WhatsAppChannel } from './whatsapp/service.js';
+import { DiscordChannel } from './discord/service.js';
 
 export type ChannelRegistryDeps = {
   sessionService: SessionMessageService;
@@ -33,6 +34,9 @@ function createChannelInstance(
 ): IChannel | null {
   if (cfg.type === 'whatsapp') {
     return new WhatsAppChannel(cfg, deps);
+  }
+  if (cfg.type === 'discord') {
+    return new DiscordChannel(cfg, deps);
   }
   // Future channel types go here, e.g.:
   // if (cfg.type === 'telegram') {

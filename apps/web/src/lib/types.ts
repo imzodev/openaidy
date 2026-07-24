@@ -463,8 +463,8 @@ export type ProviderConfig =
   | GeminiProviderConfig;
 
 /**
- * A configured messaging channel. WhatsApp is the only type today; the shape
- * mirrors `whatsappChannelConfigSchema` in packages/config.
+ * A configured messaging channel. Shapes mirror the channel schemas in
+ * packages/config (`whatsappChannelConfigSchema` / `discordChannelConfigSchema`).
  */
 export type WhatsAppChannelConfig = {
   type: 'whatsapp';
@@ -474,7 +474,23 @@ export type WhatsAppChannelConfig = {
   enabled?: boolean;
 };
 
-export type ChannelConfig = WhatsAppChannelConfig;
+/** A secret value: env-var reference or inline (encrypted at rest server-side). */
+export type ChannelSecretValue =
+  | string
+  | { kind: 'env' | 'inline'; value: string };
+
+export type DiscordChannelConfig = {
+  type: 'discord';
+  id: string;
+  agentId: string;
+  botToken: ChannelSecretValue;
+  dmAllowlist?: string[];
+  channelAllowlist?: string[];
+  respondToMentions?: boolean;
+  enabled?: boolean;
+};
+
+export type ChannelConfig = WhatsAppChannelConfig | DiscordChannelConfig;
 
 /**
  * Application configuration

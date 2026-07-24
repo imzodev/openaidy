@@ -2,6 +2,28 @@ import { z } from 'zod';
 import { httpTimeoutSchema, retrySchema, vendorFamilySchema } from './provider';
 
 // ============================================================================
+// Shared secret value schema (used by channels and MCP servers)
+// ============================================================================
+
+/**
+ * A single secret value. A plain string is the legacy shape (still accepted
+ * for backward compatibility with existing configs); the structured object
+ * form records whether the value is a `${VAR}`/env-var reference or an inline
+ * secret. Inline values are stored encrypted at rest — see
+ * `apps/server/src/mcp/secret-crypto.ts` — the `value` here is the
+ * `enc:v1:...` ciphertext, never the plaintext secret.
+ */
+export const mcpSecretValueSchema = z.union([
+  z.string(),
+  z.object({
+    kind: z.enum(['env', 'inline']),
+    value: z.string(),
+  }),
+]);
+
+export type McpSecretValue = z.infer<typeof mcpSecretValueSchema>;
+
+// ============================================================================
 // Channel Configuration
 // ============================================================================
 
@@ -13,13 +35,36 @@ export const whatsappChannelConfigSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+/**
+ * Discord channel. Authenticates with a bot token (no QR). The token is a
+ * secret value (env reference or inline-encrypted) stored via
+ * {@link mcpSecretValueSchema}. Trigger rules: DMs (optionally restricted to
+ * `dmAllowlist` user IDs), `@mentions` in servers when `respondToMentions`,
+ * and all messages in the server channels listed in `channelAllowlist`.
+ */
+export const discordChannelConfigSchema = z.object({
+  type: z.literal('discord'),
+  id: z.string().min(1),
+  agentId: z.string().min(1),
+  botToken: mcpSecretValueSchema,
+  /** Discord user IDs allowed to DM the bot; empty/absent = allow all DMs. */
+  dmAllowlist: z.array(z.string()).optional(),
+  /** Server channel IDs the bot responds to (all messages in them). */
+  channelAllowlist: z.array(z.string()).optional(),
+  /** In server channels, reply when the bot is @mentioned. */
+  respondToMentions: z.boolean().default(true),
+  enabled: z.boolean().default(true),
+});
+
 export const channelConfigSchema = z.discriminatedUnion('type', [
   whatsappChannelConfigSchema,
-  // Future channels added here: telegram, discord, slack, etc.
+  discordChannelConfigSchema,
+  // Future channels added here: telegram, slack, etc.
   // Adding a new channel = add its schema to this union. Zero other changes needed.
 ]);
 
 export type WhatsAppChannelConfig = z.infer<typeof whatsappChannelConfigSchema>;
+export type DiscordChannelConfig = z.infer<typeof discordChannelConfigSchema>;
 export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 
 // ============================================================================
@@ -33,22 +78,6 @@ export type ChannelConfig = z.infer<typeof channelConfigSchema>;
  * See: https://github.com/imzodev/openaidy/issues/200
  */
 export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
-
-/**
- * A single `env`/`headers` secret value. A plain string is the legacy shape
- * (still accepted for backward compatibility with existing configs); the
- * structured object form records whether the value is a `${VAR}` environment
- * reference or an inline secret. Inline values are stored encrypted at rest
- * — see `apps/server/src/mcp/secret-crypto.ts` — the `value` here is the
- * `enc:v1:...` ciphertext, never the plaintext secret.
- */
-export const mcpSecretValueSchema = z.union([
-  z.string(),
-  z.object({
-    kind: z.enum(['env', 'inline']),
-    value: z.string(),
-  }),
-]);
 
 /**
  * MCP server configuration schema
@@ -87,7 +116,6 @@ export const mcpServerConfigSchema = z
 
 export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
 export type McpServerTransport = z.infer<typeof mcpServerTransportSchema>;
-export type McpSecretValue = z.infer<typeof mcpSecretValueSchema>;
 
 /**
  * MCP Server runtime status (returned by API)
