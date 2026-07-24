@@ -10,6 +10,7 @@ import {
   FileText,
   Save,
   RotateCcw,
+  Download,
   Loader2,
   FileWarning,
   Image,
@@ -20,6 +21,7 @@ import {
   readWorkspaceFile,
   updateWorkspaceFile,
   fetchWorkspaceFileBlob,
+  downloadWorkspaceFile,
   type WorkspaceErrorResponse,
   type WorkspaceFileInfo,
   type WorkspaceFileContentResponse,
@@ -63,6 +65,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   >(null);
   const [isLoading, setIsLoading] = createSignal(false);
   const [isSaving, setIsSaving] = createSignal(false);
+  const [isDownloading, setIsDownloading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = createSignal<Date | null>(null);
   const [imageUrl, setImageUrl] = createSignal<string | null>(null);
@@ -254,6 +257,24 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
     setError(null);
   };
 
+  const handleDownload = async () => {
+    const filePath = currentPath();
+    const file = props.selectedFile;
+    if (!filePath || !file || isDownloading()) {
+      return;
+    }
+
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await downloadWorkspaceFile(props.agentId, filePath, file.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download file');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   createEffect(
     on(
       () => [props.agentId, currentPath()],
@@ -343,6 +364,21 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
               Read only
             </span>
           </Show>
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={!props.selectedFile || isDownloading()}
+            class="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Download file"
+          >
+            <Show
+              when={isDownloading()}
+              fallback={<Download class="w-3.5 h-3.5" />}
+            >
+              <Loader2 class="w-3.5 h-3.5 animate-spin" />
+            </Show>
+            Download
+          </button>
           <button
             type="button"
             onClick={revertChanges}

@@ -27,6 +27,7 @@ vi.mock('./CodeMirrorEditor', () => ({
 vi.mock('../../lib/api', () => ({
   readWorkspaceFile: vi.fn(),
   updateWorkspaceFile: vi.fn(),
+  downloadWorkspaceFile: vi.fn(),
 }));
 
 describe('WorkspaceEditor', () => {
@@ -159,5 +160,51 @@ describe('WorkspaceEditor', () => {
       screen.getByText('Detected type: application/octet-stream'),
     ).toBeInTheDocument();
     expect(api.updateWorkspaceFile).not.toHaveBeenCalled();
+  });
+
+  it('downloads the open file when the Download button is clicked', async () => {
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      content: 'hello world',
+      path: 'test.txt',
+      isText: true,
+      mimeType: 'text/plain',
+      size: 11,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
+    });
+    vi.mocked(api.downloadWorkspaceFile).mockResolvedValue(undefined);
+
+    render(() => <WorkspaceEditor agentId="default" selectedFile={file} />);
+
+    await screen.findByDisplayValue('hello world');
+    fireEvent.click(screen.getByTitle('Download file'));
+
+    expect(api.downloadWorkspaceFile).toHaveBeenCalledWith(
+      'default',
+      'test.txt',
+      'test.txt',
+    );
+  });
+
+  it('surfaces download errors via the error banner', async () => {
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      content: 'hello world',
+      path: 'test.txt',
+      isText: true,
+      mimeType: 'text/plain',
+      size: 11,
+      modifiedAt: '2026-04-05T10:00:00Z',
+      isTooLarge: false,
+    });
+    vi.mocked(api.downloadWorkspaceFile).mockRejectedValue(
+      new Error('File too large'),
+    );
+
+    render(() => <WorkspaceEditor agentId="default" selectedFile={file} />);
+
+    await screen.findByDisplayValue('hello world');
+    fireEvent.click(screen.getByTitle('Download file'));
+
+    expect(await screen.findByText('File too large')).toBeInTheDocument();
   });
 });
