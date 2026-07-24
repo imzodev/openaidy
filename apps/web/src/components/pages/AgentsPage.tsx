@@ -970,6 +970,7 @@ export function AgentsPage(props: AgentsPageProps) {
                       'Memory',
                       'Tasks',
                       'Workspace',
+                      'Media',
                       'Code',
                       'Execution',
                       'Skills',

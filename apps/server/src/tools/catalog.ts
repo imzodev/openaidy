@@ -116,6 +116,20 @@ export const workspaceDeleteMeta: ToolMeta = {
   description: 'Delete a file from the agent workspace.',
 };
 
+// ── Media ─────────────────────────────────────────────────────────────────────
+
+export const mediaShareMeta: ToolMeta = {
+  name: 'media_share',
+  category: 'Media',
+  description:
+    'Share a media file (image, audio, or video) from the agent workspace in the chat, ' +
+    'so the user can see or play it inline. The file must already exist in the workspace — ' +
+    'create it first with workspace_write, exec_run, or another tool. ' +
+    'Supported: png/jpg/gif/webp images, wav/mp3/m4a/ogg/webm/flac/aac audio, mp4/webm/ogv video. ' +
+    'Use this whenever the user would benefit from viewing a generated chart, image, ' +
+    'audio clip, or video rather than reading a file path.',
+};
+
 // ── Execution ─────────────────────────────────────────────────────────────────
 
 export const execRunMeta: ToolMeta = {

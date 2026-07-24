@@ -53,20 +53,14 @@ import type {
   SessionMessage as SharedSessionMessage,
   RunStatus as SharedRunStatus,
   SessionRun as SharedSessionRun,
+  SessionMessageAttachment,
 } from '@openaidy/shared-types';
 
-/**
- * Attachment metadata on a session message. Bytes are fetched separately
- * via GET /api/attachments/:id/raw (through the authenticated fetch).
- */
-export type SessionMessageAttachment = {
-  id: string;
-  kind: 'image' | 'audio';
-  source: 'user_upload' | 'tool_output';
-  name?: string | null;
-  mimeType: string;
-  sizeBytes: number;
-};
+// Attachment metadata on a session message. Declared in shared-types
+// (single source of truth) and re-exported so existing './types' imports
+// keep working. Bytes are fetched separately via GET /api/attachments/:id/raw
+// (through the authenticated fetch).
+export type { SessionMessageAttachment };
 
 /**
  * Session message — extends shared type with UI-only reasoning content field

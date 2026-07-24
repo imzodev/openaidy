@@ -207,7 +207,7 @@ export type SessionDeleteRequest = WSMessage<
  */
 export type SessionMessageAttachment = {
   id: string;
-  kind: 'image' | 'audio';
+  kind: 'image' | 'audio' | 'video';
   source: 'user_upload' | 'tool_output';
   name?: string | null;
   mimeType: string;
