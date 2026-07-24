@@ -309,6 +309,46 @@ describe('channel config validation', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a valid discord channel config and defaults respondToMentions', () => {
+    const result = appConfigSchema.safeParse({
+      ...baseConfig,
+      channels: [
+        {
+          type: 'discord',
+          id: 'guild-bot',
+          agentId: 'my-agent',
+          botToken: { kind: 'inline', value: 'enc:v1:ciphertext' },
+          enabled: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    const ch = result.data?.channels?.[0];
+    expect(ch?.type).toBe('discord');
+    if (ch?.type === 'discord') {
+      expect(ch.respondToMentions).toBe(true);
+      expect(ch.botToken).toEqual({
+        kind: 'inline',
+        value: 'enc:v1:ciphertext',
+      });
+    }
+  });
+
+  it('rejects a discord channel config missing a bot token', () => {
+    const result = appConfigSchema.safeParse({
+      ...baseConfig,
+      channels: [
+        {
+          type: 'discord',
+          id: 'guild-bot',
+          agentId: 'my-agent',
+          enabled: true,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects duplicate channel ids', () => {
     const result = appConfigSchema.safeParse({
       ...baseConfig,

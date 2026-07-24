@@ -28,6 +28,7 @@
     "adm-zip": "^0.6.0",
     "archiver": "^8.0.0",
     "croner": "^10.0.1",
+    "discord.js": "^14.16.3",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.41.0",
     "eventemitter3": "^5.0.4",

@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
 import type { FastifyBaseLogger } from 'fastify';
-import type { WhatsAppChannelConfig } from '@openaidy/config';
+import type {
+  WhatsAppChannelConfig,
+  DiscordChannelConfig,
+} from '@openaidy/config';
 import {
   createChannelRegistry,
   reconcileChannelRegistry,
@@ -29,6 +32,17 @@ function wa(id: string, agentId = 'default'): WhatsAppChannelConfig {
   return { type: 'whatsapp', id, agentId, enabled: true };
 }
 
+function dc(id: string, agentId = 'default'): DiscordChannelConfig {
+  return {
+    type: 'discord',
+    id,
+    agentId,
+    botToken: { kind: 'inline', value: 'tok' },
+    respondToMentions: true,
+    enabled: true,
+  };
+}
+
 describe('createChannelRegistry', () => {
   it('builds a channel instance per whatsapp config entry', () => {
     const registry = createChannelRegistry([wa('a'), wa('b')], makeDeps());
@@ -44,6 +58,12 @@ describe('createChannelRegistry', () => {
   it('handles undefined config as no channels', () => {
     const registry = createChannelRegistry(undefined, makeDeps());
     expect(registry.getAll()).toHaveLength(0);
+  });
+
+  it('builds a discord channel instance for a discord config entry', () => {
+    const registry = createChannelRegistry([dc('d1'), wa('w1')], makeDeps());
+    expect(registry.get('d1')?.type).toBe('discord');
+    expect(registry.get('w1')?.type).toBe('whatsapp');
   });
 });
 

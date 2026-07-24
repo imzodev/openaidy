@@ -33,6 +33,7 @@ import {
   readMcpSeedManifest,
   writeMcpSeedManifest,
 } from '../mcp/preinstall';
+import { encryptSecret, isEncryptedSecret } from '../mcp/secret-crypto';
 
 export class AppConfigService {
   private readonly configPath: string;
@@ -173,6 +174,7 @@ export class AppConfigService {
 
   async save(input: unknown): Promise<OpenAidyAppConfig> {
     const parsed = appConfigSchema.parse(input);
+    this.encryptChannelSecrets(parsed);
     this.writeConfigFile(parsed);
     await this.applyConfig(parsed);
     this.currentConfig = parsed;
@@ -216,6 +218,27 @@ export class AppConfigService {
     }
 
     return appConfigSchema.parse(parsedJson);
+  }
+
+  /**
+   * Encrypt inline channel secrets (currently the Discord bot token) before
+   * the config is written, so a plaintext token pasted in the UI never lands
+   * in openaidy.json. Idempotent: already-encrypted (`enc:v1:`) values and
+   * env-var references are left untouched. Mirrors MCP inline-secret handling
+   * (see `mcp/server-record.ts`).
+   */
+  private encryptChannelSecrets(config: OpenAidyAppConfig): void {
+    for (const channel of config.channels ?? []) {
+      if (channel.type !== 'discord') continue;
+      const token = channel.botToken;
+      if (
+        typeof token === 'object' &&
+        token.kind === 'inline' &&
+        !isEncryptedSecret(token.value)
+      ) {
+        token.value = encryptSecret(token.value);
+      }
+    }
   }
 
   private writeConfigFile(config: OpenAidyAppConfig): void {

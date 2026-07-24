@@ -1359,6 +1359,55 @@ export async function addWhatsAppChannel(input: {
 }
 
 /**
+ * Add a Discord channel to the config. Like {@link addWhatsAppChannel}, this
+ * reads the current config, appends the entry, and persists it via the config
+ * PUT; the server encrypts the inline bot token at rest and reconciles the
+ * channel into the live registry so the caller can immediately connect it.
+ *
+ * Throws if the id already exists or the config write fails.
+ */
+export async function addDiscordChannel(input: {
+  id: string;
+  agentId: string;
+  botToken: string;
+  dmAllowlist?: string[];
+  channelAllowlist?: string[];
+  respondToMentions?: boolean;
+}): Promise<void> {
+  const current = await getConfig();
+  if (!('config' in current)) {
+    throw new Error('Failed to load config');
+  }
+  const config = current.config;
+  const channels = config.channels ?? [];
+  if (channels.some((c) => c.id === input.id)) {
+    throw new Error(`A channel with id "${input.id}" already exists`);
+  }
+  const entry: ChannelConfig = {
+    type: 'discord',
+    id: input.id,
+    agentId: input.agentId,
+    // Sent as plaintext inline; the server encrypts it to enc:v1: on save.
+    botToken: { kind: 'inline', value: input.botToken },
+    enabled: true,
+    respondToMentions: input.respondToMentions ?? true,
+    ...(input.dmAllowlist && input.dmAllowlist.length > 0
+      ? { dmAllowlist: input.dmAllowlist }
+      : {}),
+    ...(input.channelAllowlist && input.channelAllowlist.length > 0
+      ? { channelAllowlist: input.channelAllowlist }
+      : {}),
+  };
+  const result = await updateConfig({
+    ...config,
+    channels: [...channels, entry],
+  });
+  if ('error' in result) {
+    throw new Error(`Failed to save channel: ${result.error}`);
+  }
+}
+
+/**
  * Remove a channel from the config by id. The server reconciles the live
  * registry, disconnecting and dropping the channel.
  */

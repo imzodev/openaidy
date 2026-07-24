@@ -26,6 +26,7 @@ import {
   connectChannel,
   disconnectChannel,
   addWhatsAppChannel,
+  addDiscordChannel,
   removeChannel,
   listAgents,
 } from '../../lib/api';
@@ -159,32 +160,59 @@ function QrPanel(props: { channelId: string; onConnected: () => void }) {
 
 function AddChannelDialog(props: {
   onClose: () => void;
-  onAdded: (id: string) => void;
+  onAdded: (id: string, type: 'whatsapp' | 'discord') => void;
 }) {
   const [agents] = createResource(async () => (await listAgents()).items);
+  const [channelType, setChannelType] = createSignal<'whatsapp' | 'discord'>(
+    'whatsapp',
+  );
   const [id, setId] = createSignal('');
   const [agentId, setAgentId] = createSignal('');
   const [allowlist, setAllowlist] = createSignal('');
+  const [botToken, setBotToken] = createSignal('');
+  const [dmAllowlist, setDmAllowlist] = createSignal('');
+  const [channelAllowlist, setChannelAllowlist] = createSignal('');
+  const [respondToMentions, setRespondToMentions] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
-  const canSave = () => id().trim().length > 0 && agentId().length > 0;
+  const csv = (s: string) =>
+    s
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+
+  const canSave = () => {
+    if (id().trim().length === 0 || agentId().length === 0) return false;
+    if (channelType() === 'discord') return botToken().trim().length > 0;
+    return true;
+  };
 
   const handleSave = async () => {
     if (!canSave()) return;
     setSaving(true);
     setError(null);
     try {
-      const allowlistArr = allowlist()
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      await addWhatsAppChannel({
-        id: id().trim(),
-        agentId: agentId(),
-        ...(allowlistArr.length > 0 ? { allowlist: allowlistArr } : {}),
-      });
-      props.onAdded(id().trim());
+      if (channelType() === 'discord') {
+        const dm = csv(dmAllowlist());
+        const chans = csv(channelAllowlist());
+        await addDiscordChannel({
+          id: id().trim(),
+          agentId: agentId(),
+          botToken: botToken().trim(),
+          respondToMentions: respondToMentions(),
+          ...(dm.length > 0 ? { dmAllowlist: dm } : {}),
+          ...(chans.length > 0 ? { channelAllowlist: chans } : {}),
+        });
+      } else {
+        const allowlistArr = csv(allowlist());
+        await addWhatsAppChannel({
+          id: id().trim(),
+          agentId: agentId(),
+          ...(allowlistArr.length > 0 ? { allowlist: allowlistArr } : {}),
+        });
+      }
+      props.onAdded(id().trim(), channelType());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add channel');
     } finally {
@@ -192,12 +220,15 @@ function AddChannelDialog(props: {
     }
   };
 
+  const inputClass =
+    'w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary';
+
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4">
         <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Add WhatsApp channel
+            Add channel
           </h2>
           <button
             onClick={props.onClose}
@@ -217,6 +248,22 @@ function AddChannelDialog(props: {
 
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Channel type <span class="text-red-500">*</span>
+            </label>
+            <select
+              value={channelType()}
+              onChange={(e) =>
+                setChannelType(e.currentTarget.value as 'whatsapp' | 'discord')
+              }
+              class={inputClass}
+            >
+              <option value="whatsapp">WhatsApp</option>
+              <option value="discord">Discord</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Channel ID <span class="text-red-500">*</span>
             </label>
             <input
@@ -224,10 +271,10 @@ function AddChannelDialog(props: {
               value={id()}
               onInput={(e) => setId(e.currentTarget.value)}
               placeholder="e.g. personal"
-              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+              class={inputClass}
             />
             <p class="mt-1 text-xs text-text-tertiary">
-              A unique name for this WhatsApp connection.
+              A unique name for this connection.
             </p>
           </div>
 
@@ -238,7 +285,7 @@ function AddChannelDialog(props: {
             <select
               value={agentId()}
               onChange={(e) => setAgentId(e.currentTarget.value)}
-              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+              class={inputClass}
             >
               <option value="">Select an agent…</option>
               <For each={agents() ?? []}>
@@ -250,22 +297,88 @@ function AddChannelDialog(props: {
             </p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Allowlist
+          <Show when={channelType() === 'whatsapp'}>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Allowlist
+              </label>
+              <input
+                type="text"
+                value={allowlist()}
+                onInput={(e) => setAllowlist(e.currentTarget.value)}
+                placeholder="e.g. 15551234567, 15559876543"
+                class={inputClass}
+              />
+              <p class="mt-1 text-xs text-text-tertiary">
+                Optional. Comma-separated phone numbers allowed to message this
+                channel. Leave empty to allow everyone.
+              </p>
+            </div>
+          </Show>
+
+          <Show when={channelType() === 'discord'}>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Bot token <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={botToken()}
+                onInput={(e) => setBotToken(e.currentTarget.value)}
+                placeholder="Discord bot token"
+                autocomplete="off"
+                class={inputClass}
+              />
+              <p class="mt-1 text-xs text-text-tertiary">
+                From the Discord Developer Portal. Stored encrypted at rest.
+                Enable the “Message Content Intent” for your bot.
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                DM allowlist
+              </label>
+              <input
+                type="text"
+                value={dmAllowlist()}
+                onInput={(e) => setDmAllowlist(e.currentTarget.value)}
+                placeholder="e.g. 123456789012345678"
+                class={inputClass}
+              />
+              <p class="mt-1 text-xs text-text-tertiary">
+                Optional. Comma-separated Discord user IDs allowed to DM the
+                bot. Leave empty to allow all DMs.
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Server channel allowlist
+              </label>
+              <input
+                type="text"
+                value={channelAllowlist()}
+                onInput={(e) => setChannelAllowlist(e.currentTarget.value)}
+                placeholder="e.g. 987654321098765432"
+                class={inputClass}
+              />
+              <p class="mt-1 text-xs text-text-tertiary">
+                Optional. Comma-separated channel IDs the bot replies in (all
+                messages).
+              </p>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={respondToMentions()}
+                onChange={(e) => setRespondToMentions(e.currentTarget.checked)}
+                class="rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary"
+              />
+              Reply when the bot is @mentioned in a server
             </label>
-            <input
-              type="text"
-              value={allowlist()}
-              onInput={(e) => setAllowlist(e.currentTarget.value)}
-              placeholder="e.g. 15551234567, 15559876543"
-              class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <p class="mt-1 text-xs text-text-tertiary">
-              Optional. Comma-separated phone numbers allowed to message this
-              channel. Leave empty to allow everyone.
-            </p>
-          </div>
+          </Show>
         </div>
 
         <div class="flex items-center justify-end gap-3 p-4 border-t dark:border-gray-700">
@@ -295,11 +408,11 @@ export function ChannelsPage() {
   const [showAdd, setShowAdd] = createSignal(false);
   const [confirmRemove, setConfirmRemove] = createSignal<string | null>(null);
 
-  const handleAdded = (id: string) => {
+  const handleAdded = (id: string, type: 'whatsapp' | 'discord') => {
     setShowAdd(false);
     void refetch();
     // Jump straight into linking the freshly-added channel.
-    void handleConnect(id);
+    void handleConnect(id, type);
   };
 
   const handleRemove = async (id: string) => {
@@ -314,11 +427,13 @@ export function ChannelsPage() {
     }
   };
 
-  const handleConnect = async (id: string) => {
+  const handleConnect = async (id: string, type: string) => {
     setPending(id);
     try {
       await connectChannel(id);
-      setQrOpen(id);
+      // Only WhatsApp needs the QR pairing panel; Discord connects via token
+      // and flips to Connected over the status WebSocket.
+      if (type === 'whatsapp') setQrOpen(id);
     } catch {
       // connect error — QR panel won't open, user can retry
     } finally {
@@ -343,7 +458,7 @@ export function ChannelsPage() {
       class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
     >
       <Plus class="w-4 h-4" />
-      Add WhatsApp
+      Add channel
     </button>
   );
 
@@ -382,15 +497,15 @@ export function ChannelsPage() {
                 No channels configured
               </h3>
               <p class="text-sm text-text-secondary mb-4 max-w-sm">
-                Connect a WhatsApp number so an agent can chat with you there.
-                Add a channel, then scan the QR code from your phone.
+                Connect WhatsApp or Discord so an agent can chat with people
+                there. Add a channel, then connect it.
               </p>
               <button
                 onClick={() => setShowAdd(true)}
                 class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors"
               >
                 <Plus class="w-4 h-4" />
-                Add WhatsApp channel
+                Add channel
               </button>
             </div>
           }
@@ -435,7 +550,9 @@ export function ChannelsPage() {
                         fallback={
                           <button
                             disabled={pending() === channel.id}
-                            onClick={() => handleConnect(channel.id)}
+                            onClick={() =>
+                              handleConnect(channel.id, channel.type)
+                            }
                             class="px-3 py-1.5 text-sm font-medium text-white bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
                           >
                             {pending() === channel.id
