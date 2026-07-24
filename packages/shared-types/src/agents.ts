@@ -35,4 +35,10 @@ export type CreateAgentInput = {
   description?: string;
   tags?: string[];
   skills?: string[];
+  /**
+   * Id of a prebuilt personality preset (see AGENT_PERSONALITY_PRESETS). When
+   * set, the server writes the preset's personality files after scaffolding
+   * the new agent. Ignored by agent config storage itself.
+   */
+  personalityPresetId?: string;
 };

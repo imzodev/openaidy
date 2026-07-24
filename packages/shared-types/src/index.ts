@@ -9,6 +9,7 @@ export * from './addon.js';
 export * from './mcp.js';
 export * from './agents.js';
 export * from './personality.js';
+export * from './personality-preset.js';
 export * from './channels.js';
 export * from './providers-preset.js';
 export * from './providers.js';

@@ -180,6 +180,8 @@ export type CreateAgentInput = {
   model: string;
   description?: string;
   tags?: string[];
+  /** Prebuilt personality preset id; server writes its personality files. */
+  personalityPresetId?: string;
 };
 
 /**

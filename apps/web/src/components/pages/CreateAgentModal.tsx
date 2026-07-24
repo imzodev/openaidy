@@ -6,8 +6,13 @@
  */
 
 import { createSignal, For, Show } from 'solid-js';
-import { X, Plus } from 'lucide-solid';
+import { X, Plus, Sparkles } from 'lucide-solid';
+import {
+  AGENT_PERSONALITY_PRESETS,
+  type PersonalityPreset,
+} from '@openaidy/shared-types';
 import { Modal } from '../ui/Modal';
+import { PersonalityPresetCard } from './PersonalityPresetCard';
 import {
   createAgent,
   type CreateAgentInput,
@@ -40,8 +45,25 @@ export function CreateAgentModal(props: Props) {
   const [tags, setTags] = createSignal<string[]>([]);
   const [isSubmitting, setIsSubmitting] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [selectedPresetId, setSelectedPresetId] = createSignal<string | null>(
+    null,
+  );
 
   const derivedId = () => (idTouched() ? id() : slugify(name()));
+
+  // Selecting a personality prefills the (still-editable) form. Name is only
+  // filled when empty so a name the user already typed is never clobbered.
+  const selectPreset = (preset: PersonalityPreset) => {
+    setSelectedPresetId(preset.id);
+    setSystemPrompt(preset.systemPrompt);
+    setDescription(preset.description);
+    setTags(preset.tags ? [...preset.tags] : []);
+    if (name().trim().length === 0) {
+      setName(preset.name);
+    }
+  };
+
+  const clearPreset = () => setSelectedPresetId(null);
 
   const allModels = (): { label: string; value: string }[] => {
     const out: { label: string; value: string }[] = [];
@@ -104,6 +126,7 @@ export function CreateAgentModal(props: Props) {
     setTagInput('');
     setTags([]);
     setError(null);
+    setSelectedPresetId(null);
   };
 
   const handleClose = () => {
@@ -126,6 +149,7 @@ export function CreateAgentModal(props: Props) {
       model: model(),
       description: description().trim() || undefined,
       tags: tags().length > 0 ? tags() : undefined,
+      personalityPresetId: selectedPresetId() ?? undefined,
     };
 
     try {
@@ -153,6 +177,35 @@ export function CreateAgentModal(props: Props) {
             {error()}
           </div>
         </Show>
+
+        {/* Personality picker (optional) — prefills the form below */}
+        <div>
+          <label class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <Sparkles class="w-4 h-4 text-primary" />
+            Start from a personality
+            <span class="font-normal text-gray-400">(optional)</span>
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <For each={AGENT_PERSONALITY_PRESETS}>
+              {(preset) => (
+                <PersonalityPresetCard
+                  preset={preset}
+                  selected={selectedPresetId() === preset.id}
+                  onSelect={selectPreset}
+                />
+              )}
+            </For>
+          </div>
+          <Show when={selectedPresetId()}>
+            <button
+              type="button"
+              onClick={clearPreset}
+              class="mt-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+            >
+              Clear personality (start blank)
+            </button>
+          </Show>
+        </div>
 
         {/* Name + ID row */}
         <div class="grid grid-cols-2 gap-4">
