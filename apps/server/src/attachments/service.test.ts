@@ -33,6 +33,7 @@ describe('mimeTypeForPath', () => {
   it('maps media extensions to mime types', () => {
     expect(mimeTypeForPath('media/chart.png')).toBe('image/png');
     expect(mimeTypeForPath('photo.jpg')).toBe('image/jpeg');
+    expect(mimeTypeForPath('photo.jpeg')).toBe('image/jpeg');
     expect(mimeTypeForPath('voice-note.mp3')).toBe('audio/mpeg');
     expect(mimeTypeForPath('song.m4a')).toBe('audio/mp4');
     expect(mimeTypeForPath('clip.mp4')).toBe('video/mp4');
@@ -43,6 +44,7 @@ describe('mimeTypeForPath', () => {
   it('is case-insensitive', () => {
     expect(mimeTypeForPath('CLIP.MP4')).toBe('video/mp4');
     expect(mimeTypeForPath('Pic.JPG')).toBe('image/jpeg');
+    expect(mimeTypeForPath('Pic.JPEG')).toBe('image/jpeg');
   });
 
   it('returns null for unsupported or extensionless paths', () => {
