@@ -170,6 +170,22 @@ export type SkillInfo = {
 };
 
 /**
+ * Validation error for a SKILL.md the registry refused to load.
+ * Returned alongside `items` by GET /skills so operators can see why
+ * a skill that exists on disk is missing from the catalog.
+ *
+ * `agentId` is set when the failing file lives in an agent's workspace
+ * (e.g. `<workspace>/<agentId>/skills/<id>/SKILL.md`). It is absent for
+ * errors in the global SKILLS_DIR.
+ */
+export type SkillLoadError = {
+  id: string;
+  filePath: string;
+  messages: string[];
+  agentId?: string;
+};
+
+/**
  * Input for creating a new agent
  */
 export type CreateAgentInput = {

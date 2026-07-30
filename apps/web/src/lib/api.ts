@@ -21,6 +21,7 @@ export type {
   BuiltinToolInfo,
   SkillSource,
   SkillInfo,
+  SkillLoadError,
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
@@ -94,6 +95,7 @@ import type {
   Agent,
   BuiltinToolInfo,
   SkillInfo,
+  SkillLoadError,
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
@@ -381,9 +383,16 @@ export async function updateAgentMcpServers(
 }
 
 /**
- * List all available skills registered on the server
+ * List all available skills registered on the server.
+ * `loadErrors` lists SKILL.md files the registry rejected (e.g. missing
+ * frontmatter). Those files exist on disk but are NOT included in `items`,
+ * so without this field operators have no way to see why a listed skill
+ * silently does not work.
  */
-export async function listSkills(): Promise<{ items: SkillInfo[] }> {
+export async function listSkills(): Promise<{
+  items: SkillInfo[];
+  loadErrors: SkillLoadError[];
+}> {
   const response = await apiFetch(`${API_BASE}/api/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list skills: ${response.statusText}`);
