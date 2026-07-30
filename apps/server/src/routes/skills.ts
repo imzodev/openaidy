@@ -41,36 +41,58 @@ function readAgentWorkspaceSkillIds(agentSkillsDir: string): Set<string> {
 }
 
 /**
- * Parse all valid SKILL.md files in an agent's workspace skills directory.
+ * Parse all SKILL.md files in an agent's workspace skills directory.
+ *
+ * Returns BOTH the skills that parsed cleanly and the validation errors
+ * for the ones that did not. Callers must surface the errors — silently
+ * dropping them is what hid the broken `minimax-image-gen` skill from the
+ * UI for so long.
  */
-function parseAgentWorkspaceSkills(
-  agentSkillsDir: string,
-): Array<{ id: string; name: string; description: string }> {
-  const results: Array<{ id: string; name: string; description: string }> = [];
-  if (!existsSync(agentSkillsDir)) return results;
+function scanAgentWorkspaceSkills(agentSkillsDir: string): {
+  skills: Array<{ id: string; name: string; description: string }>;
+  errors: Array<{ id: string; filePath: string; messages: string[] }>;
+} {
+  const skills: Array<{ id: string; name: string; description: string }> = [];
+  const errors: Array<{ id: string; filePath: string; messages: string[] }> =
+    [];
+  if (!existsSync(agentSkillsDir)) return { skills, errors };
   let subdirs: string[];
   try {
     subdirs = readdirSync(agentSkillsDir);
   } catch {
-    return results;
+    return { skills, errors };
   }
   for (const id of subdirs) {
     const skillFile = join(agentSkillsDir, id, 'SKILL.md');
     if (!existsSync(skillFile)) continue;
+    let content: string;
     try {
-      const content = readFileSync(skillFile, 'utf-8');
-      const result = parseSkillMd(content, id, skillFile);
-      if ('errors' in result) continue;
-      results.push({
-        id: result.id,
-        name: result.name,
-        description: result.description,
-      });
+      content = readFileSync(skillFile, 'utf-8');
     } catch {
-      // skip unreadable files
+      // Unreadable file — record as an error rather than silently dropping it.
+      errors.push({
+        id,
+        filePath: skillFile,
+        messages: ['Failed to read SKILL.md'],
+      });
+      continue;
     }
+    const result = parseSkillMd(content, id, skillFile);
+    if ('errors' in result) {
+      errors.push({
+        id,
+        filePath: skillFile,
+        messages: result.errors.map((e) => e.message),
+      });
+      continue;
+    }
+    skills.push({
+      id: result.id,
+      name: result.name,
+      description: result.description,
+    });
   }
-  return results;
+  return { skills, errors };
 }
 
 export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
@@ -87,6 +109,12 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
   app.get('/skills', async () => {
     const manifest = readSeedManifest(skillsDir);
     const items: EnrichedSkillInfo[] = [];
+    const loadErrors: Array<{
+      id: string;
+      filePath: string;
+      messages: string[];
+      agentId?: string;
+    }> = [];
 
     // Global skills with source tags
     for (const skill of skillRegistry.listSkills()) {
@@ -115,18 +143,30 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
       });
     }
 
-    // Agent workspace skills
+    // Skills whose SKILL.md failed validation in the GLOBAL registry.
+    for (const err of skillRegistry.getLoadErrors()) {
+      loadErrors.push(err);
+    }
+
+    // Agent workspace skills — both the valid ones (added to items) and
+    // the ones that failed validation (added to loadErrors with agentId).
+    // Walking both per-agent keeps the data model simple and ensures that
+    // a broken workspace SKILL.md is never silently invisible.
     for (const agent of agentRegistry.listAllAgents()) {
       const agentSkillsDir = join(
         workspace.getWorkspacePath(agent.id),
         'skills',
       );
-      for (const skill of parseAgentWorkspaceSkills(agentSkillsDir)) {
+      const { skills, errors } = scanAgentWorkspaceSkills(agentSkillsDir);
+      for (const skill of skills) {
         items.push({ ...skill, source: 'agent', agentId: agent.id });
+      }
+      for (const err of errors) {
+        loadErrors.push({ ...err, agentId: agent.id });
       }
     }
 
-    return { items };
+    return { items, loadErrors };
   });
 
   /**
@@ -149,7 +189,8 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
     >(globalSkills.map((s) => [s.id, s]));
 
     const agentSkillsDir = join(workspace.getWorkspacePath(agentId), 'skills');
-    for (const skill of parseAgentWorkspaceSkills(agentSkillsDir)) {
+    const { skills: agentSkills } = scanAgentWorkspaceSkills(agentSkillsDir);
+    for (const skill of agentSkills) {
       merged.set(skill.id, skill);
     }
 
