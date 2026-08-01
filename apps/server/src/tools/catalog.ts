@@ -203,6 +203,17 @@ export const skillCreateMeta: ToolMeta = {
     'The skill is immediately available after creation.',
 };
 
+export const skillUpdateMeta: ToolMeta = {
+  name: 'skill_update',
+  category: 'Skills',
+  description:
+    'Modify an existing skill in your workspace. Pass only the fields you want to change — omitted fields keep their current value. ' +
+    'Use files to add or overwrite companion files; pass deleteFiles to remove specific ones. ' +
+    'Companion files not mentioned in either list are preserved. ' +
+    'This is the ONLY way to update a skill — never use workspace_write, code_edit, or exec_run to edit SKILL.md ' +
+    '(the loader will not pick up changes made outside this tool).',
+};
+
 // ── Web ───────────────────────────────────────────────────────────────────────
 
 export const webFetchMeta: ToolMeta = {
@@ -479,6 +490,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   codeGlobMeta,
   execRunMeta,
   skillCreateMeta,
+  skillUpdateMeta,
   webFetchMeta,
   addonCreateMeta,
   addonUpdateMeta,
