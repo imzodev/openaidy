@@ -7,6 +7,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { SkillLoadError } from '@openaidy/shared-types';
 import { parseSkillMd } from './parser.js';
 import type { SkillDefinition } from './parser.js';
 
@@ -28,6 +29,7 @@ export type SkillRegistryOptions = {
 
 export class SkillRegistry {
   private skills: Map<string, SkillDefinition> = new Map();
+  private loadErrors: SkillLoadError[] = [];
   private loaded = false;
   private readonly skillsDir: string;
   private readonly initialSkills?: SkillDefinition[];
@@ -55,6 +57,20 @@ export class SkillRegistry {
     }
 
     this.loaded = true;
+  }
+
+  /**
+   * Per-file validation errors collected during the last load().
+   * Each entry is a directory id and the absolute path of its SKILL.md,
+   * plus the parser messages explaining why the file was rejected.
+   *
+   * Skills that land here were skipped — agents listing them in their config
+   * will not see them at runtime. Surface them via /skills or the API so the
+   * problem is visible instead of a silent no-op.
+   */
+  getLoadErrors(): SkillLoadError[] {
+    this.ensureLoaded();
+    return [...this.loadErrors];
   }
 
   private loadFromDir(): void {
@@ -87,9 +103,13 @@ export class SkillRegistry {
       const result = parseSkillMd(content, id, skillFile);
 
       if ('errors' in result) {
-        // Log warning and skip invalid skill
+        const messages = result.errors.map((e) => e.message);
+        this.loadErrors.push({ id, filePath: skillFile, messages });
+        // Actionable warning — file path is included so the operator can find it.
         console.warn(
-          `[SkillRegistry] Skipping invalid skill "${id}": ${result.errors.map((e) => e.message).join(', ')}`,
+          `[SkillRegistry] Skipping invalid skill "${id}" at ${skillFile}: ${messages.join(', ')}. ` +
+            `SKILL.md must start with YAML frontmatter (---) including at minimum 'name' and 'description'. ` +
+            `Use skill_create to generate a valid file.`,
         );
         continue;
       }

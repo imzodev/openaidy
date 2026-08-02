@@ -47,39 +47,54 @@ const ALLOWED_MIME_TYPES: Record<AttachmentKind, readonly string[]> = {
   video: ['video/mp4', 'video/webm', 'video/ogg'],
 };
 
-const EXT_BY_MIME: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'audio/wav': 'wav',
-  'audio/x-wav': 'wav',
-  'audio/mpeg': 'mp3',
-  'audio/mp3': 'mp3',
-  'audio/mp4': 'm4a',
-  'audio/ogg': 'ogg',
-  'audio/webm': 'webm',
-  'audio/flac': 'flac',
-  'audio/aac': 'aac',
-  'video/mp4': 'mp4',
-  'video/webm': 'webm',
-  'video/ogg': 'ogv',
-};
-
 /**
- * Extension → mime lookup, derived from {@link EXT_BY_MIME} so the two
- * directions never drift. Where several mimes share an extension (e.g.
- * audio/mpeg vs audio/mp3) the first — canonical — entry wins.
+ * Supported media types. The source of truth for both lookup tables
+ * below. Each row is one mime with its canonical extension (written
+ * to disk when an upload arrives) and any extension aliases that
+ * resolve to the same mime when shared from the workspace (e.g. `jpeg`
+ * is the same as `jpg`).
+ *
+ * Where two mimes share an extension (audio/wav/x-wav, audio/mpeg/mp3,
+ * audio/webm/video/webm), both rows are listed and the first one
+ * wins as the canonical mime for {@link MIME_BY_EXT}. The `.webm`
+ * override at the bottom bends that rule: a <video> element plays
+ * both audio and video webm files, while an <audio> element can't
+ * show the picture of a video webm.
  */
+const MEDIA_TYPES: ReadonlyArray<
+  readonly [mime: string, ext: string, ...aliases: string[]]
+> = [
+  ['image/png', 'png'],
+  ['image/jpeg', 'jpg', 'jpeg'],
+  ['image/gif', 'gif'],
+  ['image/webp', 'webp'],
+  ['audio/wav', 'wav'],
+  ['audio/x-wav', 'wav'],
+  ['audio/mpeg', 'mp3'],
+  ['audio/mp3', 'mp3'],
+  ['audio/mp4', 'm4a'],
+  ['audio/ogg', 'ogg'],
+  ['audio/webm', 'webm'],
+  ['audio/flac', 'flac'],
+  ['audio/aac', 'aac'],
+  ['video/mp4', 'mp4'],
+  ['video/webm', 'webm'],
+  ['video/ogg', 'ogv'],
+];
+
 const MIME_BY_EXT: Record<string, string> = {};
-for (const [mime, ext] of Object.entries(EXT_BY_MIME)) {
+const EXT_BY_MIME: Record<string, string> = {};
+for (const [mime, ext, ...aliases] of MEDIA_TYPES) {
   if (!(ext in MIME_BY_EXT)) {
     MIME_BY_EXT[ext] = mime;
   }
+  for (const alias of aliases) {
+    MIME_BY_EXT[alias] = mime;
+  }
+  if (!(mime in EXT_BY_MIME)) {
+    EXT_BY_MIME[mime] = ext;
+  }
 }
-// .webm is ambiguous — the same extension is used for audio-only and
-// video files. Prefer video: a <video> element plays both correctly,
-// while an <audio> element can't show the picture of a video webm.
 MIME_BY_EXT['webm'] = 'video/webm';
 
 /** Derive the attachment kind from a mime type, or null if unsupported. */

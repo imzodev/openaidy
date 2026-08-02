@@ -107,6 +107,52 @@ describe('SkillRegistry', () => {
       expect(skills).toHaveLength(0);
     });
 
+    it('skips SKILL.md with no frontmatter and records the load error', () => {
+      // Simulates the agent writing a SKILL.md directly via workspace_write
+      // instead of skill_create: just a markdown heading, no --- delimiters.
+      mkdirSync(join(tmpSkillDir, 'no-frontmatter'), { recursive: true });
+      writeFileSync(
+        join(tmpSkillDir, 'no-frontmatter/SKILL.md'),
+        [
+          '# Generación de Imágenes',
+          '',
+          'Esta skill invoca un modelo para generar imágenes.',
+        ].join('\n'),
+      );
+
+      const registry = new SkillRegistry({ skillsDir: tmpSkillDir });
+      registry.load();
+
+      expect(registry.listSkills()).toHaveLength(0);
+      const errors = registry.getLoadErrors();
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.id).toBe('no-frontmatter');
+      expect(errors[0]!.filePath).toMatch(/no-frontmatter[\\/]SKILL\.md$/);
+      expect(errors[0]!.messages.join(' ')).toMatch(/frontmatter/i);
+    });
+
+    it('records separate load errors for each invalid skill', () => {
+      mkdirSync(join(tmpSkillDir, 'bad-a'), { recursive: true });
+      mkdirSync(join(tmpSkillDir, 'bad-b'), { recursive: true });
+      writeFileSync(
+        join(tmpSkillDir, 'bad-a/SKILL.md'),
+        '# Just a heading\n\nNo frontmatter here.',
+      );
+      writeFileSync(
+        join(tmpSkillDir, 'bad-b/SKILL.md'),
+        ['---', '---', 'Empty frontmatter'].join('\n'),
+      );
+
+      const registry = new SkillRegistry({ skillsDir: tmpSkillDir });
+      registry.load();
+
+      const errorIds = registry
+        .getLoadErrors()
+        .map((e) => e.id)
+        .sort();
+      expect(errorIds).toEqual(['bad-a', 'bad-b']);
+    });
+
     it('loads from initialSkills when provided (bypasses filesystem)', () => {
       const initialSkills = [
         createTmpSkill('init-a'),

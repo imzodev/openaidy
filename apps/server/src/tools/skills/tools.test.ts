@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSkillRegistry } from '../../skills/index';
+import { createSkillRegistry, parseSkillMd } from '../../skills/index';
 import { WorkspaceService } from '../../workspace/service';
 import {
   createSkillCreateTool,
@@ -144,6 +144,35 @@ describe('skill tools', () => {
         'utf-8',
       );
       expect(fileContent).toContain(`created_by: ${CTX.agentId}`);
+    });
+
+    it('produces a SKILL.md that round-trips through parseSkillMd', async () => {
+      const tool = createSkillCreateTool(registry, workspace);
+      const result = await tool.execute(
+        {
+          id: 'roundtrip-skill',
+          name: 'Roundtrip Skill',
+          description: 'Survives parsing',
+          body: 'Always emit frontmatter so the registry can load this file.',
+        },
+        CTX,
+      );
+      expect(result.ok).toBe(true);
+
+      const fileContent = await readFile(
+        join(agentSkillsDir, 'roundtrip-skill', 'SKILL.md'),
+        'utf-8',
+      );
+      const parsed = parseSkillMd(fileContent, 'roundtrip-skill', 'test');
+      expect('errors' in parsed).toBe(false);
+      if (!('errors' in parsed)) {
+        expect(parsed.name).toBe('Roundtrip Skill');
+        expect(parsed.description).toBe('Survives parsing');
+        expect(parsed.body).toBe(
+          'Always emit frontmatter so the registry can load this file.',
+        );
+        expect(parsed.version).toBe('1.0.0');
+      }
     });
 
     it('returns error when id already exists', async () => {

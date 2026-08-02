@@ -181,6 +181,41 @@ describe('Skill Routes', () => {
       expect(ids).toEqual(['skill-a', 'skill-b']);
     });
 
+    it('surfaces broken workspace SKILL.md in loadErrors with agentId', async () => {
+      // Replicate the bug the user reported: a SKILL.md in the agent
+      // workspace written without frontmatter (e.g. by workspace_write
+      // bypassing skill_create). It must NOT disappear silently — the
+      // operator has to see WHY the skill is missing from `items`.
+      const agentSkillsDir = path.join(tempWorkspaceDir, 'default', 'skills');
+      fs.mkdirSync(path.join(agentSkillsDir, 'broken-skill'), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(agentSkillsDir, 'broken-skill', 'SKILL.md'),
+        '# Just a heading\n\nNo frontmatter at all.',
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/skills',
+      });
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      // The broken skill is NOT in items (it failed to parse).
+      const ids = body.items.map((s: { id: string }) => s.id);
+      expect(ids).not.toContain('broken-skill');
+
+      // But it IS in loadErrors with the agent attached.
+      const err = body.loadErrors.find(
+        (e: { id: string }) => e.id === 'broken-skill',
+      );
+      expect(err).toBeDefined();
+      expect(err.agentId).toBe('default');
+      expect(err.filePath).toMatch(/broken-skill[\\/]SKILL\.md$/);
+      expect(err.messages.join(' ')).toMatch(/frontmatter/i);
+    });
+
     it('returns skill summaries with id, name, description', async () => {
       const response = await app.inject({
         method: 'GET',

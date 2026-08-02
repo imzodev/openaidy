@@ -125,7 +125,7 @@ export const mediaShareMeta: ToolMeta = {
     'Share a media file (image, audio, or video) from the agent workspace in the chat, ' +
     'so the user can see or play it inline. The file must already exist in the workspace — ' +
     'create it first with workspace_write, exec_run, or another tool. ' +
-    'Supported: png/jpg/gif/webp images, wav/mp3/m4a/ogg/webm/flac/aac audio, mp4/webm/ogv video. ' +
+    'Supported: png/jpg/jpeg/gif/webp images, wav/mp3/m4a/ogg/webm/flac/aac audio, mp4/webm/ogv video. ' +
     'Use this whenever the user would benefit from viewing a generated chart, image, ' +
     'audio clip, or video rather than reading a file path.',
 };
@@ -200,7 +200,17 @@ export const skillCreateMeta: ToolMeta = {
   description:
     'Create a new skill and save it to the skills directory. ' +
     'A skill is a reusable set of instructions that can be assigned to agents. ' +
-    'The skill is immediately available after creation.',
+    'REQUIRED parameters: id (lowercase, hyphens), name (human-readable), ' +
+    'description (one-line summary used by the skill registry and by agents ' +
+    'to decide when to load the skill — frontmatter is generated from these), ' +
+    'and body (the actual instructions, Markdown allowed). ' +
+    'Optional: version (defaults to "1.0.0") and files (companion scripts, ' +
+    '.env.example, etc.). ' +
+    'This is the ONLY way to create a skill — never use workspace_write, ' +
+    'code_edit, or exec_run to write a SKILL.md file. Files written by those ' +
+    'tools bypass the frontmatter wrap and the registry will silently skip them, ' +
+    'so the skill will not load even if it is listed in the agent config. ' +
+    'Pass companion files via the `files` map; SKILL.md itself comes from `body`.',
 };
 
 export const skillUpdateMeta: ToolMeta = {

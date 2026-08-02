@@ -218,6 +218,137 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
       expect(body.items).toBeInstanceOf(Array);
       expect(body.items.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('rejects an invalid status filter', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sessions?status=bogus',
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('excludes archived sessions from the default list and includes them under status=archived', async () => {
+      const created = (
+        await app.inject({
+          method: 'POST',
+          url: '/api/sessions',
+          payload: { title: 'To be archived' },
+        })
+      ).json();
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${created.id}`,
+        payload: { status: 'archived' },
+      });
+
+      const active = (
+        await app.inject({ method: 'GET', url: '/api/sessions' })
+      ).json();
+      expect(
+        active.items.some((s: { id: string }) => s.id === created.id),
+      ).toBe(false);
+
+      const archived = (
+        await app.inject({
+          method: 'GET',
+          url: '/api/sessions?status=archived',
+        })
+      ).json();
+      expect(
+        archived.items.some((s: { id: string }) => s.id === created.id),
+      ).toBe(true);
+    });
+  });
+
+  describe('PATCH /sessions/:sessionId', () => {
+    const createSession = async (title: string) =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/sessions',
+          payload: { title },
+        })
+      ).json();
+
+    it('renames a session', async () => {
+      const session = await createSession('Old title');
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { title: 'New title' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().title).toBe('New title');
+    });
+
+    it('favorites and unfavorites a session', async () => {
+      const session = await createSession('Fav me');
+
+      const fav = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { favorited: true },
+      });
+      expect(fav.statusCode).toBe(200);
+      expect(fav.json().favoritedAt).toBeTruthy();
+
+      const unfav = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { favorited: false },
+      });
+      expect(unfav.json().favoritedAt).toBeFalsy();
+    });
+
+    it('archives and unarchives a session, clearing archivedAt on unarchive', async () => {
+      const session = await createSession('Archive me');
+
+      const archived = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { status: 'archived' },
+      });
+      expect(archived.json().status).toBe('archived');
+      expect(archived.json().archivedAt).toBeTruthy();
+
+      const restored = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { status: 'active' },
+      });
+      expect(restored.json().status).toBe('active');
+      expect(restored.json().archivedAt).toBeFalsy();
+    });
+
+    it('rejects an empty patch', async () => {
+      const session = await createSession('No-op');
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: {},
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects a disallowed status (deleted) via PATCH', async () => {
+      const session = await createSession('Cannot delete via patch');
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/sessions/${session.id}`,
+        payload: { status: 'deleted' },
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 404 for a non-existent session', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/sessions/does-not-exist',
+        payload: { title: 'x' },
+      });
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   describe('DELETE /sessions/:sessionId', () => {

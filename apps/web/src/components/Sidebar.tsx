@@ -21,6 +21,7 @@ import {
   Brain,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
+import { SessionList } from './SessionList';
 import type { Session, AddonRecord } from '../lib/api';
 import { updateBadgeVisible } from '../stores/update-notice';
 
@@ -49,6 +50,7 @@ type SidebarProps = {
   onSelectSession: (id: string) => void;
   onCreateSession: () => void;
   onClearSession?: () => void;
+  onToggleFavorite?: (id: string, favorited: boolean) => void | Promise<void>;
   isLoadingSessions?: boolean;
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
@@ -224,6 +226,26 @@ export function Sidebar(props: SidebarProps) {
                 </button>
               </Show>
             </div>
+
+            {/* Quick-access sessions: Favorites + Recent. Hidden when collapsed. */}
+            <Show when={!props.isCollapsed}>
+              <SessionList
+                sessions={props.sessions}
+                selectedId={props.selectedSessionId}
+                onSelect={(id) => {
+                  props.onSelectSession(id);
+                  if (isMobileViewport()) {
+                    props.onCollapse();
+                  }
+                }}
+                {...(props.onToggleFavorite
+                  ? { onToggleFavorite: props.onToggleFavorite }
+                  : {})}
+                isLoading={props.isLoadingSessions ?? false}
+                isCollapsed={props.isCollapsed}
+                isActiveView={props.currentView === 'chat'}
+              />
+            </Show>
           </div>
 
           <For each={navSections}>

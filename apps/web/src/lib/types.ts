@@ -53,6 +53,10 @@ export type {
   UpdateMemoryInput,
   MemorySearchResult,
   MemoryAgentSummary,
+  // SKILL.md validation errors surfaced by GET /skills. Declared in
+  // shared-types so the registry, the route, and this client agree on one
+  // shape; re-exported here so existing './types' imports keep working.
+  SkillLoadError,
 } from '@openaidy/shared-types';
 
 import type {

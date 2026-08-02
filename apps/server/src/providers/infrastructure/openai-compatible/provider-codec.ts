@@ -2,29 +2,18 @@
  * Provider-specific adapter behaviour.
  *
  * The OpenAI-compatible adapter speaks to several different
- * providers (OpenAI, Groq, DeepSeek, OpenRouter, etc.) that
- * mostly look the same on the wire but have small, important
- * differences:
+ * providers (OpenAI, Groq, DeepSeek, OpenRouter, MiniMax, etc.)
+ * that mostly look the same on the wire but have small,
+ * important differences. These quirks are scattered across the
+ * adapter (request shaping, response shaping, streaming event
+ * handling), so we centralise them here behind a
+ * `ProviderAdapterCodec` interface.
  *
- *   - DeepSeek restricts function-call tool names to
- *     `^[a-zA-Z0-9_-]+$`, so MCP-style names with `::` or
- *     dotted names must be translated on the request side and
- *     the original recovered on the response side. Without a
- *     per-call name map, naive sanitization mangles legitimate
- *     native tool names like `workspace_list` into
- *     `workspace.list`.
- *   - DeepSeek streams `reasoning_content` deltas alongside
- *     regular content for its thinking-mode models.
- *
- * These quirks are scattered across the adapter (request
- * shaping, response shaping, streaming event handling), so we
- * centralise them here behind a `ProviderAdapterCodec`
- * interface. Adding a new OpenAI-compatible provider with
- * quirks is a single subclass — not a chain of
- * `if (baseUrl.includes('foo'))` branches in the adapter.
- *
- * The codec is selected once at adapter construction
- * (`selectAdapterCodec`) and consulted at every request.
+ * Adding a new OpenAI-compatible provider with quirks is a
+ * single subclass — not a chain of `if (baseUrl.includes(...))`
+ * branches in the adapter. Live codec implementations live in
+ * `./provider-codec/{deepseek,minimax}.ts` and are re-exported
+ * from this file so the public API stays flat.
  */
 
 import type { ToolDefinition } from '@openaidy/runtime';
@@ -91,8 +80,8 @@ export interface ProviderAdapterCodec {
 
   /**
    * Optional: extract a `reasoning_content` field from a
-   * non-streaming response message. Returns `null` if the
-   * codec has no reasoning-mode support.
+   * non-streaming response message. Returns `null` for codecs
+   * that have no reasoning-mode support.
    */
   extractReasoningField(message: unknown): string | null;
 
@@ -103,13 +92,38 @@ export interface ProviderAdapterCodec {
    * reasoning-mode round-trip.
    */
   pickRequestReasoningContent(message: unknown): string | undefined;
+
+  /**
+   * Strip leaked provider-side framing tokens from a streaming
+   * content delta. Some OpenAI-compatible providers (notably
+   * MiniMax M-series) occasionally emit tool-call wrappers and
+   * their internal token boundaries inside the `content` field
+   * of a streamed assistant delta. When that happens, the raw
+   * markup reaches the client as user-visible text and (because
+   * the model already finished its turn with `tool_calls`) the
+   * response is cut off mid-stream.
+   *
+   * The default codec pass-through is safe: it returns the input
+   * unchanged and assumes the upstream SDK already routed
+   * tool calls to `choice.delta.tool_calls`. Codecs whose
+   * upstream SDK does leak (or cannot be trusted to never leak)
+   * override this to scrub the framing tokens before the delta
+   * is yielded.
+   *
+   * The function is stateless and per-chunk: it cannot
+   * reconstruct a tool call whose wrapping was split across
+   * multiple deltas. That would require a stateful parser and a
+   * separate rework of the streaming loop — out of scope here.
+   */
+  sanitizeContentDelta(delta: string): string;
 }
 
 /**
  * Default codec — passes tool names through unchanged, no
- * reasoning-mode support. Used by OpenAI, Groq, OpenRouter,
- * and any other provider that doesn't have quirks beyond the
- * standard OpenAI Chat Completions shape.
+ * reasoning-mode support, no content sanitization. Used by
+ * OpenAI, Groq, OpenRouter, and any other provider that
+ * doesn't have quirks beyond the standard OpenAI Chat
+ * Completions shape.
  */
 export class IdentityAdapterCodec implements ProviderAdapterCodec {
   readonly name = 'identity';
@@ -143,87 +157,21 @@ export class IdentityAdapterCodec implements ProviderAdapterCodec {
   pickRequestReasoningContent(_message: unknown): string | undefined {
     return undefined;
   }
-}
 
-/**
- * DeepSeek-specific codec:
- *   - Sanitises tool names to `^[a-zA-Z0-9_-]+$` on the
- *     request side and recovers the original via a per-call
- *     name map on the response side.
- *   - Surfaces the `reasoning_content` deltas (streaming)
- *     and field (non-streaming) returned by DeepSeek's
- *     thinking-mode models.
- */
-export class DeepSeekAdapterCodec implements ProviderAdapterCodec {
-  readonly name = 'deepseek';
-
-  prepareRequest(tools: readonly ToolDefinition[]): {
-    wire: Array<{ name: string; description: string; parameters: unknown }>;
-    nameMap: ToolNameMapping;
-  } {
-    const nameMap = new Map<string, string>();
-    const wire = tools.map((tool) => {
-      const wireName = sanitize(tool.name);
-      if (wireName !== tool.name) {
-        nameMap.set(wireName, tool.name);
-      }
-      return {
-        name: wireName,
-        description: tool.description,
-        parameters: tool.parameters,
-      };
-    });
-    return { wire, nameMap };
-  }
-
-  restoreName(wireName: string, nameMap: ToolNameMapping): string {
-    return nameMap.get(wireName) ?? wireName;
-  }
-
-  extractReasoningDelta(chunk: unknown): string | null {
-    const choice = (chunk as { choices?: Array<{ delta?: unknown }> })
-      ?.choices?.[0];
-    if (!choice) return null;
-    const delta = (choice as { delta?: { reasoning_content?: unknown } }).delta;
-    return typeof delta?.reasoning_content === 'string'
-      ? delta.reasoning_content
-      : null;
-  }
-
-  extractReasoningField(message: unknown): string | null {
-    if (!message || typeof message !== 'object') return null;
-    const field = (message as { reasoning_content?: unknown })
-      .reasoning_content;
-    return typeof field === 'string' ? field : null;
-  }
-
-  pickRequestReasoningContent(message: unknown): string | undefined {
-    if (!message || typeof message !== 'object') return undefined;
-    const field = (message as { reasoningContent?: unknown }).reasoningContent;
-    return typeof field === 'string' ? field : undefined;
+  sanitizeContentDelta(delta: string): string {
+    return delta;
   }
 }
 
 /**
- * The DeepSeek character allow-list. A tool name is wire-safe
- * iff every character is in this set; otherwise the characters
- * are replaced with `_` on the way out and recovered via the
- * per-call name map on the way back.
+ * Shared empty map for codecs that pass names through
+ * unchanged. Avoids allocating a fresh Map per request.
  */
-const DEEPSEEK_ALLOWED = /^[a-zA-Z0-9_-]+$/;
+export const EMPTY_NAME_MAP: ToolNameMapping = new Map();
 
-/**
- * Replace any character outside the DeepSeek allow-list with
- * `_`. Returns the input unchanged if it was already wire-safe.
- */
-function sanitize(name: string): string {
-  return DEEPSEEK_ALLOWED.test(name)
-    ? name
-    : name.replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-/**
- * Shared empty map for the identity codec. Avoids allocating
- * a fresh Map per request.
- */
-const EMPTY_NAME_MAP: ToolNameMapping = new Map();
+// Re-export provider-specific codecs so callers can keep
+// importing everything from `./provider-codec.js` instead of
+// reaching into the subdirectory. The subdirectory files own
+// the implementation; this file owns the contract.
+export { DeepSeekAdapterCodec } from './provider-codec/deepseek.js';
+export { MiniMaxAdapterCodec } from './provider-codec/minimax.js';

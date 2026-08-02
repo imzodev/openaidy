@@ -21,6 +21,7 @@ export type {
   BuiltinToolInfo,
   SkillSource,
   SkillInfo,
+  SkillLoadError,
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
@@ -94,6 +95,7 @@ import type {
   Agent,
   BuiltinToolInfo,
   SkillInfo,
+  SkillLoadError,
   CreateAgentInput,
   SubmitMessageInput,
   SubmitMessageResult,
@@ -178,12 +180,55 @@ function apiFetch(input: string, init?: RequestInit): Promise<Response> {
 }
 
 /**
- * List sessions
+ * List active sessions.
+ *
+ * Arg-less by design so it can be passed straight to a query's `queryFn`
+ * (the query context arg would otherwise leak into a query string). Use
+ * {@link listArchivedSessions} for the archived view.
  */
 export async function listSessions(): Promise<{ items: Session[] }> {
   const response = await apiFetch(`${API_BASE}/api/sessions`);
   if (!response.ok) {
     throw new Error(`Failed to list sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * List archived sessions (status=archived).
+ */
+export async function listArchivedSessions(): Promise<{ items: Session[] }> {
+  const response = await apiFetch(`${API_BASE}/api/sessions?status=archived`);
+  if (!response.ok) {
+    throw new Error(`Failed to list archived sessions: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Update a session: rename (title), archive/unarchive (status), and/or
+ * favorite/unfavorite (favorited). Only the provided fields change.
+ */
+export async function updateSession(
+  id: string,
+  patch: {
+    title?: string;
+    status?: 'active' | 'archived';
+    favorited?: boolean;
+  },
+): Promise<Session> {
+  const response = await apiFetch(`${API_BASE}/api/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as { message?: string; error?: string }).message ??
+        (err as { error?: string }).error ??
+        `Failed to update session: ${response.statusText}`,
+    );
   }
   return response.json();
 }
@@ -338,9 +383,16 @@ export async function updateAgentMcpServers(
 }
 
 /**
- * List all available skills registered on the server
+ * List all available skills registered on the server.
+ * `loadErrors` lists SKILL.md files the registry rejected (e.g. missing
+ * frontmatter). Those files exist on disk but are NOT included in `items`,
+ * so without this field operators have no way to see why a listed skill
+ * silently does not work.
  */
-export async function listSkills(): Promise<{ items: SkillInfo[] }> {
+export async function listSkills(): Promise<{
+  items: SkillInfo[];
+  loadErrors: SkillLoadError[];
+}> {
   const response = await apiFetch(`${API_BASE}/api/skills`);
   if (!response.ok) {
     throw new Error(`Failed to list skills: ${response.statusText}`);

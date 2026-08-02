@@ -1,7 +1,12 @@
 import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
-import { Lightbulb, Bot } from 'lucide-solid';
+import { Lightbulb, Bot, AlertTriangle } from 'lucide-solid';
 import { Layout } from './Layout';
-import { listSkills, type SkillInfo, type SkillSource } from '../../lib/api';
+import {
+  listSkills,
+  type SkillInfo,
+  type SkillLoadError,
+  type SkillSource,
+} from '../../lib/api';
 import {
   SKILL_SOURCE_BADGE,
   SKILL_SOURCE_BADGE_CLASSES,
@@ -58,6 +63,7 @@ type SkillGroup = {
 
 export function SkillsPage() {
   const [skills, setSkills] = createSignal<SkillInfo[]>([]);
+  const [loadErrors, setLoadErrors] = createSignal<SkillLoadError[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -67,6 +73,7 @@ export function SkillsPage() {
     try {
       const data = await listSkills();
       setSkills(data.items);
+      setLoadErrors(data.loadErrors);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load skills');
     } finally {
@@ -154,6 +161,67 @@ export function SkillsPage() {
         <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p class="text-sm text-red-700 dark:text-red-400">{error()}</p>
         </div>
+      </Show>
+
+      {/* Load errors: SKILL.md files the registry refused. These exist on
+          disk but are NOT in `items` — without this banner, an operator has
+          no way to see why a skill listed in the agent config does nothing. */}
+      <Show when={!isLoading() && loadErrors().length > 0}>
+        <section class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-6">
+          <header class="flex items-center gap-2 mb-2">
+            <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <h2 class="text-sm font-semibold text-amber-900 dark:text-amber-300">
+              {loadErrors().length} skill
+              {loadErrors().length === 1 ? '' : 's'} failed to load
+            </h2>
+          </header>
+          <p class="text-xs text-amber-800 dark:text-amber-400 mb-3">
+            These SKILL.md files exist on disk but the registry rejected them.
+            Most often this is missing or malformed YAML frontmatter — the file
+            must start with{' '}
+            <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">
+              ---
+            </code>{' '}
+            and include at minimum{' '}
+            <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">
+              name
+            </code>{' '}
+            and{' '}
+            <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">
+              description
+            </code>
+            . Use the{' '}
+            <code class="bg-amber-100 dark:bg-amber-900/40 px-1 rounded font-mono">
+              skill_create
+            </code>{' '}
+            tool to write a valid one.
+          </p>
+          <ul class="flex flex-col gap-1.5">
+            <For each={loadErrors()}>
+              {(err) => (
+                <li class="bg-white/60 dark:bg-black/20 border border-amber-200/60 dark:border-amber-800/40 rounded px-3 py-2">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <code class="text-xs font-mono font-semibold text-amber-900 dark:text-amber-300">
+                      {err.id}
+                    </code>
+                    <Show when={err.agentId}>
+                      <span class="flex items-center gap-0.5 text-xs text-amber-700 dark:text-amber-400">
+                        <Bot class="w-3 h-3" />
+                        <code class="font-mono">{err.agentId}</code>
+                        <span class="text-amber-700/60 dark:text-amber-400/60">
+                          (workspace)
+                        </span>
+                      </span>
+                    </Show>
+                  </div>
+                  <ul class="text-xs text-amber-800 dark:text-amber-400 list-disc pl-5 mt-1">
+                    <For each={err.messages}>{(msg) => <li>{msg}</li>}</For>
+                  </ul>
+                </li>
+              )}
+            </For>
+          </ul>
+        </section>
       </Show>
 
       {/* Empty state */}
