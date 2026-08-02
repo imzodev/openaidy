@@ -497,7 +497,7 @@ export type AddonIframeMessage =
       body?: unknown;
       nonce: string;
     }
-  | { type: 'OPENAIDY_CSP_VIOLATION'; blockedURI: string; nonce: string };
+  | { type: 'ADDON_CSP_VIOLATION'; blockedURI: string; nonce: string };
 
 /**
  * Single CSS variable names an addon theme-aware template should expect to

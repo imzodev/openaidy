@@ -245,13 +245,17 @@ function applyTheme(theme) {
 // The parent may have already sent it before this script executed, so we
 // also listen for OPENAIDY_THEME_CHANGED so a user who toggles the host's
 // theme while the addon is open sees the addon follow without a reload.
+// The listener stays registered for the addon's lifetime — OPENAIDY_INIT
+// is gated on an initialised flag so a duplicate init is a no-op, but
+// OPENAIDY_THEME_CHANGED still reaches applyTheme() after init.
 applyTheme({ mode: 'dark', tokens: FALLBACK_TOKENS });
 
+var initialised = false;
 window.addEventListener('message', function onMessage(event) {
   var msg = event.data;
   if (!msg || typeof msg !== 'object') return;
-  if (msg.type === 'OPENAIDY_INIT') {
-    window.removeEventListener('message', onMessage);
+  if (msg.type === 'OPENAIDY_INIT' && !initialised) {
+    initialised = true;
     applyTheme(msg.theme);
     var script = document.createElement('script');
     script.src = msg.apiBase + '/sdk/openaidy-sdk.js';

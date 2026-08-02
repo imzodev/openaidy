@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@solidjs/testing-library';
 import { onMount } from 'solid-js';
+import type { Theme } from '@openaidy/shared-types';
 import { AddonViewPage } from './AddonViewPage';
-import { ThemeProvider, useTheme, type Theme } from '../../lib/theme';
+import { ThemeProvider, useTheme } from '../../lib/theme';
 import type { AddonRecord } from '../../lib/api';
 
 vi.mock('../../lib/api', () => ({

@@ -5,8 +5,9 @@ import {
   createEffect,
   type ParentComponent,
 } from 'solid-js';
+import type { Theme } from '@openaidy/shared-types';
 
-export type Theme = 'light' | 'dark' | 'system';
+export type { Theme };
 
 interface ThemeContextValue {
   theme: () => Theme;

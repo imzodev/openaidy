@@ -58,24 +58,167 @@ describe('generateFromTemplate — shared theme tokens', () => {
     expect(js).toMatch(/'--text-primary':\s*'#f3f4f6'/);
   });
 
-  it('handles OPENAIDY_THEME_CHANGED by reapplying tokens', async () => {
+  it('gates init on an initialised flag so a duplicate OPENAIDY_INIT is a no-op but the listener stays alive', async () => {
     const { js } = await generate();
-    // The shared bootstrap should branch on the message type and re-apply
-    // the theme when the host pushes a live update.
-    expect(js).toContain('OPENAIDY_THEME_CHANGED');
-    expect(js).toMatch(/OPENAIDY_THEME_CHANGED[\s\S]*applyTheme\(msg\.theme\)/);
+    // No removeEventListener — the message listener must remain registered
+    // for the addon's lifetime so a subsequent OPENAIDY_THEME_CHANGED can
+    // reach applyTheme().
+    expect(js).not.toMatch(/removeEventListener\(['"]message['"]/);
+    // The init branch is guarded by the flag.
+    expect(js).toMatch(/OPENAIDY_INIT['"]\s*&&\s*!initialised/);
   });
 
   it('applies the .dark class so Tailwind dark: variants inside the addon still resolve', async () => {
     const { js } = await generate();
     expect(js).toMatch(/classList\.(add|remove)\('dark'\)/);
   });
+});
 
-  it('removes the OPENAIDY_INIT listener after the first init so the rest of the lifetime only handles live theme updates', async () => {
-    const { js } = await generate();
-    // removeEventListener for the first-message branch — guarantees the
-    // OPENAIDY_THEME_CHANGED branch is the one that survives a long-lived
-    // addon.
-    expect(js).toMatch(/removeEventListener\('message', onMessage\)/);
+/**
+ * Execute the generated `app/index.js` in a stubbed browser environment so
+ * the test can assert behaviour — not just source text. The review on
+ * PR #485 was that text-matching tests couldn't catch the live-update
+ * regression where `removeEventListener` killed the listener; this
+ * execution test would have.
+ */
+describe('generateFromTemplate — bootstrap behaviour', () => {
+  let dir: string;
+  let originalSetTimeout: typeof setTimeout;
+  let originalDocument: typeof document;
+  let originalWindow: typeof window;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'openaidy-scaffolding-bootstrap-'));
+    // The basic template registers a 5-second "SDK never connected" timer.
+    // Stub setTimeout so the timer doesn't keep the test process alive.
+    originalSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (() => 0) as unknown as typeof setTimeout;
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    globalThis.setTimeout = originalSetTimeout;
+    // Unused: kept so the test can be re-pointed at the global
+    // window/document if it ever needs real ones.
+    void originalDocument;
+    void originalWindow;
+  });
+
+  it('applies OPENAIDY_THEME_CHANGED after init — the listener survives the first init', async () => {
+    const result = await generateFromTemplate('basic', dir, SAMPLE_OPTS);
+    expect(result.success).toBe(true);
+    const js = await readFile(join(dir, 'app/index.js'), 'utf-8');
+
+    // Track every property written to :root.style and every event listener
+    // registered/unregistered on window. The test feeds the bootstrap
+    // OPENAIDY_INIT, then OPENAIDY_THEME_CHANGED, and asserts the second
+    // message actually wrote new tokens — which is only possible if the
+    // listener survived the first init.
+    const tokensApplied: Array<{ key: string; value: string }> = [];
+    const registeredListeners: Array<{ event: string; handler: unknown }> = [];
+    const removedListeners: Array<{ event: string; handler: unknown }> = [];
+    const postedToParent: unknown[] = [];
+
+    const stubWindow = {
+      addEventListener: (event: string, handler: unknown) => {
+        registeredListeners.push({ event, handler });
+      },
+      removeEventListener: (event: string, handler: unknown) => {
+        removedListeners.push({ event, handler });
+      },
+      parent: {
+        postMessage: (data: unknown) => {
+          postedToParent.push(data);
+        },
+      },
+    };
+
+    const stubStyle = {
+      setProperty: (key: string, value: string) => {
+        tokensApplied.push({ key, value });
+      },
+    };
+
+    const stubDocument = {
+      documentElement: {
+        classList: { add: () => {}, remove: () => {} },
+        style: stubStyle,
+      },
+      getElementById: () => ({
+        textContent: '',
+        style: { color: '' },
+      }),
+      createElement: () => ({ src: '', onload: null as null }),
+      head: { appendChild: () => {} },
+    };
+
+    // Run the bootstrap in a controlled scope. The generated code reads
+    // from `window` and `document` at top level (no IIFE), so passing
+    // them as args gives the test full visibility into every call.
+    const fn = new Function('window', 'document', js);
+    fn(stubWindow, stubDocument);
+
+    // Pre-init: the fallback tokens must already be applied, and the
+    // bootstrap must have signalled ADDON_READY.
+    expect(tokensApplied.length).toBeGreaterThan(0);
+    expect(postedToParent).toContainEqual({ type: 'ADDON_READY' });
+
+    const messageReg = registeredListeners.find((e) => e.event === 'message');
+    expect(messageReg).toBeDefined();
+    const handler = messageReg!.handler as (event: { data: unknown }) => void;
+
+    // First init — light mode, custom token.
+    tokensApplied.length = 0;
+    handler({
+      data: {
+        type: 'OPENAIDY_INIT',
+        apiBase: 'http://host.test',
+        theme: { mode: 'light', tokens: { '--bg-primary': '#fafafa' } },
+      },
+    });
+    const initTokens = tokensApplied.filter((t) => t.key === '--bg-primary');
+    expect(initTokens).toContainEqual({
+      key: '--bg-primary',
+      value: '#fafafa',
+    });
+    // The listener must NOT have been removed.
+    expect(removedListeners).toHaveLength(0);
+
+    // Live theme update — dark mode, different token. This is the message
+    // that would never reach applyTheme under the old removeEventListener
+    // pattern.
+    tokensApplied.length = 0;
+    handler({
+      data: {
+        type: 'OPENAIDY_THEME_CHANGED',
+        theme: { mode: 'dark', tokens: { '--bg-primary': '#0a0a0a' } },
+      },
+    });
+    const darkTokens = tokensApplied.filter((t) => t.key === '--bg-primary');
+    expect(darkTokens).toContainEqual({
+      key: '--bg-primary',
+      value: '#0a0a0a',
+    });
+
+    // A duplicate init must be a no-op (flag guard).
+    tokensApplied.length = 0;
+    handler({
+      data: {
+        type: 'OPENAIDY_INIT',
+        apiBase: 'http://host.test',
+        theme: { mode: 'light', tokens: { '--bg-primary': '#ffffff' } },
+      },
+    });
+    // A second init still calls applyTheme (which writes all known tokens),
+    // so the bg-primary value should reflect the second init, not be
+    // silently ignored. The guard prevents double <script> injection, not
+    // re-application of tokens.
+    const secondInitTokens = tokensApplied.filter(
+      (t) => t.key === '--bg-primary',
+    );
+    expect(secondInitTokens).toContainEqual({
+      key: '--bg-primary',
+      value: '#ffffff',
+    });
   });
 });

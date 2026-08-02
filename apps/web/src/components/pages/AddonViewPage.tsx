@@ -5,8 +5,7 @@ import {
   onCleanup,
   onMount,
   createMemo,
-  createEffect,
-  untrack,
+  on,
 } from 'solid-js';
 import {
   Puzzle,
@@ -25,6 +24,9 @@ import { resolveToken } from '../../lib/auth-token';
 import { useTheme } from '../../lib/theme';
 import {
   ADDON_THEME_TOKEN_NAMES,
+  type AddonIframeMessage,
+  type AddonInitMessage,
+  type AddonThemeMessage,
   type AddonThemePayload,
 } from '@openaidy/shared-types';
 
@@ -142,33 +144,34 @@ export function AddonViewPage(props: Props) {
   // on first paint, with no flash. See OPENAIDY_THEME_CHANGED below for the
   // live-update path.
   const sendInit = () => {
-    iframeRef?.contentWindow?.postMessage(
-      {
-        type: 'OPENAIDY_INIT',
-        apiBase: SERVER_BASE,
-        nonce,
-        theme: readThemeFromHost(),
-      },
-      '*',
-    );
+    const init: AddonInitMessage = {
+      type: 'OPENAIDY_INIT',
+      apiBase: SERVER_BASE,
+      nonce,
+      theme: readThemeFromHost(),
+    };
+    iframeRef?.contentWindow?.postMessage(init, '*');
   };
 
   // Live theme propagation. When the user toggles light/dark (or the OS
   // preference changes for `system` mode), the host's `<html>` class flips
   // and the CSS variables resolve to the new palette. We re-sample the host
   // and post OPENAIDY_THEME_CHANGED so a theme-aware addon follows without
-  // needing a reload. untrack the read on first run — the first init already
-  // carries the theme, so we only want to push deltas.
-  createEffect(() => {
-    resolvedTheme();
-    const theme = readThemeFromHost();
-    untrack(() => {
-      iframeRef?.contentWindow?.postMessage(
-        { type: 'OPENAIDY_THEME_CHANGED', theme },
-        '*',
-      );
-    });
-  });
+  // a reload. The first run is intentionally skipped (`defer: true`) — the
+  // initial OPENAIDY_INIT already carries the theme, so we only push deltas.
+  createEffect(
+    on(
+      resolvedTheme,
+      () => {
+        const message: AddonThemeMessage = {
+          type: 'OPENAIDY_THEME_CHANGED',
+          theme: readThemeFromHost(),
+        };
+        iframeRef?.contentWindow?.postMessage(message, '*');
+      },
+      { defer: true },
+    ),
+  );
 
   // Send on iframe load as a fallback for addons that predate ADDON_READY,
   // and again when the addon sends ADDON_READY (see handleMessage) for reliability.
@@ -196,8 +199,9 @@ export function AddonViewPage(props: Props) {
     // every message type, including ADDON_READY (which necessarily arrives
     // before the addon has a nonce to echo back).
     if (event.source !== iframeRef?.contentWindow) return;
-    const msg = event.data as Record<string, unknown>;
-    if (typeof msg !== 'object') return;
+    const raw = event.data;
+    if (typeof raw !== 'object' || raw === null) return;
+    const msg = raw as AddonIframeMessage;
     // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
     if (msg.type === 'ADDON_READY') {
       sendInit();
@@ -205,8 +209,7 @@ export function AddonViewPage(props: Props) {
     }
     if (msg.type === 'ADDON_CSP_VIOLATION') {
       if (msg.nonce !== nonce) return;
-      const blocked = msg.blockedURI as string | undefined;
-      if (!blocked) return;
+      const blocked = msg.blockedURI;
       try {
         const host = new URL(blocked).hostname;
         setCspWarnings((prev) =>
@@ -223,20 +226,10 @@ export function AddonViewPage(props: Props) {
     // Validate nonce instead of origin (sandbox strips origin to 'null')
     if (msg.nonce !== nonce) return;
 
-    const {
-      requestId,
-      method,
-      path: reqPath,
-      body,
-    } = msg as {
-      requestId: string;
-      method: string;
-      path: string;
-      body?: unknown;
-    };
+    const { requestId, method, path: reqPath, body } = msg;
 
     // Reject requests to paths not in the allowlist
-    if (!isAllowed(method ?? 'GET', reqPath)) {
+    if (!isAllowed(method, reqPath)) {
       iframeRef?.contentWindow?.postMessage(
         {
           type: 'OPENAIDY_RESPONSE',
@@ -275,7 +268,7 @@ export function AddonViewPage(props: Props) {
 
     try {
       const res = await fetch(`${SERVER_BASE}${reqPath}`, {
-        method: method ?? 'GET',
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${addonToken}`,
