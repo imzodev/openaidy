@@ -6,6 +6,7 @@ import {
   onCleanup,
   createMemo,
 } from 'solid-js';
+import { createQuery } from '@tanstack/solid-query';
 import {
   MessageSquare,
   Plus,
@@ -17,8 +18,13 @@ import {
   AlignLeft,
   Filter,
   Zap,
+  Star,
+  Pencil,
+  Check,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-solid';
-import { searchSessions } from '../../lib/api';
+import { searchSessions, listArchivedSessions } from '../../lib/api';
 import type { Session } from '../../lib/api';
 import type { SessionSearchResult, UsageTotals } from '../../lib/types';
 import {
@@ -33,6 +39,10 @@ type SessionsPageProps = {
   onSelectSession: (id: string) => void;
   onCreateSession: () => void;
   onDeleteSession?: (id: string) => void;
+  onRenameSession?: (id: string, title: string) => void | Promise<void>;
+  onToggleFavorite?: (id: string, favorited: boolean) => void | Promise<void>;
+  onArchiveSession?: (id: string) => void | Promise<void>;
+  onUnarchiveSession?: (id: string) => void | Promise<void>;
   isLoading?: boolean;
   /** Per-session usage totals keyed by session id (absent = no usage yet). */
   usageBySession?: Record<string, UsageTotals>;
@@ -44,6 +54,7 @@ type SessionsPageProps = {
 const ADDON_SESSION_TITLE_PREFIX = 'addon:';
 
 type SessionCategory = 'chat' | 'task' | 'subtask' | 'addon';
+type SessionView = 'active' | 'archived';
 
 const CATEGORY_LABELS: Record<SessionCategory, string> = {
   chat: 'Chat',
@@ -66,6 +77,8 @@ function lastActivityMs(session: Session): number {
   return ts ? new Date(ts).getTime() : 0;
 }
 
+const isFavorite = (session: Session): boolean => !!session.favoritedAt;
+
 export function SessionsPage(props: SessionsPageProps) {
   const [searchQuery, setSearchQuery] = createSignal('');
   const [searchResults, setSearchResults] = createSignal<
@@ -77,8 +90,21 @@ export function SessionsPage(props: SessionsPageProps) {
   const [activeCategories, setActiveCategories] = createSignal<
     SessionCategory[]
   >(['chat']);
+  const [view, setView] = createSignal<SessionView>('active');
+  // Inline rename state — id of the session being renamed and its draft title.
+  const [editingId, setEditingId] = createSignal<string | null>(null);
+  const [editValue, setEditValue] = createSignal('');
 
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Archived sessions are fetched on demand — only when the Archived tab is
+  // active — so the common (active) view stays a single request. Shares the
+  // ['sessions', 'archived'] key that App's mutations invalidate.
+  const archivedQuery = createQuery(() => ({
+    queryKey: ['sessions', 'archived'],
+    queryFn: listArchivedSessions,
+    enabled: view() === 'archived',
+  }));
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString();
@@ -144,13 +170,37 @@ export function SessionsPage(props: SessionsPageProps) {
   const isSearching_ = () => isSearching();
   const hasSearchResults = () => searchResults() !== null;
   const searchResults_ = () => searchResults() ?? [];
-  const sortedSessions = createMemo(() =>
-    [...props.sessions].sort((a, b) => lastActivityMs(b) - lastActivityMs(a)),
-  );
+
+  // The list to render depends on the active/archived toggle. Active sessions
+  // come from props (App's ['sessions'] query); archived ones are fetched here.
+  const viewSessions = (): Session[] =>
+    view() === 'archived' ? (archivedQuery.data?.items ?? []) : props.sessions;
+
+  // Active view: favorites first, then most-recent activity. Archived view:
+  // most-recently-archived (falls back to activity) first, no favorite bump.
+  const sortedSessions = createMemo(() => {
+    const list = [...viewSessions()];
+    if (view() === 'archived') {
+      return list.sort((a, b) => {
+        const at = a.archivedAt ? new Date(a.archivedAt).getTime() : 0;
+        const bt = b.archivedAt ? new Date(b.archivedAt).getTime() : 0;
+        return (bt || lastActivityMs(b)) - (at || lastActivityMs(a));
+      });
+    }
+    return list.sort((a, b) => {
+      const favDiff = Number(isFavorite(b)) - Number(isFavorite(a));
+      if (favDiff !== 0) return favDiff;
+      return lastActivityMs(b) - lastActivityMs(a);
+    });
+  });
+
   const sessions_ = () =>
     sortedSessions().filter((s) =>
       activeCategories().includes(categorizeSession(s)),
     );
+
+  const isViewLoading = () =>
+    view() === 'archived' ? archivedQuery.isLoading : !!props.isLoading;
 
   // Usage badge data for a card — only when the session has recorded tokens,
   // so brand-new / empty sessions don't show a "0 tokens" badge.
@@ -165,6 +215,19 @@ export function SessionsPage(props: SessionsPageProps) {
         ? prev.filter((c) => c !== category)
         : [...prev, category],
     );
+  };
+
+  const startRename = (session: Session) => {
+    setEditingId(session.id);
+    setEditValue(session.title);
+  };
+
+  const commitRename = (session: Session) => {
+    const next = editValue().trim();
+    if (next && next !== session.title) {
+      void props.onRenameSession?.(session.id, next);
+    }
+    setEditingId(null);
   };
 
   return (
@@ -271,6 +334,24 @@ export function SessionsPage(props: SessionsPageProps) {
 
         {/* Default session list (shown when not searching) */}
         <Show when={!hasSearchResults()}>
+          {/* Active / Archived toggle */}
+          <div class="inline-flex items-center gap-1 mb-4 p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+            <For each={['active', 'archived'] as SessionView[]}>
+              {(v) => (
+                <button
+                  onClick={() => setView(v)}
+                  class={`px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize ${
+                    view() === v
+                      ? 'bg-white dark:bg-gray-700 text-text-primary shadow-sm'
+                      : 'text-text-tertiary hover:text-text-secondary'
+                  }`}
+                >
+                  {v}
+                </button>
+              )}
+            </For>
+          </div>
+
           {/* Category filter */}
           <div class="flex items-center gap-2 flex-wrap mb-4">
             <Filter class="w-4 h-4 text-text-tertiary" />
@@ -290,7 +371,7 @@ export function SessionsPage(props: SessionsPageProps) {
             </For>
           </div>
 
-          <Show when={props.isLoading}>
+          <Show when={isViewLoading()}>
             <div class="text-center py-12">
               <div class="animate-pulse text-text-tertiary">
                 Loading sessions...
@@ -300,33 +381,48 @@ export function SessionsPage(props: SessionsPageProps) {
 
           <Show
             when={
-              !props.isLoading &&
+              !isViewLoading() &&
               sessions_().length === 0 &&
-              props.sessions.length === 0
+              viewSessions().length === 0
             }
           >
             <div class="text-center py-12">
-              <MessageSquare class="w-12 h-12 mx-auto mb-4 text-text-muted" />
-              <h3 class="text-lg font-medium text-text-primary mb-2">
-                No sessions yet
-              </h3>
-              <p class="text-text-secondary mb-4">
-                Create a new session to start chatting with agents
-              </p>
-              <button
-                onClick={props.onCreateSession}
-                class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors"
+              <Show
+                when={view() === 'archived'}
+                fallback={
+                  <>
+                    <MessageSquare class="w-12 h-12 mx-auto mb-4 text-text-muted" />
+                    <h3 class="text-lg font-medium text-text-primary mb-2">
+                      No sessions yet
+                    </h3>
+                    <p class="text-text-secondary mb-4">
+                      Create a new session to start chatting with agents
+                    </p>
+                    <button
+                      onClick={props.onCreateSession}
+                      class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg transition-colors"
+                    >
+                      Create Session
+                    </button>
+                  </>
+                }
               >
-                Create Session
-              </button>
+                <Archive class="w-12 h-12 mx-auto mb-4 text-text-muted" />
+                <h3 class="text-lg font-medium text-text-primary mb-2">
+                  No archived sessions
+                </h3>
+                <p class="text-text-secondary">
+                  Sessions you archive will appear here.
+                </p>
+              </Show>
             </div>
           </Show>
 
           <Show
             when={
-              !props.isLoading &&
+              !isViewLoading() &&
               sessions_().length === 0 &&
-              props.sessions.length > 0
+              viewSessions().length > 0
             }
           >
             <div class="text-center py-12">
@@ -340,7 +436,7 @@ export function SessionsPage(props: SessionsPageProps) {
             </div>
           </Show>
 
-          <Show when={!props.isLoading && sessions_().length > 0}>
+          <Show when={!isViewLoading() && sessions_().length > 0}>
             <div class="grid gap-4">
               <For each={sessions_()}>
                 {(session) => (
@@ -350,13 +446,38 @@ export function SessionsPage(props: SessionsPageProps) {
                         ? 'border-primary bg-blue-50 dark:bg-blue-900/20'
                         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'
                     }`}
-                    onClick={() => props.onSelectSession(session.id)}
+                    onClick={() => {
+                      if (editingId() === session.id) return;
+                      props.onSelectSession(session.id);
+                    }}
                   >
                     <div class="flex items-start justify-between gap-4">
                       <div class="flex-1 min-w-0">
-                        <h3 class="font-medium text-text-primary truncate">
-                          {session.title}
-                        </h3>
+                        <Show
+                          when={editingId() === session.id}
+                          fallback={
+                            <h3 class="flex items-center gap-1.5 font-medium text-text-primary truncate">
+                              <Show when={isFavorite(session)}>
+                                <Star class="w-3.5 h-3.5 shrink-0 fill-amber-400 text-amber-400" />
+                              </Show>
+                              <span class="truncate">{session.title}</span>
+                            </h3>
+                          }
+                        >
+                          <input
+                            type="text"
+                            value={editValue()}
+                            onClick={(e) => e.stopPropagation()}
+                            onInput={(e) => setEditValue(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitRename(session);
+                              if (e.key === 'Escape') setEditingId(null);
+                            }}
+                            onBlur={() => commitRename(session)}
+                            ref={(el) => setTimeout(() => el.focus(), 0)}
+                            class="w-full px-2 py-1 text-sm font-medium bg-white dark:bg-gray-900 border border-primary/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50 text-text-primary"
+                          />
+                        </Show>
                         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-text-tertiary">
                           <span class="inline-flex items-center gap-1.5">
                             <Clock class="w-3.5 h-3.5" />
@@ -380,7 +501,83 @@ export function SessionsPage(props: SessionsPageProps) {
                           </Show>
                         </div>
                       </div>
-                      <div class="flex items-center gap-2">
+                      <div class="flex items-center gap-1">
+                        <Show when={view() === 'active'}>
+                          <Show when={props.onToggleFavorite}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void props.onToggleFavorite?.(
+                                  session.id,
+                                  !isFavorite(session),
+                                );
+                              }}
+                              class={`p-1.5 rounded-lg transition-colors ${
+                                isFavorite(session)
+                                  ? 'text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                                  : 'text-text-tertiary hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'
+                              }`}
+                              title={
+                                isFavorite(session)
+                                  ? 'Remove from favorites'
+                                  : 'Add to favorites'
+                              }
+                            >
+                              <Star
+                                class={`w-4 h-4 ${isFavorite(session) ? 'fill-amber-400' : ''}`}
+                              />
+                            </button>
+                          </Show>
+                          <Show when={props.onRenameSession}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (editingId() === session.id) {
+                                  commitRename(session);
+                                } else {
+                                  startRename(session);
+                                }
+                              }}
+                              class="p-1.5 text-text-tertiary hover:text-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                              title="Rename session"
+                            >
+                              <Show
+                                when={editingId() === session.id}
+                                fallback={<Pencil class="w-4 h-4" />}
+                              >
+                                <Check class="w-4 h-4" />
+                              </Show>
+                            </button>
+                          </Show>
+                          <Show when={props.onArchiveSession}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void props.onArchiveSession?.(session.id);
+                              }}
+                              class="p-1.5 text-text-tertiary hover:text-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                              title="Archive session"
+                            >
+                              <Archive class="w-4 h-4" />
+                            </button>
+                          </Show>
+                        </Show>
+                        <Show
+                          when={
+                            view() === 'archived' && props.onUnarchiveSession
+                          }
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void props.onUnarchiveSession?.(session.id);
+                            }}
+                            class="p-1.5 text-text-tertiary hover:text-primary hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                            title="Unarchive session"
+                          >
+                            <ArchiveRestore class="w-4 h-4" />
+                          </button>
+                        </Show>
                         <Show when={props.onDeleteSession}>
                           <button
                             onClick={(e) => {

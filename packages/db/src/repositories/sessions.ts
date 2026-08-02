@@ -122,13 +122,33 @@ export class SessionsRepository {
       updatedAt: now,
     };
 
-    if (status === 'archived') {
-      updates.archivedAt = now;
-    }
+    // Set archivedAt when archiving; clear it when moving back to active so a
+    // re-archived session gets a fresh timestamp and the field never goes stale.
+    updates.archivedAt = status === 'archived' ? now : null;
 
     const results = await this.db
       .update(schema.sessions)
       .set(updates)
+      .where(eq(schema.sessions.id, id))
+      .returning();
+
+    return results[0] ?? null;
+  }
+
+  /**
+   * Favorite/unfavorite (pin) a session.
+   *
+   * Sets `favoritedAt` to now when favoriting, or null when unfavoriting.
+   * Deliberately does NOT touch `updatedAt` — favoriting is not activity and
+   * must not reorder recency-sorted lists.
+   */
+  async updateFavorite(
+    id: string,
+    favorited: boolean,
+  ): Promise<schema.Session | null> {
+    const results = await this.db
+      .update(schema.sessions)
+      .set({ favoritedAt: favorited ? new Date() : null })
       .where(eq(schema.sessions.id, id))
       .returning();
 

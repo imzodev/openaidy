@@ -869,6 +869,235 @@ describe('OpenAICompatibleProvider', () => {
       expect(finished?.finishReason).toBe('tool_calls');
     });
   });
+
+  // The MiniMax M-series adapter leaks tool-call wrappers and
+  // internal framing tokens into `choice.delta.content`. The
+  // codec abstraction (`MiniMaxAdapterCodec`) selects itself
+  // based on baseUrl and scrubs the leaked markup before the
+  // adapter emits `stream.content_delta`. These tests pin that
+  // behaviour so a future refactor of `selectAdapterCodec` or
+  // `invokeStream` cannot silently regress it.
+  describe('MiniMax content-delta sanitization', () => {
+    const baseRequest: ModelRequest = {
+      model: 'minimax-m3',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [
+        {
+          name: 'get_weather',
+          description: 'Get weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ],
+    };
+
+    async function collectBaseUrl(
+      chunks: unknown[],
+      baseUrl: string,
+    ): Promise<Array<{ type: string; [k: string]: unknown }>> {
+      const mockStream = (async function* () {
+        for (const c of chunks) yield c;
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        baseUrl,
+      });
+      const events: Array<{ type: string; [k: string]: unknown }> = [];
+      for await (const event of provider.invokeStream(baseRequest)) {
+        if (event.ok) events.push(event.value as { type: string });
+      }
+      return events;
+    }
+
+    it('strips a tool_call wrapper that leaked into the content delta', async () => {
+      const events = await collectBaseUrl(
+        [
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  content: 'before <tool_call>function</tool_call> after',
+                },
+                finish_reason: null,
+              },
+            ],
+          },
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          },
+        ],
+        'https://api.minimax.io/v1',
+      );
+
+      const deltas = events
+        .filter((e) => e.type === 'stream.content_delta')
+        .map((e) => e.delta as string);
+      // The leak is gone but the surrounding text is preserved.
+      expect(deltas.join('')).toBe('before  after');
+      // No delta contains the leaked wrapper.
+      for (const d of deltas) {
+        expect(d).not.toContain('<tool_call>');
+        expect(d).not.toContain('</tool_call>');
+      }
+    });
+
+    it('strips framing-token boundaries from the content delta', async () => {
+      // Build the framing-token boundary at runtime so the
+      // chars do not appear in this source file unexpectedly.
+      const RB = String.fromCharCode(93, 60, 93);
+      const LB = String.fromCharCode(91, 62, 91);
+      const framing = RB + 'minimax' + LB;
+
+      const events = await collectBaseUrl(
+        [
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  content: `hello ${framing} world`,
+                },
+                finish_reason: null,
+              },
+            ],
+          },
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          },
+        ],
+        'https://api.minimax.io/v1',
+      );
+
+      const deltas = events
+        .filter((e) => e.type === 'stream.content_delta')
+        .map((e) => e.delta as string);
+      expect(deltas.join('')).toBe('hello  world');
+      for (const d of deltas) {
+        expect(d).not.toContain(RB);
+        expect(d).not.toContain(LB);
+      }
+    });
+
+    it('does not leak a tool_call wrapper for non-MiniMax providers', async () => {
+      // The identity codec is a pass-through; we assert that the
+      // adapter still does NOT emit a malformed content_delta
+      // for OpenAI. This is the floor the sanitization must
+      // preserve: providers that don't leak must keep working
+      // exactly as before.
+      const events = await collectBaseUrl(
+        [
+          {
+            id: 'o',
+            model: 'gpt-4',
+            choices: [
+              {
+                index: 0,
+                delta: { content: 'hello world' },
+                finish_reason: null,
+              },
+            ],
+          },
+          {
+            id: 'o',
+            model: 'gpt-4',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          },
+        ],
+        'https://api.openai.com/v1',
+      );
+
+      const deltas = events
+        .filter((e) => e.type === 'stream.content_delta')
+        .map((e) => e.delta as string);
+      expect(deltas.join('')).toBe('hello world');
+    });
+
+    it('drops a content_delta entirely when sanitization leaves nothing', async () => {
+      // If the chunk was NOTHING but a tool wrapper, the codec
+      // empties it. The adapter must not emit a `content_delta`
+      // with an empty string — that would still send a useless
+      // event and force the client to render an empty update.
+      const events = await collectBaseUrl(
+        [
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  content: '<tool_call>payload</tool_call>',
+                },
+                finish_reason: null,
+              },
+            ],
+          },
+          {
+            id: 'm',
+            model: 'minimax-m3',
+            choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          },
+        ],
+        'https://api.minimax.io/v1',
+      );
+
+      const deltas = events
+        .filter((e) => e.type === 'stream.content_delta')
+        .map((e) => e.delta as string);
+      expect(deltas).toEqual([]);
+    });
+
+    it('selects the MiniMax codec by baseUrl alone', async () => {
+      // Sanity check: a provider configured to point at the
+      // MiniMax baseUrl gets the sanitizing codec, even when
+      // the user passes a custom providerId. The branch is
+      // baseUrl-driven, not providerId-driven.
+      const mockStream = (async function* () {
+        yield {
+          id: 'm',
+          model: 'minimax-m3',
+          choices: [
+            {
+              index: 0,
+              delta: { content: '<tool_call>x</tool_call>' },
+              finish_reason: null,
+            },
+          ],
+        };
+        yield {
+          id: 'm',
+          model: 'minimax-m3',
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        };
+      })();
+      mockCreateCompletion.mockResolvedValueOnce(mockStream);
+
+      const provider = createOpenAICompatibleProvider({
+        apiKey: 'test-key',
+        baseUrl: 'https://api.minimax.io/v1',
+        providerId: 'custom-minimax',
+        providerName: 'Custom',
+      });
+      const events: Array<{ type: string; [k: string]: unknown }> = [];
+      for await (const event of provider.invokeStream(baseRequest)) {
+        if (event.ok) events.push(event.value as { type: string });
+      }
+
+      const deltas = events
+        .filter((e) => e.type === 'stream.content_delta')
+        .map((e) => e.delta as string);
+      expect(deltas).toEqual([]);
+    });
+  });
 });
 
 describe('Factory functions', () => {

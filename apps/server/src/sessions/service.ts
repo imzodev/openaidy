@@ -40,6 +40,8 @@ import {
   createSessionRecord,
   listSessionRecords,
   updateSessionTitleRecord,
+  updateSessionStatusRecord,
+  updateSessionFavoriteRecord,
   appendMessageRecord,
   listSessionMessageRecords,
   createRunRecord,
@@ -300,13 +302,17 @@ export class SessionMessageService {
   }
 
   /**
-   * List all sessions
+   * List sessions, optionally filtered by status (defaults to 'active' so
+   * archived/deleted sessions stay out of the default list). The in-memory
+   * store has no status field, so it always returns everything.
    */
-  async listSessions(): Promise<SessionRecord[] | Session[]> {
+  async listSessions(
+    status: import('@openaidy/shared-types').SessionStatus = 'active',
+  ): Promise<SessionRecord[] | Session[]> {
     if (this.sessionsRepo) {
-      return this.sessionsRepo.list('active');
+      return this.sessionsRepo.list(status);
     }
-    return listSessionRecords();
+    return listSessionRecords(status);
   }
 
   /**
@@ -346,6 +352,34 @@ export class SessionMessageService {
       return this.sessionsRepo.updateTitle(id, title);
     }
     return updateSessionTitleRecord(id, title) ?? null;
+  }
+
+  /**
+   * Update a session's status (e.g. archive / unarchive). No-op that just
+   * returns the session on the in-memory store, which has no status field.
+   */
+  async updateSessionStatus(
+    id: string,
+    status: import('@openaidy/shared-types').SessionStatus,
+  ): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.updateStatus(id, status);
+    }
+    return updateSessionStatusRecord(id, status) ?? null;
+  }
+
+  /**
+   * Favorite / unfavorite (pin) a session. No-op that just returns the session
+   * on the in-memory store, which has no favoritedAt field.
+   */
+  async updateSessionFavorite(
+    id: string,
+    favorited: boolean,
+  ): Promise<SessionRecord | Session | null> {
+    if (this.sessionsRepo) {
+      return this.sessionsRepo.updateFavorite(id, favorited);
+    }
+    return updateSessionFavoriteRecord(id, favorited) ?? null;
   }
 
   /**

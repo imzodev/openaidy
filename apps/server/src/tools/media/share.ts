@@ -106,7 +106,7 @@ export function createMediaShareTool(workspace: WorkspaceService): BuiltinTool {
           ok: false,
           error:
             `"${filePath}" is not a supported media file. ` +
-            'Supported: png/jpg/gif/webp images, wav/mp3/m4a/ogg/webm/flac/aac audio, mp4/webm/ogv video.',
+            'Supported: png/jpg/jpeg/gif/webp images, wav/mp3/m4a/ogg/webm/flac/aac audio, mp4/webm/ogv video.',
         };
       }
 

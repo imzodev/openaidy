@@ -22,3 +22,4 @@ export * from './bootstrap-admin.js';
 export * from './model-pricing.js';
 export * from './backups.js';
 export * from './update.js';
+export * from './skills.js';

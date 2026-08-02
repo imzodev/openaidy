@@ -276,4 +276,59 @@ describe('SessionsRepository', () => {
       expect(results.some((r) => r.id === session.id)).toBe(true);
     });
   });
+
+  describe('updateFavorite', () => {
+    it('sets favoritedAt when favoriting and clears it when unfavoriting', async () => {
+      const session = await sessionsRepo.create({ title: 'Pin me' });
+      expect(session.favoritedAt).toBeFalsy();
+
+      const favorited = await sessionsRepo.updateFavorite(session.id, true);
+      expect(favorited?.favoritedAt).toBeTruthy();
+
+      const unfavorited = await sessionsRepo.updateFavorite(session.id, false);
+      expect(unfavorited?.favoritedAt).toBeFalsy();
+    });
+
+    it('does not bump updatedAt (favoriting is not activity)', async () => {
+      const session = await sessionsRepo.create({ title: 'Keep recency' });
+      const before = new Date(session.updatedAt).getTime();
+
+      const favorited = await sessionsRepo.updateFavorite(session.id, true);
+      const after = new Date(favorited!.updatedAt).getTime();
+
+      expect(after).toBe(before);
+    });
+
+    it('returns null for a non-existent session', async () => {
+      const result = await sessionsRepo.updateFavorite('nope', true);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('sets archivedAt on archive and clears it on unarchive', async () => {
+      const session = await sessionsRepo.create({ title: 'Archive lifecycle' });
+
+      const archived = await sessionsRepo.updateStatus(session.id, 'archived');
+      expect(archived?.status).toBe('archived');
+      expect(archived?.archivedAt).toBeTruthy();
+
+      const restored = await sessionsRepo.updateStatus(session.id, 'active');
+      expect(restored?.status).toBe('active');
+      expect(restored?.archivedAt).toBeFalsy();
+    });
+
+    it('filters by status in list()', async () => {
+      const active = await sessionsRepo.create({ title: 'Active one' });
+      const toArchive = await sessionsRepo.create({ title: 'Archived one' });
+      await sessionsRepo.updateStatus(toArchive.id, 'archived');
+
+      const activeList = await sessionsRepo.list('active');
+      expect(activeList.some((s) => s.id === active.id)).toBe(true);
+      expect(activeList.some((s) => s.id === toArchive.id)).toBe(false);
+
+      const archivedList = await sessionsRepo.list('archived');
+      expect(archivedList.some((s) => s.id === toArchive.id)).toBe(true);
+    });
+  });
 });

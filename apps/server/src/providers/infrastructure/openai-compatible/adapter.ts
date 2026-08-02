@@ -24,6 +24,7 @@ import { createLogger } from '../../../lib/logger';
 import {
   IdentityAdapterCodec,
   DeepSeekAdapterCodec,
+  MiniMaxAdapterCodec,
   type ProviderAdapterCodec,
   type ToolNameMapping,
 } from './provider-codec';
@@ -54,6 +55,9 @@ const PROVIDER_NAME = 'OpenAI-Compatible';
 function selectAdapterCodec(baseUrl: string): ProviderAdapterCodec {
   if (baseUrl.includes('deepseek.com')) {
     return new DeepSeekAdapterCodec();
+  }
+  if (baseUrl.includes('api.minimax.io')) {
+    return new MiniMaxAdapterCodec();
   }
   return new IdentityAdapterCodec();
 }
@@ -515,14 +519,23 @@ export class OpenAICompatibleProvider implements ModelProvider {
           reasoningContent += reasoningDelta;
         }
 
-        // Handle content delta
+        // Handle content delta. The codec strips any provider-
+        // specific framing tokens (e.g. MiniMax M-series can
+        // leak tool-call wrappers into `choice.delta.content`);
+        // the identity codec is a pass-through so this is free
+        // for providers that don't leak.
         if (choice.delta?.content) {
-          yield ok({
-            type: 'stream.content_delta',
-            timestamp: new Date().toISOString(),
-            id: responseId,
-            delta: choice.delta.content,
-          });
+          const sanitized = this.codec.sanitizeContentDelta(
+            choice.delta.content,
+          );
+          if (sanitized) {
+            yield ok({
+              type: 'stream.content_delta',
+              timestamp: new Date().toISOString(),
+              id: responseId,
+              delta: sanitized,
+            });
+          }
         }
 
         // Accumulate tool call deltas by index (do NOT emit yet)

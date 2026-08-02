@@ -27,7 +27,11 @@ export type SessionRecord = {
   id: string;
   title: string;
   type?: import('@openaidy/shared-types').SessionType;
+  status?: import('@openaidy/shared-types').SessionStatus;
   createdAt: string;
+  updatedAt?: string;
+  archivedAt?: string;
+  favoritedAt?: string;
 };
 
 /**
