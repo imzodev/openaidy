@@ -90,7 +90,10 @@ describe('Create Command', () => {
         path.join(testDir, 'myaddon', 'app', 'index.js'),
         'utf-8',
       );
-      expect(js).toContain("msg.type !== 'OPENAIDY_INIT'");
+      // The listener gates on OPENAIDY_INIT (positive match — the old
+      // negative-match form was rewritten to a positive branch so the
+      // bootstrap could also handle OPENAIDY_THEME_CHANGED).
+      expect(js).toContain("msg.type === 'OPENAIDY_INIT'");
       expect(js).toContain('onSdkReady(msg)');
       expect(js).toContain('function onSdkReady');
     });

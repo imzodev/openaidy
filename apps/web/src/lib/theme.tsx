@@ -6,7 +6,7 @@ import {
   type ParentComponent,
 } from 'solid-js';
 
-type Theme = 'light' | 'dark' | 'system';
+export type Theme = 'light' | 'dark' | 'system';
 
 interface ThemeContextValue {
   theme: () => Theme;
