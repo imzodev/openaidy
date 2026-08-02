@@ -414,6 +414,118 @@ export type ListAddonsResponse = {
 };
 
 // ============================================================================
+// Iframe Host ↔ Addon Protocol
+// ============================================================================
+//
+// Messages the host page posts into the addon's sandboxed iframe. The iframe's
+// `sandbox` attribute strips its origin to `null`, so origin-based checks are
+// unavailable. Each message carries a per-session `nonce` (issued by the host)
+// and the addon echoes it back in every `OPENAIDY_REQUEST` so the host can
+// reject impersonators. The current `theme` is included on init so an addon
+// that follows the host's look is correct on first paint, and is repeated via
+// `OPENAIDY_THEME_CHANGED` whenever the host's theme updates so a user who
+// toggles light/dark while an addon is open sees the change live.
+
+/**
+ * Resolved mode the host is currently displaying — the host collapses the
+ * tri-state preference (`light` | `dark` | `system`) down to the actual mode
+ * the user is seeing, so the addon never has to redo that resolution.
+ */
+export type AddonThemeMode = 'light' | 'dark';
+
+/**
+ * Map of CSS custom property name → current resolved value, sampled from the
+ * host's `<html>` after dark-mode is applied. Variables use the same names as
+ * `apps/web/src/index.css` (the host's theme), so the addon can apply them
+ * straight to its own `:root` and inherit the host's palette.
+ */
+export type AddonThemeTokens = Record<string, string>;
+
+/**
+ * Payload every themed host-to-addon message carries. `mode` is the source of
+ * truth for a one-line dark/light switch, `tokens` is the source of truth for
+ * the actual color values (so a future custom-theme system propagates without
+ * a protocol change).
+ */
+export type AddonThemePayload = {
+  mode: AddonThemeMode;
+  tokens: AddonThemeTokens;
+};
+
+/**
+ * First message the host posts to a freshly-loaded addon. Carries the SDK
+ * base URL, the session nonce, and the current theme so the addon paints
+ * correctly on the first frame.
+ */
+export type AddonInitMessage = {
+  type: 'OPENAIDY_INIT';
+  apiBase: string;
+  nonce: string;
+  theme: AddonThemePayload;
+};
+
+/**
+ * Sent whenever the host's theme changes while the addon's iframe is already
+ * loaded (e.g. the user clicked the theme toggle). Same shape as
+ * `AddonInitMessage.theme`, plus a `type` discriminator so a hand-written
+ * addon that didn't expect a live update can still detect it.
+ */
+export type AddonThemeMessage = {
+  type: 'OPENAIDY_THEME_CHANGED';
+  theme: AddonThemePayload;
+};
+
+/**
+ * Discriminated union of all host-to-addon messages. Addon-side code narrows
+ * on `type` to handle each one.
+ */
+export type AddonHostMessage = AddonInitMessage | AddonThemeMessage;
+
+/**
+ * Discriminated union of all addon-to-host messages. Currently just
+ * `ADDON_READY` (a timing-safety signal) and `OPENAIDY_REQUEST` (a proxied
+ * fetch), but kept as a single union so the host's `message` handler has one
+ * type to narrow on.
+ */
+export type AddonIframeMessage =
+  | { type: 'ADDON_READY' }
+  | {
+      type: 'OPENAIDY_REQUEST';
+      requestId: string;
+      method: string;
+      path: string;
+      body?: unknown;
+      nonce: string;
+    }
+  | { type: 'ADDON_CSP_VIOLATION'; blockedURI: string; nonce: string };
+
+/**
+ * Single CSS variable names an addon theme-aware template should expect to
+ * receive. Kept in one place so the addon template, the host's reader, and
+ * any future docs reference the same list.
+ */
+export const ADDON_THEME_TOKEN_NAMES = [
+  '--primary',
+  '--primary-hover',
+  '--primary-disabled',
+  '--danger',
+  '--success',
+  '--text-primary',
+  '--text-secondary',
+  '--text-tertiary',
+  '--text-muted',
+  '--text-inverse',
+  '--bg-primary',
+  '--bg-secondary',
+  '--bg-tertiary',
+  '--bg-elevated',
+  '--border-primary',
+  '--border-secondary',
+] as const;
+
+export type AddonThemeTokenName = (typeof ADDON_THEME_TOKEN_NAMES)[number];
+
+// ============================================================================
 // Validation Error Types
 // ============================================================================
 
