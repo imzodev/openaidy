@@ -5,6 +5,7 @@ import {
   MissingEnvVarsError,
 } from './placeholder-resolver';
 import type { McpServerConfig } from '@openaidy/config';
+import type { UvxEnvironmentRepairer } from './uvx-repair';
 
 describe('McpClientService', () => {
   let mcpService: McpClientService;
@@ -282,5 +283,52 @@ describe('McpClientService with mock MCP server', () => {
     // This should fail because the command doesn't exist
     await expect(mcpService.connect(config)).rejects.toThrow();
     expect(mcpService.isConnected('failing-server')).toBe(false);
+  });
+  describe('uvx environment repair', () => {
+    // A stdio server that dies at launch the way a uvx package with a drifted
+    // dependency set does: an import error on stderr, then a non-zero exit.
+    // `client.connect()` sees only "Connection closed", so the stderr tail is
+    // the only signal the repair can act on.
+    const brokenServer = (id: string): McpServerConfig => ({
+      id,
+      transport: 'stdio',
+      command: 'node',
+      args: [
+        '-e',
+        'process.stderr.write("ModuleNotFoundError: No module named mcp.server.fastmcp"); process.exit(1)',
+      ],
+    });
+
+    it('hands the captured stderr to the repairer when a launch fails', async () => {
+      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => false);
+      const service = createMcpClientService({ uvxRepairer: repairer });
+
+      await expect(service.connect(brokenServer('probe'))).rejects.toThrow();
+
+      expect(repairer).toHaveBeenCalledTimes(1);
+      const input = repairer.mock.calls[0]?.[0];
+      expect(input).toMatchObject({ serverId: 'probe', command: 'node' });
+      expect(input?.stderr).toContain('ModuleNotFoundError');
+      expect(service.isConnected('probe')).toBe(false);
+    });
+
+    it('retries exactly once when the repair succeeds, never looping', async () => {
+      // Always reports success, so a missing retry guard would recurse forever.
+      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => true);
+      const service = createMcpClientService({ uvxRepairer: repairer });
+
+      await expect(service.connect(brokenServer('loopy'))).rejects.toThrow();
+
+      expect(repairer).toHaveBeenCalledTimes(1);
+      expect(service.isConnected('loopy')).toBe(false);
+    });
+
+    it('does not attempt repair when it is disabled', async () => {
+      const service = createMcpClientService({ uvxRepairer: null });
+      await expect(
+        service.connect(brokenServer('no-repair')),
+      ).rejects.toThrow();
+      expect(service.isConnected('no-repair')).toBe(false);
+    });
   });
 });
