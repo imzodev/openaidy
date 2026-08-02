@@ -69,6 +69,10 @@ import type {
   FinishReason,
 } from '../types';
 import type { RunEventEmitter } from '../dispatch/events';
+import {
+  reconstructProviderHistory,
+  type ReconstructedHistory,
+} from './provider-history.js';
 
 /**
  * Session message service
@@ -285,6 +289,35 @@ export class SessionMessageService {
       elided++;
     }
     return elided;
+  }
+
+  /**
+   * Log when the provider-history reconstruction had to repair anything.
+   * A clean history (no orphans, no deferred user messages) is the
+   * expected steady state. Anything else means a previous run left the
+   * transcript in a degraded shape; the repair is silent from the
+   * provider's perspective but worth surfacing for diagnosis.
+   */
+  private logHistoryDiagnostics(
+    source: 'submit' | 'agentic',
+    sessionId: string,
+    d: ReconstructedHistory['diagnostics'],
+  ): void {
+    if (
+      d.orphanToolMessages === 0 &&
+      d.strippedToolCalls === 0 &&
+      d.deferredUserMessages === 0
+    ) {
+      return;
+    }
+    this.logger?.warn(
+      {
+        source,
+        sessionId,
+        ...d,
+      },
+      'Repaired provider history before sending to model',
+    );
   }
 
   /**
@@ -797,6 +830,16 @@ export class SessionMessageService {
       } as Message;
     });
 
+    // Repair tool-call / tool-result adjacency before the provider sees the
+    // history. Provider APIs (OpenAI, MiniMax, Anthropic, Gemini) reject
+    // with 400 if a `role: 'tool'` message does not immediately follow
+    // the assistant whose `tool_calls` referenced it — a real failure mode
+    // when a user message arrives between a slow tool's call and result.
+    // See apps/server/src/sessions/provider-history.ts.
+    const repaired = reconstructProviderHistory(historyMessages);
+    this.logHistoryDiagnostics('submit', input.sessionId, repaired.diagnostics);
+    const providerHistory = repaired.messages;
+
     // Build system prompt with personality files and skill bodies injected
     const systemPrompt = await buildSystemPrompt({
       agentId,
@@ -813,8 +856,8 @@ export class SessionMessageService {
         | undefined,
     });
     const messages: Message[] = systemPrompt
-      ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
-      : historyMessages;
+      ? [{ role: 'system' as const, content: systemPrompt }, ...providerHistory]
+      : providerHistory;
 
     // 6. Invoke provider
     const modelRequest: ModelRequest = {
@@ -1168,7 +1211,10 @@ export class SessionMessageService {
 
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
-    const historyMessages: Message[] = [];
+    let historyMessages: Message[] = [];
+    // `let` so the adjacency repair below can replace the array with a
+    // sanitized copy. The original `historyMessages` is not used after that
+    // point; only the repaired version flows into the model request.
     for (const m of history) {
       const msgRole = (m as { role: string }).role;
       const msgContent = (m as { content: string }).content;
@@ -1282,6 +1328,20 @@ export class SessionMessageService {
         'Trimmed stale tool outputs from replayed history',
       );
     }
+
+    // Repair tool-call / tool-result adjacency before the provider sees the
+    // history. Provider APIs (OpenAI, MiniMax, Anthropic, Gemini) reject
+    // with 400 if a `role: 'tool'` message does not immediately follow
+    // the assistant whose `tool_calls` referenced it — a real failure mode
+    // when a user message arrives between a slow tool's call and result.
+    // See apps/server/src/sessions/provider-history.ts.
+    const repairedAgent = reconstructProviderHistory(historyMessages);
+    this.logHistoryDiagnostics(
+      'agentic',
+      input.sessionId,
+      repairedAgent.diagnostics,
+    );
+    historyMessages = repairedAgent.messages;
 
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
