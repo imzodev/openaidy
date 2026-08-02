@@ -14,6 +14,18 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpServerConfig } from '@openaidy/config';
 import { EnvPlaceholderResolver } from './placeholder-resolver';
+import {
+  createProcessRunner,
+  createPypiReleaseDateLookup,
+  createUvxEnvironmentRepairer,
+  type UvxEnvironmentRepairer,
+} from './uvx-repair';
+
+/**
+ * How much of a child's stderr to keep for diagnosing a launch failure. A
+ * Python traceback fits comfortably; anything longer is already in the log.
+ */
+const STDERR_TAIL_LIMIT = 8_192;
 
 /**
  * Tool definition from an MCP server
@@ -68,6 +80,13 @@ export type McpClientServiceOptions = {
    * testing; defaults to reading from `process.env`.
    */
   resolver?: EnvPlaceholderResolver | undefined;
+  /**
+   * Rebuilds the environment of a `uvx` server that died at launch, so the
+   * connection can be retried once. Injectable for testing; defaults to the
+   * real `uv tool install --exclude-newer` repair. Pass `null` to disable
+   * repair entirely.
+   */
+  uvxRepairer?: UvxEnvironmentRepairer | null | undefined;
 };
 
 /**
@@ -79,11 +98,21 @@ export class McpClientService {
   private connections = new Map<string, McpConnection>();
   private logger: FastifyBaseLogger | undefined;
   private resolver: EnvPlaceholderResolver;
+  private repairUvxEnvironment: UvxEnvironmentRepairer | undefined;
   private shutdownHandlersRegistered = false;
 
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
     this.resolver = options?.resolver ?? new EnvPlaceholderResolver();
+    this.repairUvxEnvironment =
+      options?.uvxRepairer === null
+        ? undefined
+        : (options?.uvxRepairer ??
+          createUvxEnvironmentRepairer({
+            logger: options?.logger,
+            run: createProcessRunner(),
+            lookupReleaseDate: createPypiReleaseDateLookup(),
+          }));
     this.registerShutdownHandlers();
   }
 
@@ -151,8 +180,12 @@ export class McpClientService {
    * previously produced misleading `MCP process error` logs and a redundant
    * process that was never wired to the protocol.
    */
-  private async connectStdio(serverConfig: McpServerConfig): Promise<void> {
+  private async connectStdio(
+    serverConfig: McpServerConfig,
+    options: { allowRepair?: boolean } = {},
+  ): Promise<void> {
     const { id, command, args, env } = serverConfig;
+    const allowRepair = options.allowRepair ?? true;
 
     if (!command) {
       throw new Error(`stdio transport requires command for server ${id}`);
@@ -182,13 +215,16 @@ export class McpClientService {
     });
 
     // Surface the server's stderr for debugging. onData is buffered by the
-    // PassThrough, so this is safe to attach post-construction.
+    // PassThrough, so this is safe to attach post-construction. The tail is
+    // also kept in memory: when a stdio server dies before the handshake, the
+    // protocol error is a bare "Connection closed" and this text is the only
+    // evidence of why.
+    let stderrTail = '';
     const stderrStream = transport.stderr;
     stderrStream?.on('data', (data: Buffer) => {
-      this.logger?.warn(
-        { serverId: id, stderr: data.toString() },
-        'MCP server stderr',
-      );
+      const chunk = data.toString();
+      stderrTail = `${stderrTail}${chunk}`.slice(-STDERR_TAIL_LIMIT);
+      this.logger?.warn({ serverId: id, stderr: chunk }, 'MCP server stderr');
     });
 
     // Trigger reconnection when the child exits unexpectedly. The Client
@@ -219,7 +255,31 @@ export class McpClientService {
 
     // Connect the client. This spawns the child via cross-spawn (which
     // handles Windows .cmd/.bat launchers), so failures surface here.
-    await client.connect(transport);
+    //
+    // A `uvx` server that dies at import time fails here with a bare
+    // "Connection closed". That is usually a drifted dependency resolution
+    // rather than a broken config, and it is repairable — see uvx-repair.ts.
+    // One retry only, and only for a first attempt, so a genuinely broken
+    // server cannot loop.
+    try {
+      await client.connect(transport);
+    } catch (error) {
+      if (!allowRepair || !this.repairUvxEnvironment) throw error;
+
+      // The transport's child is already gone, but close() releases the
+      // client's own listeners before a second attempt reuses the id.
+      await client.close().catch(() => {});
+
+      const repaired = await this.repairUvxEnvironment({
+        serverId: id,
+        command,
+        args: args ?? [],
+        stderr: stderrTail,
+      });
+      if (!repaired) throw error;
+
+      return this.connectStdio(serverConfig, { allowRepair: false });
+    }
 
     // Store the connection with config for reconnection
     this.connections.set(id, {
