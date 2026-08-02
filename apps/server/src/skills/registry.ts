@@ -7,6 +7,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { SkillLoadError } from '@openaidy/shared-types';
 import { parseSkillMd } from './parser.js';
 import type { SkillDefinition } from './parser.js';
 
@@ -14,12 +15,6 @@ export type SkillSummary = {
   id: string;
   name: string;
   description: string;
-};
-
-export type SkillLoadError = {
-  id: string;
-  filePath: string;
-  messages: string[];
 };
 
 export type SkillRegistryOptions = {
