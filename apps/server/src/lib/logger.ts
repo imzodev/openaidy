@@ -22,6 +22,24 @@ interface Logger {
   error: (message: string, ...args: unknown[]) => void;
 }
 
+type LogFn = (message: string, ...args: unknown[]) => void;
+
+/**
+ * A log function that accepts either this module's `(message, ...args)` order
+ * or pino's `(mergeObject, message)` order. See {@link toPinoStyleLogger}.
+ */
+type PinoStyleLogFn = {
+  (message: string, ...args: unknown[]): void;
+  (context: object, message?: string, ...args: unknown[]): void;
+};
+
+export interface PinoStyleLogger {
+  debug: PinoStyleLogFn;
+  info: PinoStyleLogFn;
+  warn: PinoStyleLogFn;
+  error: PinoStyleLogFn;
+}
+
 // ============================================================================
 // Internal helpers
 // ============================================================================
@@ -89,6 +107,45 @@ export function createLogger(context: string = ''): Logger {
 }
 
 export const logger = createLogger();
+
+/**
+ * Wrap a {@link Logger} so it also accepts pino's `(mergeObject, message)`
+ * calling convention.
+ *
+ * Services typed against Fastify's `FastifyBaseLogger` — the MCP client, the
+ * scheduler, the channels, `SessionMessageService` — log structured context
+ * first: `logger.warn({ serverId, stderr }, 'MCP server stderr')`. Handing them
+ * this module's `(message, ...args)` logger made the context object the
+ * *message*, so every such line printed `[object Object]` and the real text was
+ * demoted to an argument. The context itself (an MCP server's stderr, a job id,
+ * a provider error) reached neither the console nor the log buffer's `message`
+ * field, which is how a failing MCP server's Python traceback stayed invisible.
+ *
+ * Both orders are accepted, so a consumer that logs `(message, meta)` is
+ * unaffected.
+ */
+export function toPinoStyleLogger(base: Logger): PinoStyleLogger {
+  const adapt =
+    (fn: LogFn): PinoStyleLogFn =>
+    (first: string | object, ...rest: unknown[]) => {
+      // Already `(message, ...args)` — pass through untouched.
+      if (typeof first === 'string') {
+        fn(first, ...rest);
+        return;
+      }
+      // pino order: the message (when present) follows the merge object.
+      const [message, ...others] = rest;
+      const text = typeof message === 'string' ? message : '';
+      fn(text, first, ...others);
+    };
+
+  return {
+    debug: adapt(base.debug),
+    info: adapt(base.info),
+    warn: adapt(base.warn),
+    error: adapt(base.error),
+  };
+}
 
 // ============================================================================
 // Fastify HTTP Logging Plugin
