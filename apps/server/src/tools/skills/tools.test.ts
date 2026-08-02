@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSkillRegistry, parseSkillMd } from '../../skills/index';
@@ -411,6 +411,105 @@ describe('skill tools', () => {
       expect(file).toContain(`created_by: ${CTX.agentId}`);
       expect(file).toContain(`updated_by: ${CTX.agentId}`);
       expect(file).toMatch(/updated_at: \d{4}-\d{2}-\d{2}T/);
+    });
+
+    it('preserves frontmatter fields it does not model on a body-only update', async () => {
+      await seed('rich-frontmatter');
+      // Rewrite the seeded file with metadata the parser knows nothing about,
+      // including a multi-line list value.
+      const filePath = join(agentSkillsDir, 'rich-frontmatter', 'SKILL.md');
+      await writeFile(
+        filePath,
+        [
+          '---',
+          'name: rich-frontmatter',
+          'description: Seed skill',
+          'version: 1.2.3',
+          'license: MIT',
+          'allowed-tools:',
+          '  - code_read',
+          '  - code_grep',
+          'created_by: someone-else',
+          '---',
+          '',
+          'Original instructions.',
+          '',
+        ].join('\n'),
+        'utf-8',
+      );
+
+      const tool = createSkillUpdateTool(registry, workspace);
+      const result = await tool.execute(
+        { id: 'rich-frontmatter', body: 'New body.' },
+        CTX,
+      );
+      expect(result.ok).toBe(true);
+
+      const file = await readFile(filePath, 'utf-8');
+      expect(file).toContain('license: MIT');
+      expect(file).toContain('allowed-tools:');
+      expect(file).toContain('  - code_read');
+      expect(file).toContain('  - code_grep');
+      expect(file).toContain('created_by: someone-else');
+      expect(file).toContain('version: 1.2.3');
+      expect(file).toContain('New body.');
+    });
+
+    it('keeps the existing version when the supplied version is not a usable string', async () => {
+      await seed('bad-version');
+      const filePath = join(agentSkillsDir, 'bad-version', 'SKILL.md');
+      const tool = createSkillUpdateTool(registry, workspace);
+
+      // Empty string alongside another field: must not blank out the version.
+      await tool.execute(
+        { id: 'bad-version', body: 'Body A.', version: '' },
+        CTX,
+      );
+      let file = await readFile(filePath, 'utf-8');
+      expect(file).toContain('version: 1.0.0');
+      expect(file).not.toMatch(/version:\s*$/m);
+
+      // Non-string value: same rule.
+      await tool.execute(
+        { id: 'bad-version', body: 'Body B.', version: 2 as unknown as string },
+        CTX,
+      );
+      file = await readFile(filePath, 'utf-8');
+      expect(file).toContain('version: 1.0.0');
+      expect(file).not.toContain('version: 2');
+    });
+
+    it('rolls back SKILL.md and leaves the registry alone when a companion write fails', async () => {
+      await seed('rollback', 'Original instructions.', { 'keep.sh': 'keep' });
+      const skillDir = join(agentSkillsDir, 'rollback');
+      const filePath = join(skillDir, 'SKILL.md');
+      const before = await readFile(filePath, 'utf-8');
+
+      // A directory where a companion file is meant to go: writeFile fails
+      // after SKILL.md has already been written, which is exactly the
+      // partial-update window the rollback exists to close.
+      await mkdir(join(skillDir, 'blocked.txt'), { recursive: true });
+
+      const tool = createSkillUpdateTool(registry, workspace);
+      const result = await tool.execute(
+        {
+          id: 'rollback',
+          body: 'Should not survive.',
+          files: { 'blocked.txt': 'nope' },
+          deleteFiles: ['keep.sh'],
+        },
+        CTX,
+      );
+
+      expect(result.ok).toBe(false);
+      // SKILL.md restored byte for byte…
+      expect(await readFile(filePath, 'utf-8')).toBe(before);
+      // …the delete undone…
+      expect(await readFile(join(skillDir, 'keep.sh'), 'utf-8')).toBe('keep');
+      // …and the registry never advanced to the failed content.
+      expect(registry.getSkill('rollback')?.body).toBe(
+        'Original instructions.',
+      );
     });
 
     it('re-registers the skill in the registry with new content', async () => {

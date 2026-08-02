@@ -18,8 +18,15 @@ import { skillUpdateMeta } from '../catalog.js';
  * companion files. This is intentionally NOT a replace-all operation so that
  * a partial update cannot silently destroy unseen files.
  *
- * Preserves the original `created_by` frontmatter and stamps `updated_by`
- * (the calling agent) plus `updated_at` (ISO 8601) on every successful update.
+ * Frontmatter is patched, not rebuilt: only the keys the caller asked for
+ * change, every other key (`created_by`, `tags`, `license`, anything the parser
+ * doesn't model) is carried over verbatim, and `updated_by` (the calling agent)
+ * plus `updated_at` (ISO 8601) are stamped on every successful update.
+ *
+ * Writes are all-or-nothing. SKILL.md and the companion files cannot be
+ * committed as one filesystem operation, so the prior content of every path is
+ * snapshotted first and restored if any write or delete fails; the registry is
+ * updated only once the on-disk state is final, so the two never drift apart.
  */
 export function createSkillUpdateTool(
   skillRegistry: SkillRegistry,
@@ -204,34 +211,62 @@ export function createSkillUpdateTool(
         };
       }
 
-      const createdBy = extractFrontmatterField(existingContent, 'created_by');
       const updatedAt = new Date().toISOString();
 
-      const nextName = hasName ? name : existingParsed.name;
-      const nextDescription = hasDescription
-        ? description
-        : existingParsed.description;
-      const nextVersion =
-        hasVersion || existingParsed.version
-          ? (version ?? existingParsed.version)
-          : '1.0.0';
+      // Select each value from its `has*` flag, never from the raw argument: a
+      // non-null but invalid value (an empty string, a number) must leave the
+      // existing field alone rather than overwrite it with junk.
       const nextBody = hasBody ? body : existingParsed.body;
 
-      const frontmatterLines = [
-        `name: ${nextName}`,
-        `description: ${nextDescription}`,
-        `version: ${nextVersion}`,
-        ...(createdBy ? [`created_by: ${createdBy}`] : []),
-        `updated_by: ${ctx.agentId}`,
-        `updated_at: ${updatedAt}`,
-      ];
-      const newContent = `---\n${frontmatterLines.join('\n')}\n---\n\n${nextBody}\n`;
+      // Patch the frontmatter in place instead of rebuilding it from the four
+      // fields the parser models — rebuilding silently dropped every other key
+      // (tags, license, custom metadata) on any update, including a body-only
+      // one. Unknown keys and their order survive untouched.
+      const frontmatter = parseFrontmatterBlocks(existingContent);
+      if (hasName) setFrontmatterField(frontmatter, 'name', name);
+      if (hasDescription) {
+        setFrontmatterField(frontmatter, 'description', description);
+      }
+      if (hasVersion) {
+        setFrontmatterField(frontmatter, 'version', version);
+      } else if (!existingParsed.version) {
+        // No version provided and none on disk — stamp the default so every
+        // skill this tool touches carries one.
+        setFrontmatterField(frontmatter, 'version', '1.0.0');
+      }
+      setFrontmatterField(frontmatter, 'updated_by', ctx.agentId);
+      setFrontmatterField(frontmatter, 'updated_at', updatedAt);
+
+      const newContent = `---\n${renderFrontmatterBlocks(frontmatter).join('\n')}\n---\n\n${nextBody}\n`;
 
       const reparsed = parseSkillMd(newContent, id, skillFilePath);
       if ('errors' in reparsed) {
         return {
           ok: false,
           error: `Invalid skill content: ${reparsed.errors.map((e) => e.message).join(', ')}`,
+        };
+      }
+
+      // An update touches several files (SKILL.md plus any companion writes and
+      // deletes) and there is no filesystem primitive that commits them as one.
+      // So snapshot every path we are about to touch, and undo the whole set if
+      // any single operation fails — a half-applied update on disk with a stale
+      // registry is worse than no update at all.
+      const touchedPaths = [
+        skillFilePath,
+        ...(filesMap
+          ? Object.keys(filesMap).map((f) => join(skillDirPath, f))
+          : []),
+        ...deleteFiles.map((f) => join(skillDirPath, f)),
+      ];
+
+      let snapshots: FileSnapshot[];
+      try {
+        snapshots = await snapshotFiles(touchedPaths);
+      } catch (err) {
+        return {
+          ok: false,
+          error: `Failed to read the current skill files before updating: ${err instanceof Error ? err.message : String(err)}`,
         };
       }
 
@@ -255,12 +290,19 @@ export function createSkillUpdateTool(
           }
         }
       } catch (err) {
+        const restoreFailures = await restoreFiles(snapshots);
+        const detail = err instanceof Error ? err.message : String(err);
         return {
           ok: false,
-          error: `Failed to write skill file: ${err instanceof Error ? err.message : String(err)}`,
+          error:
+            restoreFailures.length === 0
+              ? `Failed to write skill file: ${detail}. The skill was left unchanged.`
+              : `Failed to write skill file: ${detail}. Rolling back left these files in an unknown state: ${restoreFailures.join(', ')}.`,
         };
       }
 
+      // Only now is the on-disk state final, so this is the only point at which
+      // the registry can be updated without drifting from the files.
       skillRegistry.register(reparsed);
 
       const writtenFiles = filesMap ? Object.keys(filesMap) : [];
@@ -282,29 +324,127 @@ export function createSkillUpdateTool(
 }
 
 /**
- * Line-scan the frontmatter of a SKILL.md content string for a single key.
- * Mirrors the parser's scan style so we can recover fields it doesn't model.
- * Returns undefined if the key is not present.
+ * One frontmatter key with the raw lines that belong to it.
+ *
+ * `key` is empty for the leading block, which holds any lines that appear
+ * before the first key (comments, blank lines) so they survive a round-trip.
  */
-function extractFrontmatterField(
-  content: string,
-  key: string,
-): string | undefined {
+type FrontmatterBlock = { key: string; lines: string[] };
+
+/** A `key:` line at the top level of the frontmatter. */
+const FRONTMATTER_KEY_PATTERN = /^([A-Za-z0-9_.-]+):/;
+
+/**
+ * Split the frontmatter of a SKILL.md into ordered key blocks.
+ *
+ * A block starts at a `key:` line and absorbs everything up to the next one,
+ * so a multi-line value (an indented map, a `- ` list) travels with its key and
+ * is re-emitted verbatim. Mirrors the parser's delimiter scan: the frontmatter
+ * is whatever lies between the first two `---` lines. Callers only reach this
+ * after `parseSkillMd` succeeded, so those delimiters are known to exist; an
+ * unparseable input yields a single leading block and is rewritten as-is.
+ */
+function parseFrontmatterBlocks(content: string): FrontmatterBlock[] {
   const lines = content.split('\n');
-  const prefix = `${key}:`;
-  let inFrontmatter = false;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === '---') {
-      if (!inFrontmatter) {
-        inFrontmatter = true;
-        continue;
-      }
-      return undefined;
+  const dashes: number[] = [];
+  for (let i = 0; i < lines.length && dashes.length < 2; i++) {
+    if (lines[i]?.trim() === '---') dashes.push(i);
+  }
+  if (dashes.length < 2) return [];
+
+  const blocks: FrontmatterBlock[] = [];
+  for (let i = dashes[0]! + 1; i < dashes[1]!; i++) {
+    const line = lines[i] ?? '';
+    const match = FRONTMATTER_KEY_PATTERN.exec(line);
+    if (match) {
+      blocks.push({ key: match[1]!, lines: [line] });
+      continue;
     }
-    if (inFrontmatter && line.startsWith(prefix)) {
-      return line.substring(prefix.length).trim();
+    const current = blocks[blocks.length - 1];
+    if (current) {
+      current.lines.push(line);
+    } else {
+      blocks.push({ key: '', lines: [line] });
     }
   }
-  return undefined;
+  return blocks;
+}
+
+/**
+ * Set a frontmatter key to a single-line scalar, replacing the existing block
+ * (and any continuation lines it had) or appending a new one at the end.
+ */
+function setFrontmatterField(
+  blocks: FrontmatterBlock[],
+  key: string,
+  value: unknown,
+): void {
+  const line = `${key}: ${String(value)}`;
+  const existing = blocks.find((block) => block.key === key);
+  if (existing) {
+    existing.lines = [line];
+    return;
+  }
+  blocks.push({ key, lines: [line] });
+}
+
+/** Flatten blocks back into frontmatter lines, in order. */
+function renderFrontmatterBlocks(blocks: FrontmatterBlock[]): string[] {
+  return blocks.flatMap((block) => block.lines);
+}
+
+/**
+ * The prior content of a file, or `null` when it did not exist. Buffers rather
+ * than strings so restoring a companion file written outside this tool (an
+ * image, anything non-UTF-8) returns the exact bytes.
+ */
+type FileSnapshot = { path: string; previous: Buffer | null };
+
+/**
+ * Record the current content of every path an update is about to touch.
+ *
+ * @throws if a file exists but cannot be read — better to refuse the update
+ * than to start writing with no way back.
+ */
+async function snapshotFiles(paths: string[]): Promise<FileSnapshot[]> {
+  const unique = [...new Set(paths)];
+  const snapshots: FileSnapshot[] = [];
+  for (const path of unique) {
+    try {
+      snapshots.push({ path, previous: await readFile(path) });
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        snapshots.push({ path, previous: null });
+        continue;
+      }
+      throw err;
+    }
+  }
+  return snapshots;
+}
+
+/**
+ * Put the files back the way {@link snapshotFiles} found them: restore prior
+ * content, and remove files that did not exist before.
+ *
+ * Best-effort and non-throwing — it runs while another error is already being
+ * reported. Returns the paths it could not restore so the caller can say so
+ * instead of claiming a clean rollback.
+ */
+async function restoreFiles(snapshots: FileSnapshot[]): Promise<string[]> {
+  const failed: string[] = [];
+  for (const { path, previous } of [...snapshots].reverse()) {
+    try {
+      if (previous === null) {
+        await unlink(path).catch((err: NodeJS.ErrnoException) => {
+          if (err.code !== 'ENOENT') throw err;
+        });
+      } else {
+        await writeFile(path, previous);
+      }
+    } catch {
+      failed.push(path);
+    }
+  }
+  return failed;
 }
