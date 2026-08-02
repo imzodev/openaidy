@@ -245,24 +245,29 @@ function applyTheme(theme) {
 // The parent may have already sent it before this script executed, so we
 // also listen for OPENAIDY_THEME_CHANGED so a user who toggles the host's
 // theme while the addon is open sees the addon follow without a reload.
-// The listener stays registered for the addon's lifetime — OPENAIDY_INIT
-// is gated on an initialised flag so a duplicate init is a no-op, but
-// OPENAIDY_THEME_CHANGED still reaches applyTheme() after init.
+// The listener stays registered for the addon's lifetime so a later
+// OPENAIDY_THEME_CHANGED still reaches applyTheme(). Loading the SDK is the
+// only part gated on the initialised flag — the theme is applied on every
+// themed message, including a repeated init.
 applyTheme({ mode: 'dark', tokens: FALLBACK_TOKENS });
 
 var initialised = false;
 window.addEventListener('message', function onMessage(event) {
   var msg = event.data;
   if (!msg || typeof msg !== 'object') return;
+  if (msg.type !== 'OPENAIDY_INIT' && msg.type !== 'OPENAIDY_THEME_CHANGED') {
+    return;
+  }
+  // Both messages carry the host's current theme. Apply it every time: the
+  // host sends OPENAIDY_INIT twice by design (on iframe load, then again on
+  // ADDON_READY), and the second one may carry a newer palette than the first.
+  applyTheme(msg.theme);
   if (msg.type === 'OPENAIDY_INIT' && !initialised) {
     initialised = true;
-    applyTheme(msg.theme);
     var script = document.createElement('script');
     script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
     script.onload = function() { onSdkReady(msg); };
     document.head.appendChild(script);
-  } else if (msg.type === 'OPENAIDY_THEME_CHANGED') {
-    applyTheme(msg.theme);
   }
 });
 window.parent.postMessage({ type: 'ADDON_READY' }, '*');`;

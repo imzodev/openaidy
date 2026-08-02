@@ -84,8 +84,6 @@ describe('generateFromTemplate — shared theme tokens', () => {
 describe('generateFromTemplate — bootstrap behaviour', () => {
   let dir: string;
   let originalSetTimeout: typeof setTimeout;
-  let originalDocument: typeof document;
-  let originalWindow: typeof window;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'openaidy-scaffolding-bootstrap-'));
@@ -98,10 +96,6 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
     globalThis.setTimeout = originalSetTimeout;
-    // Unused: kept so the test can be re-pointed at the global
-    // window/document if it ever needs real ones.
-    void originalDocument;
-    void originalWindow;
   });
 
   it('applies OPENAIDY_THEME_CHANGED after init — the listener survives the first init', async () => {
