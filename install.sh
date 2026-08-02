@@ -321,6 +321,66 @@ check_ripgrep() {
 }
 
 # ============================================================================
+# uv / uvx Provisioning (Python-based MCP servers)
+# ============================================================================
+# Node-based MCP servers launch through `npx`, which the managed Node install
+# above provides. Python-based ones launch through `uvx` — without it they fail
+# to spawn at all (`spawn uvx ENOENT`), so a user who adds one has to install a
+# toolchain by hand. Provision the toolchain here so those servers work as soon
+# as the user adds one. Installed next to node/npm/npx (see get_node_link_dir)
+# so the server finds it on PATH in later sessions too, not just the installer's.
+#
+# Scope: the toolchain only. No MCP server package is installed here — which
+# ones to run is the user's choice, made from the MCP page, and the installer
+# must not put a third-party package on every box without that consent.
+# ============================================================================
+
+install_uv() {
+    log_info "Installing uv (Python toolchain for MCP servers)..."
+
+    local link_dir
+    link_dir="$(get_node_link_dir)"
+    mkdir -p "$link_dir"
+
+    # Official installer, pinned to a directory we control. It also drops uvx
+    # alongside uv. Failure here is non-fatal: the server boots fine and only
+    # Python MCP servers are affected.
+    if curl -fsSL --retry 3 --retry-connrefused https://astral.sh/uv/install.sh \
+        | env UV_INSTALL_DIR="$link_dir" UV_NO_MODIFY_PATH=1 sh >/dev/null 2>&1; then
+        export PATH="$link_dir:$PATH"
+        command -v uvx >/dev/null 2>&1 && return 0
+    fi
+
+    log_warn "Could not install uv — Python-based MCP servers will not start"
+    log_info "Install it manually from https://docs.astral.sh/uv/getting-started/installation/"
+    return 1
+}
+
+check_uv() {
+    log_info "Checking uv..."
+
+    # Honor an OpenAidy-managed install from a previous run.
+    local link_dir
+    link_dir="$(get_node_link_dir)"
+    if [ -x "$link_dir/uvx" ]; then
+        export PATH="$link_dir:$PATH"
+    fi
+
+    if command -v uvx >/dev/null 2>&1; then
+        local ver
+        ver=$(uv --version 2>/dev/null | awk '{print $2}')
+        log_success "uv ${ver:-} found"
+        return 0
+    fi
+
+    log_warn "uv not found — required by Python-based MCP servers"
+    install_uv || return 0
+    local ver
+    ver=$(uv --version 2>/dev/null | awk '{print $2}')
+    log_success "uv ${ver:-} installed"
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -442,6 +502,7 @@ main() {
 
     check_node
     check_ripgrep
+    check_uv
     install_openaidy
 
     # Ensure JWT secret + generate bootstrap-admin token (idempotent).

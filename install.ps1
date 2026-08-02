@@ -233,6 +233,75 @@ function Test-Ripgrep {
 }
 
 # ============================================================================
+# uv / uvx provisioning (Python-based MCP servers)
+# ============================================================================
+# Node-based MCP servers launch through `npx`, which the managed Node install
+# above provides. Python-based ones launch through `uvx` — without it they fail
+# to spawn at all (`spawn uvx ENOENT`), so a user who adds one has to install a
+# toolchain by hand. Provision the toolchain here so those servers work as soon
+# as the user adds one.
+#
+# Scope: the toolchain only. No MCP server package is installed here — which
+# ones to run is the user's choice, made from the MCP page, and the installer
+# must not put a third-party package on every box without that consent.
+
+function Install-Uv {
+    Log-Info "Installing uv (Python toolchain for MCP servers)..."
+
+    $binDir = Join-Path $InstallDir "bin"
+    if (-not (Test-Path $binDir)) {
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+    }
+
+    try {
+        # Official installer, pinned to the directory we already use for managed
+        # tools. We add it to PATH ourselves (below), same as the Node step, so
+        # the installer doesn't register a second location.
+        $env:UV_INSTALL_DIR = $binDir
+        $env:UV_NO_MODIFY_PATH = "1"
+        Invoke-RestMethod https://astral.sh/uv/install.ps1 -UseBasicParsing | Invoke-Expression
+    } catch {
+        Log-Warn "Could not install uv: $_"
+        Log-Info "Install it manually from https://docs.astral.sh/uv/getting-started/installation/"
+        return $false
+    } finally {
+        Remove-Item Env:\UV_INSTALL_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\UV_NO_MODIFY_PATH -ErrorAction SilentlyContinue
+    }
+
+    if (-not (Test-Path (Join-Path $binDir "uvx.exe"))) {
+        Log-Warn "uv installer finished but uvx.exe is not in $binDir"
+        return $false
+    }
+
+    # Persist so a later `openaidy start` from a fresh terminal still finds uvx
+    # when it spawns an MCP server (ripgrep lives in this dir too).
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$binDir*") {
+        [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
+    }
+    $env:PATH = "$binDir;$env:PATH"
+    return $true
+}
+
+function Test-Uv {
+    # Honor an OpenAidy-managed install from a previous run.
+    $binDir = Join-Path $InstallDir "bin"
+    if (Test-Path (Join-Path $binDir "uvx.exe")) {
+        $env:PATH = "$binDir;$env:PATH"
+    }
+
+    if (Get-Command uvx -ErrorAction SilentlyContinue) {
+        Log-Success "uv found"
+        return
+    }
+
+    Log-Warn "uv not found — required by Python-based MCP servers"
+    if (-not (Install-Uv)) { return }
+    Log-Success "uv installed"
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -373,6 +442,10 @@ if (-not (Test-Node)) {
 if (-not (Test-Ripgrep)) {
     exit 1
 }
+
+# uv / uvx + Python MCP server environments (non-fatal: only Python-based MCP
+# servers depend on it, the server itself boots fine without it).
+Test-Uv
 
 # OpenAidy CLI (prebuilt package)
 Install-OpenAidy
