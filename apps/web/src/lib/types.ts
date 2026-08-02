@@ -53,6 +53,10 @@ export type {
   UpdateMemoryInput,
   MemorySearchResult,
   MemoryAgentSummary,
+  // SKILL.md validation errors surfaced by GET /skills. Declared in
+  // shared-types so the registry, the route, and this client agree on one
+  // shape; re-exported here so existing './types' imports keep working.
+  SkillLoadError,
 } from '@openaidy/shared-types';
 
 import type {
@@ -166,22 +170,6 @@ export type SkillInfo = {
   name: string;
   description: string;
   source?: SkillSource;
-  agentId?: string;
-};
-
-/**
- * Validation error for a SKILL.md the registry refused to load.
- * Returned alongside `items` by GET /skills so operators can see why
- * a skill that exists on disk is missing from the catalog.
- *
- * `agentId` is set when the failing file lives in an agent's workspace
- * (e.g. `<workspace>/<agentId>/skills/<id>/SKILL.md`). It is absent for
- * errors in the global SKILLS_DIR.
- */
-export type SkillLoadError = {
-  id: string;
-  filePath: string;
-  messages: string[];
   agentId?: string;
 };
 

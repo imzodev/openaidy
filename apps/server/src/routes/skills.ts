@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
+import type { SkillLoadError } from '@openaidy/shared-types';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { SkillRegistry } from '../skills';
@@ -50,11 +51,12 @@ function readAgentWorkspaceSkillIds(agentSkillsDir: string): Set<string> {
  */
 function scanAgentWorkspaceSkills(agentSkillsDir: string): {
   skills: Array<{ id: string; name: string; description: string }>;
-  errors: Array<{ id: string; filePath: string; messages: string[] }>;
+  errors: SkillLoadError[];
 } {
   const skills: Array<{ id: string; name: string; description: string }> = [];
-  const errors: Array<{ id: string; filePath: string; messages: string[] }> =
-    [];
+  // `agentId` is filled in by the caller, which knows which agent this
+  // directory belongs to.
+  const errors: SkillLoadError[] = [];
   if (!existsSync(agentSkillsDir)) return { skills, errors };
   let subdirs: string[];
   try {
@@ -109,12 +111,7 @@ export const skillRoutes: FastifyPluginAsync<SkillRoutesOptions> = async (
   app.get('/skills', async () => {
     const manifest = readSeedManifest(skillsDir);
     const items: EnrichedSkillInfo[] = [];
-    const loadErrors: Array<{
-      id: string;
-      filePath: string;
-      messages: string[];
-      agentId?: string;
-    }> = [];
+    const loadErrors: SkillLoadError[] = [];
 
     // Global skills with source tags
     for (const skill of skillRegistry.listSkills()) {
