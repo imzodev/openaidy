@@ -15,7 +15,11 @@ import {
   createDatabaseAdapter,
 } from '@openaidy/db';
 import { env } from './lib/env';
-import { createLogger, registerHttpLogger } from './lib/logger';
+import {
+  createLogger,
+  registerHttpLogger,
+  toPinoStyleLogger,
+} from './lib/logger';
 import { ensureEncryptionKey } from './mcp/secret-crypto';
 import {
   buildCredentialResolver,
@@ -103,6 +107,11 @@ import type { AppServices } from './types';
 export async function buildApp() {
   const app = Fastify({ logger: false });
   const log = createLogger();
+  // Services typed against `FastifyBaseLogger` log pino-style
+  // (`logger.warn({ ctx }, 'message')`). Adapt once here rather than casting
+  // `log` directly at each injection site, where the argument order silently
+  // flipped and printed `[object Object]` in place of the message.
+  const pinoLog = toPinoStyleLogger(log) as unknown as FastifyBaseLogger;
   const wsConfig = {
     enabled: env.WS_ENABLED,
     port: env.WS_PORT,
@@ -237,7 +246,7 @@ export async function buildApp() {
 
   // Create MCP client service (before sessionService so it can be injected)
   const mcpService = createMcpClientService({
-    logger: log as unknown as FastifyBaseLogger,
+    logger: pinoLog,
   });
 
   // Create workspace service before sessionService so it can be injected into builtin tools
@@ -350,7 +359,7 @@ export async function buildApp() {
 
   sessionService = new SessionMessageService({
     providers: providerServices,
-    logger: log as unknown as FastifyBaseLogger,
+    logger: pinoLog,
     agents: agentRegistry,
     mcp: mcpService,
     workspace: workspaceService,
@@ -375,7 +384,7 @@ export async function buildApp() {
   const channelDeps = {
     sessionService,
     authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
-    logger: log as unknown as FastifyBaseLogger,
+    logger: pinoLog,
   };
   const channelRegistry = createChannelRegistry(
     configService.getConfig().channels,
@@ -403,16 +412,12 @@ export async function buildApp() {
     }
   }
   const bootstrapAdmin = env.BOOTSTRAP_ADMIN_ENABLED
-    ? new BootstrapAdminManager(
-        new AuthMiddleware(wsConfig),
-        log as unknown as FastifyBaseLogger,
-        {
-          enabled: env.BOOTSTRAP_ADMIN_ENABLED,
-          tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
-          clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
-          tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
-        },
-      )
+    ? new BootstrapAdminManager(new AuthMiddleware(wsConfig), pinoLog, {
+        enabled: env.BOOTSTRAP_ADMIN_ENABLED,
+        tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
+        clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
+        tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
+      })
     : undefined;
 
   await bootstrapAdmin?.ensureToken();
@@ -424,7 +429,7 @@ export async function buildApp() {
       jobRunsRepo,
       sessionService,
       sessionsRepo,
-      log as unknown as FastifyBaseLogger,
+      pinoLog,
       { pollIntervalMs: 5000 },
     );
 
@@ -439,7 +444,7 @@ export async function buildApp() {
         jobRunsRepo,
         sessionsStore: sessionsRepo,
         sessionMessageService: sessionService,
-        logger: log as unknown as FastifyBaseLogger,
+        logger: pinoLog,
       }),
     );
   }
