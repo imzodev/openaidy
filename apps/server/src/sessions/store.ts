@@ -6,7 +6,7 @@ import type {
   AppendMessageInput,
   FinishReason,
 } from '../types.js';
-import type { SessionType } from '@openaidy/shared-types';
+import type { SessionType, SessionStatus } from '@openaidy/shared-types';
 export type { SessionRecord, SessionMessageRecord, SessionRunRecord };
 
 // In-memory storage (will be replaced with database)
@@ -15,8 +15,11 @@ const messages = new Map<string, SessionMessageRecord>();
 const runs = new Map<string, SessionRunRecord>();
 
 // Session operations
-export function listSessionRecords(): SessionRecord[] {
-  return Array.from(sessions.values());
+export function listSessionRecords(status?: SessionStatus): SessionRecord[] {
+  const all = Array.from(sessions.values());
+  if (!status) return all;
+  // Default missing status to 'active' so legacy records still match.
+  return all.filter((s) => (s.status ?? 'active') === status);
 }
 
 export function findSessionRecord(id: string): SessionRecord | undefined {
@@ -27,11 +30,14 @@ export function createSessionRecord(
   title: string,
   type?: SessionType,
 ): SessionRecord {
+  const now = new Date().toISOString();
   const record: SessionRecord = {
     id: nanoid(),
     title,
     type: type ?? 'chat',
-    createdAt: new Date().toISOString(),
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
   };
   sessions.set(record.id, record);
   return record;
@@ -43,7 +49,44 @@ export function updateSessionTitleRecord(
 ): SessionRecord | undefined {
   const record = sessions.get(id);
   if (!record) return undefined;
-  const updated = { ...record, title };
+  const updated = { ...record, title, updatedAt: new Date().toISOString() };
+  sessions.set(id, updated);
+  return updated;
+}
+
+export function updateSessionStatusRecord(
+  id: string,
+  status: SessionStatus,
+): SessionRecord | undefined {
+  const record = sessions.get(id);
+  if (!record) return undefined;
+  const now = new Date().toISOString();
+  // Drop any prior archivedAt, then re-add only when archiving. (Omitting the
+  // key rather than setting undefined keeps exactOptionalPropertyTypes happy.)
+  const { archivedAt: _prevArchivedAt, ...rest } = record;
+  const updated: SessionRecord = {
+    ...rest,
+    status,
+    updatedAt: now,
+    ...(status === 'archived' ? { archivedAt: now } : {}),
+  };
+  sessions.set(id, updated);
+  return updated;
+}
+
+export function updateSessionFavoriteRecord(
+  id: string,
+  favorited: boolean,
+): SessionRecord | undefined {
+  const record = sessions.get(id);
+  if (!record) return undefined;
+  // Favoriting is not activity — do not bump updatedAt. Drop favoritedAt, then
+  // re-add only when favoriting.
+  const { favoritedAt: _prevFavoritedAt, ...rest } = record;
+  const updated: SessionRecord = {
+    ...rest,
+    ...(favorited ? { favoritedAt: new Date().toISOString() } : {}),
+  };
   sessions.set(id, updated);
   return updated;
 }

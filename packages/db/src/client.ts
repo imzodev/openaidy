@@ -58,7 +58,8 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       agent_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      archived_at TEXT
+      archived_at TEXT,
+      favorited_at TEXT
     );
 
 
@@ -659,6 +660,17 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       `ALTER TABLE task_execution_history ADD COLUMN subtask_summary TEXT`,
     );
   }
+
+  // Migration: Add favorited_at to sessions if not exists (session favorites)
+  const sessionsInfo = sqlite.pragma('table_info(sessions)') as Array<{
+    name: string;
+  }>;
+  const hasFavoritedAt = sessionsInfo.some(
+    (col) => col.name === 'favorited_at',
+  );
+  if (!hasFavoritedAt) {
+    sqlite.exec(`ALTER TABLE sessions ADD COLUMN favorited_at TEXT`);
+  }
 }
 
 export async function createDatabaseClient(
@@ -715,12 +727,17 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0013_session_runs_usage.sql'),
     'utf-8',
   );
+  const sessionFavoritesMigrationSql = readFileSync(
+    resolve(drizzleDir, '0014_session_favorites.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
     await client.query(runningStatusMigrationSql);
     await client.query(messageAttachmentsMigrationSql);
     await client.query(sessionRunsUsageMigrationSql);
+    await client.query(sessionFavoritesMigrationSql);
   } finally {
     client.release();
   }

@@ -56,6 +56,8 @@ export type Session = {
   createdAt: string;
   updatedAt?: string;
   archivedAt?: string;
+  /** When the session was favorited/pinned (null/absent = not a favorite) */
+  favoritedAt?: string;
 };
 
 /**

@@ -69,6 +69,10 @@ export const sessions = pgTable('sessions', {
     .notNull()
     .defaultNow(),
   archivedAt: timestamp('archived_at', { withTimezone: true }),
+  // When the session was favorited/pinned by the user (null = not a favorite).
+  // Favoriting deliberately does NOT bump `updatedAt` so it never affects
+  // recency ordering.
+  favoritedAt: timestamp('favorited_at', { withTimezone: true }),
 });
 
 /**

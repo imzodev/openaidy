@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@solidjs/testing-library';
+import { render, screen, cleanup, fireEvent } from '@solidjs/testing-library';
 import { SessionList } from './SessionList';
 import type { Session } from '../lib/api';
 
@@ -7,16 +7,23 @@ import type { Session } from '../lib/api';
 // (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
   MessageSquare: () => <span data-testid="message-square" />,
-  Trash2: () => <span data-testid="trash-2" />,
+  Star: () => <span data-testid="star" />,
 }));
 
 describe('SessionList', () => {
   const mockSessions: Session[] = [
-    { id: '1', title: 'Test Session 1', createdAt: '2024-01-01T00:00:00Z' },
-    { id: '2', title: 'Test Session 2', createdAt: '2024-01-02T00:00:00Z' },
+    { id: '1', title: 'Recent Session 1', createdAt: '2024-01-01T00:00:00Z' },
+    { id: '2', title: 'Recent Session 2', createdAt: '2024-01-02T00:00:00Z' },
+    {
+      id: '3',
+      title: 'Pinned Session',
+      createdAt: '2024-01-03T00:00:00Z',
+      favoritedAt: '2024-01-04T00:00:00Z',
+    },
   ];
 
   const mockOnSelect = vi.fn();
+  const mockOnToggleFavorite = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -26,21 +33,7 @@ describe('SessionList', () => {
     cleanup();
   });
 
-  it('should render empty state when no sessions', () => {
-    render(() => (
-      <SessionList
-        sessions={[]}
-        selectedId={undefined}
-        onSelect={mockOnSelect}
-        isCollapsed={false}
-        isActiveView={true}
-      />
-    ));
-
-    expect(screen.getByText('No sessions yet')).toBeInTheDocument();
-  });
-
-  it('should render list of sessions', () => {
+  it('renders recent (non-favorite) sessions under Recent', () => {
     render(() => (
       <SessionList
         sessions={mockSessions}
@@ -51,11 +44,41 @@ describe('SessionList', () => {
       />
     ));
 
-    expect(screen.getByText('Test Session 1')).toBeInTheDocument();
-    expect(screen.getByText('Test Session 2')).toBeInTheDocument();
+    expect(screen.getByText('Recent')).toBeInTheDocument();
+    expect(screen.getByText('Recent Session 1')).toBeInTheDocument();
+    expect(screen.getByText('Recent Session 2')).toBeInTheDocument();
   });
 
-  it('should show loading state', () => {
+  it('renders favorited sessions under a Favorites heading', () => {
+    render(() => (
+      <SessionList
+        sessions={mockSessions}
+        selectedId={undefined}
+        onSelect={mockOnSelect}
+        isCollapsed={false}
+        isActiveView={true}
+      />
+    ));
+
+    expect(screen.getByText('Favorites')).toBeInTheDocument();
+    expect(screen.getByText('Pinned Session')).toBeInTheDocument();
+  });
+
+  it('renders nothing when collapsed', () => {
+    const { container } = render(() => (
+      <SessionList
+        sessions={mockSessions}
+        selectedId={undefined}
+        onSelect={mockOnSelect}
+        isCollapsed={true}
+        isActiveView={true}
+      />
+    ));
+
+    expect(container.textContent).toBe('');
+  });
+
+  it('shows loading state', () => {
     render(() => (
       <SessionList
         sessions={[]}
@@ -70,7 +93,7 @@ describe('SessionList', () => {
     expect(screen.getByText('Loading sessions...')).toBeInTheDocument();
   });
 
-  it('should render delete button for each session', () => {
+  it('calls onSelect when a session is clicked', () => {
     render(() => (
       <SessionList
         sessions={mockSessions}
@@ -81,8 +104,25 @@ describe('SessionList', () => {
       />
     ));
 
-    // Each session has a delete button (with aria-label)
-    const deleteButtons = screen.getAllByLabelText('Delete session');
-    expect(deleteButtons.length).toBe(2);
+    fireEvent.click(screen.getByText('Recent Session 1'));
+    expect(mockOnSelect).toHaveBeenCalledWith('1');
+  });
+
+  it('calls onToggleFavorite when the star button is clicked', () => {
+    render(() => (
+      <SessionList
+        sessions={mockSessions}
+        selectedId={undefined}
+        onSelect={mockOnSelect}
+        onToggleFavorite={mockOnToggleFavorite}
+        isCollapsed={false}
+        isActiveView={true}
+      />
+    ));
+
+    // The favorited session's star toggle should unfavorite it.
+    const unfavBtn = screen.getByLabelText('Remove from favorites');
+    fireEvent.click(unfavBtn);
+    expect(mockOnToggleFavorite).toHaveBeenCalledWith('3', false);
   });
 });

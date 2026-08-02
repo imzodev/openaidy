@@ -51,6 +51,7 @@ import { getStoredToken, resolveToken, clearToken } from './lib/auth-token';
 import {
   listAddons,
   deleteSession,
+  updateSession,
   uploadAttachment,
   getConfig,
   getUsageBySession,
@@ -586,6 +587,53 @@ function AppContent(props: AppContentProps) {
     }
   };
 
+  // Session organization: rename, favorite/pin, archive/unarchive. All go
+  // through the same PATCH mutation and refresh both the active and archived
+  // lists so the sessions page and sidebar quick-access stay in sync.
+  const refreshSessionLists = () => {
+    queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    queryClient.invalidateQueries({ queryKey: ['sessions', 'archived'] });
+  };
+  const updateSessionMutation = createMutation(() => ({
+    mutationFn: (input: {
+      id: string;
+      patch: {
+        title?: string;
+        status?: 'active' | 'archived';
+        favorited?: boolean;
+      };
+    }) => updateSession(input.id, input.patch),
+    onSuccess: refreshSessionLists,
+  }));
+
+  const handleRenameSession = async (id: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    await updateSessionMutation.mutateAsync({ id, patch: { title: trimmed } });
+  };
+
+  const handleToggleFavorite = async (id: string, favorited: boolean) => {
+    await updateSessionMutation.mutateAsync({ id, patch: { favorited } });
+  };
+
+  const handleArchiveSession = async (id: string) => {
+    await updateSessionMutation.mutateAsync({
+      id,
+      patch: { status: 'archived' },
+    });
+    // Archiving removes it from the active list; drop the selection if needed.
+    if (selectedSessionId() === id) {
+      setSelectedSessionId(undefined);
+    }
+  };
+
+  const handleUnarchiveSession = async (id: string) => {
+    await updateSessionMutation.mutateAsync({
+      id,
+      patch: { status: 'active' },
+    });
+  };
+
   // Queue-aware entry point used by the composer and the choices card.
   // While a run is in flight the message is queued; otherwise it is sent now.
   // Files are uploaded immediately (they don't need the run to be idle) and
@@ -960,9 +1008,13 @@ function AppContent(props: AppContentProps) {
       <Sidebar
         sessions={sessionsQuery.data?.items || []}
         selectedSessionId={selectedSessionId()}
-        onSelectSession={setSelectedSessionId}
+        onSelectSession={(id) => {
+          setSelectedSessionId(id);
+          navigate('chat');
+        }}
         onClearSession={() => setSelectedSessionId(undefined)}
         onCreateSession={handleCreateSession}
+        onToggleFavorite={handleToggleFavorite}
         isLoadingSessions={sessionsQuery.isLoading}
         currentView={view()}
         onNavigate={navigate}
@@ -1043,6 +1095,10 @@ function AppContent(props: AppContentProps) {
             }}
             onCreateSession={handleCreateSession}
             onDeleteSession={handleDeleteSession}
+            onRenameSession={handleRenameSession}
+            onToggleFavorite={handleToggleFavorite}
+            onArchiveSession={handleArchiveSession}
+            onUnarchiveSession={handleUnarchiveSession}
             isLoading={sessionsQuery.isLoading}
           />
         </Show>

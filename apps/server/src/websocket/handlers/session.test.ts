@@ -83,6 +83,7 @@ describe('SessionHandler', () => {
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:00:00.000Z'),
         archivedAt: null,
+        favoritedAt: null,
       };
       mockSessionService.createSession.mockResolvedValue(mockSession);
 
@@ -136,6 +137,7 @@ describe('SessionHandler', () => {
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:01:00.000Z'),
         archivedAt: null,
+        favoritedAt: null,
       };
       mockSessionService.getSession.mockResolvedValue(mockSession);
 
@@ -185,6 +187,7 @@ describe('SessionHandler', () => {
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
           updatedAt: new Date('2024-01-01T00:00:00.000Z'),
           archivedAt: null,
+          favoritedAt: null,
         },
         {
           id: 'session-2',
@@ -195,6 +198,7 @@ describe('SessionHandler', () => {
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
           updatedAt: new Date('2024-01-02T00:00:00.000Z'),
           archivedAt: null,
+          favoritedAt: null,
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -231,6 +235,7 @@ describe('SessionHandler', () => {
           createdAt: new Date('2024-01-01T00:00:00.000Z'),
           updatedAt: new Date('2024-01-01T00:00:00.000Z'),
           archivedAt: null,
+          favoritedAt: null,
         },
         {
           id: 'session-2',
@@ -241,6 +246,7 @@ describe('SessionHandler', () => {
           createdAt: new Date('2024-01-02T00:00:00.000Z'),
           updatedAt: new Date('2024-01-02T00:00:00.000Z'),
           archivedAt: new Date('2024-01-02T00:00:00.000Z'),
+          favoritedAt: null,
         },
       ];
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
@@ -271,6 +277,7 @@ describe('SessionHandler', () => {
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
         updatedAt: new Date('2024-01-01T00:00:00.000Z'),
         archivedAt: null,
+        favoritedAt: null,
       }));
       mockSessionService.listSessions.mockResolvedValue(mockSessions);
 
