@@ -233,6 +233,101 @@ function Test-Ripgrep {
 }
 
 # ============================================================================
+# uv / uvx provisioning (Python-based MCP servers)
+# ============================================================================
+# Node-based MCP servers launch through `npx`, which the managed Node install
+# above provides. Python-based ones launch through `uvx` — without it they fail
+# to spawn at all (`spawn uvx ENOENT`), so a user who adds one has to install a
+# toolchain by hand. Provision it here so those servers work out of the box.
+
+function Install-Uv {
+    Log-Info "Installing uv (Python toolchain for MCP servers)..."
+
+    $binDir = Join-Path $InstallDir "bin"
+    if (-not (Test-Path $binDir)) {
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+    }
+
+    try {
+        # Official installer, pinned to the directory we already use for managed
+        # tools. We add it to PATH ourselves (below), same as the Node step, so
+        # the installer doesn't register a second location.
+        $env:UV_INSTALL_DIR = $binDir
+        $env:UV_NO_MODIFY_PATH = "1"
+        Invoke-RestMethod https://astral.sh/uv/install.ps1 -UseBasicParsing | Invoke-Expression
+    } catch {
+        Log-Warn "Could not install uv: $_"
+        Log-Info "Install it manually from https://docs.astral.sh/uv/getting-started/installation/"
+        return $false
+    } finally {
+        Remove-Item Env:\UV_INSTALL_DIR -ErrorAction SilentlyContinue
+        Remove-Item Env:\UV_NO_MODIFY_PATH -ErrorAction SilentlyContinue
+    }
+
+    if (-not (Test-Path (Join-Path $binDir "uvx.exe"))) {
+        Log-Warn "uv installer finished but uvx.exe is not in $binDir"
+        return $false
+    }
+
+    # Persist so a later `openaidy start` from a fresh terminal still finds uvx
+    # when it spawns an MCP server (ripgrep lives in this dir too).
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$binDir*") {
+        [Environment]::SetEnvironmentVariable("Path", "$binDir;$userPath", "User")
+    }
+    $env:PATH = "$binDir;$env:PATH"
+    return $true
+}
+
+# Pre-provision the Python MCP servers OpenAidy commonly needs, so the first
+# connection doesn't wait on a cold `uvx` resolve — and, more importantly, so it
+# resolves to a working dependency set.
+#
+# `minimax-coding-plan-mcp` (0.0.4, the latest) declares `mcp[cli]>=1.6.0` with
+# no upper bound. `mcp` 2.0.0 (2026-07-28) removed `mcp.server.fastmcp`, which
+# the package imports at module scope, so any environment resolved after that
+# date crashes on import and the MCP client only sees "Connection closed".
+# Pinning `mcp[cli]<2` in a persistent tool environment makes
+# `uvx minimax-coding-plan-mcp` reuse it instead of re-resolving to the broken
+# version. Remove the pin once upstream publishes a build that constrains `mcp`
+# or migrates the import: https://github.com/MiniMax-AI/MiniMax-Coding-Plan-MCP
+function Install-PythonMcpTools {
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { return }
+
+    Log-Info "Provisioning MiniMax MCP server environment..."
+    try {
+        # Idempotent: on a machine that already has it, uv exits immediately
+        # with "already installed" and touches neither the network nor the
+        # environment. Deliberately not --force, which would delete a working
+        # environment first and leave it broken if the reinstall failed halfway.
+        uv tool install minimax-coding-plan-mcp --with "mcp[cli]<2" | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Log-Success "MiniMax MCP server ready"
+            return
+        }
+    } catch { }
+    Log-Warn "Could not provision the MiniMax MCP server — add it later from the MCP page"
+}
+
+function Test-Uv {
+    # Honor an OpenAidy-managed install from a previous run.
+    $binDir = Join-Path $InstallDir "bin"
+    if (Test-Path (Join-Path $binDir "uvx.exe")) {
+        $env:PATH = "$binDir;$env:PATH"
+    }
+
+    if (Get-Command uvx -ErrorAction SilentlyContinue) {
+        Log-Success "uv found"
+    } else {
+        Log-Warn "uv not found — required by Python-based MCP servers"
+        if (-not (Install-Uv)) { return }
+        Log-Success "uv installed"
+    }
+
+    Install-PythonMcpTools
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -373,6 +468,10 @@ if (-not (Test-Node)) {
 if (-not (Test-Ripgrep)) {
     exit 1
 }
+
+# uv / uvx + Python MCP server environments (non-fatal: only Python-based MCP
+# servers depend on it, the server itself boots fine without it).
+Test-Uv
 
 # OpenAidy CLI (prebuilt package)
 Install-OpenAidy

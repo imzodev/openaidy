@@ -321,6 +321,90 @@ check_ripgrep() {
 }
 
 # ============================================================================
+# uv / uvx Provisioning (Python-based MCP servers)
+# ============================================================================
+# Node-based MCP servers launch through `npx`, which the managed Node install
+# above provides. Python-based ones launch through `uvx` — without it they fail
+# to spawn at all (`spawn uvx ENOENT`), so a user who adds one has to install a
+# toolchain by hand. Provision it here so those servers work out of the box.
+# Installed next to node/npm/npx (see get_node_link_dir) so the server finds it
+# on PATH in later sessions too, not just the installer's own.
+# ============================================================================
+
+install_uv() {
+    log_info "Installing uv (Python toolchain for MCP servers)..."
+
+    local link_dir
+    link_dir="$(get_node_link_dir)"
+    mkdir -p "$link_dir"
+
+    # Official installer, pinned to a directory we control. It also drops uvx
+    # alongside uv. Failure here is non-fatal: the server boots fine and only
+    # Python MCP servers are affected.
+    if curl -fsSL --retry 3 --retry-connrefused https://astral.sh/uv/install.sh \
+        | env UV_INSTALL_DIR="$link_dir" UV_NO_MODIFY_PATH=1 sh >/dev/null 2>&1; then
+        export PATH="$link_dir:$PATH"
+        command -v uvx >/dev/null 2>&1 && return 0
+    fi
+
+    log_warn "Could not install uv — Python-based MCP servers will not start"
+    log_info "Install it manually from https://docs.astral.sh/uv/getting-started/installation/"
+    return 1
+}
+
+# Pre-provision the Python MCP servers OpenAidy ships or commonly needs, so the
+# first connection doesn't wait on a cold `uvx` resolve — and, more importantly,
+# so it resolves to a working dependency set.
+#
+# `minimax-coding-plan-mcp` (0.0.4, the latest) declares `mcp[cli]>=1.6.0` with
+# no upper bound. `mcp` 2.0.0 (2026-07-28) removed `mcp.server.fastmcp`, which
+# the package imports at module scope, so any environment resolved after that
+# date crashes on import and the MCP client only sees "Connection closed".
+# Pinning `mcp[cli]<2` in a persistent tool environment makes `uvx
+# minimax-coding-plan-mcp` reuse it instead of re-resolving to the broken
+# version. Remove the pin once upstream publishes a build that constrains `mcp`
+# or migrates the import: https://github.com/MiniMax-AI/MiniMax-Coding-Plan-MCP
+provision_python_mcp_tools() {
+    command -v uv >/dev/null 2>&1 || return 0
+
+    log_info "Provisioning MiniMax MCP server environment..."
+    # Idempotent: on a machine that already has it, uv exits immediately with
+    # "already installed" and touches neither the network nor the environment.
+    # Deliberately not --force, which would delete a working environment first
+    # and leave it broken if the reinstall failed halfway.
+    if uv tool install minimax-coding-plan-mcp --with "mcp[cli]<2" >/dev/null 2>&1; then
+        log_success "MiniMax MCP server ready"
+    else
+        log_warn "Could not provision the MiniMax MCP server — add it later from the MCP page"
+    fi
+}
+
+check_uv() {
+    log_info "Checking uv..."
+
+    # Honor an OpenAidy-managed install from a previous run.
+    local link_dir
+    link_dir="$(get_node_link_dir)"
+    if [ -x "$link_dir/uvx" ]; then
+        export PATH="$link_dir:$PATH"
+    fi
+
+    if command -v uvx >/dev/null 2>&1; then
+        local ver
+        ver=$(uv --version 2>/dev/null | awk '{print $2}')
+        log_success "uv ${ver:-} found"
+    else
+        log_warn "uv not found — required by Python-based MCP servers"
+        install_uv || return 0
+        local ver
+        ver=$(uv --version 2>/dev/null | awk '{print $2}')
+        log_success "uv ${ver:-} installed"
+    fi
+
+    provision_python_mcp_tools
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -442,6 +526,7 @@ main() {
 
     check_node
     check_ripgrep
+    check_uv
     install_openaidy
 
     # Ensure JWT secret + generate bootstrap-admin token (idempotent).
