@@ -5,6 +5,8 @@ import {
   onCleanup,
   onMount,
   createMemo,
+  createEffect,
+  untrack,
 } from 'solid-js';
 import {
   Puzzle,
@@ -20,17 +22,49 @@ import {
 import type { AddonRecord } from '../../lib/api';
 import { refreshAddonToken, getAddonAssetToken } from '../../lib/api';
 import { resolveToken } from '../../lib/auth-token';
+import { useTheme } from '../../lib/theme';
+import {
+  ADDON_THEME_TOKEN_NAMES,
+  type AddonThemePayload,
+} from '@openaidy/shared-types';
 
 // Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
 // and the server's static handler (--integrated mode) both serve addons
 // on the same origin the browser is already on, so a relative URL works.
 const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 
+/**
+ * Sample the host's resolved theme — the mode the user is actually seeing
+ * (after `system` collapses to light/dark) plus the resolved values of every
+ * CSS custom property the host uses to drive its palette.
+ *
+ * Reading `getComputedStyle` is the only portable way to know the *current*
+ * values: a custom-theme system, or any future override, would change the
+ * variables without us knowing, and we want the addon to track the truth.
+ */
+function readThemeFromHost(): AddonThemePayload {
+  if (typeof document === 'undefined') {
+    return { mode: 'dark', tokens: {} };
+  }
+  const root = document.documentElement;
+  const computed = getComputedStyle(root);
+  const tokens: Record<string, string> = {};
+  for (const name of ADDON_THEME_TOKEN_NAMES) {
+    const value = computed.getPropertyValue(name).trim();
+    if (value) tokens[name] = value;
+  }
+  const mode: AddonThemePayload['mode'] = root.classList.contains('dark')
+    ? 'dark'
+    : 'light';
+  return { mode, tokens };
+}
+
 type Props = {
   addon: AddonRecord;
 };
 
 export function AddonViewPage(props: Props) {
+  const { resolvedTheme } = useTheme();
   const manifest = () => props.addon.manifest as Record<string, unknown>;
   const ui = () => manifest().ui as Record<string, unknown> | undefined;
   const sidebar = () => ui()?.sidebar as Record<string, unknown> | undefined;
@@ -102,12 +136,39 @@ export function AddonViewPage(props: Props) {
   // addon itself. All authenticated calls the addon triggers are proxied by
   // this component (see handleMessage below) using a short-lived,
   // addon-scoped token that never crosses into the iframe.
+  //
+  // The host's current theme (mode + the resolved CSS variable values) is
+  // included on init so an addon that mirrors the host's palette is correct
+  // on first paint, with no flash. See OPENAIDY_THEME_CHANGED below for the
+  // live-update path.
   const sendInit = () => {
     iframeRef?.contentWindow?.postMessage(
-      { type: 'OPENAIDY_INIT', apiBase: SERVER_BASE, nonce },
+      {
+        type: 'OPENAIDY_INIT',
+        apiBase: SERVER_BASE,
+        nonce,
+        theme: readThemeFromHost(),
+      },
       '*',
     );
   };
+
+  // Live theme propagation. When the user toggles light/dark (or the OS
+  // preference changes for `system` mode), the host's `<html>` class flips
+  // and the CSS variables resolve to the new palette. We re-sample the host
+  // and post OPENAIDY_THEME_CHANGED so a theme-aware addon follows without
+  // needing a reload. untrack the read on first run — the first init already
+  // carries the theme, so we only want to push deltas.
+  createEffect(() => {
+    resolvedTheme();
+    const theme = readThemeFromHost();
+    untrack(() => {
+      iframeRef?.contentWindow?.postMessage(
+        { type: 'OPENAIDY_THEME_CHANGED', theme },
+        '*',
+      );
+    });
+  });
 
   // Send on iframe load as a fallback for addons that predate ADDON_READY,
   // and again when the addon sends ADDON_READY (see handleMessage) for reliability.

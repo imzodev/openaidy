@@ -102,43 +102,49 @@ function writeReadme(projectPath: string, opts: TemplateOptions): void {
 const TAILWIND_CDN_TAG =
   '  <script src="https://cdn.tailwindcss.com"></script>';
 
-// Shared CSS for both templates
+// Shared CSS for both templates.
+//
+// Colors come from the host's theme via CSS custom properties on `:root`.
+// `apps/web/src/index.css` defines the same names (`--bg-primary`, etc.) and
+// the host passes the resolved values down via OPENAIDY_INIT. Referencing the
+// variables (not hardcoded values) means the addon tracks the host's theme
+// without us having to know which palette the host ships today.
 const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--bg-primary);
+      color: var(--text-primary);
       min-height: 100vh;
     }
     main { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
     .card {
-      background: #1e293b;
-      border: 1px solid #334155;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-primary);
       border-radius: 12px;
       padding: 20px;
     }
-    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #f1f5f9; }
-    .card p { font-size: 0.875rem; color: #94a3b8; line-height: 1.6; }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: var(--text-primary); }
+    .card p { font-size: 0.875rem; color: var(--text-tertiary); line-height: 1.6; }
     label {
       display: block;
       font-size: 0.813rem;
       font-weight: 500;
-      color: #94a3b8;
+      color: var(--text-secondary);
       margin-bottom: 6px;
     }
     select, textarea, input {
       width: 100%;
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
       border-radius: 8px;
-      color: #e2e8f0;
+      color: var(--text-primary);
       font-family: inherit;
       font-size: 0.875rem;
       padding: 10px 12px;
       outline: none;
       transition: border-color 0.15s;
     }
-    select:focus, textarea:focus, input:focus { border-color: #0ea5e9; }
+    select:focus, textarea:focus, input:focus { border-color: var(--primary); }
     textarea { resize: vertical; min-height: 80px; }
     .field { margin-bottom: 14px; }
     .btn {
@@ -153,19 +159,19 @@ const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
       cursor: pointer;
       transition: opacity 0.15s;
       color: #fff;
-      background: #0ea5e9;
+      background: var(--primary);
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn:hover:not(:disabled) { opacity: 0.9; }
     .response-box {
       margin-top: 14px;
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-primary);
       border-radius: 8px;
       padding: 14px;
       font-size: 0.875rem;
       line-height: 1.6;
-      color: #e2e8f0;
+      color: var(--text-primary);
       white-space: pre-wrap;
       display: none;
     }
@@ -178,23 +184,82 @@ const SHARED_CSS = `    * { box-sizing: border-box; margin: 0; padding: 0; }
       color: #fff;
       margin-top: 4px;
     }
-    .badge-ok { background: #22c55e; }
-    .badge-err { background: #ef4444; }
-    .badge-wait { background: #0ea5e9; }`;
+    .badge-ok { background: var(--success); }
+    .badge-err { background: var(--danger); }
+    .badge-wait { background: var(--primary); }`;
 
-// Shared JS for SDK loading and agent invocation (used by both templates)
-const SHARED_SDK_JS = `// Signal the parent that this addon is ready to receive OPENAIDY_INIT.
-// The parent may have already sent it before this script executed.
-window.addEventListener('message', function onInit(event) {
+// Shared JS for SDK loading and agent invocation (used by both templates).
+//
+// `applyTheme` writes the host's CSS custom properties onto `:root` so the
+// shared stylesheet (which references them) renders the host's palette on
+// first paint. It is called once on init and again on every
+// `OPENAIDY_THEME_CHANGED` postMessage the host sends while the addon is
+// loaded, so a user who toggles light/dark in the host sees the addon follow
+// without a reload. A small fallback set is hardcoded so the addon still
+// paints (with the host's dark defaults) when the init message is delayed or
+// the host predates this contract.
+const SHARED_SDK_JS = `// Fallback tokens — used until the host's OPENAIDY_INIT arrives.
+// These intentionally mirror the host's .dark palette in apps/web/src/index.css
+// so an addon that paints before the init message still looks reasonable.
+var FALLBACK_TOKENS = {
+  '--primary': '#3b82f6',
+  '--primary-hover': '#2563eb',
+  '--primary-disabled': '#93c5fd',
+  '--danger': '#ef4444',
+  '--success': '#22c55e',
+  '--text-primary': '#f3f4f6',
+  '--text-secondary': '#d1d5db',
+  '--text-tertiary': '#9ca3af',
+  '--text-muted': '#6b7280',
+  '--text-inverse': '#f9fafb',
+  '--bg-primary': '#111827',
+  '--bg-secondary': '#1f2937',
+  '--bg-tertiary': '#374151',
+  '--bg-elevated': '#1f2937',
+  '--border-primary': '#374151',
+  '--border-secondary': '#4b5563'
+};
+
+function applyTheme(theme) {
+  if (!theme) return;
+  var tokens = theme.tokens || {};
+  var root = document.documentElement;
+  // Apply every token the host sent, then fall back for any it didn't.
+  var keys = Object.keys(FALLBACK_TOKENS);
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var v = tokens[k] || FALLBACK_TOKENS[k];
+    root.style.setProperty(k, v);
+  }
+  // The .dark class is the source of truth for Tailwind dark: variants when
+  // the host includes any in its addons; we mirror it so Tailwind classes
+  // (e.g. text-text-primary) still resolve correctly inside the iframe.
+  if (theme.mode === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+}
+
+// Signal the parent that this addon is ready to receive OPENAIDY_INIT.
+// The parent may have already sent it before this script executed, so we
+// also listen for OPENAIDY_THEME_CHANGED so a user who toggles the host's
+// theme while the addon is open sees the addon follow without a reload.
+applyTheme({ mode: 'dark', tokens: FALLBACK_TOKENS });
+
+window.addEventListener('message', function onMessage(event) {
   var msg = event.data;
-  if (!msg || msg.type !== 'OPENAIDY_INIT') return;
-  window.removeEventListener('message', onInit);
-  var script = document.createElement('script');
-  script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
-  script.onload = function() {
-    onSdkReady(msg);
-  };
-  document.head.appendChild(script);
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'OPENAIDY_INIT') {
+    window.removeEventListener('message', onMessage);
+    applyTheme(msg.theme);
+    var script = document.createElement('script');
+    script.src = msg.apiBase + '/sdk/openaidy-sdk.js';
+    script.onload = function() { onSdkReady(msg); };
+    document.head.appendChild(script);
+  } else if (msg.type === 'OPENAIDY_THEME_CHANGED') {
+    applyTheme(msg.theme);
+  }
 });
 window.parent.postMessage({ type: 'ADDON_READY' }, '*');`;
 
