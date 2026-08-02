@@ -7,6 +7,7 @@ import {
   createLogger,
   setCorrelationContext,
   clearCorrelationContext,
+  toPinoStyleLogger,
 } from './logger';
 
 describe('LogBuffer', () => {
@@ -279,6 +280,68 @@ describe('createLogger', () => {
     expect(result.items[0]?.runId).toBe('run-456');
 
     clearCorrelationContext();
+  });
+});
+
+describe('toPinoStyleLogger', () => {
+  beforeEach(() => {
+    resetLogBuffer();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('uses the message as the message when context comes first (pino order)', () => {
+    const log = toPinoStyleLogger(createLogger('mcp'));
+    log.warn(
+      { serverId: 'MiniMax', stderr: 'ModuleNotFoundError' },
+      'MCP server stderr',
+    );
+
+    const entry = getLogBuffer().query().items[0];
+    expect(entry?.message).toBe('MCP server stderr');
+    expect(entry?.args).toEqual([
+      { serverId: 'MiniMax', stderr: 'ModuleNotFoundError' },
+    ]);
+  });
+
+  it('passes (message, meta) calls through untouched', () => {
+    const log = toPinoStyleLogger(createLogger('mcp'));
+    log.info('MCP server connected', { serverId: 'MiniMax' });
+
+    const entry = getLogBuffer().query().items[0];
+    expect(entry?.message).toBe('MCP server connected');
+    expect(entry?.args).toEqual([{ serverId: 'MiniMax' }]);
+  });
+
+  it('keeps the context when a bare object is logged with no message', () => {
+    const log = toPinoStyleLogger(createLogger('mcp'));
+    log.error({ err: 'boom' });
+
+    const entry = getLogBuffer().query().items[0];
+    expect(entry?.message).toBe('');
+    expect(entry?.args).toEqual([{ err: 'boom' }]);
+  });
+
+  it('never stringifies the context into the message', () => {
+    const log = toPinoStyleLogger(createLogger('mcp'));
+    log.info({ serverId: 'MiniMax' }, 'Connecting');
+
+    const entry = getLogBuffer().query().items[0];
+    expect(entry?.message).not.toContain('[object Object]');
+  });
+
+  it('preserves the log level of the wrapped logger', () => {
+    const log = toPinoStyleLogger(createLogger('mcp'));
+    log.warn({ a: 1 }, 'warned');
+    log.error({ b: 2 }, 'errored');
+
+    const items = getLogBuffer().query().items;
+    expect(items.map((i) => i.level)).toEqual(['error', 'warn']);
   });
 });
 
