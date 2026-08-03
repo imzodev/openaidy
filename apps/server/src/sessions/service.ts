@@ -59,6 +59,7 @@ import type {
   SessionMessageServiceOptions,
 } from './types';
 import { buildSystemPrompt } from '../prompts/build-system-prompt';
+import type { AddonPromptSummary } from '../prompts/build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type {
   WorkspacePermissionsInfo,
@@ -98,6 +99,9 @@ export class SessionMessageService {
   private readonly personalityService: AgentPersonalityService | undefined;
   private readonly runEvents: RunEventEmitter | undefined;
   private readonly workspaceBaseDir: string | undefined;
+  private readonly listAddons:
+    | (() => Promise<AddonPromptSummary[]>)
+    | undefined;
   private readonly attachments: AttachmentService | undefined;
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
@@ -129,6 +133,7 @@ export class SessionMessageService {
     this.personalityService = options.personality;
     this.runEvents = options.runEvents;
     this.workspaceBaseDir = options.workspaceBaseDir;
+    this.listAddons = options.listAddons;
     this.attachments = options.attachments;
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
@@ -1321,6 +1326,20 @@ export class SessionMessageService {
       : undefined;
 
     // Build system prompt with personality files, skill bodies, and tool guidelines injected
+    // Addons the agent may review or change. Best-effort: an unavailable list
+    // costs the agent that context, never the run.
+    let addonSummaries: AddonPromptSummary[] = [];
+    if (this.listAddons) {
+      try {
+        addonSummaries = await this.listAddons();
+      } catch (err) {
+        this.logger?.warn(
+          { err },
+          'Could not load the addon list for the system prompt',
+        );
+      }
+    }
+
     const systemPrompt = await buildSystemPrompt({
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
@@ -1333,6 +1352,7 @@ export class SessionMessageService {
       tools: allTools,
       workspacePermissions,
       workspaceBaseDir: this.workspaceBaseDir,
+      ...(addonSummaries.length > 0 ? { addons: addonSummaries } : {}),
       sessionType: (session as { type?: string }).type as
         | SessionType
         | undefined,
