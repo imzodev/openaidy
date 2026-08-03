@@ -8,6 +8,31 @@ import {
 } from '@openaidy/runtime';
 import type { ProviderRegistryService } from './registry';
 import type { ProviderSelectionService } from './selection';
+import { repairProviderHistory } from './history-repair.js';
+import { createLogger } from '../lib/logger.js';
+
+const log = createLogger('provider-invocation');
+
+/**
+ * Repair tool-call/tool-result adjacency in the request history before it
+ * reaches the provider — see `history-repair.ts` for why a persisted
+ * transcript can develop this shape and what "repair" means here. Applied
+ * once, at this chokepoint, so every caller of `invoke`/`invokeStream`
+ * (session submissions, the agentic dispatch loop, the planning service,
+ * personality auto-fill, the provider test endpoint) is covered without
+ * each one having to remember to call it.
+ */
+function repairRequestHistory(request: ModelRequest): ModelRequest {
+  const { messages, diagnostics } = repairProviderHistory(request.messages);
+  if (
+    diagnostics.orphanToolResults > 0 ||
+    diagnostics.strippedToolCallTurns > 0 ||
+    diagnostics.deferredUserMessages > 0
+  ) {
+    log.warn('Repaired provider request history before sending', diagnostics);
+  }
+  return { ...request, messages };
+}
 
 /**
  * Invocation options
@@ -23,14 +48,14 @@ export type InvocationOptions = {
 
 /**
  * Model Invocation Service
- * 
+ *
  * Orchestrates provider invocation through the normalized interface.
  * Handles both streaming and non-streaming paths.
  */
 export class ModelInvocationService {
   constructor(
     private readonly registry: ProviderRegistryService,
-    private readonly selection: ProviderSelectionService
+    private readonly selection: ProviderSelectionService,
   ) {}
 
   /**
@@ -38,16 +63,20 @@ export class ModelInvocationService {
    */
   async invoke(
     request: ModelRequest,
-    options?: InvocationOptions
+    options?: InvocationOptions,
   ): Promise<ProviderResult<ModelResponse>> {
     // Determine provider ID from options or request metadata
-    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
-    
+    const providerId =
+      options?.providerId ??
+      (request.metadata?.providerId as string | undefined);
+
     // Select provider and model
     const selectionResult = this.selection.select({
       ...(providerId !== undefined && { providerId }),
       modelId: options?.modelId ?? request.model,
-      capabilities: request.stream ? ['streaming', 'text_generation'] : ['text_generation'],
+      capabilities: request.stream
+        ? ['streaming', 'text_generation']
+        : ['text_generation'],
     });
 
     if (!selectionResult.ok) {
@@ -62,14 +91,14 @@ export class ModelInvocationService {
         createProviderError(
           'provider.capability_unsupported',
           `Provider "${provider.descriptor.id}" does not support streaming`,
-          { providerId: provider.descriptor.id, modelId }
-        )
+          { providerId: provider.descriptor.id, modelId },
+        ),
       );
     }
 
-    // Build the actual request with resolved model
+    // Build the actual request with resolved model and repaired history
     const actualRequest: ModelRequest = {
-      ...request,
+      ...repairRequestHistory(request),
       model: modelId,
       metadata: {
         ...request.metadata,
@@ -91,8 +120,8 @@ export class ModelInvocationService {
             cause: error,
             providerId: provider.descriptor.id,
             modelId,
-          }
-        )
+          },
+        ),
       );
     }
   }
@@ -103,11 +132,13 @@ export class ModelInvocationService {
    */
   async *invokeStream(
     request: ModelRequest,
-    options?: InvocationOptions
+    options?: InvocationOptions,
   ): AsyncIterable<ProviderResult<ModelStreamEvent>> {
     // Determine provider ID from options or request metadata
-    const providerId = options?.providerId ?? (request.metadata?.providerId as string | undefined);
-    
+    const providerId =
+      options?.providerId ??
+      (request.metadata?.providerId as string | undefined);
+
     // Select provider and model
     const selectionResult = this.selection.select({
       ...(providerId !== undefined && { providerId }),
@@ -128,15 +159,15 @@ export class ModelInvocationService {
         createProviderError(
           'provider.capability_unsupported',
           `Provider "${provider.descriptor.id}" does not support streaming`,
-          { providerId: provider.descriptor.id, modelId }
-        )
+          { providerId: provider.descriptor.id, modelId },
+        ),
       );
       return;
     }
 
-    // Build the actual request with resolved model
+    // Build the actual request with resolved model and repaired history
     const actualRequest: ModelRequest = {
-      ...request,
+      ...repairRequestHistory(request),
       model: modelId,
       stream: true,
       metadata: {
@@ -158,8 +189,8 @@ export class ModelInvocationService {
             cause: error,
             providerId: provider.descriptor.id,
             modelId,
-          }
-        )
+          },
+        ),
       );
     }
   }
@@ -184,7 +215,7 @@ export class ModelInvocationService {
  */
 export function createModelInvocation(
   registry: ProviderRegistryService,
-  selection: ProviderSelectionService
+  selection: ProviderSelectionService,
 ): ModelInvocationService {
   return new ModelInvocationService(registry, selection);
 }
