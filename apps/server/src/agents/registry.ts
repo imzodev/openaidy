@@ -321,6 +321,41 @@ export class AgentRegistry {
   }
 
   /**
+   * Append a skill ID to an agent's skills list.
+   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   *
+   * - Throws if the agent does not exist.
+   * - No-op (returns the existing agent) if the skill is already attached.
+   * - Otherwise appends the skillId, persists the change, and returns the updated agent.
+   */
+  addSkillToAgent(agentId: string, skillId: string): Agent {
+    this.ensureLoaded();
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new Error(`Agent with ID "${agentId}" not found`);
+    }
+
+    const currentSkills = agent.skills ?? [];
+    if (currentSkills.includes(skillId)) {
+      return agent;
+    }
+
+    const newSkills = [...currentSkills, skillId];
+    const updated: Agent = {
+      ...agent,
+      skills: newSkills,
+    };
+    this.agents.set(agentId, updated);
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      if (idx !== -1) {
+        agents[idx]!['skills'] = newSkills;
+      }
+    });
+    return updated;
+  }
+
+  /**
    * Update the MCP server references for an agent.
    * Patches both the in-memory registry and the main openaidy.json config file on disk.
    * Returns the updated AgentSummary or undefined if the agent was not found.

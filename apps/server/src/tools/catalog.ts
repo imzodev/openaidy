@@ -200,6 +200,9 @@ export const skillCreateMeta: ToolMeta = {
   description:
     'Create a new skill and save it to the skills directory. ' +
     'A skill is a reusable set of instructions that can be assigned to agents. ' +
+    'The new skill is automatically activated for the calling agent — no ' +
+    'follow-up agent_update call is needed unless the tool result says ' +
+    'activation failed. ' +
     'REQUIRED parameters: id (lowercase, hyphens), name (human-readable), ' +
     'description (one-line summary used by the skill registry and by agents ' +
     'to decide when to load the skill — frontmatter is generated from these), ' +
