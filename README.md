@@ -84,19 +84,19 @@ The dev mode runs the API server and Vite UI separately with hot reload.
 
 ## How OpenAidy compares
 
-| Capability                              | OpenAidy | n8n   | CrewAI | AutoGen |
-| --------------------------------------- | :------: | :---: | :----: | :-----: |
-| **Self-hostable**                       |    ✅    |  ✅   |   ❌   |    ❌   |
-| **Built-in operator UI**                |    ✅    |  ✅   |   ❌   |    ❌   |
-| **Real-time token streaming**           |    ✅    |  🟡   |   ❌   |    ❌   |
-| **Persistent agent sessions**           |    ✅    |  🟡   |   ❌   |    ❌   |
-| **Cron + one-shot scheduler**           |    ✅    |  ✅   |   ❌   |    ❌   |
-| **First-class MCP support**             |    ✅    |  🟡   |   ❌   |    ✅   |
-| **Plugin SDK (tools, channels, UI)**    |    ✅    |  ✅   |   ❌   |    ❌   |
-| **Messaging channels (WhatsApp, etc.)** |    ✅    |  ✅   |   ❌   |    ❌   |
-| **Multi-agent orchestration**           |    ✅    |  🟡   |   ✅   |    ✅   |
-| **Provider-agnostic (OpenAI/Anthropic/Gemini/local)** | ✅ | ✅ | ✅ | ✅ |
-| **License**                             |   MIT    |  ⚖️   |  MIT   |   MIT   |
+| Capability                                            | OpenAidy | n8n | CrewAI | AutoGen |
+| ----------------------------------------------------- | :------: | :-: | :----: | :-----: |
+| **Self-hostable**                                     |    ✅    | ✅  |   ❌   |   ❌    |
+| **Built-in operator UI**                              |    ✅    | ✅  |   ❌   |   ❌    |
+| **Real-time token streaming**                         |    ✅    | 🟡  |   ❌   |   ❌    |
+| **Persistent agent sessions**                         |    ✅    | 🟡  |   ❌   |   ❌    |
+| **Cron + one-shot scheduler**                         |    ✅    | ✅  |   ❌   |   ❌    |
+| **First-class MCP support**                           |    ✅    | 🟡  |   ❌   |   ✅    |
+| **Plugin SDK (tools, channels, UI)**                  |    ✅    | ✅  |   ❌   |   ❌    |
+| **Messaging channels (WhatsApp, etc.)**               |    ✅    | ✅  |   ❌   |   ❌    |
+| **Multi-agent orchestration**                         |    ✅    | 🟡  |   ✅   |   ✅    |
+| **Provider-agnostic (OpenAI/Anthropic/Gemini/local)** |    ✅    | ✅  |   ✅   |   ✅    |
+| **License**                                           |   MIT    | ⚖️  |  MIT   |   MIT   |
 
 Legend: ✅ yes &nbsp;&nbsp; 🟡 partial &nbsp;&nbsp; ❌ no &nbsp;&nbsp; ⚖️ "Sustainable Use" (not OSI-open)
 
@@ -290,6 +290,7 @@ The following MCP servers ship preinstalled (reconciled into every install on st
 | Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}` |
 | Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
 | Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
+| Buffer              | http      | `${BUFFER_API_KEY}`               | [Buffer](https://buffer.com) social media scheduling — per-account API key                                     |
 
 #### Setting API keys
 
