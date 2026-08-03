@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSystemPrompt } from './build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
+import type { ToolDefinition } from '@openaidy/runtime';
 
 function mockPersonality(blank: string[]): AgentPersonalityService {
   return {
@@ -57,5 +58,87 @@ describe('buildSystemPrompt — onboarding block (#373)', () => {
       onboardingMessagesRemaining: 2,
     });
     expect(prompt).not.toContain('[ONBOARDING]');
+  });
+});
+
+describe('buildSystemPrompt — [ADDONS_AVAILABLE] block', () => {
+  const ADDON_TOOL = {
+    name: 'addon_update',
+    description: 'update an addon',
+    parameters: { type: 'object', properties: {} },
+  } as unknown as ToolDefinition;
+
+  const OTHER_TOOL = {
+    name: 'workspace_read',
+    description: 'read a file',
+    parameters: { type: 'object', properties: {} },
+  } as unknown as ToolDefinition;
+
+  const ADDONS = [
+    {
+      id: 'weather',
+      name: 'Weather Widget',
+      description: 'Shows the weather',
+      version: '1.2.0',
+      status: 'enabled',
+    },
+    { id: 'broken-one', name: 'Broken', status: 'error' },
+  ];
+
+  it('lists the installed addons when the agent holds an addon tool', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [ADDON_TOOL],
+      addons: ADDONS,
+    });
+    expect(prompt).toContain('[ADDONS_AVAILABLE]');
+    expect(prompt).toContain(
+      '- weather: Weather Widget v1.2.0 — Shows the weather',
+    );
+    // The id the addon_* tools take must be what is listed.
+    expect(prompt).toContain('addon_read({ addon_id: "<id>" })');
+  });
+
+  it('reports a non-enabled addon with its actual state, not just "disabled"', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [ADDON_TOOL],
+      addons: ADDONS,
+    });
+    // An agent asked to fix a broken addon has to be able to see it is broken.
+    expect(prompt).toContain('- broken-one: Broken (error)');
+  });
+
+  it('warns that addon_update overwrites, so files must be read first', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [ADDON_TOOL],
+      addons: ADDONS,
+    });
+    expect(prompt).toContain('OVERWRITES');
+    expect(prompt).toContain('OUTSIDE your workspace');
+  });
+
+  it('omits the block for an agent with no addon tool', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [OTHER_TOOL],
+      addons: ADDONS,
+    });
+    expect(prompt).not.toContain('[ADDONS_AVAILABLE]');
+  });
+
+  it('omits the block when no addons are installed', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [ADDON_TOOL],
+      addons: [],
+    });
+    expect(prompt).not.toContain('[ADDONS_AVAILABLE]');
   });
 });

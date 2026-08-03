@@ -13,6 +13,27 @@ import { join } from 'node:path';
 import { parseSkillMd } from '../skills/parser';
 import { logger } from '../lib/logger';
 
+/**
+ * The facts about an installed addon an agent needs before it can review or
+ * change one: which addons exist, what each is for, and whether it is currently
+ * running. File contents are deliberately not included — the agent pulls those
+ * with `addon_read` for the one addon it is working on, instead of every
+ * addon's source landing in every prompt.
+ */
+export type AddonPromptSummary = {
+  /** The addon identifier the addon_* tools take (not the DB row id). */
+  id: string;
+  name: string;
+  description?: string | undefined;
+  version?: string | undefined;
+  /**
+   * Lifecycle state, verbatim: `enabled`, `disabled`, `installed` or `error`.
+   * Passed through rather than collapsed to a boolean — an agent asked to fix a
+   * broken addon needs to see `error`, not "disabled".
+   */
+  status: string;
+};
+
 export type BuildSystemPromptOptions = {
   agentId: string;
   basePrompt: string;
@@ -33,6 +54,16 @@ export type BuildSystemPromptOptions = {
   workspaceBaseDir?: string | undefined;
   /** Session type - used to inject context-specific reminders */
   sessionType?: SessionType | undefined;
+  /**
+   * Addons installed on this instance, for the [ADDONS_AVAILABLE] block.
+   *
+   * Without this the agent has no way to know an addon exists: addons live
+   * outside the workspace, so no workspace_* tool can see them, and
+   * `addon_update` requires an id it would otherwise have to guess. Injected
+   * only when the agent actually holds an addon tool (see below), so an agent
+   * with no addon access doesn't pay for the list.
+   */
+  addons?: AddonPromptSummary[] | undefined;
   /**
    * Number of remaining messages that should receive ONBOARDING injection.
    * Onboarding runs until this reaches 0 or all personality files are configured.
@@ -111,6 +142,7 @@ export async function buildSystemPrompt(
     workspacePermissions,
     workspaceBaseDir,
     sessionType,
+    addons,
     onboardingMessagesRemaining = 0,
   } = options;
 
@@ -276,6 +308,32 @@ Your response will be automatically evaluated. Work is judged complete only if t
     if (allBodies) {
       prompt += '\n\n[SKILL_CONTEXTS]\n' + allBodies + '\n[/SKILL_CONTEXTS]';
     }
+  }
+
+  // Addons the agent can review or change. Gated on the agent actually holding
+  // an addon tool: an agent without one can neither read nor modify an addon,
+  // so listing them would only burn context. Disabled addons are listed too —
+  // an agent asked to fix a broken addon needs to see the one that is off.
+  if (addons?.length && tools?.some((t) => t.name.startsWith('addon_'))) {
+    const entries = addons
+      .map((a) => {
+        const version = a.version ? ` v${a.version}` : '';
+        const state = a.status === 'enabled' ? '' : ` (${a.status})`;
+        const description = a.description ? ` — ${a.description}` : '';
+        return `- ${a.id}: ${a.name}${version}${state}${description}`;
+      })
+      .join('\n');
+
+    prompt += `
+
+[ADDONS_AVAILABLE]
+The following addons are installed on this instance:
+${entries}
+
+Addons live in a directory managed by OpenAidy, OUTSIDE your workspace — no workspace_* or code_* tool can see or change them.
+To inspect one before changing it, call addon_read({ addon_id: "<id>" }) for its file list, then addon_read({ addon_id: "<id>", paths: ["app/index.js"] }) for contents.
+Never rewrite a file from memory: addon_update OVERWRITES whole files, so read first or you will silently drop code you did not author.
+[/ADDONS_AVAILABLE]`;
   }
 
   // Inject tool guidelines with honest information about available tools and workspace permissions

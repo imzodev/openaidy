@@ -120,6 +120,16 @@ export type SessionMessageServiceOptions = {
   runEvents?: RunEventEmitter;
   /** Base directory for agent workspaces (for loading agent workspace skills) */
   workspaceBaseDir?: string;
+  /**
+   * Resolves the addons installed on this instance, for the
+   * [ADDONS_AVAILABLE] block in the system prompt. A narrow callback rather
+   * than the AddonService itself: this service only needs to read the list,
+   * and the DB may be absent (no addons at all). Failures are swallowed at the
+   * call site — a run must never die because the addon list was unavailable.
+   */
+  listAddons?: () => Promise<
+    import('../prompts/build-system-prompt').AddonPromptSummary[]
+  >;
   /** Attachment storage for image/audio chat media (requires DB) */
   attachments?: import('../attachments/service').AttachmentService;
   /**

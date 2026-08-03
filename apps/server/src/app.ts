@@ -369,6 +369,34 @@ export async function buildApp() {
     getDefaultAgentId: () => configService.getConfig().defaults.agentId,
     runEvents,
     workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+    // Lets the agent see which addons exist (and their ids) so it can review or
+    // change one — addons live outside the workspace, so nothing else in the
+    // prompt reveals them. Absent when there is no DB, i.e. no addons at all.
+    ...(addonService
+      ? {
+          listAddons: async () => {
+            const { addons } = await addonService.listAddons();
+            return addons.map((addon) => {
+              // `description` is manifest-only (not a column), and the manifest
+              // column is typed `unknown` at the repository boundary.
+              const manifest = addon.manifest as
+                | { description?: string }
+                | null
+                | undefined;
+              return {
+                // addonId, not id: the row id means nothing to the addon tools.
+                id: addon.addonId,
+                name: addon.name,
+                version: addon.version,
+                ...(manifest?.description
+                  ? { description: manifest.description }
+                  : {}),
+                status: addon.status,
+              };
+            });
+          },
+        }
+      : {}),
     ...(attachmentService ? { attachments: attachmentService } : {}),
     ...(modelPricingConfig ? { modelPricing: modelPricingConfig } : {}),
     repositories: dbAdapter
