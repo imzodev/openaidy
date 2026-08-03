@@ -72,6 +72,14 @@ const tavily: McpServerConfig = {
   env: { TAVILY_API_KEY: '${TAVILY_API_KEY}' },
 };
 
+const buffer: McpServerConfig = {
+  id: 'buffer',
+  name: 'Buffer',
+  transport: 'http',
+  url: 'https://mcp.buffer.com/mcp',
+  headers: { Authorization: 'Bearer ${BUFFER_API_KEY}' },
+};
+
 /** The full preinstalled set shipped in `config/openaidy.template.json`. */
 const allPreinstalled: McpServerConfig[] = [
   github,
@@ -81,6 +89,7 @@ const allPreinstalled: McpServerConfig[] = [
   context7,
   braveSearch,
   tavily,
+  buffer,
 ];
 
 describe('reconcilePreinstalledMcpServers', () => {
