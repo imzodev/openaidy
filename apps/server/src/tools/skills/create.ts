@@ -190,25 +190,30 @@ export function createSkillCreateTool(
         companionList.length > 0
           ? ` Companion files written: ${companionList.join(', ')}.`
           : '';
-      const successMessage = `Skill "${id}" created and activated for agent "${ctx.agentId}".${companionNote}`;
-
       try {
         agentRegistry.addSkillToAgent(ctx.agentId, id);
       } catch (err) {
         const errMessage = err instanceof Error ? err.message : String(err);
+        // `content` is the only field the caller (the model, via the tool
+        // result) actually reads — `warning` has no consumer anywhere in the
+        // codebase (same as the pre-existing `web_fetch` warning field), so
+        // it must not be the sole place the failure is reported. Say plainly
+        // that activation did NOT happen; claiming success here would leave
+        // the model believing the skill's instructions are already loaded
+        // into its context when they are not.
         logger.warn(
           `Skill "${id}" registered but failed to auto-activate on agent "${ctx.agentId}": ${errMessage}`,
         );
         return {
           ok: true,
-          content: successMessage,
+          content: `Skill "${id}" created${companionNote} but NOT activated for agent "${ctx.agentId}": ${errMessage}. Call agent_update to add it manually.`,
           warning: `Skill registered but failed to auto-activate on agent "${ctx.agentId}": ${errMessage}. Call agent_update to add it manually.`,
         };
       }
 
       return {
         ok: true,
-        content: successMessage,
+        content: `Skill "${id}" created and activated for agent "${ctx.agentId}".${companionNote}`,
       };
     },
   };

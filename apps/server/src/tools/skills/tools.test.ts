@@ -440,6 +440,13 @@ describe('skill tools', () => {
         // but a `warning` field surfaces the auto-activation failure.
         expect(result.ok).toBe(true);
         expect(result.content).toContain('partial-success-skill');
+        // `content` is the only field the model actually reads back (no
+        // caller anywhere consumes `warning`), so it must say plainly that
+        // activation did NOT happen — not the success wording, which would
+        // leave the model believing the skill is already loaded into its
+        // context when it isn't.
+        expect(result.content).toContain('NOT activated');
+        expect(result.content).not.toContain('created and activated');
         expect(result.warning).toBeDefined();
         expect(result.warning).toMatch(/failed to auto-activate/);
         expect(result.warning).toContain(CTX.agentId);
