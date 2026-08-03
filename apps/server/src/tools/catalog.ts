@@ -257,6 +257,16 @@ export const addonUpdateMeta: ToolMeta = {
     'This is the ONLY way to update an addon — never use workspace_write, code_edit, or exec_run to patch addon files (the loader will not see changes made outside this tool).',
 };
 
+export const addonReadMeta: ToolMeta = {
+  name: 'addon_read',
+  category: 'Addons',
+  description:
+    'Inspect an installed addon: its manifest (name, description, version, permissions, external domains) and the files it is built from. ' +
+    'Call with just addon_id for the file inventory, then again with paths for the contents you need. ' +
+    'Read before addon_update — that tool OVERWRITES whole files, so editing without reading first silently drops code. ' +
+    'Addons live outside the agent workspace, so workspace_read and code_read cannot see them; this is the only way to read one.',
+};
+
 export const addonListQueriesMeta: ToolMeta = {
   name: 'addon_list_queries',
   category: 'Addons',
@@ -503,6 +513,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   skillUpdateMeta,
   webFetchMeta,
   addonCreateMeta,
+  addonReadMeta,
   addonUpdateMeta,
   addonListQueriesMeta,
   addonRunMeta,
