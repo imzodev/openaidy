@@ -119,7 +119,13 @@ export function createBuiltinToolRegistry(
   }
 
   if (deps.skills) {
-    for (const tool of createSkillTools(deps.skills.registry, deps.workspace)) {
+    // deps.agents is always co-configured with deps.skills in app.ts
+    // (skill auto-activation requires the agent registry).
+    for (const tool of createSkillTools(
+      deps.skills.registry,
+      deps.agents!.registry,
+      deps.workspace,
+    )) {
       registry.register(tool);
     }
   }

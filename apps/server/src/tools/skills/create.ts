@@ -3,8 +3,12 @@ import { join, basename } from 'node:path';
 import type { BuiltinTool } from '@openaidy/runtime';
 import { parseSkillMd } from '../../skills/parser.js';
 import type { SkillRegistry } from '../../skills/index.js';
+import type { AgentRegistry } from '../../agents/registry.js';
 import type { WorkspaceService } from '../../workspace/service.js';
+import { createLogger } from '../../lib/logger.js';
 import { skillCreateMeta } from '../catalog.js';
+
+const logger = createLogger('skill_create');
 
 /**
  * skill_create
@@ -20,6 +24,7 @@ import { skillCreateMeta } from '../catalog.js';
  */
 export function createSkillCreateTool(
   skillRegistry: SkillRegistry,
+  agentRegistry: AgentRegistry,
   workspace: WorkspaceService,
 ): BuiltinTool {
   return {
@@ -185,10 +190,25 @@ export function createSkillCreateTool(
         companionList.length > 0
           ? ` Companion files written: ${companionList.join(', ')}.`
           : '';
+      const successMessage = `Skill "${id}" created and activated for agent "${ctx.agentId}".${companionNote}`;
+
+      try {
+        agentRegistry.addSkillToAgent(ctx.agentId, id);
+      } catch (err) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          `Skill "${id}" registered but failed to auto-activate on agent "${ctx.agentId}": ${errMessage}`,
+        );
+        return {
+          ok: true,
+          content: successMessage,
+          warning: `Skill registered but failed to auto-activate on agent "${ctx.agentId}": ${errMessage}. Call agent_update to add it manually.`,
+        };
+      }
 
       return {
         ok: true,
-        content: `Skill "${id}" created successfully.${companionNote} It is now available to assign to agents.`,
+        content: successMessage,
       };
     },
   };
