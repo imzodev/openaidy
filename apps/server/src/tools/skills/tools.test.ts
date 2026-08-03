@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSkillRegistry, parseSkillMd } from '../../skills/index';
 import { WorkspaceService } from '../../workspace/service';
+import { AgentRegistry } from '../../agents/registry';
 import {
   createSkillCreateTool,
   createSkillTools,
@@ -17,6 +18,7 @@ describe('skill tools', () => {
   let workspace: WorkspaceService;
   let agentSkillsDir: string;
   let registry: ReturnType<typeof createSkillRegistry>;
+  let agentRegistry: AgentRegistry;
 
   beforeEach(async () => {
     baseDir = join(tmpdir(), `skill-tools-test-${Date.now()}`);
@@ -25,6 +27,23 @@ describe('skill tools', () => {
     agentSkillsDir = join(baseDir, CTX.agentId, 'skills');
     registry = createSkillRegistry({ skillsDir: agentSkillsDir });
     registry.load();
+    // Provide an in-memory agent registry that already contains the
+    // agentId from CTX. This is what `createSkillCreateTool` targets for
+    // auto-activation; without this entry addSkillToAgent would throw
+    // "Agent with ID ... not found" and the new auto-activation path
+    // would always degrade to a warning.
+    agentRegistry = new AgentRegistry({
+      initialAgents: [
+        {
+          id: CTX.agentId,
+          name: 'Test Agent',
+          enabled: true,
+          systemPrompt: 'You are a test agent.',
+          model: 'openai/gpt-4o-mini',
+          version: 1,
+        },
+      ],
+    });
   });
 
   afterEach(async () => {
@@ -35,7 +54,7 @@ describe('skill tools', () => {
 
   describe('createSkillTools', () => {
     it('returns skill_create and skill_update tools', () => {
-      const tools = createSkillTools(registry, workspace);
+      const tools = createSkillTools(registry, agentRegistry, workspace);
       const names = tools.map((t) => t.name);
       expect(names).toContain('skill_create');
       expect(names).toContain('skill_update');
@@ -47,7 +66,7 @@ describe('skill tools', () => {
 
   describe('skill_create', () => {
     it('creates a valid skill and writes SKILL.md to disk', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'my-skill',
@@ -71,7 +90,7 @@ describe('skill tools', () => {
     });
 
     it('registers the skill in the registry immediately', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       await tool.execute(
         {
           id: 'instant-skill',
@@ -89,7 +108,7 @@ describe('skill tools', () => {
     });
 
     it('uses the provided version in the file', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       await tool.execute(
         {
           id: 'versioned-skill',
@@ -109,7 +128,7 @@ describe('skill tools', () => {
     });
 
     it('defaults version to 1.0.0 when omitted', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       await tool.execute(
         {
           id: 'no-version-skill',
@@ -128,7 +147,7 @@ describe('skill tools', () => {
     });
 
     it('records created_by with the agent id', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       await tool.execute(
         {
           id: 'attributed-skill',
@@ -147,7 +166,7 @@ describe('skill tools', () => {
     });
 
     it('produces a SKILL.md that round-trips through parseSkillMd', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'roundtrip-skill',
@@ -176,7 +195,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when id already exists', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const args = {
         id: 'duplicate-skill',
         name: 'Duplicate',
@@ -193,7 +212,7 @@ describe('skill tools', () => {
     });
 
     it('returns error for invalid id format', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'Invalid ID!',
@@ -211,7 +230,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when id is missing', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         { name: 'No ID', description: 'Missing id', body: 'Body.' },
         CTX,
@@ -220,7 +239,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when name is missing', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         { id: 'no-name', description: 'No name', body: 'Body.' },
         CTX,
@@ -229,7 +248,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when description is missing', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         { id: 'no-desc', name: 'No Desc', body: 'Body.' },
         CTX,
@@ -238,7 +257,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when body is missing', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         { id: 'no-body', name: 'No Body', description: 'Missing body' },
         CTX,
@@ -249,7 +268,7 @@ describe('skill tools', () => {
     // ─── companion files ─────────────────────────────────────────────────────
 
     it('writes companion files alongside SKILL.md', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'api-skill',
@@ -283,7 +302,7 @@ describe('skill tools', () => {
     });
 
     it('succeeds with no companion files', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'plain-skill',
@@ -298,7 +317,7 @@ describe('skill tools', () => {
     });
 
     it('returns error for companion filename with path separator', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'traversal-skill',
@@ -316,7 +335,7 @@ describe('skill tools', () => {
     });
 
     it('returns error when trying to pass SKILL.md as companion file', async () => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id: 'override-skill',
@@ -332,6 +351,131 @@ describe('skill tools', () => {
         /body parameter/,
       );
     });
+
+    // ─── auto-activation on the creating agent ──────────────────────────
+
+    it('auto-activates the skill on ctx.agentId after creation', async () => {
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
+
+      // Sanity check: the agent's skills list is empty before the call.
+      const agentBefore = agentRegistry.getAgent(CTX.agentId);
+      expect(agentBefore?.skills ?? []).toEqual([]);
+
+      const result = (await tool.execute(
+        {
+          id: 'auto-activated-skill',
+          name: 'Auto Activated',
+          description: 'Should land on the agent automatically',
+          body: 'Body.',
+        },
+        CTX,
+      )) as { ok: true; content: string; warning?: string };
+
+      // Tool reports success (no warning) — the auto-activation succeeded.
+      expect(result.ok).toBe(true);
+      expect(result.warning).toBeUndefined();
+      expect(result.content).toContain('auto-activated-skill');
+      expect(result.content).toContain('activated for agent');
+      expect(result.content).toContain(CTX.agentId);
+
+      // The created skill ID now appears in the agent's skills array.
+      const agentAfter = agentRegistry.getAgent(CTX.agentId);
+      expect(agentAfter?.skills).toContain('auto-activated-skill');
+    });
+
+    it('idempotent re-creation errors with "already exists" and does not mutate the agent', async () => {
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
+      const args = {
+        id: 'recreate-skill',
+        name: 'Recreate',
+        description: 'First time succeeds; second time must error',
+        body: 'Body.',
+      };
+
+      // First call: succeeds and auto-activates the skill on the agent.
+      const first = await tool.execute(args, CTX);
+      expect(first.ok).toBe(true);
+      expect(agentRegistry.getAgent(CTX.agentId)?.skills).toEqual([
+        'recreate-skill',
+      ]);
+
+      // Second call: must error with the exact "already exists" message and
+      // must not have invoked addSkillToAgent (so the agent's skills array
+      // is unchanged — still the single-element list from the first call).
+      const second = await tool.execute(args, CTX);
+      expect(second.ok).toBe(false);
+      expect((second as { ok: false; error: string }).error).toBe(
+        `Skill "recreate-skill" already exists`,
+      );
+      expect(agentRegistry.getAgent(CTX.agentId)?.skills).toEqual([
+        'recreate-skill',
+      ]);
+    });
+
+    it('returns ok:true with a warning when addSkillToAgent throws — and the skill is still registered', async () => {
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
+
+      // Simulate a transient failure in the agent registry: this is the
+      // "partial success" scenario. The skill registration has already
+      // succeeded in skillRegistry; the auto-activation step then fails.
+      const spy = vi
+        .spyOn(agentRegistry, 'addSkillToAgent')
+        .mockImplementation(() => {
+          throw new Error('disk full');
+        });
+
+      try {
+        const result = (await tool.execute(
+          {
+            id: 'partial-success-skill',
+            name: 'Partial Success',
+            description:
+              'Registration must survive even when auto-activation fails',
+            body: 'Body.',
+          },
+          CTX,
+        )) as { ok: true; content: string; warning: string };
+
+        // The tool degrades gracefully: ok:true so the caller proceeds,
+        // but a `warning` field surfaces the auto-activation failure.
+        expect(result.ok).toBe(true);
+        expect(result.content).toContain('partial-success-skill');
+        expect(result.warning).toBeDefined();
+        expect(result.warning).toMatch(/failed to auto-activate/);
+        expect(result.warning).toContain(CTX.agentId);
+        expect(result.warning).toContain('disk full');
+        // The warning must point the caller at a recovery path.
+        expect(result.warning).toMatch(/agent_update/);
+
+        // The skill IS still registered (registration precedes auto-activation).
+        const registered = registry.getSkill('partial-success-skill');
+        expect(registered).toBeDefined();
+        expect(registered?.name).toBe('Partial Success');
+        expect(registered?.description).toBe(
+          'Registration must survive even when auto-activation fails',
+        );
+      } finally {
+        spy.mockRestore();
+      }
+
+      // After restoring the spy, a fresh call to the tool with a different
+      // id succeeds end-to-end — confirming the mock did not corrupt
+      // registry state.
+      const recovered = (await tool.execute(
+        {
+          id: 'recovery-skill',
+          name: 'Recovery',
+          description: 'Succeeds once the registry is healthy again',
+          body: 'Body.',
+        },
+        CTX,
+      )) as { ok: true; content: string; warning?: string };
+      expect(recovered.ok).toBe(true);
+      expect(recovered.warning).toBeUndefined();
+      expect(agentRegistry.getAgent(CTX.agentId)?.skills).toContain(
+        'recovery-skill',
+      );
+    });
   });
 
   // ─── skill_update ──────────────────────────────────────────────────────────
@@ -344,7 +488,7 @@ describe('skill tools', () => {
       body = 'Original instructions.',
       files: Record<string, string> = {},
     ): Promise<void> => {
-      const tool = createSkillCreateTool(registry, workspace);
+      const tool = createSkillCreateTool(registry, agentRegistry, workspace);
       const result = await tool.execute(
         {
           id,
