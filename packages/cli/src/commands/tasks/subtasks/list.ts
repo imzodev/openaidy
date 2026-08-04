@@ -83,6 +83,7 @@ Exit Codes:
         title: string;
         status: import('@openaidy/shared-types').SubtaskStatus;
         assignedAgentId: string | null;
+        dependsOnSubtaskIds: string[];
         result: string | null;
         retryCount: number;
         createdAt: string;
