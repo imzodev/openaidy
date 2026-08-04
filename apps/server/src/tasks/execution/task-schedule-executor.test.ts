@@ -56,10 +56,6 @@ const makeAgent = (overrides: Partial<TaskAgent> = {}): TaskAgent => ({
 const makeSubtask = (overrides: Partial<Subtask> = {}): Subtask => ({
   id: 'sub-1',
   taskId: 'task-1',
-  // The Drizzle schema declares parentSubtaskId as NOT NULL, so we use
-  // a placeholder string for root subtasks. (The repository's own create()
-  // writes null — pre-existing inconsistency in the codebase, not ours.)
-  parentSubtaskId: '',
   title: 'Subtask 1',
   description: 'Do thing 1',
   status: 'pending',

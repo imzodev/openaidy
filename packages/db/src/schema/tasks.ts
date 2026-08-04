@@ -7,7 +7,10 @@ import {
   pgEnum,
   primaryKey,
   index,
+  uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { sessions } from './sessions';
 
@@ -106,7 +109,9 @@ export const subtaskStatusEnum = pgEnum('subtask_status', [
  * Subtasks table
  *
  * Subtasks are created by the planning agent or manually.
- * Supports nested subtasks via parentSubtaskId.
+ * Dependencies between subtasks are modeled as a graph via the
+ * `subtaskEdges` table below, not as a column on this table — a
+ * subtask can depend on multiple upstream subtasks.
  */
 export const subtasks = pgTable(
   'subtasks',
@@ -117,7 +122,6 @@ export const subtasks = pgTable(
     taskId: text('task_id')
       .notNull()
       .references(() => tasks.id, { onDelete: 'cascade' }),
-    parentSubtaskId: text('parent_subtask_id').notNull(),
     title: text('title').notNull(),
     description: text('description').notNull(),
     status: subtaskStatusEnum('status').notNull().default('pending'),
@@ -139,6 +143,50 @@ export const subtasks = pgTable(
   },
   (table) => ({
     sessionIdIdx: index('subtasks_session_id_idx').on(table.sessionId),
+  }),
+);
+
+/**
+ * Subtask edges table
+ *
+ * Models subtask dependencies as a graph: a row means `subtaskId`
+ * depends on `dependsOnSubtaskId` and cannot start until it completes.
+ * A subtask may have multiple incoming edges (fan-in). `edgeKind`
+ * defaults to `'dependency'` and exists so future edge types (e.g. a
+ * loop-back edge for a visual workflow builder) can be added without
+ * another schema migration.
+ */
+export const subtaskEdges = pgTable(
+  'subtask_edges',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    subtaskId: text('subtask_id')
+      .notNull()
+      .references(() => subtasks.id, { onDelete: 'cascade' }),
+    dependsOnSubtaskId: text('depends_on_subtask_id')
+      .notNull()
+      .references(() => subtasks.id, { onDelete: 'cascade' }),
+    edgeKind: text('edge_kind').notNull().default('dependency'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    subtaskIdIdx: index('subtask_edges_subtask_id_idx').on(table.subtaskId),
+    uniqueEdgeIdx: uniqueIndex('subtask_edges_unique_idx').on(
+      table.subtaskId,
+      table.dependsOnSubtaskId,
+    ),
+    // A subtask can never depend on itself — that would deadlock it
+    // forever. Cycles across multiple edges (A -> B -> A) are not
+    // caught here; they're guarded against at the application layer
+    // where the full graph is available.
+    noSelfEdge: check(
+      'subtask_edges_no_self_edge',
+      sql`${table.subtaskId} <> ${table.dependsOnSubtaskId}`,
+    ),
   }),
 );
 
@@ -182,6 +230,8 @@ export type Task = typeof tasks.$inferSelect;
 export type NewTask = typeof tasks.$inferInsert;
 export type Subtask = typeof subtasks.$inferSelect;
 export type NewSubtask = typeof subtasks.$inferInsert;
+export type SubtaskEdge = typeof subtaskEdges.$inferSelect;
+export type NewSubtaskEdge = typeof subtaskEdges.$inferInsert;
 export type TaskAgent = typeof taskAgents.$inferSelect;
 export type NewTaskAgent = typeof taskAgents.$inferInsert;
 export type TaskSchedule = typeof taskSchedules.$inferSelect;

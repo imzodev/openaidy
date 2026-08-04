@@ -244,6 +244,8 @@ Rules:
 - Do NOT offer a menu of options or ask "what would you like me to do?". Pick the best approach and execute it.
 - Do NOT end your response with a question or a proposal. End it with the finished work.
 
+Your final message is the ONLY thing downstream subtasks will ever see from this work — they do not see your intermediate steps or tool calls. Before finishing, explicitly restate every concrete fact a later subtask might need: IDs, URLs, file paths, names, numbers, and key decisions. Do not assume anything you did earlier in this conversation carries forward — if it's not in your final message, it is lost to the rest of the workflow.
+
 Your response will be automatically evaluated. Work is judged complete only if the actual deliverable is present in your response, not if you described what you could do.
 [/SUBTASK_REMINDER]`;
   }

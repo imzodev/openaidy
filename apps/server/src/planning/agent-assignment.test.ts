@@ -86,6 +86,7 @@ const makeSubtasksRepo = () => ({
     } as MockSubtask),
   ),
   deleteByTask: vi.fn().mockResolvedValue([]),
+  addEdges: vi.fn().mockResolvedValue(undefined),
 });
 
 const makeTaskAgentsRepo = () => ({

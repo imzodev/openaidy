@@ -132,7 +132,8 @@ export type UpdateTaskInput = {
 
 export type CreateSubtaskInput = {
   taskId: string;
-  parentSubtaskId?: string;
+  /** Subtask IDs this subtask depends on; it won't start until all of them complete. */
+  dependsOn?: string[];
   title: string;
   description: string;
   orderIndex?: number;

@@ -47,6 +47,7 @@ describe('TaskService Session Integration', () => {
     update: ReturnType<typeof vi.fn>;
     updateStatus: ReturnType<typeof vi.fn>;
     listByTask: ReturnType<typeof vi.fn>;
+    listEdgesByTask: ReturnType<typeof vi.fn>;
     getCountsByStatus: ReturnType<typeof vi.fn>;
     assignAgent: ReturnType<typeof vi.fn>;
     setResult: ReturnType<typeof vi.fn>;
@@ -99,6 +100,7 @@ describe('TaskService Session Integration', () => {
       update: vi.fn().mockResolvedValue({}),
       updateStatus: vi.fn().mockResolvedValue({}),
       listByTask: vi.fn().mockResolvedValue([]),
+      listEdgesByTask: vi.fn().mockResolvedValue([]),
       getCountsByStatus: vi.fn().mockResolvedValue({
         pending: 0,
         assigned: 0,

@@ -4,7 +4,7 @@ import type { TaskService } from '../tasks/service';
 
 // Validation schemas
 const createSubtaskSchema = z.object({
-  parentSubtaskId: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
   title: z.string().min(1),
   description: z.string().min(1),
   orderIndex: z.number().int().min(0).optional(),
@@ -38,7 +38,7 @@ export type SubtaskRoutesOptions = {
 
 export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
   app,
-  options
+  options,
 ) => {
   const { taskService } = options;
 
@@ -53,7 +53,13 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
     const task = await taskService.getTask(taskId);
     if (!task) {
       reply.code(404);
-      return { ok: false, error: { code: 'task.not_found', message: `Task "${taskId}" not found` } };
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
     }
 
     const items = await taskService.getSubtasks(taskId);
@@ -76,14 +82,15 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
 
     const createInput: {
       taskId: string;
-      parentSubtaskId?: string;
+      dependsOn?: string[];
       title: string;
       description: string;
       orderIndex?: number;
@@ -93,8 +100,8 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
       title: parsed.title,
       description: parsed.description,
     };
-    if (parsed.parentSubtaskId !== undefined) {
-      createInput.parentSubtaskId = parsed.parentSubtaskId;
+    if (parsed.dependsOn !== undefined) {
+      createInput.dependsOn = parsed.dependsOn;
     }
     if (parsed.orderIndex !== undefined) {
       createInput.orderIndex = parsed.orderIndex;
@@ -136,12 +143,17 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
 
-    const updateInput: { title?: string; description?: string; orderIndex?: number } = {};
+    const updateInput: {
+      title?: string;
+      description?: string;
+      orderIndex?: number;
+    } = {};
     if (parsed.title !== undefined) {
       updateInput.title = parsed.title;
     }
@@ -203,7 +215,8 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -238,7 +251,8 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }
@@ -275,7 +289,8 @@ export const subtaskRoutes: FastifyPluginAsync<SubtaskRoutesOptions> = async (
         ok: false,
         error: {
           code: 'validation.invalid_request',
-          message: error instanceof Error ? error.message : 'Invalid request body',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
         },
       };
     }

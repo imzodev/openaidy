@@ -141,6 +141,8 @@ export type SubtaskWithDetails = {
   description: string;
   status: SubtaskStatus;
   assignedAgentId: string | null;
+  /** IDs of subtasks this one depends on; it won't start until all of them complete. */
+  dependsOnSubtaskIds: string[];
   result: string | null;
   retryCount: number;
   createdAt: string;
@@ -156,6 +158,8 @@ export type SubtaskSummary = {
   title: string;
   status: SubtaskStatus;
   assignedAgentId: string | null;
+  /** IDs of subtasks this one depends on; it won't start until all of them complete. */
+  dependsOnSubtaskIds: string[];
   result: string | null;
   retryCount: number;
   createdAt: string;

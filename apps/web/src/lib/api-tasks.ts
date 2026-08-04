@@ -97,7 +97,8 @@ export type SubtaskStatus =
 export type Subtask = {
   id: string;
   taskId: string;
-  parentSubtaskId: string | null;
+  /** IDs of subtasks this one depends on; it won't start until all of them complete. */
+  dependsOnSubtaskIds: string[];
   title: string;
   description: string;
   status: SubtaskStatus;
@@ -166,7 +167,8 @@ export type UpdateTaskInput = {
  */
 export type CreateSubtaskInput = {
   taskId: string;
-  parentSubtaskId?: string;
+  /** IDs of subtasks this one depends on; it won't start until all of them complete. */
+  dependsOn?: string[];
   title: string;
   description: string;
   orderIndex?: number;
