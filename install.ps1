@@ -171,7 +171,15 @@ function Install-Ripgrep {
     # drop rg.exe into $InstallDir\bin. No package manager required.
     $arch = $env:PROCESSOR_ARCHITECTURE
     $rgArch = if ($arch -eq "ARM64") { "aarch64-pc-windows-msvc" } else { "x86_64-pc-windows-msvc" }
-    $url = "https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-$rgArch.zip"
+    try {
+        $tag = Invoke-RestMethod -Uri "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" -Headers @{ "User-Agent" = "OpenAidy/1.0" } -TimeoutSec 30
+        $version = $tag.tag_name
+        if (-not $version) { throw "tag_name missing from API response" }
+    } catch {
+        Log-Error "Could not determine the latest ripgrep version from the GitHub API: $_"
+        return $false
+    }
+    $url = "https://github.com/BurntSushi/ripgrep/releases/download/$version/ripgrep-$version-$rgArch.zip"
     $zipPath = New-TempFile
     $binDir = Join-Path $InstallDir "bin"
     $rgExe = Join-Path $binDir "rg.exe"
