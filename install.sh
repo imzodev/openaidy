@@ -282,7 +282,15 @@ install_ripgrep() {
         aarch64|arm64) arch="aarch64-unknown-linux-musl" ;;
         *)             log_error "Unsupported architecture for ripgrep fallback: $(uname -m)"; return 1 ;;
     esac
-    local url="https://github.com/BurntSushi/ripgrep/releases/latest/download/ripgrep-${arch}.tar.gz"
+    local version
+    if ! version=$(curl -fsSL --retry 3 --retry-connrefused \
+            "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" \
+            | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+            | head -1) || [ -z "$version" ]; then
+        log_error "Could not determine the latest ripgrep version from the GitHub API"
+        return 1
+    fi
+    local url="https://github.com/BurntSushi/ripgrep/releases/download/${version}/ripgrep-${version}-${arch}.tar.gz"
     local tmp_dir
     tmp_dir=$(mktemp -d)
     log_info "Downloading ripgrep static binary..."
