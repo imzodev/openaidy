@@ -18,6 +18,8 @@ type MockTasksRepo = {
 type MockSubtasksRepo = {
   findById: ReturnType<typeof vi.fn>;
   listByTask: ReturnType<typeof vi.fn>;
+  listEdgesByTask: ReturnType<typeof vi.fn>;
+  addEdges: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   updateStatus: ReturnType<typeof vi.fn>;
   assignAgent: ReturnType<typeof vi.fn>;
@@ -51,6 +53,8 @@ describe('Subtask Execution', () => {
     mockSubtasksRepo = {
       findById: vi.fn(),
       listByTask: vi.fn(),
+      listEdgesByTask: vi.fn().mockResolvedValue([]),
+      addEdges: vi.fn().mockResolvedValue(undefined),
       update: vi.fn().mockResolvedValue({}),
       updateStatus: vi.fn().mockResolvedValue({}),
       assignAgent: vi.fn().mockResolvedValue({}),
@@ -157,18 +161,19 @@ describe('Subtask Execution', () => {
       }
     });
 
-    it('throws if parent subtask not completed', async () => {
-      mockSubtasksRepo.findById
-        .mockResolvedValueOnce({
-          id: 'subtask-2',
-          parentSubtaskId: 'subtask-1',
-          status: 'pending',
-          taskId: 'task-1',
-        })
-        .mockResolvedValueOnce({
-          id: 'subtask-1',
-          status: 'in_progress',
-        });
+    it('does not execute if a dependency is not completed', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-1', status: 'in_progress', taskId: 'task-1' },
+        { id: 'subtask-2', status: 'pending', taskId: 'task-1' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-2', dependsOnSubtaskId: 'subtask-1' },
+      ]);
 
       const result = await taskService.executeSubtask('subtask-2');
 
@@ -178,20 +183,14 @@ describe('Subtask Execution', () => {
       }
     });
 
-    it('allows execution if parent is completed', async () => {
-      mockSubtasksRepo.findById
-        .mockResolvedValueOnce({
-          id: 'subtask-2',
-          parentSubtaskId: 'subtask-1',
-          title: 'Child Subtask',
-          description: 'Description',
-          status: 'pending',
-          taskId: 'task-1',
-        })
-        .mockResolvedValueOnce({
-          id: 'subtask-1',
-          status: 'completed',
-        });
+    it('allows execution once its dependency is completed', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        title: 'Child Subtask',
+        description: 'Description',
+        status: 'pending',
+        taskId: 'task-1',
+      });
       mockSubtasksRepo.listByTask.mockResolvedValue([
         {
           id: 'subtask-1',
@@ -207,6 +206,9 @@ describe('Subtask Execution', () => {
           taskId: 'task-1',
         },
       ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-2', dependsOnSubtaskId: 'subtask-1' },
+      ]);
 
       const result = await taskService.executeSubtask('subtask-2');
 
@@ -214,6 +216,95 @@ describe('Subtask Execution', () => {
       if (result.ok) {
         expect(result.data.sessionId).toBe('session-1');
       }
+    });
+
+    it('does not execute until ALL of multiple dependencies are completed (regression: previously only the first dependency was tracked)', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-3',
+        title: 'Merge',
+        description: 'Combine A and B',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'A',
+          status: 'completed',
+          result: 'Result A',
+          taskId: 'task-1',
+        },
+        { id: 'subtask-2', title: 'B', status: 'pending', taskId: 'task-1' },
+        {
+          id: 'subtask-3',
+          title: 'Merge',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
+      ]);
+
+      const result = await taskService.executeSubtask('subtask-3');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.dependency_not_met');
+      }
+    });
+
+    it("includes only its actual dependencies' results in the handoff, bounded and excluding unrelated completed subtasks", async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-3',
+        title: 'Merge',
+        description: 'Combine A and B',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'A',
+          status: 'completed',
+          result: 'Result A',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          title: 'B',
+          status: 'completed',
+          result: 'Result B',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-unrelated',
+          title: 'Unrelated',
+          status: 'completed',
+          result: 'Should not appear',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-3',
+          title: 'Merge',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
+      ]);
+
+      const result = await taskService.executeSubtask('subtask-3');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).toContain('Result A');
+      expect(messageInput.content).toContain('Result B');
+      expect(messageInput.content).not.toContain('Should not appear');
     });
   });
 
@@ -274,11 +365,13 @@ describe('Subtask Execution', () => {
         {
           id: 'subtask-2',
           status: 'pending',
-          parentSubtaskId: 'subtask-1',
           title: 'Subtask 2',
           description: 'Desc 2',
           taskId: 'task-1',
         },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-2', dependsOnSubtaskId: 'subtask-1' },
       ]);
       // Mock findById for executeSubtask call
       mockSubtasksRepo.findById.mockResolvedValue({
@@ -294,6 +387,53 @@ describe('Subtask Execution', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         // Only subtask-1 has no dependencies
+        expect(result.data.startedCount).toBe(1);
+      }
+    });
+
+    it('does not execute a subtask until ALL of its multiple dependencies are completed (regression)', async () => {
+      mockTasksRepo.findById.mockResolvedValue({ id: 'task-1' });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          status: 'completed',
+          title: 'A',
+          description: 'Desc A',
+          result: 'Result A',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          status: 'pending',
+          title: 'B',
+          description: 'Desc B',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-3',
+          status: 'pending',
+          title: 'Merge',
+          description: 'Desc Merge',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
+      ]);
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        status: 'pending',
+        title: 'B',
+        description: 'Desc B',
+        taskId: 'task-1',
+      });
+
+      const result = await taskService.executeSubtasks('task-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Only subtask-2 is executable; subtask-3 still waits on subtask-2.
         expect(result.data.startedCount).toBe(1);
       }
     });
@@ -460,10 +600,15 @@ describe('Subtask Execution', () => {
       mockSubtasksRepo.listByTask.mockResolvedValue([
         { id: 'subtask-1', status: 'pending' },
         { id: 'subtask-2', status: 'in_progress' },
-        { id: 'subtask-3', status: 'pending', parentSubtaskId: 'subtask-1' },
-        { id: 'subtask-4', status: 'pending', parentSubtaskId: 'subtask-2' },
-        { id: 'subtask-5', status: 'pending', parentSubtaskId: 'subtask-6' },
+        { id: 'subtask-3', status: 'pending' },
+        { id: 'subtask-4', status: 'pending' },
+        { id: 'subtask-5', status: 'pending' },
         { id: 'subtask-6', status: 'completed' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-4', dependsOnSubtaskId: 'subtask-2' },
+        { subtaskId: 'subtask-5', dependsOnSubtaskId: 'subtask-6' },
       ]);
 
       const result = await taskService.getNextExecutableSubtasks('task-1');
@@ -482,15 +627,44 @@ describe('Subtask Execution', () => {
       mockSubtasksRepo.listByTask.mockResolvedValue([
         { id: 'subtask-1', status: 'completed' },
         { id: 'subtask-2', status: 'in_progress' },
+        { id: 'subtask-3', status: 'pending' },
+        { id: 'subtask-4', status: 'pending' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
         // subtask-3 depends on subtask-2 which is in_progress (not completed)
-        { id: 'subtask-3', status: 'pending', parentSubtaskId: 'subtask-2' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
         // subtask-4 depends on subtask-5 which doesn't exist
-        { id: 'subtask-4', status: 'pending', parentSubtaskId: 'subtask-5' },
+        { subtaskId: 'subtask-4', dependsOnSubtaskId: 'subtask-5' },
       ]);
 
       const result = await taskService.getNextExecutableSubtasks('task-1');
 
       expect(result).toHaveLength(0);
+    });
+
+    it('requires ALL dependencies to complete when a subtask has multiple (regression: previously only the first dependency was tracked)', async () => {
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-1', status: 'completed' },
+        { id: 'subtask-2', status: 'pending' },
+        { id: 'subtask-3', status: 'pending' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
+      ]);
+
+      let result = await taskService.getNextExecutableSubtasks('task-1');
+      expect(result.map((s) => s.id)).not.toContain('subtask-3');
+
+      // subtask-2 completes too — subtask-3 should now be executable.
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-1', status: 'completed' },
+        { id: 'subtask-2', status: 'completed' },
+        { id: 'subtask-3', status: 'pending' },
+      ]);
+
+      result = await taskService.getNextExecutableSubtasks('task-1');
+      expect(result.map((s) => s.id)).toContain('subtask-3');
     });
 
     it('returns all pending subtasks when none have dependencies', async () => {

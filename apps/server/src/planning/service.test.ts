@@ -79,6 +79,7 @@ const makeSubtasksRepo = () => ({
     orderIndex: 0,
   } as MockSubtask),
   deleteByTask: vi.fn().mockResolvedValue([]),
+  addEdges: vi.fn().mockResolvedValue(undefined),
 });
 
 describe('PlanningService', () => {
@@ -110,6 +111,42 @@ describe('PlanningService', () => {
         expect(result.subtasks).toHaveLength(2);
         expect(result.subtasks[0]!.title).toBe('Subtask 1');
       }
+    });
+
+    it('writes ALL declared dependencies as edges, not just the first (regression: previously only dependencies[0] was kept)', async () => {
+      mockProviders.invocation.invoke.mockResolvedValue({
+        ok: true,
+        value: {
+          content: JSON.stringify([
+            { title: 'A', description: 'First', dependencies: [] },
+            { title: 'B', description: 'Second', dependencies: [] },
+            {
+              title: 'Merge',
+              description: 'Combine A and B',
+              dependencies: [0, 1],
+            },
+          ]),
+        },
+      });
+      let created = 0;
+      mockSubtasksRepo.create.mockImplementation(async () => {
+        created += 1;
+        return {
+          id: `subtask-${created}`,
+          taskId: 'task-1',
+          title: `Subtask ${created}`,
+          description: 'x',
+          orderIndex: created - 1,
+        } as MockSubtask;
+      });
+
+      const result = await service.planTask('task-1');
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.addEdges).toHaveBeenCalledWith('subtask-3', [
+        'subtask-1',
+        'subtask-2',
+      ]);
     });
 
     it('updates planning status to completed on success', async () => {

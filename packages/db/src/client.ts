@@ -221,7 +221,6 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS subtasks (
       id TEXT PRIMARY KEY NOT NULL,
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      parent_subtask_id TEXT REFERENCES subtasks(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
@@ -236,6 +235,22 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     );
 
     CREATE INDEX IF NOT EXISTS subtasks_session_id_idx ON subtasks(session_id);
+
+    -- Subtask dependency graph: a row means subtask_id depends on
+    -- depends_on_subtask_id and cannot start until it completes.
+    -- Replaces the old single parent_subtask_id column so a subtask
+    -- can depend on multiple upstream subtasks (fan-in).
+    CREATE TABLE IF NOT EXISTS subtask_edges (
+      id TEXT PRIMARY KEY NOT NULL,
+      subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+      depends_on_subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+      edge_kind TEXT NOT NULL DEFAULT 'dependency',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (subtask_id <> depends_on_subtask_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS subtask_edges_unique_idx ON subtask_edges(subtask_id, depends_on_subtask_id);
 
     CREATE INDEX IF NOT EXISTS tasks_session_id_idx ON tasks(session_id);
 
@@ -671,6 +686,37 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   if (!hasFavoritedAt) {
     sqlite.exec(`ALTER TABLE sessions ADD COLUMN favorited_at TEXT`);
   }
+
+  // Migration: Create subtask_edges table if not exists (subtask
+  // dependency graph, replaces the old single parent_subtask_id column)
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS subtask_edges (
+      id TEXT PRIMARY KEY NOT NULL,
+      subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+      depends_on_subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
+      edge_kind TEXT NOT NULL DEFAULT 'dependency',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (subtask_id <> depends_on_subtask_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS subtask_edges_unique_idx ON subtask_edges(subtask_id, depends_on_subtask_id);
+  `);
+
+  // Migration: Backfill existing parent_subtask_id chains into
+  // subtask_edges, on databases that still carry the old column. The
+  // column itself is left in place (unused) rather than dropped.
+  const hasParentSubtaskId = tableInfo.some(
+    (col) => col.name === 'parent_subtask_id',
+  );
+  if (hasParentSubtaskId) {
+    sqlite.exec(`
+      INSERT OR IGNORE INTO subtask_edges (id, subtask_id, depends_on_subtask_id, edge_kind)
+      SELECT lower(hex(randomblob(16))), id, parent_subtask_id, 'dependency'
+      FROM subtasks
+      WHERE parent_subtask_id IS NOT NULL AND parent_subtask_id <> id;
+    `);
+  }
 }
 
 export async function createDatabaseClient(
@@ -731,6 +777,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0014_session_favorites.sql'),
     'utf-8',
   );
+  const subtaskEdgesMigrationSql = readFileSync(
+    resolve(drizzleDir, '0015_subtask_edges.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -738,6 +788,7 @@ export async function createDatabaseClient(
     await client.query(messageAttachmentsMigrationSql);
     await client.query(sessionRunsUsageMigrationSql);
     await client.query(sessionFavoritesMigrationSql);
+    await client.query(subtaskEdgesMigrationSql);
   } finally {
     client.release();
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   tasks,
   subtasks,
+  subtaskEdges,
   taskAgents,
   taskStatusEnum,
   taskPriorityEnum,
@@ -83,7 +84,6 @@ describe('Tasks Schema', () => {
       const columns = Object.keys(subtasks);
       expect(columns).toContain('id');
       expect(columns).toContain('taskId');
-      expect(columns).toContain('parentSubtaskId');
       expect(columns).toContain('title');
       expect(columns).toContain('description');
       expect(columns).toContain('status');
@@ -92,6 +92,17 @@ describe('Tasks Schema', () => {
       expect(columns).toContain('result');
       expect(columns).toContain('createdAt');
       expect(columns).toContain('updatedAt');
+    });
+  });
+
+  describe('subtaskEdges table', () => {
+    it('should have required columns for a dependency graph', () => {
+      const columns = Object.keys(subtaskEdges);
+      expect(columns).toContain('id');
+      expect(columns).toContain('subtaskId');
+      expect(columns).toContain('dependsOnSubtaskId');
+      expect(columns).toContain('edgeKind');
+      expect(columns).toContain('createdAt');
     });
   });
 

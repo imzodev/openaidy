@@ -17,10 +17,24 @@ import type {
 } from '@openaidy/shared-types';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
+import {
+  createContextBudget,
+  truncateWithBudget,
+} from '../../lib/context-budget';
 import type { SessionMessageRecord, ServiceResult } from '../../types';
+import {
+  isSubtaskExecutable,
+  getDependencySubtasks,
+  type SubtaskDependencyEdge,
+} from './subtask-graph';
 
 const MAX_RETRIES = 5;
 const STUCK_TIMEOUT_MINUTES = 3;
+// Bounds on how much of a completed dependency's result is carried into
+// a dependent subtask's opening message, so a large upstream result
+// can't unboundedly grow the next subtask's context window.
+const DEP_CONTEXT_PER_ITEM_CHARS = 2000;
+const DEP_CONTEXT_TOTAL_CHARS = 8000;
 
 export class TaskExecution {
   private readonly logger: ReturnType<typeof createLogger>;
@@ -312,7 +326,16 @@ export class TaskExecution {
 
   async executeSubtask(
     subtaskId: string,
-    options: { sessionId?: string } = {},
+    options: {
+      sessionId?: string;
+      // Lets executeSubtasks() pass the task's subtasks/edges it already
+      // fetched for the batch, instead of this method re-fetching the
+      // same data per subtask.
+      preloadedGraph?: {
+        allSubtasks: Subtask[];
+        edges: SubtaskDependencyEdge[];
+      };
+    } = {},
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -349,17 +372,21 @@ export class TaskExecution {
       };
     }
 
-    if (subtask.parentSubtaskId) {
-      const parent = await this.subtasksRepo.findById(subtask.parentSubtaskId);
-      if (parent?.status !== 'completed') {
-        return {
-          ok: false,
-          error: {
-            code: 'subtask.dependency_not_met',
-            message: 'Parent subtask not completed',
-          },
-        };
-      }
+    const allSubtasks =
+      options.preloadedGraph?.allSubtasks ??
+      (await this.subtasksRepo.listByTask(subtask.taskId));
+    const edges =
+      options.preloadedGraph?.edges ??
+      (await this.subtasksRepo.listEdgesByTask(subtask.taskId));
+
+    if (!isSubtaskExecutable(subtask, allSubtasks, edges)) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.dependency_not_met',
+          message: 'One or more dependencies not completed',
+        },
+      };
     }
 
     // Reuse the existing session if the caller (e.g. the recurring-task
@@ -387,20 +414,32 @@ export class TaskExecution {
     await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
     await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
 
-    const allSubtasks = await this.subtasksRepo.listByTask(subtask.taskId);
-    const completedDeps = allSubtasks.filter(
-      (s) => s.status === 'completed' && s.result,
-    );
+    // Scope the handoff to this subtask's actual dependencies only
+    // (not every completed subtask in the task), and bound its size so
+    // a large upstream result can't unboundedly grow this session.
+    const completedDeps = getDependencySubtasks(
+      subtask,
+      allSubtasks,
+      edges,
+    ).filter((s) => s.status === 'completed' && s.result);
 
     let messageContent = subtask.description;
     if (completedDeps.length > 0) {
-      const contextParts = completedDeps.map(
-        (dep) => `## Result from "${dep.title}":\n${dep.result}`,
-      );
-      messageContent = `${subtask.description}\n\n---\n\n**Context from completed work:**\n\n${contextParts.join('\n\n')}`;
+      const depBudget = createContextBudget(DEP_CONTEXT_TOTAL_CHARS);
+      const contextParts: string[] = [];
+      for (const dep of completedDeps) {
+        if (depBudget.remaining <= 0) break;
+        const truncatedResult = truncateWithBudget(
+          dep.result!,
+          DEP_CONTEXT_PER_ITEM_CHARS,
+          depBudget,
+        );
+        contextParts.push(`## Result from "${dep.title}":\n${truncatedResult}`);
+      }
+      messageContent = `${subtask.description}\n\n---\n\n**Context from completed dependencies:**\n\n${contextParts.join('\n\n')}`;
       this.logger.info('Including context from completed dependencies', {
         subtaskId,
-        depCount: completedDeps.length,
+        depCount: contextParts.length,
       });
     }
 
@@ -439,21 +478,24 @@ export class TaskExecution {
     }
 
     const subtasks = await this.subtasksRepo.listByTask(taskId);
+    const edges = await this.subtasksRepo.listEdgesByTask(taskId);
     const executable = subtasks
       .filter((s) => s.status === 'pending')
-      .filter((subtask) => {
-        if (!subtask.parentSubtaskId) return true;
-        const parent = subtasks.find((s) => s.id === subtask.parentSubtaskId);
-        return parent?.status === 'completed';
-      });
+      .filter((subtask) => isSubtaskExecutable(subtask, subtasks, edges));
+
+    // Executable subtasks already have every dependency in a terminal
+    // `completed` state as of this snapshot, and a dependency's status
+    // and result never change once completed — so it's safe to reuse
+    // this same snapshot for every subtask in the batch instead of each
+    // executeSubtask() call re-fetching it.
+    const preloadedGraph = { allSubtasks: subtasks, edges };
 
     let startedCount = 0;
     for (const subtask of executable) {
-      const result = options.sessionId
-        ? await this.executeSubtask(subtask.id, {
-            sessionId: options.sessionId,
-          })
-        : await this.executeSubtask(subtask.id);
+      const result = await this.executeSubtask(subtask.id, {
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        preloadedGraph,
+      });
       if (result.ok) startedCount++;
     }
 
@@ -682,9 +724,9 @@ export class TaskExecution {
 
     const consultedSkills = new Set<string>();
     const toolCallsWithResults: string[] = [];
-    let totalResultsBytes = 0;
     const MAX_PER_RESULT = 1000;
     const MAX_TOTAL_RESULTS = 8192;
+    const resultsBudget = createContextBudget(MAX_TOTAL_RESULTS);
 
     if (sessionMessages && sessionMessages.length > 0) {
       for (const m of sessionMessages) {
@@ -698,18 +740,15 @@ export class TaskExecution {
             let entry = `- ${tc.name}(${tc.arguments})`;
             if (tc.id && toolResultByCallId.has(tc.id)) {
               const result = toolResultByCallId.get(tc.id)!;
-              if (totalResultsBytes < MAX_TOTAL_RESULTS) {
-                const remaining = MAX_TOTAL_RESULTS - totalResultsBytes;
-                const budget = Math.min(MAX_PER_RESULT, remaining);
-                const truncated =
-                  result.content.length > budget
-                    ? result.content.slice(0, budget) +
-                      `…[truncated ${result.content.length - budget} chars]`
-                    : result.content;
+              if (resultsBudget.remaining > 0) {
+                const truncated = truncateWithBudget(
+                  result.content,
+                  MAX_PER_RESULT,
+                  resultsBudget,
+                );
                 entry += `\n    → result${
                   result.isError ? ' (ERROR)' : ''
                 }: ${truncated}`;
-                totalResultsBytes += truncated.length;
               }
             }
             toolCallsWithResults.push(entry);
