@@ -180,14 +180,11 @@ export class TaskExecution {
           lastAssistantMessage?.content ?? 'Completed',
         );
 
-        console.log(
-          '[TaskExecution] Subtask run completed, sending to verification',
-          {
-            subtaskId: linkedSubtask.id,
-            subtaskTitle: linkedSubtask.title,
-            lastMessagePreview: result.substring(0, 300),
-          },
-        );
+        this.logger.info('Subtask run completed, sending to verification', {
+          subtaskId: linkedSubtask.id,
+          subtaskTitle: linkedSubtask.title,
+          lastMessagePreview: result.substring(0, 300),
+        });
 
         const updatedSubtask = await this.subtasksRepo.incrementRetryCount(
           linkedSubtask.id,
@@ -627,10 +624,24 @@ export class TaskExecution {
     // retryCount/MAX_RETRIES is a separate concept (run-failure
     // recovery) and is untouched by this branch.
     if (subtask.loopMaxIterations != null) {
+      // The API always requires conditionOperator/conditionValue together
+      // with maxIterations, so this should be unreachable in practice. If
+      // it ever isn't, fail loudly instead of silently defaulting to an
+      // operator that could mask a data-integrity bug.
+      if (!subtask.loopConditionOperator || !subtask.loopConditionValue) {
+        this.logger.error(
+          'Loop subtask is missing its condition operator/value',
+          { subtaskId },
+        );
+        return this.failSubtask(
+          subtaskId,
+          'Loop subtask is missing its condition operator/value — this is a data-integrity bug, not a normal loop failure.',
+        );
+      }
+
       const converged = evaluateCondition(result, {
-        operator: (subtask.loopConditionOperator ??
-          'contains') as ConditionOperator,
-        value: subtask.loopConditionValue ?? '',
+        operator: subtask.loopConditionOperator as ConditionOperator,
+        value: subtask.loopConditionValue,
       });
       if (!converged) {
         const nextIteration = subtask.loopIterationCount + 1;
@@ -654,7 +665,15 @@ export class TaskExecution {
         // subtask (now back to 'pending') straight back up.
         await this.executeSubtasks(subtask.taskId);
         const reloaded = await this.subtasksRepo.findById(subtaskId);
-        return { ok: true, data: reloaded! };
+        return reloaded
+          ? { ok: true, data: reloaded }
+          : {
+              ok: false,
+              error: {
+                code: 'subtask.not_found',
+                message: `Subtask "${subtaskId}" not found after loop iteration`,
+              },
+            };
       }
       // Condition holds — fall through to normal completion below.
     }
@@ -711,7 +730,17 @@ export class TaskExecution {
         },
       };
     }
-    if (subtask.awaitingApprovalSince == null) {
+
+    // The "still awaiting approval" check is enforced atomically inside
+    // this UPDATE's WHERE clause (not as a separate read-then-check), so
+    // two concurrent resolve calls can't both win the race: only the
+    // first clears `awaitingApprovalSince` and gets a row back.
+    const resolved = await this.subtasksRepo.resolveApproval(subtaskId, {
+      decision,
+      note: note ?? null,
+      approvedBy: approvedBy ?? null,
+    });
+    if (!resolved) {
       return {
         ok: false,
         error: {
@@ -721,15 +750,18 @@ export class TaskExecution {
       };
     }
 
-    await this.subtasksRepo.resolveApproval(subtaskId, {
-      decision,
-      note: note ?? null,
-      approvedBy: approvedBy ?? null,
-    });
-
+    // Give the completed/failed result an explicit OUTCOME tag so any
+    // downstream conditional edge has a predictable value to match
+    // against, instead of the human's free-text note.
     return decision === 'approved'
-      ? this.completeSubtask(subtaskId, note ?? 'Approved')
-      : this.failSubtask(subtaskId, `Rejected${note ? `: ${note}` : ''}`);
+      ? this.completeSubtask(
+          subtaskId,
+          `OUTCOME: approved${note ? `\n\n${note}` : ''}`,
+        )
+      : this.failSubtask(
+          subtaskId,
+          `OUTCOME: rejected${note ? `\n\n${note}` : ''}`,
+        );
   }
 
   async failSubtask(

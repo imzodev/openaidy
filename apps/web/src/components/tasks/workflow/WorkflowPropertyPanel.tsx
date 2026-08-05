@@ -16,7 +16,6 @@ import type {
 } from '../../../lib/api-tasks';
 import type { Agent } from '../AgentSelector';
 import { STATUS_COLORS, STATUS_ICONS } from '../subtask-status';
-import { assignSubtaskAgent } from '../../../lib/api-tasks';
 
 export type WorkflowSelection =
   | { type: 'node'; id: string }
@@ -51,6 +50,7 @@ export type WorkflowPropertyPanelProps = {
     decision: 'approved' | 'rejected',
     note?: string,
   ) => void;
+  onAssignAgent: (id: string, agentId: string) => void;
 };
 
 const CONDITION_OPERATORS: ConditionOperator[] = [
@@ -60,16 +60,18 @@ const CONDITION_OPERATORS: ConditionOperator[] = [
 ];
 
 export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
-  const selectedSubtask = createMemo(() =>
-    props.selection?.type === 'node'
-      ? (props.subtasks.find((s) => s.id === props.selection!.id) ?? null)
-      : null,
-  );
-  const selectedEdge = createMemo(() =>
-    props.selection?.type === 'edge'
-      ? (props.edges.find((e) => e.id === props.selection!.id) ?? null)
-      : null,
-  );
+  const selectedSubtask = createMemo(() => {
+    const sel = props.selection;
+    return sel?.type === 'node'
+      ? (props.subtasks.find((s) => s.id === sel.id) ?? null)
+      : null;
+  });
+  const selectedEdge = createMemo(() => {
+    const sel = props.selection;
+    return sel?.type === 'edge'
+      ? (props.edges.find((e) => e.id === sel.id) ?? null)
+      : null;
+  });
 
   // Node draft state
   const [draftTitle, setDraftTitle] = createSignal('');
@@ -89,11 +91,39 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
     createSignal<ConditionOperator>('equals');
   const [edgeValue, setEdgeValue] = createSignal('');
 
+  // Tracks the previously-selected subtask so a switch to a different
+  // node flushes any edited-but-unsaved title/description first (dirty
+  // check against what was last committed), instead of silently
+  // discarding it. Comparing by id (not object identity) also means a
+  // background poll refetching the same subtask doesn't re-trigger this
+  // — only an actual selection change does.
+  let lastSubtaskId: string | undefined;
+  let lastCommittedTitle = '';
+  let lastCommittedDescription = '';
+
   createEffect(() => {
     const subtask = selectedSubtask();
+    const currentId = subtask?.id;
+    if (currentId === lastSubtaskId) return;
+
+    if (lastSubtaskId) {
+      const dirty =
+        draftTitle() !== lastCommittedTitle ||
+        draftDescription() !== lastCommittedDescription;
+      if (dirty) {
+        props.onUpdateSubtask(lastSubtaskId, {
+          title: draftTitle(),
+          description: draftDescription(),
+        });
+      }
+    }
+    lastSubtaskId = currentId;
     if (!subtask) return;
+
     setDraftTitle(subtask.title);
     setDraftDescription(subtask.description);
+    lastCommittedTitle = subtask.title;
+    lastCommittedDescription = subtask.description;
     setLoopEnabled(subtask.loopMaxIterations != null);
     setLoopMax(subtask.loopMaxIterations ?? 3);
     setLoopOperator(
@@ -127,6 +157,8 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
       title: draftTitle(),
       description: draftDescription(),
     });
+    lastCommittedTitle = draftTitle();
+    lastCommittedDescription = draftDescription();
   }
 
   function saveLoopConfig(id: string) {
@@ -232,10 +264,14 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
               </div>
 
               <div>
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                <label
+                  for="wf-node-title"
+                  class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                >
                   Title
                 </label>
                 <input
+                  id="wf-node-title"
                   class="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1"
                   value={draftTitle()}
                   onInput={(e) => setDraftTitle(e.currentTarget.value)}
@@ -243,10 +279,14 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                 />
               </div>
               <div>
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                <label
+                  for="wf-node-description"
+                  class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                >
                   Description
                 </label>
                 <textarea
+                  id="wf-node-description"
                   class="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 resize-y"
                   rows={3}
                   value={draftDescription()}
@@ -256,15 +296,19 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
               </div>
 
               <div>
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5">
+                <label
+                  for="wf-node-agent"
+                  class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                >
                   Assigned agent
                 </label>
                 <select
+                  id="wf-node-agent"
                   class="w-full text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1"
                   value={subtask().assignedAgentId ?? ''}
                   onChange={(e) => {
                     const agentId = e.currentTarget.value;
-                    if (agentId) void assignSubtaskAgent(subtask().id, agentId);
+                    if (agentId) props.onAssignAgent(subtask().id, agentId);
                   }}
                 >
                   <option value="">Unassigned</option>
@@ -290,10 +334,14 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   <Show when={loopEnabled()}>
                     <div class="mt-2 space-y-1.5">
                       <div class="flex items-center gap-1.5">
-                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                        <label
+                          for="wf-loop-max"
+                          class="text-xs text-gray-500 dark:text-gray-400"
+                        >
                           Max iterations
-                        </span>
+                        </label>
                         <input
+                          id="wf-loop-max"
                           type="number"
                           min={1}
                           class="w-16 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
@@ -305,7 +353,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                         />
                       </div>
                       <div class="flex items-center gap-1.5">
+                        <label for="wf-loop-operator" class="sr-only">
+                          Loop condition operator
+                        </label>
                         <select
+                          id="wf-loop-operator"
                           class="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
                           value={loopOperator()}
                           onChange={(e) => {
@@ -319,7 +371,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                             {(op) => <option value={op}>{op}</option>}
                           </For>
                         </select>
+                        <label for="wf-loop-value" class="sr-only">
+                          Loop condition value
+                        </label>
                         <input
+                          id="wf-loop-value"
                           class="flex-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
                           placeholder="value, e.g. approved"
                           value={loopValue()}
@@ -356,49 +412,57 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                       </div>
                     }
                   >
-                    <div class="text-xs text-amber-600 dark:text-amber-400">
-                      Awaiting a human decision since{' '}
-                      {new Date(
-                        subtask().awaitingApprovalSince!,
-                      ).toLocaleString()}
-                    </div>
-                    <textarea
-                      class="w-full text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800 px-2 py-1"
-                      rows={2}
-                      placeholder="Optional note"
-                      value={approvalNote()}
-                      onInput={(e) => setApprovalNote(e.currentTarget.value)}
-                    />
-                    <div class="flex gap-1.5">
-                      <button
-                        type="button"
-                        class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() =>
-                          props.onResolveApproval(
-                            subtask().id,
-                            'approved',
-                            approvalNote() || undefined,
-                          )
-                        }
-                      >
-                        <Check class="w-3.5 h-3.5" />
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-red-600 hover:bg-red-700 text-white"
-                        onClick={() =>
-                          props.onResolveApproval(
-                            subtask().id,
-                            'rejected',
-                            approvalNote() || undefined,
-                          )
-                        }
-                      >
-                        <X class="w-3.5 h-3.5" />
-                        Reject
-                      </button>
-                    </div>
+                    {(awaitingSince) => (
+                      <>
+                        <div class="text-xs text-amber-600 dark:text-amber-400">
+                          Awaiting a human decision since{' '}
+                          {new Date(awaitingSince()).toLocaleString()}
+                        </div>
+                        <label for="wf-approval-note" class="sr-only">
+                          Approval note
+                        </label>
+                        <textarea
+                          id="wf-approval-note"
+                          class="w-full text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800 px-2 py-1"
+                          rows={2}
+                          placeholder="Optional note"
+                          value={approvalNote()}
+                          onInput={(e) =>
+                            setApprovalNote(e.currentTarget.value)
+                          }
+                        />
+                        <div class="flex gap-1.5">
+                          <button
+                            type="button"
+                            class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() =>
+                              props.onResolveApproval(
+                                subtask().id,
+                                'approved',
+                                approvalNote() || undefined,
+                              )
+                            }
+                          >
+                            <Check class="w-3.5 h-3.5" />
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-red-600 hover:bg-red-700 text-white"
+                            onClick={() =>
+                              props.onResolveApproval(
+                                subtask().id,
+                                'rejected',
+                                approvalNote() || undefined,
+                              )
+                            }
+                          >
+                            <X class="w-3.5 h-3.5" />
+                            Reject
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </Show>
                 </div>
               </Show>
@@ -486,7 +550,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
 
                 <Show when={edgeKind() === 'conditional'}>
                   <div class="flex items-center gap-1.5">
+                    <label for="wf-edge-operator" class="sr-only">
+                      Edge condition operator
+                    </label>
                     <select
+                      id="wf-edge-operator"
                       class="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
                       value={edgeOperator()}
                       onChange={(e) => {
@@ -500,7 +568,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                         {(op) => <option value={op}>{op}</option>}
                       </For>
                     </select>
+                    <label for="wf-edge-value" class="sr-only">
+                      Edge condition value
+                    </label>
                     <input
+                      id="wf-edge-value"
                       class="flex-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
                       placeholder="value, e.g. approved"
                       value={edgeValue()}

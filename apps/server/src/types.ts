@@ -17,7 +17,12 @@ import type {
   TaskExecutionHistoryRepository,
 } from '@openaidy/db';
 export type { CreateAgentInput } from '@openaidy/shared-types';
-import type { MessageRole, FinishReason } from '@openaidy/shared-types';
+import type {
+  MessageRole,
+  FinishReason,
+  SubtaskKind,
+  LoopConfig,
+} from '@openaidy/shared-types';
 export type { MessageRole, FinishReason };
 
 /**
@@ -138,24 +143,16 @@ export type CreateSubtaskInput = {
   description: string;
   orderIndex?: number;
   assignedAgentId?: string;
-  subtaskKind?: 'agent' | 'approval_gate';
-  loop?: {
-    maxIterations: number;
-    conditionOperator: 'equals' | 'contains' | 'matches_regex';
-    conditionValue: string;
-  } | null;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
 };
 
 export type UpdateSubtaskInput = {
   title?: string;
   description?: string;
   orderIndex?: number;
-  subtaskKind?: 'agent' | 'approval_gate';
-  loop?: {
-    maxIterations: number;
-    conditionOperator: 'equals' | 'contains' | 'matches_regex';
-    conditionValue: string;
-  } | null;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
 };
 
 export type TaskWithDetails = Task & {

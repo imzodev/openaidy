@@ -258,7 +258,9 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       condition_operator TEXT,
       condition_value TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (subtask_id <> depends_on_subtask_id)
+      CHECK (subtask_id <> depends_on_subtask_id),
+      CHECK (edge_kind IN ('dependency', 'conditional')),
+      CHECK (edge_kind <> 'conditional' OR (condition_operator IS NOT NULL AND condition_value IS NOT NULL))
     );
 
     CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
@@ -710,7 +712,9 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       condition_operator TEXT,
       condition_value TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (subtask_id <> depends_on_subtask_id)
+      CHECK (subtask_id <> depends_on_subtask_id),
+      CHECK (edge_kind IN ('dependency', 'conditional')),
+      CHECK (edge_kind <> 'conditional' OR (condition_operator IS NOT NULL AND condition_value IS NOT NULL))
     );
 
     CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
@@ -760,6 +764,13 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     );
   }
 
+  // NOTE: an existing subtask_edges table (created before this migration,
+  // when it had no edge_kind/condition CHECK constraints) only gets the
+  // new columns added here — SQLite's ALTER TABLE cannot add a CHECK
+  // constraint to an existing table. Fresh tables created by either
+  // CREATE TABLE statement above (in initializeSqliteSchema or the block
+  // just above this one) get all three constraints from the start; only
+  // pre-existing SQLite databases have this gap, enforced app-side only.
   const edgeInfo = sqlite.pragma('table_info(subtask_edges)') as Array<{
     name: string;
   }>;

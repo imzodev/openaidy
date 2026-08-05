@@ -25,22 +25,29 @@ export type SubtaskDependencyEdge = {
 };
 
 const OUTCOME_TAG_RE = /^OUTCOME:\s*(.+)$/im;
+// When an agent doesn't emit an OUTCOME tag, extractOutcome falls back to
+// the raw result text as the condition operand. Cap that fallback so a
+// large (potentially MB-scale) result can't become the operand wholesale.
+const OUTCOME_FALLBACK_MAX_CHARS = 2000;
 
 /**
  * Pull the structured `OUTCOME: <tag>` line out of a subtask result
  * (see subtaskNeedsOutcomeTag), falling back to the raw result text
- * when the agent didn't emit one.
+ * (capped to OUTCOME_FALLBACK_MAX_CHARS) when the agent didn't emit one.
  */
 export function extractOutcome(result: string | null | undefined): string {
   if (!result) return '';
   const match = result.match(OUTCOME_TAG_RE);
-  return (match?.[1] ?? result).trim();
+  if (match?.[1]) return match[1].trim();
+  return result.slice(0, OUTCOME_FALLBACK_MAX_CHARS).trim();
 }
 
 /**
  * Evaluate a conditional edge's condition against its upstream
- * dependency's result. Case-insensitive; an invalid regex never
- * matches (fails closed rather than throwing).
+ * dependency's result. All three operators are deliberately
+ * case-insensitive for consistency — `equals`/`contains` via explicit
+ * `toLowerCase()`, `matches_regex` via the `i` flag. An invalid regex
+ * never matches (fails closed rather than throwing).
  */
 export function evaluateCondition(
   result: string | null | undefined,
@@ -118,8 +125,8 @@ export function wouldCreateCycle(
 
   const stack = [newEdge.subtaskId];
   const seen = new Set<string>();
-  while (stack.length > 0) {
-    const current = stack.pop()!;
+  let current: string | undefined;
+  while ((current = stack.pop()) !== undefined) {
     if (current === newEdge.dependsOnSubtaskId) return true;
     if (seen.has(current)) continue;
     seen.add(current);

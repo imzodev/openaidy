@@ -18,6 +18,7 @@ import {
   createSubtaskEdge,
   updateSubtaskEdge,
   deleteSubtaskEdge,
+  assignSubtaskAgent,
   resolveApproval,
   type Subtask,
   type SubtaskEdgeDto,
@@ -94,8 +95,15 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       setEdges(nextEdges);
 
       const stored = loadStoredPositions(props.taskId);
+      // Positions already known in the live signal — e.g. a node mid-drag
+      // (only in memory, not yet in localStorage), or one just placed by
+      // handleAddSubtask before this reload — take priority over
+      // stored/auto-layout. Without this, a poll firing mid-drag (or the
+      // reload after adding a node) would revert it to a stale/recomputed
+      // position.
+      const current = positions();
       const nodeIds = nextSubtasks.map((s) => s.id);
-      const missingIds = nodeIds.filter((id) => !stored[id]);
+      const missingIds = nodeIds.filter((id) => !stored[id] && !current[id]);
       const autoPositions =
         missingIds.length > 0
           ? computeAutoLayout(
@@ -108,7 +116,9 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
           : {};
       const merged: Record<string, { x: number; y: number }> = {};
       for (const id of nodeIds) {
-        merged[id] = stored[id] ?? autoPositions[id] ?? { x: 0, y: 0 };
+        merged[id] = current[id] ??
+          stored[id] ??
+          autoPositions[id] ?? { x: 0, y: 0 };
       }
       setPositions(merged);
     } catch (err) {
@@ -133,6 +143,14 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   }
   function selectEdge(id: string | null) {
     setSelection(id ? { type: 'edge', id } : null);
+  }
+  function selectedNodeId(): string | null {
+    const sel = selection();
+    return sel?.type === 'node' ? sel.id : null;
+  }
+  function selectedEdgeId(): string | null {
+    const sel = selection();
+    return sel?.type === 'edge' ? sel.id : null;
   }
 
   // ── Node position editing ────────────────────────────────────────────────
@@ -270,10 +288,24 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     await load();
   }
 
+  async function handleAssignAgent(id: string, agentId: string) {
+    setActionError(null);
+    const result = await assignSubtaskAgent(id, agentId);
+    if (!result.ok) {
+      setActionError(result.error.message);
+      return;
+    }
+    await load();
+  }
+
   return (
     <div class="workflow-editor h-full w-full flex flex-col">
       <Show when={actionError()}>
-        <div class="px-3 py-1.5 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-800 flex items-center justify-between">
+        <div
+          role="status"
+          aria-live="assertive"
+          class="px-3 py-1.5 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-800 flex items-center justify-between"
+        >
           {actionError()}
           <button
             type="button"
@@ -302,17 +334,14 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
               edges={edges()}
               agents={props.agents}
               positions={positions()}
-              selectedNodeId={
-                selection()?.type === 'node' ? selection()!.id : null
-              }
-              selectedEdgeId={
-                selection()?.type === 'edge' ? selection()!.id : null
-              }
+              selectedNodeId={selectedNodeId()}
+              selectedEdgeId={selectedEdgeId()}
               onSelectNode={selectNode}
               onSelectEdge={selectEdge}
               onNodeMove={handleNodeMove}
               onNodeMoveEnd={handleNodeMoveEnd}
               onConnect={handleConnect}
+              onDeleteEdge={handleDeleteEdge}
             />
           </div>
           <div class="w-72 flex-shrink-0">
@@ -327,6 +356,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
               onUpdateEdge={handleUpdateEdge}
               onDeleteEdge={handleDeleteEdge}
               onResolveApproval={handleResolveApproval}
+              onAssignAgent={handleAssignAgent}
             />
           </div>
         </Show>

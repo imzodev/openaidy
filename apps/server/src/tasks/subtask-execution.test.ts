@@ -842,7 +842,7 @@ describe('Subtask Execution', () => {
       expect(result.ok).toBe(true);
       expect(mockSubtasksRepo.failSubtask).toHaveBeenCalledWith(
         'subtask-approve',
-        'Rejected: not ready',
+        'OUTCOME: rejected\n\nnot ready',
       );
     });
 
@@ -868,6 +868,10 @@ describe('Subtask Execution', () => {
         subtaskKind: 'approval_gate',
         awaitingApprovalSince: null,
       });
+      // The repo enforces "still awaiting approval" atomically in its
+      // UPDATE's WHERE clause and returns null when the row doesn't
+      // match (see SubtasksRepository.resolveApproval).
+      mockSubtasksRepo.resolveApproval.mockResolvedValue(null);
 
       const result = await taskService.resolveApproval(
         'subtask-approve',

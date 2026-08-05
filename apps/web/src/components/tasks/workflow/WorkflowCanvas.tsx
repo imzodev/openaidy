@@ -28,6 +28,8 @@ export type WorkflowCanvasProps = {
   onNodeMoveEnd?: () => void;
   /** Fired when a connect-drag from `sourceId` is released over `targetId`. */
   onConnect?: (sourceId: string, targetId: string) => void;
+  /** Fired when Delete/Backspace is pressed on a focused edge. */
+  onDeleteEdge?: (id: string) => void;
 };
 
 type DragState =
@@ -91,6 +93,14 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   function onNodeConnectStart(nodeId: string, e: PointerEvent) {
     const { x, y } = toCanvasCoords(e.clientX, e.clientY);
     setDrag({ kind: 'connect', sourceId: nodeId, cursorX: x, cursorY: y });
+  }
+
+  // Narrows DragState to just the 'connect' variant (or null), so the
+  // <Show> callback below gets a properly typed, non-null accessor
+  // instead of needing an `as`/`!` cast to read sourceId/cursorX/cursorY.
+  function connectPreview() {
+    const d = drag();
+    return d.kind === 'connect' ? d : null;
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -181,78 +191,110 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
             {(edge) => {
               const from = () => props.positions[edge.dependsOnSubtaskId];
               const to = () => props.positions[edge.subtaskId];
+              const fromTitle = () =>
+                props.subtasks.find((s) => s.id === edge.dependsOnSubtaskId)
+                  ?.title ?? edge.dependsOnSubtaskId;
+              const toTitle = () =>
+                props.subtasks.find((s) => s.id === edge.subtaskId)?.title ??
+                edge.subtaskId;
+              const conditionLabel = () =>
+                edge.condition
+                  ? ` when ${edge.condition.operator} "${edge.condition.value}"`
+                  : '';
               return (
-                <Show when={from() && to()}>
-                  <g
-                    class="pointer-events-auto cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onSelectEdge(edge.id);
-                    }}
-                  >
-                    <path
-                      d={edgePath(from()!, to()!)}
-                      fill="none"
-                      stroke-width={
-                        props.selectedEdgeId === edge.id ? 2.5 : 1.5
-                      }
-                      class={
-                        edge.edgeKind === 'conditional'
-                          ? 'stroke-purple-400 dark:stroke-purple-500'
-                          : 'stroke-gray-400 dark:stroke-gray-500'
-                      }
-                      stroke-dasharray={
-                        edge.edgeKind === 'conditional' ? '6,4' : undefined
-                      }
-                      marker-end="url(#wf-arrow)"
-                    />
-                    <Show
-                      when={edge.edgeKind === 'conditional' && edge.condition}
-                    >
-                      <foreignObject
-                        x={(from()!.x + to()!.x) / 2 - 60}
-                        y={(from()!.y + to()!.y) / 2 - 10}
-                        width={120}
-                        height={20}
-                      >
-                        <div class="flex justify-center">
-                          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 whitespace-nowrap">
-                            {edge.condition!.operator} "{edge.condition!.value}"
-                          </span>
-                        </div>
-                      </foreignObject>
+                <Show when={from()}>
+                  {(f) => (
+                    <Show when={to()}>
+                      {(t) => (
+                        <g
+                          class="pointer-events-auto cursor-pointer"
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`${toTitle()} depends on ${fromTitle()}${conditionLabel()}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            props.onSelectEdge(edge.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              props.onSelectEdge(edge.id);
+                            } else if (
+                              e.key === 'Delete' ||
+                              e.key === 'Backspace'
+                            ) {
+                              e.preventDefault();
+                              props.onDeleteEdge?.(edge.id);
+                            }
+                          }}
+                        >
+                          <path
+                            d={edgePath(f(), t())}
+                            fill="none"
+                            stroke-width={
+                              props.selectedEdgeId === edge.id ? 2.5 : 1.5
+                            }
+                            class={
+                              edge.edgeKind === 'conditional'
+                                ? 'stroke-purple-400 dark:stroke-purple-500'
+                                : 'stroke-gray-400 dark:stroke-gray-500'
+                            }
+                            stroke-dasharray={
+                              edge.edgeKind === 'conditional'
+                                ? '6,4'
+                                : undefined
+                            }
+                            marker-end="url(#wf-arrow)"
+                          />
+                          <Show
+                            when={
+                              edge.edgeKind === 'conditional'
+                                ? edge.condition
+                                : null
+                            }
+                          >
+                            {(condition) => (
+                              <foreignObject
+                                x={(f().x + t().x) / 2 - 60}
+                                y={(f().y + t().y) / 2 - 10}
+                                width={120}
+                                height={20}
+                              >
+                                <div class="flex justify-center">
+                                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 whitespace-nowrap">
+                                    {condition().operator} "{condition().value}"
+                                  </span>
+                                </div>
+                              </foreignObject>
+                            )}
+                          </Show>
+                        </g>
+                      )}
                     </Show>
-                  </g>
+                  )}
                 </Show>
               );
             }}
           </For>
 
           {/* Live preview line while dragging a new connection. */}
-          <Show when={drag().kind === 'connect'}>
-            {(() => {
-              const d = drag() as {
-                kind: 'connect';
-                sourceId: string;
-                cursorX: number;
-                cursorY: number;
-              };
-              const from = props.positions[d.sourceId];
-              return (
-                <Show when={from}>
+          <Show when={connectPreview()}>
+            {(d) => (
+              <Show when={props.positions[d().sourceId]}>
+                {(from) => (
                   <path
-                    d={edgePath(from!, {
-                      x: d.cursorX,
-                      y: d.cursorY + NODE_HEIGHT / 2,
+                    d={edgePath(from(), {
+                      x: d().cursorX,
+                      y: d().cursorY + NODE_HEIGHT / 2,
                     })}
                     fill="none"
                     stroke-width={1.5}
                     class="stroke-blue-400 dark:stroke-blue-500"
                     stroke-dasharray="4,4"
                   />
-                </Show>
-              );
-            })()}
+                )}
+              </Show>
+            )}
           </Show>
         </svg>
 
@@ -261,16 +303,18 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
             const pos = () => props.positions[subtask.id];
             return (
               <Show when={pos()}>
-                <WorkflowNode
-                  subtask={subtask}
-                  agents={props.agents}
-                  x={pos()!.x}
-                  y={pos()!.y}
-                  selected={props.selectedNodeId === subtask.id}
-                  onSelect={() => props.onSelectNode(subtask.id)}
-                  onMoveStart={(e) => onNodeMoveStart(subtask.id, e)}
-                  onConnectStart={(e) => onNodeConnectStart(subtask.id, e)}
-                />
+                {(p) => (
+                  <WorkflowNode
+                    subtask={subtask}
+                    agents={props.agents}
+                    x={p().x}
+                    y={p().y}
+                    selected={props.selectedNodeId === subtask.id}
+                    onSelect={() => props.onSelectNode(subtask.id)}
+                    onMoveStart={(e) => onNodeMoveStart(subtask.id, e)}
+                    onConnectStart={(e) => onNodeConnectStart(subtask.id, e)}
+                  />
+                )}
               </Show>
             );
           }}

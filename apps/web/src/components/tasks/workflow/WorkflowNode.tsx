@@ -46,11 +46,17 @@ export function WorkflowNode(props: WorkflowNodeProps) {
   const isApprovalGate = () => props.subtask.subtaskKind === 'approval_gate';
   const isAwaiting = () => Boolean(props.subtask.awaitingApprovalSince);
   const isLoop = () => props.subtask.loopMaxIterations != null;
+  const statusLabel = () => props.subtask.status.replace('_', ' ');
+  const kindLabel = () => (isApprovalGate() ? 'approval gate' : 'subtask');
 
   return (
     <div
       data-node-id={props.subtask.id}
-      class={`absolute rounded-md border px-3 py-2 shadow-sm cursor-grab select-none transition-shadow ${
+      tabIndex={0}
+      role="button"
+      aria-label={`${props.subtask.title}, ${kindLabel()}, ${statusLabel()}${isAwaiting() ? ', awaiting approval' : ''}`}
+      aria-pressed={props.selected}
+      class={`absolute rounded-md border px-3 py-2 shadow-sm cursor-grab select-none transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
         STATUS_BG[props.subtask.status] ?? STATUS_BG.pending
       } ${
         props.selected ? 'ring-2 ring-blue-500' : 'hover:shadow-md'
@@ -64,6 +70,12 @@ export function WorkflowNode(props: WorkflowNodeProps) {
       onClick={(e) => {
         e.stopPropagation();
         props.onSelect();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          props.onSelect();
+        }
       }}
       onPointerDown={(e) => {
         e.stopPropagation();
@@ -96,7 +108,10 @@ export function WorkflowNode(props: WorkflowNodeProps) {
       </Show>
 
       <Show when={isAwaiting()}>
-        <div class="mt-1 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 animate-pulse">
+        <div
+          role="status"
+          class="mt-1 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 animate-pulse"
+        >
           Awaiting approval
         </div>
       </Show>
@@ -114,8 +129,12 @@ export function WorkflowNode(props: WorkflowNodeProps) {
 
       {/* Drag from here to another node to create a dependency edge. */}
       <div
-        class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-gray-400 dark:bg-gray-500 border-2 border-white dark:border-gray-900 cursor-crosshair hover:bg-blue-500"
+        role="button"
+        tabIndex={0}
+        aria-label={`Create dependency from ${props.subtask.title}`}
         title="Drag to another node to connect"
+        class="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-gray-400 dark:bg-gray-500 border-2 border-white dark:border-gray-900 cursor-crosshair hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+        onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => {
           e.stopPropagation();
           props.onConnectStart?.(e);

@@ -1,4 +1,4 @@
-import { eq, asc, and } from 'drizzle-orm';
+import { eq, asc, and, isNotNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/tasks';
@@ -430,16 +430,16 @@ export class SubtasksRepository {
   }
 
   /**
-   * Increment the retry count for a subtask
+   * Increment the retry count for a subtask. Uses an atomic `col = col + 1`
+   * SQL expression rather than read-then-write, so two concurrent events
+   * for the same subtask can't both read the same count and clobber each
+   * other's increment.
    */
   async incrementRetryCount(id: string): Promise<schema.Subtask | null> {
-    const subtask = await this.findById(id);
-    if (!subtask) return null;
-
     const results = await this.db
       .update(schema.subtasks)
       .set({
-        retryCount: (subtask.retryCount ?? 0) + 1,
+        retryCount: sql`${schema.subtasks.retryCount} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(schema.subtasks.id, id))
@@ -514,6 +514,12 @@ export class SubtasksRepository {
    * and clear the pause sentinel. Does not itself complete/fail the
    * subtask — the caller (TaskExecution.resolveApproval) does that via
    * the normal completeSubtask/failSubtask cascade.
+   *
+   * The WHERE clause requires `awaitingApprovalSince IS NOT NULL`
+   * atomically, rather than the caller checking it via a separate read
+   * first — two concurrent resolve calls can't both succeed; the second
+   * gets `null` back since the row no longer matches after the first
+   * clears the sentinel.
    */
   async resolveApproval(
     id: string,
@@ -532,25 +538,28 @@ export class SubtasksRepository {
         awaitingApprovalSince: null,
         updatedAt: new Date(),
       })
-      .where(eq(schema.subtasks.id, id))
+      .where(
+        and(
+          eq(schema.subtasks.id, id),
+          isNotNull(schema.subtasks.awaitingApprovalSince),
+        ),
+      )
       .returning();
     return results[0] ?? null;
   }
 
   /**
    * Record one iteration of a bounded self-loop: stash the iteration's
-   * result for the next iteration's context, bump the counter, and reset
-   * the subtask back to `pending` (clearing session/verification state)
-   * so the next executeSubtasks() scan picks it straight back up. Scoped
-   * single-row analog of `resetByTask`.
+   * result for the next iteration's context, bump the counter atomically
+   * (`col = col + 1`, not read-then-write — see `incrementRetryCount`),
+   * and reset the subtask back to `pending` (clearing session/verification
+   * state) so the next executeSubtasks() scan picks it straight back up.
+   * Scoped single-row analog of `resetByTask`.
    */
   async recordLoopIteration(
     id: string,
     input: { result: string },
   ): Promise<schema.Subtask | null> {
-    const subtask = await this.findById(id);
-    if (!subtask) return null;
-
     const results = await this.db
       .update(schema.subtasks)
       .set({
@@ -558,7 +567,7 @@ export class SubtasksRepository {
         sessionId: null,
         pendingVerificationResult: null,
         loopLastResult: input.result,
-        loopIterationCount: (subtask.loopIterationCount ?? 0) + 1,
+        loopIterationCount: sql`${schema.subtasks.loopIterationCount} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(schema.subtasks.id, id))
