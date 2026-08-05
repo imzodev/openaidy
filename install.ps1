@@ -2,7 +2,8 @@
 # OpenAidy Installer for Windows
 # ============================================================================
 # Installs OpenAidy from the prebuilt npm package (@openaidy/app). No git
-# clone, no source build — just Node + ripgrep, then `npm install -g`.
+# clone, no source build — just Node + ripgrep + uv + git, then `npm install
+# -g`.
 #
 # Usage:
 #   iex (irm https://openaidy.com/install.ps1)
@@ -310,6 +311,81 @@ function Test-Uv {
 }
 
 # ============================================================================
+# git provisioning
+# ============================================================================
+# Defense-in-depth prerequisite. npm's @npmcli/git module spawns `git` to
+# resolve git+https / github: dependencies some packages still use (e.g.
+# historical @whiskeysockets/baileys releases pinned libsignal to
+# git+https://github.com/whiskeysockets/libsignal-node.git, which broke npm
+# install on bare boxes without git). Even after bumping such deps to registry
+# releases, a future transitive dep could reintroduce the same requirement —
+# so the installer provisions git instead of asking the user to.
+#
+# Scope: the git binary only. No git repo is cloned, no source is fetched —
+# this matches the installer's "prebuilt package" model.
+
+function Install-Git {
+    Log-Info "Installing git..."
+
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Log-Info "Installing git via winget..."
+        winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements 2>$null
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            Log-Success "git installed via winget"
+            return $true
+        }
+    }
+
+    $choco = Get-Command choco -ErrorAction SilentlyContinue
+    if ($choco) {
+        Log-Info "Installing git via Chocolatey..."
+        choco install git -y --no-progress 2>$null
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            Log-Success "git installed via Chocolatey"
+            return $true
+        }
+    }
+
+    $scoop = Get-Command scoop -ErrorAction SilentlyContinue
+    if ($scoop) {
+        Log-Info "Installing git via Scoop..."
+        scoop install git 2>$null
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            Log-Success "git installed via Scoop"
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-Git {
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        try {
+            $v = (& git --version) 2>$null
+            if ($v) {
+                Log-Success "git found"
+                return $true
+            }
+        } catch { }
+    }
+
+    Log-Warn "git not found — required by npm for any git-URL dependency"
+    if (-not (Install-Git)) {
+        Log-Error "git could not be installed automatically."
+        Log-Info "Install 'Git for Windows' from https://git-scm.com/download/win, or via your package manager:"
+        Log-Info "  winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements"
+        Log-Info "  choco install git -y"
+        Log-Info "  scoop install git"
+        Log-Info "Then re-run this installer."
+        return $false
+    }
+    Log-Success "git installed"
+    return $true
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -454,6 +530,13 @@ if (-not (Test-Ripgrep)) {
 # uv / uvx + Python MCP server environments (non-fatal: only Python-based MCP
 # servers depend on it, the server itself boots fine without it).
 Test-Uv
+
+# git (defense-in-depth: npm needs git on PATH if any transitive dep uses a
+# git URL). Fail-loud if we can't install it — a soft-skip here would leave
+# the user with a half-installed setup that breaks on the very next step.
+if (-not (Test-Git)) {
+    exit 1
+}
 
 # OpenAidy CLI (prebuilt package)
 Install-OpenAidy
