@@ -35,6 +35,10 @@ const STUCK_TIMEOUT_MINUTES = 3;
 // can't unboundedly grow the next subtask's context window.
 const DEP_CONTEXT_PER_ITEM_CHARS = 2000;
 const DEP_CONTEXT_TOTAL_CHARS = 8000;
+// Bound on how much of a verifier's rejection reason gets echoed back into
+// the retry message, so a verbose verdict can't unboundedly grow the next
+// attempt's opening message.
+const RETRY_REASON_MAX_CHARS = 1500;
 
 export class TaskExecution {
   private readonly logger: ReturnType<typeof createLogger>;
@@ -504,6 +508,7 @@ export class TaskExecution {
 
   async triggerSubtaskRetry(
     subtaskId: string,
+    reason?: string,
   ): Promise<ServiceResult<{ sessionId: string }>> {
     if (!this.sessionService) {
       return {
@@ -542,12 +547,19 @@ export class TaskExecution {
       subtaskId,
       sessionId,
       agentId,
+      hasReason: Boolean(reason),
     });
+
+    // When a verification verdict supplied a reason, tell the agent
+    // specifically what was wrong or missing instead of the generic
+    // "try again" — without it, a retry just repeats the same mistake.
+    const content = reason
+      ? `Your previous attempt at this subtask was reviewed and marked incomplete. Here is specifically what was wrong or missing:\n\n${reason.slice(0, RETRY_REASON_MAX_CHARS)}\n\nAddress this directly, then deliver the actual output requested. Do not ask what to do — execute the task directly.`
+      : 'Please continue and complete this subtask. Focus on delivering the actual output requested. Do not ask what to do — execute the task directly.';
 
     const messageInput: SubmitMessageStreamingInput = {
       sessionId,
-      content:
-        'Please continue and complete this subtask. Focus on delivering the actual output requested. Do not ask what to do — execute the task directly.',
+      content,
       role: 'user',
       onStreamEvent: () => {},
     };
@@ -889,10 +901,17 @@ export class TaskExecution {
           verificationSessionId,
         );
       } else {
+        // Prefer the verifier's structured reason; if JSON parsing failed
+        // (or the model omitted it), fall back to its raw response text
+        // rather than telling the agent nothing about what was wrong.
+        const retryReason =
+          parsedVerdict.reason?.trim() ||
+          content.slice(0, RETRY_REASON_MAX_CHARS).trim();
         this.logger.info('Verification says incomplete, triggering retry', {
           subtaskId,
+          retryReason,
         });
-        await this.triggerSubtaskRetry(subtaskId);
+        await this.triggerSubtaskRetry(subtaskId, retryReason);
       }
     }
   }

@@ -679,4 +679,59 @@ describe('Subtask Execution', () => {
       expect(result).toHaveLength(3);
     });
   });
+
+  describe('triggerSubtaskRetry', () => {
+    it('sends the generic retry message when no reason is given', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        sessionId: 'session-1',
+        assignedAgentId: 'agent-1',
+      });
+
+      const result = await taskService.triggerSubtaskRetry('subtask-1');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).toBe(
+        'Please continue and complete this subtask. Focus on delivering the actual output requested. Do not ask what to do — execute the task directly.',
+      );
+    });
+
+    it('includes the verification reason in the retry message when given', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        sessionId: 'session-1',
+        assignedAgentId: 'agent-1',
+      });
+
+      const result = await taskService.triggerSubtaskRetry(
+        'subtask-1',
+        'The headline claimed in the response does not appear anywhere in the actual tool results.',
+      );
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).toContain(
+        'The headline claimed in the response does not appear anywhere in the actual tool results.',
+      );
+      expect(messageInput.content).toContain('marked incomplete');
+    });
+
+    it('truncates an excessively long reason instead of forwarding it verbatim', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        sessionId: 'session-1',
+        assignedAgentId: 'agent-1',
+      });
+      const longReason = 'x'.repeat(5000);
+
+      await taskService.triggerSubtaskRetry('subtask-1', longReason);
+
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content.length).toBeLessThan(longReason.length);
+    });
+  });
 });
