@@ -37,12 +37,18 @@ const createMockTaskService = () => ({
   createSubtask: vi.fn(),
   getSubtasks: vi.fn(),
   updateSubtask: vi.fn(),
+  deleteSubtask: vi.fn(),
   updateSubtaskStatus: vi.fn(),
   assignSubtaskAgent: vi.fn(),
   setSubtaskResult: vi.fn(),
   getTaskProgress: vi.fn(),
   updatePlanningStatus: vi.fn(),
   createSubtasks: vi.fn(),
+  listSubtaskEdges: vi.fn(),
+  createSubtaskEdge: vi.fn(),
+  updateSubtaskEdge: vi.fn(),
+  deleteSubtaskEdge: vi.fn(),
+  resolveApproval: vi.fn(),
 });
 
 type MockTaskService = ReturnType<typeof createMockTaskService>;
@@ -779,6 +785,361 @@ describe('taskRoutes', () => {
       expect((result as { ok: boolean }).ok).toBe(false);
       expect(reply.code).toHaveBeenCalledWith(400);
       expect(mockService.assignSubtaskAgent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /tasks/:taskId/subtasks', () => {
+    it('creates a subtask and returns 201', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createSubtask.mockResolvedValue({
+        ok: true,
+        data: { id: 'sub1', taskId: 'task1', title: 'New', description: 'd' },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          params: { taskId: 'task1' },
+          body: { title: 'New', description: 'd' },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(reply.code).toHaveBeenCalledWith(201);
+      expect(mockService.createSubtask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task1',
+          title: 'New',
+          description: 'd',
+        }),
+      );
+    });
+
+    it('returns 400 for invalid input', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        { params: { taskId: 'task1' }, body: { title: '' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 404 when the task does not exist', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createSubtask.mockResolvedValue({
+        ok: false,
+        error: { code: 'task.not_found', message: 'Task not found' },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          params: { taskId: 'missing' },
+          body: { title: 'New', description: 'd' },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('DELETE /subtasks/:id', () => {
+    it('deletes a subtask', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.deleteSubtask.mockResolvedValue({ ok: true, data: true });
+
+      const route = app._routes.find(
+        (r) => r.method === 'DELETE' && r.url === '/subtasks/:id',
+      );
+      const result = await route!.handler(
+        { params: { id: 'sub1' } },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(mockService.deleteSubtask).toHaveBeenCalledWith('sub1');
+    });
+
+    it('returns 404 when the subtask does not exist', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.deleteSubtask.mockResolvedValue({
+        ok: false,
+        error: { code: 'subtask.not_found', message: 'not found' },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'DELETE' && r.url === '/subtasks/:id',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler({ params: { id: 'missing' } }, reply);
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('subtask-edges routes', () => {
+    it('GET lists edges for a task', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.listSubtaskEdges.mockResolvedValue({
+        ok: true,
+        data: [{ id: 'edge1', subtaskId: 'b', dependsOnSubtaskId: 'a' }],
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'GET' && r.url === '/tasks/:taskId/subtask-edges',
+      );
+      const result = await route!.handler(
+        { params: { taskId: 'task1' } },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect(
+        (result as { ok: boolean; data: { items: unknown[] } }).data.items,
+      ).toHaveLength(1);
+    });
+
+    it('POST creates a conditional edge', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createSubtaskEdge.mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'edge1',
+          subtaskId: 'b',
+          dependsOnSubtaskId: 'a',
+          edgeKind: 'conditional',
+        },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtask-edges',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          params: { taskId: 'task1' },
+          body: {
+            subtaskId: 'b',
+            dependsOnSubtaskId: 'a',
+            edgeKind: 'conditional',
+            condition: { operator: 'equals', value: 'approved' },
+          },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(reply.code).toHaveBeenCalledWith(201);
+    });
+
+    it('POST returns 400 when the edge would create a cycle', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createSubtaskEdge.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'edge.would_create_cycle',
+          message: 'would create a cycle',
+        },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtask-edges',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route!.handler(
+        {
+          params: { taskId: 'task1' },
+          body: { subtaskId: 'a', dependsOnSubtaskId: 'b' },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('PATCH updates an edge', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.updateSubtaskEdge.mockResolvedValue({
+        ok: true,
+        data: { id: 'edge1', edgeKind: 'conditional' },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'PATCH' && r.url === '/subtask-edges/:id',
+      );
+      const result = await route!.handler(
+        {
+          params: { id: 'edge1' },
+          body: { condition: { operator: 'contains', value: 'ok' } },
+        },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+    });
+
+    it('DELETE removes an edge', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.deleteSubtaskEdge.mockResolvedValue({ ok: true, data: true });
+
+      const route = app._routes.find(
+        (r) => r.method === 'DELETE' && r.url === '/subtask-edges/:id',
+      );
+      const result = await route!.handler(
+        { params: { id: 'edge1' } },
+        { code: vi.fn().mockReturnThis() },
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+    });
+  });
+
+  describe('POST /subtasks/:id/approval/resolve', () => {
+    async function setupWithMock() {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      const route = app._routes.find(
+        (r) =>
+          r.method === 'POST' && r.url === '/subtasks/:id/approval/resolve',
+      );
+      return route!;
+    }
+
+    it('approves a paused approval gate', async () => {
+      const route = await setupWithMock();
+      mockService.resolveApproval.mockResolvedValue({
+        ok: true,
+        data: { id: 'sub1', status: 'completed' },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        {
+          params: { id: 'sub1' },
+          body: { decision: 'approved', note: 'looks good' },
+        },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(true);
+      expect(mockService.resolveApproval).toHaveBeenCalledWith(
+        'sub1',
+        'approved',
+        'looks good',
+      );
+    });
+
+    it('returns 400 when the subtask is not an approval gate', async () => {
+      const route = await setupWithMock();
+      mockService.resolveApproval.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'subtask.not_approval_gate',
+          message: 'not an approval gate',
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { decision: 'approved' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 when the subtask is not awaiting approval', async () => {
+      const route = await setupWithMock();
+      mockService.resolveApproval.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'subtask.not_awaiting_approval',
+          message: 'not awaiting approval',
+        },
+      });
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { decision: 'rejected' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 400 for an invalid decision value', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { decision: 'maybe' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.resolveApproval).not.toHaveBeenCalled();
     });
   });
 });

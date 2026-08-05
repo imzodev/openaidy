@@ -26,6 +26,14 @@ export const SUBTASK_STATUS_VALUES = [
   'failed',
 ] as const;
 
+export const SUBTASK_KIND_VALUES = ['agent', 'approval_gate'] as const;
+
+export const CONDITION_OPERATOR_VALUES = [
+  'equals',
+  'contains',
+  'matches_regex',
+] as const;
+
 export const AGENT_ROLE_VALUES = ['primary', 'secondary', 'reviewer'] as const;
 
 export const PLANNING_STATUS_VALUES = [
@@ -58,6 +66,18 @@ export type PlanningStatus = (typeof PLANNING_STATUS_VALUES)[number];
  * Subtask status
  */
 export type SubtaskStatus = (typeof SUBTASK_STATUS_VALUES)[number];
+
+/**
+ * Subtask kind — 'agent' runs a normal LLM session; 'approval_gate'
+ * pauses execution until a human resolves it via the API/UI.
+ */
+export type SubtaskKind = (typeof SUBTASK_KIND_VALUES)[number];
+
+/**
+ * How a conditional edge's condition is evaluated against the
+ * upstream dependency's result (or its `OUTCOME: <tag>` line).
+ */
+export type ConditionOperator = (typeof CONDITION_OPERATOR_VALUES)[number];
 
 /**
  * Agent role on a task
@@ -132,6 +152,38 @@ export type KanbanBoard = Record<
 >;
 
 /**
+ * A conditional edge's condition, evaluated against the upstream
+ * dependency's result (see ConditionOperator).
+ */
+export type EdgeCondition = {
+  operator: ConditionOperator;
+  value: string;
+};
+
+/**
+ * Bounded single-subtask loop config: the subtask re-runs itself up
+ * to maxIterations times until its own result satisfies the
+ * condition, or fails once iterations are exhausted.
+ */
+export type LoopConfig = {
+  maxIterations: number;
+  conditionOperator: ConditionOperator;
+  conditionValue: string;
+};
+
+/**
+ * A subtask dependency-graph edge, as returned by the edge-CRUD API.
+ */
+export type SubtaskEdgeDto = {
+  id: string;
+  subtaskId: string;
+  dependsOnSubtaskId: string;
+  edgeKind: 'dependency' | 'conditional';
+  condition: EdgeCondition | null;
+  createdAt: string;
+};
+
+/**
  * Subtask with details
  */
 export type SubtaskWithDetails = {
@@ -145,6 +197,13 @@ export type SubtaskWithDetails = {
   dependsOnSubtaskIds: string[];
   result: string | null;
   retryCount: number;
+  subtaskKind: SubtaskKind;
+  loop: LoopConfig | null;
+  loopIterationCount: number;
+  loopLastResult: string | null;
+  awaitingApprovalSince: string | null;
+  approvalDecision: 'approved' | 'rejected' | null;
+  approvalNote: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -162,6 +221,13 @@ export type SubtaskSummary = {
   dependsOnSubtaskIds: string[];
   result: string | null;
   retryCount: number;
+  subtaskKind: SubtaskKind;
+  loop: LoopConfig | null;
+  loopIterationCount: number;
+  loopLastResult: string | null;
+  awaitingApprovalSince: string | null;
+  approvalDecision: 'approved' | 'rejected' | null;
+  approvalNote: string | null;
   createdAt: string;
   updatedAt: string;
 };

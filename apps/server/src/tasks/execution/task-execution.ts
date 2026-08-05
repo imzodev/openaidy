@@ -25,7 +25,10 @@ import type { SessionMessageRecord, ServiceResult } from '../../types';
 import {
   isSubtaskExecutable,
   getDependencySubtasks,
+  evaluateCondition,
+  subtaskNeedsOutcomeTag,
   type SubtaskDependencyEdge,
+  type ConditionOperator,
 } from './subtask-graph';
 
 const MAX_RETRIES = 5;
@@ -336,7 +339,7 @@ export class TaskExecution {
         edges: SubtaskDependencyEdge[];
       };
     } = {},
-  ): Promise<ServiceResult<{ sessionId: string }>> {
+  ): Promise<ServiceResult<{ sessionId: string | null }>> {
     if (!this.sessionService) {
       return {
         ok: false,
@@ -387,6 +390,20 @@ export class TaskExecution {
           message: 'One or more dependencies not completed',
         },
       };
+    }
+
+    // Approval gates pause execution for a human decision instead of
+    // running an agent. No session is created and submitMessageStreaming
+    // is never called, so this subtask stays completely outside the
+    // RunEvent/session-correlation machinery — resolveApproval() is the
+    // only thing that moves it forward.
+    if (subtask.subtaskKind === 'approval_gate') {
+      await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
+      await this.subtasksRepo.setAwaitingApproval(subtaskId, true);
+      this.logger.info('Approval gate paused, awaiting human decision', {
+        subtaskId,
+      });
+      return { ok: true, data: { sessionId: null } };
     }
 
     // Reuse the existing session if the caller (e.g. the recurring-task
@@ -441,6 +458,33 @@ export class TaskExecution {
         subtaskId,
         depCount: contextParts.length,
       });
+    }
+
+    // Loop iteration context: on iterations after the first, prepend the
+    // previous attempt's result so the agent can build on (or fix) it.
+    if (
+      subtask.loopMaxIterations != null &&
+      subtask.loopIterationCount > 0 &&
+      subtask.loopLastResult
+    ) {
+      const loopBudget = createContextBudget(DEP_CONTEXT_PER_ITEM_CHARS);
+      const truncatedPrevious = truncateWithBudget(
+        subtask.loopLastResult,
+        DEP_CONTEXT_PER_ITEM_CHARS,
+        loopBudget,
+      );
+      messageContent =
+        `This is iteration ${subtask.loopIterationCount + 1} of ${subtask.loopMaxIterations}. ` +
+        `Continue refining until the result satisfies: ${subtask.loopConditionOperator} "${subtask.loopConditionValue}".\n\n` +
+        `**Previous attempt's result:**\n${truncatedPrevious}\n\n---\n\n${messageContent}`;
+    }
+
+    // Some downstream logic (a conditional branch reading this subtask's
+    // result, or this subtask's own loop convergence check) needs a short
+    // structured signal rather than free text — ask the agent to end its
+    // final message with an OUTCOME line.
+    if (subtaskNeedsOutcomeTag(subtask, edges)) {
+      messageContent = `${messageContent}\n\n---\n\nEnd your final message with a line "OUTCOME: <short-tag>" summarizing the outcome in a few words (e.g. "OUTCOME: approved" or "OUTCOME: needs-revision"). This is used to decide what happens next.`;
     }
 
     const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
@@ -577,6 +621,44 @@ export class TaskExecution {
       };
     }
 
+    // Bounded self-loop: this subtask keeps re-running itself until its
+    // own result satisfies loopConditionOperator/loopConditionValue, or
+    // the iteration cap is hit (then it fails instead of completing).
+    // retryCount/MAX_RETRIES is a separate concept (run-failure
+    // recovery) and is untouched by this branch.
+    if (subtask.loopMaxIterations != null) {
+      const converged = evaluateCondition(result, {
+        operator: (subtask.loopConditionOperator ??
+          'contains') as ConditionOperator,
+        value: subtask.loopConditionValue ?? '',
+      });
+      if (!converged) {
+        const nextIteration = subtask.loopIterationCount + 1;
+        if (nextIteration >= subtask.loopMaxIterations) {
+          this.logger.warn(
+            'Loop exceeded max iterations without satisfying its condition',
+            { subtaskId, loopMaxIterations: subtask.loopMaxIterations },
+          );
+          return this.failSubtask(
+            subtaskId,
+            `Loop exceeded ${subtask.loopMaxIterations} iterations without satisfying its condition. Last result: ${result.slice(0, 200)}`,
+          );
+        }
+        await this.subtasksRepo.recordLoopIteration(subtaskId, { result });
+        this.logger.info('Loop condition not met, re-running subtask', {
+          subtaskId,
+          iteration: nextIteration,
+          maxIterations: subtask.loopMaxIterations,
+        });
+        // Same cascade normal completion triggers below — picks this
+        // subtask (now back to 'pending') straight back up.
+        await this.executeSubtasks(subtask.taskId);
+        const reloaded = await this.subtasksRepo.findById(subtaskId);
+        return { ok: true, data: reloaded! };
+      }
+      // Condition holds — fall through to normal completion below.
+    }
+
     const updated = await this.subtasksRepo.completeSubtask(subtaskId, result);
 
     this.logger.info('Subtask completed, checking for dependent subtasks', {
@@ -596,6 +678,58 @@ export class TaskExecution {
     }
 
     return { ok: true, data: updated! };
+  }
+
+  /**
+   * Resolve a paused approval-gate subtask with a human decision.
+   * Deliberately outside handleRunEvent/session correlation — an
+   * approval gate never created a session or LLM run, so there's
+   * nothing for a RunEvent to correlate back to here.
+   */
+  async resolveApproval(
+    subtaskId: string,
+    decision: 'approved' | 'rejected',
+    note?: string,
+    approvedBy?: string,
+  ): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: `Subtask "${subtaskId}" not found`,
+        },
+      };
+    }
+    if (subtask.subtaskKind !== 'approval_gate') {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_approval_gate',
+          message: `Subtask "${subtaskId}" is not an approval gate`,
+        },
+      };
+    }
+    if (subtask.awaitingApprovalSince == null) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_awaiting_approval',
+          message: `Subtask "${subtaskId}" is not awaiting approval`,
+        },
+      };
+    }
+
+    await this.subtasksRepo.resolveApproval(subtaskId, {
+      decision,
+      note: note ?? null,
+      approvedBy: approvedBy ?? null,
+    });
+
+    return decision === 'approved'
+      ? this.completeSubtask(subtaskId, note ?? 'Approved')
+      : this.failSubtask(subtaskId, `Rejected${note ? `: ${note}` : ''}`);
   }
 
   async failSubtask(
@@ -618,7 +752,11 @@ export class TaskExecution {
 
   async checkStuckSubtasks(): Promise<void> {
     const allSubtasks = await this.subtasksRepo.listAll();
-    const inProgress = allSubtasks.filter((s) => s.status === 'in_progress');
+    // Approval gates are supposed to sit in_progress indefinitely while
+    // awaiting a human decision — that's not "stuck".
+    const inProgress = allSubtasks.filter(
+      (s) => s.status === 'in_progress' && s.awaitingApprovalSince == null,
+    );
 
     if (inProgress.length === 0) return;
 

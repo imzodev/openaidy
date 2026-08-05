@@ -28,6 +28,11 @@ type MockSubtasksRepo = {
   failSubtask: ReturnType<typeof vi.fn>;
   create: ReturnType<typeof vi.fn>;
   getCountsByStatus: ReturnType<typeof vi.fn>;
+  setAwaitingApproval: ReturnType<typeof vi.fn>;
+  resolveApproval: ReturnType<typeof vi.fn>;
+  recordLoopIteration: ReturnType<typeof vi.fn>;
+  listAll: ReturnType<typeof vi.fn>;
+  incrementRetryCount: ReturnType<typeof vi.fn>;
 };
 
 type MockTaskAgentsRepo = {
@@ -69,6 +74,11 @@ describe('Subtask Execution', () => {
         failed: 0,
         assigned: 0,
       }),
+      setAwaitingApproval: vi.fn().mockResolvedValue({}),
+      resolveApproval: vi.fn().mockResolvedValue({}),
+      recordLoopIteration: vi.fn().mockResolvedValue({}),
+      listAll: vi.fn().mockResolvedValue([]),
+      incrementRetryCount: vi.fn().mockResolvedValue({}),
     };
 
     mockTasksRepo = {
@@ -677,6 +687,304 @@ describe('Subtask Execution', () => {
       const result = await taskService.getNextExecutableSubtasks('task-1');
 
       expect(result).toHaveLength(3);
+    });
+  });
+
+  describe('conditional edges', () => {
+    it('routes to the matching branch when the condition is met', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        title: 'Only if approved',
+        description: 'desc',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          status: 'completed',
+          result: 'OUTCOME: approved',
+          taskId: 'task-1',
+        },
+        { id: 'subtask-2', status: 'pending', taskId: 'task-1' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        {
+          subtaskId: 'subtask-2',
+          dependsOnSubtaskId: 'subtask-1',
+          edgeKind: 'conditional',
+          conditionOperator: 'equals',
+          conditionValue: 'approved',
+        },
+      ]);
+
+      const result = await taskService.executeSubtask('subtask-2');
+      expect(result.ok).toBe(true);
+    });
+
+    it('does not route to the non-matching branch', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        title: 'Only if approved',
+        description: 'desc',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          status: 'completed',
+          result: 'OUTCOME: rejected',
+          taskId: 'task-1',
+        },
+        { id: 'subtask-2', status: 'pending', taskId: 'task-1' },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        {
+          subtaskId: 'subtask-2',
+          dependsOnSubtaskId: 'subtask-1',
+          edgeKind: 'conditional',
+          conditionOperator: 'equals',
+          conditionValue: 'approved',
+        },
+      ]);
+
+      const result = await taskService.executeSubtask('subtask-2');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.dependency_not_met');
+      }
+    });
+  });
+
+  describe('approval gate subtasks', () => {
+    it('pauses instead of creating a session or submitting a message', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-approve',
+        title: 'Approve deploy',
+        description: 'desc',
+        status: 'pending',
+        subtaskKind: 'approval_gate',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-approve',
+          status: 'pending',
+          subtaskKind: 'approval_gate',
+          taskId: 'task-1',
+        },
+      ]);
+
+      const result = await taskService.executeSubtask('subtask-approve');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.data.sessionId).toBeNull();
+      }
+      expect(mockSubtasksRepo.setAwaitingApproval).toHaveBeenCalledWith(
+        'subtask-approve',
+        true,
+      );
+      expect(mockSessionService.createSession).not.toHaveBeenCalled();
+      expect(mockSessionService.submitMessageStreaming).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resolveApproval', () => {
+    it('completes the subtask on approval', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-approve',
+        taskId: 'task-1',
+        subtaskKind: 'approval_gate',
+        awaitingApprovalSince: new Date(),
+      });
+      mockSubtasksRepo.completeSubtask.mockResolvedValue({
+        id: 'subtask-approve',
+        status: 'completed',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-approve', status: 'completed' },
+      ]);
+
+      const result = await taskService.resolveApproval(
+        'subtask-approve',
+        'approved',
+        'looks good',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.resolveApproval).toHaveBeenCalledWith(
+        'subtask-approve',
+        { decision: 'approved', note: 'looks good', approvedBy: null },
+      );
+      expect(mockSubtasksRepo.completeSubtask).toHaveBeenCalled();
+    });
+
+    it('fails the subtask on rejection, leaving dependents ineligible', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-approve',
+        taskId: 'task-1',
+        subtaskKind: 'approval_gate',
+        awaitingApprovalSince: new Date(),
+      });
+      mockSubtasksRepo.failSubtask.mockResolvedValue({
+        id: 'subtask-approve',
+        status: 'failed',
+      });
+
+      const result = await taskService.resolveApproval(
+        'subtask-approve',
+        'rejected',
+        'not ready',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.failSubtask).toHaveBeenCalledWith(
+        'subtask-approve',
+        'Rejected: not ready',
+      );
+    });
+
+    it('errors when the subtask is not an approval gate', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        taskId: 'task-1',
+        subtaskKind: 'agent',
+      });
+
+      const result = await taskService.resolveApproval('subtask-1', 'approved');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.not_approval_gate');
+      }
+    });
+
+    it('errors when the subtask is not currently awaiting approval', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-approve',
+        taskId: 'task-1',
+        subtaskKind: 'approval_gate',
+        awaitingApprovalSince: null,
+      });
+
+      const result = await taskService.resolveApproval(
+        'subtask-approve',
+        'approved',
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('subtask.not_awaiting_approval');
+      }
+    });
+  });
+
+  describe('bounded loops', () => {
+    it('re-runs the subtask when the loop condition is not yet met', async () => {
+      mockSubtasksRepo.findById
+        .mockResolvedValueOnce({
+          id: 'subtask-loop',
+          taskId: 'task-1',
+          loopMaxIterations: 3,
+          loopConditionOperator: 'contains',
+          loopConditionValue: 'approved',
+          loopIterationCount: 0,
+        })
+        .mockResolvedValueOnce({
+          id: 'subtask-loop',
+          taskId: 'task-1',
+          status: 'pending',
+          loopMaxIterations: 3,
+          loopIterationCount: 1,
+        });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-loop', status: 'pending', taskId: 'task-1' },
+      ]);
+
+      const result = await taskService.completeSubtask(
+        'subtask-loop',
+        'OUTCOME: needs-work',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.recordLoopIteration).toHaveBeenCalledWith(
+        'subtask-loop',
+        { result: 'OUTCOME: needs-work' },
+      );
+      expect(mockSubtasksRepo.completeSubtask).not.toHaveBeenCalled();
+    });
+
+    it('fails the subtask once iterations are exhausted without convergence', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-loop',
+        taskId: 'task-1',
+        loopMaxIterations: 3,
+        loopConditionOperator: 'contains',
+        loopConditionValue: 'approved',
+        loopIterationCount: 2,
+      });
+      mockSubtasksRepo.failSubtask.mockResolvedValue({
+        id: 'subtask-loop',
+        status: 'failed',
+      });
+
+      const result = await taskService.completeSubtask(
+        'subtask-loop',
+        'OUTCOME: needs-work',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.failSubtask).toHaveBeenCalled();
+      expect(mockSubtasksRepo.recordLoopIteration).not.toHaveBeenCalled();
+    });
+
+    it('completes normally once the loop condition converges', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-loop',
+        taskId: 'task-1',
+        loopMaxIterations: 3,
+        loopConditionOperator: 'contains',
+        loopConditionValue: 'approved',
+        loopIterationCount: 1,
+      });
+      mockSubtasksRepo.completeSubtask.mockResolvedValue({
+        id: 'subtask-loop',
+        status: 'completed',
+        result: 'OUTCOME: approved',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        { id: 'subtask-loop', status: 'completed', taskId: 'task-1' },
+      ]);
+
+      const result = await taskService.completeSubtask(
+        'subtask-loop',
+        'OUTCOME: approved',
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.completeSubtask).toHaveBeenCalled();
+      expect(mockSubtasksRepo.recordLoopIteration).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkStuckSubtasks', () => {
+    it('skips subtasks that are awaiting approval', async () => {
+      mockSubtasksRepo.listAll.mockResolvedValue([
+        {
+          id: 'subtask-approve',
+          status: 'in_progress',
+          awaitingApprovalSince: new Date(Date.now() - 10 * 60 * 1000),
+          updatedAt: new Date(Date.now() - 10 * 60 * 1000),
+          retryCount: 0,
+        },
+      ]);
+
+      await taskService.checkStuckSubtasks();
+
+      expect(mockSubtasksRepo.updateStatus).not.toHaveBeenCalled();
+      expect(mockSubtasksRepo.incrementRetryCount).not.toHaveBeenCalled();
     });
   });
 });

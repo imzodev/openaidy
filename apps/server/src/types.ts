@@ -138,6 +138,24 @@ export type CreateSubtaskInput = {
   description: string;
   orderIndex?: number;
   assignedAgentId?: string;
+  subtaskKind?: 'agent' | 'approval_gate';
+  loop?: {
+    maxIterations: number;
+    conditionOperator: 'equals' | 'contains' | 'matches_regex';
+    conditionValue: string;
+  } | null;
+};
+
+export type UpdateSubtaskInput = {
+  title?: string;
+  description?: string;
+  orderIndex?: number;
+  subtaskKind?: 'agent' | 'approval_gate';
+  loop?: {
+    maxIterations: number;
+    conditionOperator: 'equals' | 'contains' | 'matches_regex';
+    conditionValue: string;
+  } | null;
 };
 
 export type TaskWithDetails = Task & {

@@ -92,6 +92,46 @@ export type SubtaskStatus =
   | 'failed';
 
 /**
+ * Subtask kind — 'agent' runs a normal LLM session; 'approval_gate'
+ * pauses execution until a human resolves it via the approval UI.
+ */
+export type SubtaskKind = 'agent' | 'approval_gate';
+
+/**
+ * How a conditional edge's condition is evaluated against the
+ * upstream dependency's result (or its `OUTCOME: <tag>` line).
+ */
+export type ConditionOperator = 'equals' | 'contains' | 'matches_regex';
+
+export type EdgeCondition = {
+  operator: ConditionOperator;
+  value: string;
+};
+
+/**
+ * Bounded single-subtask loop config: the subtask re-runs itself up
+ * to maxIterations times until its own result satisfies the
+ * condition, or fails once iterations are exhausted.
+ */
+export type LoopConfig = {
+  maxIterations: number;
+  conditionOperator: ConditionOperator;
+  conditionValue: string;
+};
+
+/**
+ * A subtask dependency-graph edge, as returned by the edge-CRUD API.
+ */
+export type SubtaskEdgeDto = {
+  id: string;
+  subtaskId: string;
+  dependsOnSubtaskId: string;
+  edgeKind: 'dependency' | 'conditional';
+  condition: EdgeCondition | null;
+  createdAt: string;
+};
+
+/**
  * Subtask record
  */
 export type Subtask = {
@@ -106,6 +146,15 @@ export type Subtask = {
   sessionId?: string | null;
   orderIndex: number;
   result: string | null;
+  subtaskKind?: SubtaskKind;
+  loopMaxIterations?: number | null;
+  loopConditionOperator?: ConditionOperator | null;
+  loopConditionValue?: string | null;
+  loopIterationCount?: number;
+  loopLastResult?: string | null;
+  awaitingApprovalSince?: string | null;
+  approvalDecision?: 'approved' | 'rejected' | null;
+  approvalNote?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -173,6 +222,8 @@ export type CreateSubtaskInput = {
   description: string;
   orderIndex?: number;
   assignedAgentId?: string;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
 };
 
 /**
@@ -382,16 +433,123 @@ export async function updateSubtaskStatus(
 }
 
 /**
- * Edit a subtask's title/description/order after planning.
+ * Edit a subtask's title/description/order/kind/loop-config after planning.
  */
 export async function updateSubtask(
   id: string,
-  updates: { title?: string; description?: string; orderIndex?: number },
+  updates: {
+    title?: string;
+    description?: string;
+    orderIndex?: number;
+    subtaskKind?: SubtaskKind;
+    loop?: LoopConfig | null;
+  },
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(`${API_BASE}/api/subtasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
+  });
+  return response.json();
+}
+
+/**
+ * Delete a subtask. Used by the workflow editor to remove nodes.
+ */
+export async function deleteSubtask(id: string): Promise<ApiResult<true>> {
+  const response = await apiFetch(`${API_BASE}/api/subtasks/${id}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+}
+
+/**
+ * Resolve a paused approval-gate subtask with a human decision.
+ */
+export async function resolveApproval(
+  subtaskId: string,
+  decision: 'approved' | 'rejected',
+  note?: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/approval/resolve`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, note }),
+    },
+  );
+  return response.json();
+}
+
+// ── Subtask dependency-graph edges ────────────────────────────────────────────
+
+/**
+ * List all dependency-graph edges for a task's subtasks.
+ */
+export async function listSubtaskEdges(
+  taskId: string,
+): Promise<{ items: SubtaskEdgeDto[] }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/subtask-edges`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to list subtask edges: ${response.statusText}`);
+  }
+  const json = await response.json();
+  return json.data ?? json;
+}
+
+/**
+ * Create a dependency-graph edge (plain dependency or conditional).
+ */
+export async function createSubtaskEdge(
+  taskId: string,
+  input: {
+    subtaskId: string;
+    dependsOnSubtaskId: string;
+    edgeKind?: 'dependency' | 'conditional';
+    condition?: EdgeCondition | null;
+  },
+): Promise<ApiResult<SubtaskEdgeDto>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/subtask-edges`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  return response.json();
+}
+
+/**
+ * Update an edge's kind/condition (e.g. converting a plain dependency
+ * edge to a conditional one, or vice versa).
+ */
+export async function updateSubtaskEdge(
+  edgeId: string,
+  input: {
+    edgeKind?: 'dependency' | 'conditional';
+    condition?: EdgeCondition | null;
+  },
+): Promise<ApiResult<SubtaskEdgeDto>> {
+  const response = await apiFetch(`${API_BASE}/api/subtask-edges/${edgeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return response.json();
+}
+
+/**
+ * Delete a dependency-graph edge.
+ */
+export async function deleteSubtaskEdge(
+  edgeId: string,
+): Promise<ApiResult<true>> {
+  const response = await apiFetch(`${API_BASE}/api/subtask-edges/${edgeId}`, {
+    method: 'DELETE',
   });
   return response.json();
 }

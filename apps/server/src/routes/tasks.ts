@@ -106,6 +106,44 @@ const assignAgentsSchema = z.object({
   ),
 });
 
+const conditionSchema = z.object({
+  operator: z.enum(['equals', 'contains', 'matches_regex']),
+  value: z.string().min(1),
+});
+
+const loopSchema = z.object({
+  maxIterations: z.number().int().positive(),
+  conditionOperator: z.enum(['equals', 'contains', 'matches_regex']),
+  conditionValue: z.string().min(1),
+});
+
+const createSubtaskSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().min(1),
+  orderIndex: z.number().int().optional(),
+  assignedAgentId: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
+  subtaskKind: z.enum(['agent', 'approval_gate']).optional(),
+  loop: loopSchema.nullable().optional(),
+});
+
+const createSubtaskEdgeSchema = z.object({
+  subtaskId: z.string().min(1),
+  dependsOnSubtaskId: z.string().min(1),
+  edgeKind: z.enum(['dependency', 'conditional']).optional(),
+  condition: conditionSchema.nullable().optional(),
+});
+
+const updateSubtaskEdgeSchema = z.object({
+  edgeKind: z.enum(['dependency', 'conditional']).optional(),
+  condition: conditionSchema.nullable().optional(),
+});
+
+const resolveApprovalSchema = z.object({
+  decision: z.enum(['approved', 'rejected']),
+  note: z.string().optional(),
+});
+
 /**
  * Task routes options
  */
@@ -557,6 +595,61 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   });
 
   /**
+   * POST /tasks/:taskId/subtasks
+   * Manually create a subtask (independent of AI planning). Used by the
+   * workflow editor to add nodes to the subtask graph.
+   */
+  app.post('/tasks/:taskId/subtasks', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    let parsed;
+    try {
+      parsed = createSubtaskSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.createSubtask({
+      taskId,
+      title: parsed.title,
+      description: parsed.description,
+      ...(parsed.orderIndex !== undefined && {
+        orderIndex: parsed.orderIndex,
+      }),
+      ...(parsed.assignedAgentId !== undefined && {
+        assignedAgentId: parsed.assignedAgentId,
+      }),
+      ...(parsed.dependsOn !== undefined && { dependsOn: parsed.dependsOn }),
+      ...(parsed.subtaskKind !== undefined && {
+        subtaskKind: parsed.subtaskKind,
+      }),
+      ...(parsed.loop !== undefined && { loop: parsed.loop }),
+    });
+
+    if (result.ok) {
+      reply.code(201);
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'task.not_found') {
+        reply.code(404);
+      } else if (result.error.code === 'agent.not_found') {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
    * POST /tasks/:id/plan
    * Plan a task (decompose into subtasks using AI)
    */
@@ -697,21 +790,46 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    */
   app.patch<{
     Params: { id: string };
-    Body: { title?: string; description?: string; orderIndex?: number };
+    Body: {
+      title?: string;
+      description?: string;
+      orderIndex?: number;
+      subtaskKind?: 'agent' | 'approval_gate';
+      loop?: {
+        maxIterations: number;
+        conditionOperator: 'equals' | 'contains' | 'matches_regex';
+        conditionValue: string;
+      } | null;
+    };
   }>('/subtasks/:id', async (request, reply) => {
     const { id } = request.params;
     const body = request.body ?? {};
-    const input: { title?: string; description?: string; orderIndex?: number } =
-      {};
+    const input: {
+      title?: string;
+      description?: string;
+      orderIndex?: number;
+      subtaskKind?: 'agent' | 'approval_gate';
+      loop?: {
+        maxIterations: number;
+        conditionOperator: 'equals' | 'contains' | 'matches_regex';
+        conditionValue: string;
+      } | null;
+    } = {};
     if (typeof body.title === 'string') input.title = body.title;
     if (typeof body.description === 'string')
       input.description = body.description;
     if (typeof body.orderIndex === 'number') input.orderIndex = body.orderIndex;
+    if (body.subtaskKind === 'agent' || body.subtaskKind === 'approval_gate') {
+      input.subtaskKind = body.subtaskKind;
+    }
+    if (body.loop !== undefined) input.loop = body.loop;
 
     if (
       input.title === undefined &&
       input.description === undefined &&
-      input.orderIndex === undefined
+      input.orderIndex === undefined &&
+      input.subtaskKind === undefined &&
+      input.loop === undefined
     ) {
       reply.code(400);
       return {
@@ -719,7 +837,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         error: {
           code: 'validation.empty_patch',
           message:
-            'At least one of title, description, or orderIndex must be supplied',
+            'At least one of title, description, orderIndex, subtaskKind, or loop must be supplied',
         },
       };
     }
@@ -744,6 +862,189 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       } else {
         reply.code(500);
       }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * DELETE /subtasks/:id
+   * Delete a subtask. Used by the workflow editor to remove nodes.
+   */
+  app.delete('/subtasks/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.deleteSubtask(id);
+
+    if (result.ok) {
+      return { ok: true };
+    } else {
+      reply.code(404);
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /subtasks/:id/approval/resolve
+   * Resolve a paused approval-gate subtask with a human decision.
+   */
+  app.post<{
+    Params: { id: string };
+    Body: { decision: 'approved' | 'rejected'; note?: string };
+  }>('/subtasks/:id/approval/resolve', async (request, reply) => {
+    const { id } = request.params;
+
+    let parsed;
+    try {
+      parsed = resolveApprovalSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.resolveApproval(
+      id,
+      parsed.decision,
+      parsed.note,
+    );
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else if (
+        result.error.code === 'subtask.not_approval_gate' ||
+        result.error.code === 'subtask.not_awaiting_approval'
+      ) {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  // ── Subtask dependency-graph edges ──────────────────────────────────────────
+
+  /**
+   * GET /tasks/:taskId/subtask-edges
+   * List all dependency-graph edges for a task's subtasks.
+   */
+  app.get('/tasks/:taskId/subtask-edges', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    const result = await taskService.listSubtaskEdges(taskId);
+    if (result.ok) {
+      return { ok: true, data: { items: result.data } };
+    } else {
+      reply.code(result.error.code === 'task.not_found' ? 404 : 500);
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * POST /tasks/:taskId/subtask-edges
+   * Create a dependency-graph edge. Rejects self-edges, edges between
+   * subtasks outside the task, missing conditions on conditional
+   * edges, and edges that would create a cycle.
+   */
+  app.post('/tasks/:taskId/subtask-edges', async (request, reply) => {
+    const { taskId } = request.params as { taskId: string };
+
+    let parsed;
+    try {
+      parsed = createSubtaskEdgeSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.createSubtaskEdge(taskId, parsed);
+
+    if (result.ok) {
+      reply.code(201);
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'subtask.not_found') {
+        reply.code(404);
+      } else if (
+        result.error.code === 'edge.self_edge' ||
+        result.error.code === 'edge.condition_required' ||
+        result.error.code === 'edge.would_create_cycle'
+      ) {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * PATCH /subtask-edges/:id
+   * Update an edge's kind/condition (e.g. converting a plain
+   * dependency edge to a conditional one, or vice versa).
+   */
+  app.patch('/subtask-edges/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    let parsed;
+    try {
+      parsed = updateSubtaskEdgeSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.updateSubtaskEdge(id, parsed);
+
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    } else {
+      if (result.error.code === 'edge.not_found') {
+        reply.code(404);
+      } else if (result.error.code === 'edge.condition_required') {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
+  });
+
+  /**
+   * DELETE /subtask-edges/:id
+   */
+  app.delete('/subtask-edges/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const result = await taskService.deleteSubtaskEdge(id);
+
+    if (result.ok) {
+      return { ok: true };
+    } else {
+      reply.code(404);
       return { ok: false, error: result.error };
     }
   });
