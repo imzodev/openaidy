@@ -24,6 +24,61 @@
   const _pendingRequests = new Map();
   const _readyCallbacks = [];
 
+  // ── Host theme sync ─────────────────────────────────────────────────────
+  // Every addon that loads this file — whether scaffolded via `openaidy
+  // addon create` or generated ad hoc by an agent — should follow the host
+  // app's light/dark theme instead of carrying its own. The host
+  // (AddonViewPage) posts OPENAIDY_INIT once on load and OPENAIDY_THEME_CHANGED
+  // whenever the user toggles the theme; applyTheme() mirrors both onto this
+  // document so an addon using Tailwind `dark:` classes (the common case,
+  // since addon_create injects the Tailwind CDN) or referencing the
+  // `--bg-primary`/`--text-primary`/etc. CSS custom properties tracks the
+  // host automatically, live, with no addon-authored code required.
+  //
+  // Fallback tokens mirror the host's dark palette (apps/web/src/index.css)
+  // so an addon that paints before OPENAIDY_INIT arrives still looks
+  // reasonable instead of flashing unstyled/default browser colors.
+  var FALLBACK_THEME_TOKENS = {
+    '--primary': '#3b82f6',
+    '--primary-hover': '#2563eb',
+    '--primary-disabled': '#93c5fd',
+    '--danger': '#ef4444',
+    '--success': '#22c55e',
+    '--text-primary': '#f3f4f6',
+    '--text-secondary': '#d1d5db',
+    '--text-tertiary': '#9ca3af',
+    '--text-muted': '#6b7280',
+    '--text-inverse': '#f9fafb',
+    '--bg-primary': '#111827',
+    '--bg-secondary': '#1f2937',
+    '--bg-tertiary': '#374151',
+    '--bg-elevated': '#1f2937',
+    '--border-primary': '#374151',
+    '--border-secondary': '#4b5563',
+  };
+
+  function _applyTheme(theme) {
+    if (!theme) return;
+    var tokens = theme.tokens || {};
+    var root = document.documentElement;
+    var keys = Object.keys(FALLBACK_THEME_TOKENS);
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      root.style.setProperty(k, tokens[k] || FALLBACK_THEME_TOKENS[k]);
+    }
+    // Tailwind's `dark:` variants (and the SDK's own sdk.ui.* components,
+    // which use them) key off this class — mirror the host's so they
+    // resolve correctly inside the iframe.
+    if (theme.mode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }
+
+  // Paint something reasonable immediately, before OPENAIDY_INIT arrives.
+  _applyTheme({ mode: 'dark', tokens: FALLBACK_THEME_TOKENS });
+
   // Forward CSP violations to the parent app so it can show a warning banner.
   // Violations that fire before OPENAIDY_INIT (nonce not yet known) are buffered
   // and flushed once the nonce arrives.
@@ -56,6 +111,11 @@
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.type === 'OPENAIDY_INIT') {
+      // The host sends OPENAIDY_INIT more than once by design (on iframe
+      // load, then again on ADDON_READY) — apply the theme every time
+      // rather than gating it on `_ready`, since a later INIT can carry a
+      // newer palette than the first.
+      _applyTheme(msg.theme);
       _apiBase = msg.apiBase ?? null;
       _nonce = msg.nonce ?? null;
       _ready = true;
@@ -71,6 +131,13 @@
       return;
     }
 
+    if (msg.type === 'OPENAIDY_THEME_CHANGED') {
+      // Live update: fires whenever the user toggles the host's theme
+      // while the addon is open, so it follows without a reload.
+      _applyTheme(msg.theme);
+      return;
+    }
+
     if (msg.type === 'OPENAIDY_RESPONSE') {
       const pending = _pendingRequests.get(msg.requestId);
       if (!pending) return;
@@ -82,6 +149,13 @@
       }
     }
   });
+
+  // Timing safety: the host also sends OPENAIDY_INIT on the iframe's `load`
+  // event as a fallback, but that can race with slower-loading addon pages.
+  // Signaling readiness explicitly once this script has registered its
+  // listener guarantees a prompt (re-)INIT — receiving it twice is safe
+  // (see above).
+  window.parent.postMessage({ type: 'ADDON_READY' }, '*');
 
   // Default timeout for quick proxied calls (list/get/storage). Kept short so
   // a genuinely lost response surfaces fast rather than hanging the UI.
