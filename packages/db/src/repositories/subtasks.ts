@@ -18,7 +18,6 @@ export class SubtasksRepository {
    */
   async create(input: {
     taskId: string;
-    parentSubtaskId?: string;
     title: string;
     description: string;
     orderIndex?: number;
@@ -30,7 +29,6 @@ export class SubtasksRepository {
       .values({
         id: nanoid(),
         taskId: input.taskId,
-        parentSubtaskId: input.parentSubtaskId ?? null,
         title: input.title,
         description: input.description,
         status: 'pending',
@@ -66,6 +64,52 @@ export class SubtasksRepository {
       .from(schema.subtasks)
       .where(eq(schema.subtasks.taskId, taskId))
       .orderBy(asc(schema.subtasks.orderIndex));
+  }
+
+  /**
+   * Add dependency edges for a subtask: `subtaskId` depends on each of
+   * `dependsOnSubtaskIds` and cannot start until they all complete.
+   * Self-edges (a subtask depending on itself) are dropped rather than
+   * inserted — they would deadlock the subtask forever. Also enforced
+   * at the DB level via a CHECK constraint as defense in depth.
+   */
+  async addEdges(
+    subtaskId: string,
+    dependsOnSubtaskIds: string[],
+  ): Promise<void> {
+    const filtered = dependsOnSubtaskIds.filter((id) => id !== subtaskId);
+    if (filtered.length === 0) return;
+    const now = new Date();
+    await this.db.insert(schema.subtaskEdges).values(
+      filtered.map((dependsOnSubtaskId) => ({
+        id: nanoid(),
+        subtaskId,
+        dependsOnSubtaskId,
+        edgeKind: 'dependency',
+        createdAt: now,
+      })),
+    );
+  }
+
+  /**
+   * List all dependency edges for every subtask in a task, in one
+   * query (joined through `subtasks` on `subtaskId` since edges don't
+   * store `taskId` directly).
+   */
+  async listEdgesByTask(
+    taskId: string,
+  ): Promise<{ subtaskId: string; dependsOnSubtaskId: string }[]> {
+    return this.db
+      .select({
+        subtaskId: schema.subtaskEdges.subtaskId,
+        dependsOnSubtaskId: schema.subtaskEdges.dependsOnSubtaskId,
+      })
+      .from(schema.subtaskEdges)
+      .innerJoin(
+        schema.subtasks,
+        eq(schema.subtaskEdges.subtaskId, schema.subtasks.id),
+      )
+      .where(eq(schema.subtasks.taskId, taskId));
   }
 
   /**

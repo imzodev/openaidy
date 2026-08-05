@@ -7,6 +7,7 @@ import type {
 import type { AgentRegistry } from '../../agents';
 import { createLogger } from '../../lib/logger';
 import type { CreateSubtaskInput, ServiceResult } from '../../types';
+import { isSubtaskExecutable } from '../execution/subtask-graph';
 
 export class SubtaskOperations {
   constructor(
@@ -41,11 +42,25 @@ export class SubtaskOperations {
       }
     }
     const subtask = await this.subtasksRepo.create(input);
+    if (input.dependsOn && input.dependsOn.length > 0) {
+      await this.subtasksRepo.addEdges(subtask.id, input.dependsOn);
+    }
     return { ok: true, data: subtask };
   }
 
-  async getSubtasks(taskId: string): Promise<Subtask[]> {
-    return this.subtasksRepo.listByTask(taskId);
+  async getSubtasks(
+    taskId: string,
+  ): Promise<(Subtask & { dependsOnSubtaskIds: string[] })[]> {
+    const [subtasks, edges] = await Promise.all([
+      this.subtasksRepo.listByTask(taskId),
+      this.subtasksRepo.listEdgesByTask(taskId),
+    ]);
+    return subtasks.map((subtask) => ({
+      ...subtask,
+      dependsOnSubtaskIds: edges
+        .filter((e) => e.subtaskId === subtask.id)
+        .map((e) => e.dependsOnSubtaskId),
+    }));
   }
 
   async updateSubtask(
@@ -160,12 +175,10 @@ export class SubtaskOperations {
 
   async getNextExecutableSubtasks(taskId: string): Promise<Subtask[]> {
     const subtasks = await this.subtasksRepo.listByTask(taskId);
-    return subtasks.filter((subtask) => {
-      if (subtask.status !== 'pending') return false;
-      if (!subtask.parentSubtaskId) return true;
-      const parent = subtasks.find((s) => s.id === subtask.parentSubtaskId);
-      return parent?.status === 'completed';
-    });
+    const edges = await this.subtasksRepo.listEdgesByTask(taskId);
+    return subtasks
+      .filter((s) => s.status === 'pending')
+      .filter((subtask) => isSubtaskExecutable(subtask, subtasks, edges));
   }
 
   async getSubtaskBySessionId(
