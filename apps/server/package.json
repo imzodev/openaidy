@@ -24,7 +24,7 @@
     "@openaidy/providers": "workspace:*",
     "@openaidy/runtime": "workspace:*",
     "@openaidy/shared-types": "workspace:*",
-    "@whiskeysockets/baileys": "7.0.0-rc10",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "adm-zip": "^0.6.0",
     "archiver": "^8.0.0",
     "croner": "^10.0.1",
