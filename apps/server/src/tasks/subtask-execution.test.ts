@@ -731,7 +731,17 @@ describe('Subtask Execution', () => {
 
       const [messageInput] =
         mockSessionService.submitMessageStreaming.mock.calls[0]!;
-      expect(messageInput.content.length).toBeLessThan(longReason.length);
+      // Pin the exact bound (not just "shorter than input") so shrinking the
+      // cap, or dropping the slice entirely, fails this test. Extract the
+      // embedded reason rather than counting 'x' across the whole message,
+      // since the fixed wording around it ("execute") also contains an x.
+      const match = messageInput.content.match(
+        /missing:\n\n([\s\S]*?)\n\nAddress this directly/,
+      );
+      expect(match).not.toBeNull();
+      expect(match![1]).toBe(
+        `${'x'.repeat(1500)}\n\n[…reason truncated at 1500 chars…]`,
+      );
     });
   });
 });

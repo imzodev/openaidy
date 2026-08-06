@@ -27,6 +27,10 @@ import {
   getDependencySubtasks,
   type SubtaskDependencyEdge,
 } from './subtask-graph';
+import {
+  parseVerificationVerdict,
+  buildRetryMessage,
+} from './verification-verdict';
 
 const MAX_RETRIES = 5;
 const STUCK_TIMEOUT_MINUTES = 3;
@@ -543,19 +547,22 @@ export class TaskExecution {
     }
 
     const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
-    this.logger.info('Triggering retry for stuck subtask', {
-      subtaskId,
-      sessionId,
-      agentId,
-      hasReason: Boolean(reason),
-    });
+    this.logger.info(
+      reason
+        ? 'Triggering verification-driven subtask retry'
+        : 'Triggering stuck-subtask retry',
+      {
+        subtaskId,
+        sessionId,
+        agentId,
+        hasReason: Boolean(reason),
+      },
+    );
 
     // When a verification verdict supplied a reason, tell the agent
     // specifically what was wrong or missing instead of the generic
     // "try again" — without it, a retry just repeats the same mistake.
-    const content = reason
-      ? `Your previous attempt at this subtask was reviewed and marked incomplete. Here is specifically what was wrong or missing:\n\n${reason.slice(0, RETRY_REASON_MAX_CHARS)}\n\nAddress this directly, then deliver the actual output requested. Do not ask what to do — execute the task directly.`
-      : 'Please continue and complete this subtask. Focus on delivering the actual output requested. Do not ask what to do — execute the task directly.';
+    const content = buildRetryMessage(reason, RETRY_REASON_MAX_CHARS);
 
     const messageInput: SubmitMessageStreamingInput = {
       sessionId,
@@ -852,28 +859,21 @@ export class TaskExecution {
     const rawContent = (lastMsg as { content?: string })?.content ?? '';
     const content = stripThinking(rawContent);
 
-    let isComplete = false;
-    let parsedVerdict: { verdict?: string; reason?: string } = {};
-
-    try {
-      const jsonMatch = content.match(/\{[^}]+\}/);
-      if (jsonMatch) {
-        parsedVerdict = JSON.parse(jsonMatch[0]);
-        isComplete = parsedVerdict.verdict?.toUpperCase() === 'COMPLETED';
-      } else {
-        isComplete =
-          /\bCOMPLETED\b/i.test(content) && !/\bINCOMPLETE\b/i.test(content);
-      }
-    } catch (_e) {
-      isComplete =
-        /\bCOMPLETED\b/i.test(content) && !/\bINCOMPLETE\b/i.test(content);
-    }
+    const {
+      isComplete,
+      reason: verdictReason,
+      rawVerdict,
+    } = parseVerificationVerdict(content);
 
     this.logger.info('Subtask verification result received', {
       subtaskId,
       isComplete,
-      verdict: parsedVerdict,
-      verificationSummary: content,
+      verdict: rawVerdict ?? null,
+      verificationSummaryLength: content.length,
+    });
+    this.logger.debug('Subtask verification raw response', {
+      subtaskId,
+      content,
     });
 
     if (isComplete) {
@@ -893,7 +893,7 @@ export class TaskExecution {
       if (hasConcreteArtifacts(originalResult)) {
         this.logger.warn(
           'Verifier said INCOMPLETE but executor response contains concrete success artifacts; overriding to COMPLETED to avoid duplicate side effects',
-          { subtaskId, verdict: parsedVerdict },
+          { subtaskId, verdict: rawVerdict ?? null },
         );
         await this.completeSubtask(
           subtaskId,
@@ -901,17 +901,11 @@ export class TaskExecution {
           verificationSessionId,
         );
       } else {
-        // Prefer the verifier's structured reason; if JSON parsing failed
-        // (or the model omitted it), fall back to its raw response text
-        // rather than telling the agent nothing about what was wrong.
-        const retryReason =
-          parsedVerdict.reason?.trim() ||
-          content.slice(0, RETRY_REASON_MAX_CHARS).trim();
         this.logger.info('Verification says incomplete, triggering retry', {
           subtaskId,
-          retryReason,
+          reasonLength: verdictReason.length,
         });
-        await this.triggerSubtaskRetry(subtaskId, retryReason);
+        await this.triggerSubtaskRetry(subtaskId, verdictReason);
       }
     }
   }
