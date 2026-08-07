@@ -61,7 +61,11 @@
     if (!theme) return;
     var tokens = theme.tokens || {};
     var root = document.documentElement;
-    var keys = Object.keys(FALLBACK_THEME_TOKENS);
+    // Iterate the union of the fallback's keys and whatever the host
+    // actually sent, not just the fallback's — otherwise a token the host
+    // adds later (packages/shared-types ADDON_THEME_TOKEN_NAMES) is silently
+    // dropped here until this fallback list is updated to match.
+    var keys = Object.keys(Object.assign({}, FALLBACK_THEME_TOKENS, tokens));
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
       root.style.setProperty(k, tokens[k] || FALLBACK_THEME_TOKENS[k]);
@@ -77,7 +81,25 @@
   }
 
   // Paint something reasonable immediately, before OPENAIDY_INIT arrives.
-  _applyTheme({ mode: 'dark', tokens: FALLBACK_THEME_TOKENS });
+  // Probe for the host's likely mode instead of assuming dark, so a
+  // light-mode host doesn't see a dark flash that snaps to light once the
+  // real INIT lands. Same-origin localStorage works because this script only
+  // ever loads inside an OpenAidy-hosted addon iframe, and mirrors the
+  // host's own resolution (apps/web/src/lib/theme.tsx): an explicit
+  // 'dark'/'light' choice wins, 'system' (or no choice yet) falls back to
+  // the OS preference.
+  var _storedTheme =
+    typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
+  var _prefersDark =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var _initialMode =
+    document.documentElement.classList.contains('dark') ||
+    _storedTheme === 'dark' ||
+    ((_storedTheme === 'system' || !_storedTheme) && _prefersDark)
+      ? 'dark'
+      : 'light';
+  _applyTheme({ mode: _initialMode, tokens: FALLBACK_THEME_TOKENS });
 
   // Forward CSP violations to the parent app so it can show a warning banner.
   // Violations that fire before OPENAIDY_INIT (nonce not yet known) are buffered
@@ -107,6 +129,13 @@
 
   // Listen for INIT message from parent
   window.addEventListener('message', function (event) {
+    // Mirror the host's own check (AddonViewPage validates
+    // event.source === iframeRef.contentWindow): only the page that framed
+    // this addon may drive it. Without this, any window holding a reference
+    // to this iframe's WindowProxy (a sibling addon iframe, window.opener, a
+    // nested iframe this addon itself creates) could post OPENAIDY_INIT /
+    // OPENAIDY_THEME_CHANGED / OPENAIDY_RESPONSE and have it acted on.
+    if (event.source !== window.parent) return;
     const msg = event.data;
     if (!msg || typeof msg !== 'object') return;
 
