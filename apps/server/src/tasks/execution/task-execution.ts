@@ -870,10 +870,7 @@ export class TaskExecution {
       isComplete,
       verdict: rawVerdict ?? null,
       verificationSummaryLength: content.length,
-    });
-    this.logger.debug('Subtask verification raw response', {
-      subtaskId,
-      content,
+      verificationSummaryPreview: content.slice(0, 400),
     });
 
     if (isComplete) {
@@ -904,6 +901,7 @@ export class TaskExecution {
         this.logger.info('Verification says incomplete, triggering retry', {
           subtaskId,
           reasonLength: verdictReason.length,
+          reasonPreview: verdictReason.slice(0, 400),
         });
         await this.triggerSubtaskRetry(subtaskId, verdictReason);
       }
