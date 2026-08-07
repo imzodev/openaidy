@@ -93,6 +93,20 @@ describe('Tasks Schema', () => {
       expect(columns).toContain('createdAt');
       expect(columns).toContain('updatedAt');
     });
+
+    it('should have workflow-graph columns for kind/loop/approval', () => {
+      const columns = Object.keys(subtasks);
+      expect(columns).toContain('subtaskKind');
+      expect(columns).toContain('loopMaxIterations');
+      expect(columns).toContain('loopConditionOperator');
+      expect(columns).toContain('loopConditionValue');
+      expect(columns).toContain('loopIterationCount');
+      expect(columns).toContain('loopLastResult');
+      expect(columns).toContain('awaitingApprovalSince');
+      expect(columns).toContain('approvalDecision');
+      expect(columns).toContain('approvalNote');
+      expect(columns).toContain('approvedBy');
+    });
   });
 
   describe('subtaskEdges table', () => {
@@ -103,6 +117,12 @@ describe('Tasks Schema', () => {
       expect(columns).toContain('dependsOnSubtaskId');
       expect(columns).toContain('edgeKind');
       expect(columns).toContain('createdAt');
+    });
+
+    it('should have condition columns for conditional edges', () => {
+      const columns = Object.keys(subtaskEdges);
+      expect(columns).toContain('conditionOperator');
+      expect(columns).toContain('conditionValue');
     });
   });
 

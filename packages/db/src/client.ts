@@ -230,6 +230,16 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       result TEXT,
       retry_count INTEGER NOT NULL DEFAULT 0,
       pending_verification_result TEXT,
+      subtask_kind TEXT NOT NULL DEFAULT 'agent',
+      loop_max_iterations INTEGER,
+      loop_condition_operator TEXT,
+      loop_condition_value TEXT,
+      loop_iteration_count INTEGER NOT NULL DEFAULT 0,
+      loop_last_result TEXT,
+      awaiting_approval_since TEXT,
+      approval_decision TEXT,
+      approval_note TEXT,
+      approved_by TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -245,8 +255,12 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
       depends_on_subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
       edge_kind TEXT NOT NULL DEFAULT 'dependency',
+      condition_operator TEXT,
+      condition_value TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (subtask_id <> depends_on_subtask_id)
+      CHECK (subtask_id <> depends_on_subtask_id),
+      CHECK (edge_kind IN ('dependency', 'conditional')),
+      CHECK (edge_kind <> 'conditional' OR (condition_operator IS NOT NULL AND condition_value IS NOT NULL))
     );
 
     CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
@@ -695,8 +709,12 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
       depends_on_subtask_id TEXT NOT NULL REFERENCES subtasks(id) ON DELETE CASCADE,
       edge_kind TEXT NOT NULL DEFAULT 'dependency',
+      condition_operator TEXT,
+      condition_value TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CHECK (subtask_id <> depends_on_subtask_id)
+      CHECK (subtask_id <> depends_on_subtask_id),
+      CHECK (edge_kind IN ('dependency', 'conditional')),
+      CHECK (edge_kind <> 'conditional' OR (condition_operator IS NOT NULL AND condition_value IS NOT NULL))
     );
 
     CREATE INDEX IF NOT EXISTS subtask_edges_subtask_id_idx ON subtask_edges(subtask_id);
@@ -716,6 +734,51 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
       FROM subtasks
       WHERE parent_subtask_id IS NOT NULL AND parent_subtask_id <> id;
     `);
+  }
+
+  // Migration: workflow graph foundation — conditional edges, bounded
+  // loops, human-approval gates (0016_workflow_conditions_loops_approval).
+  const subtaskColumnDefaults: Array<[string, string]> = [
+    ['subtask_kind', `TEXT NOT NULL DEFAULT 'agent'`],
+    ['loop_max_iterations', 'INTEGER'],
+    ['loop_condition_operator', 'TEXT'],
+    ['loop_condition_value', 'TEXT'],
+    ['loop_iteration_count', 'INTEGER NOT NULL DEFAULT 0'],
+    ['loop_last_result', 'TEXT'],
+    ['awaiting_approval_since', 'TEXT'],
+    ['approval_decision', 'TEXT'],
+    ['approval_note', 'TEXT'],
+    ['approved_by', 'TEXT'],
+  ];
+  for (const [column, ddl] of subtaskColumnDefaults) {
+    if (!tableInfo.some((col) => col.name === column)) {
+      sqlite.exec(`ALTER TABLE subtasks ADD COLUMN ${column} ${ddl}`);
+    }
+  }
+  const hasAwaitingApprovalIdx = subtaskIndices.some(
+    (idx) => idx.name === 'subtasks_awaiting_approval_idx',
+  );
+  if (!hasAwaitingApprovalIdx) {
+    sqlite.exec(
+      `CREATE INDEX subtasks_awaiting_approval_idx ON subtasks(awaiting_approval_since) WHERE awaiting_approval_since IS NOT NULL`,
+    );
+  }
+
+  // NOTE: an existing subtask_edges table (created before this migration,
+  // when it had no edge_kind/condition CHECK constraints) only gets the
+  // new columns added here — SQLite's ALTER TABLE cannot add a CHECK
+  // constraint to an existing table. Fresh tables created by either
+  // CREATE TABLE statement above (in initializeSqliteSchema or the block
+  // just above this one) get all three constraints from the start; only
+  // pre-existing SQLite databases have this gap, enforced app-side only.
+  const edgeInfo = sqlite.pragma('table_info(subtask_edges)') as Array<{
+    name: string;
+  }>;
+  if (!edgeInfo.some((col) => col.name === 'condition_operator')) {
+    sqlite.exec(`ALTER TABLE subtask_edges ADD COLUMN condition_operator TEXT`);
+  }
+  if (!edgeInfo.some((col) => col.name === 'condition_value')) {
+    sqlite.exec(`ALTER TABLE subtask_edges ADD COLUMN condition_value TEXT`);
   }
 }
 
@@ -781,6 +844,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0015_subtask_edges.sql'),
     'utf-8',
   );
+  const workflowMigrationSql = readFileSync(
+    resolve(drizzleDir, '0016_workflow_conditions_loops_approval.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -789,6 +856,7 @@ export async function createDatabaseClient(
     await client.query(sessionRunsUsageMigrationSql);
     await client.query(sessionFavoritesMigrationSql);
     await client.query(subtaskEdgesMigrationSql);
+    await client.query(workflowMigrationSql);
   } finally {
     client.release();
   }

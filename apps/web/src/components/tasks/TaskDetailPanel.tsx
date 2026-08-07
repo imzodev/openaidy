@@ -26,6 +26,8 @@ import {
 import { readWorkspaceFile } from '../../lib/api';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
+import { WorkflowEditor } from './workflow/WorkflowEditor';
+import { Tabs } from '../ui/Tabs';
 import { ScheduleDisplay } from '../common/ScheduleDisplay';
 import type { TaskSchedule } from '../../lib/api-tasks';
 import type {
@@ -110,6 +112,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   const [editDescription, setEditDescription] = createSignal('');
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [isReplanning, setIsReplanning] = createSignal(false);
+  const [subtaskView, setSubtaskView] = createSignal<'list' | 'flow'>('list');
   const [isPausingResuming, setIsPausingResuming] = createSignal(false);
   const [isStopping, setIsStopping] = createSignal(false);
   const [deliverableModal, setDeliverableModal] = createSignal<{
@@ -389,7 +392,13 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   }
 
   return (
-    <div class="task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      class={`task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full overflow-y-auto ${
+        subtaskView() === 'flow'
+          ? 'max-w-[95vw] h-[85vh]'
+          : 'max-w-2xl max-h-[90vh]'
+      }`}
+    >
       {/* Header */}
       <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
         <Show
@@ -696,14 +705,39 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
           {/* Subtasks (if planning enabled) */}
           <Show when={task()?.planningEnabled}>
             <div>
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Subtasks
-              </h3>
-              <SubtaskList
-                subtasks={subtasks()}
-                agents={props.agents}
-                onSubtaskUpdate={loadTaskData}
-              />
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Subtasks
+                </h3>
+                <div class="scale-90 origin-right">
+                  <Tabs
+                    tabs={[
+                      { id: 'list', label: 'List' },
+                      { id: 'flow', label: 'Flow' },
+                    ]}
+                    activeTab={subtaskView}
+                    onTabChange={setSubtaskView}
+                  />
+                </div>
+              </div>
+              <Show
+                when={subtaskView() === 'flow'}
+                fallback={
+                  <SubtaskList
+                    subtasks={subtasks()}
+                    agents={props.agents}
+                    onSubtaskUpdate={loadTaskData}
+                  />
+                }
+              >
+                <div class="h-[500px] rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <WorkflowEditor
+                    taskId={props.taskId}
+                    agents={props.agents}
+                    isTaskRunning={task()?.status === 'in_progress'}
+                  />
+                </div>
+              </Show>
             </div>
           </Show>
 

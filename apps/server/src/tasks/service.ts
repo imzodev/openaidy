@@ -17,6 +17,7 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
   CreateSubtaskInput,
+  UpdateSubtaskInput,
   TaskWithDetails,
   KanbanBoard,
   ServiceResult,
@@ -27,6 +28,7 @@ export type {
   CreateTaskInput,
   UpdateTaskInput,
   CreateSubtaskInput,
+  UpdateSubtaskInput,
   TaskWithDetails,
   KanbanBoard,
   ServiceResult,
@@ -189,13 +191,39 @@ export class TaskService {
 
   async updateSubtask(
     id: string,
-    input: { title?: string; description?: string; orderIndex?: number },
+    input: UpdateSubtaskInput,
   ): Promise<ServiceResult<Subtask>> {
     return this.subtaskOps.updateSubtask(id, input);
   }
 
   async deleteSubtask(id: string): Promise<ServiceResult<true>> {
     return this.subtaskOps.deleteSubtask(id);
+  }
+
+  async listSubtaskEdges(
+    taskId: string,
+  ): ReturnType<SubtaskOperations['listSubtaskEdges']> {
+    return this.subtaskOps.listSubtaskEdges(taskId);
+  }
+
+  async createSubtaskEdge(
+    taskId: string,
+    input: Parameters<SubtaskOperations['createSubtaskEdge']>[1],
+  ): ReturnType<SubtaskOperations['createSubtaskEdge']> {
+    return this.subtaskOps.createSubtaskEdge(taskId, input);
+  }
+
+  async updateSubtaskEdge(
+    id: string,
+    input: Parameters<SubtaskOperations['updateSubtaskEdge']>[1],
+  ): ReturnType<SubtaskOperations['updateSubtaskEdge']> {
+    return this.subtaskOps.updateSubtaskEdge(id, input);
+  }
+
+  async deleteSubtaskEdge(
+    id: string,
+  ): ReturnType<SubtaskOperations['deleteSubtaskEdge']> {
+    return this.subtaskOps.deleteSubtaskEdge(id);
   }
 
   async updateSubtaskStatus(
@@ -265,7 +293,7 @@ export class TaskService {
   async executeSubtask(
     subtaskId: string,
     options: { sessionId?: string } = {},
-  ): Promise<ServiceResult<{ sessionId: string }>> {
+  ): Promise<ServiceResult<{ sessionId: string | null }>> {
     return this.execution.executeSubtask(subtaskId, options);
   }
 
@@ -295,6 +323,20 @@ export class TaskService {
     error: string,
   ): Promise<ServiceResult<Subtask>> {
     return this.execution.failSubtask(subtaskId, error);
+  }
+
+  async resolveApproval(
+    subtaskId: string,
+    decision: 'approved' | 'rejected',
+    note?: string,
+    approvedBy?: string,
+  ): Promise<ServiceResult<Subtask>> {
+    return this.execution.resolveApproval(
+      subtaskId,
+      decision,
+      note,
+      approvedBy,
+    );
   }
 
   async checkStuckSubtasks(): Promise<void> {
