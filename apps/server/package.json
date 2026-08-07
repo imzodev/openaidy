@@ -52,6 +52,7 @@
     "@types/semver": "^7.5.8",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.30.6",
+    "jsdom": "^28.1.0",
     "ws": "^8.20.0"
   },
   "exports": {

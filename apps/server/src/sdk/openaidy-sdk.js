@@ -15,7 +15,7 @@
 (function (global) {
   'use strict';
 
-  var SDK_VERSION = '0.3.1';
+  var SDK_VERSION = '0.4.0';
   console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
 
   let _apiBase = null;
@@ -59,7 +59,15 @@
 
   function _applyTheme(theme) {
     if (!theme) return;
-    var tokens = theme.tokens || {};
+    // theme.tokens can arrive as anything a host bug (or a malicious
+    // sibling frame, pre event.source-check) might send — guard against
+    // non-plain-object values reaching Object.assign/property lookups below.
+    var tokens =
+      theme.tokens &&
+      typeof theme.tokens === 'object' &&
+      !Array.isArray(theme.tokens)
+        ? theme.tokens
+        : {};
     var root = document.documentElement;
     // Iterate the union of the fallback's keys and whatever the host
     // actually sent, not just the fallback's — otherwise a token the host
@@ -68,7 +76,14 @@
     var keys = Object.keys(Object.assign({}, FALLBACK_THEME_TOKENS, tokens));
     for (var i = 0; i < keys.length; i++) {
       var k = keys[i];
-      root.style.setProperty(k, tokens[k] || FALLBACK_THEME_TOKENS[k]);
+      // Explicit null/undefined check, not `||` — a host intentionally
+      // unsetting a token with '' must not silently fall back to the
+      // (usually dark) default value.
+      var v = tokens[k];
+      root.style.setProperty(
+        k,
+        v !== undefined && v !== null ? v : FALLBACK_THEME_TOKENS[k],
+      );
     }
     // Tailwind's `dark:` variants (and the SDK's own sdk.ui.* components,
     // which use them) key off this class — mirror the host's so they
