@@ -278,8 +278,9 @@ export class TaskService {
 
   async triggerSubtaskRetry(
     subtaskId: string,
+    reason?: string,
   ): Promise<ServiceResult<{ sessionId: string }>> {
-    return this.execution.triggerSubtaskRetry(subtaskId);
+    return this.execution.triggerSubtaskRetry(subtaskId, reason);
   }
 
   async completeSubtask(
