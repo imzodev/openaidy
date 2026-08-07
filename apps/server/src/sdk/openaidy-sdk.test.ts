@@ -40,7 +40,7 @@ type SdkWindow = {
   };
   MessageEvent: typeof MessageEvent;
   dispatchEvent: (event: Event) => void;
-  parent: unknown;
+  parent: Window;
   localStorage: { setItem: (k: string, v: string) => void };
   matchMedia?: (query: string) => { matches: boolean };
 };
@@ -190,7 +190,7 @@ describe('openaidy-sdk.js theme sync', () => {
     window.dispatchEvent(
       new window.MessageEvent('message', {
         data: { type: 'OPENAIDY_INIT', theme: { mode: 'dark', tokens: {} } },
-        source: foreignSource as never,
+        source: foreignSource as unknown as MessageEventSource,
       }),
     );
     // No dark class was ever applied because the message was rejected before
