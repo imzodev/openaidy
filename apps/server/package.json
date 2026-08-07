@@ -24,7 +24,7 @@
     "@openaidy/providers": "workspace:*",
     "@openaidy/runtime": "workspace:*",
     "@openaidy/shared-types": "workspace:*",
-    "@whiskeysockets/baileys": "7.0.0-rc10",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "adm-zip": "^0.6.0",
     "archiver": "^8.0.0",
     "croner": "^10.0.1",
@@ -48,10 +48,12 @@
     "@types/adm-zip": "^0.5.8",
     "@types/archiver": "^8.0.0",
     "@types/html-to-text": "^9.0.4",
+    "@types/jsdom": "^28.0.3",
     "@types/qrcode": "^1.5.6",
     "@types/semver": "^7.5.8",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.30.6",
+    "jsdom": "^28.1.0",
     "ws": "^8.20.0"
   },
   "exports": {

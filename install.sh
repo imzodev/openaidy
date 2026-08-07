@@ -3,8 +3,8 @@
 # OpenAidy Installer
 # ============================================================================
 # Installs OpenAidy on Linux, macOS, and WSL2 from the prebuilt npm package
-# (@openaidy/app). No git clone, no source build — just Node + ripgrep, then
-# `npm install -g @openaidy/app`.
+# (@openaidy/app). No git clone, no source build — just Node + ripgrep + uv +
+# git, then `npm install -g @openaidy/app`.
 #
 # Usage:
 #   curl -fsSL https://openaidy.com/install.sh | bash
@@ -87,15 +87,42 @@ detect_os() {
         fi
         if [ -f /etc/os-release ]; then
             DISTRO=$(. /etc/os-release; echo "$ID")
+            # Map the distro's ID onto the package-manager family it inherits.
+            # Enumerating every Ubuntu/Debian/RHEL/Arch derivative (Linux Mint,
+            # Pop!_OS, elementary, Zorin, Kali, Raspbian, Fedora, CentOS, RHEL,
+            # Rocky, Manjaro, Endeavour, …) is brittle — the list grows every
+            # year. /etc/os-release carries an ID_LIKE field precisely so the
+            # installer can ask "is this Debian-family?" without enumerating
+            # every derivative; fall back to ID for the well-known names and
+            # to ID_LIKE otherwise.
+            local id_like=""
+            id_like=$(. /etc/os-release; echo "$ID_LIKE")
+            case "$DISTRO" in
+                ubuntu|debian)            DISTRO_FAMILY="debian" ;;
+                fedora|centos|rhel|rocky|almalinux) DISTRO_FAMILY="rhel" ;;
+                arch)                     DISTRO_FAMILY="arch" ;;
+                *)
+                    case " $id_like " in
+                        *" ubuntu "*|*" debian "*) DISTRO_FAMILY="debian" ;;
+                        *" rhel "*|*" fedora "*)   DISTRO_FAMILY="rhel" ;;
+                        *" arch "*)               DISTRO_FAMILY="arch" ;;
+                        *)                        DISTRO_FAMILY="unknown" ;;
+                    esac
+                    ;;
+            esac
         elif [ -f /etc/redhat-release ]; then
             DISTRO="fedora"
+            DISTRO_FAMILY="rhel"
         elif [ -f /etc/debian_version ]; then
             DISTRO="debian"
+            DISTRO_FAMILY="debian"
         else
             DISTRO="unknown"
+            DISTRO_FAMILY="unknown"
         fi
     elif [ "$OS" = "macos" ]; then
         DISTRO="macos"
+        DISTRO_FAMILY="macos"
     fi
 }
 
@@ -254,12 +281,12 @@ install_ripgrep() {
             if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
                 command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
             fi
-            case "$DISTRO" in
-                ubuntu|debian)
+            case "$DISTRO_FAMILY" in
+                debian)
                     log_info "Installing ripgrep via apt..."
                     $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ripgrep >/dev/null 2>&1 || true
                     ;;
-                fedora)
+                rhel)
                     log_info "Installing ripgrep via dnf..."
                     $sudo_cmd dnf install -y ripgrep >/dev/null 2>&1 || true
                     ;;
@@ -389,6 +416,95 @@ check_uv() {
 }
 
 # ============================================================================
+# git Provisioning
+# ============================================================================
+# Required as a defense-in-depth prerequisite. npm's @npmcli/git module spawns
+# `git` to resolve git+https / github: dependencies that some packages still
+# use (e.g. historical @whiskeysockets/baileys releases pinned libsignal to
+# git+https://github.com/whiskeysockets/libsignal-node.git, which broke npm
+# install on bare boxes without git). Even after bumping such deps to registry
+# releases, a future transitive dep could reintroduce the same requirement —
+# so the installer provisions git instead of asking the user to.
+#
+# Scope: the git binary only. No git repo is cloned, no source is fetched —
+# this matches the installer's "prebuilt package" model.
+# ============================================================================
+
+install_git() {
+    log_info "Installing git..."
+
+    case "$OS" in
+        macos)
+            if command -v brew >/dev/null 2>&1; then
+                log_info "Installing git via Homebrew..."
+                brew install git >/dev/null 2>&1 || true
+                command -v git >/dev/null 2>&1 && return 0
+            fi
+            log_warn "Could not install git via Homebrew"
+            ;;
+        linux|linux-wsl)
+            local sudo_cmd=""
+            if [ "$(id -u 2>/dev/null || echo 1000)" -ne 0 ]; then
+                command -v sudo >/dev/null 2>&1 && sudo_cmd="sudo"
+            fi
+            case "$DISTRO_FAMILY" in
+                debian)
+                    log_info "Installing git via apt..."
+                    $sudo_cmd env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git >/dev/null 2>&1 || true
+                    ;;
+                rhel)
+                    log_info "Installing git via dnf..."
+                    $sudo_cmd dnf install -y git >/dev/null 2>&1 || true
+                    ;;
+                arch)
+                    log_info "Installing git via pacman..."
+                    $sudo_cmd pacman -S --noconfirm git >/dev/null 2>&1 || true
+                    ;;
+            esac
+            command -v git >/dev/null 2>&1 && return 0
+            log_warn "Could not install git via system package manager"
+            ;;
+    esac
+
+    return 1
+}
+
+check_git() {
+    log_info "Checking git..."
+
+    if command -v git >/dev/null 2>&1; then
+        local ver
+        ver=$(git --version 2>/dev/null | awk '{print $3}')
+        log_success "git ${ver:-} found"
+        return 0
+    fi
+
+    log_warn "git not found — required by npm for any git-URL dependency"
+    if install_git; then
+        local ver
+        ver=$(git --version 2>/dev/null | awk '{print $3}')
+        log_success "git ${ver:-} installed"
+        return 0
+    fi
+
+    log_error "git could not be installed automatically."
+    log_info "Install it manually, then re-run this installer:"
+    case "$OS" in
+        macos)       log_info "  macOS:   xcode-select --install   # or: brew install git" ;;
+        linux|linux-wsl)
+            case "$DISTRO_FAMILY" in
+                debian) log_info "  Debian/Ubuntu/Mint: sudo apt-get install -y git" ;;
+                rhel)   log_info "  Fedora/RHEL/Rocky:  sudo dnf install -y git" ;;
+                arch)   log_info "  Arch/Manjaro:       sudo pacman -S git" ;;
+                *)      log_info "  Use your distro's package manager to install the 'git' package" ;;
+            esac
+            ;;
+        *)           log_info "  Use your OS package manager to install 'git'" ;;
+    esac
+    return 1
+}
+
+# ============================================================================
 # OpenAidy CLI (prebuilt npm package)
 # ============================================================================
 
@@ -511,6 +627,7 @@ main() {
     check_node
     check_ripgrep
     check_uv
+    check_git
     install_openaidy
 
     # Ensure JWT secret + generate bootstrap-admin token (idempotent).
