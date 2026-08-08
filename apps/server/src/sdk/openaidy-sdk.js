@@ -96,22 +96,18 @@
   }
 
   // Paint something reasonable immediately, before OPENAIDY_INIT arrives.
-  // Probe for the host's likely mode instead of assuming dark, so a
-  // light-mode host doesn't see a dark flash that snaps to light once the
-  // real INIT lands. Same-origin localStorage works because this script only
-  // ever loads inside an OpenAidy-hosted addon iframe, and mirrors the
-  // host's own resolution (apps/web/src/lib/theme.tsx): an explicit
-  // 'dark'/'light' choice wins, 'system' (or no choice yet) falls back to
-  // the OS preference.
-  var _storedTheme =
-    typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
+  // The iframe is sandboxed WITHOUT allow-same-origin (opaque origin) by
+  // design (see commit c5a8073) — localStorage/sessionStorage are
+  // inaccessible and throw a SecurityError on access, not just return
+  // undefined, so we can't read the host's explicit theme choice here.
+  // Fall back to the OS preference only; the real host-resolved theme
+  // (including any explicit override) arrives moments later via
+  // OPENAIDY_INIT and corrects this via _applyTheme().
   var _prefersDark =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-color-scheme: dark)').matches;
   var _initialMode =
-    document.documentElement.classList.contains('dark') ||
-    _storedTheme === 'dark' ||
-    ((_storedTheme === 'system' || !_storedTheme) && _prefersDark)
+    document.documentElement.classList.contains('dark') || _prefersDark
       ? 'dark'
       : 'light';
   _applyTheme({ mode: _initialMode, tokens: FALLBACK_THEME_TOKENS });

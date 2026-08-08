@@ -79,6 +79,63 @@ export function rewriteAddonHtml(html: string, token: string): string {
   );
 }
 
+/**
+ * Build the Content-Security-Policy header for an addon's static assets.
+ *
+ * `connect-src`/`img-src`/`style-src`/`font-src` are each extended per-addon
+ * from the manifest's `externalDomains`/`externalImageDomains`/
+ * `externalStyleDomains`/`externalFontDomains` fields (declared but unset
+ * entries default to just the platform baseline). `script-src` is left to
+ * the caller — it depends on the request host/env, not just the manifest
+ * (see TAILWIND_CDN_ORIGIN above for why it's never manifest-extensible).
+ */
+export function buildAddonCsp(
+  manifest: Record<string, unknown> | null,
+  scriptSrcOrigins: string[],
+): string {
+  const stringArray = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.filter((d): d is string => typeof d === 'string')
+      : [];
+
+  const externalDomains = stringArray(manifest?.['externalDomains']);
+  const externalImageDomains = stringArray(manifest?.['externalImageDomains']);
+  const externalStyleDomains = stringArray(manifest?.['externalStyleDomains']);
+  const externalFontDomains = stringArray(manifest?.['externalFontDomains']);
+
+  const normalizeHosts = (hosts: string[]) =>
+    hosts
+      .map((d) => d.replace(/^https?:\/\//i, '').split('/')[0] ?? '')
+      .filter((d) => /^[a-zA-Z0-9.-]+(:\d+)?$/.test(d))
+      .map((d) => `https://${d}`);
+
+  const connectSrc = ["'self'", ...normalizeHosts(externalDomains)].join(' ');
+  const imgSrc = [
+    "'self'",
+    'data:',
+    ...normalizeHosts(externalImageDomains),
+  ].join(' ');
+  const styleSrc = [
+    "'self'",
+    "'unsafe-inline'",
+    ...normalizeHosts(externalStyleDomains),
+  ].join(' ');
+  const fontSrc = ["'self'", ...normalizeHosts(externalFontDomains)].join(' ');
+
+  return [
+    "default-src 'none'",
+    `script-src ${scriptSrcOrigins.join(' ')}`,
+    `style-src ${styleSrc}`,
+    `img-src ${imgSrc}`,
+    `font-src ${fontSrc}`,
+    `connect-src ${connectSrc}`,
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ');
+}
+
 /** Extract the `at` asset-token query param from a request. */
 function getAssetToken(request: FastifyRequest): string | null {
   const query = request.query as Record<string, unknown> | undefined;
@@ -496,44 +553,20 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       };
       const contentType = mimeTypes[ext] ?? 'application/octet-stream';
 
-      // Read externalDomains from the addon manifest to extend connect-src.
+      // Read the addon manifest to extend connect-src/img-src/style-src/
+      // font-src per its declared externalDomains/externalImageDomains/
+      // externalStyleDomains/externalFontDomains.
       // TODO: In the future, prompt the user to approve these domains before
       // the addon is enabled — similar to the permissions approval flow.
       const manifestPath = path.join(addonsDir, addonId, 'addon.json');
-      let externalDomains: string[] = [];
-      let externalImageDomains: string[] = [];
+      let manifestRaw: Record<string, unknown> | null = null;
       try {
-        const manifestRaw = JSON.parse(
+        manifestRaw = JSON.parse(
           fs.readFileSync(manifestPath, 'utf-8'),
         ) as Record<string, unknown>;
-        if (Array.isArray(manifestRaw['externalDomains'])) {
-          externalDomains = (
-            manifestRaw['externalDomains'] as unknown[]
-          ).filter((d): d is string => typeof d === 'string');
-        }
-        if (Array.isArray(manifestRaw['externalImageDomains'])) {
-          externalImageDomains = (
-            manifestRaw['externalImageDomains'] as unknown[]
-          ).filter((d): d is string => typeof d === 'string');
-        }
       } catch {
         // manifest unreadable — proceed with no external domains
       }
-
-      const normalizeHosts = (hosts: string[]) =>
-        hosts
-          .map((d) => d.replace(/^https?:\/\//i, '').split('/')[0] ?? '')
-          .filter((d) => /^[a-zA-Z0-9.-]+(:\d+)?$/.test(d))
-          .map((d) => `https://${d}`);
-
-      const connectSrc = ["'self'", ...normalizeHosts(externalDomains)].join(
-        ' ',
-      );
-      const imgSrc = [
-        "'self'",
-        'data:',
-        ...normalizeHosts(externalImageDomains),
-      ].join(' ');
 
       // The addon HTML is loaded inside a sandboxed iframe WITHOUT
       // allow-same-origin, which gives the document an opaque origin.
@@ -551,20 +584,8 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
         `http://localhost:${env.PORT}`,
         TAILWIND_CDN_ORIGIN,
       ];
-      const scriptSrc = scriptSrcOrigins.join(' ');
 
-      const csp = [
-        "default-src 'none'",
-        `script-src ${scriptSrc}`,
-        "style-src 'self' 'unsafe-inline'",
-        `img-src ${imgSrc}`,
-        "font-src 'self'",
-        `connect-src ${connectSrc}`,
-        "frame-src 'none'",
-        "object-src 'none'",
-        "base-uri 'none'",
-        "form-action 'none'",
-      ].join('; ');
+      const csp = buildAddonCsp(manifestRaw, scriptSrcOrigins);
 
       // The addon iframe is sandboxed WITHOUT `allow-same-origin`, so its
       // document has an opaque origin and EVERY subresource request counts
