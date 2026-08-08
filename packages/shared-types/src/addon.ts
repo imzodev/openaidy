@@ -276,6 +276,46 @@ export const AddonManifestSchema = z.object({
     )
     .max(20)
     .optional(),
+  /**
+   * External domains this addon is allowed to load stylesheets from (browser-side).
+   * Each entry must be a bare hostname or hostname:port (e.g. "fonts.googleapis.com").
+   * Enforced via CSP style-src. Use this for <link rel="stylesheet" href="https://...">.
+   *
+   * TODO: Before an addon with externalStyleDomains is enabled, prompt the user to
+   * review and approve the listed domains — similar to the permissions approval flow.
+   */
+  externalStyleDomains: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-zA-Z0-9.-]+(:\d+)?$/,
+          'externalStyleDomains entries must be bare hostnames (e.g. "fonts.googleapis.com")',
+        ),
+    )
+    .max(20)
+    .optional(),
+  /**
+   * External domains this addon is allowed to load font files from (browser-side).
+   * Each entry must be a bare hostname or hostname:port (e.g. "fonts.gstatic.com").
+   * Enforced via CSP font-src. Google Fonts needs BOTH externalStyleDomains
+   * (fonts.googleapis.com, for the CSS) and this field (fonts.gstatic.com,
+   * for the actual font files that CSS references).
+   *
+   * TODO: Before an addon with externalFontDomains is enabled, prompt the user to
+   * review and approve the listed domains — similar to the permissions approval flow.
+   */
+  externalFontDomains: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-zA-Z0-9.-]+(:\d+)?$/,
+          'externalFontDomains entries must be bare hostnames (e.g. "fonts.gstatic.com")',
+        ),
+    )
+    .max(20)
+    .optional(),
   icons: z
     .object({
       16: z.string().url().optional(),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rewriteAddonHtml } from './addons';
+import { rewriteAddonHtml, buildAddonCsp } from './addons';
 
 describe('rewriteAddonHtml', () => {
   it('adds crossorigin to a local script and appends the asset token', () => {
@@ -49,5 +49,76 @@ describe('rewriteAddonHtml', () => {
     expect(out).toContain(
       '<script crossorigin="anonymous" src="index.js?at=TOKEN"></script>',
     );
+  });
+});
+
+describe('buildAddonCsp', () => {
+  const scriptSrcOrigins = ["'unsafe-inline'", 'http://localhost:3001'];
+
+  it('defaults style-src/font-src/img-src/connect-src to the platform baseline when the manifest declares nothing', () => {
+    const csp = buildAddonCsp(null, scriptSrcOrigins);
+    expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+    expect(csp).toContain("font-src 'self'");
+    expect(csp).toContain("img-src 'self' data:");
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).toContain(`script-src ${scriptSrcOrigins.join(' ')}`);
+    // Fixed directives are always present regardless of manifest.
+    expect(csp).toContain("frame-src 'none'");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("default-src 'none'");
+  });
+
+  it('extends style-src and font-src for a Google Fonts manifest', () => {
+    const csp = buildAddonCsp(
+      {
+        externalStyleDomains: ['fonts.googleapis.com'],
+        externalFontDomains: ['fonts.gstatic.com'],
+      },
+      scriptSrcOrigins,
+    );
+    expect(csp).toContain(
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    );
+    expect(csp).toContain("font-src 'self' https://fonts.gstatic.com");
+  });
+
+  it('still extends connect-src/img-src from externalDomains/externalImageDomains (regression check)', () => {
+    const csp = buildAddonCsp(
+      {
+        externalDomains: ['api.open-meteo.com'],
+        externalImageDomains: ['raw.githubusercontent.com'],
+      },
+      scriptSrcOrigins,
+    );
+    expect(csp).toContain("connect-src 'self' https://api.open-meteo.com");
+    expect(csp).toContain(
+      "img-src 'self' data: https://raw.githubusercontent.com",
+    );
+  });
+
+  it('normalizes a domain entry that already has a scheme prefix', () => {
+    const csp = buildAddonCsp(
+      { externalStyleDomains: ['https://fonts.googleapis.com'] },
+      scriptSrcOrigins,
+    );
+    expect(csp).toContain('https://fonts.googleapis.com');
+    // No double scheme.
+    expect(csp).not.toContain('https://https://');
+  });
+
+  it('drops non-string and malformed entries instead of throwing', () => {
+    const csp = buildAddonCsp(
+      {
+        externalStyleDomains: [
+          'fonts.googleapis.com',
+          123,
+          null,
+          'not a valid host!',
+        ],
+      },
+      scriptSrcOrigins,
+    );
+    expect(csp).toContain('https://fonts.googleapis.com');
+    expect(csp).not.toContain('not a valid host');
   });
 });

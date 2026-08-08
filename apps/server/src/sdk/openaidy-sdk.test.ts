@@ -205,19 +205,35 @@ describe('openaidy-sdk.js theme sync', () => {
     expect(isDark(window)).toBe(false);
   });
 
-  it('picks a dark initial paint from a stored theme preference, before any INIT arrives', () => {
+  it('picks a dark initial paint from the OS preference, before any INIT arrives', () => {
     const { window } = loadSdk((w) => {
-      w.matchMedia = () => ({ matches: false });
-      w.localStorage.setItem('theme', 'dark');
+      w.matchMedia = () => ({ matches: true });
     });
     expect(isDark(window)).toBe(true);
   });
 
-  it('falls back to the OS preference for a stored "system" theme', () => {
-    const { window } = loadSdk((w) => {
-      w.matchMedia = () => ({ matches: true });
-      w.localStorage.setItem('theme', 'system');
+  it('does not touch localStorage for the initial paint, and still exposes window.OpenAidy', () => {
+    // Regression test: the addon iframe is sandboxed WITHOUT
+    // allow-same-origin, so *accessing* localStorage throws a SecurityError
+    // synchronously (not just returns undefined). jsdom's own localStorage
+    // doesn't model that, so this simulates it directly — if any code path
+    // in the SDK still touched localStorage at load time, this would throw
+    // before `global.OpenAidy = sdk` (the file's last statement) ever runs,
+    // exactly like the real bug reported in production.
+    const { window, vmContext } = loadSdk((w) => {
+      w.matchMedia = () => ({ matches: false });
+      Object.defineProperty(w, 'localStorage', {
+        get() {
+          throw new DOMException(
+            "Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag.",
+            'SecurityError',
+          );
+        },
+      });
     });
-    expect(isDark(window)).toBe(true);
+    expect(
+      (vmContext as unknown as { OpenAidy?: unknown }).OpenAidy,
+    ).toBeDefined();
+    expect(isDark(window)).toBe(false);
   });
 });
