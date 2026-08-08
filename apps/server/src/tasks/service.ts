@@ -75,6 +75,7 @@ export class TaskService {
       options.runEvents,
       options.workspaceBaseDir,
       options.taskExecutionHistoryRepo,
+      options.getExecutionConfig,
     );
   }
 

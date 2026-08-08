@@ -180,6 +180,12 @@ export type TaskServiceOptions = {
   planningService?: import('./planning').PlanningService;
   runEvents?: RunEventEmitter;
   workspaceBaseDir?: string;
+  /**
+   * Live getter for subtask retry/context-truncation limits, read from the
+   * app config on each use so changes saved via the Settings UI take effect
+   * without a restart. Falls back to hardcoded defaults when omitted.
+   */
+  getExecutionConfig?: () => import('@openaidy/config').ExecutionConfig;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';

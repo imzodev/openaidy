@@ -716,6 +716,7 @@ export async function buildApp() {
           planningService,
           runEvents: services.runEvents,
           workspaceBaseDir: env.WORKSPACE_BASE_DIR,
+          getExecutionConfig: () => configService.getConfig().execution,
         });
         await api.register(taskRoutes, {
           taskService,

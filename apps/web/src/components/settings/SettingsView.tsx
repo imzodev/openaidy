@@ -7,6 +7,7 @@ import {
   DefaultsTab,
   ProvidersTab,
   AgentsTab,
+  ExecutionTab,
   RawJsonTab,
   AboutTab,
 } from './tabs';
@@ -16,6 +17,7 @@ const tabs: { id: ConfigTab; label: string }[] = [
   { id: 'defaults', label: 'Defaults' },
   { id: 'providers', label: 'Providers' },
   { id: 'agents', label: 'Agents' },
+  { id: 'execution', label: 'Execution' },
   { id: 'raw', label: 'Raw JSON' },
   { id: 'about', label: 'About' },
 ];
@@ -92,6 +94,21 @@ export function SettingsView() {
             ...(prev?.defaults ?? {}),
             ...((newConfig.defaults as Record<string, unknown> | undefined) ??
               {}),
+          },
+        }) as AppConfig,
+    );
+    setHasChanges(true);
+  };
+
+  // Handle execution tab change - update local state only
+  const handleExecutionChange = (newConfig: Record<string, unknown>) => {
+    setLocalConfig(
+      (prev) =>
+        ({
+          ...prev,
+          execution: {
+            ...(prev?.execution ?? {}),
+            ...((newConfig.execution ?? {}) as Record<string, unknown>),
           },
         }) as AppConfig,
     );
@@ -316,6 +333,14 @@ export function SettingsView() {
                 }}
                 rewiredNotices={rewiredNotices()}
                 onDismissRewireNotice={dismissRewiredNotice}
+              />
+            </Show>
+
+            {/* Execution Tab */}
+            <Show when={activeTab() === 'execution'}>
+              <ExecutionTab
+                config={localConfig}
+                onChange={handleExecutionChange}
               />
             </Show>
 

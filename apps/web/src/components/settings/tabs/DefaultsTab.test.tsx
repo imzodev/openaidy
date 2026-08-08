@@ -45,6 +45,11 @@ const baseConfig: AppConfig = {
       model: 'anthropic/claude-3-5-sonnet',
     },
   ],
+  execution: {
+    maxRetries: 5,
+    depContextPerItemChars: 2000,
+    depContextTotalChars: 8000,
+  },
 };
 
 describe('DefaultsTab', () => {

@@ -316,6 +316,174 @@ describe('Subtask Execution', () => {
       expect(messageInput.content).toContain('Result B');
       expect(messageInput.content).not.toContain('Should not appear');
     });
+
+    it('honors a configured dependency-context limit instead of the hardcoded default', async () => {
+      const configuredService = new TaskService({
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+        sessionService: mockSessionService as unknown as NonNullable<
+          TaskServiceOptions['sessionService']
+        >,
+        getExecutionConfig: () => ({
+          maxRetries: 5,
+          depContextPerItemChars: 10,
+          depContextTotalChars: 8000,
+        }),
+      });
+
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        title: 'Child Subtask',
+        description: 'Description',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'Parent Subtask',
+          status: 'completed',
+          result: 'This result is much longer than ten characters',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          title: 'Child Subtask',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-2', dependsOnSubtaskId: 'subtask-1' },
+      ]);
+
+      const result = await configuredService.executeSubtask('subtask-2');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).not.toContain(
+        'This result is much longer than ten characters',
+      );
+      expect(messageInput.content).toContain('This resul');
+    });
+
+    it('honors a configured total dependency-context limit, dropping later dependencies once the combined budget is spent', async () => {
+      const configuredService = new TaskService({
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+        sessionService: mockSessionService as unknown as NonNullable<
+          TaskServiceOptions['sessionService']
+        >,
+        getExecutionConfig: () => ({
+          maxRetries: 5,
+          depContextPerItemChars: 1000,
+          depContextTotalChars: 10,
+        }),
+      });
+
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-3',
+        title: 'Merge',
+        description: 'Combine A and B',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'A',
+          status: 'completed',
+          result: 'AAAAAAAAAA',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          title: 'B',
+          status: 'completed',
+          result: 'BBBBBBBBBB',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-3',
+          title: 'Merge',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-1' },
+        { subtaskId: 'subtask-3', dependsOnSubtaskId: 'subtask-2' },
+      ]);
+
+      const result = await configuredService.executeSubtask('subtask-3');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      // The 10-char total budget is fully spent on the first dependency, so
+      // the second is dropped entirely rather than truncated.
+      expect(messageInput.content).toContain('AAAAAAAAAA');
+      expect(messageInput.content).not.toContain('BBBBBBBBBB');
+    });
+
+    it('routes the loop-iteration "previous attempt" context through the configured per-item limit (regression for commit 7487d43)', async () => {
+      const configuredService = new TaskService({
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+        sessionService: mockSessionService as unknown as NonNullable<
+          TaskServiceOptions['sessionService']
+        >,
+        getExecutionConfig: () => ({
+          maxRetries: 5,
+          depContextPerItemChars: 10,
+          depContextTotalChars: 8000,
+        }),
+      });
+
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-loop',
+        title: 'Loop Subtask',
+        description: 'Refine the draft',
+        status: 'pending',
+        taskId: 'task-1',
+        loopMaxIterations: 5,
+        loopIterationCount: 1,
+        loopLastResult:
+          'This previous result is much longer than ten characters',
+        loopConditionOperator: 'contains',
+        loopConditionValue: 'done',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-loop',
+          title: 'Loop Subtask',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([]);
+
+      const result = await configuredService.executeSubtask('subtask-loop');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).not.toContain(
+        'This previous result is much longer than ten characters',
+      );
+      expect(messageInput.content).toContain('This previ');
+      expect(messageInput.content).toContain('iteration 2 of 5');
+    });
   });
 
   describe('executeSubtasks', () => {
@@ -988,6 +1156,65 @@ describe('Subtask Execution', () => {
       await taskService.checkStuckSubtasks();
 
       expect(mockSubtasksRepo.updateStatus).not.toHaveBeenCalled();
+      expect(mockSubtasksRepo.incrementRetryCount).not.toHaveBeenCalled();
+    });
+
+    it('retries a stuck subtask under the default max-retries limit', async () => {
+      mockSubtasksRepo.listAll.mockResolvedValue([
+        {
+          id: 'subtask-stuck',
+          status: 'in_progress',
+          updatedAt: new Date(Date.now() - 10 * 60 * 1000),
+          retryCount: 2,
+        },
+      ]);
+
+      await taskService.checkStuckSubtasks();
+
+      // Default maxRetries is 5, so retryCount 2 is still under the limit.
+      expect(mockSubtasksRepo.incrementRetryCount).toHaveBeenCalledWith(
+        'subtask-stuck',
+      );
+      expect(mockSubtasksRepo.updateStatus).not.toHaveBeenCalledWith(
+        'subtask-stuck',
+        'failed',
+      );
+    });
+
+    it('honors a configured max-retries limit instead of the hardcoded default', async () => {
+      const configuredService = new TaskService({
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+        sessionService: mockSessionService as unknown as NonNullable<
+          TaskServiceOptions['sessionService']
+        >,
+        getExecutionConfig: () => ({
+          maxRetries: 2,
+          depContextPerItemChars: 2000,
+          depContextTotalChars: 8000,
+        }),
+      });
+
+      mockSubtasksRepo.listAll.mockResolvedValue([
+        {
+          id: 'subtask-stuck',
+          status: 'in_progress',
+          updatedAt: new Date(Date.now() - 10 * 60 * 1000),
+          retryCount: 2,
+        },
+      ]);
+
+      await configuredService.checkStuckSubtasks();
+
+      // retryCount 2 meets the configured limit of 2 (vs the hardcoded
+      // default of 5), so this should fail instead of retrying.
+      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith(
+        'subtask-stuck',
+        'failed',
+      );
       expect(mockSubtasksRepo.incrementRetryCount).not.toHaveBeenCalled();
     });
   });
