@@ -134,6 +134,27 @@ export const subtasks = pgTable(
     retryCount: integer('retry_count').notNull().default(0),
     // Stores the subtask result temporarily while awaiting verification
     pendingVerificationResult: text('pending_verification_result'),
+    // 'agent' runs a normal LLM session; 'approval_gate' pauses execution
+    // until a human resolves it via the API/UI (see awaitingApprovalSince).
+    subtaskKind: text('subtask_kind').notNull().default('agent'),
+    // Bounded single-subtask loop: when loopMaxIterations is set, this
+    // subtask re-runs itself (see loopIterationCount) until its own result
+    // satisfies loopConditionOperator/loopConditionValue, or the iteration
+    // cap is hit and it fails. Null loopMaxIterations means "not a loop".
+    loopMaxIterations: integer('loop_max_iterations'),
+    loopConditionOperator: text('loop_condition_operator'),
+    loopConditionValue: text('loop_condition_value'),
+    loopIterationCount: integer('loop_iteration_count').notNull().default(0),
+    loopLastResult: text('loop_last_result'),
+    // Non-null = paused, awaiting a human decision (mirrors
+    // pendingVerificationResult's side-channel-column pattern; not a
+    // status enum value, since `status` stays 'in_progress' while paused).
+    awaitingApprovalSince: timestamp('awaiting_approval_since', {
+      withTimezone: true,
+    }),
+    approvalDecision: text('approval_decision'),
+    approvalNote: text('approval_note'),
+    approvedBy: text('approved_by'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -143,6 +164,9 @@ export const subtasks = pgTable(
   },
   (table) => ({
     sessionIdIdx: index('subtasks_session_id_idx').on(table.sessionId),
+    awaitingApprovalIdx: index('subtasks_awaiting_approval_idx')
+      .on(table.awaitingApprovalSince)
+      .where(sql`${table.awaitingApprovalSince} IS NOT NULL`),
   }),
 );
 
@@ -169,6 +193,12 @@ export const subtaskEdges = pgTable(
       .notNull()
       .references(() => subtasks.id, { onDelete: 'cascade' }),
     edgeKind: text('edge_kind').notNull().default('dependency'),
+    // Set only when edgeKind === 'conditional': the edge is only
+    // satisfied when evaluateCondition(dependency.result, {conditionOperator,
+    // conditionValue}) is true, in addition to the dependency being
+    // 'completed'. Null for plain 'dependency' edges.
+    conditionOperator: text('condition_operator'),
+    conditionValue: text('condition_value'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -186,6 +216,14 @@ export const subtaskEdges = pgTable(
     noSelfEdge: check(
       'subtask_edges_no_self_edge',
       sql`${table.subtaskId} <> ${table.dependsOnSubtaskId}`,
+    ),
+    validEdgeKind: check(
+      'subtask_edges_kind_check',
+      sql`${table.edgeKind} IN ('dependency', 'conditional')`,
+    ),
+    conditionRequiredForConditional: check(
+      'subtask_edges_condition_required_check',
+      sql`${table.edgeKind} <> 'conditional' OR (${table.conditionOperator} IS NOT NULL AND ${table.conditionValue} IS NOT NULL)`,
     ),
   }),
 );

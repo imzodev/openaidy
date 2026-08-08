@@ -2,12 +2,20 @@ import type {
   TasksRepository,
   SubtasksRepository,
   Subtask,
+  SubtaskEdge,
   SubtaskStatus,
 } from '@openaidy/db';
 import type { AgentRegistry } from '../../agents';
 import { createLogger } from '../../lib/logger';
-import type { CreateSubtaskInput, ServiceResult } from '../../types';
-import { isSubtaskExecutable } from '../execution/subtask-graph';
+import type {
+  CreateSubtaskInput,
+  UpdateSubtaskInput,
+  ServiceResult,
+} from '../../types';
+import {
+  isSubtaskExecutable,
+  wouldCreateCycle,
+} from '../execution/subtask-graph';
 
 export class SubtaskOperations {
   constructor(
@@ -65,7 +73,7 @@ export class SubtaskOperations {
 
   async updateSubtask(
     id: string,
-    input: { title?: string; description?: string; orderIndex?: number },
+    input: UpdateSubtaskInput,
   ): Promise<ServiceResult<Subtask>> {
     const existing = await this.subtasksRepo.findById(id);
     if (!existing) {
@@ -93,6 +101,128 @@ export class SubtaskOperations {
       };
     }
     await this.subtasksRepo.delete(id);
+    return { ok: true, data: true };
+  }
+
+  async listSubtaskEdges(taskId: string): Promise<
+    ServiceResult<
+      Array<{
+        id: string;
+        subtaskId: string;
+        dependsOnSubtaskId: string;
+        edgeKind: string;
+        conditionOperator: string | null;
+        conditionValue: string | null;
+        createdAt: Date;
+      }>
+    >
+  > {
+    const task = await this.tasksRepo.findById(taskId);
+    if (!task) {
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
+    }
+    const edges = await this.subtasksRepo.listEdgesByTaskFull(taskId);
+    return { ok: true, data: edges };
+  }
+
+  async createSubtaskEdge(
+    taskId: string,
+    input: {
+      subtaskId: string;
+      dependsOnSubtaskId: string;
+      edgeKind?: 'dependency' | 'conditional' | undefined;
+      condition?: { operator: string; value: string } | null | undefined;
+    },
+  ): Promise<ServiceResult<SubtaskEdge>> {
+    if (input.subtaskId === input.dependsOnSubtaskId) {
+      return {
+        ok: false,
+        error: {
+          code: 'edge.self_edge',
+          message: 'A subtask cannot depend on itself',
+        },
+      };
+    }
+    if (input.edgeKind === 'conditional' && !input.condition) {
+      return {
+        ok: false,
+        error: {
+          code: 'edge.condition_required',
+          message: 'A conditional edge requires a condition',
+        },
+      };
+    }
+
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+    const subtaskIds = new Set(subtasks.map((s) => s.id));
+    if (
+      !subtaskIds.has(input.subtaskId) ||
+      !subtaskIds.has(input.dependsOnSubtaskId)
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'subtask.not_found',
+          message: 'Both subtasks must belong to the given task',
+        },
+      };
+    }
+
+    const existingEdges = await this.subtasksRepo.listEdgesByTask(taskId);
+    if (wouldCreateCycle(existingEdges, input)) {
+      return {
+        ok: false,
+        error: {
+          code: 'edge.would_create_cycle',
+          message: 'Adding this edge would create a cycle in the subtask graph',
+        },
+      };
+    }
+
+    const edge = await this.subtasksRepo.addEdge(input);
+    return { ok: true, data: edge };
+  }
+
+  async updateSubtaskEdge(
+    id: string,
+    input: {
+      edgeKind?: 'dependency' | 'conditional' | undefined;
+      condition?: { operator: string; value: string } | null | undefined;
+    },
+  ): Promise<ServiceResult<SubtaskEdge>> {
+    if (input.edgeKind === 'conditional' && input.condition === null) {
+      return {
+        ok: false,
+        error: {
+          code: 'edge.condition_required',
+          message: 'A conditional edge requires a condition',
+        },
+      };
+    }
+    const updated = await this.subtasksRepo.updateEdge(id, input);
+    if (!updated) {
+      return {
+        ok: false,
+        error: { code: 'edge.not_found', message: `Edge "${id}" not found` },
+      };
+    }
+    return { ok: true, data: updated };
+  }
+
+  async deleteSubtaskEdge(id: string): Promise<ServiceResult<true>> {
+    const deleted = await this.subtasksRepo.deleteEdge(id);
+    if (!deleted) {
+      return {
+        ok: false,
+        error: { code: 'edge.not_found', message: `Edge "${id}" not found` },
+      };
+    }
     return { ok: true, data: true };
   }
 

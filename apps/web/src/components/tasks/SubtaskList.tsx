@@ -16,6 +16,7 @@ import {
 import type { Subtask } from '../../lib/api-tasks';
 import { updateSubtask, assignSubtaskAgent } from '../../lib/api-tasks';
 import type { Agent } from './AgentSelector';
+import { STATUS_ICONS, STATUS_COLORS } from './subtask-status';
 
 /**
  * Statuses where a subtask may still be edited/reassigned — after planning but
@@ -33,28 +34,6 @@ export type SubtaskListProps = {
   onSubtaskUpdate?: () => void;
   onCompleteSubtask?: (subtaskId: string) => void;
   onRetrySubtask?: (subtaskId: string) => void;
-};
-
-/**
- * Status icons
- */
-const STATUS_ICONS: Record<string, string> = {
-  pending: '○',
-  assigned: '●',
-  in_progress: '▶',
-  completed: '✓',
-  failed: '✗',
-};
-
-/**
- * Status colors
- */
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'text-gray-400',
-  assigned: 'text-blue-400',
-  in_progress: 'text-yellow-500',
-  completed: 'text-green-500',
-  failed: 'text-red-500',
 };
 
 /**

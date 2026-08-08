@@ -17,7 +17,12 @@ import type {
   TaskExecutionHistoryRepository,
 } from '@openaidy/db';
 export type { CreateAgentInput } from '@openaidy/shared-types';
-import type { MessageRole, FinishReason } from '@openaidy/shared-types';
+import type {
+  MessageRole,
+  FinishReason,
+  SubtaskKind,
+  LoopConfig,
+} from '@openaidy/shared-types';
 export type { MessageRole, FinishReason };
 
 /**
@@ -138,6 +143,16 @@ export type CreateSubtaskInput = {
   description: string;
   orderIndex?: number;
   assignedAgentId?: string;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
+};
+
+export type UpdateSubtaskInput = {
+  title?: string;
+  description?: string;
+  orderIndex?: number;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
 };
 
 export type TaskWithDetails = Task & {
