@@ -308,6 +308,53 @@ export const appDefaultsSchema = z.object({
 });
 
 /**
+ * Single source of truth for the execution config defaults below. Consumers
+ * that need a fallback outside a parsed config (e.g. `TaskExecution`'s
+ * constructor default when no `getExecutionConfig` getter is injected) import
+ * this instead of hand-copying the literal, so a schema default change can't
+ * silently drift out of sync with the fallback.
+ */
+export const DEFAULT_EXECUTION_CONFIG = {
+  maxRetries: 5,
+  depContextPerItemChars: 2000,
+  depContextTotalChars: 8000,
+} as const;
+
+/**
+ * Task/subtask execution tuning. Governs subtask retry behavior and how much
+ * of a completed dependency subtask's result gets carried into a downstream
+ * subtask's prompt.
+ */
+export const executionConfigSchema = z.object({
+  /** Max retry attempts for a failed subtask before it's marked failed. */
+  maxRetries: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .optional()
+    .default(DEFAULT_EXECUTION_CONFIG.maxRetries),
+  /** Per-dependency cap (chars) on how much of its result is carried forward. */
+  depContextPerItemChars: z
+    .number()
+    .int()
+    .min(100)
+    .max(50000)
+    .optional()
+    .default(DEFAULT_EXECUTION_CONFIG.depContextPerItemChars),
+  /** Total cap (chars) across all dependencies carried into one subtask. */
+  depContextTotalChars: z
+    .number()
+    .int()
+    .min(100)
+    .max(200000)
+    .optional()
+    .default(DEFAULT_EXECUTION_CONFIG.depContextTotalChars),
+});
+
+export type ExecutionConfig = z.infer<typeof executionConfigSchema>;
+
+/**
  * Per-model pricing override (USD per 1,000 tokens). Merged over the
  * built-in MODEL_PRICING reference table so users can add custom providers
  * or correct outdated rates. Keyed by model id.
@@ -330,6 +377,8 @@ export const appConfigSchema = z
     channels: z.array(channelConfigSchema).optional(),
     /** Optional per-model pricing overrides for cost estimation */
     modelPricing: z.record(z.string(), modelPricingSchema).optional(),
+    /** Task/subtask execution tuning (retries, dependency-context limits) */
+    execution: executionConfigSchema.optional().default({}),
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();

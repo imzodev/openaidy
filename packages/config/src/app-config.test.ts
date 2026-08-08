@@ -266,6 +266,90 @@ describe('appConfigSchema with mcpServers', () => {
   });
 });
 
+describe('executionConfigSchema', () => {
+  const minimalValidConfig = {
+    version: 1,
+    defaults: {
+      providerId: 'openai',
+      modelId: 'gpt-4o-mini',
+      agentId: 'default',
+    },
+    providers: [
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        vendorFamily: 'openai-compatible',
+        enabled: true,
+        models: [
+          {
+            id: 'gpt-4o-mini',
+            name: 'GPT-4o Mini',
+          },
+        ],
+      },
+    ],
+    agents: [
+      {
+        id: 'default',
+        name: 'Default',
+        systemPrompt: 'You are helpful.',
+        model: 'openai/gpt-4o-mini',
+        enabled: true,
+      },
+    ],
+  };
+
+  it('fills in default retry/context limits when execution is omitted', () => {
+    const result = appConfigSchema.safeParse(minimalValidConfig);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.execution).toEqual({
+        maxRetries: 5,
+        depContextPerItemChars: 2000,
+        depContextTotalChars: 8000,
+      });
+    }
+  });
+
+  it('accepts user-configured retry/context limits', () => {
+    const config = {
+      ...minimalValidConfig,
+      execution: {
+        maxRetries: 10,
+        depContextPerItemChars: 5000,
+        depContextTotalChars: 20000,
+      },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.execution).toEqual({
+        maxRetries: 10,
+        depContextPerItemChars: 5000,
+        depContextTotalChars: 20000,
+      });
+    }
+  });
+
+  it('rejects maxRetries outside [1, 20]', () => {
+    const config = {
+      ...minimalValidConfig,
+      execution: { maxRetries: 0 },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-integer depContextPerItemChars', () => {
+    const config = {
+      ...minimalValidConfig,
+      execution: { depContextPerItemChars: 2000.5 },
+    };
+    const result = appConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('channel config validation', () => {
   const baseConfig = {
     version: 1,
