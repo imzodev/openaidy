@@ -9,6 +9,7 @@
 import * as p from '@clack/prompts';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { isAgentIdentityHexColor } from '@openaidy/shared-types';
 import type {
   CommandResult,
   AgentConfig,
@@ -17,8 +18,6 @@ import type {
   CreateAgentInput,
   AgentIdentity,
 } from '../../types.js';
-
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 const ACCENT_COLOR_PALETTE: Array<{ label: string; value: string }> = [
   { label: 'Violet', value: '#7C3AED' },
@@ -117,22 +116,50 @@ Exit Codes:
   const workspaceBaseDir = resolveWorkspaceBaseDir();
   const configPath = resolveConfigPath();
 
-  // Parse --name / --description / --id / --emoji / --color / --no-identity from args
+  // Parse --name / --description / --id / --emoji / --color / --no-identity from args.
+  // A value-taking flag with no following value (or one immediately followed
+  // by another flag) is a usage error — it must not silently fall through to
+  // an interactive prompt, which would hang a non-interactive (CI) invocation.
+  const VALUE_FLAGS = new Set([
+    '--name',
+    '--id',
+    '--description',
+    '--desc',
+    '--emoji',
+    '--color',
+  ]);
+  const isFlagValue = (token: string | undefined): token is string =>
+    token !== undefined && !token.startsWith('-');
+
   let nameArg: string | undefined;
   let idArg: string | undefined;
   let descArg: string | undefined;
   let emojiArg: string | undefined;
   let colorArg: string | undefined;
   let noIdentity = false;
+
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--name') nameArg = args[++i];
-    else if (args[i] === '--id') idArg = args[++i];
-    else if (args[i] === '--description' || args[i] === '--desc')
-      descArg = args[++i];
-    else if (args[i] === '--emoji') emojiArg = args[++i];
-    else if (args[i] === '--color') colorArg = args[++i];
-    else if (args[i] === '--no-identity') noIdentity = true;
-    else if (!args[i]!.startsWith('-') && !nameArg) nameArg = args[i];
+    const arg = args[i];
+    if (arg === undefined) break;
+
+    if (VALUE_FLAGS.has(arg)) {
+      const value = args[i + 1];
+      if (!isFlagValue(value)) {
+        const message = `${arg} requires a value.`;
+        p.cancel(message);
+        return { exitCode: 1, error: message };
+      }
+      if (arg === '--name') nameArg = value;
+      else if (arg === '--id') idArg = value;
+      else if (arg === '--description' || arg === '--desc') descArg = value;
+      else if (arg === '--emoji') emojiArg = value;
+      else if (arg === '--color') colorArg = value;
+      i++;
+      continue;
+    }
+
+    if (arg === '--no-identity') noIdentity = true;
+    else if (!arg.startsWith('-') && !nameArg) nameArg = arg;
   }
 
   p.intro('Create Agent');
@@ -212,7 +239,7 @@ Exit Codes:
     }
 
     let accentColor: string | undefined = colorArg?.trim();
-    if (accentColor !== undefined && !HEX_COLOR_RE.test(accentColor)) {
+    if (accentColor !== undefined && !isAgentIdentityHexColor(accentColor)) {
       p.cancel(
         `Invalid accent color "${accentColor}". Expected a 6-digit hex color like #7C3AED.`,
       );
@@ -242,7 +269,7 @@ Exit Codes:
           message: 'Custom accent color (hex)',
           placeholder: '#7C3AED',
           validate: (v) =>
-            !HEX_COLOR_RE.test((v ?? '').trim())
+            !isAgentIdentityHexColor((v ?? '').trim())
               ? 'Must be a 6-digit hex color, e.g. #7C3AED.'
               : undefined,
         });

@@ -57,6 +57,9 @@ export type {
   // shared-types so the registry, the route, and this client agree on one
   // shape; re-exported here so existing './types' imports keep working.
   SkillLoadError,
+  // Structured agent visual identity — single source of truth.
+  AgentIdentity,
+  AgentIdentityAsset,
 } from '@openaidy/shared-types';
 
 import type {
@@ -64,6 +67,7 @@ import type {
   RunStatus as SharedRunStatus,
   SessionRun as SharedSessionRun,
   SessionMessageAttachment,
+  AgentIdentity,
 } from '@openaidy/shared-types';
 
 // Attachment metadata on a session message. Declared in shared-types
@@ -124,7 +128,7 @@ export type Agent = {
     maxTokens?: number;
   };
   workspace?: AgentWorkspaceConfig;
-  identity?: import('@openaidy/shared-types').AgentIdentity;
+  identity?: AgentIdentity;
 };
 
 /**

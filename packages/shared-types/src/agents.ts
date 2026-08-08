@@ -23,6 +23,20 @@ export type McpServerRef = {
 };
 
 /**
+ * Pattern for a 6-digit hex color (e.g. "#7C3AED"). Single source of truth
+ * for identity accent-color validation — consumed by the server's Zod
+ * schema and the CLI's flag/prompt validation so both agree on one rule.
+ */
+export const AGENT_IDENTITY_HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * Type guard for a 6-digit hex color string.
+ */
+export function isAgentIdentityHexColor(value: string): value is `#${string}` {
+  return AGENT_IDENTITY_HEX_COLOR_PATTERN.test(value);
+}
+
+/**
  * A renderable visual asset for an agent's identity, layered on top of the
  * emoji fallback. Discriminated by `kind` so consumers (web, CLI, future
  * addons) branch on the union instead of inspecting URLs or content-type.

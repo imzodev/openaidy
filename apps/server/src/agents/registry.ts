@@ -405,10 +405,10 @@ export class AgentRegistry {
     this.agents.set(agentId, updated);
     this.persistConfig((agents) => {
       const idx = agents.findIndex((a) => a['id'] === agentId);
-      if (idx !== -1) {
-        if (identity) agents[idx]!['identity'] = identity;
-        else delete agents[idx]!['identity'];
-      }
+      const entry = idx !== -1 ? agents[idx] : undefined;
+      if (!entry) return;
+      if (identity) entry['identity'] = identity;
+      else delete entry['identity'];
     });
     return toAgentSummary(updated);
   }

@@ -17,6 +17,8 @@ export type {
   AgentWorkspace,
   AgentWorkspaceConfig,
   Agent,
+  AgentIdentity,
+  AgentIdentityAsset,
   SessionRun,
   BuiltinToolInfo,
   SkillSource,

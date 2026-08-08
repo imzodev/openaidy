@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import type { AgentIdentity, McpServerRef } from '@openaidy/shared-types';
+import {
+  AGENT_IDENTITY_HEX_COLOR_PATTERN,
+  type AgentIdentity,
+  type McpServerRef,
+} from '@openaidy/shared-types';
 
 /**
  * Workspace permissions schema
@@ -78,7 +82,7 @@ export type { McpServerRef };
  */
 const HexColorSchema = z
   .string()
-  .regex(/^#[0-9a-fA-F]{6}$/)
+  .regex(AGENT_IDENTITY_HEX_COLOR_PATTERN)
   .transform((v) => v as `#${string}`);
 
 /**

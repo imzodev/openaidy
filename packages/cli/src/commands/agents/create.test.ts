@@ -431,4 +431,66 @@ describe('agents create', () => {
       expect(agent.identity).toEqual({ emoji: '🐢', accentColor: '#123abc' });
     });
   });
+
+  describe('flag value validation', () => {
+    it('rejects --emoji with no value instead of falling through to the prompt', async () => {
+      const result = await agentsCreateHandler([
+        '--name',
+        'No Value Agent',
+        '--emoji',
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--emoji requires a value');
+      // Must fail before ever touching the interactive prompts.
+      expect(mockClack.text).not.toHaveBeenCalled();
+    });
+
+    it('rejects --color with no value instead of falling through to the prompt', async () => {
+      const result = await agentsCreateHandler([
+        '--name',
+        'No Value Agent',
+        '--color',
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--color requires a value');
+      expect(mockClack.text).not.toHaveBeenCalled();
+    });
+
+    it('rejects --emoji immediately followed by another flag', async () => {
+      const result = await agentsCreateHandler([
+        '--name',
+        'No Value Agent',
+        '--emoji',
+        '--no-identity',
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--emoji requires a value');
+    });
+
+    it('rejects --name with no value', async () => {
+      const result = await agentsCreateHandler(['--name']);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--name requires a value');
+    });
+
+    it('rejects --description with no value', async () => {
+      const result = await agentsCreateHandler([
+        '--name',
+        'No Value Agent',
+        '--description',
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--description requires a value');
+    });
+
+    it('rejects --id with no value', async () => {
+      const result = await agentsCreateHandler([
+        '--name',
+        'No Value Agent',
+        '--id',
+      ]);
+      expect(result.exitCode).toBe(1);
+      expect(result.error).toContain('--id requires a value');
+    });
+  });
 });
