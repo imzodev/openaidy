@@ -883,6 +883,15 @@ export async function buildApp() {
           sessionService,
           agentRegistry,
           storageEngine: addonStorageEngine,
+          ...(taskService ? { taskService } : {}),
+          channelRegistry: services.channels,
+          ...(dbAdapter
+            ? {
+                jobsRepo: dbAdapter.repositories.jobs,
+                jobRunsRepo: dbAdapter.repositories.jobRuns,
+                sessionsRepo: dbAdapter.repositories.sessions,
+              }
+            : {}),
         });
       }
     },

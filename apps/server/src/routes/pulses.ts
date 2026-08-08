@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { z } from 'zod';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import { triggerPulseNow } from '../scheduler';
@@ -7,108 +6,15 @@ import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { PulseService } from '../pulses/service.js';
 import { createLogger } from '../lib/logger';
+import {
+  createPulseSchema,
+  updatePulseSchema,
+  listPulsesSchema,
+  listRunsSchema,
+  toScheduleInput,
+} from '../pulses/schemas.js';
 
 const log = createLogger('pulse-routes');
-
-// ========================================
-// Schemas (API input validation only)
-// ========================================
-
-const createPulseSchema = z.object({
-  name: z.string().min(1),
-  prompt: z.string().min(1),
-  schedule: z.union([
-    z.object({
-      every: z.enum(['15m', '30m', '1h', '6h', '12h', '1d', '1w']),
-    }),
-    z.object({
-      daily: z.object({
-        hour: z.number().int().min(0).max(23),
-        minute: z.number().int().min(0).max(59),
-      }),
-    }),
-    z.object({
-      cron: z.object({
-        expression: z.string(),
-        tz: z.string().optional(),
-      }),
-    }),
-    z.object({
-      at: z.string(),
-    }),
-  ]),
-  agentId: z.string().optional(),
-  sessionId: z.string().uuid().optional(),
-});
-
-const updatePulseSchema = z.object({
-  name: z.string().min(1).optional(),
-  prompt: z.string().min(1).optional(),
-  schedule: z
-    .union([
-      z.object({
-        every: z.enum(['15m', '30m', '1h', '6h', '12h', '1d', '1w']),
-      }),
-      z.object({
-        daily: z.object({
-          hour: z.number().int().min(0).max(23),
-          minute: z.number().int().min(0).max(59),
-        }),
-      }),
-      z.object({
-        cron: z.object({
-          expression: z.string(),
-          tz: z.string().optional(),
-        }),
-      }),
-      z.object({
-        at: z.string(),
-      }),
-    ])
-    .optional(),
-  status: z.enum(['active', 'paused']).optional(),
-  agentId: z.string().optional(),
-  sessionId: z.string().uuid().optional(),
-});
-
-const listPulsesSchema = z.object({
-  status: z.enum(['active', 'paused', 'completed', 'failed']).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
-
-const listRunsSchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
-});
-
-// ========================================
-// API → Service input converters
-// ========================================
-
-function toScheduleInput(
-  schedule: z.infer<typeof createPulseSchema>['schedule'],
-): import('@openaidy/shared-types').ScheduleInput {
-  if ('every' in schedule) {
-    return { every: schedule.every };
-  }
-  if ('daily' in schedule) {
-    return { daily: schedule.daily };
-  }
-  if ('cron' in schedule) {
-    const result: import('@openaidy/shared-types').ScheduleInput = {
-      cron: schedule.cron.expression,
-    };
-    if (schedule.cron.tz !== undefined) {
-      (result as { cron: string; tz?: string }).tz = schedule.cron.tz;
-    }
-    return result;
-  }
-  if ('at' in schedule) {
-    return { at: schedule.at };
-  }
-  throw new Error('Invalid schedule format');
-}
 
 // ========================================
 // Route options

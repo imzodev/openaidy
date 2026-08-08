@@ -5,9 +5,12 @@
  */
 
 import type { AddonManifest } from '@openaidy/shared-types';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { SessionMessageService } from '../sessions/service';
 import type { AgentRegistry } from '../agents/registry';
+import type { TaskService } from '../tasks/service';
+import type { ChannelRegistry } from '../channels/registry';
 
 // Forward declaration to avoid circular dependency
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,6 +26,12 @@ export interface AddonProxyRoutesOptions {
   sessionService?: SessionMessageService;
   agentRegistry?: AgentRegistry;
   storageEngine?: import('./storage/engine').AddonStorageEngine;
+  taskService?: TaskService;
+  channelRegistry?: ChannelRegistry;
+  /** Pulses need their own PulseService, constructed lazily from these three. */
+  jobsRepo?: JobsStore;
+  jobRunsRepo?: JobRunsStore;
+  sessionsRepo?: SessionsStore;
 }
 
 /**

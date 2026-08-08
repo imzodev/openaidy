@@ -1,9 +1,21 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import type { Addon, TaskPriority } from '@openaidy/db';
 import type { AddonProxyRoutesOptions, InvokeAgentBody } from './types';
 import { createAddonProxyService } from '../addons/proxy';
 import { AddonProxyAgentService } from './proxy-agent-service';
 import { AddonStorageError } from './storage/engine';
 import type { StorageParams } from './storage/engine';
+import { PulseService } from '../pulses/service.js';
+import { triggerPulseNow } from '../scheduler';
+import {
+  createPulseSchema,
+  updatePulseSchema,
+  listPulsesSchema,
+  listRunsSchema,
+  toScheduleInput,
+} from '../pulses/schemas.js';
+import { toStatusResponse } from '../channels/status.js';
 
 // Extend FastifyRequest to include addon context
 declare module 'fastify' {
@@ -317,12 +329,10 @@ export const addonProxyRoutes: FastifyPluginAsync<
     permission: 'storage.read' | 'storage.write',
   ): Promise<{ migrations: string[] } | null> => {
     if (!opts.storageEngine) {
-      reply
-        .code(503)
-        .send({
-          error: 'SERVICE_UNAVAILABLE',
-          message: 'Storage not available',
-        });
+      reply.code(503).send({
+        error: 'SERVICE_UNAVAILABLE',
+        message: 'Storage not available',
+      });
       return null;
     }
     const addon = await opts.addonService.getAddon(request.addonId!);
@@ -494,6 +504,651 @@ export const addonProxyRoutes: FastifyPluginAsync<
           limit,
         ),
       }));
+    },
+  );
+
+  // ==========================================================================
+  // Shared helper for the routes below (tasks/pulses/channels) — resolve the
+  // addon and check one permission, sending the 404/403 response itself on
+  // failure. Mirrors `forStorage` above but permission-generic.
+  // ==========================================================================
+  const getAuthorizedAddon = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    permission: string,
+  ): Promise<Addon | null> => {
+    const addon = await opts.addonService.getAddon(request.addonId!);
+    if (!addon) {
+      reply
+        .code(404)
+        .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
+      return null;
+    }
+    const authResult = proxyService.authorize(addon, permission);
+    if (!authResult.authorized) {
+      reply
+        .code(403)
+        .send({ error: 'PERMISSION_DENIED', message: authResult.error });
+      return null;
+    }
+    return addon;
+  };
+
+  // ==========================================================================
+  // Tasks — /addon-proxy/tasks/*
+  // ==========================================================================
+  //
+  // Deliberately narrower than the web-facing /api/tasks surface: no agent
+  // assignment, no scheduling, no subtask CRUD/execution-history — just
+  // enough for an addon to create, read, and drive a task to completion.
+
+  const TASK_STATUSES = [
+    'backlog',
+    'todo',
+    'in_progress',
+    'review',
+    'done',
+    'cancelled',
+  ] as const;
+
+  const createAddonTaskSchema = z.object({
+    title: z.string().min(1).optional(),
+    description: z.string().min(1),
+    priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
+  });
+
+  const updateTaskStatusBodySchema = z.object({
+    status: z.enum(TASK_STATUSES),
+  });
+
+  // GET /api/addon-proxy/tasks
+  app.get<{ Querystring: { status?: string } }>(
+    '/addon-proxy/tasks',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.list');
+      if (!addon) return;
+      if (!opts.taskService) return reply.send({ items: [] });
+
+      await proxyService.recordUsage(request.addonId!, '/tasks');
+      const status = request.query.status as
+        | (typeof TASK_STATUSES)[number]
+        | undefined;
+      const items = await opts.taskService.listTasks(status);
+      return reply.send({ items });
+    },
+  );
+
+  // GET /api/addon-proxy/tasks/:id
+  app.get<{ Params: { id: string } }>(
+    '/addon-proxy/tasks/:id',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.read');
+      if (!addon) return;
+      if (!opts.taskService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Tasks not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/tasks/:id');
+      const task = await opts.taskService.getTaskWithDetails(request.params.id);
+      if (!task) {
+        return reply
+          .code(404)
+          .send({ error: 'TASK_NOT_FOUND', message: 'Task not found' });
+      }
+      return reply.send({ task });
+    },
+  );
+
+  // POST /api/addon-proxy/tasks
+  app.post<{
+    Body: { title?: string; description: string; priority?: string };
+  }>(
+    '/addon-proxy/tasks',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.write');
+      if (!addon) return;
+      if (!opts.taskService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Tasks not available',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = createAddonTaskSchema.parse(request.body);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/tasks');
+      const derivedTitle =
+        parsed.title ??
+        (parsed.description.length > 60
+          ? `${parsed.description.slice(0, 60).trimEnd()}…`
+          : parsed.description);
+
+      const createInput: {
+        title: string;
+        description: string;
+        priority?: TaskPriority;
+      } = {
+        title: derivedTitle,
+        description: parsed.description,
+      };
+      if (parsed.priority !== undefined) {
+        createInput.priority = parsed.priority as TaskPriority;
+      }
+
+      const result = await opts.taskService.createTask(createInput);
+      if (!result.ok) {
+        return reply
+          .code(500)
+          .send({ error: result.error.code, message: result.error.message });
+      }
+      return reply.code(201).send({ task: result.data });
+    },
+  );
+
+  // PATCH /api/addon-proxy/tasks/:id/status
+  app.patch<{ Params: { id: string }; Body: { status: string } }>(
+    '/addon-proxy/tasks/:id/status',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.write');
+      if (!addon) return;
+      if (!opts.taskService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Tasks not available',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = updateTaskStatusBodySchema.parse(request.body);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/tasks/:id/status');
+      const result = await opts.taskService.updateTaskStatus(
+        request.params.id,
+        parsed.status,
+      );
+      if (!result.ok) {
+        const status = result.error.code === 'task.not_found' ? 404 : 500;
+        return reply
+          .code(status)
+          .send({ error: result.error.code, message: result.error.message });
+      }
+      return reply.send({ task: result.data });
+    },
+  );
+
+  // GET /api/addon-proxy/tasks/:id/subtasks
+  app.get<{ Params: { id: string } }>(
+    '/addon-proxy/tasks/:id/subtasks',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.read');
+      if (!addon) return;
+      if (!opts.taskService) return reply.send({ items: [] });
+
+      await proxyService.recordUsage(request.addonId!, '/tasks/:id/subtasks');
+      const items = await opts.taskService.getSubtasks(request.params.id);
+      return reply.send({ items });
+    },
+  );
+
+  // POST /api/addon-proxy/tasks/:id/execute
+  app.post<{ Params: { id: string } }>(
+    '/addon-proxy/tasks/:id/execute',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'tasks.invoke');
+      if (!addon) return;
+      if (!opts.taskService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Tasks not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/tasks/:id/execute');
+      const result = await opts.taskService.executeTask(request.params.id);
+      if (!result.ok) {
+        const status =
+          result.error.code === 'task.not_found'
+            ? 404
+            : result.error.code === 'session.not_configured'
+              ? 503
+              : 500;
+        return reply
+          .code(status)
+          .send({ error: result.error.code, message: result.error.message });
+      }
+      return reply.send({ sessionId: result.data.sessionId });
+    },
+  );
+
+  // ==========================================================================
+  // Pulses — /addon-proxy/pulses/*
+  // ==========================================================================
+  //
+  // Full CRUD + trigger + history, mirroring `routes/pulses.ts` almost 1:1
+  // (pulses are inherently an automation primitive addons should be able to
+  // fully drive) — just gated behind addon permissions instead of user auth.
+
+  const pulseService =
+    opts.jobsRepo && opts.jobRunsRepo && opts.sessionsRepo
+      ? new PulseService(opts.jobsRepo, opts.jobRunsRepo, opts.sessionsRepo)
+      : undefined;
+
+  // GET /api/addon-proxy/pulses
+  app.get<{ Querystring: Record<string, string | undefined> }>(
+    '/addon-proxy/pulses',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.list');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.send({ pulses: [], total: 0, limit: 50, offset: 0 });
+      }
+
+      let parsed;
+      try {
+        parsed = listPulsesSchema.parse(request.query);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid query parameters',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses');
+      const listInput: import('@openaidy/shared-types').ListPulsesFilters = {
+        limit: parsed.limit,
+        offset: parsed.offset,
+      };
+      if (parsed.status !== undefined) listInput.status = parsed.status;
+      const result = await pulseService.listPulses(listInput);
+      return reply.send({
+        pulses: result.items,
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+      });
+    },
+  );
+
+  // GET /api/addon-proxy/pulses/:id
+  app.get<{ Params: { id: string } }>(
+    '/addon-proxy/pulses/:id',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.read');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses/:id');
+      try {
+        const pulse = await pulseService.getPulse(request.params.id);
+        return reply.send({ pulse });
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+      }
+    },
+  );
+
+  // POST /api/addon-proxy/pulses
+  app.post<{ Body: unknown }>(
+    '/addon-proxy/pulses',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.write');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = createPulseSchema.parse(request.body);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses');
+      try {
+        const input: import('@openaidy/shared-types').CreatePulseInput = {
+          name: parsed.name,
+          prompt: parsed.prompt,
+          schedule: toScheduleInput(parsed.schedule),
+        };
+        if (parsed.agentId != null) input.agentId = parsed.agentId;
+        if (parsed.sessionId != null) input.sessionId = parsed.sessionId;
+        const pulse = await pulseService.createPulse(input);
+        return reply.code(201).send({ pulse });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('not found')) {
+          return reply
+            .code(404)
+            .send({ error: 'SESSION_NOT_FOUND', message: msg });
+        }
+        return reply
+          .code(400)
+          .send({ error: 'INVALID_SCHEDULE', message: msg });
+      }
+    },
+  );
+
+  // PATCH /api/addon-proxy/pulses/:id
+  app.patch<{ Params: { id: string }; Body: unknown }>(
+    '/addon-proxy/pulses/:id',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.write');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = updatePulseSchema.parse(request.body);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses/:id');
+      try {
+        const input: import('@openaidy/shared-types').UpdatePulseInput = {};
+        if (parsed.name !== undefined) input.name = parsed.name;
+        if (parsed.prompt !== undefined) input.prompt = parsed.prompt;
+        if (parsed.schedule !== undefined) {
+          input.schedule = toScheduleInput(parsed.schedule);
+        }
+        if (parsed.status !== undefined) input.status = parsed.status;
+        if (parsed.agentId !== undefined) input.agentId = parsed.agentId;
+        if (parsed.sessionId !== undefined) input.sessionId = parsed.sessionId;
+        const pulse = await pulseService.updatePulse(request.params.id, input);
+        return reply.send({ pulse });
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+      }
+    },
+  );
+
+  // DELETE /api/addon-proxy/pulses/:id
+  app.delete<{ Params: { id: string } }>(
+    '/addon-proxy/pulses/:id',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.delete');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses/:id');
+      try {
+        await pulseService.deletePulse(request.params.id);
+        return reply.code(204).send();
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+      }
+    },
+  );
+
+  // POST /api/addon-proxy/pulses/:id/trigger
+  app.post<{ Params: { id: string } }>(
+    '/addon-proxy/pulses/:id/trigger',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.invoke');
+      if (!addon) return;
+      if (
+        !pulseService ||
+        !opts.jobsRepo ||
+        !opts.jobRunsRepo ||
+        !opts.sessionsRepo ||
+        !opts.sessionService
+      ) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses/:id/trigger');
+      try {
+        const run = await pulseService.triggerPulse(
+          request.params.id,
+          (jobId) =>
+            triggerPulseNow(jobId, {
+              jobsRepo: opts.jobsRepo!,
+              jobRunsRepo: opts.jobRunsRepo!,
+              sessionsStore: opts.sessionsRepo!,
+              sessionMessageService: opts.sessionService!,
+              logger: app.log,
+            }),
+        );
+        const updatedRun = await opts.jobRunsRepo.findById(run.id);
+        return reply.send({ run: updatedRun ?? run });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Job not found') {
+          return reply
+            .code(404)
+            .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+        }
+        return reply.code(500).send({
+          error: 'PULSE_TRIGGER_FAILED',
+          message: error instanceof Error ? error.message : 'Trigger failed',
+        });
+      }
+    },
+  );
+
+  // GET /api/addon-proxy/pulses/:id/history
+  app.get<{
+    Params: { id: string };
+    Querystring: { limit?: string; offset?: string };
+  }>(
+    '/addon-proxy/pulses/:id/history',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'pulses.read');
+      if (!addon) return;
+      if (!pulseService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Pulses not available',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = listRunsSchema.parse(request.query);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid query parameters',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/pulses/:id/history');
+      try {
+        const result = await pulseService.getPulseHistory(request.params.id, {
+          limit: parsed.limit,
+          offset: parsed.offset,
+        });
+        return reply.send({
+          runs: result.items,
+          total: result.total,
+          limit: result.limit,
+          offset: result.offset,
+        });
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+      }
+    },
+  );
+
+  // ==========================================================================
+  // Channels — /addon-proxy/channels/* (read-only + connect/disconnect)
+  // ==========================================================================
+  //
+  // No outbound "send a message" capability exists anywhere in the codebase
+  // yet — channels are purely reactive. Mirrors `routes/channels.ts` exactly.
+
+  // GET /api/addon-proxy/channels
+  app.get(
+    '/addon-proxy/channels',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'channels.list');
+      if (!addon) return;
+      if (!opts.channelRegistry) return reply.send({ items: [] });
+
+      await proxyService.recordUsage(request.addonId!, '/channels');
+      const items = opts.channelRegistry.getAll().map(toStatusResponse);
+      return reply.send({ items });
+    },
+  );
+
+  // GET /api/addon-proxy/channels/:id/status
+  app.get<{ Params: { id: string } }>(
+    '/addon-proxy/channels/:id/status',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'channels.read');
+      if (!addon) return;
+      if (!opts.channelRegistry) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Channels not available',
+        });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/channels/:id/status');
+      const channel = opts.channelRegistry.get(request.params.id);
+      if (!channel) {
+        return reply
+          .code(404)
+          .send({ error: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+      }
+      return reply.send(toStatusResponse(channel));
+    },
+  );
+
+  // POST /api/addon-proxy/channels/:id/connect
+  app.post<{ Params: { id: string } }>(
+    '/addon-proxy/channels/:id/connect',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'channels.manage');
+      if (!addon) return;
+      if (!opts.channelRegistry) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Channels not available',
+        });
+      }
+
+      const channel = opts.channelRegistry.get(request.params.id);
+      if (!channel) {
+        return reply
+          .code(404)
+          .send({ error: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+      }
+
+      await proxyService.recordUsage(request.addonId!, '/channels/:id/connect');
+      // Fire-and-forget — connect() is async and may take time (QR flow).
+      channel.connect().catch((err) => {
+        app.log.error(
+          { err, channelId: request.params.id },
+          'addon channel connect error',
+        );
+      });
+      return reply.code(204).send();
+    },
+  );
+
+  // POST /api/addon-proxy/channels/:id/disconnect
+  app.post<{ Params: { id: string } }>(
+    '/addon-proxy/channels/:id/disconnect',
+    { preHandler: validateAddonToken },
+    async (request, reply) => {
+      const addon = await getAuthorizedAddon(request, reply, 'channels.manage');
+      if (!addon) return;
+      if (!opts.channelRegistry) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Channels not available',
+        });
+      }
+
+      const channel = opts.channelRegistry.get(request.params.id);
+      if (!channel) {
+        return reply
+          .code(404)
+          .send({ error: 'CHANNEL_NOT_FOUND', message: 'Channel not found' });
+      }
+
+      await proxyService.recordUsage(
+        request.addonId!,
+        '/channels/:id/disconnect',
+      );
+      await channel.disconnect();
+      return reply.code(204).send();
     },
   );
 
