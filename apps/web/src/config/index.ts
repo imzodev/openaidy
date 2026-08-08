@@ -56,6 +56,7 @@ export {
   getProvidersSectionSchemaWithModels,
   getVendorSpecificFields,
   getAgentsSectionSchema,
+  getExecutionSectionSchema,
   buildAppConfigSchema,
 } from './schemas';
 export type { BuildFormSchemaOptions } from './schemas';

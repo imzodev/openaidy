@@ -497,6 +497,16 @@ export type DiscordChannelConfig = {
 export type ChannelConfig = WhatsAppChannelConfig | DiscordChannelConfig;
 
 /**
+ * Task/subtask execution tuning (retries, dependency-context truncation
+ * limits). Mirrors `executionConfigSchema` in packages/config/src/app-config.ts.
+ */
+export type ExecutionConfig = {
+  maxRetries: number;
+  depContextPerItemChars: number;
+  depContextTotalChars: number;
+};
+
+/**
  * Application configuration
  *
  * `channels` (and `mcpServers`, not modelled here) round-trip through the raw
@@ -508,6 +518,7 @@ export type AppConfig = {
   providers: ProviderConfig[];
   agents: AgentConfig[];
   channels?: ChannelConfig[];
+  execution?: ExecutionConfig;
 };
 
 /**

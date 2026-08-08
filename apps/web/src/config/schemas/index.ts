@@ -11,6 +11,7 @@ export {
   getVendorSpecificFields,
 } from './providers-schema';
 export { getAgentsSectionSchema } from './agents-schema';
+export { getExecutionSectionSchema } from './execution-schema';
 
 import type { FormSchema, SectionSchema } from '../schema';
 import { getDefaultsSectionSchema } from './defaults-schema';

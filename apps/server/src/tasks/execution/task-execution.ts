@@ -15,6 +15,7 @@ import type {
   SessionType,
   ExecutionSubtaskSummary,
 } from '@openaidy/shared-types';
+import type { ExecutionConfig } from '@openaidy/config';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
 import {
@@ -32,13 +33,15 @@ import {
   buildRetryMessage,
 } from './verification-verdict';
 
-const MAX_RETRIES = 5;
 const STUCK_TIMEOUT_MINUTES = 3;
-// Bounds on how much of a completed dependency's result is carried into
-// a dependent subtask's opening message, so a large upstream result
-// can't unboundedly grow the next subtask's context window.
-const DEP_CONTEXT_PER_ITEM_CHARS = 2000;
-const DEP_CONTEXT_TOTAL_CHARS = 8000;
+// Fallback execution config, used when no getExecutionConfig getter is
+// injected (e.g. in tests). Mirrors the defaults in
+// packages/config/src/app-config.ts#executionConfigSchema.
+const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
+  maxRetries: 5,
+  depContextPerItemChars: 2000,
+  depContextTotalChars: 8000,
+};
 // Bound on how much of a verifier's rejection reason gets echoed back into
 // the retry message, so a verbose verdict can't unboundedly grow the next
 // attempt's opening message.
@@ -60,6 +63,11 @@ export class TaskExecution {
     private readonly taskExecutionHistoryRepo:
       | TaskExecutionHistoryRepository
       | undefined,
+    // Live getter (rather than a value captured at construction time) so
+    // config changes saved via the Settings UI take effect on the next
+    // subtask run without restarting the server.
+    private readonly getExecutionConfig: () => ExecutionConfig = () =>
+      DEFAULT_EXECUTION_CONFIG,
   ) {
     this.logger = createLogger('TaskExecution');
 
@@ -198,15 +206,16 @@ export class TaskExecution {
           linkedSubtask.id,
         );
         const retryCount = updatedSubtask?.retryCount ?? 0;
+        const { maxRetries } = this.getExecutionConfig();
 
-        if (retryCount >= MAX_RETRIES) {
+        if (retryCount >= maxRetries) {
           this.logger.warn('Max retries exceeded, marking subtask as failed', {
             subtaskId: linkedSubtask.id,
             retryCount,
           });
           await this.failSubtask(
             linkedSubtask.id,
-            `Failed after ${MAX_RETRIES} attempts. Last message: ${result.substring(0, 200)}`,
+            `Failed after ${maxRetries} attempts. Last message: ${result.substring(0, 200)}`,
           );
         } else {
           const verified = await this.submitVerificationToTaskSession(
@@ -433,13 +442,15 @@ export class TaskExecution {
 
     let messageContent = subtask.description;
     if (completedDeps.length > 0) {
-      const depBudget = createContextBudget(DEP_CONTEXT_TOTAL_CHARS);
+      const { depContextPerItemChars, depContextTotalChars } =
+        this.getExecutionConfig();
+      const depBudget = createContextBudget(depContextTotalChars);
       const contextParts: string[] = [];
       for (const dep of completedDeps) {
         if (depBudget.remaining <= 0) break;
         const truncatedResult = truncateWithBudget(
           dep.result!,
-          DEP_CONTEXT_PER_ITEM_CHARS,
+          depContextPerItemChars,
           depBudget,
         );
         contextParts.push(`## Result from "${dep.title}":\n${truncatedResult}`);
@@ -656,7 +667,7 @@ export class TaskExecution {
 
       const retryCount = (subtask as { retryCount?: number }).retryCount ?? 0;
 
-      if (retryCount >= MAX_RETRIES) {
+      if (retryCount >= this.getExecutionConfig().maxRetries) {
         this.logger.warn('Subtask exceeded max retries, marking as failed', {
           subtaskId: subtask.id,
           retryCount,

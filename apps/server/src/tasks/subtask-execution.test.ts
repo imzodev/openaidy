@@ -306,6 +306,60 @@ describe('Subtask Execution', () => {
       expect(messageInput.content).toContain('Result B');
       expect(messageInput.content).not.toContain('Should not appear');
     });
+
+    it('honors a configured dependency-context limit instead of the hardcoded default', async () => {
+      const configuredService = new TaskService({
+        tasksRepo: mockTasksRepo as unknown as TaskServiceOptions['tasksRepo'],
+        subtasksRepo:
+          mockSubtasksRepo as unknown as TaskServiceOptions['subtasksRepo'],
+        taskAgentsRepo:
+          mockTaskAgentsRepo as unknown as TaskServiceOptions['taskAgentsRepo'],
+        sessionService: mockSessionService as unknown as NonNullable<
+          TaskServiceOptions['sessionService']
+        >,
+        getExecutionConfig: () => ({
+          maxRetries: 5,
+          depContextPerItemChars: 10,
+          depContextTotalChars: 8000,
+        }),
+      });
+
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-2',
+        title: 'Child Subtask',
+        description: 'Description',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+      mockSubtasksRepo.listByTask.mockResolvedValue([
+        {
+          id: 'subtask-1',
+          title: 'Parent Subtask',
+          status: 'completed',
+          result: 'This result is much longer than ten characters',
+          taskId: 'task-1',
+        },
+        {
+          id: 'subtask-2',
+          title: 'Child Subtask',
+          status: 'pending',
+          taskId: 'task-1',
+        },
+      ]);
+      mockSubtasksRepo.listEdgesByTask.mockResolvedValue([
+        { subtaskId: 'subtask-2', dependsOnSubtaskId: 'subtask-1' },
+      ]);
+
+      const result = await configuredService.executeSubtask('subtask-2');
+
+      expect(result.ok).toBe(true);
+      const [messageInput] =
+        mockSessionService.submitMessageStreaming.mock.calls[0]!;
+      expect(messageInput.content).not.toContain(
+        'This result is much longer than ten characters',
+      );
+      expect(messageInput.content).toContain('This resul');
+    });
   });
 
   describe('executeSubtasks', () => {
