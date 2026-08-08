@@ -2,10 +2,15 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { AgentRegistry } from '../agents/registry';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { CreateAgentInput } from '../types';
-import type { McpServerRef, PersonalityFileId } from '@openaidy/shared-types';
+import type {
+  AgentIdentity,
+  McpServerRef,
+  PersonalityFileId,
+} from '@openaidy/shared-types';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import { PERSONALITY_FILES } from '../agents/personality-service';
 import { AGENT_PERSONALITY_PRESETS } from '@openaidy/shared-types';
+import { IdentitySchema } from '../agents/schema';
 import { requireAuth } from '../middleware/require-auth';
 
 /**
@@ -287,6 +292,42 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (
       reply.code(404);
       return { error: 'Agent not found', agentId };
     }
+
+    return result;
+  });
+
+  /**
+   * PATCH /agents/:agentId/identity
+   * Update or clear the structured visual identity for an agent.
+   * Body: { identity: AgentIdentity | null }
+   */
+  app.patch('/agents/:agentId/identity', async (request, reply) => {
+    const { agentId } = request.params as { agentId: string };
+    const body = request.body as { identity?: unknown };
+
+    if (!agentRegistry.hasAgent(agentId)) {
+      reply.code(404);
+      return { error: 'Agent not found', agentId };
+    }
+
+    if (body?.identity === null) {
+      const result = agentRegistry.updateAgentIdentity(agentId, null);
+      return result;
+    }
+
+    const parsed = IdentitySchema.safeParse(body?.identity);
+    if (!parsed.success) {
+      reply.code(400);
+      return {
+        error:
+          'Invalid request: identity must be a valid identity object or null',
+      };
+    }
+
+    const result = agentRegistry.updateAgentIdentity(
+      agentId,
+      parsed.data as AgentIdentity,
+    );
 
     return result;
   });

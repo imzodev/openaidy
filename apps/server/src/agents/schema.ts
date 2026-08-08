@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { McpServerRef } from '@openaidy/shared-types';
+import type { AgentIdentity, McpServerRef } from '@openaidy/shared-types';
 
 /**
  * Workspace permissions schema
@@ -73,6 +73,46 @@ export const McpServerRefSchema = z.object({
 export type { McpServerRef };
 
 /**
+ * Hex color schema (6-digit, e.g. "#7C3AED")
+ * Transformed to the `#${string}` brand so it lines up with AgentIdentity.
+ */
+const HexColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .transform((v) => v as `#${string}`);
+
+/**
+ * Identity avatar asset schema
+ *
+ * Discriminated union so consumers branch on `kind` instead of inspecting
+ * URLs or content-type. See AgentIdentityAsset in @openaidy/shared-types.
+ */
+export const IdentityAssetSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('image'),
+    url: z.string().url(),
+    alt: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal('model3d'),
+    url: z.string().url(),
+    format: z.enum(['gltf', 'glb']),
+  }),
+]);
+
+/**
+ * Identity schema
+ *
+ * Structured visual identity for an agent: emoji + accent color, with an
+ * optional avatar asset override. See AgentIdentity in @openaidy/shared-types.
+ */
+export const IdentitySchema = z.object({
+  emoji: z.string().min(1).max(8),
+  accentColor: HexColorSchema,
+  avatar: IdentityAssetSchema.optional(),
+});
+
+/**
  * Agent definition schema
  *
  * Defines an agent with its configuration and metadata.
@@ -116,6 +156,9 @@ export const AgentSchema = z.object({
     .optional(),
   // Workspace configuration (optional)
   workspace: WorkspaceConfigSchema.optional(),
+
+  // Structured visual identity (emoji + accent color + optional avatar).
+  identity: IdentitySchema.optional(),
 });
 
 /**
@@ -137,6 +180,7 @@ export type AgentSummary = {
   mcpServers: McpServerRef[] | undefined;
   model: string | undefined; // Format: "providerId/modelId"; undefined = inherit config default
   workspace?: WorkspaceConfig | undefined;
+  identity?: AgentIdentity | undefined;
 };
 
 /**
@@ -205,6 +249,7 @@ export function toAgentSummary(agent: Agent): AgentSummary {
     mcpServers: agent.mcpServers,
     model: agent.model,
     workspace: agent.workspace,
+    identity: agent.identity,
   };
 }
 

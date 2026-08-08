@@ -809,6 +809,160 @@ describe('AgentRegistry', () => {
       expect(registry.size).toBe(0);
     });
   });
+
+  describe('createAgent with identity', () => {
+    it('persists the identity field in memory and to disk', () => {
+      const configPath = path.join(tempDir, 'openaidy.json');
+      fs.writeFileSync(configPath, JSON.stringify({ version: 1, agents: [] }));
+
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([]);
+
+      const summary = registry.createAgent({
+        id: 'fox-agent',
+        name: 'Fox Agent',
+        systemPrompt: 'You are a fox.',
+        model: 'openai/gpt-4o-mini',
+        identity: { emoji: '🦊', accentColor: '#7C3AED' },
+      });
+
+      expect(summary.identity).toEqual({ emoji: '🦊', accentColor: '#7C3AED' });
+      expect(registry.getAgent('fox-agent')?.identity).toEqual({
+        emoji: '🦊',
+        accentColor: '#7C3AED',
+      });
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; identity?: unknown }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'fox-agent');
+      expect(agent?.identity).toEqual({ emoji: '🦊', accentColor: '#7C3AED' });
+    });
+
+    it('creates an agent without identity when not provided', () => {
+      const registry = new AgentRegistry();
+      registry.replaceAll([]);
+
+      const summary = registry.createAgent({
+        id: 'plain-agent',
+        name: 'Plain Agent',
+        systemPrompt: 'You are plain.',
+        model: 'openai/gpt-4o-mini',
+      });
+
+      expect(summary.identity).toBeUndefined();
+    });
+  });
+
+  describe('updateAgentIdentity', () => {
+    let configPath: string;
+
+    beforeEach(() => {
+      configPath = path.join(tempDir, 'openaidy.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          agents: [
+            {
+              id: 'agent1',
+              name: 'Agent One',
+              enabled: true,
+              systemPrompt: 'Prompt',
+              model: 'openai/gpt-4',
+              identity: { emoji: '🐢', accentColor: '#111111' },
+            },
+          ],
+        }),
+      );
+    });
+
+    it('updates identity in memory and returns updated summary', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+          identity: { emoji: '🐢', accentColor: '#111111' },
+        },
+      ]);
+
+      const result = registry.updateAgentIdentity('agent1', {
+        emoji: '🦊',
+        accentColor: '#7C3AED',
+      });
+
+      expect(result?.identity).toEqual({ emoji: '🦊', accentColor: '#7C3AED' });
+      expect(registry.getAgent('agent1')?.identity).toEqual({
+        emoji: '🦊',
+        accentColor: '#7C3AED',
+      });
+    });
+
+    it('persists identity to the config file on disk', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+        },
+      ]);
+
+      registry.updateAgentIdentity('agent1', {
+        emoji: '🦊',
+        accentColor: '#7C3AED',
+      });
+
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; identity?: unknown }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent?.identity).toEqual({ emoji: '🦊', accentColor: '#7C3AED' });
+    });
+
+    it('removes the identity key from memory and disk when passed null', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([
+        {
+          id: 'agent1',
+          name: 'Agent One',
+          enabled: true,
+          systemPrompt: 'Prompt',
+          model: 'openai/gpt-4',
+          version: 1,
+          identity: { emoji: '🐢', accentColor: '#111111' },
+        },
+      ]);
+
+      registry.updateAgentIdentity('agent1', null);
+
+      expect(registry.getAgent('agent1')?.identity).toBeUndefined();
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        agents: Array<{ id: string; identity?: unknown }>;
+      };
+      const agent = written.agents.find((a) => a.id === 'agent1');
+      expect(agent).not.toHaveProperty('identity');
+    });
+
+    it('returns undefined for an unknown agent id', () => {
+      const registry = new AgentRegistry({ configPath });
+      registry.replaceAll([]);
+
+      const result = registry.updateAgentIdentity('ghost', {
+        emoji: '🦊',
+        accentColor: '#7C3AED',
+      });
+      expect(result).toBeUndefined();
+    });
+  });
 });
 
 describe('createAgentRegistry', () => {

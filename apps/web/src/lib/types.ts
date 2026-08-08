@@ -124,6 +124,7 @@ export type Agent = {
     maxTokens?: number;
   };
   workspace?: AgentWorkspaceConfig;
+  identity?: import('@openaidy/shared-types').AgentIdentity;
 };
 
 /**

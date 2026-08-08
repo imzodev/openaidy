@@ -15,7 +15,19 @@ import type {
   OpenAidyConfig,
   SkillSummary,
   CreateAgentInput,
+  AgentIdentity,
 } from '../../types.js';
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+const ACCENT_COLOR_PALETTE: Array<{ label: string; value: string }> = [
+  { label: 'Violet', value: '#7C3AED' },
+  { label: 'Blue', value: '#2563EB' },
+  { label: 'Green', value: '#16A34A' },
+  { label: 'Amber', value: '#D97706' },
+  { label: 'Rose', value: '#E11D48' },
+  { label: 'Slate', value: '#475569' },
+];
 
 function resolveConfigPath(): string {
   return resolve(process.env.APP_CONFIG_PATH ?? '.openaidy/openaidy.json');
@@ -83,11 +95,16 @@ Options:
   --name <name>          Agent display name (skips prompt)
   --id <id>              Agent ID slug (derived from name if omitted)
   --description <desc>   Short description (skips prompt)
+  --emoji <emoji>        Identity emoji (skips identity prompts)
+  --color <hex>          Identity accent color, e.g. #7C3AED (skips identity prompts)
+  --no-identity          Skip the identity (emoji + accent color) prompts entirely
 
 Examples:
   pnpm openaidy agents create
   pnpm openaidy agents create "Research Assistant"
   pnpm openaidy agents create --name "Research Assistant" --description "Helps with research"
+  pnpm openaidy agents create --name "Research Assistant" --emoji "🔬" --color "#2563EB"
+  pnpm openaidy agents create --name "Research Assistant" --no-identity
 
 Exit Codes:
   0  Agent created successfully
@@ -100,15 +117,21 @@ Exit Codes:
   const workspaceBaseDir = resolveWorkspaceBaseDir();
   const configPath = resolveConfigPath();
 
-  // Parse --name / --description / --id from args
+  // Parse --name / --description / --id / --emoji / --color / --no-identity from args
   let nameArg: string | undefined;
   let idArg: string | undefined;
   let descArg: string | undefined;
+  let emojiArg: string | undefined;
+  let colorArg: string | undefined;
+  let noIdentity = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--name') nameArg = args[++i];
     else if (args[i] === '--id') idArg = args[++i];
     else if (args[i] === '--description' || args[i] === '--desc')
       descArg = args[++i];
+    else if (args[i] === '--emoji') emojiArg = args[++i];
+    else if (args[i] === '--color') colorArg = args[++i];
+    else if (args[i] === '--no-identity') noIdentity = true;
     else if (!args[i]!.startsWith('-') && !nameArg) nameArg = args[i];
   }
 
@@ -161,6 +184,80 @@ Exit Codes:
     return { exitCode: 1, error: 'Cancelled.' };
   }
   const description = ((descResult as string | undefined) ?? '').trim();
+
+  // Identity: emoji + accent color (skippable via --no-identity, or preset via --emoji/--color)
+  let identity: AgentIdentity | undefined;
+  if (!noIdentity) {
+    let emoji: string | undefined = emojiArg?.trim();
+    if (emoji !== undefined && (!emoji || emoji.length > 8)) {
+      p.cancel('Emoji must be 1-8 characters.');
+      return { exitCode: 1, error: 'Emoji must be 1-8 characters.' };
+    }
+    if (emoji === undefined) {
+      const emojiResult = await p.text({
+        message: 'Identity emoji',
+        placeholder: '🦊',
+        validate: (v) => {
+          const trimmed = (v ?? '').trim();
+          if (!trimmed) return 'Emoji is required.';
+          if (trimmed.length > 8) return 'Emoji must be at most 8 characters.';
+          return undefined;
+        },
+      });
+      if (p.isCancel(emojiResult)) {
+        p.cancel('Cancelled.');
+        return { exitCode: 1, error: 'Cancelled.' };
+      }
+      emoji = (emojiResult as string).trim();
+    }
+
+    let accentColor: string | undefined = colorArg?.trim();
+    if (accentColor !== undefined && !HEX_COLOR_RE.test(accentColor)) {
+      p.cancel(
+        `Invalid accent color "${accentColor}". Expected a 6-digit hex color like #7C3AED.`,
+      );
+      return {
+        exitCode: 1,
+        error: `Invalid accent color "${accentColor}".`,
+      };
+    }
+    if (accentColor === undefined) {
+      const colorResult = await p.select<string>({
+        message: 'Identity accent color',
+        options: [
+          ...ACCENT_COLOR_PALETTE.map((c) => ({
+            value: c.value,
+            label: c.label,
+            hint: c.value,
+          })),
+          { value: 'custom', label: 'Custom…' },
+        ],
+      });
+      if (p.isCancel(colorResult)) {
+        p.cancel('Cancelled.');
+        return { exitCode: 1, error: 'Cancelled.' };
+      }
+      if (colorResult === 'custom') {
+        const customColorResult = await p.text({
+          message: 'Custom accent color (hex)',
+          placeholder: '#7C3AED',
+          validate: (v) =>
+            !HEX_COLOR_RE.test((v ?? '').trim())
+              ? 'Must be a 6-digit hex color, e.g. #7C3AED.'
+              : undefined,
+        });
+        if (p.isCancel(customColorResult)) {
+          p.cancel('Cancelled.');
+          return { exitCode: 1, error: 'Cancelled.' };
+        }
+        accentColor = (customColorResult as string).trim();
+      } else {
+        accentColor = colorResult;
+      }
+    }
+
+    identity = { emoji, accentColor: accentColor as `#${string}` };
+  }
 
   // Prompt: system prompt
   const systemPromptResult = await p.text({
@@ -232,6 +329,7 @@ Exit Codes:
     description: description || undefined,
     tags: [],
     skills: assignedSkills.length > 0 ? assignedSkills : undefined,
+    identity,
   };
 
   // Construct the full AgentConfig for openaidy.json (mirrors what registry.createAgent() produces)

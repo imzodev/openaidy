@@ -23,6 +23,26 @@ export type McpServerRef = {
 };
 
 /**
+ * A renderable visual asset for an agent's identity, layered on top of the
+ * emoji fallback. Discriminated by `kind` so consumers (web, CLI, future
+ * addons) branch on the union instead of inspecting URLs or content-type.
+ */
+export type AgentIdentityAsset =
+  | { kind: 'image'; url: string; alt?: string | undefined }
+  | { kind: 'model3d'; url: string; format: 'gltf' | 'glb' };
+
+/**
+ * Structured visual identity for an agent: emoji + accent color, with an
+ * optional avatar asset override. Optional everywhere it's consumed so
+ * existing agents without an `identity` block continue to load unchanged.
+ */
+export type AgentIdentity = {
+  emoji: string;
+  accentColor: `#${string}`;
+  avatar?: AgentIdentityAsset | undefined;
+};
+
+/**
  * Minimal user-provided fields for creating a new agent.
  * Structural defaults (version, enabled, workspace scaffold) are applied
  * by the server's AgentRegistry.createAgent().
@@ -41,4 +61,5 @@ export type CreateAgentInput = {
    * the new agent. Ignored by agent config storage itself.
    */
   personalityPresetId?: string;
+  identity?: AgentIdentity;
 };
