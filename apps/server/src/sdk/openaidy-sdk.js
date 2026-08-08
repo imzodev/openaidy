@@ -531,6 +531,141 @@
       },
     },
 
+    // ── Tasks ─────────────────────────────────────────────────────────────
+    // Requires `tasks.list` / `tasks.read` / `tasks.write` / `tasks.invoke`.
+    // A deliberately narrower surface than the web UI's task API: no agent
+    // assignment, no scheduling, no subtask CRUD.
+    tasks: {
+      /** List tasks, optionally filtered by status. Resolves {items}. */
+      list: function (status) {
+        return request(
+          'GET',
+          '/api/addon-proxy/tasks' +
+            (status ? '?status=' + encodeURIComponent(status) : ''),
+        );
+      },
+      /** Get a task with its subtasks and progress. Resolves {task}. */
+      get: function (id) {
+        return request('GET', '/api/addon-proxy/tasks/' + id);
+      },
+      /** Create a task. `input` is {title?, description, priority?}. Resolves {task}. */
+      create: function (input) {
+        return request('POST', '/api/addon-proxy/tasks', input);
+      },
+      /** Update a task's status. Resolves {task}. */
+      updateStatus: function (id, status) {
+        return request('PATCH', '/api/addon-proxy/tasks/' + id + '/status', {
+          status: status,
+        });
+      },
+      /** List a task's subtasks. Resolves {items}. */
+      listSubtasks: function (id) {
+        return request('GET', '/api/addon-proxy/tasks/' + id + '/subtasks');
+      },
+      /** Start executing a task. Blocks on real work — allow the long timeout. */
+      execute: function (id) {
+        return request(
+          'POST',
+          '/api/addon-proxy/tasks/' + id + '/execute',
+          undefined,
+          AGENT_REQUEST_TIMEOUT_MS,
+        );
+      },
+    },
+
+    // ── Pulses ────────────────────────────────────────────────────────────
+    // Requires `pulses.list` / `pulses.read` / `pulses.write` /
+    // `pulses.delete` / `pulses.invoke`.
+    pulses: {
+      /** List pulses. `filters` is {status?, limit?, offset?}. Resolves {pulses,total,limit,offset}. */
+      list: function (filters) {
+        filters = filters || {};
+        var params = [];
+        if (filters.status) {
+          params.push('status=' + encodeURIComponent(filters.status));
+        }
+        if (filters.limit != null) params.push('limit=' + filters.limit);
+        if (filters.offset != null) params.push('offset=' + filters.offset);
+        return request(
+          'GET',
+          '/api/addon-proxy/pulses' +
+            (params.length ? '?' + params.join('&') : ''),
+        );
+      },
+      /** Get a single pulse. Resolves {pulse}. */
+      get: function (id) {
+        return request('GET', '/api/addon-proxy/pulses/' + id);
+      },
+      /** Create a pulse. `input` is {name, prompt, schedule, agentId?, sessionId?}. Resolves {pulse}. */
+      create: function (input) {
+        return request('POST', '/api/addon-proxy/pulses', input);
+      },
+      /** Partially update a pulse. Resolves {pulse}. */
+      update: function (id, input) {
+        return request('PATCH', '/api/addon-proxy/pulses/' + id, input);
+      },
+      /** Delete a pulse. */
+      delete: function (id) {
+        return request('DELETE', '/api/addon-proxy/pulses/' + id);
+      },
+      /** Trigger a pulse to run right now. Blocks on the run — allow the long timeout. Resolves {run}. */
+      trigger: function (id) {
+        return request(
+          'POST',
+          '/api/addon-proxy/pulses/' + id + '/trigger',
+          undefined,
+          AGENT_REQUEST_TIMEOUT_MS,
+        );
+      },
+      /** List a pulse's run history. `pagination` is {limit?, offset?}. Resolves {runs,total,limit,offset}. */
+      history: function (id, pagination) {
+        pagination = pagination || {};
+        var params = [];
+        if (pagination.limit != null) params.push('limit=' + pagination.limit);
+        if (pagination.offset != null) {
+          params.push('offset=' + pagination.offset);
+        }
+        return request(
+          'GET',
+          '/api/addon-proxy/pulses/' +
+            id +
+            '/history' +
+            (params.length ? '?' + params.join('&') : ''),
+        );
+      },
+    },
+
+    // ── Channels (read-only) ──────────────────────────────────────────────
+    // Requires `channels.list` / `channels.read` / `channels.manage`. There
+    // is no "send a message" capability — channels only auto-reply to
+    // inbound messages via the agent they're configured with.
+    channels: {
+      /** List configured channels and their connection status. Resolves {items}. */
+      list: function () {
+        return request('GET', '/api/addon-proxy/channels');
+      },
+      /** Get a single channel's connection status. */
+      getStatus: function (id) {
+        return request('GET', '/api/addon-proxy/channels/' + id + '/status');
+      },
+      /** Start connecting a channel (may take time for a QR flow). */
+      connect: function (id) {
+        return request(
+          'POST',
+          '/api/addon-proxy/channels/' + id + '/connect',
+          undefined,
+          AGENT_REQUEST_TIMEOUT_MS,
+        );
+      },
+      /** Disconnect a channel. */
+      disconnect: function (id) {
+        return request(
+          'POST',
+          '/api/addon-proxy/channels/' + id + '/disconnect',
+        );
+      },
+    },
+
     // ── UI (Tailwind-styled component library) ─────────────────────────────
     // Pure client-side DOM builders — no server round-trip, no permission
     // required. Every component returns a real HTMLElement so it can be
