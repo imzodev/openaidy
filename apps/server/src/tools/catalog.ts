@@ -7,8 +7,10 @@ export const agentsListMeta: ToolMeta = {
   category: 'Agents',
   description:
     'List all enabled agents available in this OpenAidy instance. ' +
-    "Returns each agent's id, name, description, and model. " +
-    'Use this before creating an addon that invokes an agent — never hardcode an agent ID.',
+    "Returns each agent's id, name, description, model, and the tools, " +
+    'skills, and MCP servers it has access to. ' +
+    'Use this before creating an addon that invokes an agent, or before ' +
+    'delegating to another agent, to check what it can actually do — never hardcode an agent ID.',
 };
 
 export const agentsCreateMeta: ToolMeta = {
