@@ -10,6 +10,7 @@ import {
   toAgentSummary,
 } from './schema';
 import type { CreateAgentInput } from '../types';
+import type { AgentIdentity } from '@openaidy/shared-types';
 
 /**
  * Agent registry options
@@ -384,6 +385,35 @@ export class AgentRegistry {
   }
 
   /**
+   * Update (or clear) the structured visual identity for an agent.
+   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Passing `null` removes the `identity` key. Returns the updated AgentSummary
+   * or undefined if the agent was not found.
+   */
+  updateAgentIdentity(
+    agentId: string,
+    identity: AgentIdentity | null,
+  ): AgentSummary | undefined {
+    this.ensureLoaded();
+    const agent = this.agents.get(agentId);
+    if (!agent) return undefined;
+
+    const updated: Agent = {
+      ...agent,
+      identity: identity ?? undefined,
+    };
+    this.agents.set(agentId, updated);
+    this.persistConfig((agents) => {
+      const idx = agents.findIndex((a) => a['id'] === agentId);
+      const entry = idx !== -1 ? agents[idx] : undefined;
+      if (!entry) return;
+      if (identity) entry['identity'] = identity;
+      else delete entry['identity'];
+    });
+    return toAgentSummary(updated);
+  }
+
+  /**
    * Create a new agent from user-provided input.
    * All structural defaults (version, enabled, workspace scaffold, tags) are applied here
    * so callers never duplicate this logic. Persists to openaidy.json and registers in memory.
@@ -409,6 +439,7 @@ export class AgentRegistry {
       skills:
         input.skills && input.skills.length > 0 ? input.skills : undefined,
       version: 1,
+      identity: input.identity,
       workspace: {
         enabled: true,
         defaultPermissions: {

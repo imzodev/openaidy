@@ -31,6 +31,16 @@ export function AgentPicker(props: AgentPickerProps) {
     props.agents.find((a) => a.id === props.selectedAgentId);
   const selectedLabel = () => selectedAgent()?.name ?? 'Default agent';
 
+  // Chip icon for the trigger button: agent's emoji when set, otherwise the
+  // neutral bot icon fallback.
+  const AgentIcon = (p: { agent?: Agent; class: string }) => (
+    <Show when={p.agent?.identity?.emoji} fallback={<Bot class={p.class} />}>
+      <span class="leading-none" aria-hidden="true">
+        {p.agent?.identity?.emoji}
+      </span>
+    </Show>
+  );
+
   // Option list shared by the desktop dropdown and the mobile bottom sheet.
   const OptionList = () => (
     <>
@@ -54,13 +64,23 @@ export function AgentPicker(props: AgentPickerProps) {
           <button
             type="button"
             onClick={() => handleSelect(agent.id)}
+            style={
+              agent.identity?.accentColor
+                ? { 'border-left': `2px solid ${agent.identity.accentColor}` }
+                : undefined
+            }
             class={`w-full px-3 py-3 md:py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+              agent.identity?.accentColor ? '' : 'border-l-2 border-transparent'
+            } ${
               props.selectedAgentId === agent.id
                 ? 'bg-blue-50 dark:bg-blue-900/30'
                 : ''
             }`}
           >
-            <Bot class="w-4 h-4 text-text-tertiary flex-shrink-0" />
+            <AgentIcon
+              agent={agent}
+              class="w-4 h-4 text-text-tertiary flex-shrink-0"
+            />
             <div class="flex-1 min-w-0">
               <div class="font-medium text-text-primary truncate">
                 {agent.name}
@@ -100,7 +120,10 @@ export function AgentPicker(props: AgentPickerProps) {
             aria-label="Select agent"
             class="flex items-center gap-2 px-3 h-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px]"
           >
-            <Bot class="w-4 h-4 text-text-tertiary" />
+            <AgentIcon
+              agent={selectedAgent()}
+              class="w-4 h-4 text-text-tertiary"
+            />
             <span class="flex-1 text-left text-sm text-text-secondary truncate">
               {selectedLabel()}
             </span>
@@ -116,7 +139,7 @@ export function AgentPicker(props: AgentPickerProps) {
           title={selectedLabel()}
           class="flex items-center justify-center w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text-tertiary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Bot class="w-4 h-4" />
+          <AgentIcon agent={selectedAgent()} class="w-4 h-4" />
         </button>
       </Show>
 

@@ -10,6 +10,7 @@ import {
   WorkspaceConfigSchema,
   getAgentWorkspace,
   McpServerRefSchema,
+  IdentitySchema,
 } from './schema';
 
 describe('AgentSchema', () => {
@@ -543,5 +544,127 @@ describe('AgentSchema builtin tools (tools field)', () => {
     });
     const summary = toAgentSummary(agent);
     expect(summary.tools).toEqual(['workspace_read', 'workspace_write']);
+  });
+});
+
+describe('IdentitySchema', () => {
+  it('accepts a valid emoji + accentColor payload', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: '#7C3AED',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.emoji).toBe('🦊');
+      expect(result.data.accentColor).toBe('#7C3AED');
+      expect(result.data.avatar).toBeUndefined();
+    }
+  });
+
+  it('accepts a valid image avatar', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: '#7C3AED',
+      avatar: { kind: 'image', url: 'https://example.com/fox.png', alt: 'Fox' },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a valid model3d avatar', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: '#7C3AED',
+      avatar: {
+        kind: 'model3d',
+        url: 'https://example.com/fox.glb',
+        format: 'glb',
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a bad hex accentColor', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: 'purple',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a short hex accentColor', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: '#fff',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an emoji longer than 8 characters', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊🦊🦊🦊🦊',
+      accentColor: '#7C3AED',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an avatar with an unknown kind', () => {
+    const result = IdentitySchema.safeParse({
+      emoji: '🦊',
+      accentColor: '#7C3AED',
+      avatar: { kind: 'video', url: 'https://example.com/fox.mp4' },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('AgentSchema with identity', () => {
+  it('parses an agent with identity', () => {
+    const agent = AgentSchema.parse({
+      id: 'identity-agent',
+      name: 'Identity Agent',
+      enabled: true,
+      systemPrompt: 'You are a test assistant.',
+      model: 'openai/gpt-4o-mini',
+      identity: { emoji: '🦊', accentColor: '#7C3AED' },
+    });
+    expect(agent.identity?.emoji).toBe('🦊');
+    expect(agent.identity?.accentColor).toBe('#7C3AED');
+  });
+
+  it('parses an agent without identity (backward compatible)', () => {
+    const agent = AgentSchema.parse({
+      id: 'no-identity-agent',
+      name: 'No Identity Agent',
+      enabled: true,
+      systemPrompt: 'You are a test assistant.',
+      model: 'openai/gpt-4o-mini',
+    });
+    expect(agent.identity).toBeUndefined();
+  });
+
+  it('toAgentSummary propagates identity', () => {
+    const agent = AgentSchema.parse({
+      id: 'identity-agent',
+      name: 'Identity Agent',
+      enabled: true,
+      systemPrompt: 'You are a test assistant.',
+      model: 'openai/gpt-4o-mini',
+      identity: { emoji: '🦊', accentColor: '#7C3AED' },
+    });
+    const summary = toAgentSummary(agent);
+    expect(summary.identity?.emoji).toBe('🦊');
+    expect(summary.identity?.accentColor).toBe('#7C3AED');
+  });
+
+  it('toAgentSummary produces identity: undefined when absent', () => {
+    const agent = AgentSchema.parse({
+      id: 'no-identity-agent',
+      name: 'No Identity Agent',
+      enabled: true,
+      systemPrompt: 'You are a test assistant.',
+      model: 'openai/gpt-4o-mini',
+    });
+    const summary = toAgentSummary(agent);
+    expect(summary.identity).toBeUndefined();
   });
 });

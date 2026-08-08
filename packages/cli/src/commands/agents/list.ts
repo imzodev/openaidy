@@ -14,6 +14,8 @@ import type {
   OpenAidyConfig,
 } from '../../types.js';
 
+const ESC = '\x1b';
+
 function resolveConfigPath(): string {
   return resolve(process.env.APP_CONFIG_PATH ?? '.openaidy/openaidy.json');
 }
@@ -28,9 +30,21 @@ async function readAgentConfigs(): Promise<AgentConfig[]> {
   }
 }
 
+/** Render a hex accent color (e.g. "#7C3AED") as a truecolor ANSI background swatch. */
+function colorSwatch(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${ESC}[48;2;${r};${g};${b}m  ${ESC}[0m`;
+}
+
 function formatAgent(a: AgentConfig): string {
+  const emojiPrefix = a.identity?.emoji ? `${a.identity.emoji}  ` : '';
+  const swatch = a.identity?.accentColor
+    ? `  ${colorSwatch(a.identity.accentColor)}`
+    : '';
   const lines: string[] = [
-    `${a.name}${a.enabled === false ? ' [disabled]' : ''}`,
+    `${emojiPrefix}${a.name}${a.enabled === false ? ' [disabled]' : ''}${swatch}`,
   ];
   lines.push(`ID:     ${a.id}`);
   if (a.description) lines.push(`Desc:   ${a.description}`);

@@ -175,4 +175,63 @@ describe('agents list', () => {
       expect(noteOutput()).toContain('No Model Agent');
     });
   });
+
+  describe('identity rendering', () => {
+    it('prepends the emoji when identity is present', async () => {
+      const config = {
+        version: 1,
+        agents: [
+          {
+            id: 'fox-agent',
+            name: 'Fox Agent',
+            enabled: true,
+            model: 'openai/gpt-4o-mini',
+            identity: { emoji: '🦊', accentColor: '#7C3AED' },
+          },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await agentsListHandler([]);
+      expect(noteOutput()).toContain('🦊  Fox Agent');
+    });
+
+    it('renders an ANSI truecolor swatch for the accent color', async () => {
+      const config = {
+        version: 1,
+        agents: [
+          {
+            id: 'fox-agent',
+            name: 'Fox Agent',
+            enabled: true,
+            model: 'openai/gpt-4o-mini',
+            identity: { emoji: '🦊', accentColor: '#7C3AED' },
+          },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await agentsListHandler([]);
+      // #7C3AED -> r=124 g=58 b=237
+      expect(noteOutput()).toContain('\x1b[48;2;124;58;237m');
+      expect(noteOutput()).toContain('\x1b[0m');
+    });
+
+    it('shows no emoji prefix or swatch when identity is absent', async () => {
+      const config = {
+        version: 1,
+        agents: [
+          {
+            id: 'plain-agent',
+            name: 'Plain Agent',
+            enabled: true,
+            model: 'openai/gpt-4o-mini',
+          },
+        ],
+      };
+      mockReadFile.mockResolvedValue(JSON.stringify(config));
+      await agentsListHandler([]);
+      expect(noteOutput()).not.toContain('\x1b[48;2;');
+      const firstLine = noteOutput().split('\n')[0];
+      expect(firstLine).toBe('Plain Agent');
+    });
+  });
 });

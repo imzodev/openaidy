@@ -371,6 +371,71 @@ describe('Agent Routes', () => {
     });
   });
 
+  describe('PATCH /agents/:agentId/identity', () => {
+    it('should update identity for an agent and return updated summary', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/identity',
+        payload: { identity: { emoji: '🦊', accentColor: '#7C3AED' } },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.id).toBe('default');
+      expect(body.identity).toEqual({ emoji: '🦊', accentColor: '#7C3AED' });
+    });
+
+    it('should clear identity when passed null', async () => {
+      await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/identity',
+        payload: { identity: { emoji: '🦊', accentColor: '#7C3AED' } },
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/identity',
+        payload: { identity: null },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.identity).toBeUndefined();
+    });
+
+    it('should return 400 when accentColor is not a valid hex color', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/identity',
+        payload: { identity: { emoji: '🦊', accentColor: 'purple' } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 when identity is missing from the body', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/default/identity',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 404 for a non-existent agent', async () => {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/api/agents/ghost/identity',
+        payload: { identity: { emoji: '🦊', accentColor: '#7C3AED' } },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = response.json();
+      expect(body.error).toBe('Agent not found');
+    });
+  });
+
   describe('DELETE /agents/:agentId', () => {
     it('returns 200 and the deleted agent summary', async () => {
       const response = await app.inject({

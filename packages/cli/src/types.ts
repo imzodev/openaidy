@@ -4,6 +4,8 @@
  * Shared type definitions for the OpenAidy CLI.
  */
 
+import type { AgentIdentity } from '@openaidy/shared-types';
+
 /**
  * Output format mode
  */
@@ -107,13 +109,14 @@ export type AgentConfig = {
     workspaces: Array<{ path: string; permissions: WorkspacePermissions }>;
   };
   version?: number;
+  identity?: AgentIdentity;
 };
 
 export type OpenAidyConfig = {
   agents?: AgentConfig[];
 };
 
-export type { CreateAgentInput } from '@openaidy/shared-types';
+export type { CreateAgentInput, AgentIdentity } from '@openaidy/shared-types';
 
 export type SkillSummary = {
   id: string;
