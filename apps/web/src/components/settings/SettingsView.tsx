@@ -108,8 +108,7 @@ export function SettingsView() {
           ...prev,
           execution: {
             ...(prev?.execution ?? {}),
-            ...((newConfig.execution as Record<string, unknown> | undefined) ??
-              {}),
+            ...((newConfig.execution ?? {}) as Record<string, unknown>),
           },
         }) as AppConfig,
     );

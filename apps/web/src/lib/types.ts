@@ -518,7 +518,10 @@ export type AppConfig = {
   providers: ProviderConfig[];
   agents: AgentConfig[];
   channels?: ChannelConfig[];
-  execution?: ExecutionConfig;
+  // Non-optional: executionConfigSchema.optional().default({}) guarantees
+  // this is always present on a parsed config (unlike `channels`/`mcpServers`,
+  // which genuinely round-trip as absent).
+  execution: ExecutionConfig;
 };
 
 /**

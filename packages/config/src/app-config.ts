@@ -308,14 +308,32 @@ export const appDefaultsSchema = z.object({
 });
 
 /**
+ * Single source of truth for the execution config defaults below. Consumers
+ * that need a fallback outside a parsed config (e.g. `TaskExecution`'s
+ * constructor default when no `getExecutionConfig` getter is injected) import
+ * this instead of hand-copying the literal, so a schema default change can't
+ * silently drift out of sync with the fallback.
+ */
+export const DEFAULT_EXECUTION_CONFIG = {
+  maxRetries: 5,
+  depContextPerItemChars: 2000,
+  depContextTotalChars: 8000,
+} as const;
+
+/**
  * Task/subtask execution tuning. Governs subtask retry behavior and how much
  * of a completed dependency subtask's result gets carried into a downstream
- * subtask's prompt. Defaults match the previous hardcoded constants in
- * `apps/server/src/tasks/execution/task-execution.ts`.
+ * subtask's prompt.
  */
 export const executionConfigSchema = z.object({
   /** Max retry attempts for a failed subtask before it's marked failed. */
-  maxRetries: z.number().int().min(1).max(20).optional().default(5),
+  maxRetries: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .optional()
+    .default(DEFAULT_EXECUTION_CONFIG.maxRetries),
   /** Per-dependency cap (chars) on how much of its result is carried forward. */
   depContextPerItemChars: z
     .number()
@@ -323,7 +341,7 @@ export const executionConfigSchema = z.object({
     .min(100)
     .max(50000)
     .optional()
-    .default(2000),
+    .default(DEFAULT_EXECUTION_CONFIG.depContextPerItemChars),
   /** Total cap (chars) across all dependencies carried into one subtask. */
   depContextTotalChars: z
     .number()
@@ -331,7 +349,7 @@ export const executionConfigSchema = z.object({
     .min(100)
     .max(200000)
     .optional()
-    .default(8000),
+    .default(DEFAULT_EXECUTION_CONFIG.depContextTotalChars),
 });
 
 export type ExecutionConfig = z.infer<typeof executionConfigSchema>;

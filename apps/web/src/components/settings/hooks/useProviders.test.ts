@@ -18,6 +18,11 @@ const mockConfig = () =>
       },
     ],
     agents: [],
+    execution: {
+      maxRetries: 5,
+      depContextPerItemChars: 2000,
+      depContextTotalChars: 8000,
+    },
   }) as AppConfig;
 
 const mockUpdateConfigData = vi.fn().mockResolvedValue(undefined);

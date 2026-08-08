@@ -15,7 +15,10 @@ import type {
   SessionType,
   ExecutionSubtaskSummary,
 } from '@openaidy/shared-types';
-import type { ExecutionConfig } from '@openaidy/config';
+import {
+  DEFAULT_EXECUTION_CONFIG,
+  type ExecutionConfig,
+} from '@openaidy/config';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
 import {
@@ -37,14 +40,6 @@ import {
 } from './verification-verdict';
 
 const STUCK_TIMEOUT_MINUTES = 3;
-// Fallback execution config, used when no getExecutionConfig getter is
-// injected (e.g. in tests). Mirrors the defaults in
-// packages/config/src/app-config.ts#executionConfigSchema.
-const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
-  maxRetries: 5,
-  depContextPerItemChars: 2000,
-  depContextTotalChars: 8000,
-};
 // Bound on how much of a verifier's rejection reason gets echoed back into
 // the retry message, so a verbose verdict can't unboundedly grow the next
 // attempt's opening message.
