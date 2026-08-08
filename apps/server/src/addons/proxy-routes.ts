@@ -16,6 +16,24 @@ import {
   toScheduleInput,
 } from '../pulses/schemas.js';
 import { toStatusResponse } from '../channels/status.js';
+import { WorkspaceError } from '../workspace';
+import { AttachmentError, MAX_ATTACHMENT_BYTES } from '../attachments/service';
+import { uploadAttachmentSchema } from '../routes/attachments';
+
+/**
+ * Cap for a single addon-shared workspace file. Same ceiling as
+ * `MAX_ATTACHMENT_BYTES` — there's no principled reason for these to differ,
+ * and keeping one number makes both limits easy to reason about together.
+ */
+const MAX_ADDON_WORKSPACE_FILE_BYTES = MAX_ATTACHMENT_BYTES;
+
+/**
+ * Base64 expands bytes by ~4/3; allow the JSON envelope on top of the
+ * decoded-size limit enforced below (mirrors `UPLOAD_BODY_LIMIT` in
+ * `routes/attachments.ts`).
+ */
+const ADDON_UPLOAD_BODY_LIMIT =
+  Math.ceil(MAX_ADDON_WORKSPACE_FILE_BYTES * 1.4) + 64 * 1024;
 
 // Extend FastifyRequest to include addon context
 declare module 'fastify' {
@@ -210,7 +228,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
   // POST /api/addon-proxy/sessions/:sessionId/messages
   app.post<{
     Params: { sessionId: string };
-    Body: { content: string; agentId: string };
+    Body: { content: string; agentId: string; attachmentIds?: string[] };
   }>(
     '/addon-proxy/sessions/:sessionId/messages',
     { preHandler: validateAddonToken },
@@ -231,12 +249,24 @@ export const addonProxyRoutes: FastifyPluginAsync<
       }
 
       const { sessionId } = request.params;
-      const { content, agentId } = request.body;
+      const { content, agentId, attachmentIds } = request.body;
 
       if (!content || !agentId) {
         return reply.code(400).send({
           error: 'INVALID_REQUEST',
           message: 'content and agentId are required',
+        });
+      }
+
+      if (
+        attachmentIds !== undefined &&
+        (!Array.isArray(attachmentIds) ||
+          attachmentIds.length > 10 ||
+          attachmentIds.some((id) => typeof id !== 'string'))
+      ) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message: 'attachmentIds must be an array of at most 10 strings',
         });
       }
 
@@ -257,6 +287,7 @@ export const addonProxyRoutes: FastifyPluginAsync<
         role: 'user',
         content,
         agentId,
+        ...(attachmentIds !== undefined ? { attachmentIds } : {}),
         onStreamEvent: () => {},
       });
 
@@ -271,6 +302,195 @@ export const addonProxyRoutes: FastifyPluginAsync<
         message: result.assistantMessage.content,
         sessionId,
       });
+    },
+  );
+
+  // POST /api/addon-proxy/sessions/:sessionId/attachments
+  //
+  // Upload an image/audio/video file for a pending message, exactly like the
+  // human-facing `POST /sessions/:sessionId/attachments` in
+  // `routes/attachments.ts` — same schema, same service call. The returned
+  // id is unlinked until passed as one of `attachmentIds` on the messages
+  // route above.
+  app.post(
+    '/addon-proxy/sessions/:sessionId/attachments',
+    { preHandler: validateAddonToken, bodyLimit: ADDON_UPLOAD_BODY_LIMIT },
+    async (request, reply) => {
+      const addon = await opts.addonService.getAddon(request.addonId!);
+
+      if (!addon) {
+        return reply
+          .code(404)
+          .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
+      }
+
+      const authResult = proxyService.authorize(addon, 'sessions.write');
+      if (!authResult.authorized) {
+        return reply
+          .code(403)
+          .send({ error: 'PERMISSION_DENIED', message: authResult.error });
+      }
+
+      if (!opts.sessionService || !opts.attachmentService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Attachment service not available',
+        });
+      }
+
+      const { sessionId } = request.params as { sessionId: string };
+
+      const session = await opts.sessionService.getSession(sessionId);
+      if (!session) {
+        return reply
+          .code(404)
+          .send({ error: 'SESSION_NOT_FOUND', message: 'Session not found' });
+      }
+
+      let body: ReturnType<typeof uploadAttachmentSchema.parse>;
+      try {
+        body = uploadAttachmentSchema.parse(request.body);
+      } catch (error) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        });
+      }
+
+      await proxyService.recordUsage(
+        request.addonId!,
+        `/sessions/${sessionId}/attachments`,
+      );
+
+      try {
+        const attachment = await opts.attachmentService.saveUpload({
+          sessionId,
+          mimeType: body.mimeType,
+          data: body.data,
+          ...(body.name ? { name: body.name } : {}),
+        });
+        return reply.code(201).send({
+          id: attachment.id,
+          sessionId: attachment.sessionId,
+          kind: attachment.kind,
+          source: attachment.source,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          sizeBytes: attachment.sizeBytes,
+          createdAt: attachment.createdAt,
+        });
+      } catch (error) {
+        if (error instanceof AttachmentError) {
+          return reply
+            .code(
+              error.code === 'FILE_TOO_LARGE'
+                ? 413
+                : error.code === 'UNSUPPORTED_MIME_TYPE'
+                  ? 415
+                  : 500,
+            )
+            .send({ error: error.code, message: error.message });
+        }
+        return reply.code(500).send({
+          error: 'ATTACHMENT_ERROR',
+          message: error instanceof Error ? error.message : 'Upload failed',
+        });
+      }
+    },
+  );
+
+  // POST /api/addon-proxy/workspace/:agentId/files
+  //
+  // Write an arbitrary file (csv, txt, json, ...) into an agent's workspace
+  // on the addon's behalf. The addon never gets a filesystem path — the
+  // server resolves and validates it via `WorkspaceService.validatePath`
+  // (through `writeBinaryFile`), the same guard used by the agent's own
+  // workspace_write tool.
+  app.post<{
+    Params: { agentId: string };
+    Body: { path: string; data: string };
+  }>(
+    '/addon-proxy/workspace/:agentId/files',
+    { preHandler: validateAddonToken, bodyLimit: ADDON_UPLOAD_BODY_LIMIT },
+    async (request, reply) => {
+      const { agentId } = request.params;
+      const addon = await opts.addonService.getAddon(request.addonId!);
+
+      if (!addon) {
+        return reply
+          .code(404)
+          .send({ error: 'ADDON_NOT_FOUND', message: 'Addon not found' });
+      }
+
+      const authResult = proxyService.authorize(addon, 'workspace.write');
+      if (!authResult.authorized) {
+        return reply
+          .code(403)
+          .send({ error: 'PERMISSION_DENIED', message: authResult.error });
+      }
+
+      if (!proxyService.hasWorkspaceAccess(addon, agentId)) {
+        return reply.code(403).send({
+          error: 'AGENT_NOT_ALLOWED',
+          message: `Access to agent ${agentId}'s workspace not allowed`,
+        });
+      }
+
+      if (!opts.workspaceService) {
+        return reply.code(503).send({
+          error: 'SERVICE_UNAVAILABLE',
+          message: 'Workspace service not available',
+        });
+      }
+
+      const { path, data } = request.body ?? {};
+      if (!path || !data) {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message: 'path and data are required',
+        });
+      }
+
+      let buffer: Buffer;
+      try {
+        buffer = Buffer.from(data, 'base64');
+      } catch {
+        return reply.code(400).send({
+          error: 'INVALID_REQUEST',
+          message: 'data must be base64-encoded',
+        });
+      }
+
+      if (
+        buffer.length === 0 ||
+        buffer.length > MAX_ADDON_WORKSPACE_FILE_BYTES
+      ) {
+        return reply.code(413).send({
+          error: 'FILE_TOO_LARGE',
+          message: `File must be between 1 byte and ${MAX_ADDON_WORKSPACE_FILE_BYTES} bytes`,
+        });
+      }
+
+      await proxyService.recordUsage(
+        request.addonId!,
+        `/workspace/${agentId}/files`,
+      );
+
+      try {
+        await opts.workspaceService.writeBinaryFile(agentId, path, buffer);
+        return reply.code(201).send({ agentId, path });
+      } catch (error) {
+        if (error instanceof WorkspaceError) {
+          return reply
+            .code(error.code === 'PATH_TRAVERSAL_BLOCKED' ? 400 : 500)
+            .send({ error: error.code, message: error.message });
+        }
+        return reply.code(500).send({
+          error: 'WRITE_FAILED',
+          message: error instanceof Error ? error.message : 'Write failed',
+        });
+      }
     },
   );
 

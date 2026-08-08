@@ -16,6 +16,10 @@ import type { FastifyInstance } from 'fastify';
 import { addonProxyRoutes } from './proxy-routes';
 import { AddonService } from './service';
 import type { SessionMessageService } from '../sessions/service';
+import {
+  AttachmentError,
+  type AttachmentService,
+} from '../attachments/service';
 import type { Addon } from '@openaidy/db';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +56,7 @@ function makeEnabledAddon(addonId: string, permissions: string[]): Addon {
 function makeSessionService(sessions: object[] = []): SessionMessageService {
   return {
     listSessions: vi.fn().mockResolvedValue(sessions),
+    getSession: vi.fn().mockResolvedValue({ id: 'sess-123' }),
     submitMessageStreaming: vi.fn().mockResolvedValue({
       ok: true,
       assistantMessage: { content: 'Agent response' },
@@ -59,10 +64,29 @@ function makeSessionService(sessions: object[] = []): SessionMessageService {
   } as unknown as SessionMessageService;
 }
 
+function makeAttachmentService(
+  overrides: Partial<AttachmentService> = {},
+): AttachmentService {
+  return {
+    saveUpload: vi.fn().mockResolvedValue({
+      id: 'att-1',
+      sessionId: 'sess-123',
+      kind: 'image',
+      source: 'user_upload',
+      name: 'photo.png',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    }),
+    ...overrides,
+  } as unknown as AttachmentService;
+}
+
 /** Build a minimal Fastify app with the proxy routes registered */
 async function buildProxyApp(opts: {
   addon: Addon | null;
   sessionService?: SessionMessageService;
+  attachmentService?: AttachmentService;
 }): Promise<{ app: FastifyInstance; token: string }> {
   const addonSvc = makeAddonService();
 
@@ -93,6 +117,9 @@ async function buildProxyApp(opts: {
         authMiddleware: null as never,
         internalApiBaseUrl: '',
         ...(opts.sessionService ? { sessionService: opts.sessionService } : {}),
+        ...(opts.attachmentService
+          ? { attachmentService: opts.attachmentService }
+          : {}),
       });
     },
     { prefix: '/api' },
@@ -283,5 +310,188 @@ describe('POST /api/addon-proxy/sessions/:sessionId/messages', () => {
     const body = res.json();
     expect(body.message).toBe('Agent response');
     expect(body.sessionId).toBe('sess-123');
+  });
+
+  it('forwards attachmentIds to submitMessageStreaming when provided', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        content: 'What is this?',
+        agentId: 'default',
+        attachmentIds: ['att-1', 'att-2'],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(sessionSvc.submitMessageStreaming).toHaveBeenCalledWith(
+      expect.objectContaining({ attachmentIds: ['att-1', 'att-2'] }),
+    );
+  });
+
+  it('omits attachmentIds from submitMessageStreaming when not provided', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { content: 'Hello', agentId: 'default' },
+    });
+    const call = vi.mocked(sessionSvc.submitMessageStreaming).mock.calls[0]![0];
+    expect(call).not.toHaveProperty('attachmentIds');
+  });
+
+  it('returns 400 when attachmentIds is not an array of strings', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/messages',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        content: 'Hello',
+        agentId: 'default',
+        attachmentIds: [123],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('INVALID_REQUEST');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/addon-proxy/sessions/:sessionId/attachments
+// ---------------------------------------------------------------------------
+
+describe('POST /api/addon-proxy/sessions/:sessionId/attachments', () => {
+  let app: FastifyInstance;
+  let token: string;
+  let sessionSvc: SessionMessageService;
+  let attachmentSvc: AttachmentService;
+
+  beforeEach(async () => {
+    sessionSvc = makeSessionService();
+    attachmentSvc = makeAttachmentService();
+    const setup = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['sessions.write']),
+      sessionService: sessionSvc,
+      attachmentService: attachmentSvc,
+    });
+    app = setup.app;
+    token = setup.token;
+  });
+
+  const payload = {
+    mimeType: 'image/png',
+    data: Buffer.from('png').toString('base64'),
+    name: 'photo.png',
+  };
+
+  it('returns 401 when no Authorization header is provided', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      payload,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 403 when addon lacks sessions.write permission', async () => {
+    const { app: restrictedApp, token: restrictedToken } = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['sessions.list']), // no sessions.write
+      sessionService: sessionSvc,
+      attachmentService: attachmentSvc,
+    });
+    const res = await restrictedApp.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${restrictedToken}` },
+      payload,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe('PERMISSION_DENIED');
+  });
+
+  it('returns 503 when attachmentService is not wired', async () => {
+    const { app: noSvcApp, token: noSvcToken } = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['sessions.write']),
+      sessionService: sessionSvc,
+      // no attachmentService
+    });
+    const res = await noSvcApp.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${noSvcToken}` },
+      payload,
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('returns 404 when the session does not exist', async () => {
+    vi.mocked(sessionSvc.getSession).mockResolvedValueOnce(null as never);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('SESSION_NOT_FOUND');
+  });
+
+  it('returns 400 when the body fails validation', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { mimeType: 'image/png' }, // missing data
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('INVALID_REQUEST');
+  });
+
+  it('returns 415 when saveUpload rejects an unsupported mime type', async () => {
+    vi.mocked(attachmentSvc.saveUpload).mockRejectedValueOnce(
+      new AttachmentError('bad mime', 'UNSUPPORTED_MIME_TYPE'),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { mimeType: 'text/csv', data: 'YQ==' },
+    });
+    expect(res.statusCode).toBe(415);
+    expect(res.json().error).toBe('UNSUPPORTED_MIME_TYPE');
+  });
+
+  it('returns 413 when saveUpload rejects an oversized file', async () => {
+    vi.mocked(attachmentSvc.saveUpload).mockRejectedValueOnce(
+      new AttachmentError('too big', 'FILE_TOO_LARGE'),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+    expect(res.statusCode).toBe(413);
+    expect(res.json().error).toBe('FILE_TOO_LARGE');
+  });
+
+  it('creates an unlinked attachment and returns its metadata', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/addon-proxy/sessions/sess-123/attachments',
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(attachmentSvc.saveUpload).toHaveBeenCalledWith({
+      sessionId: 'sess-123',
+      mimeType: 'image/png',
+      data: payload.data,
+      name: 'photo.png',
+    });
+    const body = res.json();
+    expect(body.id).toBe('att-1');
+    expect(body.mimeType).toBe('image/png');
   });
 });

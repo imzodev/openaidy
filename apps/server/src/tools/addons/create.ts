@@ -22,7 +22,11 @@ import { generateFromTemplate } from '@openaidy/addon-scaffolding';
 import type { AddonService } from '../../addons/service.js';
 import type { AddonManifest } from '@openaidy/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
-import { renderSdkReference, SDK_METHODS } from '../../addons/sdk-reference.js';
+import {
+  renderSdkReference,
+  listSdkPermissions,
+  SDK_METHODS,
+} from '../../addons/sdk-reference.js';
 import { addonCreateMeta } from '../catalog.js';
 import {
   isValidId,
@@ -59,7 +63,7 @@ OpenAidy.ready(function(sdk) {
 });`;
 }
 
-function buildSdkUsageComment(permissions: string[]): string {
+export function buildSdkUsageComment(permissions: string[]): string {
   const relevant = SDK_METHODS.filter(
     (m) => !m.requiredPermission || permissions.includes(m.requiredPermission),
   );
@@ -75,6 +79,7 @@ function buildSdkUsageComment(permissions: string[]): string {
 
 export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
   const sdkReference = renderSdkReference();
+  const validPermissions = listSdkPermissions().join(', ');
 
   return {
     name: addonCreateMeta.name,
@@ -248,10 +253,12 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           items: { type: 'string' },
           description:
             'SDK permissions this addon requires. ' +
-            'Valid values: agents.list, agents.invoke, sessions.list, ' +
-            'sessions.read, sessions.write, config.read. Only request what you actually use. ' +
+            `Valid base values: ${validPermissions}. Only request what you actually use. ` +
+            'Append ":<agentId>" to agents.invoke or workspace.write to scope it to one agent ' +
+            'instead of granting it for every agent (e.g. "workspace.write:my-agent"). ' +
             'NOTE: sessions are created automatically by agents.invoke — there is no sessions.create permission. ' +
-            'sessions.write = send a message to an existing session via sdk.sendMessage().',
+            'sessions.write = send a message via sdk.sendMessage() or attach a file via sdk.attachFile(). ' +
+            "workspace.write = share a file into an agent's workspace via sdk.shareFile().",
         },
         externalDomains: {
           type: 'array',

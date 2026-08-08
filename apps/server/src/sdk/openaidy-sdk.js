@@ -205,6 +205,10 @@
   // default would reject a request that actually succeeds. A generous ceiling
   // still guards against a truly hung run / lost response.
   var AGENT_REQUEST_TIMEOUT_MS = 300000; // 5 minutes
+  // Timeout for file uploads (shareFile, attachFile). These transfer a
+  // base64 body rather than running an agent, but can still be several MB —
+  // longer than the default, well short of the agent ceiling.
+  var UPLOAD_REQUEST_TIMEOUT_MS = 30000;
 
   // Send a proxied API request through the parent. `timeoutMs` overrides the
   // default for long-running calls.
@@ -423,17 +427,37 @@
     listSessions: function () {
       return request('GET', '/api/addon-proxy/sessions');
     },
-    sendMessage: function (sessionId, content, agentId) {
+    sendMessage: function (sessionId, content, agentId, attachmentIds) {
       // Runs the agent to completion server-side — allow the long timeout.
       return request(
         'POST',
         '/api/addon-proxy/sessions/' + sessionId + '/messages',
-        { content: content, agentId: agentId },
+        {
+          content: content,
+          agentId: agentId,
+          attachmentIds: attachmentIds || undefined,
+        },
         AGENT_REQUEST_TIMEOUT_MS,
       );
     },
     getSession: function (sessionId) {
       return request('GET', '/api/addon-proxy/sessions/' + sessionId);
+    },
+    /**
+     * Upload an image/audio/video file for `sessionId`, resolving
+     * `{id, ...}`. The attachment is unlinked until you pass its `id` in
+     * `attachmentIds` on a subsequent `sendMessage` call — that's what makes
+     * it visible to the LLM (for vision/audio-capable models).
+     * Requires the `sessions.write` permission.
+     */
+    attachFile: function (sessionId, file) {
+      file = file || {};
+      return request(
+        'POST',
+        '/api/addon-proxy/sessions/' + sessionId + '/attachments',
+        { mimeType: file.mimeType, data: file.data, name: file.name },
+        UPLOAD_REQUEST_TIMEOUT_MS,
+      );
     },
 
     // ── Agents ────────────────────────────────────────────────────────────
@@ -450,6 +474,22 @@
           context: context ?? {},
         },
         AGENT_REQUEST_TIMEOUT_MS,
+      );
+    },
+    /**
+     * Write a file (csv, txt, json, any type) into `agentId`'s workspace,
+     * resolving `{agentId, path}`. The agent reads it back with its own
+     * workspace_read/workspace_list tools — nothing is inlined into the
+     * LLM's context automatically. Requires the `workspace.write` (or
+     * `workspace.write:<agentId>`) permission.
+     */
+    shareFile: function (agentId, file) {
+      file = file || {};
+      return request(
+        'POST',
+        '/api/addon-proxy/workspace/' + agentId + '/files',
+        { path: file.path, data: file.data },
+        UPLOAD_REQUEST_TIMEOUT_MS,
       );
     },
 

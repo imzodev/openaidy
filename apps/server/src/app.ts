@@ -892,6 +892,8 @@ export async function buildApp() {
                 sessionsRepo: dbAdapter.repositories.sessions,
               }
             : {}),
+          workspaceService,
+          ...(attachmentService ? { attachmentService } : {}),
         });
       }
     },

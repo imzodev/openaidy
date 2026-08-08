@@ -152,6 +152,39 @@ describe('AddonProxyService permission checks', () => {
     expect(result.authorized).toBe(false);
     expect(result.error).toContain('agents.invoke');
   });
+
+  it('hasWorkspaceAccess: unscoped workspace.write grants all agents', () => {
+    const addon = makeEnabledAddon('a', ['workspace.write']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'agent-1')).toBe(true);
+    expect(proxyService.hasWorkspaceAccess(addon, 'agent-2')).toBe(true);
+  });
+
+  it('hasWorkspaceAccess: workspace.* grants all agents', () => {
+    const addon = makeEnabledAddon('a', ['workspace.*']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'any-agent')).toBe(true);
+  });
+
+  it('hasWorkspaceAccess: wildcard * grants all agents', () => {
+    const addon = makeEnabledAddon('a', ['*']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'any-agent')).toBe(true);
+  });
+
+  it('hasWorkspaceAccess: scoped permission only allows the specified agent', () => {
+    const addon = makeEnabledAddon('a', ['workspace.write:agent-abc']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'agent-abc')).toBe(true);
+    expect(proxyService.hasWorkspaceAccess(addon, 'agent-xyz')).toBe(false);
+  });
+
+  it('hasWorkspaceAccess: no permission denies all agents', () => {
+    const addon = makeEnabledAddon('a', ['sessions.read']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'any-agent')).toBe(false);
+  });
+
+  it('hasWorkspaceAccess: agents.invoke does not grant workspace access', () => {
+    // Distinct resources — the two-tier check must not cross-authorize.
+    const addon = makeEnabledAddon('a', ['agents.invoke']);
+    expect(proxyService.hasWorkspaceAccess(addon, 'any-agent')).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

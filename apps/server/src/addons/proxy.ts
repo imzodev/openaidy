@@ -56,6 +56,29 @@ export class AddonProxyService {
   }
 
   /**
+   * Check if an addon has access to write into a specific agent's workspace.
+   *
+   * Two tiers, checked in order (mirrors {@link hasAgentAccess}):
+   *   1. Unscoped: `workspace.write`, `workspace.*`, or `*` — access to all agents' workspaces.
+   *   2. Scoped:   `workspace.write:<agentId>`               — access to that agent's workspace only.
+   */
+  hasWorkspaceAccess(addon: Addon, agentId: string): boolean {
+    const permissions = (addon.permissions as string[]) ?? [];
+
+    // Tier 1: unscoped — grants access to all agents' workspaces
+    if (
+      permissions.includes('workspace.write') ||
+      permissions.includes('workspace.*') ||
+      permissions.includes('*')
+    ) {
+      return true;
+    }
+
+    // Tier 2: scoped — grants access to one specific agent's workspace
+    return permissions.includes(`workspace.write:${agentId}`);
+  }
+
+  /**
    * Validate an addon access token
    */
   async validateToken(token: string): Promise<{
