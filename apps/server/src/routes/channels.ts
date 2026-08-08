@@ -1,20 +1,10 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requireAuth } from '../middleware/require-auth.js';
-import type { IChannel } from '../channels/interface.js';
-import type { ChannelStatusResponse } from '@openaidy/shared-types';
 import type { ChannelRoutesOptions } from '../types.js';
 import { createLogger } from '../lib/logger.js';
+import { toStatusResponse } from '../channels/status.js';
 
 const log = createLogger('channel-routes');
-
-function toStatusResponse(channel: IChannel): ChannelStatusResponse {
-  return {
-    id: channel.id,
-    type: channel.type,
-    status: channel.getStatus(),
-    agentId: channel.agentId,
-  };
-}
 
 export const channelRoutes: FastifyPluginAsync<ChannelRoutesOptions> = async (
   app,

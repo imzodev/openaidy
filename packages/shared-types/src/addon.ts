@@ -569,6 +569,8 @@ export const PERMISSION_RESOURCES = [
   'workspace',
   'logs',
   'storage',
+  'channels',
+  'pulses',
 ] as const;
 
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];

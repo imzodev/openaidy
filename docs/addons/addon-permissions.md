@@ -44,33 +44,84 @@ When using `agents.invoke:<agentId>`, the addon can only invoke the named agent.
 | ------------- | ------------- | -------------------------- |
 | `config.read` | `getConfig()` | Read the app configuration |
 
+### Storage (per-addon SQLite)
+
+Each addon gets its own private SQLite database, schema declared in `addon.json` under `storage.migrations`.
+
+| Permission      | SDK Method                             | What It Does                           |
+| --------------- | -------------------------------------- | -------------------------------------- |
+| `storage.read`  | `storage.kv.get(key)`                  | Read a key/value pair                  |
+| `storage.read`  | `storage.kv.list(prefix?)`             | List key/value pairs                   |
+| `storage.write` | `storage.kv.set(key, value)`           | Write a key/value pair                 |
+| `storage.write` | `storage.kv.delete(key)`               | Delete a key/value pair                |
+| `storage.read`  | `storage.query(sql, params?)`          | Run a read (`SELECT`) query            |
+| `storage.write` | `storage.exec(sql, params?)`           | Run a write statement                  |
+| `storage.read`  | `storage.search(table, match, limit?)` | Full-text search over a declared table |
+
+### Tasks
+
+Deliberately narrower than the web UI's task API — no agent assignment, no scheduling, no subtask CRUD.
+
+| Permission     | SDK Method                                       | What It Does                              |
+| -------------- | ------------------------------------------------ | ----------------------------------------- |
+| `tasks.list`   | `tasks.list(status?)`                            | List tasks, optionally filtered by status |
+| `tasks.read`   | `tasks.get(id)`                                  | Get a task with its subtasks and progress |
+| `tasks.write`  | `tasks.create({title?, description, priority?})` | Create a task                             |
+| `tasks.write`  | `tasks.updateStatus(id, status)`                 | Update a task's status                    |
+| `tasks.read`   | `tasks.listSubtasks(id)`                         | List a task's subtasks                    |
+| `tasks.invoke` | `tasks.execute(id)`                              | Start executing a task                    |
+
+### Pulses
+
+Scheduled prompts (one-off or recurring) that run against an agent, optionally inside an existing session. Addons can fully drive pulses — create, read, update, delete, trigger, and inspect run history.
+
+| Permission      | SDK Method                                                      | What It Does                     |
+| --------------- | --------------------------------------------------------------- | -------------------------------- |
+| `pulses.list`   | `pulses.list(filters?)`                                         | List pulses                      |
+| `pulses.read`   | `pulses.get(id)`                                                | Get a single pulse               |
+| `pulses.write`  | `pulses.create({name, prompt, schedule, agentId?, sessionId?})` | Create a pulse                   |
+| `pulses.write`  | `pulses.update(id, input)`                                      | Partially update a pulse         |
+| `pulses.delete` | `pulses.delete(id)`                                             | Delete a pulse                   |
+| `pulses.invoke` | `pulses.trigger(id)`                                            | Trigger a pulse to run right now |
+| `pulses.read`   | `pulses.history(id, pagination?)`                               | List a pulse's run history       |
+
+### Channels (read-only)
+
+WhatsApp/Discord integrations. There is currently no "send a message" capability — channels only auto-reply to inbound messages via the agent they're configured with, so addon access is limited to visibility and connection lifecycle.
+
+| Permission        | SDK Method                | What It Does                              |
+| ----------------- | ------------------------- | ----------------------------------------- |
+| `channels.list`   | `channels.list()`         | List configured channels and their status |
+| `channels.read`   | `channels.getStatus(id)`  | Get a single channel's connection status  |
+| `channels.manage` | `channels.connect(id)`    | Start connecting a channel                |
+| `channels.manage` | `channels.disconnect(id)` | Disconnect a channel                      |
+
 ## Planned Permissions (Not Yet Implemented)
 
 The following resources exist in the permission schema but **have no SDK methods or backend endpoints for addons yet**. Declaring them in `addon.json` is valid (the manifest validator accepts them) but they have no effect.
 
 | Resource    | Status  | Description                                       |
 | ----------- | ------- | ------------------------------------------------- |
-| `tasks`     | Planned | Task management — no addon API exists yet         |
 | `runs`      | Planned | Session execution runs — no addon API exists yet  |
 | `mcp`       | Planned | MCP server integrations — no addon API exists yet |
 | `workspace` | Planned | Workspace settings — no addon API exists yet      |
 | `logs`      | Planned | System logs — no addon API exists yet             |
 | `system`    | Planned | System-level operations — no addon API exists yet |
 
-These will be implemented in future releases as addon capabilities expand.
+These will be implemented in future releases as addon capabilities expand. Memories, skills, and MCP server access are intentionally reached indirectly — through whatever agent the addon is permitted to invoke — rather than exposed as their own addon-proxy resources.
 
 ## Available Actions
 
 Not every action applies to every resource. The table below shows which actions are valid for the currently implemented resources.
 
-| Action   | sessions                   | agents           | config         |
-| -------- | -------------------------- | ---------------- | -------------- |
-| `list`   | ✅ List sessions           | ✅ List agents   | —              |
-| `read`   | ✅ Get session by ID       | ✅ Get agent     | ✅ Read config |
-| `write`  | ✅ Send message to session | —                | —              |
-| `delete` | ✅ Delete sessions         | —                | —              |
-| `invoke` | —                          | ✅ Invoke agents | —              |
-| `manage` | —                          | —                | —              |
+| Action   | sessions                   | agents           | config         | storage              | tasks                   | pulses               | channels              |
+| -------- | -------------------------- | ---------------- | -------------- | -------------------- | ----------------------- | -------------------- | --------------------- |
+| `list`   | ✅ List sessions           | ✅ List agents   | —              | —                    | ✅ List tasks           | ✅ List pulses       | ✅ List channels      |
+| `read`   | ✅ Get session by ID       | ✅ Get agent     | ✅ Read config | ✅ Read/query/search | ✅ Get task/subtasks    | ✅ Get pulse/history | ✅ Get channel status |
+| `write`  | ✅ Send message to session | —                | —              | ✅ Write/exec        | ✅ Create/update status | ✅ Create/update     | —                     |
+| `delete` | ✅ Delete sessions         | —                | —              | —                    | —                       | ✅ Delete pulse      | —                     |
+| `invoke` | —                          | ✅ Invoke agents | —              | —                    | ✅ Execute task         | ✅ Trigger pulse     | —                     |
+| `manage` | —                          | —                | —              | —                    | —                       | —                    | ✅ Connect/disconnect |
 
 Actions marked with **—** are not implemented for that resource.
 
@@ -120,6 +171,23 @@ Can list sessions and invoke only the `price-analyzer` agent. Cannot invoke any 
 ```
 
 Can only read the app configuration. No access to sessions or agents.
+
+### Pulse automation addon
+
+```json
+{
+  "permissions": [
+    "pulses.list",
+    "pulses.read",
+    "pulses.write",
+    "pulses.invoke",
+    "tasks.list",
+    "tasks.write"
+  ]
+}
+```
+
+Can create and manage its own pulses (scheduled prompts), trigger them on demand, and create tasks to track the work. Cannot delete pulses or execute tasks directly.
 
 ## Escape Hatch
 
