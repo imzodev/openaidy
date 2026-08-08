@@ -483,10 +483,11 @@ export class TaskExecution {
       subtask.loopIterationCount > 0 &&
       subtask.loopLastResult
     ) {
-      const loopBudget = createContextBudget(DEP_CONTEXT_PER_ITEM_CHARS);
+      const { depContextPerItemChars } = this.getExecutionConfig();
+      const loopBudget = createContextBudget(depContextPerItemChars);
       const truncatedPrevious = truncateWithBudget(
         subtask.loopLastResult,
-        DEP_CONTEXT_PER_ITEM_CHARS,
+        depContextPerItemChars,
         loopBudget,
       );
       messageContent =
@@ -651,7 +652,7 @@ export class TaskExecution {
     // Bounded self-loop: this subtask keeps re-running itself until its
     // own result satisfies loopConditionOperator/loopConditionValue, or
     // the iteration cap is hit (then it fails instead of completing).
-    // retryCount/MAX_RETRIES is a separate concept (run-failure
+    // retryCount/maxRetries is a separate concept (run-failure
     // recovery) and is untouched by this branch.
     if (subtask.loopMaxIterations != null) {
       // The API always requires conditionOperator/conditionValue together
