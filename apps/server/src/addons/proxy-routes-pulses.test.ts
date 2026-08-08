@@ -280,6 +280,54 @@ describe('POST /api/addon-proxy/pulses', () => {
   });
 });
 
+describe('PATCH /api/addon-proxy/pulses/:id', () => {
+  it('returns 404 PULSE_NOT_FOUND when the pulse does not exist', async () => {
+    const { app, token } = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['pulses.write']),
+      jobsRepo: makeJobsRepo(null),
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/addon-proxy/pulses/missing',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'Renamed' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('PULSE_NOT_FOUND');
+  });
+
+  it('returns 400 INVALID_SCHEDULE for a malformed cron expression, not a 404', async () => {
+    const { app, token } = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['pulses.write']),
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/addon-proxy/pulses/pulse-1',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { schedule: { cron: { expression: 'not-a-valid-cron' } } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('INVALID_SCHEDULE');
+  });
+
+  it('updates a pulse', async () => {
+    const jobsRepo = makeJobsRepo();
+    const { app, token } = await buildProxyApp({
+      addon: makeEnabledAddon('test-addon', ['pulses.write']),
+      jobsRepo,
+    });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/addon-proxy/pulses/pulse-1',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'Renamed Pulse' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pulse.id).toBe('pulse-1');
+    expect(jobsRepo.update).toHaveBeenCalled();
+  });
+});
+
 describe('DELETE /api/addon-proxy/pulses/:id', () => {
   it('deletes a pulse', async () => {
     const jobsRepo = makeJobsRepo();

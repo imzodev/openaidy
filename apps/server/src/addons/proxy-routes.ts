@@ -911,10 +911,21 @@ export const addonProxyRoutes: FastifyPluginAsync<
         if (parsed.sessionId !== undefined) input.sessionId = parsed.sessionId;
         const pulse = await pulseService.updatePulse(request.params.id, input);
         return reply.send({ pulse });
-      } catch {
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg === 'Pulse not found') {
+          return reply
+            .code(404)
+            .send({ error: 'PULSE_NOT_FOUND', message: msg });
+        }
+        if (msg.includes('not found')) {
+          return reply
+            .code(404)
+            .send({ error: 'SESSION_NOT_FOUND', message: msg });
+        }
         return reply
-          .code(404)
-          .send({ error: 'PULSE_NOT_FOUND', message: 'Pulse not found' });
+          .code(400)
+          .send({ error: 'INVALID_SCHEDULE', message: msg });
       }
     },
   );
@@ -952,12 +963,13 @@ export const addonProxyRoutes: FastifyPluginAsync<
     async (request, reply) => {
       const addon = await getAuthorizedAddon(request, reply, 'pulses.invoke');
       if (!addon) return;
+      const { jobsRepo, jobRunsRepo, sessionsRepo, sessionService } = opts;
       if (
         !pulseService ||
-        !opts.jobsRepo ||
-        !opts.jobRunsRepo ||
-        !opts.sessionsRepo ||
-        !opts.sessionService
+        !jobsRepo ||
+        !jobRunsRepo ||
+        !sessionsRepo ||
+        !sessionService
       ) {
         return reply.code(503).send({
           error: 'SERVICE_UNAVAILABLE',
@@ -971,14 +983,14 @@ export const addonProxyRoutes: FastifyPluginAsync<
           request.params.id,
           (jobId) =>
             triggerPulseNow(jobId, {
-              jobsRepo: opts.jobsRepo!,
-              jobRunsRepo: opts.jobRunsRepo!,
-              sessionsStore: opts.sessionsRepo!,
-              sessionMessageService: opts.sessionService!,
+              jobsRepo,
+              jobRunsRepo,
+              sessionsStore: sessionsRepo,
+              sessionMessageService: sessionService,
               logger: app.log,
             }),
         );
-        const updatedRun = await opts.jobRunsRepo.findById(run.id);
+        const updatedRun = await jobRunsRepo.findById(run.id);
         return reply.send({ run: updatedRun ?? run });
       } catch (error) {
         if (error instanceof Error && error.message === 'Job not found') {
