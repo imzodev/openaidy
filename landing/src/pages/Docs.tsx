@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { marked } from 'marked';
 import {
@@ -24,34 +24,44 @@ interface DocEntry {
 const DOC_STRUCTURE: DocEntry[] = [
   {
     title: 'Getting Started',
+    children: [{ title: 'Getting Started', slug: 'getting-started' }],
+  },
+  {
+    title: 'Core Concepts',
     children: [
-      { title: 'Overview', slug: 'overview' },
-      { title: 'Bootstrapping', slug: 'bootstrapping' },
-      { title: 'Bootstrap Checklist', slug: 'bootstrap-checklist' },
+      { title: 'Agents', slug: 'agents' },
+      { title: 'Sessions', slug: 'sessions' },
+      { title: 'Providers', slug: 'providers' },
+      { title: 'Memories', slug: 'memories' },
+      { title: 'Skills', slug: 'skills' },
+      { title: 'Creating Skills', slug: 'creating-skills' },
+      { title: 'Workspace', slug: 'workspace' },
     ],
   },
   {
-    title: 'Architecture & Planning',
+    title: 'Automation',
     children: [
-      { title: 'Architecture', slug: 'architecture' },
-      { title: 'Data Model', slug: 'data-model' },
-      { title: 'API Design', slug: 'api-design' },
-      { title: 'MVP Roadmap', slug: 'mvp-roadmap' },
-      { title: 'Monorepo', slug: 'monorepo' },
-      { title: 'Control Plane', slug: 'control-plane' },
+      { title: 'Tasks', slug: 'tasks' },
+      { title: 'Task Schedules', slug: 'task-schedules' },
+      { title: 'Pulses', slug: 'pulses' },
     ],
   },
   {
-    title: 'Extension Model',
+    title: 'Connecting the Outside World',
     children: [
-      { title: 'Plugin SDK', slug: 'plugin-sdk' },
-      { title: 'Provider Adapter Plan', slug: 'provider-adapter-plan' },
-      { title: 'Tool Present Choices', slug: 'tool_present_choices' },
+      { title: 'Channels', slug: 'channels' },
+      { title: 'MCP Servers', slug: 'mcp-servers' },
+      { title: 'Addons', slug: 'addons/README' },
+      { title: 'Addon Permissions', slug: 'addons/addon-permissions' },
     ],
   },
   {
-    title: 'Channels',
-    children: [{ title: 'WhatsApp', slug: 'channels/channels-whatsapp' }],
+    title: 'Operating OpenAidy',
+    children: [
+      { title: 'Configuration', slug: 'config' },
+      { title: 'Access Tokens & Device Pairing', slug: 'access-tokens' },
+      { title: 'Usage', slug: 'usage' },
+    ],
   },
   {
     title: 'CLI',
@@ -59,78 +69,8 @@ const DOC_STRUCTURE: DocEntry[] = [
       { title: 'Overview', slug: 'cli/README' },
       { title: 'Getting Started', slug: 'cli/getting-started' },
       { title: 'Installation', slug: 'cli/installation' },
-      { title: 'Architecture', slug: 'cli/architecture' },
       { title: 'Bootstrap Admin', slug: 'cli/bootstrap-admin' },
       { title: 'Command Reference', slug: 'cli/command-reference' },
-    ],
-  },
-  {
-    title: 'Memory',
-    children: [{ title: 'Overview', slug: 'memory/README' }],
-  },
-  {
-    title: 'Scheduler',
-    children: [
-      { title: 'Overview', slug: 'recurring-tasks/README' },
-      {
-        title: 'Adding a New Scheduled Kind',
-        slug: 'recurring-tasks/adding-a-new-scheduled-kind',
-      },
-      { title: 'Known Limitations', slug: 'recurring-tasks/known-limitations' },
-    ],
-  },
-  {
-    title: 'Pulses',
-    children: [
-      { title: 'Overview', slug: 'pulses/README' },
-      { title: 'Phase 1 — Backend', slug: 'pulses/pulses-phase-1-backend' },
-      { title: 'Phase 2 — Frontend', slug: 'pulses/pulses-phase-2-frontend' },
-      {
-        title: 'Technical Specification',
-        slug: 'pulses/pulses-technical-specification',
-      },
-    ],
-  },
-  {
-    title: 'Addons',
-    children: [
-      { title: 'Overview', slug: 'addons/README' },
-      { title: 'Permissions', slug: 'addons/addon-permissions' },
-      {
-        title: 'Phase 1 — Backend Foundation',
-        slug: 'addons/addons-phase-1-backend-foundation',
-      },
-      {
-        title: 'Phase 2 — Frontend Foundation',
-        slug: 'addons/addons-phase-2-frontend-foundation',
-      },
-      {
-        title: 'Phase 3 — Security & Isolation',
-        slug: 'addons/addons-phase-3-security-isolation',
-      },
-      {
-        title: 'Phase 4 — Developer Experience',
-        slug: 'addons/addons-phase-4-developer-experience',
-      },
-      {
-        title: 'Phase 5 — Advanced Features',
-        slug: 'addons/addons-phase-5-advanced-features',
-      },
-      {
-        title: 'Technical Specification',
-        slug: 'addons/addons-technical-specification',
-      },
-    ],
-  },
-  {
-    title: 'WebSocket',
-    children: [
-      { title: 'Architecture', slug: 'websocket-architecture' },
-      { title: 'Client SDK', slug: 'websocket-client-sdk' },
-      { title: 'Deployment', slug: 'websocket-deployment' },
-      { title: 'Integration Guide', slug: 'websocket-integration-guide' },
-      { title: 'Persistence', slug: 'websocket-persistence' },
-      { title: 'Protocol', slug: 'websocket-protocol' },
     ],
   },
 ];
@@ -174,7 +114,9 @@ function renderMarkdown(src: string): string {
     const id = text
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-');
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
 
@@ -206,19 +148,34 @@ function parseFrontmatter(raw: string): {
   return { meta, body: raw };
 }
 
+// The route-level page-transition animation remounts this component on every
+// navigation (each doc slug is a distinct pathname). Without this, the
+// sidebar's own scroll position resets to the top on every click.
+let savedSidebarScrollTop = 0;
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function Docs() {
   const { '*': docSlug } = useParams<{ '*': string }>();
   const navigate = useNavigate();
-  const slug = docSlug || 'overview';
+  const slug = docSlug || 'index';
   const [content, setContent] = useState('');
-  // Which slug the currently-loaded content belongs to. Used to hide stale
-  // content while a newly-selected doc loads (replaces a synchronous reset).
-  const [loadedSlug, setLoadedSlug] = useState('');
   const [html, setHtml] = useState('');
   const [meta, setMeta] = useState<Record<string, string>>({});
   const [mobileOpen, setMobileOpen] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  // Restore the sidebar's scroll position before paint, since this component
+  // remounts fresh on every navigation (see savedSidebarScrollTop above).
+  useLayoutEffect(() => {
+    if (sidebarRef.current)
+      sidebarRef.current.scrollTop = savedSidebarScrollTop;
+  }, []);
+
+  // A new doc should always open scrolled to its own top.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,11 +190,10 @@ export default function Docs() {
         setMeta(fm);
         setContent(body);
         setHtml(renderMarkdown(body));
-        setLoadedSlug(slug);
       })
       .catch(() => {
         // Fallback to index if not found
-        if (!cancelled) navigate('/docs/overview', { replace: true });
+        if (!cancelled) navigate('/docs/index', { replace: true });
       });
     return () => {
       cancelled = true;
@@ -281,7 +237,11 @@ export default function Docs() {
 
       {/* Sidebar */}
       <aside
+        ref={sidebarRef}
         className={`docs-sidebar ${mobileOpen ? 'docs-sidebar--open' : ''}`}
+        onScroll={(e) => {
+          savedSidebarScrollTop = e.currentTarget.scrollTop;
+        }}
       >
         <div className="docs-sidebar-inner">
           <Link to="/docs" className="docs-sidebar-home">
@@ -312,7 +272,7 @@ export default function Docs() {
 
       {/* Main content */}
       <main className="docs-main">
-        {content && loadedSlug === slug ? (
+        {content ? (
           <>
             {/* Breadcrumb */}
             <nav className="docs-breadcrumb">

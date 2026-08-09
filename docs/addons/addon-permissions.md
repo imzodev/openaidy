@@ -96,17 +96,29 @@ WhatsApp/Discord integrations. There is currently no "send a message" capability
 | `channels.manage` | `channels.connect(id)`    | Start connecting a channel                |
 | `channels.manage` | `channels.disconnect(id)` | Disconnect a channel                      |
 
+### Workspace
+
+Addons can share a file into an agent's workspace on the agent's behalf. The addon never receives a filesystem path — the server validates and resolves it (the same guard the agent's own `workspace_write` tool uses).
+
+| Permission                  | SDK Method                 | What It Does                                        |
+| --------------------------- | -------------------------- | --------------------------------------------------- |
+| `workspace.write`           | `shareFile(agentId, file)` | Write a file into any agent's workspace             |
+| `workspace.write:<agentId>` | `shareFile(agentId, file)` | Write a file into a specific agent's workspace only |
+
+`shareFile(agentId, { path, data })` takes a workspace-relative `path` and base64-encoded `data`, and resolves `{ agentId, path }` once written. The agent doesn't see the file automatically — it reads it back itself with its own `workspace_read`/`workspace_list` tools.
+
+When using `workspace.write:<agentId>`, the addon can only write into the named agent's workspace. Writing to a different agent's workspace returns a 403 error.
+
 ## Planned Permissions (Not Yet Implemented)
 
 The following resources exist in the permission schema but **have no SDK methods or backend endpoints for addons yet**. Declaring them in `addon.json` is valid (the manifest validator accepts them) but they have no effect.
 
-| Resource    | Status  | Description                                       |
-| ----------- | ------- | ------------------------------------------------- |
-| `runs`      | Planned | Session execution runs — no addon API exists yet  |
-| `mcp`       | Planned | MCP server integrations — no addon API exists yet |
-| `workspace` | Planned | Workspace settings — no addon API exists yet      |
-| `logs`      | Planned | System logs — no addon API exists yet             |
-| `system`    | Planned | System-level operations — no addon API exists yet |
+| Resource | Status  | Description                                       |
+| -------- | ------- | ------------------------------------------------- |
+| `runs`   | Planned | Session execution runs — no addon API exists yet  |
+| `mcp`    | Planned | MCP server integrations — no addon API exists yet |
+| `logs`   | Planned | System logs — no addon API exists yet             |
+| `system` | Planned | System-level operations — no addon API exists yet |
 
 These will be implemented in future releases as addon capabilities expand. Memories, skills, and MCP server access are intentionally reached indirectly — through whatever agent the addon is permitted to invoke — rather than exposed as their own addon-proxy resources.
 
@@ -114,14 +126,14 @@ These will be implemented in future releases as addon capabilities expand. Memor
 
 Not every action applies to every resource. The table below shows which actions are valid for the currently implemented resources.
 
-| Action   | sessions                   | agents           | config         | storage              | tasks                   | pulses               | channels              |
-| -------- | -------------------------- | ---------------- | -------------- | -------------------- | ----------------------- | -------------------- | --------------------- |
-| `list`   | ✅ List sessions           | ✅ List agents   | —              | —                    | ✅ List tasks           | ✅ List pulses       | ✅ List channels      |
-| `read`   | ✅ Get session by ID       | ✅ Get agent     | ✅ Read config | ✅ Read/query/search | ✅ Get task/subtasks    | ✅ Get pulse/history | ✅ Get channel status |
-| `write`  | ✅ Send message to session | —                | —              | ✅ Write/exec        | ✅ Create/update status | ✅ Create/update     | —                     |
-| `delete` | ✅ Delete sessions         | —                | —              | —                    | —                       | ✅ Delete pulse      | —                     |
-| `invoke` | —                          | ✅ Invoke agents | —              | —                    | ✅ Execute task         | ✅ Trigger pulse     | —                     |
-| `manage` | —                          | —                | —              | —                    | —                       | —                    | ✅ Connect/disconnect |
+| Action   | sessions                   | agents           | config         | storage              | tasks                   | pulses               | channels              | workspace     |
+| -------- | -------------------------- | ---------------- | -------------- | -------------------- | ----------------------- | -------------------- | --------------------- | ------------- |
+| `list`   | ✅ List sessions           | ✅ List agents   | —              | —                    | ✅ List tasks           | ✅ List pulses       | ✅ List channels      | —             |
+| `read`   | ✅ Get session by ID       | ✅ Get agent     | ✅ Read config | ✅ Read/query/search | ✅ Get task/subtasks    | ✅ Get pulse/history | ✅ Get channel status | —             |
+| `write`  | ✅ Send message to session | —                | —              | ✅ Write/exec        | ✅ Create/update status | ✅ Create/update     | —                     | ✅ Write file |
+| `delete` | ✅ Delete sessions         | —                | —              | —                    | —                       | ✅ Delete pulse      | —                     | —             |
+| `invoke` | —                          | ✅ Invoke agents | —              | —                    | ✅ Execute task         | ✅ Trigger pulse     | —                     | —             |
+| `manage` | —                          | —                | —              | —                    | —                       | —                    | ✅ Connect/disconnect | —             |
 
 Actions marked with **—** are not implemented for that resource.
 
