@@ -165,8 +165,10 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
             'Replacement permission set — REPLACES the previous list entirely, so include ' +
             'every permission the addon still needs, not just the new one. ' +
             `Valid base values: ${validPermissions}. Append ":<agentId>" to agents.invoke or ` +
-            'workspace.write to scope it to one agent (e.g. "workspace.write:my-agent"). ' +
-            'See the SDK reference above for which method needs which permission.',
+            'workspace.write to scope it to one agent (e.g. "workspace.write:my-agent"); append ' +
+            '":microphone" or ":camera" to media.read to scope it to one device. ' +
+            'media.read also auto-grants playback of the data: URL it returns (<audio src>/<img src>) — ' +
+            'no externalDomains needed. See the SDK reference above for which method needs which permission.',
         },
         externalDomains: {
           type: 'array',

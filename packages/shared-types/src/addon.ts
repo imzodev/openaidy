@@ -522,10 +522,14 @@ export type AddonThemeMessage = {
 export type AddonHostMessage = AddonInitMessage | AddonThemeMessage;
 
 /**
- * Discriminated union of all addon-to-host messages. Currently just
- * `ADDON_READY` (a timing-safety signal) and `OPENAIDY_REQUEST` (a proxied
- * fetch), but kept as a single union so the host's `message` handler has one
- * type to narrow on.
+ * Discriminated union of all addon-to-host messages: `ADDON_READY` (a timing
+ * -safety signal), `OPENAIDY_REQUEST` (a proxied fetch, or a media capture
+ * request — see the `/media/*` virtual paths in `AddonViewPage`),
+ * `ADDON_CSP_VIOLATION`, and `OPENAIDY_MEDIA_STOP` (a fire-and-forget signal
+ * to end an in-progress `sdk.media.recordAudio()` early — the pending
+ * `OPENAIDY_REQUEST`'s response resolves normally once the host actually
+ * stops, so this has no response of its own). Kept as a single union so the
+ * host's `message` handler has one type to narrow on.
  */
 export type AddonIframeMessage =
   | { type: 'ADDON_READY' }
@@ -537,7 +541,8 @@ export type AddonIframeMessage =
       body?: unknown;
       nonce: string;
     }
-  | { type: 'ADDON_CSP_VIOLATION'; blockedURI: string; nonce: string };
+  | { type: 'ADDON_CSP_VIOLATION'; blockedURI: string; nonce: string }
+  | { type: 'OPENAIDY_MEDIA_STOP'; nonce: string };
 
 /**
  * Single CSS variable names an addon theme-aware template should expect to
@@ -611,6 +616,7 @@ export const PERMISSION_RESOURCES = [
   'storage',
   'channels',
   'pulses',
+  'media',
 ] as const;
 
 export type PermissionResource = (typeof PERMISSION_RESOURCES)[number];
@@ -679,3 +685,50 @@ export function matchesPermission(
 
   return true;
 }
+
+// ============================================================================
+// Web Speech API (host-side, for sdk.media.recordAudio()'s transcript)
+// ============================================================================
+//
+// TypeScript's DOM lib doesn't ship Web Speech API types — this declares
+// just the surface `AddonViewPage` uses to produce recordAudio()'s
+// best-effort `transcript` field via the browser's native SpeechRecognition,
+// never an LLM call.
+
+export interface SpeechRecognitionResultLike {
+  readonly isFinal: boolean;
+  readonly [index: number]: { readonly transcript: string };
+}
+
+export interface SpeechRecognitionEventLike {
+  readonly resultIndex: number;
+  readonly results: {
+    readonly length: number;
+    readonly [index: number]: SpeechRecognitionResultLike;
+  };
+}
+
+/**
+ * The real event has more fields (`SpeechRecognitionErrorEvent`); `error`
+ * (e.g. `'no-speech'`, `'aborted'`, `'network'`) is the only one consumers
+ * of this shim currently read, to decide whether to force-finalize a
+ * recording that a spec-noncompliant `onerror`-without-`onend` would
+ * otherwise leave hanging.
+ */
+export interface SpeechRecognitionErrorEventLike {
+  readonly error?: string;
+  readonly message?: string;
+}
+
+export interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+export type SpeechRecognitionCtorLike = new () => SpeechRecognitionLike;

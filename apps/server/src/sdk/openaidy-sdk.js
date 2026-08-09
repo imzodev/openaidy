@@ -209,6 +209,10 @@
   // base64 body rather than running an agent, but can still be several MB —
   // longer than the default, well short of the agent ceiling.
   var UPLOAD_REQUEST_TIMEOUT_MS = 30000;
+  // Must match MAX_RECORD_SECONDS in apps/web/.../AddonViewPage.tsx — the
+  // host clamps to this regardless of what an addon asks for, so this
+  // promise's own timeout must not wait any longer than that.
+  var MEDIA_MAX_RECORD_SECONDS = 600;
 
   // Send a proxied API request through the parent. `timeoutMs` overrides the
   // default for long-running calls.
@@ -703,6 +707,66 @@
           'POST',
           '/api/addon-proxy/channels/' + id + '/disconnect',
         );
+      },
+    },
+
+    // ── Media (microphone / camera) ──────────────────────────────────────
+    // The addon never gets direct getUserMedia access — the iframe is
+    // sandboxed with an opaque origin, which can't hold a persistent browser
+    // permission grant. The host captures on the addon's behalf and hands
+    // back the result. Requires `media.read` (both), `media.read:microphone`,
+    // or `media.read:camera`.
+    media: {
+      /**
+       * Record audio from the microphone for up to `maxSeconds` (default 30,
+       * capped at 600 by the host regardless of what's requested here).
+       * Resolves `{data, mimeType, durationMs, transcript}` — `data` is
+       * base64-encoded, no `data:` URL prefix. `transcript` is a best-effort
+       * live transcription from the browser's own Web Speech API (native,
+       * no LLM call) — `null` if the browser doesn't support it or nothing
+       * was recognized; pass `lang` (e.g. "es-MX") to override the default
+       * (the browser's own language). Recording stops early if the host's
+       * "Stop" control, or stopRecording(), is used.
+       */
+      recordAudio: function (opts) {
+        opts = opts || {};
+        // Mirror the host's own cap (MAX_RECORD_SECONDS in AddonViewPage) —
+        // without this, an addon passing an absurd maxSeconds (typo, e.g.
+        // an extra zero) would still make THIS promise wait that long even
+        // though the host will already have responded after 600s.
+        var maxSeconds = Math.min(
+          Math.max(1, Math.floor(opts.maxSeconds) || 30),
+          MEDIA_MAX_RECORD_SECONDS,
+        );
+        return request(
+          'POST',
+          '/media/record-audio',
+          { maxSeconds: maxSeconds, lang: opts.lang },
+          maxSeconds * 1000 + 20000,
+        );
+      },
+      /**
+       * End an in-progress recordAudio() early — e.g. the addon's own
+       * "tap to stop" button, rather than relying only on the host's
+       * banner. The pending recordAudio() promise resolves normally with
+       * whatever was captured; this call itself has no return value. A
+       * no-op if nothing is recording (including if called before the SDK
+       * is ready — nothing could have started recording yet either).
+       */
+      stopRecording: function () {
+        if (!_ready) return;
+        window.parent.postMessage(
+          { type: 'OPENAIDY_MEDIA_STOP', nonce: _nonce },
+          '*',
+        );
+      },
+      /**
+       * Open a camera preview and let the user capture a single photo.
+       * Resolves `{data, mimeType, width, height}` (base64, no `data:` URL
+       * prefix), or rejects if the user cancels.
+       */
+      takePhoto: function () {
+        return request('POST', '/media/take-photo', undefined, 120000);
       },
     },
 

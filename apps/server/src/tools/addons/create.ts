@@ -258,7 +258,10 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'instead of granting it for every agent (e.g. "workspace.write:my-agent"). ' +
             'NOTE: sessions are created automatically by agents.invoke — there is no sessions.create permission. ' +
             'sessions.write = send a message via sdk.sendMessage() or attach a file via sdk.attachFile(). ' +
-            "workspace.write = share a file into an agent's workspace via sdk.shareFile().",
+            "workspace.write = share a file into an agent's workspace via sdk.shareFile(). " +
+            'media.read = record audio (sdk.media.recordAudio) and/or take a photo (sdk.media.takePhoto) via the host — ' +
+            'scope with ":microphone" or ":camera" to grant only one. Playing the returned data: URL back ' +
+            '(<audio src>/<img src>) works automatically once media.read is granted — no externalDomains needed.',
         },
         externalDomains: {
           type: 'array',

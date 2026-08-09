@@ -88,6 +88,9 @@ export function rewriteAddonHtml(html: string, token: string): string {
  * entries default to just the platform baseline). `script-src` is left to
  * the caller — it depends on the request host/env, not just the manifest
  * (see TAILWIND_CDN_ORIGIN above for why it's never manifest-extensible).
+ * `media-src` isn't domain-list-extensible like the others — it's derived
+ * from whether the manifest declares any `media.read` permission variant
+ * (see below), since that's already required to use `sdk.media.*` at all.
  */
 export function buildAddonCsp(
   manifest: Record<string, unknown> | null,
@@ -102,6 +105,7 @@ export function buildAddonCsp(
   const externalImageDomains = stringArray(manifest?.['externalImageDomains']);
   const externalStyleDomains = stringArray(manifest?.['externalStyleDomains']);
   const externalFontDomains = stringArray(manifest?.['externalFontDomains']);
+  const permissions = stringArray(manifest?.['permissions']);
 
   const normalizeHosts = (hosts: string[]) =>
     hosts
@@ -122,12 +126,38 @@ export function buildAddonCsp(
   ].join(' ');
   const fontSrc = ["'self'", ...normalizeHosts(externalFontDomains)].join(' ');
 
+  // <audio>/<video> playback is governed by media-src, not img-src — it's
+  // 'none' by default (falling through to default-src) so an addon without
+  // any media.read variant can't play back a data: URI at all. An addon
+  // that captures audio/photos via sdk.media.* gets its own recordings back
+  // as base64 data: URLs meant to be played/displayed inline, so granting
+  // media-src here is tied to the permission it already had to declare to
+  // use the feature — no separate externalDomains-style field needed.
+  //
+  // `media.*` / `*` can't currently reach here — AddonPermissionSchema only
+  // accepts resource.action[:scope] with a fixed action set, so a bare
+  // wildcard never validates. Kept for forward-compat with the scoping
+  // convention AddonProxyService.hasScopedAccess already uses, in case that
+  // schema is ever widened.
+  const hasMediaReadPermission = permissions.some(
+    (p) =>
+      p === 'media.read' ||
+      p === 'media.*' ||
+      p === '*' ||
+      p.startsWith('media.read:'),
+  );
+  // No 'self' here (unlike the sibling directives above): the addon's
+  // document has an opaque origin (sandboxed without allow-same-origin), so
+  // CSP 'self' can never match it — only the data: scheme actually matters.
+  const mediaSrc = hasMediaReadPermission ? 'data:' : "'none'";
+
   return [
     "default-src 'none'",
     `script-src ${scriptSrcOrigins.join(' ')}`,
     `style-src ${styleSrc}`,
     `img-src ${imgSrc}`,
     `font-src ${fontSrc}`,
+    `media-src ${mediaSrc}`,
     `connect-src ${connectSrc}`,
     "frame-src 'none'",
     "object-src 'none'",

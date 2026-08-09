@@ -240,6 +240,66 @@ export const SDK_METHODS: readonly SdkMethod[] = [
     exampleJs: 'sdk.getConfig().then(function(cfg) { console.log(cfg); });',
   },
 
+  // ── Media (microphone / camera) ─────────────────────────────────────────
+  // No proxyPath/httpMethod — these never hit /api/addon-proxy/*. The addon
+  // iframe's opaque origin can't hold a persistent browser media permission,
+  // so the host captures on the addon's behalf over the postMessage bridge
+  // and hands back the result.
+  {
+    name: 'media.recordAudio',
+    category: 'Media',
+    requiredPermission: 'media.read',
+    params: [
+      {
+        name: 'opts',
+        kind: 'optional_object',
+        description:
+          '{ maxSeconds?, lang? } — recording stops automatically after maxSeconds (default 30, capped at 600 by the host); lang (e.g. "es-MX") sets the transcription language, defaulting to the browser\'s own language',
+      },
+    ],
+    returns:
+      'Promise<{ data: string; mimeType: string; durationMs: number; transcript: string | null }>',
+    description:
+      "Record audio from the user's microphone. The host shows a visible " +
+      'recording indicator with a Stop control; recording also ends early ' +
+      'if the user clicks it or the addon calls stopRecording(). `data` is ' +
+      'base64-encoded, no `data:` URL prefix. `transcript` is a best-effort ' +
+      "live transcription from the browser's own Web Speech API — a native " +
+      'web API, not an LLM call — so an agent asked to structure a voice ' +
+      'note only ever needs text; `null` if the browser lacks Web Speech ' +
+      'support or nothing was recognized. Also accepts the scoped ' +
+      'permission `media.read:microphone`.',
+    exampleJs:
+      'sdk.media.recordAudio({ maxSeconds: 15 }).then(function(r) { console.log(r.transcript); });',
+  },
+  {
+    name: 'media.stopRecording',
+    category: 'Media',
+    params: [],
+    returns: 'void',
+    description:
+      "End an in-progress recordAudio() early, e.g. the addon's own " +
+      "'tap to stop' control — the host's own Stop indicator works " +
+      'independently of this. The pending recordAudio() promise resolves ' +
+      'normally with whatever was captured; a no-op if nothing is recording.',
+    exampleJs: 'sdk.media.stopRecording();',
+  },
+  {
+    name: 'media.takePhoto',
+    category: 'Media',
+    requiredPermission: 'media.read',
+    params: [],
+    returns:
+      'Promise<{ data: string; mimeType: string; width: number; height: number }>',
+    description:
+      'Open a camera preview in the host and let the user capture a single ' +
+      'photo. Rejects if the user cancels. `data` is base64-encoded, no ' +
+      '`data:` URL prefix. Also accepts the scoped permission ' +
+      '`media.read:camera`.',
+    exampleJs:
+      'sdk.media.takePhoto().then(function(p) { console.log(p.width, p.height); });',
+  },
+
   // ── Raw escape hatch ──────────────────────────────────────────────────────
   {
     name: 'request',
