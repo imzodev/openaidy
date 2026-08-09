@@ -11,6 +11,13 @@
  *
  * For creating a brand-new addon use `addon_create`. This tool refuses to
  * run if the addon does not already exist.
+ *
+ * Architecture note
+ * ─────────────────
+ * SDK documentation is imported from `../../addons/sdk-reference.ts` —
+ * the single source of truth, same as addon_create. When sdk-reference.ts is
+ * updated (new method added, signature changed), this tool's description and
+ * its "valid permission values" hint update automatically.
  */
 
 import { existsSync } from 'node:fs';
@@ -19,6 +26,11 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import type { AddonManifest } from '@openaidy/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import type { AddonToolDeps } from './create.js';
+import { buildSdkUsageComment } from './create.js';
+import {
+  renderSdkReference,
+  listSdkPermissions,
+} from '../../addons/sdk-reference.js';
 import { addonUpdateMeta } from '../catalog.js';
 import {
   isValidId,
@@ -40,6 +52,9 @@ const MANIFEST_FIELD_KEYS = [
 // ── Tool factory ──────────────────────────────────────────────────────────────
 
 export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
+  const sdkReference = renderSdkReference();
+  const validPermissions = listSdkPermissions().join(', ');
+
   return {
     name: addonUpdateMeta.name,
 
@@ -97,6 +112,17 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
       'Changing permissions updates the manifest and DB. An addon iframe that is',
       'already open keeps its old access token until it is reloaded (or the addon',
       'is disabled/re-enabled), so tell the user to reload after a permission change.',
+      '',
+      'ADDING A NEW FEATURE TO THIS ADDON',
+      '───────────────────────────────────',
+      'If the feature you are adding needs an SDK method the addon does not already',
+      'use (e.g. a file-upload form that shares an image with an agent for analysis',
+      'via sdk.shareFile()/sdk.attachFile()), you must also add the matching permission',
+      'to the `permissions` parameter below — the method silently fails at runtime',
+      'without it, even though the code will look correct. See the reference below',
+      'for every available method and the permission it requires.',
+      '',
+      sdkReference,
     ].join('\n'),
 
     parameters: {
@@ -136,8 +162,11 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Replacement permission set. Valid values: agents.list, agents.invoke, ' +
-            'sessions.list, sessions.read, sessions.write, config.read.',
+            'Replacement permission set — REPLACES the previous list entirely, so include ' +
+            'every permission the addon still needs, not just the new one. ' +
+            `Valid base values: ${validPermissions}. Append ":<agentId>" to agents.invoke or ` +
+            'workspace.write to scope it to one agent (e.g. "workspace.write:my-agent"). ' +
+            'See the SDK reference above for which method needs which permission.',
         },
         externalDomains: {
           type: 'array',
@@ -442,6 +471,13 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
       }
 
       // ── Success ──────────────────────────────────────────────────────────
+      // When permissions were replaced, remind the agent which SDK methods
+      // the new set actually unlocks — same hint addon_create shows on create.
+      const usageHint =
+        permissions !== undefined
+          ? buildSdkUsageComment(permissions as string[])
+          : '';
+
       return {
         ok: true,
         content: [
@@ -453,6 +489,7 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
             ? ['', 'Files deleted:', ...deleted.map((f) => `  ${f}`)]
             : []),
           ...(notes.length ? ['', ...notes] : []),
+          ...(usageHint ? ['', usageHint] : []),
           '',
           'Reload the addon in the UI to see the changes.',
         ].join('\n'),

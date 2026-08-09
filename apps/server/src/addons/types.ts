@@ -11,6 +11,8 @@ import type { SessionMessageService } from '../sessions/service';
 import type { AgentRegistry } from '../agents/registry';
 import type { TaskService } from '../tasks/service';
 import type { ChannelRegistry } from '../channels/registry';
+import type { WorkspaceService } from '../workspace';
+import type { AttachmentService } from '../attachments/service';
 
 // Forward declaration to avoid circular dependency
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,6 +34,10 @@ export interface AddonProxyRoutesOptions {
   jobsRepo?: JobsStore;
   jobRunsRepo?: JobRunsStore;
   sessionsRepo?: SessionsStore;
+  /** Enables `POST /addon-proxy/workspace/:agentId/files` (writing a file into an agent's workspace on the addon's behalf). */
+  workspaceService?: WorkspaceService;
+  /** Enables `POST /addon-proxy/sessions/:sessionId/attachments` (creating an unlinked attachment for a later message). */
+  attachmentService?: AttachmentService;
 }
 
 /**
