@@ -16,8 +16,8 @@ The OpenAidy CLI is a local administration tool for managing access tokens, boot
 
 ### For Contributors
 
-- **[Architecture Guide](./architecture.md)** - CLI architecture and package boundaries
-- **[Extension Points](../packages/cli/EXTENSION_POINTS.md)** - How to extend the CLI
+- **[Architecture Guide](../../plans/cli/architecture.md)** - CLI architecture and package boundaries
+- **[Extension Points](../../packages/cli/EXTENSION_POINTS.md)** - How to extend the CLI
 
 ### For Everyone
 
@@ -48,6 +48,6 @@ The CLI package is located at `packages/cli/` in the monorepo.
 
 ## Related Documentation
 
-- [Control Plane Overview](../docs/control-plane.md)
-- [WebSocket Architecture](../docs/websocket-architecture.md)
-- [API Design](../docs/api-design.md)
+- [Control Plane Overview](../../plans/control-plane/overview.md)
+- [WebSocket Architecture](../../plans/websocket-architecture.md)
+- [API Design](../../plans/api-design.md)

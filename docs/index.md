@@ -1,58 +1,40 @@
 ---
-summary: 'Landing page for OpenAidy project documentation'
+summary: 'OpenAidy documentation index'
 read_when:
-  - You want an overview of the OpenAidy docs set
-  - You are starting work on the project and want to know where to begin
+  - You are new to OpenAidy or looking for a specific topic
 title: 'OpenAidy Docs'
 ---
 
 # OpenAidy Docs
 
-This section collects the planning and foundation documents for OpenAidy.
+OpenAidy is a self-hosted AI agent platform — persistent sessions with streaming responses, structured multi-step tasks, scheduled automation, real messaging channels, and a plugin system, all running on one server you control.
 
-Use these docs to move from product idea to implementation foundation.
+New here? Start with [Getting Started](./getting-started.md).
 
-## Start here
+## Core concepts
 
-- [What is OpenAidy](./overview) — product overview, goals, capabilities, and target users.
-- [Bootstrapping OpenAidy](./bootstrapping) — practical setup guide for the initial repository, stack, packages, and first vertical slice.
-- [Bootstrap Checklist](./bootstrap-checklist) — short execution checklist for setting up the initial foundation.
+- [Agents](./agents.md) — how agents are dispatched, streamed, and configured
+- [Sessions](./sessions.md) — the conversation model: types, status, runs
+- [Providers](./providers.md) — connecting LLMs, cloud and local
+- [Memories](./memories.md) — explicit, persistent recall across sessions
+- [Skills](./skills.md) — reusable system-prompt fragments ([creating your own](./creating-skills.md))
+- [Workspace](./workspace.md) — per-agent file access
 
-## Architecture and planning
+## Automation
 
-- [OpenAidy Architecture](./architecture) — core services, subsystem boundaries, data flow, event model, and security model.
-- [OpenAidy Data Model](./data-model) — recommended relational schema and persistence boundaries.
+- [Tasks](./tasks.md) — multi-step work with a kanban board and a visual workflow graph (conditional branches, loops, approval gates)
+- [Task Schedules](./task-schedules.md) — run a task automatically, recurring or one-shot
+- [Pulses](./pulses.md) — a lighter-weight scheduled prompt, for when a full task is overkill
 
-## Extension model
+## Connecting the outside world
 
-- [OpenAidy Plugin SDK](./plugin-sdk) — public plugin contracts, permissions, manifests, and lifecycle design.
-- [OpenAidy API Design](./api-design) — suggested API surface for sessions, scheduler, channels, pairing, config, plugins, and MCP.
+- [Channels](./channels.md) — WhatsApp and Discord, so agents can handle real conversations
+- [MCP Servers](./mcp-servers.md) — give agents tools from external MCP servers
+- [Addons](./addons/README.md) — build or install a mini-app inside OpenAidy, with its own [permission model](./addons/addon-permissions.md)
 
-## WebSocket Control Plane
+## Operating OpenAidy
 
-Real-time communication layer for OpenAidy:
-
-- [WebSocket Protocol](./websocket-protocol) — complete protocol reference, message types, examples, and best practices.
-- [WebSocket Client SDK](./websocket-client-sdk) — TypeScript client SDK API reference and usage examples.
-- [WebSocket Integration Guide](./websocket-integration-guide) — integration patterns for web, mobile, CLI, and services.
-- [WebSocket Architecture](./websocket-architecture) — component architecture, data flows, and design decisions.
-
-## Recommended reading order
-
-If you are just starting:
-
-1. Read [What is OpenAidy](./overview).
-2. Read [OpenAidy Architecture](./architecture).
-3. Read [Bootstrapping OpenAidy](./bootstrapping).
-4. Use [Bootstrap Checklist](./bootstrap-checklist) while creating the repo.
-5. Refer to [OpenAidy Data Model](./data-model), [OpenAidy Plugin SDK](./plugin-sdk), and [OpenAidy API Design](./api-design) as implementation references.
-
-## Intended outcome
-
-After reading this section, you should be able to:
-
-- explain what OpenAidy is and what it should do
-- choose the initial technical foundation
-- set up the repository and packages
-- implement the first working vertical slice
-- preserve a plugin-first architecture from the start
+- [Configuration](./config.md) — `openaidy.json`, the Settings UI, execution tuning
+- [Access Tokens & Device Pairing](./access-tokens.md) — API credentials and approving new devices
+- [Usage](./usage.md) — token and cost tracking
+- [CLI Reference](./cli/README.md) — every `openaidy` command, install and bootstrap-admin guides

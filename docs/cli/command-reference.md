@@ -809,59 +809,9 @@ pnpm openaidy addon create my-addon --template agent
 
 ---
 
-#### `addon init`
+#### `addon init`, `addon build`, `addon test`, `addon dev`, `addon publish`
 
-Initialize an existing project as an addon.
-
-**Usage:**
-
-```bash
-openaidy addon init [--force]
-```
-
-**Examples:**
-
-```bash
-pnpm openaidy addon init
-```
-
----
-
-#### `addon build`
-
-Build addon for production.
-
-**Usage:**
-
-```bash
-openaidy addon build [--watch] [--minify] [--sourcemap]
-```
-
-**Examples:**
-
-```bash
-pnpm openaidy addon build
-pnpm openaidy addon build --minify
-```
-
----
-
-#### `addon test`
-
-Run addon tests.
-
-**Usage:**
-
-```bash
-openaidy addon test [--watch] [--coverage] [--ui] [--filter <pattern>]
-```
-
-**Examples:**
-
-```bash
-pnpm openaidy addon test
-pnpm openaidy addon test --coverage
-```
+**Status: planned, not yet implemented.** `init` and `build` appear in `addon --help`'s listing, but none of these five have a registered command handler — running any of them today returns an "unknown command" error, not the behavior their name suggests. Use `addon create` for scaffolding and `addon validate` for checking a package in the meantime.
 
 ---
 
@@ -880,44 +830,6 @@ openaidy addon validate [--package] [--verbose] [--strict]
 ```bash
 pnpm openaidy addon validate
 pnpm openaidy addon validate --verbose
-```
-
----
-
-#### `addon dev`
-
-Start development server with hot-reloading.
-
-**Usage:**
-
-```bash
-openaidy addon dev [--port <port>] [--host <host>] [--openaidy-url <url>]
-```
-
-**Examples:**
-
-```bash
-pnpm openaidy addon dev
-pnpm openaidy addon dev --port 3001
-```
-
----
-
-#### `addon publish`
-
-Publish addon to the registry.
-
-**Usage:**
-
-```bash
-openaidy addon publish [--tag <tag>] [--registry <url>] [--access <access>]
-```
-
-**Examples:**
-
-```bash
-pnpm openaidy addon publish
-pnpm openaidy addon publish --tag beta
 ```
 
 ---
@@ -1291,4 +1203,4 @@ The following commands are planned but not yet implemented:
 - `admin token status` - Quick status check
 - `config show` - Display current configuration
 
-See [Extension Points](../packages/cli/EXTENSION_POINTS.md) for details on adding new commands.
+See [Extension Points](../../packages/cli/EXTENSION_POINTS.md) for details on adding new commands.

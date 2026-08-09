@@ -180,4 +180,4 @@ openaidy init
 - [Getting Started Guide](./getting-started.md)
 - [Bootstrap Admin Operator Guide](./bootstrap-admin.md)
 - [Command Reference](./command-reference.md)
-- [Architecture Guide](./architecture.md)
+- [Architecture Guide](../../plans/cli/architecture.md)

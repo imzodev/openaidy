@@ -308,4 +308,4 @@ pnpm openaidy devices list
 
 - Read the [Command Reference](./command-reference.md) for detailed command documentation
 - Learn about [Bootstrap Admin](./bootstrap-admin.md) token management
-- Understand the [Architecture](./architecture.md) for contributing
+- Understand the [Architecture](../../plans/cli/architecture.md) for contributing
