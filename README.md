@@ -129,7 +129,8 @@ openaidy/
     shared-types/ # Shared TypeScript contracts (DTOs, events, IDs)
   config/
     skills/       # Bundled default skills seeded on first run
-  docs/           # Architecture and design documentation
+  docs/           # User-facing documentation
+  plans/          # Internal design docs and implementation plans
   plugins/        # First-party and example plugins
   landing/        # Public marketing site (Vite + React)
 ```
@@ -310,16 +311,9 @@ A server whose `${VAR}` is unset sits in "Awaiting configuration" instead of try
 
 Edit `config/openaidy.template.json` and add/remove entries. On the next server start, `apps/server/src/mcp/preinstall.ts` reconciles: new entries are added, updated entries replace pristine ones, and servers the user has deleted are not resurrected. User-edited entries are never clobbered.
 
-## Architecture
+## Documentation
 
-See the [`docs/`](./docs/) directory for detailed documentation:
-
-- [`docs/overview.md`](./docs/overview.md) — Product overview and design goals
-- [`docs/architecture.md`](./docs/architecture.md) — System architecture
-- [`docs/monorepo.md`](./docs/monorepo.md) — Monorepo structure and package boundaries
-- [`docs/websocket-protocol.md`](./docs/websocket-protocol.md) — WebSocket protocol reference
-- [`docs/websocket-client-sdk.md`](./docs/websocket-client-sdk.md) — WebSocket client SDK guide
-- [`docs/api-design.md`](./docs/api-design.md) — REST API design principles
+See [`docs/`](./docs/) for the full user-facing documentation — [Getting Started](./docs/getting-started.md), Agents, Sessions, Tasks, Channels, MCP servers, Providers, Addons, and more, starting from [`docs/index.md`](./docs/index.md). The [CLI reference](./docs/cli/command-reference.md) lives there too.
 
 ## Contributing
 
@@ -333,6 +327,8 @@ See the [`docs/`](./docs/) directory for detailed documentation:
 - Types go in `packages/shared-types` (shared) or `src/types.ts` (server-internal) — never exported from logic files
 - All route handlers live in `apps/server/src/routes/`
 - Each package exposes a public API through its `src/index.ts`
+
+Internal design docs, architecture decisions, and in-progress implementation plans live in [`plans/`](./plans/) — start at [`plans/overview.md`](./plans/overview.md) or [`plans/architecture.md`](./plans/architecture.md).
 
 ## License
 

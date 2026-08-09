@@ -37,10 +37,16 @@ function AnimatedPage({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const location = useLocation();
+  // Group all /docs/* pages under one animation key so navigating between
+  // docs pages doesn't replay the page-transition (fade/slide) — only
+  // entering or leaving the docs section does.
+  const transitionKey = location.pathname.startsWith('/docs')
+    ? '/docs'
+    : location.pathname;
 
   return (
     <AnimatePresence mode="wait" initial={false}>
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location} key={transitionKey}>
         <Route
           path="/"
           element={

@@ -98,7 +98,12 @@ describe('Documentation Validation', () => {
   });
 
   describe('Architecture Guide', () => {
-    const archPath = join(docsDir, 'architecture.md');
+    // Contributor-facing, so it now lives under plans/ with the rest of the
+    // dev-facing docs — docsDir (docs/cli) only holds user-facing pages now.
+    const archPath = join(
+      import.meta.dirname,
+      '../../../plans/cli/architecture.md',
+    );
     const arch = existsSync(archPath) ? readFileSync(archPath, 'utf-8') : '';
 
     it('documents package structure', () => {
@@ -140,7 +145,12 @@ describe('Documentation Validation', () => {
   });
 
   describe('Control Plane Overview', () => {
-    const controlPlanePath = join(docsDir, '../control-plane.md');
+    // Contributor-facing — moved under plans/control-plane/ with the rest of
+    // the dev-facing docs.
+    const controlPlanePath = join(
+      import.meta.dirname,
+      '../../../plans/control-plane/overview.md',
+    );
     const controlPlane = existsSync(controlPlanePath)
       ? readFileSync(controlPlanePath, 'utf-8')
       : '';
