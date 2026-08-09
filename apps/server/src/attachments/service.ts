@@ -28,6 +28,9 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
  */
 export const MAX_TOOL_OUTPUT_BYTES = 100 * 1024 * 1024;
 
+/** Max attachments a single message (human or addon-submitted) may reference. */
+export const MAX_ATTACHMENT_IDS_PER_MESSAGE = 10;
+
 /** Allowed mime types by kind. */
 const ALLOWED_MIME_TYPES: Record<AttachmentKind, readonly string[]> = {
   image: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],

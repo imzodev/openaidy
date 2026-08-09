@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { SessionMessageService } from '../sessions/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
+import { MAX_ATTACHMENT_IDS_PER_MESSAGE } from '../attachments/service';
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
@@ -31,7 +32,10 @@ const submitMessageSchema = z
     agentId: z.string().optional(),
     providerId: z.string().optional(),
     modelId: z.string().optional(),
-    attachmentIds: z.array(z.string()).max(10).optional(),
+    attachmentIds: z
+      .array(z.string())
+      .max(MAX_ATTACHMENT_IDS_PER_MESSAGE)
+      .optional(),
   })
   .refine((body) => body.content.length > 0 || body.attachmentIds?.length, {
     message: 'content is required unless attachments are provided',

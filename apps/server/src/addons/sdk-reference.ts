@@ -91,6 +91,12 @@ export const SDK_METHODS: readonly SdkMethod[] = [
         kind: 'string',
         description: 'ID of the agent that should respond',
       },
+      {
+        name: 'attachmentIds',
+        kind: 'optional_array',
+        description:
+          'IDs returned by attachFile() to include as media on this message',
+      },
     ],
     returns: 'Promise<{ message: string; sessionId: string }>',
     description:
@@ -99,6 +105,33 @@ export const SDK_METHODS: readonly SdkMethod[] = [
       'Does NOT create a new session.',
     exampleJs:
       "sdk.sendMessage('sess-123', 'Summarize this', 'default').then(function(r) { console.log(r.message); });",
+  },
+  {
+    name: 'attachFile',
+    category: 'Sessions',
+    proxyPath: '/api/addon-proxy/sessions/:sessionId/attachments',
+    httpMethod: 'POST',
+    requiredPermission: 'sessions.write',
+    params: [
+      {
+        name: 'sessionId',
+        kind: 'string',
+        description: 'ID of the session to attach the file to',
+      },
+      {
+        name: 'file',
+        kind: 'object',
+        description:
+          '{ mimeType, data (base64), name? } — image/audio/video only',
+      },
+    ],
+    returns: 'Promise<{ id: string; mimeType: string; sizeBytes: number }>',
+    description:
+      'Upload an image/audio/video file for this session. The attachment is ' +
+      'unlinked until its id is passed in attachmentIds on a sendMessage call — ' +
+      'that is what makes it visible to the LLM (vision/audio-capable models only).',
+    exampleJs:
+      "sdk.attachFile('sess-123', { mimeType: 'image/png', data: base64Png }).then(function(a) { return sdk.sendMessage('sess-123', 'What is this?', 'default', [a.id]); });",
   },
   {
     name: 'getSession',
@@ -158,6 +191,34 @@ export const SDK_METHODS: readonly SdkMethod[] = [
     description: 'Invoke an agent with a prompt and get a response.',
     exampleJs:
       "sdk.invokeAgent('my-agent', 'Hello!').then(function(r) { console.log(r.message); });",
+  },
+  {
+    name: 'shareFile',
+    category: 'Agents',
+    proxyPath: '/api/addon-proxy/workspace/:agentId/files',
+    httpMethod: 'POST',
+    requiredPermission: 'workspace.write',
+    params: [
+      {
+        name: 'agentId',
+        kind: 'string',
+        description: 'ID of the agent whose workspace should receive the file',
+      },
+      {
+        name: 'file',
+        kind: 'object',
+        description:
+          '{ path, data (base64) } — any file type, e.g. csv/txt/json',
+      },
+    ],
+    returns: 'Promise<{ agentId: string; path: string }>',
+    description:
+      "Write a file into an agent's workspace. The agent reads it back with " +
+      'its own workspace_read/workspace_list tools — nothing is inlined into ' +
+      'the LLM context automatically. Use attachFile() instead for images/audio ' +
+      'you want the LLM to see inline.',
+    exampleJs:
+      "sdk.shareFile('my-agent', { path: 'shared/report.csv', data: base64Csv });",
   },
 
   // ── Config ────────────────────────────────────────────────────────────────
@@ -892,4 +953,20 @@ export function renderSdkReference(): string {
     }
   }
   return lines.join('\n');
+}
+
+/**
+ * Every distinct base (unscoped) permission string referenced by at least
+ * one SDK method's `requiredPermission` — sorted, deduped. This is the
+ * single source of truth for the "valid values" hint shown in
+ * addon_create/addon_update's `permissions` parameter, so adding a new SDK
+ * method's permission here updates both tool schemas automatically instead
+ * of drifting out of sync with a hand-maintained list.
+ */
+export function listSdkPermissions(): string[] {
+  const permissions = new Set<string>();
+  for (const method of SDK_METHODS) {
+    if (method.requiredPermission) permissions.add(method.requiredPermission);
+  }
+  return [...permissions].sort();
 }

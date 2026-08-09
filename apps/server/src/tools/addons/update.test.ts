@@ -86,6 +86,25 @@ describe('addon_update tool', () => {
     expect(required).toEqual(['id']);
   });
 
+  it('description embeds the SDK reference, same as addon_create', () => {
+    // addon_update is the tool used to add a new feature (e.g. a file-upload
+    // form) to an existing addon, so it needs the same SDK awareness as
+    // addon_create — not just a permissions checklist.
+    expect(tool.description).toContain('listAgents');
+    expect(tool.description).toContain('invokeAgent');
+    expect(tool.description).toContain('shareFile');
+    expect(tool.description).toContain('attachFile');
+  });
+
+  it('permissions parameter derives its valid-values list from SDK_METHODS', () => {
+    const params = tool.parameters as unknown as {
+      properties: { permissions: { description: string } };
+    };
+    const description = params.properties.permissions.description;
+    expect(description).toContain('workspace.write');
+    expect(description).toContain('sessions.write');
+  });
+
   // ── Input validation ───────────────────────────────────────────────────────
 
   it('rejects missing id', async () => {
@@ -412,6 +431,31 @@ describe('addon_update tool', () => {
     );
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.content).not.toContain('Permissions changed');
+  });
+
+  it('shows a usage hint for the newly granted SDK methods when permissions are replaced', async () => {
+    const mockAddonService = { updateAddon: async () => ({}) };
+    const toolWithService = createAddonUpdateTool({
+      addonsDir,
+      addonService: mockAddonService as never,
+    });
+    const result = await toolWithService.execute(
+      { id: 'demo', permissions: ['workspace.write'] },
+      CTX,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content).toContain('shareFile');
+  });
+
+  it('shows no usage hint when permissions are not part of the update', async () => {
+    const result = await tool.execute(
+      { id: 'demo', files: { 'app/index.js': '// just files' } },
+      CTX,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.content).not.toContain('Available SDK methods');
+    }
   });
 
   it('surfaces a warning when addonService.updateAddon throws', async () => {

@@ -142,3 +142,35 @@ describe('buildSystemPrompt — [ADDONS_AVAILABLE] block', () => {
     expect(prompt).not.toContain('[ADDONS_AVAILABLE]');
   });
 });
+
+describe('buildSystemPrompt — workspace:// external-tool guidance', () => {
+  const WORKSPACE_READ_TOOL: ToolDefinition = {
+    name: 'workspace_read',
+    description: 'Read a file from your workspace',
+    parameters: { type: 'object' },
+  };
+  const OTHER_TOOL: ToolDefinition = {
+    name: 'web_search',
+    description: 'Search the web',
+    parameters: { type: 'object' },
+  };
+
+  it('documents the workspace:// convention when workspace_read is available', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [WORKSPACE_READ_TOOL],
+    });
+    expect(prompt).toContain('workspace://<relative-path>');
+    expect(prompt).toContain('image_source: "workspace://tickets/receipt.jpg"');
+  });
+
+  it('omits the guidance when workspace_read is not available', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [OTHER_TOOL],
+    });
+    expect(prompt).not.toContain('workspace://<relative-path>');
+  });
+});
