@@ -75,19 +75,19 @@ describe('buildAddonCsp', () => {
       { permissions: ['media.read'] },
       scriptSrcOrigins,
     );
-    expect(withUnscoped).toContain("media-src 'self' data:");
+    expect(withUnscoped).toContain('media-src data:');
 
     const withScoped = buildAddonCsp(
       { permissions: ['media.read:microphone'] },
       scriptSrcOrigins,
     );
-    expect(withScoped).toContain("media-src 'self' data:");
+    expect(withScoped).toContain('media-src data:');
 
     const withWildcard = buildAddonCsp(
       { permissions: ['media.*'] },
       scriptSrcOrigins,
     );
-    expect(withWildcard).toContain("media-src 'self' data:");
+    expect(withWildcard).toContain('media-src data:');
 
     const withoutIt = buildAddonCsp(
       { permissions: ['sessions.read'] },

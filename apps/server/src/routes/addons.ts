@@ -133,6 +133,12 @@ export function buildAddonCsp(
   // as base64 data: URLs meant to be played/displayed inline, so granting
   // media-src here is tied to the permission it already had to declare to
   // use the feature — no separate externalDomains-style field needed.
+  //
+  // `media.*` / `*` can't currently reach here — AddonPermissionSchema only
+  // accepts resource.action[:scope] with a fixed action set, so a bare
+  // wildcard never validates. Kept for forward-compat with the scoping
+  // convention AddonProxyService.hasScopedAccess already uses, in case that
+  // schema is ever widened.
   const hasMediaReadPermission = permissions.some(
     (p) =>
       p === 'media.read' ||
@@ -140,7 +146,10 @@ export function buildAddonCsp(
       p === '*' ||
       p.startsWith('media.read:'),
   );
-  const mediaSrc = hasMediaReadPermission ? "'self' data:" : "'none'";
+  // No 'self' here (unlike the sibling directives above): the addon's
+  // document has an opaque origin (sandboxed without allow-same-origin), so
+  // CSP 'self' can never match it — only the data: scheme actually matters.
+  const mediaSrc = hasMediaReadPermission ? 'data:' : "'none'";
 
   return [
     "default-src 'none'",

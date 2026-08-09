@@ -209,6 +209,10 @@
   // base64 body rather than running an agent, but can still be several MB —
   // longer than the default, well short of the agent ceiling.
   var UPLOAD_REQUEST_TIMEOUT_MS = 30000;
+  // Must match MAX_RECORD_SECONDS in apps/web/.../AddonViewPage.tsx — the
+  // host clamps to this regardless of what an addon asks for, so this
+  // promise's own timeout must not wait any longer than that.
+  var MEDIA_MAX_RECORD_SECONDS = 600;
 
   // Send a proxied API request through the parent. `timeoutMs` overrides the
   // default for long-running calls.
@@ -726,7 +730,14 @@
        */
       recordAudio: function (opts) {
         opts = opts || {};
-        var maxSeconds = opts.maxSeconds || 30;
+        // Mirror the host's own cap (MAX_RECORD_SECONDS in AddonViewPage) —
+        // without this, an addon passing an absurd maxSeconds (typo, e.g.
+        // an extra zero) would still make THIS promise wait that long even
+        // though the host will already have responded after 600s.
+        var maxSeconds = Math.min(
+          Math.max(1, Math.floor(opts.maxSeconds) || 30),
+          MEDIA_MAX_RECORD_SECONDS,
+        );
         return request(
           'POST',
           '/media/record-audio',
@@ -739,9 +750,11 @@
        * "tap to stop" button, rather than relying only on the host's
        * banner. The pending recordAudio() promise resolves normally with
        * whatever was captured; this call itself has no return value. A
-       * no-op if nothing is recording.
+       * no-op if nothing is recording (including if called before the SDK
+       * is ready — nothing could have started recording yet either).
        */
       stopRecording: function () {
+        if (!_ready) return;
         window.parent.postMessage(
           { type: 'OPENAIDY_MEDIA_STOP', nonce: _nonce },
           '*',

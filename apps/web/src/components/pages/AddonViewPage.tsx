@@ -41,6 +41,8 @@ import {
 // on the same origin the browser is already on, so a relative URL works.
 const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
 
+const MAX_RECORD_SECONDS = 600;
+
 /**
  * Sample the host's resolved theme — the mode the user is actually seeing
  * (after `system` collapses to light/dark) plus the resolved values of every
@@ -106,17 +108,28 @@ export function AddonViewPage(props: Props) {
   // host captures on the addon's behalf instead, gated by a `media.read` (or
   // `media.read:microphone` / `media.read:camera`) permission, and hands the
   // recording/photo back over the same postMessage bridge.
-  const MAX_RECORD_SECONDS = 600;
   const [recordingActive, setRecordingActive] = createSignal(false);
   const [recordingSecondsLeft, setRecordingSecondsLeft] = createSignal(0);
   let stopRecordingFn: (() => void) | null = null;
+  // Claimed synchronously (before the getUserMedia await) so two
+  // recordAudio() calls issued back-to-back can't both pass the "already
+  // recording" guard and race — recordingActive only flips once we've
+  // actually started recording, which is a beat later.
+  let recordingClaimed = false;
 
   const [photoRequestId, setPhotoRequestId] = createSignal<string | null>(null);
   let photoStream: MediaStream | null = null;
   let photoVideoRef: HTMLVideoElement | undefined;
+  // Same synchronous-claim reasoning as recordingClaimed, for takePhoto().
+  let photoCaptureClaimed = false;
 
   const hasMediaPermission = (kind: 'microphone' | 'camera'): boolean => {
     const permissions = props.addon.permissions ?? [];
+    // `media.*` / `*` can't currently reach here — AddonPermissionSchema
+    // only accepts resource.action[:scope] with a fixed action set, so a
+    // bare wildcard never validates. Kept for forward-compat with the
+    // scoping convention AddonProxyService.hasScopedAccess already uses
+    // server-side, in case that schema is ever widened.
     if (
       permissions.includes('*') ||
       permissions.includes('media.*') ||
@@ -166,7 +179,7 @@ export function AddonViewPage(props: Props) {
       });
       return;
     }
-    if (recordingActive()) {
+    if (recordingClaimed) {
       postMediaResult(requestId, {
         ok: false,
         status: 409,
@@ -187,15 +200,25 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
-    const maxSeconds = Math.min(
-      Math.max(1, Math.floor(body?.maxSeconds ?? 30)),
-      MAX_RECORD_SECONDS,
-    );
+    // Number(undefined) is NaN, not a throw, so a missing/non-numeric
+    // maxSeconds must be checked explicitly — Math.max/min/floor all
+    // propagate NaN silently, which would disable the auto-stop timer.
+    const requestedSeconds = Number(body?.maxSeconds);
+    const maxSeconds =
+      Number.isFinite(requestedSeconds) && requestedSeconds >= 1
+        ? Math.min(Math.floor(requestedSeconds), MAX_RECORD_SECONDS)
+        : 30;
+
+    // Claimed synchronously, before the getUserMedia await, so a second
+    // recordAudio() call issued in the same tick (or queued before this one
+    // finishes prompting for mic access) can't also pass the guard above.
+    recordingClaimed = true;
 
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
+      recordingClaimed = false;
       postMediaResult(requestId, {
         ok: false,
         status: 403,
@@ -211,10 +234,22 @@ export function AddonViewPage(props: Props) {
       ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) =>
         MediaRecorder.isTypeSupported(t),
       ) ?? '';
-    const recorder = new MediaRecorder(
-      stream,
-      mimeType ? { mimeType } : undefined,
-    );
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    } catch (err) {
+      recordingClaimed = false;
+      stream.getTracks().forEach((t) => t.stop());
+      postMediaResult(requestId, {
+        ok: false,
+        status: 500,
+        error:
+          err instanceof Error
+            ? `Could not start recorder: ${err.message}`
+            : 'Could not start recorder',
+      });
+      return;
+    }
     const chunks: BlobPart[] = [];
     const startedAt = Date.now();
     let settled = false;
@@ -248,8 +283,16 @@ export function AddonViewPage(props: Props) {
           else interimTranscript += transcript;
         }
       };
-      recognizer.onerror = () => {
-        // Best-effort — the addon still gets the raw audio either way.
+      recognizer.onerror = (event) => {
+        // Chromium has had bugs where certain errors (e.g. 'aborted',
+        // 'network') fire onerror without a subsequent onend — if we only
+        // relied on onend, tryFinalize would never see recognizerEnded
+        // become true and the recording would hang forever. Force it here;
+        // a partial transcript beats a hung promise.
+        console.warn('[recordAudio] speech recognition error', event.error);
+        if (recognizerEnded) return;
+        recognizerEnded = true;
+        tryFinalize();
       };
       recognizerEnded = false;
       recognizer.onend = () => {
@@ -268,7 +311,9 @@ export function AddonViewPage(props: Props) {
       stream.getTracks().forEach((t) => t.stop());
       if (timer) clearInterval(timer);
       stopRecordingFn = null;
+      recordingClaimed = false;
       setRecordingActive(false);
+      setRecordingSecondsLeft(0);
     };
 
     let recorderStopped = false;
@@ -332,7 +377,28 @@ export function AddonViewPage(props: Props) {
       if (recorder.state !== 'inactive') recorder.stop();
     };
 
-    recorder.start();
+    try {
+      recorder.start();
+    } catch (err) {
+      recordingClaimed = false;
+      stream.getTracks().forEach((t) => t.stop());
+      if (recognizer) {
+        try {
+          recognizer.stop();
+        } catch {
+          // best-effort — the recorder never started, nothing to finalize
+        }
+      }
+      postMediaResult(requestId, {
+        ok: false,
+        status: 500,
+        error:
+          err instanceof Error
+            ? `Could not start recording: ${err.message}`
+            : 'Could not start recording',
+      });
+      return;
+    }
     setRecordingActive(true);
     setRecordingSecondsLeft(maxSeconds);
     timer = setInterval(() => {
@@ -350,6 +416,7 @@ export function AddonViewPage(props: Props) {
     photoStream?.getTracks().forEach((t) => t.stop());
     photoStream = null;
     photoVideoRef = undefined;
+    photoCaptureClaimed = false;
     setPhotoRequestId(null);
   };
 
@@ -362,7 +429,7 @@ export function AddonViewPage(props: Props) {
       });
       return;
     }
-    if (photoRequestId()) {
+    if (photoCaptureClaimed) {
       postMediaResult(requestId, {
         ok: false,
         status: 409,
@@ -379,11 +446,17 @@ export function AddonViewPage(props: Props) {
       return;
     }
 
+    // Claimed synchronously, before the getUserMedia await — see
+    // recordingClaimed above for why (a second takePhoto() call issued
+    // before this one resolves must not also pass the guard above).
+    photoCaptureClaimed = true;
+
     try {
       photoStream = await navigator.mediaDevices.getUserMedia({
         video: true,
       });
     } catch (err) {
+      photoCaptureClaimed = false;
       postMediaResult(requestId, {
         ok: false,
         status: 403,
@@ -408,6 +481,18 @@ export function AddonViewPage(props: Props) {
     const requestId = photoRequestId();
     if (!requestId || !photoVideoRef) return;
     const video = photoVideoRef;
+    // Metadata (and therefore real dimensions) only arrives after the
+    // first frame decodes — the capture modal can appear before that. A
+    // 0×0 canvas would silently succeed with a useless 1×1 JPEG instead of
+    // failing, so bail with an error the addon can act on instead.
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 409,
+        error: 'Camera preview is not ready yet — try again in a moment',
+      });
+      return;
+    }
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -442,7 +527,7 @@ export function AddonViewPage(props: Props) {
     if (requestId) {
       postMediaResult(requestId, {
         ok: false,
-        status: 499,
+        status: 400,
         error: 'User cancelled photo capture',
       });
     }

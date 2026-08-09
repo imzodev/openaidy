@@ -708,12 +708,24 @@ export interface SpeechRecognitionEventLike {
   };
 }
 
+/**
+ * The real event has more fields (`SpeechRecognitionErrorEvent`); `error`
+ * (e.g. `'no-speech'`, `'aborted'`, `'network'`) is the only one consumers
+ * of this shim currently read, to decide whether to force-finalize a
+ * recording that a spec-noncompliant `onerror`-without-`onend` would
+ * otherwise leave hanging.
+ */
+export interface SpeechRecognitionErrorEventLike {
+  readonly error?: string;
+  readonly message?: string;
+}
+
 export interface SpeechRecognitionLike {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
   start(): void;
   stop(): void;
