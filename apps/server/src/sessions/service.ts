@@ -11,6 +11,10 @@ import {
   MEDIA_WORKSPACE_DIR,
   type PersistedImage,
 } from '../mcp/screenshot-capture';
+import {
+  containsWorkspaceFileRef,
+  resolveWorkspaceFileRefs,
+} from '../mcp/workspace-file-refs';
 import type { BuiltinToolRegistry } from '../tools';
 import type { MediaShareResult } from '../tools/media/share';
 import type { AttachmentService } from '../attachments/service';
@@ -1909,19 +1913,51 @@ export class SessionMessageService {
                 ? stripScreenshotFilename(tc.arguments)
                 : { forwardedArgs: tc.arguments, requestedFilename: undefined };
 
-              let mcpResult = await this.mcp
-                ?.callTool(mcpServerId, mcpToolName, forwardedArgs)
-                .catch((e: unknown) => {
+              // A `workspace://<path>` reference in an argument value lets the
+              // model hand this external tool a workspace file (e.g. an image
+              // to analyze) without ever learning its absolute path. Resolved
+              // only in the copy forwarded to the tool — `tc.arguments`, what
+              // gets persisted in history, keeps the short reference, never
+              // the encoded bytes.
+              let mcpResult: McpToolResult | undefined;
+              if (this.workspace && containsWorkspaceFileRef(forwardedArgs)) {
+                try {
+                  const resolvedArgs = await resolveWorkspaceFileRefs(
+                    forwardedArgs,
+                    this.workspace,
+                    agentId,
+                  );
+                  mcpResult = await this.mcp?.callTool(
+                    mcpServerId,
+                    mcpToolName,
+                    resolvedArgs,
+                  );
+                } catch (e) {
                   toolIsError = true;
-                  return {
+                  mcpResult = {
                     content: [
                       {
-                        type: 'text',
+                        type: 'text' as const,
                         text: `Error: ${e instanceof Error ? e.message : String(e)}`,
                       },
                     ],
                   };
-                });
+                }
+              } else {
+                mcpResult = await this.mcp
+                  ?.callTool(mcpServerId, mcpToolName, forwardedArgs)
+                  .catch((e: unknown) => {
+                    toolIsError = true;
+                    return {
+                      content: [
+                        {
+                          type: 'text' as const,
+                          text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                        },
+                      ],
+                    };
+                  });
+              }
 
               // Persist any inline image the tool returned into the agent
               // workspace — screenshots keep their dedicated folder, other

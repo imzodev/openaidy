@@ -580,4 +580,28 @@ describe('sdk-reference', () => {
     expect(names).toContain('storage.search');
     expect(renderSdkReference()).toContain('Storage');
   });
+
+  it('listSdkPermissions includes every distinct requiredPermission, deduped and sorted', async () => {
+    const { listSdkPermissions } =
+      await import('../../addons/sdk-reference.js');
+    const permissions = listSdkPermissions();
+    expect(permissions).toContain('workspace.write');
+    expect(permissions).toContain('sessions.write');
+    expect(permissions).toContain('agents.invoke');
+    expect(permissions).toContain('storage.read');
+    // deduped: storage.read/storage.write appear on multiple methods
+    expect(permissions.filter((p) => p === 'storage.read')).toHaveLength(1);
+    expect(permissions).toEqual([...permissions].sort());
+  });
+
+  it("addon_create's permissions parameter derives its valid-values list from SDK_METHODS (not a hand-typed list)", () => {
+    const standaloneTool = createAddonCreateTool({ addonsDir: os.tmpdir() });
+    const params = standaloneTool.parameters as unknown as {
+      properties: { permissions: { description: string } };
+    };
+    const description = params.properties.permissions.description;
+    expect(description).toContain('workspace.write');
+    expect(description).toContain('sessions.write');
+    expect(description).toContain('shareFile');
+  });
 });

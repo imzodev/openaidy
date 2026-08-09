@@ -9,7 +9,12 @@ import {
 } from '../attachments/service';
 import type { SessionMessageService } from '../sessions/service';
 
-const uploadAttachmentSchema = z.object({
+/**
+ * Exported so the addon-proxy's attachment-create route (which lets an
+ * addon upload a file for a session it's posting to) validates against the
+ * exact same rules as this human-facing route — one schema, two callers.
+ */
+export const uploadAttachmentSchema = z.object({
   mimeType: z.string().min(1),
   /** Base64-encoded bytes (no data: URI prefix) */
   data: z.string().min(1),

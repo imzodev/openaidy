@@ -29,30 +29,48 @@ export class AddonProxyService {
   }
 
   /**
+   * Check if an addon holds a permission for a specific target, under the
+   * platform's two-tier scoping convention:
+   *   1. Unscoped: `<basePermission>`, `<namespace>.*`, or `*` — grants access
+   *      to every target.
+   *   2. Scoped:   `<basePermission>:<targetId>`              — grants access
+   *      to that one target only.
+   */
+  private hasScopedAccess(
+    addon: Addon,
+    basePermission: string,
+    targetId: string,
+  ): boolean {
+    const permissions = (addon.permissions as string[]) ?? [];
+    const namespace = basePermission.split('.')[0];
+
+    if (
+      permissions.includes(basePermission) ||
+      permissions.includes(`${namespace}.*`) ||
+      permissions.includes('*')
+    ) {
+      return true;
+    }
+
+    return permissions.includes(`${basePermission}:${targetId}`);
+  }
+
+  /**
    * Check if an addon has access to a specific agent.
-   *
-   * Two tiers, checked in order:
-   *   1. Unscoped: `agents.invoke`, `agents.*`, or `*` — access to all agents.
-   *   2. Scoped:   `agents.invoke:<agentId>`           — access to that agent only.
    *
    * Access is determined solely by the permissions the user approved at enable
    * time. The manifest `agents` array declares agents the addon *provides*, not
    * agents it may invoke, so it plays no role here.
    */
   hasAgentAccess(addon: Addon, agentId: string): boolean {
-    const permissions = (addon.permissions as string[]) ?? [];
+    return this.hasScopedAccess(addon, 'agents.invoke', agentId);
+  }
 
-    // Tier 1: unscoped — grants access to all agents
-    if (
-      permissions.includes('agents.invoke') ||
-      permissions.includes('agents.*') ||
-      permissions.includes('*')
-    ) {
-      return true;
-    }
-
-    // Tier 2: scoped — grants access to one specific agent
-    return permissions.includes(`agents.invoke:${agentId}`);
+  /**
+   * Check if an addon has access to write into a specific agent's workspace.
+   */
+  hasWorkspaceAccess(addon: Addon, agentId: string): boolean {
+    return this.hasScopedAccess(addon, 'workspace.write', agentId);
   }
 
   /**
