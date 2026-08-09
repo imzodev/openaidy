@@ -52,7 +52,7 @@ A subtask with `subtaskKind: 'approval_gate'` pauses execution and waits for a h
 
 When a subtask finishes, its result can go through verification before being marked complete — if verification rejects it, the subtask retries automatically (up to a configurable limit) with the rejection reason fed back into the next attempt. If a subtask genuinely gets stuck `in_progress` past a timeout, it's automatically retried or failed depending on how many attempts it's already had.
 
-The retry limit, and how much of a completed dependency's result gets carried into the next subtask's prompt, are both configurable — see [Configuration](./config.md#execution).
+The retry limit, and how much of a completed dependency's result gets carried into the next subtask's prompt, are both configurable — see [Configuration](./config.md#execution-tuning).
 
 ## The kanban board and the visual editor
 

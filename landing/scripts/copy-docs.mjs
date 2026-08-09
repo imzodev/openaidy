@@ -7,7 +7,12 @@ const root = resolve(here, '..', '..');
 const source = join(root, 'docs');
 const dest = join(here, '..', 'public', 'docs');
 
-rmSync(dest, { recursive: true, force: true });
-cpSync(source, dest, { recursive: true });
+try {
+  rmSync(dest, { recursive: true, force: true });
+  cpSync(source, dest, { recursive: true });
+} catch (error) {
+  console.error('Failed to sync docs/ to landing/public/docs/:', error);
+  process.exit(1);
+}
 
 console.log('Synced docs/ to landing/public/docs/');

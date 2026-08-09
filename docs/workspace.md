@@ -25,4 +25,4 @@ Different agents can point at different workspaces (or none at all) — a resear
 
 ## Related
 
-- [Addons](./addons/README.md) — addons don't get workspace access directly; an addon's file-like needs go through its own private [storage](./addons/addon-permissions.md#storage-per-addon-sqlite) instead
+- [Addons](./addons/README.md) — with the `workspace.write` permission, an addon can write a file into an agent's workspace (the agent reads it back with its own tools); for data the addon owns itself, use its private [storage](./addons/addon-permissions.md#storage-per-addon-sqlite) instead

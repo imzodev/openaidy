@@ -114,7 +114,9 @@ function renderMarkdown(src: string): string {
     const id = text
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-');
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
 
