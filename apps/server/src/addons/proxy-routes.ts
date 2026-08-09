@@ -17,7 +17,11 @@ import {
 } from '../pulses/schemas.js';
 import { toStatusResponse } from '../channels/status.js';
 import { WorkspaceError } from '../workspace';
-import { AttachmentError, MAX_ATTACHMENT_BYTES } from '../attachments/service';
+import {
+  AttachmentError,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENT_IDS_PER_MESSAGE,
+} from '../attachments/service';
 import { uploadAttachmentSchema } from '../routes/attachments';
 
 /**
@@ -261,12 +265,12 @@ export const addonProxyRoutes: FastifyPluginAsync<
       if (
         attachmentIds !== undefined &&
         (!Array.isArray(attachmentIds) ||
-          attachmentIds.length > 10 ||
+          attachmentIds.length > MAX_ATTACHMENT_IDS_PER_MESSAGE ||
           attachmentIds.some((id) => typeof id !== 'string'))
       ) {
         return reply.code(400).send({
           error: 'INVALID_REQUEST',
-          message: 'attachmentIds must be an array of at most 10 strings',
+          message: `attachmentIds must be an array of at most ${MAX_ATTACHMENT_IDS_PER_MESSAGE} strings`,
         });
       }
 

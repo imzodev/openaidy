@@ -29,53 +29,48 @@ export class AddonProxyService {
   }
 
   /**
+   * Check if an addon holds a permission for a specific target, under the
+   * platform's two-tier scoping convention:
+   *   1. Unscoped: `<basePermission>`, `<namespace>.*`, or `*` — grants access
+   *      to every target.
+   *   2. Scoped:   `<basePermission>:<targetId>`              — grants access
+   *      to that one target only.
+   */
+  private hasScopedAccess(
+    addon: Addon,
+    basePermission: string,
+    targetId: string,
+  ): boolean {
+    const permissions = (addon.permissions as string[]) ?? [];
+    const namespace = basePermission.split('.')[0];
+
+    if (
+      permissions.includes(basePermission) ||
+      permissions.includes(`${namespace}.*`) ||
+      permissions.includes('*')
+    ) {
+      return true;
+    }
+
+    return permissions.includes(`${basePermission}:${targetId}`);
+  }
+
+  /**
    * Check if an addon has access to a specific agent.
-   *
-   * Two tiers, checked in order:
-   *   1. Unscoped: `agents.invoke`, `agents.*`, or `*` — access to all agents.
-   *   2. Scoped:   `agents.invoke:<agentId>`           — access to that agent only.
    *
    * Access is determined solely by the permissions the user approved at enable
    * time. The manifest `agents` array declares agents the addon *provides*, not
    * agents it may invoke, so it plays no role here.
    */
   hasAgentAccess(addon: Addon, agentId: string): boolean {
-    const permissions = (addon.permissions as string[]) ?? [];
-
-    // Tier 1: unscoped — grants access to all agents
-    if (
-      permissions.includes('agents.invoke') ||
-      permissions.includes('agents.*') ||
-      permissions.includes('*')
-    ) {
-      return true;
-    }
-
-    // Tier 2: scoped — grants access to one specific agent
-    return permissions.includes(`agents.invoke:${agentId}`);
+    return this.hasScopedAccess(addon, 'agents.invoke', agentId);
   }
 
   /**
    * Check if an addon has access to write into a specific agent's workspace.
-   *
-   * Two tiers, checked in order (mirrors {@link hasAgentAccess}):
-   *   1. Unscoped: `workspace.write`, `workspace.*`, or `*` — access to all agents' workspaces.
-   *   2. Scoped:   `workspace.write:<agentId>`               — access to that agent's workspace only.
    */
   hasWorkspaceAccess(addon: Addon, agentId: string): boolean {
-    const permissions = (addon.permissions as string[]) ?? [];
-
-    // Tier 1: unscoped — grants access to all agents' workspaces
-    if (
-      permissions.includes('workspace.write') ||
-      permissions.includes('workspace.*') ||
-      permissions.includes('*')
-    ) {
-      return true;
-    }
-
-    // Tier 2: scoped — grants access to one specific agent's workspace
-    return permissions.includes(`workspace.write:${agentId}`);
+    return this.hasScopedAccess(addon, 'workspace.write', agentId);
   }
 
   /**
