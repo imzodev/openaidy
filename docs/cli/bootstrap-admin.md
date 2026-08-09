@@ -279,4 +279,4 @@ The following features are planned for future releases:
 
 - [CLI Getting Started](./getting-started.md)
 - [Command Reference](./command-reference.md)
-- [Architecture Guide](./architecture.md)
+- [Architecture Guide](../../plans/cli/architecture.md)

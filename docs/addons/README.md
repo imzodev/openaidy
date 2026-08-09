@@ -1,149 +1,60 @@
-# OpenAidy Addons System Documentation
-
-This directory contains comprehensive documentation for implementing the OpenAidy addons feature - a plugin system that allows third-party developers to create UI extensions that integrate with OpenAidy's agents.
-
-## Overview
-
-The addons system transforms OpenAidy into an extensible platform similar to WordPress plugins or VS Code extensions. It provides a secure, scalable foundation for third-party developers to create valuable extensions while maintaining strict security boundaries and excellent user experience.
-
-## Implementation Phases
-
-The addon system is implemented in 5 distinct phases, each building upon the previous one:
-
-### Phase 1: Backend Foundation
-
-**File: `addons-phase-1-backend-foundation.md`**
-
-Establishes the core backend infrastructure:
-
-- Addon manifest validation system
-- Database schema and persistence
-- Permission system for access control
-- Addon proxy service for secure communication
-- Authentication middleware
-
-### Phase 2: Frontend Foundation
-
-**File: `addons-phase-2-frontend-foundation.md`**
-
-Builds the client-side infrastructure:
-
-- Dynamic addon loading system
-- Addon runtime API
-- Router integration for addon routes
-- Sidebar navigation integration
-- Addon management UI
-
-### Phase 3: Security & Isolation
-
-**File: `addons-phase-3-security-isolation.md`**
-
-Strengthens security measures:
-
-- Fine-grained permission checking
-- Rate limiting and throttling
-- Comprehensive audit logging
-- Code validation and security scanning
-- Enhanced data isolation
-
-### Phase 4: Developer Experience
-
-**File: `addons-phase-4-developer-experience.md`**
-
-Creates excellent developer tools:
-
-- CLI tool with scaffolding and validation
-- Multiple addon templates
-- Testing framework and utilities
-- Documentation generator
-- Local development environment
-
-### Phase 5: Advanced Features
-
-**File: `addons-phase-5-advanced-features.md`**
-
-Implements enterprise-grade features:
-
-- Addon marketplace with discovery
-- Version management and updates
-- Dependency resolution
-- Analytics dashboard
-- Monetization and licensing
-
-## Quick Start
-
-1. **Read the Technical Specification** - Start with `addons-technical-specification.md` for a complete overview
-2. **Follow Phases Sequentially** - Each phase depends on the previous one
-3. **Review Success Criteria** - Each phase document includes clear success criteria
-4. **Run Tests** - Comprehensive test suites are provided for each component
-
-## Key Architecture Components
-
-### Addon Manifest
-
-JSON schema that defines addon metadata, permissions, UI configuration, and dependencies.
-
-### Permission System
-
-Fine-grained access control that limits addons to specific resources and actions.
-
-### Proxy Service
-
-Secure intermediary that enforces permissions and provides audit logging.
-
-### Runtime API
-
-Client-side API that addons use to communicate with OpenAidy services.
-
-### Marketplace
-
-Distribution platform for discovering, installing, and managing addons.
-
-## Security Considerations
-
-- **Sandboxed Execution**: Addons run in isolated environments
-- **Least Privilege**: Addons only get permissions they explicitly request
-- **Code Validation**: All addon packages are scanned for security issues
-- **Audit Logging**: All addon activities are logged and monitored
-- **Rate Limiting**: Addons are throttled to prevent abuse
-
-## Developer Resources
-
-- **CLI Tools**: Complete development toolkit for addon creators
-- **Templates**: Pre-built templates for common addon patterns
-- **Documentation**: Auto-generated API docs and guides
-- **Testing**: Comprehensive testing framework and utilities
-
-## File Structure
-
-```
-docs/addons/
-├── README.md                           # This file
-├── addons-technical-specification.md   # Complete technical overview
-├── addons-phase-1-backend-foundation.md # Phase 1 implementation
-├── addons-phase-2-frontend-foundation.md # Phase 2 implementation
-├── addons-phase-3-security-isolation.md # Phase 3 implementation
-├── addons-phase-4-developer-experience.md # Phase 4 implementation
-└── addons-phase-5-advanced-features.md # Phase 5 implementation
-```
-
-## Next Steps
-
-1. Review the technical specification to understand the full system
-2. Begin with Phase 1 implementation
-3. Test each phase thoroughly before proceeding
-4. Gather feedback from beta testers
-5. Iterate and improve based on real-world usage
-
-## Support
-
-For questions about implementation:
-
-- Review the phase-specific documentation
-- Check the technical specification for architecture decisions
-- Consult the test files for usage examples
-- Reach out to the development team for clarification
-
+---
+summary: 'What an addon is, and the create/install/validate workflow'
+read_when:
+  - You want to build or install a mini-app that plugs into OpenAidy
+title: 'Addons'
 ---
 
-**Note**: This documentation represents a complete implementation plan. Adjustments may be made based on actual implementation experience and user feedback.
+# Addons
+
+An addon is a small web app that runs inside OpenAidy — its own screen in the sidebar, its own UI, with permission-gated access to a subset of the platform (agents, sessions, tasks, pulses, channels, its own private storage). It's the difference between asking an agent a question and getting a text answer, versus getting a persistent tool with its own interface that stays installed.
+
+Addons run in a sandboxed iframe with no direct access to your session or credentials — every capability they use goes through the OpenAidy SDK and is explicitly granted per-permission. See [Addon Permissions](./addon-permissions.md) for the full reference of what an addon can request and what each permission actually unlocks.
+
+## Creating an addon
+
+```bash
+openaidy addon create my-addon
+openaidy addon create my-addon --template <template-name>
+openaidy addon templates    # list available templates
+```
+
+This scaffolds a new addon directory with an `addon.json` manifest (id, permissions, entry point) and a starter `index.html`/`index.js` that already loads the OpenAidy SDK.
+
+An agent can also generate an addon for you conversationally — ask it to build you a tool for whatever you need, and it writes the manifest, HTML, and JS directly.
+
+## Validating an addon
+
+```bash
+openaidy addon validate                 # check the addon in the current directory
+openaidy addon validate --verbose
+openaidy addon validate --strict        # fail on warnings, not just errors
+```
+
+Validation checks the manifest against the schema (permission format, resource names, storage config) and scans the addon's code for common issues — for example, `fetch()` calls to hosts that aren't declared in `externalDomains`, which the browser will block via CSP at runtime otherwise.
+
+## Installing an addon
+
+```bash
+openaidy addon install my-addon
+openaidy addon install my-addon --server-url http://localhost:3001 --token <token>
+```
+
+Installing copies the addon into your OpenAidy instance and registers it. It then needs to be **enabled** — from the Addons page in the web UI — where you review and approve the permissions it requested before it can actually call anything.
+
+## What's not implemented yet
+
+The CLI's help output lists a few addon subcommands (`addon init`, `addon build`, `addon dev`, `addon publish`) that aren't wired up yet — running them returns an unknown-command error today. Use `addon create` for scaffolding in the meantime.
+
+## The SDK, from inside an addon
+
+```html
+<script src="/sdk/openaidy-sdk.js"></script>
+<script>
+  OpenAidy.ready(async (sdk) => {
+    const { items } = await sdk.tasks.list();
+  });
+</script>
+```
+
+Every method call is checked against the addon's granted permissions server-side — see [Addon Permissions](./addon-permissions.md) for the complete method-by-method reference, including `sessions.*`, `agents.*`, `tasks.*`, `pulses.*`, `channels.*` (read-only), and `storage.*` (a private SQLite database per addon).
