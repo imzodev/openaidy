@@ -487,6 +487,13 @@ ${formatSessionSearchResultDocs()}
 `;
   }
 
+  if (hasWorkspaceRead) {
+    guidelines += `
+### Passing a workspace file to an external/MCP tool
+A path from workspace_read/workspace_list (e.g. "tickets/receipt.jpg") only works with workspace_* tools — external MCP tools run as separate processes and cannot open it, no matter how you format it (relative, absolute-looking, backslashes). To pass a workspace file to any OTHER tool (e.g. an image-analysis tool), reference it as workspace://<relative-path> in that tool's argument instead — the server resolves it to the actual file automatically before the call. Example: image_source: "workspace://tickets/receipt.jpg". Do not try to guess or construct a real filesystem path for external tools.
+`;
+  }
+
   guidelines += `
 ## HONESTY REQUIREMENTS (VIOLATING THESE IS A BUG)
 
