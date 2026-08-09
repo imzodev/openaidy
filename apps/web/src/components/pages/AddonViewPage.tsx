@@ -18,6 +18,9 @@ import {
   Tag,
   AlertTriangle,
   Globe,
+  Mic,
+  Camera,
+  CircleStop,
 } from 'lucide-solid';
 import type { AddonRecord } from '../../lib/api';
 import { refreshAddonToken, getAddonAssetToken } from '../../lib/api';
@@ -29,6 +32,8 @@ import {
   type AddonInitMessage,
   type AddonThemeMessage,
   type AddonThemePayload,
+  type SpeechRecognitionCtorLike,
+  type SpeechRecognitionLike,
 } from '@openaidy/shared-types';
 
 // Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
@@ -93,6 +98,355 @@ export function AddonViewPage(props: Props) {
     const d = manifest().externalDomains;
     return Array.isArray(d) ? (d as string[]) : [];
   });
+
+  // ── Media (microphone / camera) ─────────────────────────────────────────
+  // The addon iframe can't call getUserMedia itself — sandbox="allow-scripts
+  // allow-forms" (deliberately no allow-same-origin) gives it an opaque
+  // origin, and browsers can't persist a mic/camera grant against that. The
+  // host captures on the addon's behalf instead, gated by a `media.read` (or
+  // `media.read:microphone` / `media.read:camera`) permission, and hands the
+  // recording/photo back over the same postMessage bridge.
+  const MAX_RECORD_SECONDS = 600;
+  const [recordingActive, setRecordingActive] = createSignal(false);
+  const [recordingSecondsLeft, setRecordingSecondsLeft] = createSignal(0);
+  let stopRecordingFn: (() => void) | null = null;
+
+  const [photoRequestId, setPhotoRequestId] = createSignal<string | null>(null);
+  let photoStream: MediaStream | null = null;
+  let photoVideoRef: HTMLVideoElement | undefined;
+
+  const hasMediaPermission = (kind: 'microphone' | 'camera'): boolean => {
+    const permissions = props.addon.permissions ?? [];
+    if (
+      permissions.includes('*') ||
+      permissions.includes('media.*') ||
+      permissions.includes('media.read')
+    ) {
+      return true;
+    }
+    return permissions.includes(`media.read:${kind}`);
+  };
+
+  const postMediaResult = (
+    requestId: string,
+    result:
+      | { ok: true; data: unknown }
+      | { ok: false; status: number; error: string },
+  ) => {
+    iframeRef?.contentWindow?.postMessage(
+      result.ok
+        ? {
+            type: 'OPENAIDY_RESPONSE',
+            requestId,
+            ok: true,
+            status: 200,
+            data: result.data,
+          }
+        : {
+            type: 'OPENAIDY_RESPONSE',
+            requestId,
+            ok: false,
+            status: result.status,
+            error: result.error,
+          },
+      '*',
+    );
+  };
+
+  const handleRecordAudioRequest = async (
+    requestId: string,
+    body: { maxSeconds?: number; lang?: string } | undefined,
+  ) => {
+    if (!hasMediaPermission('microphone')) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 403,
+        error:
+          'Missing required permission: media.read or media.read:microphone',
+      });
+      return;
+    }
+    if (recordingActive()) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 409,
+        error: 'A recording is already in progress',
+      });
+      return;
+    }
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 501,
+        error: 'Microphone recording is not supported in this browser',
+      });
+      return;
+    }
+
+    const maxSeconds = Math.min(
+      Math.max(1, Math.floor(body?.maxSeconds ?? 30)),
+      MAX_RECORD_SECONDS,
+    );
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 403,
+        error:
+          err instanceof Error
+            ? `Microphone access denied: ${err.message}`
+            : 'Microphone access denied',
+      });
+      return;
+    }
+
+    const mimeType =
+      ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) =>
+        MediaRecorder.isTypeSupported(t),
+      ) ?? '';
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    const chunks: BlobPart[] = [];
+    const startedAt = Date.now();
+    let settled = false;
+    let timer: ReturnType<typeof setInterval> | undefined = undefined;
+
+    // Best-effort live transcription via the browser's own Web Speech API —
+    // a native web API, not an LLM call. Runs alongside MediaRecorder on the
+    // same permission grant; the addon gets both the raw audio and (when the
+    // browser supports it) a transcript, so an agent asked to structure a
+    // voice note only ever has to work with text, never audio understanding.
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtorLike;
+      webkitSpeechRecognition?: SpeechRecognitionCtorLike;
+    };
+    const SpeechRecognitionCtor =
+      speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    let recognizer: SpeechRecognitionLike | null = null;
+    let finalTranscript = '';
+    let interimTranscript = '';
+    let recognizerEnded = true;
+    if (SpeechRecognitionCtor) {
+      recognizer = new SpeechRecognitionCtor();
+      recognizer.lang = body?.lang || navigator.language || 'en-US';
+      recognizer.continuous = true;
+      recognizer.interimResults = true;
+      recognizer.onresult = (event) => {
+        interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i]![0]!.transcript;
+          if (event.results[i]!.isFinal) finalTranscript += transcript + ' ';
+          else interimTranscript += transcript;
+        }
+      };
+      recognizer.onerror = () => {
+        // Best-effort — the addon still gets the raw audio either way.
+      };
+      recognizerEnded = false;
+      recognizer.onend = () => {
+        recognizerEnded = true;
+        tryFinalize();
+      };
+      try {
+        recognizer.start();
+      } catch {
+        recognizer = null;
+        recognizerEnded = true;
+      }
+    }
+
+    const cleanup = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (timer) clearInterval(timer);
+      stopRecordingFn = null;
+      setRecordingActive(false);
+    };
+
+    let recorderStopped = false;
+    // recorder.onstop and recognizer.onend fire independently — wait for
+    // both (recognizer keeps emitting results briefly after .stop()) so the
+    // transcript isn't cut off before its last word.
+    const tryFinalize = () => {
+      if (settled || !recorderStopped || !recognizerEnded) return;
+      settled = true;
+      // recorder.mimeType (or our own guess) may carry a codec parameter
+      // (e.g. "audio/webm;codecs=opus"). Downstream consumers — the
+      // attachment upload's mime allowlist in particular — match on the
+      // bare type, so strip it before reporting.
+      const bareMimeType = (recorder.mimeType || mimeType || 'audio/webm')
+        .split(';')[0]!
+        .trim();
+      const blob = new Blob(chunks, { type: bareMimeType });
+      const durationMs = Date.now() - startedAt;
+      const transcript = (finalTranscript + ' ' + interimTranscript).trim();
+      cleanup();
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+        postMediaResult(requestId, {
+          ok: true,
+          data: {
+            data: base64,
+            mimeType: blob.type,
+            durationMs,
+            transcript: transcript || null,
+          },
+        });
+      };
+      reader.onerror = () => {
+        postMediaResult(requestId, {
+          ok: false,
+          status: 500,
+          error: 'Failed to encode recording',
+        });
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    recorder.onstop = () => {
+      recorderStopped = true;
+      tryFinalize();
+      // The recognizer keeps running otherwise — stop it so it doesn't
+      // outlive the recording it was transcribing.
+      if (recognizer) {
+        try {
+          recognizer.stop();
+        } catch {
+          recognizerEnded = true;
+          tryFinalize();
+        }
+      }
+    };
+
+    stopRecordingFn = () => {
+      if (recorder.state !== 'inactive') recorder.stop();
+    };
+
+    recorder.start();
+    setRecordingActive(true);
+    setRecordingSecondsLeft(maxSeconds);
+    timer = setInterval(() => {
+      setRecordingSecondsLeft((s) => {
+        if (s <= 1) {
+          stopRecordingFn?.();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
+
+  const closePhotoCapture = () => {
+    photoStream?.getTracks().forEach((t) => t.stop());
+    photoStream = null;
+    photoVideoRef = undefined;
+    setPhotoRequestId(null);
+  };
+
+  const handleTakePhotoRequest = async (requestId: string) => {
+    if (!hasMediaPermission('camera')) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 403,
+        error: 'Missing required permission: media.read or media.read:camera',
+      });
+      return;
+    }
+    if (photoRequestId()) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 409,
+        error: 'A photo capture is already in progress',
+      });
+      return;
+    }
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 501,
+        error: 'Camera capture is not supported in this browser',
+      });
+      return;
+    }
+
+    try {
+      photoStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+      });
+    } catch (err) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 403,
+        error:
+          err instanceof Error
+            ? `Camera access denied: ${err.message}`
+            : 'Camera access denied',
+      });
+      return;
+    }
+
+    setPhotoRequestId(requestId);
+  };
+
+  const onPhotoVideoMount = (el: HTMLVideoElement) => {
+    photoVideoRef = el;
+    el.srcObject = photoStream;
+    void el.play();
+  };
+
+  const capturePhoto = () => {
+    const requestId = photoRequestId();
+    if (!requestId || !photoVideoRef) return;
+    const video = photoVideoRef;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 500,
+        error: 'Canvas not supported',
+      });
+      closePhotoCapture();
+      return;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    postMediaResult(requestId, {
+      ok: true,
+      data: {
+        data: base64,
+        mimeType: 'image/jpeg',
+        width: canvas.width,
+        height: canvas.height,
+      },
+    });
+    closePhotoCapture();
+  };
+
+  const cancelPhotoCapture = () => {
+    const requestId = photoRequestId();
+    closePhotoCapture();
+    if (requestId) {
+      postMediaResult(requestId, {
+        ok: false,
+        status: 499,
+        error: 'User cancelled photo capture',
+      });
+    }
+  };
 
   // Crypto nonce for secure iframe communication (replaces origin check)
   const nonce = crypto.randomUUID();
@@ -223,11 +577,30 @@ export function AddonViewPage(props: Props) {
       }
       return;
     }
+    if (msg.type === 'OPENAIDY_MEDIA_STOP') {
+      if (msg.nonce !== nonce) return;
+      stopRecordingFn?.();
+      return;
+    }
     if (msg.type !== 'OPENAIDY_REQUEST') return;
     // Validate nonce instead of origin (sandbox strips origin to 'null')
     if (msg.nonce !== nonce) return;
 
     const { requestId, method, path: reqPath, body } = msg;
+
+    // Media capture is a browser capability, not a backend proxy route — the
+    // host handles these virtual paths directly instead of forwarding them.
+    if (reqPath === '/media/record-audio') {
+      void handleRecordAudioRequest(
+        requestId,
+        body as { maxSeconds?: number; lang?: string } | undefined,
+      );
+      return;
+    }
+    if (reqPath === '/media/take-photo') {
+      void handleTakePhotoRequest(requestId);
+      return;
+    }
 
     // Reject requests to paths not in the allowlist
     if (!isAllowed(method, reqPath)) {
@@ -307,6 +680,8 @@ export function AddonViewPage(props: Props) {
 
   onCleanup(() => {
     window.removeEventListener('message', handleMessage);
+    stopRecordingFn?.();
+    photoStream?.getTracks().forEach((t) => t.stop());
   });
 
   return (
@@ -361,6 +736,73 @@ export function AddonViewPage(props: Props) {
           >
             ×
           </button>
+        </div>
+      </Show>
+
+      {/* Recording indicator — mic capture happens here in the host, not
+          inside the addon's sandboxed iframe. */}
+      <Show when={recordingActive()}>
+        <div class="flex items-center justify-between gap-2 px-4 py-2.5 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+            </span>
+            <Mic class="w-3.5 h-3.5" />
+            <span class="font-medium">
+              {label()} is recording audio — {recordingSecondsLeft()}s left
+            </span>
+          </div>
+          <button
+            onClick={() => stopRecordingFn?.()}
+            class="flex items-center gap-1 px-2 py-1 rounded-md bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 font-medium"
+          >
+            <CircleStop class="w-3.5 h-3.5" />
+            Stop
+          </button>
+        </div>
+      </Show>
+
+      {/* Photo capture modal — camera preview lives in the host too. */}
+      <Show when={photoRequestId()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 class="text-lg font-semibold text-text-primary flex items-center gap-2">
+                <Camera class="w-4 h-4" />
+                {label()} wants a photo
+              </h2>
+              <button
+                onClick={cancelPhotoCapture}
+                class="p-1 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+            <div class="p-4">
+              <video
+                ref={onPhotoVideoMount}
+                autoplay
+                playsinline
+                muted
+                class="w-full rounded-lg bg-black aspect-video"
+              />
+            </div>
+            <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={cancelPhotoCapture}
+                class="px-3 py-1.5 rounded-lg text-sm font-medium text-text-secondary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={capturePhoto}
+                class="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              >
+                Capture
+              </button>
+            </div>
+          </div>
         </div>
       </Show>
 

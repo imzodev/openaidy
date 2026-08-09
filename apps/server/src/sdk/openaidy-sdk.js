@@ -706,6 +706,57 @@
       },
     },
 
+    // ── Media (microphone / camera) ──────────────────────────────────────
+    // The addon never gets direct getUserMedia access — the iframe is
+    // sandboxed with an opaque origin, which can't hold a persistent browser
+    // permission grant. The host captures on the addon's behalf and hands
+    // back the result. Requires `media.read` (both), `media.read:microphone`,
+    // or `media.read:camera`.
+    media: {
+      /**
+       * Record audio from the microphone for up to `maxSeconds` (default 30,
+       * capped at 600 by the host regardless of what's requested here).
+       * Resolves `{data, mimeType, durationMs, transcript}` — `data` is
+       * base64-encoded, no `data:` URL prefix. `transcript` is a best-effort
+       * live transcription from the browser's own Web Speech API (native,
+       * no LLM call) — `null` if the browser doesn't support it or nothing
+       * was recognized; pass `lang` (e.g. "es-MX") to override the default
+       * (the browser's own language). Recording stops early if the host's
+       * "Stop" control, or stopRecording(), is used.
+       */
+      recordAudio: function (opts) {
+        opts = opts || {};
+        var maxSeconds = opts.maxSeconds || 30;
+        return request(
+          'POST',
+          '/media/record-audio',
+          { maxSeconds: maxSeconds, lang: opts.lang },
+          maxSeconds * 1000 + 20000,
+        );
+      },
+      /**
+       * End an in-progress recordAudio() early — e.g. the addon's own
+       * "tap to stop" button, rather than relying only on the host's
+       * banner. The pending recordAudio() promise resolves normally with
+       * whatever was captured; this call itself has no return value. A
+       * no-op if nothing is recording.
+       */
+      stopRecording: function () {
+        window.parent.postMessage(
+          { type: 'OPENAIDY_MEDIA_STOP', nonce: _nonce },
+          '*',
+        );
+      },
+      /**
+       * Open a camera preview and let the user capture a single photo.
+       * Resolves `{data, mimeType, width, height}` (base64, no `data:` URL
+       * prefix), or rejects if the user cancels.
+       */
+      takePhoto: function () {
+        return request('POST', '/media/take-photo', undefined, 120000);
+      },
+    },
+
     // ── UI (Tailwind-styled component library) ─────────────────────────────
     // Pure client-side DOM builders — no server round-trip, no permission
     // required. Every component returns a real HTMLElement so it can be

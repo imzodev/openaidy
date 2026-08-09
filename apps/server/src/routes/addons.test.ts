@@ -66,6 +66,34 @@ describe('buildAddonCsp', () => {
     expect(csp).toContain("frame-src 'none'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("default-src 'none'");
+    // No media.read permission → media-src stays locked down.
+    expect(csp).toContain("media-src 'none'");
+  });
+
+  it('allows media-src data: only when the manifest declares a media.read permission variant', () => {
+    const withUnscoped = buildAddonCsp(
+      { permissions: ['media.read'] },
+      scriptSrcOrigins,
+    );
+    expect(withUnscoped).toContain("media-src 'self' data:");
+
+    const withScoped = buildAddonCsp(
+      { permissions: ['media.read:microphone'] },
+      scriptSrcOrigins,
+    );
+    expect(withScoped).toContain("media-src 'self' data:");
+
+    const withWildcard = buildAddonCsp(
+      { permissions: ['media.*'] },
+      scriptSrcOrigins,
+    );
+    expect(withWildcard).toContain("media-src 'self' data:");
+
+    const withoutIt = buildAddonCsp(
+      { permissions: ['sessions.read'] },
+      scriptSrcOrigins,
+    );
+    expect(withoutIt).toContain("media-src 'none'");
   });
 
   it('extends style-src and font-src for a Google Fonts manifest', () => {

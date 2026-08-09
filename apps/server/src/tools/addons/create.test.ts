@@ -542,10 +542,16 @@ OpenAidy.ready(function(sdk) {
 // ── sdk-reference integration ──────────────────────────────────────────────────
 
 describe('sdk-reference', () => {
-  it('every non-UI SDK_METHOD has a proxyPath starting with /api/addon-proxy/', async () => {
+  it('every non-UI, non-Media SDK_METHOD has a proxyPath starting with /api/addon-proxy/', async () => {
     const { SDK_METHODS } = await import('../../addons/sdk-reference.js');
     for (const method of SDK_METHODS) {
-      if (method.name === 'request' || method.category === 'UI') continue;
+      if (
+        method.name === 'request' ||
+        method.category === 'UI' ||
+        method.category === 'Media'
+      ) {
+        continue;
+      }
       expect(method.proxyPath).toMatch(/^\/api\/addon-proxy\//);
     }
   });
@@ -559,6 +565,30 @@ describe('sdk-reference', () => {
       expect(m.httpMethod).toBeUndefined();
       expect(m.requiredPermission).toBeUndefined();
     }
+  });
+
+  it('Media methods have no proxyPath/httpMethod — captured by the host, no backend round-trip', async () => {
+    const { SDK_METHODS } = await import('../../addons/sdk-reference.js');
+    const mediaMethods = SDK_METHODS.filter((m) => m.category === 'Media');
+    expect(mediaMethods.length).toBe(3);
+    for (const m of mediaMethods) {
+      expect(m.proxyPath).toBeUndefined();
+      expect(m.httpMethod).toBeUndefined();
+    }
+    expect(
+      mediaMethods.find((m) => m.name === 'media.recordAudio')
+        ?.requiredPermission,
+    ).toBe('media.read');
+    expect(
+      mediaMethods.find((m) => m.name === 'media.takePhoto')
+        ?.requiredPermission,
+    ).toBe('media.read');
+    // stopRecording only signals an already-permitted, already-in-progress
+    // recording — nothing new to authorize.
+    expect(
+      mediaMethods.find((m) => m.name === 'media.stopRecording')
+        ?.requiredPermission,
+    ).toBeUndefined();
   });
 
   it('renderSdkReference produces non-empty markdown', async () => {
