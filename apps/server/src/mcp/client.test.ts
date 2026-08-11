@@ -300,7 +300,7 @@ describe('McpClientService with mock MCP server', () => {
     });
 
     it('hands the captured stderr to the repairer when a launch fails', async () => {
-      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => false);
+      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => null);
       const service = createMcpClientService({ uvxRepairer: repairer });
 
       await expect(service.connect(brokenServer('probe'))).rejects.toThrow();
@@ -314,13 +314,54 @@ describe('McpClientService with mock MCP server', () => {
 
     it('retries exactly once when the repair succeeds, never looping', async () => {
       // Always reports success, so a missing retry guard would recurse forever.
-      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => true);
+      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => '2026-02-11');
       const service = createMcpClientService({ uvxRepairer: repairer });
 
       await expect(service.connect(brokenServer('loopy'))).rejects.toThrow();
 
       expect(repairer).toHaveBeenCalledTimes(1);
       expect(service.isConnected('loopy')).toBe(false);
+    });
+
+    it('sets UV_EXCLUDE_NEWER on the retry, not just a side-channel uv tool install', async () => {
+      // Echoes the pin it actually received on stderr, so the test can tell
+      // the bound reached the real spawned process rather than only a
+      // separate `uv tool install` call that the launch never reuses.
+      const echoBound: McpServerConfig = {
+        id: 'pinned',
+        transport: 'stdio',
+        command: 'node',
+        args: [
+          '-e',
+          'process.stderr.write(process.env.UV_EXCLUDE_NEWER ? "pinned:" + process.env.UV_EXCLUDE_NEWER : "ModuleNotFoundError: No module named mcp.server.fastmcp"); process.exit(1);',
+        ],
+      };
+      const repairer = vi.fn<UvxEnvironmentRepairer>(async () => '2026-02-11');
+      const stderrChunks: string[] = [];
+      const logger = {
+        info: vi.fn(),
+        warn: vi.fn((obj: { stderr?: string }) => {
+          if (obj?.stderr) stderrChunks.push(obj.stderr);
+        }),
+        error: vi.fn(),
+        debug: vi.fn(),
+        fatal: vi.fn(),
+        trace: vi.fn(),
+        child: vi.fn(),
+        level: 'info',
+        silent: false,
+      };
+      const service = createMcpClientService({
+        uvxRepairer: repairer,
+        logger: logger as unknown as McpClientService['logger'],
+      });
+
+      await expect(service.connect(echoBound)).rejects.toThrow();
+
+      expect(repairer).toHaveBeenCalledTimes(1);
+      expect(
+        stderrChunks.some((chunk) => chunk.includes('pinned:2026-02-11')),
+      ).toBe(true);
     });
 
     it('does not attempt repair when it is disabled', async () => {
