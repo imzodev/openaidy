@@ -15,6 +15,7 @@ import {
   Info,
   CircleCheck,
   Repeat,
+  MousePointerClick,
 } from 'lucide-solid';
 import type {
   Subtask,
@@ -25,7 +26,7 @@ import type {
   ConditionOperator,
 } from '../../../lib/api-tasks';
 import type { Agent } from '../AgentSelector';
-import { STATUS_COLORS, STATUS_ICONS } from '../subtask-status';
+import { STATUS_ICONS, STATUS_BADGE_BG } from '../subtask-status';
 
 export type WorkflowSelection =
   | { type: 'node'; id: string }
@@ -256,7 +257,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         <div class="flex flex-wrap gap-1.5">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors"
             onClick={() => props.onAddSubtask('agent')}
           >
             <Plus class="w-3.5 h-3.5" />
@@ -264,7 +265,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded border border-amber-400 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
             onClick={() => props.onAddSubtask('approval_gate')}
           >
             <Hourglass class="w-3.5 h-3.5" />
@@ -273,8 +274,8 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         </div>
         <button
           type="button"
-          class="p-1.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          classList={{ 'text-blue-600 dark:text-blue-400': showHelp() }}
+          class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-gray-300 transition-colors"
+          classList={{ 'text-primary dark:text-primary': showHelp() }}
           title="How this works"
           onClick={() => setShowHelp((v) => !v)}
         >
@@ -314,10 +315,13 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         <Show
           when={selectedSubtask() || selectedEdge()}
           fallback={
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              Click a node or edge to edit it, or add a new subtask above. Drag
-              a node to reposition it.
-            </p>
+            <div class="text-center py-8 px-3 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+              <MousePointerClick class="w-6 h-6 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                Click a node or edge to edit it, or add a new subtask above.
+                Drag a node to reposition it.
+              </p>
+            </div>
           }
         >
           <Show when={selectedSubtask()}>
@@ -325,7 +329,9 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-1.5">
-                    <span class={STATUS_COLORS[subtask().status]}>
+                    <span
+                      class={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold leading-none ${STATUS_BADGE_BG[subtask().status] ?? STATUS_BADGE_BG.pending}`}
+                    >
                       {STATUS_ICONS[subtask().status]}
                     </span>
                     <p class="text-xs text-gray-500 dark:text-gray-400 capitalize">
@@ -337,7 +343,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </div>
                   <button
                     type="button"
-                    class="p-1 text-gray-400 hover:text-red-600"
+                    class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     title="Delete this subtask"
                     onClick={() => props.onDeleteSubtask(subtask().id)}
                   >
@@ -357,7 +363,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </div>
                   <textarea
                     id="wf-node-description"
-                    class="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 resize-y"
+                    class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                     rows={3}
                     placeholder="What should this step do?"
                     value={draftDescription()}
@@ -378,7 +384,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </label>
                   <input
                     id="wf-node-title"
-                    class="w-full text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1"
+                    class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                     placeholder="Auto-generated from description"
                     value={draftTitle()}
                     onInput={(e) => setDraftTitle(e.currentTarget.value)}
@@ -395,7 +401,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </label>
                   <select
                     id="wf-node-agent"
-                    class="w-full text-xs rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1"
+                    class="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                     value={subtask().assignedAgentId ?? ''}
                     onChange={(e) => {
                       const agentId = e.currentTarget.value;
@@ -412,11 +418,12 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                 </div>
 
                 <Show when={subtask().subtaskKind === 'agent'}>
-                  <div class="rounded-md border border-gray-200 dark:border-gray-700 p-2">
+                  <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-2.5">
                     <div class="flex items-center justify-between">
                       <label class="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300">
                         <input
                           type="checkbox"
+                          class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
                           checked={loopEnabled()}
                           onChange={(e) => {
                             setLoopEnabled(e.currentTarget.checked);
@@ -441,7 +448,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                             id="wf-loop-max"
                             type="number"
                             min={1}
-                            class="w-16 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
+                            class="w-16 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                             value={loopMax()}
                             onInput={(e) =>
                               setLoopMax(Number(e.currentTarget.value) || 1)
@@ -455,7 +462,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                           </label>
                           <select
                             id="wf-loop-operator"
-                            class="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
+                            class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                             value={loopOperator()}
                             onChange={(e) => {
                               setLoopOperator(
@@ -473,7 +480,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                           </label>
                           <input
                             id="wf-loop-value"
-                            class="flex-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
+                            class="flex-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                             placeholder="value, e.g. approved"
                             value={loopValue()}
                             onInput={(e) => setLoopValue(e.currentTarget.value)}
@@ -499,7 +506,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                 </Show>
 
                 <Show when={subtask().subtaskKind === 'approval_gate'}>
-                  <div class="rounded-md border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-2 space-y-2">
+                  <div class="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-2.5 space-y-2">
                     <div class="font-medium text-amber-700 dark:text-amber-300 text-xs">
                       Approval gate
                     </div>
@@ -528,7 +535,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                           </label>
                           <textarea
                             id="wf-approval-note"
-                            class="w-full text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800 px-2 py-1"
+                            class="w-full text-xs rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-shadow"
                             rows={2}
                             placeholder="Optional note"
                             value={approvalNote()}
@@ -539,7 +546,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                           <div class="flex gap-1.5">
                             <button
                               type="button"
-                              class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-green-600 hover:bg-green-700 text-white"
+                              class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-green-600 hover:bg-green-700 text-white shadow-sm transition-colors"
                               onClick={() =>
                                 props.onResolveApproval(
                                   subtask().id,
@@ -553,7 +560,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                             </button>
                             <button
                               type="button"
-                              class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs rounded bg-red-600 hover:bg-red-700 text-white"
+                              class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm transition-colors"
                               onClick={() =>
                                 props.onResolveApproval(
                                   subtask().id,
@@ -603,7 +610,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                     <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
                       Result
                     </h4>
-                    <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-800 rounded p-2 max-h-40 overflow-y-auto">
+                    <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 max-h-40 overflow-y-auto">
                       {subtask().result}
                     </pre>
                   </div>
@@ -630,7 +637,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                       <SaveIndicator status={edgeSaveStatus} />
                       <button
                         type="button"
-                        class="p-1 text-gray-400 hover:text-red-600"
+                        class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                         title="Delete this edge"
                         onClick={() => props.onDeleteEdge(edge().id)}
                       >
@@ -645,6 +652,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
+                      class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
                       checked={edgeKind() === 'conditional'}
                       onChange={(e) => {
                         setEdgeKind(
@@ -665,7 +673,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                       </label>
                       <select
                         id="wf-edge-operator"
-                        class="text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
+                        class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                         value={edgeOperator()}
                         onChange={(e) => {
                           setEdgeOperator(
@@ -683,7 +691,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                       </label>
                       <input
                         id="wf-edge-value"
-                        class="flex-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-0.5"
+                        class="flex-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
                         placeholder="value, e.g. approved"
                         value={edgeValue()}
                         onInput={(e) => setEdgeValue(e.currentTarget.value)}

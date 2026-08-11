@@ -9,7 +9,7 @@
  */
 
 import { createSignal, onMount, For, Show } from 'solid-js';
-import { ArrowLeft, Play, Trash2, Pencil } from 'lucide-solid';
+import { ArrowLeft, Play, Trash2, Pencil, Workflow } from 'lucide-solid';
 import { WorkflowEditor } from '../tasks/workflow/WorkflowEditor';
 import {
   getTask,
@@ -150,6 +150,10 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
           <ArrowLeft class="w-4 h-4" />
         </button>
 
+        <div class="hidden sm:flex w-7 h-7 rounded-lg bg-primary/10 items-center justify-center flex-shrink-0">
+          <Workflow class="w-3.5 h-3.5 text-primary" />
+        </div>
+
         <div class="flex items-center gap-2 min-w-0 flex-1">
           <Show
             when={!isEditingTitle()}
@@ -164,7 +168,7 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
                 }}
                 onBlur={() => void saveTitle()}
                 autofocus
-                class="text-base font-semibold bg-transparent border-b border-primary focus:outline-none text-text-primary min-w-0 flex-1"
+                class="text-base font-semibold bg-white dark:bg-gray-900 border border-primary rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-primary/30 text-text-primary min-w-0 flex-1"
               />
             }
           >

@@ -8,7 +8,7 @@
  */
 
 import { For, Show, createSignal } from 'solid-js';
-import { X } from 'lucide-solid';
+import { X, Maximize } from 'lucide-solid';
 import type { Subtask, SubtaskEdgeDto } from '../../../lib/api-tasks';
 import type { Agent } from '../AgentSelector';
 import { WorkflowNode } from './WorkflowNode';
@@ -167,8 +167,9 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   return (
     <div
       ref={rootEl}
-      class="workflow-canvas relative w-full h-full overflow-hidden bg-gray-50 dark:bg-gray-950 cursor-grab"
+      class="workflow-canvas relative w-full h-full overflow-hidden cursor-grab bg-gray-50 dark:bg-gray-950 bg-[radial-gradient(circle,theme(colors.gray.300)_1px,transparent_1px)] dark:bg-[radial-gradient(circle,theme(colors.gray.800)_1px,transparent_1px)] [background-size:24px_24px]"
       classList={{ 'cursor-grabbing': isPanning() }}
+      style={{ 'background-position': `${pan().x}px ${pan().y}px` }}
       onPointerDown={onBackgroundPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -176,12 +177,13 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     >
       <button
         type="button"
-        class="absolute top-2 right-2 z-10 px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+        class="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           resetView();
         }}
       >
+        <Maximize class="w-3 h-3" />
         Reset view
       </button>
 
