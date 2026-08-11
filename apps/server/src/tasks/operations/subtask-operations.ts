@@ -85,6 +85,27 @@ export class SubtaskOperations {
         },
       };
     }
+
+    // Editing what a step should do, after it already ran, means its old
+    // result no longer reflects the current instructions — and any
+    // dependent subtask that already ran off that result got stale
+    // context. Without this, the subtask stays `completed`/`failed`
+    // forever and executeSubtasks() silently skips it on every future
+    // run, so the edit never actually takes effect.
+    const contentChanged =
+      (input.description !== undefined &&
+        input.description !== existing.description) ||
+      (input.title !== undefined && input.title !== existing.title);
+    const isTerminal =
+      existing.status === 'completed' || existing.status === 'failed';
+    if (contentChanged && isTerminal) {
+      await this.subtasksRepo.resetOne(id);
+      this.logger.info(
+        'Reset terminal subtask to pending after a content edit',
+        { subtaskId: id, previousStatus: existing.status },
+      );
+    }
+
     const updated = await this.subtasksRepo.update(id, input);
     return { ok: true, data: updated! };
   }

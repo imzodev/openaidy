@@ -33,6 +33,7 @@ type MockSubtasksRepo = {
   recordLoopIteration: ReturnType<typeof vi.fn>;
   listAll: ReturnType<typeof vi.fn>;
   incrementRetryCount: ReturnType<typeof vi.fn>;
+  resetOne: ReturnType<typeof vi.fn>;
 };
 
 type MockTaskAgentsRepo = {
@@ -79,6 +80,7 @@ describe('Subtask Execution', () => {
       recordLoopIteration: vi.fn().mockResolvedValue({}),
       listAll: vi.fn().mockResolvedValue([]),
       incrementRetryCount: vi.fn().mockResolvedValue({}),
+      resetOne: vi.fn().mockResolvedValue({}),
     };
 
     mockTasksRepo = {
@@ -1281,6 +1283,94 @@ describe('Subtask Execution', () => {
       expect(match![1]).toBe(
         `${'x'.repeat(1500)}\n\n[…reason truncated at 1500 chars…]`,
       );
+    });
+  });
+
+  describe('updateSubtask', () => {
+    it('resets a completed subtask to pending when its description changes', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        title: 'Step 1',
+        description: 'Old instructions',
+        status: 'completed',
+        taskId: 'task-1',
+      });
+
+      const result = await taskService.updateSubtask('subtask-1', {
+        description: 'New instructions',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockSubtasksRepo.resetOne).toHaveBeenCalledWith('subtask-1');
+      expect(mockSubtasksRepo.update).toHaveBeenCalledWith('subtask-1', {
+        description: 'New instructions',
+      });
+    });
+
+    it('resets a failed subtask to pending when its title changes', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        title: 'Old title',
+        description: 'desc',
+        status: 'failed',
+        taskId: 'task-1',
+      });
+
+      await taskService.updateSubtask('subtask-1', { title: 'New title' });
+
+      expect(mockSubtasksRepo.resetOne).toHaveBeenCalledWith('subtask-1');
+    });
+
+    it('does not reset a completed subtask when the description is unchanged', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        title: 'Step 1',
+        description: 'Same instructions',
+        status: 'completed',
+        taskId: 'task-1',
+      });
+
+      await taskService.updateSubtask('subtask-1', {
+        description: 'Same instructions',
+      });
+
+      expect(mockSubtasksRepo.resetOne).not.toHaveBeenCalled();
+    });
+
+    it('does not reset a pending subtask when its description changes', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        title: 'Step 1',
+        description: 'Old instructions',
+        status: 'pending',
+        taskId: 'task-1',
+      });
+
+      await taskService.updateSubtask('subtask-1', {
+        description: 'New instructions',
+      });
+
+      expect(mockSubtasksRepo.resetOne).not.toHaveBeenCalled();
+    });
+
+    it('does not reset when unrelated fields change (e.g. a loop config edit)', async () => {
+      mockSubtasksRepo.findById.mockResolvedValue({
+        id: 'subtask-1',
+        title: 'Step 1',
+        description: 'Old instructions',
+        status: 'completed',
+        taskId: 'task-1',
+      });
+
+      await taskService.updateSubtask('subtask-1', {
+        loop: {
+          maxIterations: 3,
+          conditionOperator: 'contains',
+          conditionValue: 'done',
+        },
+      });
+
+      expect(mockSubtasksRepo.resetOne).not.toHaveBeenCalled();
     });
   });
 });

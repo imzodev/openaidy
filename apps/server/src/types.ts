@@ -123,6 +123,14 @@ export type CreateTaskInput = {
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
+  /**
+   * Skip the automatic AI planner even when `planningEnabled` is true.
+   * Used by the workflow graph editor, where the user hand-authors the
+   * subtask graph themselves — `planningEnabled` there only means "this
+   * task has a subtask graph" (which is what gates the graph UI), not
+   * "auto-generate one from the description".
+   */
+  skipAutoPlan?: boolean;
   agents?: Array<{ agentId: string; role?: AgentRole }>;
   schedule?: import('@openaidy/shared-types').CreateTaskScheduleInput;
 };

@@ -19,6 +19,7 @@ import {
   KeyRound,
   BarChart3,
   Brain,
+  Workflow,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
 import { SessionList } from './SessionList';
@@ -30,6 +31,8 @@ export type ViewType =
   | 'sessions'
   | 'tasks'
   | 'pulses'
+  | 'workflows'
+  | 'workflow-detail'
   | 'channels'
   | 'webhooks'
   | 'agents'
@@ -80,6 +83,7 @@ const navSections: NavSection[] = [
       { id: 'sessions', label: 'Sessions', icon: Layers },
       { id: 'tasks', label: 'Tasks', icon: CheckSquare },
       { id: 'pulses', label: 'Pulses', icon: Zap },
+      { id: 'workflows', label: 'Workflows', icon: Workflow },
     ],
   },
   {
