@@ -10,14 +10,21 @@
  * identical in both cases, which is what makes this so hard to diagnose — the
  * MCP client only ever sees `Connection closed`.
  *
- * The repair is to stop resolving afresh: provision a *persistent* uv tool
- * environment resolved as of the day the server package itself was published
- * (`uv tool install --exclude-newer`), which is the dependency set its author
- * released against. `uvx` then reuses that environment on every later launch.
+ * The repair resolves the dependency set as of the day the server package
+ * itself was published: the date its author actually released against, before
+ * any later breaking change upstream. `uv tool install --force --exclude-newer`
+ * both validates that bound resolves cleanly and warms the download cache.
  *
- * Deliberately nothing about the server config changes. `command` and `args`
- * stay exactly as the vendor documents them — no pins, no resolver flags, no
- * extra fields for the user to know about.
+ * That warm cache alone isn't enough, though: a bare `uvx <package>` launch
+ * re-resolves against the *unbounded* index on every run rather than reusing
+ * the tool-installed environment, so it can walk straight back into the same
+ * broken resolution a moment later. The bound has to travel with the actual
+ * launch, so the caller sets `UV_EXCLUDE_NEWER` (uv's env var equivalent of
+ * `--exclude-newer`) in the child's environment on the retry and on every
+ * subsequent launch of that server.
+ *
+ * Deliberately nothing about the server config's `command` or `args` changes
+ * — they stay exactly as the vendor documents them.
  */
 
 import { spawn } from 'node:child_process';
@@ -33,15 +40,16 @@ export type CommandRunner = (
 export type ReleaseDateLookup = (packageName: string) => Promise<string | null>;
 
 /**
- * Attempts to repair the environment of one server. Resolves true when the
- * environment was rebuilt and a retry is worth attempting.
+ * Attempts to repair the environment of one server. Resolves the
+ * `--exclude-newer` bound to pin the server's launch to (via `UV_EXCLUDE_NEWER`)
+ * when a retry is worth attempting, or null when it isn't.
  */
 export type UvxEnvironmentRepairer = (input: {
   serverId: string;
   command: string;
   args: string[];
   stderr: string;
-}) => Promise<boolean>;
+}) => Promise<string | null>;
 
 /**
  * The package a `uvx` invocation runs, or null when this isn't one.
@@ -169,7 +177,7 @@ export type UvxRepairerOptions = {
 /**
  * Build the repairer used by {@link McpClientService}.
  *
- * Returns false — leaving the original connection error to be reported — when
+ * Returns null — leaving the original connection error to be reported — when
  * the server isn't a `uvx` one, when the failure doesn't look like a broken
  * dependency set, when the release date can't be determined, or when the
  * reinstall itself fails. Every one of those paths is logged, because a silent
@@ -182,8 +190,8 @@ export function createUvxEnvironmentRepairer(
 
   return async ({ serverId, command, args, stderr }) => {
     const packageName = parseUvxPackage(command, args);
-    if (!packageName) return false;
-    if (!looksLikeBrokenEnvironment(stderr)) return false;
+    if (!packageName) return null;
+    if (!looksLikeBrokenEnvironment(stderr)) return null;
 
     const releasedAt = await lookupReleaseDate(packageName);
     if (!releasedAt) {
@@ -191,7 +199,7 @@ export function createUvxEnvironmentRepairer(
         { serverId, packageName },
         'Cannot repair MCP server environment: release date unavailable',
       );
-      return false;
+      return null;
     }
 
     const excludeNewer = exclusiveUpperBound(releasedAt);
@@ -200,7 +208,7 @@ export function createUvxEnvironmentRepairer(
         { serverId, packageName, releasedAt },
         'Cannot repair MCP server environment: unparseable release date',
       );
-      return false;
+      return null;
     }
 
     logger?.info(
@@ -210,7 +218,9 @@ export function createUvxEnvironmentRepairer(
 
     // `--force` because this path only runs when the environment is already
     // known broken: without it uv reports "already installed" for a tool whose
-    // requirement set is unchanged and rebuilds nothing.
+    // requirement set is unchanged and rebuilds nothing. This also serves as a
+    // validation step — if `excludeNewer` doesn't resolve, don't hand back a
+    // bound that will only reproduce the same failure via UV_EXCLUDE_NEWER.
     const result = await run('uv', [
       'tool',
       'install',
@@ -225,13 +235,13 @@ export function createUvxEnvironmentRepairer(
         { serverId, packageName, error: result.stderr },
         'Failed to rebuild MCP server environment',
       );
-      return false;
+      return null;
     }
 
     logger?.info(
-      { serverId, packageName },
+      { serverId, packageName, excludeNewer },
       'MCP server environment rebuilt; retrying connection',
     );
-    return true;
+    return excludeNewer;
   };
 }

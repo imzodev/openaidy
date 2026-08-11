@@ -141,7 +141,7 @@ describe('createUvxEnvironmentRepairer', () => {
       stderr: IMPORT_FAILURE,
     });
 
-    expect(repaired).toBe(true);
+    expect(repaired).toBe('2026-02-11');
     expect(calls).toEqual([
       [
         'uv',
@@ -169,7 +169,7 @@ describe('createUvxEnvironmentRepairer', () => {
         args: ['-y', '@playwright/mcp@latest'],
         stderr: IMPORT_FAILURE,
       }),
-    ).toBe(false);
+    ).toBeNull();
     expect(calls).toEqual([]);
   });
 
@@ -187,7 +187,7 @@ describe('createUvxEnvironmentRepairer', () => {
         args: ['minimax-coding-plan-mcp', '-y'],
         stderr: 'ValueError: MINIMAX_API_KEY environment variable is required',
       }),
-    ).toBe(false);
+    ).toBeNull();
     expect(calls).toEqual([]);
   });
 
@@ -205,7 +205,7 @@ describe('createUvxEnvironmentRepairer', () => {
         args: ['pkg'],
         stderr: IMPORT_FAILURE,
       }),
-    ).toBe(false);
+    ).toBeNull();
     expect(calls).toEqual([]);
   });
 
@@ -222,6 +222,6 @@ describe('createUvxEnvironmentRepairer', () => {
         args: ['pkg'],
         stderr: IMPORT_FAILURE,
       }),
-    ).toBe(false);
+    ).toBeNull();
   });
 });
