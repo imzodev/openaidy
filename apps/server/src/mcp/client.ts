@@ -100,6 +100,15 @@ export class McpClientService {
   private resolver: EnvPlaceholderResolver;
   private repairUvxEnvironment: UvxEnvironmentRepairer | undefined;
   private shutdownHandlersRegistered = false;
+  /**
+   * `--exclude-newer` bounds discovered by {@link repairUvxEnvironment}, keyed
+   * by server id. Applied via `UV_EXCLUDE_NEWER` on every launch of that
+   * server, not just the retry that discovered it — a bare `uvx <package>`
+   * re-resolves against the unbounded index on each run, so the pin has to
+   * travel with every subsequent launch or the server drifts back into the
+   * same broken resolution the next time it's spawned.
+   */
+  private uvxExcludeNewer = new Map<string, string>();
 
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
@@ -198,6 +207,15 @@ export class McpClientService {
       `MCP server ${id} env`,
     );
 
+    // Apply a previously-discovered uvx repair bound, if any. Skipped when the
+    // server config already sets UV_EXCLUDE_NEWER itself, so an explicit user
+    // choice is never overridden.
+    const excludeNewer = this.uvxExcludeNewer.get(id);
+    const effectiveEnv =
+      excludeNewer && !resolvedEnv?.UV_EXCLUDE_NEWER
+        ? { ...resolvedEnv, UV_EXCLUDE_NEWER: excludeNewer }
+        : resolvedEnv;
+
     this.logger?.info(
       { serverId: id, command },
       'Connecting to MCP server via stdio',
@@ -210,7 +228,7 @@ export class McpClientService {
     const transport = new StdioClientTransport({
       command,
       args: args ?? [],
-      ...(resolvedEnv ? { env: resolvedEnv } : {}),
+      ...(effectiveEnv ? { env: effectiveEnv } : {}),
       stderr: 'pipe',
     });
 
@@ -270,14 +288,15 @@ export class McpClientService {
       // client's own listeners before a second attempt reuses the id.
       await client.close().catch(() => {});
 
-      const repaired = await this.repairUvxEnvironment({
+      const repairedExcludeNewer = await this.repairUvxEnvironment({
         serverId: id,
         command,
         args: args ?? [],
         stderr: stderrTail,
       });
-      if (!repaired) throw error;
+      if (!repairedExcludeNewer) throw error;
 
+      this.uvxExcludeNewer.set(id, repairedExcludeNewer);
       return this.connectStdio(serverConfig, { allowRepair: false });
     }
 
@@ -582,6 +601,7 @@ export class McpClientService {
     }
 
     this.connections.delete(serverId);
+    this.uvxExcludeNewer.delete(serverId);
   }
 
   /**
