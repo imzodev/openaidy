@@ -27,6 +27,16 @@ import { useEscapeKey } from '../settings/hooks';
 
 export type TasksPageProps = {
   onOpenSession: (sessionId: string) => void;
+  /**
+   * The detail overlay's task id and sub-view are owned by the parent
+   * (App.tsx) instead of a local signal here, so they survive TasksPage
+   * unmounting when the user navigates away to view a session and back
+   * — see the comment above the signals in App.tsx.
+   */
+  detailTaskId: string | null;
+  onDetailTaskIdChange: (id: string | null) => void;
+  detailView: 'detail' | 'executions';
+  onDetailViewChange: (view: 'detail' | 'executions') => void;
 };
 
 export function TasksPage(props: TasksPageProps) {
@@ -40,13 +50,6 @@ export function TasksPage(props: TasksPageProps) {
   const [agents, setAgents] = createSignal<Agent[]>([]);
   const [executingTasks, setExecutingTasks] = createSignal<Set<string>>(
     new Set(),
-  );
-  const [detailTaskId, setDetailTaskId] = createSignal<string | null>(null);
-  // Sub-view inside the task detail overlay. When the user clicks
-  // "View execution history" we switch to `executions` (still bound
-  // to the same `detailTaskId`). Going back returns to `detail`.
-  const [detailView, setDetailView] = createSignal<'detail' | 'executions'>(
-    'detail',
   );
   // Track tasks with planning in progress for polling
   const [planningTasks, setPlanningTasks] = createSignal<Set<string>>(
@@ -65,7 +68,7 @@ export function TasksPage(props: TasksPageProps) {
   });
 
   const handleTaskClick = (task: Task) => {
-    setDetailTaskId(task.id);
+    props.onDetailTaskIdChange(task.id);
   };
 
   const handleTaskStatusChange = async (
@@ -153,8 +156,8 @@ export function TasksPage(props: TasksPageProps) {
   };
 
   const handleCloseDetail = () => {
-    setDetailTaskId(null);
-    setDetailView('detail');
+    props.onDetailTaskIdChange(null);
+    props.onDetailViewChange('detail');
   };
 
   const handleDetailTaskUpdated = () => {
@@ -162,8 +165,8 @@ export function TasksPage(props: TasksPageProps) {
   };
 
   const handleDetailTaskDeleted = () => {
-    setDetailTaskId(null);
-    setDetailView('detail');
+    props.onDetailTaskIdChange(null);
+    props.onDetailViewChange('detail');
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -174,14 +177,14 @@ export function TasksPage(props: TasksPageProps) {
    * button that calls this.
    */
   const handleViewExecutions = () => {
-    setDetailView('executions');
+    props.onDetailViewChange('executions');
   };
 
   /**
    * Return from the executions view back to the task detail panel.
    */
   const handleBackToDetail = () => {
-    setDetailView('detail');
+    props.onDetailViewChange('detail');
   };
 
   /**
@@ -264,7 +267,7 @@ export function TasksPage(props: TasksPageProps) {
   }
 
   // Add Esc key handler for detail panel
-  useEscapeKey(handleCloseDetail, () => !!detailTaskId());
+  useEscapeKey(handleCloseDetail, () => !!props.detailTaskId);
 
   // Cleanup polling on unmount
   onCleanup(() => {
@@ -337,16 +340,16 @@ export function TasksPage(props: TasksPageProps) {
       {/* Task Detail Panel (view + subtasks) — and the nested
           Executions sub-view for recurring tasks. The same overlay
           is used for both; `detailView` decides which renders. */}
-      <Show when={detailTaskId()}>
+      <Show when={props.detailTaskId}>
         <div
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseDetail();
           }}
         >
-          <Show when={detailView() === 'detail'}>
+          <Show when={props.detailView === 'detail'}>
             <TaskDetailPanel
-              taskId={detailTaskId()!}
+              taskId={props.detailTaskId!}
               agents={agents()}
               onClose={handleCloseDetail}
               onTaskUpdated={handleDetailTaskUpdated}
@@ -354,10 +357,10 @@ export function TasksPage(props: TasksPageProps) {
               onViewExecutions={handleViewExecutions}
             />
           </Show>
-          <Show when={detailView() === 'executions'}>
+          <Show when={props.detailView === 'executions'}>
             <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col overflow-hidden">
               <TaskExecutionsPage
-                taskId={detailTaskId()!}
+                taskId={props.detailTaskId!}
                 onBack={handleBackToDetail}
                 onOpenSession={props.onOpenSession}
               />
