@@ -566,6 +566,17 @@ function AppContent(props: AppContentProps) {
 
   // Handlers
   const handleCreateSession = async () => {
+    // Don't pile up empty sessions: if the user is already sitting on the
+    // most recently active session and hasn't sent anything in it yet,
+    // "New Session" just takes them there instead of creating another one.
+    if (
+      selectedSessionId() &&
+      selectedSessionId() === latestSessionId() &&
+      messagesState.total() === 0
+    ) {
+      navigate('chat');
+      return;
+    }
     const title = `Session ${new Date().toISOString()}`;
     await createSessionMutation.mutateAsync(title);
   };
@@ -946,27 +957,28 @@ function AppContent(props: AppContentProps) {
     return agentsQuery.data?.items || [];
   };
 
+  // Id of the most-recently-active session (by updatedAt, falling back to
+  // createdAt) — the server bumps updatedAt on every successful run (via
+  // updateSessionAgentId) and broadcasts session.updated, so a session the
+  // user just chatted with floats to the top. Shared by the auto-select
+  // effect below and handleCreateSession's "don't pile up empty sessions"
+  // check.
+  const latestSessionId = (): string | undefined => {
+    const sessionList = sessionsQuery.data?.items || [];
+    if (sessionList.length === 0) return undefined;
+    const activityMs = (s: (typeof sessionList)[number]) =>
+      new Date(s.updatedAt ?? s.createdAt ?? 0).getTime();
+    return [...sessionList].sort((a, b) => activityMs(b) - activityMs(a))[0].id;
+  };
+
   // Auto-select most recent session when on chat view with no session selected
   createEffect(() => {
-    const sessionList = sessionsQuery.data?.items || [];
     const currentView = view();
     const currentSelectedId = selectedSessionId();
 
-    if (
-      currentView === 'chat' &&
-      !currentSelectedId &&
-      sessionList.length > 0
-    ) {
-      // Sort by updatedAt (last activity) descending, falling back to createdAt.
-      // The server bumps updatedAt on every successful run (via
-      // updateSessionAgentId) and broadcasts session.updated, so a session the
-      // user just chatted with floats to the top.
-      const activityMs = (s: (typeof sessionList)[number]) =>
-        new Date(s.updatedAt ?? s.createdAt ?? 0).getTime();
-      const sorted = [...sessionList].sort(
-        (a, b) => activityMs(b) - activityMs(a),
-      );
-      setSelectedSessionId(sorted[0].id);
+    if (currentView === 'chat' && !currentSelectedId) {
+      const id = latestSessionId();
+      if (id) setSelectedSessionId(id);
     }
   });
 
