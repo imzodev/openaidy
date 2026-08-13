@@ -55,6 +55,7 @@ import {
   markRunCancelled,
   listSessionRunRecords,
   deleteSessionRecord,
+  deleteExpiredEphemeralSessionRecords,
 } from './store';
 import type {
   SubmitMessageInput,
@@ -74,6 +75,44 @@ import type {
   FinishReason,
 } from '../types';
 import type { RunEventEmitter } from '../dispatch/events';
+
+/**
+ * Builtin tools that write outside the current session's own (already-
+ * ephemeral) message/run history: memory, other sessions, agent delegation,
+ * tasks/pulses/schedules, and addons. A private chat never persists its own
+ * transcript — these tools could otherwise smuggle its content into durable
+ * storage through a side door. Hidden from the model entirely for an
+ * ephemeral session (see `buildNativeToolDefinitions`) and re-checked at
+ * dispatch time as a backstop (see the tool-call loop in
+ * `submitMessageStreaming`).
+ *
+ * When adding a new builtin tool that writes to a DB table other than the
+ * current session's own messages/runs, add its name here.
+ */
+const EPHEMERAL_UNSAFE_TOOLS = new Set([
+  'memory_save',
+  'memory_delete',
+  'sessions_create',
+  'sessions_send',
+  'agents_invoke',
+  'agents_invoke_await',
+  'agents_create',
+  'tasks_create',
+  'tasks_update',
+  'tasks_delete',
+  'pulses_create',
+  'pulses_update',
+  'pulses_delete',
+  'task_schedules_create',
+  'task_schedules_update',
+  'task_schedules_pause',
+  'task_schedules_resume',
+  'task_schedules_delete',
+  'task_schedules_trigger',
+  'addon_create',
+  'addon_update',
+  'media_share',
+]);
 
 /**
  * Session message service
@@ -157,6 +196,25 @@ export class SessionMessageService {
    */
   get isDbBacked(): boolean {
     return !!this.sessionsRepo;
+  }
+
+  /**
+   * True when `sessionId` is a private/ephemeral session. These always live
+   * in the in-memory store (see `store.ts`), even when the app is otherwise
+   * DB-backed — checking the in-memory record is therefore a reliable way to
+   * tell, regardless of `isDbBacked`.
+   */
+  private isEphemeral(sessionId: string): boolean {
+    return findSessionRecord(sessionId)?.ephemeral === true;
+  }
+
+  /**
+   * Sweep expired ephemeral sessions from the in-memory store (backstop
+   * against unbounded growth on a long-lived process). Intended to be called
+   * periodically (see the WS gateway's cleanup interval).
+   */
+  cleanupExpiredEphemeralSessions(maxAgeMs: number): number {
+    return deleteExpiredEphemeralSessionRecords(maxAgeMs);
   }
 
   /**
@@ -321,14 +379,15 @@ export class SessionMessageService {
     if (this.sessionsRepo) {
       return this.sessionsRepo.list(status);
     }
-    return listSessionRecords(status);
+    // Ephemeral sessions never appear in listings, regardless of backend.
+    return listSessionRecords(status).filter((s) => !s.ephemeral);
   }
 
   /**
    * Get a session by ID
    */
   async getSession(id: string): Promise<SessionRecord | Session | null> {
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.findById(id);
     }
     return findSessionRecord(id) ?? null;
@@ -340,7 +399,12 @@ export class SessionMessageService {
   async createSession(
     title: string,
     type?: SessionType,
+    options?: { ephemeral?: boolean },
   ): Promise<SessionRecord | Session> {
+    if (options?.ephemeral) {
+      // Private/incognito session — always in-memory, never reaches the DB.
+      return createSessionRecord(title, type, true);
+    }
     if (this.sessionsRepo) {
       return this.sessionsRepo.create({
         title,
@@ -357,7 +421,7 @@ export class SessionMessageService {
     id: string,
     title: string,
   ): Promise<SessionRecord | Session | null> {
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.updateTitle(id, title);
     }
     return updateSessionTitleRecord(id, title) ?? null;
@@ -371,7 +435,7 @@ export class SessionMessageService {
     id: string,
     status: import('@openaidy/shared-types').SessionStatus,
   ): Promise<SessionRecord | Session | null> {
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.updateStatus(id, status);
     }
     return updateSessionStatusRecord(id, status) ?? null;
@@ -385,7 +449,7 @@ export class SessionMessageService {
     id: string,
     favorited: boolean,
   ): Promise<SessionRecord | Session | null> {
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.updateFavorite(id, favorited);
     }
     return updateSessionFavoriteRecord(id, favorited) ?? null;
@@ -398,7 +462,7 @@ export class SessionMessageService {
     id: string,
     agentId: string,
   ): Promise<SessionRecord | Session | null> {
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.updateAgentId(id, agentId);
     }
     // In-memory store doesn't persist agentId - just return the session
@@ -483,7 +547,7 @@ export class SessionMessageService {
       return false;
     }
 
-    if (this.sessionsRepo) {
+    if (this.sessionsRepo && !this.isEphemeral(id)) {
       const result = await this.sessionsRepo.delete(id);
       return result !== null;
     }
@@ -617,7 +681,7 @@ export class SessionMessageService {
   async listMessages(
     sessionId: string,
   ): Promise<SessionMessageRecord[] | SessionMessage[]> {
-    if (this.messagesRepo) {
+    if (this.messagesRepo && !this.isEphemeral(sessionId)) {
       const messages = await this.messagesRepo.listBySession(sessionId);
       if (!this.attachments) return messages;
       const grouped = await this.attachments.listBySessionGrouped(sessionId);
@@ -636,7 +700,7 @@ export class SessionMessageService {
   async listRuns(
     sessionId: string,
   ): Promise<SessionRunRecord[] | SessionRun[]> {
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(sessionId)) {
       return this.runsRepo.listBySession(sessionId);
     }
     return listSessionRunRecords(sessionId);
@@ -644,12 +708,13 @@ export class SessionMessageService {
 
   /**
    * Cumulative usage totals for a session (succeeded runs). Returns zeroed
-   * totals when no DB-backed run store is configured.
+   * totals when no DB-backed run store is configured (or the session is
+   * ephemeral).
    */
   async getSessionUsage(
     sessionId: string,
   ): Promise<import('@openaidy/db').SessionUsageTotals> {
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(sessionId)) {
       return this.runsRepo.getSessionUsage(sessionId);
     }
     return {
@@ -783,7 +848,7 @@ export class SessionMessageService {
     });
 
     // 4. Mark run as running
-    await this.markRunRunning(run.id);
+    await this.markRunRunning(run.id, run.sessionId);
 
     // 5. Build request from session history + new message
     const history = await this.listMessages(input.sessionId);
@@ -1023,6 +1088,19 @@ export class SessionMessageService {
       };
     }
 
+    // Attachments are disk-backed and would defeat the "nothing is stored"
+    // guarantee of a private chat — reject rather than silently drop, so the
+    // rule holds even for a direct API call, not just the composer UI.
+    if (input.attachmentIds?.length && this.isEphemeral(input.sessionId)) {
+      return {
+        ok: false,
+        error: {
+          code: 'session.attachments_unsupported',
+          message: 'Attachments are not supported in a private chat',
+        },
+      };
+    }
+
     // 2. Persist user message
     const isFirstMessage =
       (await this.listMessages(input.sessionId)).length === 0;
@@ -1117,7 +1195,7 @@ export class SessionMessageService {
     });
 
     // 4. Mark run as running
-    await this.markRunRunning(run.id);
+    await this.markRunRunning(run.id, run.sessionId);
 
     // Run-level AbortController: a user "Stop agent" aborts this, which cancels
     // the provider stream and any tool running under this run (issue #376).
@@ -1294,7 +1372,10 @@ export class SessionMessageService {
 
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
-    const nativeToolDefs = this.buildNativeToolDefinitions(agentId);
+    const nativeToolDefs = this.buildNativeToolDefinitions(
+      agentId,
+      input.sessionId,
+    );
     // All tool definitions sent to the model (MCP + builtin, merged)
     const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
 
@@ -1735,11 +1816,19 @@ export class SessionMessageService {
             let persistedImages: PersistedImage[] = [];
 
             // Route to builtin (native) tool only if it exists in the registry
-            // AND is still enabled for this agent (tools list may have changed mid-session).
+            // AND is still enabled for this agent (tools list may have changed mid-session)
+            // AND — for a private chat — isn't one of the tools that writes
+            // outside this session's own (ephemeral) history (backstop; these
+            // are already withheld from the model's tool definitions above).
             const enabledTools = this.agents?.getAgent(agentId)?.tools ?? [];
-            const builtinTool = enabledTools.includes(tc.name)
-              ? this.builtinTools?.get(tc.name)
-              : undefined;
+            const builtinTool =
+              enabledTools.includes(tc.name) &&
+              !(
+                this.isEphemeral(input.sessionId) &&
+                EPHEMERAL_UNSAFE_TOOLS.has(tc.name)
+              )
+                ? this.builtinTools?.get(tc.name)
+                : undefined;
             if (builtinTool) {
               // Register an AbortController so the user can cancel this tool
               // (issue #375). Keyed by (runId, toolCallId); cleaned up when the
@@ -2051,7 +2140,11 @@ export class SessionMessageService {
               // attachment on the tool result message so the chat renders it
               // inline. The tool already validated the file (exists, supported
               // type, size cap) — a null return here means it raced a delete.
-              if (mediaShareFromTool && this.attachments) {
+              if (
+                mediaShareFromTool &&
+                this.attachments &&
+                !this.isEphemeral(input.sessionId)
+              ) {
                 const shared = mediaShareFromTool;
                 await this.attachments
                   .registerToolOutput({
@@ -2076,7 +2169,11 @@ export class SessionMessageService {
               // Register tool-produced images as attachments on the tool
               // result message so the chat renders them inline (instead of
               // only leaving a workspace-path breadcrumb).
-              if (persistedImages.length > 0 && this.attachments) {
+              if (
+                persistedImages.length > 0 &&
+                this.attachments &&
+                !this.isEphemeral(input.sessionId)
+              ) {
                 for (const img of persistedImages) {
                   await this.attachments
                     .registerToolOutput({
@@ -2269,11 +2366,17 @@ export class SessionMessageService {
    * nativeTools list against the BuiltinToolRegistry.
    * These are completely separate from MCP tools.
    */
-  private buildNativeToolDefinitions(agentId: string): ToolDefinition[] {
+  private buildNativeToolDefinitions(
+    agentId: string,
+    sessionId: string,
+  ): ToolDefinition[] {
     if (!this.builtinTools || !this.agents) return [];
     const agent = this.agents.getAgent(agentId);
     if (!agent?.tools?.length) return [];
-    return this.builtinTools.getDefinitions(agent.tools);
+    const enabledTools = this.isEphemeral(sessionId)
+      ? agent.tools.filter((name) => !EPHEMERAL_UNSAFE_TOOLS.has(name))
+      : agent.tools;
+    return this.builtinTools.getDefinitions(enabledTools);
   }
 
   /**
@@ -2282,7 +2385,7 @@ export class SessionMessageService {
   private async appendMessage(
     input: AppendMessageInput,
   ): Promise<SessionMessageRecord | SessionMessage> {
-    if (this.messagesRepo) {
+    if (this.messagesRepo && !this.isEphemeral(input.sessionId)) {
       const result = await this.messagesRepo.append({
         sessionId: input.sessionId,
         role: input.role as DbMessageRole,
@@ -2309,7 +2412,7 @@ export class SessionMessageService {
     modelId: string;
     metadata?: Record<string, unknown>;
   }): Promise<SessionRunRecord | SessionRun> {
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(input.sessionId)) {
       return this.runsRepo.create(input);
     }
     return createRunRecord(input);
@@ -2320,8 +2423,9 @@ export class SessionMessageService {
    */
   private async markRunRunning(
     id: string,
+    sessionId: string,
   ): Promise<SessionRunRecord | SessionRun | null> {
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(sessionId)) {
       return this.runsRepo.markRunning(id);
     }
     return markRunRunning(id) ?? null;
@@ -2378,7 +2482,7 @@ export class SessionMessageService {
           }
         : undefined;
 
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(run.sessionId)) {
       const successInput: {
         finishReason: DbFinishReason;
         usage?: NonNullable<typeof usage>;
@@ -2431,13 +2535,14 @@ export class SessionMessageService {
    */
   private async markRunFailed(
     id: string,
+    sessionId: string,
     input: {
       errorCode: string;
       errorMessage: string;
       metadata?: Record<string, unknown>;
     },
   ): Promise<SessionRunRecord | SessionRun | null> {
-    if (this.runsRepo) {
+    if (this.runsRepo && !this.isEphemeral(sessionId)) {
       return this.runsRepo.markFailed(id, input);
     }
     return markRunFailed(id, input) ?? null;
@@ -2449,9 +2554,10 @@ export class SessionMessageService {
   private async markRunCancelled(
     run: SessionRunRecord | SessionRun,
   ): Promise<SessionRunRecord | SessionRun | null> {
-    const updated = this.runsRepo
-      ? await this.runsRepo.markCancelled(run.id)
-      : (markRunCancelled(run.id) ?? null);
+    const updated =
+      this.runsRepo && !this.isEphemeral(run.sessionId)
+        ? await this.runsRepo.markCancelled(run.id)
+        : (markRunCancelled(run.id) ?? null);
     if (this.runEvents && updated) {
       this.runEvents.emitRunCancelled({
         runId: run.id,
@@ -2523,7 +2629,7 @@ export class SessionMessageService {
     errorMessage: string,
   ): Promise<SubmitMessageResult> {
     // Update run with failure
-    await this.markRunFailed(runId, {
+    await this.markRunFailed(runId, userMessage.sessionId, {
       errorCode,
       errorMessage,
     });

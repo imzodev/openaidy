@@ -36,6 +36,7 @@ vi.mock('lucide-solid', () => {
     'Keyboard',
     'MessageSquare',
     'Search',
+    'EyeOff',
   ]) {
     out[name] = Stub;
   }
@@ -46,6 +47,9 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
     navigate: vi.fn(),
     newSession: vi.fn(),
+    togglePrivacy: vi.fn(),
+    canTogglePrivacy: vi.fn(() => false),
+    isSessionPrivate: vi.fn(() => false),
     toggleTheme: vi.fn(),
     toggleSidebar: vi.fn(),
     ...overrides,

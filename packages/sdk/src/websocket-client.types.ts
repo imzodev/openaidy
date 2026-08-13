@@ -177,6 +177,8 @@ export type SessionCreateOptions = {
   modelId?: string;
   title?: string;
   metadata?: Record<string, unknown>;
+  /** Create a private/ephemeral session — never persisted to the DB. */
+  ephemeral?: boolean;
 };
 
 /**

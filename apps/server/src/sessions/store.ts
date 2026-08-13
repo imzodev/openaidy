@@ -29,6 +29,7 @@ export function findSessionRecord(id: string): SessionRecord | undefined {
 export function createSessionRecord(
   title: string,
   type?: SessionType,
+  ephemeral?: boolean,
 ): SessionRecord {
   const now = new Date().toISOString();
   const record: SessionRecord = {
@@ -38,9 +39,30 @@ export function createSessionRecord(
     status: 'active',
     createdAt: now,
     updatedAt: now,
+    ...(ephemeral && { ephemeral: true }),
   };
   sessions.set(record.id, record);
   return record;
+}
+
+/**
+ * Sweep in-memory ephemeral sessions older than `maxAgeMs` (created-at based,
+ * not last-activity). Backstop against unbounded memory growth on a
+ * long-lived process when a private chat is opened and never explicitly
+ * closed. Cascades messages/runs via the existing delete path. Returns the
+ * number of sessions removed.
+ */
+export function deleteExpiredEphemeralSessionRecords(maxAgeMs: number): number {
+  const now = Date.now();
+  let removed = 0;
+  for (const record of Array.from(sessions.values())) {
+    if (!record.ephemeral) continue;
+    if (now - new Date(record.createdAt).getTime() > maxAgeMs) {
+      deleteSessionRecord(record.id);
+      removed++;
+    }
+  }
+  return removed;
 }
 
 export function updateSessionTitleRecord(

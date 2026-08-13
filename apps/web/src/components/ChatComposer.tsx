@@ -18,6 +18,12 @@ type ChatComposerProps = {
   onAgentSelect: (agentId: string | undefined) => void;
   /** Called when the component mounts, passing a focus function */
   onInputReady?: (focus: () => void) => void;
+  /**
+   * Attachments aren't supported in private chats (bytes live on disk
+   * regardless of the session's persistence flag). Hides/disables the
+   * attach button and ignores paste/drop of files.
+   */
+  attachmentsDisabled?: boolean;
 };
 
 /** Mime prefixes accepted as chat attachments. */
@@ -63,6 +69,7 @@ export function ChatComposer(props: ChatComposerProps) {
   });
 
   const addFiles = (files: Iterable<File>) => {
+    if (props.attachmentsDisabled) return;
     const accepted = [...files].filter(isAcceptedFile);
     if (accepted.length === 0) return;
     setPendingFiles((prev) => [...prev, ...accepted]);
@@ -169,9 +176,13 @@ export function ChatComposer(props: ChatComposerProps) {
     <button
       type="button"
       onClick={() => fileInputRef?.click()}
-      disabled={inputDisabled()}
+      disabled={inputDisabled() || props.attachmentsDisabled}
       aria-label="Attach image or audio"
-      title="Attach image or audio"
+      title={
+        props.attachmentsDisabled
+          ? 'Attachments are not available in a private chat'
+          : 'Attach image or audio'
+      }
       class={`flex-shrink-0 flex items-center justify-center rounded-lg text-text-tertiary hover:text-text-primary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${extraClass}`}
     >
       <Paperclip class="w-4 h-4" />

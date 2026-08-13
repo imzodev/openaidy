@@ -58,6 +58,13 @@ export type Session = {
   archivedAt?: string;
   /** When the session was favorited/pinned (null/absent = not a favorite) */
   favoritedAt?: string;
+  /**
+   * Private/incognito session: never persisted to the database, lives only
+   * in server memory for the lifetime of the process, and is absent from
+   * `listSessions`/session history. Lost on server restart or when the
+   * client stops referencing it (e.g. a page refresh).
+   */
+  ephemeral?: boolean;
 };
 
 /**
@@ -66,6 +73,7 @@ export type Session = {
 export type CreateSessionInput = {
   title: string;
   type?: SessionType;
+  ephemeral?: boolean;
 };
 
 // ========================================

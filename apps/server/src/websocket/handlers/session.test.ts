@@ -124,6 +124,62 @@ describe('SessionHandler', () => {
           .payload.error.code,
       ).toBe(WS_ERROR_CODES.INTERNAL_ERROR);
     });
+
+    it('passes ephemeral: true through to sessionService.createSession', async () => {
+      const mockSession: Session = {
+        id: 'session-priv',
+        title: 'Private chat',
+        type: 'chat',
+        status: 'active',
+        agentId: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        archivedAt: null,
+        favoritedAt: null,
+        ephemeral: true,
+      } as Session;
+      mockSessionService.createSession.mockResolvedValue(mockSession);
+
+      const request = createWSMessage('session.create', {
+        ephemeral: true,
+      }) as SessionCreateRequest;
+
+      await handler.handleCreate('conn-1', request, mockContext);
+
+      expect(mockSessionService.createSession).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        { ephemeral: true },
+      );
+    });
+
+    it('does not pass an ephemeral option for a normal session create', async () => {
+      const mockSession: Session = {
+        id: 'session-normal',
+        title: 'Session',
+        type: 'chat',
+        status: 'active',
+        agentId: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        archivedAt: null,
+        favoritedAt: null,
+      };
+      mockSessionService.createSession.mockResolvedValue(mockSession);
+
+      const request = createWSMessage(
+        'session.create',
+        {},
+      ) as SessionCreateRequest;
+
+      await handler.handleCreate('conn-1', request, mockContext);
+
+      expect(mockSessionService.createSession).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        undefined,
+      );
+    });
   });
 
   describe('handleGet', () => {
@@ -156,6 +212,33 @@ describe('SessionHandler', () => {
         (response as { payload: { session: { id: string; title: string } } })
           .payload.session.title,
       ).toBe('Test Session');
+    });
+
+    it('includes ephemeral: true for a private chat session', async () => {
+      const mockSession: Session = {
+        id: 'session-priv',
+        title: 'Private chat',
+        type: 'chat',
+        status: 'active',
+        agentId: null,
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+        archivedAt: null,
+        favoritedAt: null,
+        ephemeral: true,
+      } as Session;
+      mockSessionService.getSession.mockResolvedValue(mockSession);
+
+      const request = createWSMessage('session.get', {
+        sessionId: 'session-priv',
+      }) as SessionGetRequest;
+
+      const response = await handler.handleGet('conn-1', request, mockContext);
+
+      expect(
+        (response as { payload: { session: { ephemeral?: boolean } } }).payload
+          .session.ephemeral,
+      ).toBe(true);
     });
 
     it('should return NOT_FOUND error if session does not exist', async () => {

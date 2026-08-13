@@ -258,11 +258,14 @@ export async function searchSessions(
 /**
  * Create a new session
  */
-export async function createSession(title: string): Promise<Session> {
+export async function createSession(
+  title: string,
+  options?: { ephemeral?: boolean },
+): Promise<Session> {
   const response = await apiFetch(`${API_BASE}/api/sessions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, ...options }),
   });
   if (!response.ok) {
     throw new Error(`Failed to create session: ${response.statusText}`);

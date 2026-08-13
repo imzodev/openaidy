@@ -7,6 +7,7 @@ import { MAX_ATTACHMENT_IDS_PER_MESSAGE } from '../attachments/service';
 
 const createSessionSchema = z.object({
   title: z.string().min(1),
+  ephemeral: z.boolean().optional(),
 });
 
 // PATCH /sessions/:id — partial update. Any subset of fields may be provided;
@@ -127,7 +128,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (
           error instanceof Error ? error.message : 'Invalid request body',
       };
     }
-    const session = await sessionService.createSession(parsed.title);
+    const session = await sessionService.createSession(
+      parsed.title,
+      undefined,
+      parsed.ephemeral ? { ephemeral: true } : undefined,
+    );
     reply.code(201);
     return session;
   });

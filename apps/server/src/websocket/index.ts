@@ -75,6 +75,10 @@ const PUBLIC_MESSAGE_TYPES = new Set<string>([
   'pairing.status',
 ]);
 
+// Backstop TTL for abandoned private-chat (ephemeral) sessions — see the
+// periodic cleanup task below. Time-boxed from creation, not last activity.
+const EPHEMERAL_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
 const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
   'session.create': [WS_CAPABILITIES.SESSIONS_WRITE],
   'session.get': [WS_CAPABILITIES.SESSIONS_READ],
@@ -704,6 +708,11 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
     // Cleanup stale presence (presence that hasn't been updated in 3x heartbeat interval)
     gateway.presenceManager.cleanupStalePresence(
       gateway.config.heartbeatInterval * 3,
+    );
+    // Cleanup ephemeral (private chat) sessions abandoned without ever being
+    // explicitly deleted — backstop against unbounded in-memory growth.
+    fastify.services.sessions.cleanupExpiredEphemeralSessions(
+      EPHEMERAL_SESSION_TTL_MS,
     );
   }, 60000); // Every minute
 

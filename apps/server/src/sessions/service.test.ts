@@ -9,6 +9,11 @@ import type {
   ProviderSelectionService,
   ModelInvocationService,
 } from '../providers';
+import type {
+  SessionsStore,
+  SessionMessagesStore,
+  SessionRunsStore,
+} from '@openaidy/db';
 
 /**
  * Unit tests for the builtin tool execution guard in SessionMessageService.
@@ -334,6 +339,195 @@ describe('SessionMessageService.updateSessionTitle', () => {
       'Any title',
     );
     expect(result).toBeNull();
+  });
+});
+
+// ============================================================================
+// Ephemeral (private chat) sessions
+// ============================================================================
+
+/** Throws if any method on the mock is called — proves a code path never
+ * reaches a DB-backed repo for an ephemeral session. */
+function makeThrowingRepo(label: string): Record<string, unknown> {
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        return (..._args: unknown[]) => {
+          throw new Error(
+            `${label}.${String(prop)} should not be called for an ephemeral session`,
+          );
+        };
+      },
+    },
+  );
+}
+
+describe('SessionMessageService — ephemeral (private chat) sessions', () => {
+  it('marks the created session ephemeral and excludes it from listSessions', async () => {
+    const service = new SessionMessageService({
+      providers: makeMinimalProviders(),
+    });
+
+    const normal = await service.createSession('Normal chat');
+    const priv = await service.createSession('Private chat', undefined, {
+      ephemeral: true,
+    });
+
+    expect((priv as { ephemeral?: boolean }).ephemeral).toBe(true);
+    expect((normal as { ephemeral?: boolean }).ephemeral).toBeUndefined();
+
+    const listed = await service.listSessions();
+    const ids = listed.map((s) => (s as { id: string }).id);
+    expect(ids).toContain((normal as { id: string }).id);
+    expect(ids).not.toContain((priv as { id: string }).id);
+  });
+
+  it('still supports get/update/delete for an ephemeral session via the in-memory store', async () => {
+    const service = new SessionMessageService({
+      providers: makeMinimalProviders(),
+    });
+
+    const priv = await service.createSession('Private chat', undefined, {
+      ephemeral: true,
+    });
+    const id = (priv as { id: string }).id;
+
+    expect(await service.getSession(id)).not.toBeNull();
+
+    const renamed = await service.updateSessionTitle(id, 'Renamed private');
+    expect((renamed as { title: string } | null)?.title).toBe(
+      'Renamed private',
+    );
+
+    expect(await service.deleteSession(id)).toBe(true);
+    expect(await service.getSession(id)).toBeNull();
+  });
+
+  it('cleanupExpiredEphemeralSessions sweeps only expired ephemeral sessions', async () => {
+    const service = new SessionMessageService({
+      providers: makeMinimalProviders(),
+    });
+
+    const normal = await service.createSession('Normal chat');
+    const priv = await service.createSession('Private chat', undefined, {
+      ephemeral: true,
+    });
+    const normalId = (normal as { id: string }).id;
+    const privId = (priv as { id: string }).id;
+
+    // Negative maxAge: any elapsed time (including ~0ms) counts as expired.
+    // (The in-memory store is a module-level singleton shared across tests in
+    // this file, so other ephemeral sessions may also be swept here — assert
+    // on this test's own session rather than an exact count.)
+    const removed = service.cleanupExpiredEphemeralSessions(-1);
+
+    expect(removed).toBeGreaterThanOrEqual(1);
+    expect(await service.getSession(privId)).toBeNull();
+    // A non-ephemeral session is never swept, regardless of age.
+    expect(await service.getSession(normalId)).not.toBeNull();
+  });
+
+  it('hides ephemeral-unsafe tools (e.g. memory_save) from the model in a private chat, but keeps them for a normal session', async () => {
+    const agents = new AgentRegistry();
+    agents.replaceAll([makeAgent(['memory_save', 'echo'])]);
+    const builtinTools = new BuiltinToolRegistry();
+    builtinTools.register(makeTool('memory_save'));
+    builtinTools.register(makeTool('echo'));
+
+    const seenToolNames: string[][] = [];
+    const service = new SessionMessageService({
+      providers: {
+        registry: {
+          getDefault: vi.fn(),
+          getEntry: vi.fn(),
+        } as unknown as ProviderRegistryService,
+        selection: {} as unknown as ProviderSelectionService,
+        invocation: {
+          invoke: vi.fn(),
+          invokeStream: vi.fn(async function* (request: {
+            tools?: Array<{ name: string }>;
+          }) {
+            seenToolNames.push((request.tools ?? []).map((t) => t.name));
+            yield ok({
+              type: 'stream.started',
+              providerId: 'mock',
+              model: 'mock',
+            });
+            yield ok({ type: 'stream.content_delta', delta: 'hi' });
+            yield ok({ type: 'stream.finished', finishReason: 'stop' });
+          }),
+        } as unknown as ModelInvocationService,
+      },
+      agents,
+      builtinTools,
+    });
+
+    const normal = await service.createSession('Normal chat');
+    await submit(service, (normal as { id: string }).id);
+
+    const priv = await service.createSession('Private chat', undefined, {
+      ephemeral: true,
+    });
+    await submit(service, (priv as { id: string }).id);
+
+    expect(seenToolNames).toHaveLength(2);
+    expect(seenToolNames[0]).toEqual(
+      expect.arrayContaining(['memory_save', 'echo']),
+    );
+    expect(seenToolNames[1]).toEqual(['echo']);
+    expect(seenToolNames[1]).not.toContain('memory_save');
+  });
+
+  it('never touches configured DB repos for an ephemeral session end-to-end', async () => {
+    const agents = new AgentRegistry();
+    agents.replaceAll([makeAgent([])]);
+    const builtinTools = new BuiltinToolRegistry();
+
+    const service = new SessionMessageService({
+      providers: {
+        registry: {
+          getDefault: vi.fn(),
+          getEntry: vi.fn(),
+        } as unknown as ProviderRegistryService,
+        selection: {} as unknown as ProviderSelectionService,
+        invocation: {
+          invoke: vi.fn(),
+          invokeStream: vi.fn(async function* () {
+            yield ok({
+              type: 'stream.started',
+              providerId: 'mock',
+              model: 'mock',
+            });
+            yield ok({ type: 'stream.content_delta', delta: 'hi' });
+            yield ok({ type: 'stream.finished', finishReason: 'stop' });
+          }),
+        } as unknown as ModelInvocationService,
+      },
+      agents,
+      builtinTools,
+      repositories: {
+        sessions: makeThrowingRepo('sessionsRepo') as unknown as SessionsStore,
+        messages: makeThrowingRepo(
+          'messagesRepo',
+        ) as unknown as SessionMessagesStore,
+        runs: makeThrowingRepo('runsRepo') as unknown as SessionRunsStore,
+      },
+    });
+
+    const priv = await service.createSession('Private chat', undefined, {
+      ephemeral: true,
+    });
+    const sessionId = (priv as { id: string }).id;
+
+    const result = await submit(service, sessionId);
+
+    expect(result.ok).toBe(true);
+    // Per-session reads/writes (append/createRun/markRun*/updateSessionAgentId)
+    // all resolved without hitting the throwing repo mocks above — the only
+    // way this assertion is reachable at all.
+    const fetched = await service.getSession(sessionId);
+    expect((fetched as { ephemeral?: boolean } | null)?.ephemeral).toBe(true);
   });
 });
 
