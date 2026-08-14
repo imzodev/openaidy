@@ -17,21 +17,38 @@ import {
   Puzzle,
   Layers,
   KeyRound,
+  BarChart3,
+  Brain,
+  Workflow,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
+import { SessionList } from './SessionList';
 import type { Session, AddonRecord } from '../lib/api';
+import { updateBadgeVisible } from '../stores/update-notice';
+import { viewToRouteMap, RoutePaths } from '../lib/router';
+
+// A plain left-click (no modifier keys) is handled as an in-SPA
+// navigation via preventDefault; ctrl/cmd/middle/shift-click falls through
+// to the browser's native anchor behavior (new tab/window) untouched.
+function isPlainLeftClick(e: MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
 
 export type ViewType =
   | 'chat'
   | 'sessions'
   | 'tasks'
   | 'pulses'
+  | 'workflows'
+  | 'workflow-detail'
   | 'channels'
   | 'webhooks'
   | 'agents'
+  | 'memories'
   | 'skills'
   | 'mcps'
   | 'logs'
+  | 'usage'
   | 'backups'
   | 'addons'
   | 'addon-view'
@@ -44,6 +61,7 @@ type SidebarProps = {
   onSelectSession: (id: string) => void;
   onCreateSession: () => void;
   onClearSession?: () => void;
+  onToggleFavorite?: (id: string, favorited: boolean) => void | Promise<void>;
   isLoadingSessions?: boolean;
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
@@ -73,6 +91,7 @@ const navSections: NavSection[] = [
       { id: 'sessions', label: 'Sessions', icon: Layers },
       { id: 'tasks', label: 'Tasks', icon: CheckSquare },
       { id: 'pulses', label: 'Pulses', icon: Zap },
+      { id: 'workflows', label: 'Workflows', icon: Workflow },
     ],
   },
   {
@@ -86,6 +105,7 @@ const navSections: NavSection[] = [
     title: 'Build',
     items: [
       { id: 'agents', label: 'Agents', icon: Bot },
+      { id: 'memories', label: 'Memories', icon: Brain },
       { id: 'skills', label: 'Skills', icon: Wrench },
       { id: 'mcps', label: 'MCP Servers', icon: Server },
     ],
@@ -93,6 +113,7 @@ const navSections: NavSection[] = [
   {
     title: 'System',
     items: [
+      { id: 'usage', label: 'Usage', icon: BarChart3 },
       { id: 'logs', label: 'Logs', icon: FileText },
       { id: 'backups', label: 'Backups', icon: Save },
       { id: 'api-keys', label: 'Access Tokens', icon: KeyRound },
@@ -148,9 +169,7 @@ export function Sidebar(props: SidebarProps) {
           }`}
         >
           <Show when={!props.isCollapsed}>
-            <h1 class="text-xl font-bold text-text-primary truncate tracking-tight">
-              OpenAidy
-            </h1>
+            <img src="/logo.webp" alt="OpenAidy" class="h-7 w-auto" />
           </Show>
           <button
             onClick={props.onToggleCollapse}
@@ -182,9 +201,11 @@ export function Sidebar(props: SidebarProps) {
               </div>
             </Show>
             <div class="flex items-center gap-1 px-2">
-              <button
-                type="button"
-                onClick={() => {
+              <a
+                href={RoutePaths.CHAT}
+                onClick={(e) => {
+                  if (!isPlainLeftClick(e)) return;
+                  e.preventDefault();
                   props.onClearSession?.();
                   props.onNavigate('chat');
                   if (isMobileViewport()) {
@@ -206,7 +227,7 @@ export function Sidebar(props: SidebarProps) {
                 <Show when={!props.isCollapsed}>
                   <span class="text-sm">Chat</span>
                 </Show>
-              </button>
+              </a>
               <Show when={!props.isCollapsed}>
                 <button
                   type="button"
@@ -219,6 +240,26 @@ export function Sidebar(props: SidebarProps) {
                 </button>
               </Show>
             </div>
+
+            {/* Quick-access sessions: Favorites + Recent. Hidden when collapsed. */}
+            <Show when={!props.isCollapsed}>
+              <SessionList
+                sessions={props.sessions}
+                selectedId={props.selectedSessionId}
+                onSelect={(id) => {
+                  props.onSelectSession(id);
+                  if (isMobileViewport()) {
+                    props.onCollapse();
+                  }
+                }}
+                {...(props.onToggleFavorite
+                  ? { onToggleFavorite: props.onToggleFavorite }
+                  : {})}
+                isLoading={props.isLoadingSessions ?? false}
+                isCollapsed={props.isCollapsed}
+                isActiveView={props.currentView === 'chat'}
+              />
+            </Show>
           </div>
 
           <For each={navSections}>
@@ -238,9 +279,11 @@ export function Sidebar(props: SidebarProps) {
                   {(item) => {
                     const Icon = item.icon;
                     return (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <a
+                        href={viewToRouteMap[item.id]}
+                        onClick={(e) => {
+                          if (!isPlainLeftClick(e)) return;
+                          e.preventDefault();
                           props.onNavigate(item.id);
                           if (isMobileViewport()) {
                             props.onCollapse();
@@ -261,7 +304,7 @@ export function Sidebar(props: SidebarProps) {
                         <Show when={!props.isCollapsed}>
                           <span class="text-sm">{item.label}</span>
                         </Show>
-                      </button>
+                      </a>
                     );
                   }}
                 </For>
@@ -274,9 +317,11 @@ export function Sidebar(props: SidebarProps) {
                 >
                   <For each={props.enabledAddons ?? []}>
                     {(addon) => (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <a
+                        href={`/addons/${addon.addonId}`}
+                        onClick={(e) => {
+                          if (!isPlainLeftClick(e)) return;
+                          e.preventDefault();
                           props.onAddonSelect?.(addon);
                           if (isMobileViewport()) {
                             props.onCollapse();
@@ -297,7 +342,7 @@ export function Sidebar(props: SidebarProps) {
                         <Show when={!props.isCollapsed}>
                           <span class="text-sm truncate">{addon.name}</span>
                         </Show>
-                      </button>
+                      </a>
                     )}
                   </For>
                 </Show>
@@ -314,9 +359,11 @@ export function Sidebar(props: SidebarProps) {
           >
             <ThemeToggle isCollapsed={props.isCollapsed} />
 
-            <button
-              type="button"
-              onClick={() => {
+            <a
+              href={RoutePaths.SETTINGS}
+              onClick={(e) => {
+                if (!isPlainLeftClick(e)) return;
+                e.preventDefault();
                 props.onNavigate('settings');
                 if (isMobileViewport()) {
                   props.onCollapse();
@@ -331,11 +378,27 @@ export function Sidebar(props: SidebarProps) {
               }`}
               title="Settings"
             >
-              <Settings class="w-5 h-5 flex-shrink-0" />
+              <span class="relative flex-shrink-0">
+                <Settings class="w-5 h-5" />
+                {/* Update-available indicator (issue #456). Shown in both
+                    collapsed and expanded states so the nudge isn't lost when
+                    the sidebar is narrow. */}
+                <Show when={updateBadgeVisible()}>
+                  <span
+                    class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-white dark:ring-gray-800"
+                    aria-label="Update available"
+                  />
+                </Show>
+              </span>
               <Show when={!props.isCollapsed}>
-                <span>Settings</span>
+                <span class="flex-1 text-left">Settings</span>
               </Show>
-            </button>
+              <Show when={!props.isCollapsed && updateBadgeVisible()}>
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                  Update
+                </span>
+              </Show>
+            </a>
           </div>
         </div>
       </aside>
