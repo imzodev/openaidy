@@ -111,7 +111,17 @@ const EPHEMERAL_UNSAFE_TOOLS = new Set([
   'task_schedules_trigger',
   'addon_create',
   'addon_update',
+  'addon_run',
   'media_share',
+  // `WorkspaceService.getWorkspacePath` keys the workspace directory by
+  // agentId, not sessionId — these write real files into a durable,
+  // cross-session directory (or the globally-shared skills directory)
+  // regardless of which session invoked them.
+  'workspace_write',
+  'workspace_delete',
+  'code_edit',
+  'skill_create',
+  'skill_update',
 ]);
 
 /**
@@ -211,9 +221,10 @@ export class SessionMessageService {
   /**
    * Sweep expired ephemeral sessions from the in-memory store (backstop
    * against unbounded growth on a long-lived process). Intended to be called
-   * periodically (see the WS gateway's cleanup interval).
+   * periodically (see the WS gateway's cleanup interval). Returns the ids of
+   * the sessions removed, so the caller can notify any subscribed clients.
    */
-  cleanupExpiredEphemeralSessions(maxAgeMs: number): number {
+  cleanupExpiredEphemeralSessions(maxAgeMs: number): string[] {
     return deleteExpiredEphemeralSessionRecords(maxAgeMs);
   }
 
@@ -2054,10 +2065,19 @@ export class SessionMessageService {
               // as attachments on the tool result message below so they
               // render inline in chat. Best-effort: a failure here must not
               // fail the tool call.
+              //
+              // Skipped entirely for an ephemeral session: `this.workspace`
+              // keys files by agentId, not sessionId, so writing here would
+              // persist tool media (from any MCP tool, not just the builtin
+              // ones already blocklisted) into a durable, cross-session
+              // directory regardless of the private-chat guarantee. The
+              // model still gets the tool's raw inline image content back —
+              // it just isn't saved to disk.
               if (
                 this.workspace &&
                 mcpResult &&
                 !toolIsError &&
+                !this.isEphemeral(input.sessionId) &&
                 extractInlineImages(mcpResult as McpToolResult).length > 0
               ) {
                 try {
