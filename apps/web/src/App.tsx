@@ -32,6 +32,8 @@ import { RunList } from './components/RunList';
 import { SessionsPage } from './components/pages/SessionsPage';
 import { TasksPage } from './components/pages/TasksPage';
 import { PulsesPage } from './components/pages/PulsesPage';
+import { WorkflowsPage } from './components/pages/WorkflowsPage';
+import { WorkflowDetailPage } from './components/pages/WorkflowDetailPage';
 import { ChannelsPage } from './components/pages/ChannelsPage';
 import { WebhooksPage } from './components/pages/WebhooksPage';
 import { AgentsPage } from './components/pages/AgentsPage';
@@ -106,8 +108,14 @@ function AppContent(props: AppContentProps) {
     });
 
   // Use the router hook
-  const { currentView, currentAddonId, navigate, navigateToAddon } =
-    createRouter();
+  const {
+    currentView,
+    currentAddonId,
+    currentWorkflowTaskId,
+    navigate,
+    navigateToAddon,
+    navigateToWorkflow,
+  } = createRouter();
 
   // Get WebSocket client for streaming events
   const { client, isConnected } = useWebSocketContext();
@@ -1128,6 +1136,21 @@ function AppContent(props: AppContentProps) {
 
         <Show when={view() === 'pulses'}>
           <PulsesPage />
+        </Show>
+
+        <Show when={view() === 'workflows'}>
+          <WorkflowsPage onOpenWorkflow={navigateToWorkflow} />
+        </Show>
+
+        <Show
+          when={
+            view() === 'workflow-detail' && currentWorkflowTaskId() !== null
+          }
+        >
+          <WorkflowDetailPage
+            taskId={currentWorkflowTaskId()!}
+            onBack={() => navigate('workflows')}
+          />
         </Show>
 
         <Show when={view() === 'channels'}>

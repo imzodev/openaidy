@@ -17,6 +17,7 @@ export const RoutePaths = {
   USAGE: '/usage',
   BACKUPS: '/backups',
   ADDONS: '/addons',
+  WORKFLOWS: '/workflows',
   API_KEYS: '/api-keys',
   SETTINGS: '/settings',
 } as const;
@@ -40,6 +41,8 @@ export const viewToRouteMap: Record<ViewType, RoutePath> = {
   backups: RoutePaths.BACKUPS,
   addons: RoutePaths.ADDONS,
   'addon-view': RoutePaths.ADDONS,
+  workflows: RoutePaths.WORKFLOWS,
+  'workflow-detail': RoutePaths.WORKFLOWS,
   'api-keys': RoutePaths.API_KEYS,
   settings: RoutePaths.SETTINGS,
 };
@@ -61,6 +64,7 @@ export const routeToViewMap: Record<string, ViewType> = {
   [RoutePaths.USAGE]: 'usage',
   [RoutePaths.BACKUPS]: 'backups',
   [RoutePaths.ADDONS]: 'addons',
+  [RoutePaths.WORKFLOWS]: 'workflows',
   [RoutePaths.API_KEYS]: 'api-keys',
   [RoutePaths.SETTINGS]: 'settings',
 };
@@ -96,10 +100,18 @@ export function createRouter() {
     return m ? m[1] : null;
   };
 
+  // Parse /workflows/:taskId — returns taskId or null
+  const currentWorkflowTaskId = (): string | null => {
+    const p = currentPath();
+    const m = p.match(/^\/workflows\/([^/]+)$/);
+    return m ? m[1] : null;
+  };
+
   // Get current view from path
   const currentView = (): ViewType => {
     const p = currentPath();
     if (currentAddonId()) return 'addon-view';
+    if (currentWorkflowTaskId()) return 'workflow-detail';
     return routeToViewMap[p] || 'sessions';
   };
 
@@ -115,6 +127,15 @@ export function createRouter() {
   // Navigate directly to an addon by its addonId
   const navigateToAddon = (addonId: string) => {
     const newPath = `/addons/${addonId}`;
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+      setCurrentPath(newPath);
+    }
+  };
+
+  // Navigate directly to a workflow (task) by its taskId
+  const navigateToWorkflow = (taskId: string) => {
+    const newPath = `/workflows/${taskId}`;
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
       setCurrentPath(newPath);
@@ -144,8 +165,10 @@ export function createRouter() {
     currentPath,
     currentView,
     currentAddonId,
+    currentWorkflowTaskId,
     navigate,
     navigateToAddon,
+    navigateToWorkflow,
   };
 }
 

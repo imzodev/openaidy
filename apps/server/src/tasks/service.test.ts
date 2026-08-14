@@ -261,6 +261,31 @@ describe('TaskService', () => {
       expect(planTask).toHaveBeenCalledWith('task1');
     });
 
+    it('does NOT trigger planningService when skipAutoPlan=true, even with planningEnabled=true', async () => {
+      tasksRepo.create = vi.fn().mockResolvedValue(mockPlanningTask);
+      const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
+      const serviceWithPlanning = createTaskService({
+        tasksRepo:
+          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+        subtasksRepo:
+          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+        taskAgentsRepo:
+          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+        planningService: { planTask } as unknown as PlanningService,
+      });
+
+      const result = await serviceWithPlanning.createTask({
+        title: 'Test Task',
+        description: 'Test description',
+        planningEnabled: true,
+        skipAutoPlan: true,
+      });
+
+      expect(result.ok).toBe(true);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(planTask).not.toHaveBeenCalled();
+    });
+
     it('does NOT trigger planningService when planningEnabled=false', async () => {
       tasksRepo.create = vi.fn().mockResolvedValue(mockTask);
       const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
