@@ -14,6 +14,7 @@ import { TaskExecutionsPage } from './TaskExecutionsPage';
 import {
   type Task,
   type TaskStatus,
+  type TaskDetailView,
   createTask,
   updateTask,
   executeTask,
@@ -28,15 +29,16 @@ import { useEscapeKey } from '../settings/hooks';
 export type TasksPageProps = {
   onOpenSession: (sessionId: string) => void;
   /**
-   * The detail overlay's task id and sub-view are owned by the parent
-   * (App.tsx) instead of a local signal here, so they survive TasksPage
+   * The detail overlay's task id and sub-view live in the URL (owned by
+   * the router in App.tsx), not a signal here, so they survive TasksPage
    * unmounting when the user navigates away to view a session and back
-   * — see the comment above the signals in App.tsx.
+   * — and, unlike a persisted signal, don't survive navigating to an
+   * unrelated view, since that changes the URL away from /tasks/:taskId.
    */
   detailTaskId: string | null;
-  onDetailTaskIdChange: (id: string | null) => void;
-  detailView: 'detail' | 'executions';
-  onDetailViewChange: (view: 'detail' | 'executions') => void;
+  detailView: TaskDetailView;
+  onNavigateToTaskDetail: (taskId: string, view: TaskDetailView) => void;
+  onCloseTaskDetail: () => void;
 };
 
 export function TasksPage(props: TasksPageProps) {
@@ -68,7 +70,7 @@ export function TasksPage(props: TasksPageProps) {
   });
 
   const handleTaskClick = (task: Task) => {
-    props.onDetailTaskIdChange(task.id);
+    props.onNavigateToTaskDetail(task.id, 'detail');
   };
 
   const handleTaskStatusChange = async (
@@ -156,8 +158,7 @@ export function TasksPage(props: TasksPageProps) {
   };
 
   const handleCloseDetail = () => {
-    props.onDetailTaskIdChange(null);
-    props.onDetailViewChange('detail');
+    props.onCloseTaskDetail();
   };
 
   const handleDetailTaskUpdated = () => {
@@ -165,8 +166,7 @@ export function TasksPage(props: TasksPageProps) {
   };
 
   const handleDetailTaskDeleted = () => {
-    props.onDetailTaskIdChange(null);
-    props.onDetailViewChange('detail');
+    props.onCloseTaskDetail();
     setRefreshTrigger((prev) => prev + 1);
   };
 
@@ -177,14 +177,18 @@ export function TasksPage(props: TasksPageProps) {
    * button that calls this.
    */
   const handleViewExecutions = () => {
-    props.onDetailViewChange('executions');
+    if (props.detailTaskId) {
+      props.onNavigateToTaskDetail(props.detailTaskId, 'executions');
+    }
   };
 
   /**
    * Return from the executions view back to the task detail panel.
    */
   const handleBackToDetail = () => {
-    props.onDetailViewChange('detail');
+    if (props.detailTaskId) {
+      props.onNavigateToTaskDetail(props.detailTaskId, 'detail');
+    }
   };
 
   /**
