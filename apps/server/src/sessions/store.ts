@@ -46,20 +46,22 @@ export function createSessionRecord(
 }
 
 /**
- * Sweep in-memory ephemeral sessions older than `maxAgeMs` (created-at based,
- * not last-activity). Backstop against unbounded memory growth on a
- * long-lived process when a private chat is opened and never explicitly
- * closed. Cascades messages/runs via the existing delete path. Returns the
- * number of sessions removed.
+ * Sweep in-memory ephemeral sessions whose `updatedAt` (last activity) is
+ * older than `maxAgeMs`. Backstop against unbounded memory growth when a
+ * private chat is opened and never explicitly closed — a session actively
+ * being chatted in keeps getting its `updatedAt` bumped (see
+ * `appendMessageRecord`) and never hits the TTL. Cascades messages/runs via
+ * the existing delete path. Returns the ids of the sessions removed.
  */
-export function deleteExpiredEphemeralSessionRecords(maxAgeMs: number): number {
+export function deleteExpiredEphemeralSessionRecords(maxAgeMs: number): string[] {
   const now = Date.now();
-  let removed = 0;
+  const removed: string[] = [];
   for (const record of Array.from(sessions.values())) {
     if (!record.ephemeral) continue;
-    if (now - new Date(record.createdAt).getTime() > maxAgeMs) {
+    const lastActivity = record.updatedAt ?? record.createdAt;
+    if (now - new Date(lastActivity).getTime() > maxAgeMs) {
       deleteSessionRecord(record.id);
-      removed++;
+      removed.push(record.id);
     }
   }
   return removed;
@@ -154,6 +156,18 @@ export function appendMessageRecord(
     ...(input.metadata !== undefined && { metadata: input.metadata }),
   };
   messages.set(record.id, record);
+
+  // Bump the session's last-activity timestamp so the ephemeral-session TTL
+  // sweep (see `deleteExpiredEphemeralSessionRecords`) is activity-based
+  // rather than expiring a session that's actively being chatted in.
+  const session = sessions.get(input.sessionId);
+  if (session) {
+    sessions.set(input.sessionId, {
+      ...session,
+      updatedAt: record.createdAt,
+    });
+  }
+
   return record;
 }
 

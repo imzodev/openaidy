@@ -76,7 +76,9 @@ const PUBLIC_MESSAGE_TYPES = new Set<string>([
 ]);
 
 // Backstop TTL for abandoned private-chat (ephemeral) sessions — see the
-// periodic cleanup task below. Time-boxed from creation, not last activity.
+// periodic cleanup task below. Measured from last activity (a session
+// actively being chatted in keeps getting its `updatedAt` bumped and never
+// hits this), not creation time.
 const EPHEMERAL_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 const MESSAGE_CAPABILITIES: Partial<Record<string, string[]>> = {
@@ -711,9 +713,22 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
     );
     // Cleanup ephemeral (private chat) sessions abandoned without ever being
     // explicitly deleted — backstop against unbounded in-memory growth.
-    fastify.services.sessions.cleanupExpiredEphemeralSessions(
-      EPHEMERAL_SESSION_TTL_MS,
-    );
+    // Notify any still-subscribed client so a session that somehow does get
+    // swept (e.g. left open past the TTL with no further messages) doesn't
+    // just silently vanish from under an active chat view.
+    const expiredEphemeralIds =
+      fastify.services.sessions.cleanupExpiredEphemeralSessions(
+        EPHEMERAL_SESSION_TTL_MS,
+      );
+    for (const sessionId of expiredEphemeralIds) {
+      gateway.subscriptionManager.broadcastToSession(
+        sessionId,
+        createWSMessage('session.deleted', {
+          sessionId,
+          reason: 'expired',
+        }),
+      );
+    }
   }, 60000); // Every minute
 
   // Generate unique connection IDs
