@@ -37,6 +37,7 @@ export type SessionRecord = {
   updatedAt?: string;
   archivedAt?: string;
   favoritedAt?: string;
+  ephemeral?: boolean;
 };
 
 /**

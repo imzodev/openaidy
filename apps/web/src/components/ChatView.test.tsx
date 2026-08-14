@@ -24,6 +24,7 @@ vi.mock('lucide-solid', () => ({
   CircleStop: () => <span data-testid="circle-stop" />,
   Ban: () => <span data-testid="ban" />,
   ArrowUp: () => <span data-testid="arrow-up" />,
+  EyeOff: () => <span data-testid="eye-off" />,
 }));
 
 describe('ChatView', () => {
@@ -49,6 +50,12 @@ describe('ChatView', () => {
   it('should render empty state when no messages', () => {
     render(() => <ChatView messages={[]} isLoading={false} />);
     expect(screen.getByText('No messages yet')).toBeInTheDocument();
+  });
+
+  it('should render the private-chat empty state when isPrivate is true', () => {
+    render(() => <ChatView messages={[]} isLoading={false} isPrivate />);
+    expect(screen.getByText('Private chat')).toBeInTheDocument();
+    expect(screen.queryByText('No messages yet')).not.toBeInTheDocument();
   });
 
   it('should render messages', () => {

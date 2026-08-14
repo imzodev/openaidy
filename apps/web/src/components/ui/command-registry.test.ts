@@ -10,6 +10,9 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
     navigate: vi.fn(),
     newSession: vi.fn(),
+    togglePrivacy: vi.fn(),
+    canTogglePrivacy: vi.fn(() => false),
+    isSessionPrivate: vi.fn(() => false),
     toggleTheme: vi.fn(),
     toggleSidebar: vi.fn(),
     ...overrides,

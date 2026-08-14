@@ -174,6 +174,8 @@ export type SessionCreateRequest = WSMessage<
     providerId?: string;
     modelId?: string;
     metadata?: Record<string, unknown>;
+    /** Create a private/ephemeral session — never persisted to the DB. */
+    ephemeral?: boolean;
   }
 >;
 
@@ -356,6 +358,7 @@ export type SessionGetResponse = WSMessage<
       agentId?: string;
       createdAt: string;
       updatedAt?: string;
+      ephemeral?: boolean;
     };
   }
 >;

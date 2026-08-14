@@ -70,6 +70,8 @@ export class SessionHandler {
       // Create session via service
       const session = await this.sessionService.createSession(
         `Session ${new Date().toISOString()}`,
+        undefined,
+        request.payload.ephemeral ? { ephemeral: true } : undefined,
       );
 
       const sessionRecord = session as Session;
@@ -134,6 +136,9 @@ export class SessionHandler {
             updatedAt: sessionRecord.updatedAt
               ? new Date(sessionRecord.updatedAt).toISOString()
               : undefined,
+            ...((sessionRecord as { ephemeral?: boolean }).ephemeral && {
+              ephemeral: true,
+            }),
           },
         },
         request.id,

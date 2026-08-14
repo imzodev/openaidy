@@ -197,6 +197,44 @@ describe('Session Message Routes', { timeout: 15000 }, () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    it('creates a private/ephemeral session when ephemeral: true is passed', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Private chat', ephemeral: true },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = response.json();
+      expect(body.ephemeral).toBe(true);
+    });
+
+    it('excludes a private/ephemeral session from GET /sessions', async () => {
+      const created = (
+        await app.inject({
+          method: 'POST',
+          url: '/api/sessions',
+          payload: { title: 'Private chat 2', ephemeral: true },
+        })
+      ).json();
+
+      const listed = (
+        await app.inject({ method: 'GET', url: '/api/sessions' })
+      ).json();
+      expect(
+        listed.items.some((s: { id: string }) => s.id === created.id),
+      ).toBe(false);
+
+      // Still directly reachable by id within the same process/session.
+      const fetched = (
+        await app.inject({
+          method: 'GET',
+          url: `/api/sessions/${created.id}`,
+        })
+      ).json();
+      expect(fetched.ephemeral).toBe(true);
+    });
   });
 
   describe('GET /sessions', () => {

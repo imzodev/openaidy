@@ -35,6 +35,7 @@ import {
   Keyboard,
   MessageSquare,
   Bot as RecentAgentIcon,
+  EyeOff,
 } from 'lucide-solid';
 import type { ViewType } from '../Sidebar';
 import type { SessionMessage } from '../../lib/api';
@@ -70,6 +71,14 @@ export type CommandContext = {
   navigate: (view: ViewType) => void;
   navigateToAddon?: (addonId: string) => void;
   newSession: () => void;
+  /**
+   * Flip the active session's private/normal flag. Only meaningful while the
+   * session is still empty — `canTogglePrivacy` reports whether that's
+   * currently true, so the command can hide itself otherwise.
+   */
+  togglePrivacy: () => void;
+  canTogglePrivacy: () => boolean;
+  isSessionPrivate: () => boolean;
   toggleTheme: () => void;
   toggleSidebar: () => void;
   stopAgent?: () => void;
@@ -231,6 +240,18 @@ export function buildStaticCommands(ctx: CommandContext): Command[] {
       keywords: ['create', 'start'],
       category: 'actions',
       run: () => ctx.newSession(),
+    },
+    {
+      id: 'action.toggle-privacy',
+      label: ctx.isSessionPrivate() ? 'Make Chat Normal' : 'Make Chat Private',
+      hint: ctx.isSessionPrivate()
+        ? 'Switch back to a normal chat'
+        : 'Not saved — gone on refresh',
+      icon: EyeOff,
+      keywords: ['incognito', 'ephemeral', 'private', 'toggle'],
+      category: 'actions',
+      hidden: !ctx.canTogglePrivacy(),
+      run: () => ctx.togglePrivacy(),
     },
     {
       id: 'action.send-message',

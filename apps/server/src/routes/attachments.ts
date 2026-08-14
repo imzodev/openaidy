@@ -60,6 +60,19 @@ export const attachmentRoutes: FastifyPluginAsync<
         return { error: 'Session not found', sessionId };
       }
 
+      // Attachments are disk-backed and would defeat the "nothing is
+      // stored" guarantee of a private chat. The client disables the
+      // upload button for a private session, but a direct API call must
+      // be rejected too — same rule and error code as submitMessageStreaming
+      // enforces for a message that references an attachment id.
+      if ((session as { ephemeral?: boolean }).ephemeral === true) {
+        reply.code(403);
+        return {
+          error: 'session.attachments_unsupported',
+          message: 'Attachments are not supported in a private chat',
+        };
+      }
+
       let body;
       try {
         body = uploadAttachmentSchema.parse(request.body);

@@ -376,6 +376,20 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     };
 
+    // A private (ephemeral) session can be swept server-side by the TTL
+    // backstop (see websocket/index.ts) if left idle long enough. Surface
+    // that instead of leaving the chat view silently pointed at a session
+    // that no longer exists.
+    const handleSessionDeleted = (event: { payload: { sessionId: string } }) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      if (selectedSessionId() === event.payload.sessionId) {
+        setSelectedSessionId(undefined);
+        setSubmitError(
+          'This private chat expired from inactivity and was removed.',
+        );
+      }
+    };
+
     const handleChoicesEvent = (event: { payload: ChoicesEvent }) => {
       clearStreamWatchdog();
       setCurrentChoices(event.payload);
@@ -393,6 +407,7 @@ function AppContent(props: AppContentProps) {
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
     const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
+    const unsubDeleted = wsClient.on('session.deleted', handleSessionDeleted);
     const unsubChoices = wsClient.on('session.run.choices', handleChoicesEvent);
     const unsubExecOutput = wsClient.on(
       'session.stream.exec_output',
@@ -430,6 +445,7 @@ function AppContent(props: AppContentProps) {
       unsubEnd();
       unsubError();
       unsubUpdated();
+      unsubDeleted();
       unsubChoices();
       unsubExecOutput();
       unsubToolCancelled();
@@ -511,6 +527,18 @@ function AppContent(props: AppContentProps) {
     enabled: !!selectedSessionId(),
   }));
 
+  // True once `sessionQuery` has resolved the *currently selected* session
+  // and it's flagged ephemeral (a private chat). Guards on `data.id` matching
+  // the current selection so a stale previous-session result never flashes
+  // the wrong state while switching sessions.
+  const isActiveSessionPrivate = () => {
+    const data = sessionQuery.data;
+    const sid = selectedSessionId();
+    return (
+      !!data && !('error' in data) && data.id === sid && data.ephemeral === true
+    );
+  };
+
   // Drives the first-run onboarding gate. A fresh install has no provider
   // configured; we show the onboarding screen until the user sets one up.
   // The ['config'] key is shared with the settings `useConfig` hook, so saving
@@ -565,8 +593,67 @@ function AppContent(props: AppContentProps) {
 
   // Handlers
   const handleCreateSession = async () => {
+    // Don't pile up empty sessions: if the user is already sitting on the
+    // most recently active session and hasn't sent anything in it yet,
+    // "New Session" just takes them there instead of creating another one.
+    if (
+      selectedSessionId() &&
+      selectedSessionId() === latestSessionId() &&
+      !messagesState.isLoading() &&
+      messagesState.total() === 0
+    ) {
+      navigate('chat');
+      return;
+    }
     const title = `Session ${new Date().toISOString()}`;
     await createSessionMutation.mutateAsync(title);
+  };
+
+  // Privacy is a single toggle on the *active* session, not a separate
+  // "start a private chat" action — there is only one button/control for
+  // this (the header privacy toggle). It only does anything while the
+  // session is still empty (see canTogglePrivacy): once a message exists,
+  // privacy is locked in for that session's lifetime, matching the "gone on
+  // refresh, never stored" guarantee a private chat makes. Toggling in
+  // either direction deletes the (empty, so nothing is lost) current session
+  // and starts a fresh one with the opposite flag — there's no in-place
+  // "convert" operation, since an empty session carries no data either way.
+  const canTogglePrivacy = () =>
+    !!selectedSessionId() &&
+    !messagesState.isLoading() &&
+    messagesState.total() === 0;
+  const [isTogglingPrivacy, setIsTogglingPrivacy] = createSignal(false);
+  const handleTogglePrivacy = async () => {
+    const id = selectedSessionId();
+    if (!id || !canTogglePrivacy()) return;
+    const makePrivate = !isActiveSessionPrivate();
+    setIsTogglingPrivacy(true);
+    try {
+      await deleteSession(id);
+      // The old session is gone server-side either way from here on —
+      // invalidate now so it can't linger in the sidebar/sessions list if
+      // the createSession call below fails.
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      const title = makePrivate
+        ? `Private chat ${new Date().toISOString()}`
+        : `Session ${new Date().toISOString()}`;
+      const session = await createSession(
+        title,
+        makePrivate ? { ephemeral: true } : undefined,
+      );
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      setSelectedSessionId(session.id);
+    } catch (err) {
+      // The old session may already be deleted server-side by this point —
+      // clear the selection instead of leaving the UI pointing at it, and
+      // surface the error so the user knows to retry with "New Session".
+      setSelectedSessionId(undefined);
+      setSubmitError(
+        err instanceof Error ? err.message : 'Failed to toggle privacy',
+      );
+    } finally {
+      setIsTogglingPrivacy(false);
+    }
   };
 
   const handleStartChatWithAgent = async (agentId: string) => {
@@ -908,27 +995,28 @@ function AppContent(props: AppContentProps) {
     return agentsQuery.data?.items || [];
   };
 
+  // Id of the most-recently-active session (by updatedAt, falling back to
+  // createdAt) — the server bumps updatedAt on every successful run (via
+  // updateSessionAgentId) and broadcasts session.updated, so a session the
+  // user just chatted with floats to the top. Shared by the auto-select
+  // effect below and handleCreateSession's "don't pile up empty sessions"
+  // check.
+  const latestSessionId = (): string | undefined => {
+    const sessionList = sessionsQuery.data?.items || [];
+    if (sessionList.length === 0) return undefined;
+    const activityMs = (s: (typeof sessionList)[number]) =>
+      new Date(s.updatedAt ?? s.createdAt ?? 0).getTime();
+    return [...sessionList].sort((a, b) => activityMs(b) - activityMs(a))[0].id;
+  };
+
   // Auto-select most recent session when on chat view with no session selected
   createEffect(() => {
-    const sessionList = sessionsQuery.data?.items || [];
     const currentView = view();
     const currentSelectedId = selectedSessionId();
 
-    if (
-      currentView === 'chat' &&
-      !currentSelectedId &&
-      sessionList.length > 0
-    ) {
-      // Sort by updatedAt (last activity) descending, falling back to createdAt.
-      // The server bumps updatedAt on every successful run (via
-      // updateSessionAgentId) and broadcasts session.updated, so a session the
-      // user just chatted with floats to the top.
-      const activityMs = (s: (typeof sessionList)[number]) =>
-        new Date(s.updatedAt ?? s.createdAt ?? 0).getTime();
-      const sorted = [...sessionList].sort(
-        (a, b) => activityMs(b) - activityMs(a),
-      );
-      setSelectedSessionId(sorted[0].id);
+    if (currentView === 'chat' && !currentSelectedId) {
+      const id = latestSessionId();
+      if (id) setSelectedSessionId(id);
     }
   });
 
@@ -974,12 +1062,17 @@ function AppContent(props: AppContentProps) {
     recordRecentAgent({ id, name: agent?.name ?? id });
   };
 
-  // Re-run recent-tracking whenever the selected session changes. Effect
-  // intentionally runs only when the id actually changes; reading
-  // `selectedSessionId()` is the trigger.
+  // Re-run recent-tracking whenever the selected session changes. Waits for
+  // `sessionQuery` to resolve *for this session id* before recording, so a
+  // private (ephemeral) chat is never written to the `openaidy_recent_items`
+  // localStorage key — that would survive a refresh and defeat the "gone on
+  // refresh" guarantee private chats are supposed to have.
   createEffect(() => {
     const sid = selectedSessionId();
-    if (sid) rememberSession(sid);
+    if (!sid) return;
+    const data = sessionQuery.data;
+    if (!data || 'error' in data || data.id !== sid) return;
+    if (!data.ephemeral) rememberSession(sid);
   });
 
   createEffect(() => {
@@ -993,6 +1086,9 @@ function AppContent(props: AppContentProps) {
     navigate,
     navigateToAddon,
     newSession: handleCreateSession,
+    togglePrivacy: () => void handleTogglePrivacy(),
+    canTogglePrivacy,
+    isSessionPrivate: isActiveSessionPrivate,
     toggleTheme: () => {
       // Cycle light → dark → system → light, matching ThemeToggle.
       const next =
@@ -1068,26 +1164,93 @@ function AppContent(props: AppContentProps) {
               </div>
             </div>
 
-            <div class="hidden sm:flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-text-tertiary shadow-sm">
-              <span class="truncate max-w-[220px]">
-                {view() === 'settings'
-                  ? 'Manage configuration'
-                  : selectedSessionId()
-                    ? 'Active conversation'
-                    : 'No session selected'}
-              </span>
-            </div>
+            {/*
+              Right-side icon cluster. Grouped in one flex container (matching
+              the left-side breadcrumb group above) so `justify-between` on
+              the parent only ever splits the header into two halves — five
+              ungrouped siblings here previously left `justify-between`
+              spreading equal gaps between all of them, which is what made
+              the privacy toggle look randomly placed rather than aligned
+              with the other header controls.
+            */}
+            <div class="flex items-center gap-3">
+              {/*
+                Privacy toggle: a real switch (role="switch" + aria-checked),
+                not a status label — the track/thumb visually commits to
+                "this is a binary control" the way the old text-pill styling
+                never did. Only rendered where it's actually actionable (a
+                selected chat session); nothing to toggle in other views.
+                Not a native `disabled` button when locked (session already
+                has messages) — disabled elements don't reliably fire hover
+                events, which would kill the explanatory tooltip right when
+                it's most needed. handleTogglePrivacy no-ops on its own when
+                canTogglePrivacy() is false.
+              */}
+              <Show when={view() === 'chat' && !!selectedSessionId()}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isActiveSessionPrivate()}
+                  onClick={() => void handleTogglePrivacy()}
+                  disabled={isTogglingPrivacy()}
+                  title={
+                    canTogglePrivacy()
+                      ? isActiveSessionPrivate()
+                        ? 'No messages yet — click to switch back to a normal chat'
+                        : 'No messages yet — click to make this chat private (not saved, gone on refresh)'
+                      : isActiveSessionPrivate()
+                        ? "This chat has messages, so it's private for the rest of its lifetime. Not stored, not listed, gone on refresh."
+                        : "This chat already has messages, so it can't be made private now — start a new chat instead."
+                  }
+                  aria-label={
+                    isTogglingPrivacy()
+                      ? 'Switching…'
+                      : isActiveSessionPrivate()
+                        ? 'Private chat'
+                        : 'Normal chat'
+                  }
+                  class={`inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1.5 sm:px-3 py-1.5 shadow-sm transition-colors disabled:opacity-60 ${
+                    canTogglePrivacy()
+                      ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+                      : 'cursor-default opacity-70'
+                  }`}
+                >
+                  <span class="hidden sm:inline text-sm font-medium text-text-secondary whitespace-nowrap">
+                    {isTogglingPrivacy()
+                      ? 'Switching…'
+                      : isActiveSessionPrivate()
+                        ? 'Private chat'
+                        : 'Normal chat'}
+                  </span>
+                  <span
+                    class={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+                      isActiveSessionPrivate()
+                        ? 'bg-violet-500'
+                        : 'bg-gray-300 dark:bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        isActiveSessionPrivate()
+                          ? 'translate-x-[18px]'
+                          : 'translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+                </button>
+              </Show>
 
-            <ConnectionStatus />
-            <PresenceIndicator class="hidden md:flex" />
-            <button
-              type="button"
-              onClick={props.onLogout}
-              title="Log out"
-              class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <LogOut class="w-4 h-4" />
-            </button>
+              <ConnectionStatus />
+              <PresenceIndicator class="hidden md:flex" />
+              <button
+                type="button"
+                onClick={props.onLogout}
+                title="Log out"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                <LogOut class="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1255,6 +1418,7 @@ function AppContent(props: AppContentProps) {
                 hasMore={messagesState.hasMore()}
                 total={messagesState.total()}
                 onLoadMore={() => void messagesState.loadMore()}
+                isPrivate={isActiveSessionPrivate()}
               />
               <Show when={currentChoices()}>
                 {(c) => (
@@ -1299,6 +1463,7 @@ function AppContent(props: AppContentProps) {
                 selectedAgentId={effectiveAgentId()}
                 onAgentSelect={handleAgentSelect}
                 onInputReady={(focus) => setFocusChatInput(() => focus)}
+                attachmentsDisabled={isActiveSessionPrivate()}
               />
               <Show when={submitError()}>
                 <div class="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">

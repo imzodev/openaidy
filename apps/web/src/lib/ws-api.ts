@@ -68,10 +68,13 @@ export async function listSessions(): Promise<{ items: Session[] }> {
   );
 }
 
-export async function createSession(title: string): Promise<Session> {
+export async function createSession(
+  title: string,
+  options?: { ephemeral?: boolean },
+): Promise<Session> {
   return withWebSocketFallback(
     async (client) => {
-      const response = await client.createSession({ title });
+      const response = await client.createSession({ title, ...options });
       if (response.type !== 'session.created') {
         throw new Error('Unexpected response type for session.create');
       }
@@ -80,9 +83,10 @@ export async function createSession(title: string): Promise<Session> {
         id: response.payload.sessionId,
         title,
         createdAt: response.payload.createdAt,
+        ...(options?.ephemeral && { ephemeral: true }),
       };
     },
-    () => createSessionRest(title),
+    () => createSessionRest(title, options),
   );
 }
 
@@ -101,6 +105,7 @@ export async function getSession(id: string): Promise<Session | ApiError> {
         agentId: response.payload.session.agentId,
         createdAt: response.payload.session.createdAt,
         updatedAt: response.payload.session.updatedAt,
+        ...(response.payload.session.ephemeral && { ephemeral: true }),
       };
     },
     () => getSessionRest(id),

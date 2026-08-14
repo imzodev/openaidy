@@ -1,5 +1,5 @@
 import { Show, For, createEffect, onMount } from 'solid-js';
-import { Bot, CircleStop } from 'lucide-solid';
+import { Bot, CircleStop, EyeOff } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
@@ -53,6 +53,8 @@ type ChatViewProps = {
   total?: number;
   /** Invoked when the user clicks "Load more" or scrolls to the top. */
   onLoadMore?: () => void;
+  /** True when the active session is a private (ephemeral) chat. */
+  isPrivate?: boolean;
 };
 
 export function ChatView(props: ChatViewProps) {
@@ -222,10 +224,19 @@ export function ChatView(props: ChatViewProps) {
         }
       >
         <div class="flex flex-col items-center justify-center h-full text-text-tertiary">
-          <Bot class="w-12 h-12 mb-4 opacity-50" />
-          <p class="text-lg font-medium">No messages yet</p>
+          <Show
+            when={props.isPrivate}
+            fallback={<Bot class="w-12 h-12 mb-4 opacity-50" />}
+          >
+            <EyeOff class="w-12 h-12 mb-4 opacity-50" />
+          </Show>
+          <p class="text-lg font-medium">
+            {props.isPrivate ? 'Private chat' : 'No messages yet'}
+          </p>
           <p class="text-sm mt-1">
-            Start a conversation by sending a message below
+            {props.isPrivate
+              ? "Not saved, not listed — gone once you leave. Say what's on your mind below."
+              : 'Start a conversation by sending a message below'}
           </p>
         </div>
       </Show>
