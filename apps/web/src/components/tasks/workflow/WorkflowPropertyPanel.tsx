@@ -179,17 +179,49 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
   // poll refetching the same selected edge (e.g. while the workflow is
   // running) must not clobber an operator/value the user is mid-typing
   // before they've blurred to save it. Only an actual selection change
-  // (a different edge id) should reset the draft fields.
+  // (a different edge id) should reset the draft fields — and, like the
+  // node effect, that switch first flushes a dirty edit so it isn't
+  // silently discarded when the user picks a different edge without
+  // blurring the value input first.
   let lastEdgeId: string | undefined;
+  let lastCommittedEdgeKind: 'dependency' | 'conditional' = 'dependency';
+  let lastCommittedEdgeOperator: ConditionOperator = 'equals';
+  let lastCommittedEdgeValue = '';
   createEffect(() => {
     const edge = selectedEdge();
     const currentId = edge?.id;
     if (currentId === lastEdgeId) return;
+
+    if (lastEdgeId) {
+      const dirty =
+        edgeKind() !== lastCommittedEdgeKind ||
+        edgeOperator() !== lastCommittedEdgeOperator ||
+        edgeValue() !== lastCommittedEdgeValue;
+      // Same empty-value guard as saveEdgeFields: don't flush a
+      // conditional edge with no value typed yet — there's nothing
+      // valid to save.
+      if (
+        dirty &&
+        !(edgeKind() === 'conditional' && edgeValue().trim() === '')
+      ) {
+        props.onUpdateEdge(lastEdgeId, {
+          edgeKind: edgeKind(),
+          condition:
+            edgeKind() === 'conditional'
+              ? { operator: edgeOperator(), value: edgeValue() }
+              : null,
+        });
+      }
+    }
     lastEdgeId = currentId;
     if (!edge) return;
+
     setEdgeKind(edge.edgeKind);
     setEdgeOperator(edge.condition?.operator ?? 'equals');
     setEdgeValue(edge.condition?.value ?? '');
+    lastCommittedEdgeKind = edge.edgeKind;
+    lastCommittedEdgeOperator = edge.condition?.operator ?? 'equals';
+    lastCommittedEdgeValue = edge.condition?.value ?? '';
   });
 
   const dependsOn = createMemo(() => {
@@ -247,6 +279,9 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
           ? { operator: edgeOperator(), value: edgeValue() }
           : null,
     });
+    lastCommittedEdgeKind = edgeKind();
+    lastCommittedEdgeOperator = edgeOperator();
+    lastCommittedEdgeValue = edgeValue();
     flash(setEdgeSaveStatus);
   }
 

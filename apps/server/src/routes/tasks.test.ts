@@ -684,6 +684,19 @@ describe('taskRoutes', () => {
       expect(mockService.updateSubtask).not.toHaveBeenCalled();
     });
 
+    it('returns 400 when title is cleared without a description to re-derive from', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { title: '   ' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.updateSubtask).not.toHaveBeenCalled();
+    });
+
     it('re-derives the title from the description when title is cleared alongside it', async () => {
       const route = await setupWithMock();
       mockService.updateSubtask.mockResolvedValue({ ok: true, data: {} });
