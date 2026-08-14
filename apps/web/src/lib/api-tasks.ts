@@ -682,6 +682,7 @@ export type {
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
+  TaskDetailView,
 } from './types';
 
 /**
@@ -816,7 +817,7 @@ export async function listTaskExecutions(
   };
 }
 
-// ── Deliverables ──────────────────────────────────────────────────────────────
+// ── Deliverables ─────────────────────────────────────────────────────────────
 
 /**
  * Deliverable type

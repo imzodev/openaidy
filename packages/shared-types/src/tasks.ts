@@ -43,6 +43,8 @@ export const PLANNING_STATUS_VALUES = [
   'failed',
 ] as const;
 
+export const TASK_DETAIL_VIEW_VALUES = ['detail', 'executions'] as const;
+
 // ========================================
 // Task Types
 // ========================================
@@ -83,6 +85,12 @@ export type ConditionOperator = (typeof CONDITION_OPERATOR_VALUES)[number];
  * Agent role on a task
  */
 export type AgentRole = (typeof AGENT_ROLE_VALUES)[number];
+
+/**
+ * Which sub-view of the Tasks page's task-detail overlay is showing —
+ * the task's own detail panel, or its recurring-execution history.
+ */
+export type TaskDetailView = (typeof TASK_DETAIL_VIEW_VALUES)[number];
 
 /**
  * Task with full details (returned by GET /tasks/:id)
