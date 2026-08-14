@@ -25,6 +25,14 @@ import { ThemeToggle } from './ThemeToggle';
 import { SessionList } from './SessionList';
 import type { Session, AddonRecord } from '../lib/api';
 import { updateBadgeVisible } from '../stores/update-notice';
+import { viewToRouteMap, RoutePaths } from '../lib/router';
+
+// A plain left-click (no modifier keys) is handled as an in-SPA
+// navigation via preventDefault; ctrl/cmd/middle/shift-click falls through
+// to the browser's native anchor behavior (new tab/window) untouched.
+function isPlainLeftClick(e: MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
 
 export type ViewType =
   | 'chat'
@@ -193,9 +201,11 @@ export function Sidebar(props: SidebarProps) {
               </div>
             </Show>
             <div class="flex items-center gap-1 px-2">
-              <button
-                type="button"
-                onClick={() => {
+              <a
+                href={RoutePaths.CHAT}
+                onClick={(e) => {
+                  if (!isPlainLeftClick(e)) return;
+                  e.preventDefault();
                   props.onClearSession?.();
                   props.onNavigate('chat');
                   if (isMobileViewport()) {
@@ -217,7 +227,7 @@ export function Sidebar(props: SidebarProps) {
                 <Show when={!props.isCollapsed}>
                   <span class="text-sm">Chat</span>
                 </Show>
-              </button>
+              </a>
               <Show when={!props.isCollapsed}>
                 <button
                   type="button"
@@ -269,9 +279,11 @@ export function Sidebar(props: SidebarProps) {
                   {(item) => {
                     const Icon = item.icon;
                     return (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <a
+                        href={viewToRouteMap[item.id]}
+                        onClick={(e) => {
+                          if (!isPlainLeftClick(e)) return;
+                          e.preventDefault();
                           props.onNavigate(item.id);
                           if (isMobileViewport()) {
                             props.onCollapse();
@@ -292,7 +304,7 @@ export function Sidebar(props: SidebarProps) {
                         <Show when={!props.isCollapsed}>
                           <span class="text-sm">{item.label}</span>
                         </Show>
-                      </button>
+                      </a>
                     );
                   }}
                 </For>
@@ -305,9 +317,11 @@ export function Sidebar(props: SidebarProps) {
                 >
                   <For each={props.enabledAddons ?? []}>
                     {(addon) => (
-                      <button
-                        type="button"
-                        onClick={() => {
+                      <a
+                        href={`/addons/${addon.addonId}`}
+                        onClick={(e) => {
+                          if (!isPlainLeftClick(e)) return;
+                          e.preventDefault();
                           props.onAddonSelect?.(addon);
                           if (isMobileViewport()) {
                             props.onCollapse();
@@ -328,7 +342,7 @@ export function Sidebar(props: SidebarProps) {
                         <Show when={!props.isCollapsed}>
                           <span class="text-sm truncate">{addon.name}</span>
                         </Show>
-                      </button>
+                      </a>
                     )}
                   </For>
                 </Show>
@@ -345,9 +359,11 @@ export function Sidebar(props: SidebarProps) {
           >
             <ThemeToggle isCollapsed={props.isCollapsed} />
 
-            <button
-              type="button"
-              onClick={() => {
+            <a
+              href={RoutePaths.SETTINGS}
+              onClick={(e) => {
+                if (!isPlainLeftClick(e)) return;
+                e.preventDefault();
                 props.onNavigate('settings');
                 if (isMobileViewport()) {
                   props.onCollapse();
@@ -382,7 +398,7 @@ export function Sidebar(props: SidebarProps) {
                   Update
                 </span>
               </Show>
-            </button>
+            </a>
           </div>
         </div>
       </aside>
