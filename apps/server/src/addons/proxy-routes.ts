@@ -351,6 +351,17 @@ export const addonProxyRoutes: FastifyPluginAsync<
           .send({ error: 'SESSION_NOT_FOUND', message: 'Session not found' });
       }
 
+      // Same rule as the human-facing /sessions/:sessionId/attachments
+      // route: attachments are disk-backed and would defeat a private
+      // chat's "nothing is stored" guarantee, so an addon can't upload
+      // one to an ephemeral session either.
+      if ((session as { ephemeral?: boolean }).ephemeral === true) {
+        return reply.code(403).send({
+          error: 'session.attachments_unsupported',
+          message: 'Attachments are not supported in a private chat',
+        });
+      }
+
       let body: ReturnType<typeof uploadAttachmentSchema.parse>;
       try {
         body = uploadAttachmentSchema.parse(request.body);
