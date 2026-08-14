@@ -112,9 +112,12 @@ function AppContent(props: AppContentProps) {
     currentView,
     currentAddonId,
     currentWorkflowTaskId,
+    currentTaskDetailId,
+    currentTaskDetailView,
     navigate,
     navigateToAddon,
     navigateToWorkflow,
+    navigateToTaskDetail,
   } = createRouter();
 
   // Get WebSocket client for streaming events
@@ -123,16 +126,6 @@ function AppContent(props: AppContentProps) {
   const [selectedSessionId, setSelectedSessionId] = createSignal<
     string | undefined
   >(undefined);
-  // Which task's detail overlay (and sub-view within it) TasksPage should
-  // show — owned here, not inside TasksPage, so it survives navigating
-  // away to view a session and back. TasksPage unmounts/remounts on every
-  // `view()` change (it's inside a <Show>), so state that lived as a local
-  // signal there was lost on the round trip: "execution history" -> "view
-  // session" -> back landed on a bare Tasks page with no modal.
-  const [taskDetailId, setTaskDetailId] = createSignal<string | null>(null);
-  const [taskDetailView, setTaskDetailView] = createSignal<
-    'detail' | 'executions'
-  >('detail');
   const [enabledAddons, setEnabledAddons] = createSignal<AddonRecord[]>([]);
   const activeAddon = () =>
     enabledAddons().find((a) => a.addonId === currentAddonId());
@@ -1127,10 +1120,10 @@ function AppContent(props: AppContentProps) {
               setSelectedSessionId(sessionId);
               navigate('chat');
             }}
-            detailTaskId={taskDetailId()}
-            onDetailTaskIdChange={setTaskDetailId}
-            detailView={taskDetailView()}
-            onDetailViewChange={setTaskDetailView}
+            detailTaskId={currentTaskDetailId()}
+            detailView={currentTaskDetailView()}
+            onNavigateToTaskDetail={navigateToTaskDetail}
+            onCloseTaskDetail={() => navigate('tasks')}
           />
         </Show>
 
