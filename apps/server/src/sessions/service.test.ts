@@ -422,10 +422,64 @@ describe('SessionMessageService — ephemeral (private chat) sessions', () => {
     // on this test's own session rather than an exact count.)
     const removed = service.cleanupExpiredEphemeralSessions(-1);
 
-    expect(removed).toBeGreaterThanOrEqual(1);
+    expect(removed.length).toBeGreaterThanOrEqual(1);
+    expect(removed).toContain(privId);
     expect(await service.getSession(privId)).toBeNull();
     // A non-ephemeral session is never swept, regardless of age.
     expect(await service.getSession(normalId)).not.toBeNull();
+  });
+
+  it('cleanupExpiredEphemeralSessions is activity-based: a session with a recent message is not swept even though it was created before the TTL cutoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const agents = new AgentRegistry();
+      agents.replaceAll([makeAgent(['echo'])]);
+      const builtinTools = new BuiltinToolRegistry();
+      builtinTools.register(makeTool('echo'));
+
+      const service = new SessionMessageService({
+        providers: {
+          registry: {
+            getDefault: vi.fn(),
+            getEntry: vi.fn(),
+          } as unknown as ProviderRegistryService,
+          selection: {} as unknown as ProviderSelectionService,
+          invocation: {
+            invoke: vi.fn(),
+            invokeStream: vi.fn(async function* () {
+              yield ok({
+                type: 'stream.started',
+                providerId: 'mock',
+                model: 'mock',
+              });
+              yield ok({ type: 'stream.content_delta', delta: 'hi' });
+              yield ok({ type: 'stream.finished', finishReason: 'stop' });
+            }),
+          } as unknown as ModelInvocationService,
+        },
+        agents,
+        builtinTools,
+      });
+
+      const priv = await service.createSession('Private chat', undefined, {
+        ephemeral: true,
+      });
+      const privId = (priv as { id: string }).id;
+
+      // Created 2h ago (older than the 1h maxAge used below by creation
+      // time), then sent a message just 1 minute ago — bumping the
+      // session's last-activity timestamp (`updatedAt`).
+      vi.advanceTimersByTime(2 * 60 * 60 * 1000);
+      await submit(service, privId);
+      vi.advanceTimersByTime(60 * 1000);
+
+      const removed = service.cleanupExpiredEphemeralSessions(60 * 60 * 1000);
+
+      expect(removed).not.toContain(privId);
+      expect(await service.getSession(privId)).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('hides ephemeral-unsafe tools (e.g. memory_save) from the model in a private chat, but keeps them for a normal session', async () => {
