@@ -872,12 +872,21 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     }
     // Title is optional — clearing it (with a description in the same
     // request, which is how the workflow editor always saves the pair)
-    // re-derives it instead of persisting a blank/whitespace title.
-    if (
-      input.title !== undefined &&
-      input.title.trim() === '' &&
-      input.description !== undefined
-    ) {
+    // re-derives it instead of persisting a blank/whitespace title. A
+    // title-only patch has no description to derive from, so it's
+    // rejected rather than silently persisting a blank title.
+    if (input.title !== undefined && input.title.trim() === '') {
+      if (input.description === undefined) {
+        reply.code(400);
+        return {
+          ok: false,
+          error: {
+            code: 'validation.empty_title',
+            message:
+              'title must not be empty unless description is supplied in the same request',
+          },
+        };
+      }
       input.title = deriveTitleFromDescription(input.description);
     }
 
