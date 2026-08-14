@@ -1,5 +1,6 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import type { ViewType } from '../components/Sidebar';
+import type { TaskDetailView } from '@openaidy/shared-types';
 
 // Route path constants - single source of truth
 export const RoutePaths = {
@@ -17,6 +18,7 @@ export const RoutePaths = {
   USAGE: '/usage',
   BACKUPS: '/backups',
   ADDONS: '/addons',
+  WORKFLOWS: '/workflows',
   API_KEYS: '/api-keys',
   SETTINGS: '/settings',
 } as const;
@@ -40,6 +42,8 @@ export const viewToRouteMap: Record<ViewType, RoutePath> = {
   backups: RoutePaths.BACKUPS,
   addons: RoutePaths.ADDONS,
   'addon-view': RoutePaths.ADDONS,
+  workflows: RoutePaths.WORKFLOWS,
+  'workflow-detail': RoutePaths.WORKFLOWS,
   'api-keys': RoutePaths.API_KEYS,
   settings: RoutePaths.SETTINGS,
 };
@@ -61,6 +65,7 @@ export const routeToViewMap: Record<string, ViewType> = {
   [RoutePaths.USAGE]: 'usage',
   [RoutePaths.BACKUPS]: 'backups',
   [RoutePaths.ADDONS]: 'addons',
+  [RoutePaths.WORKFLOWS]: 'workflows',
   [RoutePaths.API_KEYS]: 'api-keys',
   [RoutePaths.SETTINGS]: 'settings',
 };
@@ -96,10 +101,37 @@ export function createRouter() {
     return m ? m[1] : null;
   };
 
+  // Parse /workflows/:taskId — returns taskId or null
+  const currentWorkflowTaskId = (): string | null => {
+    const p = currentPath();
+    const m = p.match(/^\/workflows\/([^/]+)$/);
+    return m ? m[1] : null;
+  };
+
+  // Parse /tasks/:taskId(/executions)? — returns taskId or null. Encoding
+  // the Tasks page's detail-overlay state in the URL (rather than a
+  // lifted signal) means it survives exactly the navigation it should —
+  // e.g. "view session" and back — and nothing more: navigating to an
+  // unrelated view (Settings, Pulses, ...) changes the URL away from
+  // /tasks/:taskId, so the overlay naturally doesn't reopen on return.
+  const currentTaskDetailId = (): string | null => {
+    const p = currentPath();
+    const m = p.match(/^\/tasks\/([^/]+)(?:\/executions)?$/);
+    return m ? m[1] : null;
+  };
+
+  // 'executions' when the URL ends in /executions, 'detail' otherwise.
+  const currentTaskDetailView = (): TaskDetailView => {
+    const p = currentPath();
+    return /^\/tasks\/[^/]+\/executions$/.test(p) ? 'executions' : 'detail';
+  };
+
   // Get current view from path
   const currentView = (): ViewType => {
     const p = currentPath();
     if (currentAddonId()) return 'addon-view';
+    if (currentWorkflowTaskId()) return 'workflow-detail';
+    if (currentTaskDetailId()) return 'tasks';
     return routeToViewMap[p] || 'sessions';
   };
 
@@ -115,6 +147,28 @@ export function createRouter() {
   // Navigate directly to an addon by its addonId
   const navigateToAddon = (addonId: string) => {
     const newPath = `/addons/${addonId}`;
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+      setCurrentPath(newPath);
+    }
+  };
+
+  // Navigate directly to a workflow (task) by its taskId
+  const navigateToWorkflow = (taskId: string) => {
+    const newPath = `/workflows/${taskId}`;
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', newPath);
+      setCurrentPath(newPath);
+    }
+  };
+
+  // Navigate to a task's detail overlay (or its executions sub-view).
+  const navigateToTaskDetail = (
+    taskId: string,
+    view: TaskDetailView = 'detail',
+  ) => {
+    const newPath =
+      view === 'executions' ? `/tasks/${taskId}/executions` : `/tasks/${taskId}`;
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
       setCurrentPath(newPath);
@@ -144,8 +198,13 @@ export function createRouter() {
     currentPath,
     currentView,
     currentAddonId,
+    currentWorkflowTaskId,
+    currentTaskDetailId,
+    currentTaskDetailView,
     navigate,
     navigateToAddon,
+    navigateToWorkflow,
+    navigateToTaskDetail,
   };
 }
 

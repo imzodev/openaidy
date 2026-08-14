@@ -407,6 +407,37 @@ export class SubtasksRepository {
   }
 
   /**
+   * Reset a single subtask to a fresh, never-run state — clearing its
+   * previous result, session link, retry count and pending-verification
+   * state, and moving it back to `pending`. Scoped single-row analog of
+   * `resetByTask`, used when the operations layer detects a content
+   * edit on an already-terminal (`completed`/`failed`) subtask, so the
+   * next `executeSubtasks()` scan picks it back up instead of silently
+   * skipping it.
+   */
+  async resetOne(id: string): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({
+        status: 'pending',
+        result: null,
+        sessionId: null,
+        retryCount: 0,
+        pendingVerificationResult: null,
+        awaitingApprovalSince: null,
+        approvalDecision: null,
+        approvalNote: null,
+        approvedBy: null,
+        loopIterationCount: 0,
+        loopLastResult: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.subtasks.id, id))
+      .returning();
+    return results[0] ?? null;
+  }
+
+  /**
    * Delete all subtasks for a task
    */
   async deleteByTask(taskId: string): Promise<schema.Subtask[]> {

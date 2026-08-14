@@ -84,7 +84,7 @@ export class TaskOperations {
       }
     }
 
-    if (task.planningEnabled && this.planningService) {
+    if (task.planningEnabled && this.planningService && !input.skipAutoPlan) {
       this.planningService
         .planTask(task.id)
         .then((result) => {

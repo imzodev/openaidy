@@ -195,6 +195,12 @@ export type CreateTaskInput = {
   description: string;
   priority?: TaskPriority;
   planningEnabled?: boolean;
+  /**
+   * Skip the automatic AI planner even when planningEnabled is true —
+   * set by the Workflows page, where the user hand-authors the subtask
+   * graph themselves instead of having one auto-generated.
+   */
+  skipAutoPlan?: boolean;
   schedule?: CreateTaskScheduleInput;
   agents?: Array<{
     agentId: string;
@@ -218,7 +224,8 @@ export type CreateSubtaskInput = {
   taskId: string;
   /** IDs of subtasks this one depends on; it won't start until all of them complete. */
   dependsOn?: string[];
-  title: string;
+  /** Optional — when omitted, the server derives a short title from the description. */
+  title?: string;
   description: string;
   orderIndex?: number;
   assignedAgentId?: string;
@@ -675,6 +682,7 @@ export type {
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
+  TaskDetailView,
 } from './types';
 
 /**
@@ -809,7 +817,7 @@ export async function listTaskExecutions(
   };
 }
 
-// ── Deliverables ──────────────────────────────────────────────────────────────
+// ── Deliverables ─────────────────────────────────────────────────────────────
 
 /**
  * Deliverable type

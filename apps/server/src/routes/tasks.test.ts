@@ -683,6 +683,58 @@ describe('taskRoutes', () => {
       expect(reply.code).toHaveBeenCalledWith(400);
       expect(mockService.updateSubtask).not.toHaveBeenCalled();
     });
+
+    it('returns 400 when title is cleared without a description to re-derive from', async () => {
+      const route = await setupWithMock();
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = await route.handler(
+        { params: { id: 'sub1' }, body: { title: '   ' } },
+        reply,
+      );
+
+      expect((result as { ok: boolean }).ok).toBe(false);
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(mockService.updateSubtask).not.toHaveBeenCalled();
+    });
+
+    it('re-derives the title from the description when title is cleared alongside it', async () => {
+      const route = await setupWithMock();
+      mockService.updateSubtask.mockResolvedValue({ ok: true, data: {} });
+      const reply = { code: vi.fn().mockReturnThis() };
+
+      await route.handler(
+        {
+          params: { id: 'sub1' },
+          body: { title: '  ', description: 'Fetch the latest report' },
+        },
+        reply,
+      );
+
+      expect(mockService.updateSubtask).toHaveBeenCalledWith('sub1', {
+        title: 'Fetch the latest report',
+        description: 'Fetch the latest report',
+      });
+    });
+
+    it('truncates a long description into the re-derived title', async () => {
+      const route = await setupWithMock();
+      mockService.updateSubtask.mockResolvedValue({ ok: true, data: {} });
+      const reply = { code: vi.fn().mockReturnThis() };
+      const longDescription = 'x'.repeat(80);
+
+      await route.handler(
+        {
+          params: { id: 'sub1' },
+          body: { title: '', description: longDescription },
+        },
+        reply,
+      );
+
+      expect(mockService.updateSubtask).toHaveBeenCalledWith('sub1', {
+        title: `${'x'.repeat(60)}…`,
+        description: longDescription,
+      });
+    });
   });
 
   describe('POST /subtasks/:id/assign', () => {
@@ -841,6 +893,43 @@ describe('taskRoutes', () => {
 
       expect((result as { ok: boolean }).ok).toBe(false);
       expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('derives a title from the description when title is omitted', async () => {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      mockService.createSubtask.mockResolvedValue({
+        ok: true,
+        data: {
+          id: 'sub1',
+          taskId: 'task1',
+          title: 'Fetch the report',
+          description: 'Fetch the report',
+        },
+      });
+
+      const route = app._routes.find(
+        (r) => r.method === 'POST' && r.url === '/tasks/:taskId/subtasks',
+      );
+      const reply = { code: vi.fn().mockReturnThis() };
+      await route!.handler(
+        {
+          params: { taskId: 'task1' },
+          body: { description: 'Fetch the report' },
+        },
+        reply,
+      );
+
+      expect(mockService.createSubtask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task1',
+          title: 'Fetch the report',
+          description: 'Fetch the report',
+        }),
+      );
     });
 
     it('returns 404 when the task does not exist', async () => {
