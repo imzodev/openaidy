@@ -376,6 +376,20 @@ function AppContent(props: AppContentProps) {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     };
 
+    // A private (ephemeral) session can be swept server-side by the TTL
+    // backstop (see websocket/index.ts) if left idle long enough. Surface
+    // that instead of leaving the chat view silently pointed at a session
+    // that no longer exists.
+    const handleSessionDeleted = (event: { payload: { sessionId: string } }) => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      if (selectedSessionId() === event.payload.sessionId) {
+        setSelectedSessionId(undefined);
+        setSubmitError(
+          'This private chat expired from inactivity and was removed.',
+        );
+      }
+    };
+
     const handleChoicesEvent = (event: { payload: ChoicesEvent }) => {
       clearStreamWatchdog();
       setCurrentChoices(event.payload);
@@ -393,6 +407,7 @@ function AppContent(props: AppContentProps) {
     const unsubEnd = wsClient.on('session.stream.end', handleStreamEnd);
     const unsubError = wsClient.on('session.stream.error', handleStreamError);
     const unsubUpdated = wsClient.on('session.updated', handleSessionUpdated);
+    const unsubDeleted = wsClient.on('session.deleted', handleSessionDeleted);
     const unsubChoices = wsClient.on('session.run.choices', handleChoicesEvent);
     const unsubExecOutput = wsClient.on(
       'session.stream.exec_output',
@@ -430,6 +445,7 @@ function AppContent(props: AppContentProps) {
       unsubEnd();
       unsubError();
       unsubUpdated();
+      unsubDeleted();
       unsubChoices();
       unsubExecOutput();
       unsubToolCancelled();
@@ -583,6 +599,7 @@ function AppContent(props: AppContentProps) {
     if (
       selectedSessionId() &&
       selectedSessionId() === latestSessionId() &&
+      !messagesState.isLoading() &&
       messagesState.total() === 0
     ) {
       navigate('chat');
@@ -602,7 +619,9 @@ function AppContent(props: AppContentProps) {
   // and starts a fresh one with the opposite flag — there's no in-place
   // "convert" operation, since an empty session carries no data either way.
   const canTogglePrivacy = () =>
-    !!selectedSessionId() && messagesState.total() === 0;
+    !!selectedSessionId() &&
+    !messagesState.isLoading() &&
+    messagesState.total() === 0;
   const [isTogglingPrivacy, setIsTogglingPrivacy] = createSignal(false);
   const handleTogglePrivacy = async () => {
     const id = selectedSessionId();
@@ -611,6 +630,10 @@ function AppContent(props: AppContentProps) {
     setIsTogglingPrivacy(true);
     try {
       await deleteSession(id);
+      // The old session is gone server-side either way from here on —
+      // invalidate now so it can't linger in the sidebar/sessions list if
+      // the createSession call below fails.
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
       const title = makePrivate
         ? `Private chat ${new Date().toISOString()}`
         : `Session ${new Date().toISOString()}`;
@@ -618,12 +641,16 @@ function AppContent(props: AppContentProps) {
         title,
         makePrivate ? { ephemeral: true } : undefined,
       );
-      if (!makePrivate) {
-        queryClient.invalidateQueries({ queryKey: ['sessions'] });
-      }
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
       setSelectedSessionId(session.id);
-    } catch {
-      // non-fatal — the current session stays selected so the user can retry
+    } catch (err) {
+      // The old session may already be deleted server-side by this point —
+      // clear the selection instead of leaving the UI pointing at it, and
+      // surface the error so the user knows to retry with "New Session".
+      setSelectedSessionId(undefined);
+      setSubmitError(
+        err instanceof Error ? err.message : 'Failed to toggle privacy',
+      );
     } finally {
       setIsTogglingPrivacy(false);
     }
