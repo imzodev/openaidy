@@ -30,6 +30,8 @@ export type {
   Session,
   MessageRole,
   SessionSearchResult,
+  // Which sub-view of the Tasks page's task-detail overlay is showing.
+  TaskDetailView,
   // Pulse types from shared-types — single source of truth.
   ScheduleInput,
   // Recurring task schedules (Phase 6). These mirror the

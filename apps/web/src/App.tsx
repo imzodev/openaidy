@@ -112,9 +112,12 @@ function AppContent(props: AppContentProps) {
     currentView,
     currentAddonId,
     currentWorkflowTaskId,
+    currentTaskDetailId,
+    currentTaskDetailView,
     navigate,
     navigateToAddon,
     navigateToWorkflow,
+    navigateToTaskDetail,
   } = createRouter();
 
   // Get WebSocket client for streaming events
@@ -1117,6 +1120,10 @@ function AppContent(props: AppContentProps) {
               setSelectedSessionId(sessionId);
               navigate('chat');
             }}
+            detailTaskId={currentTaskDetailId()}
+            detailView={currentTaskDetailView()}
+            onNavigateToTaskDetail={navigateToTaskDetail}
+            onCloseTaskDetail={() => navigate('tasks')}
           />
         </Show>
 
