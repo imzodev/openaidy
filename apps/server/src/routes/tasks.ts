@@ -6,6 +6,18 @@ import type { DeliverablesRepository } from '@openaidy/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 
+/**
+ * Title is optional on both tasks and subtasks — when omitted (or blank),
+ * derive a short display title from the description instead of forcing
+ * the caller to invent one. Same truncation rule in both places so a
+ * task and a subtask "look" the same when auto-named.
+ */
+function deriveTitleFromDescription(description: string): string {
+  return description.length > 60
+    ? `${description.slice(0, 60).trimEnd()}…`
+    : description;
+}
+
 // Validation schemas
 
 // Nested `schedule` schema for createTask. Matches the public
@@ -55,6 +67,12 @@ const createTaskSchema = z.object({
   description: z.string().min(1),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   planningEnabled: z.boolean().optional(),
+  /**
+   * Skip the automatic AI planner even when planningEnabled is true —
+   * used by the workflow graph editor's "New Workflow" creation, where
+   * the user hand-authors the subtask graph themselves.
+   */
+  skipAutoPlan: z.boolean().optional(),
   agents: z
     .array(
       z.object({
@@ -118,7 +136,7 @@ const loopSchema = z.object({
 });
 
 const createSubtaskSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).optional(),
   description: z.string().min(1),
   orderIndex: z.number().int().optional(),
   assignedAgentId: z.string().optional(),
@@ -214,16 +232,14 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     }
 
     const derivedTitle =
-      parsed.title ??
-      (parsed.description.length > 60
-        ? `${parsed.description.slice(0, 60).trimEnd()}…`
-        : parsed.description);
+      parsed.title ?? deriveTitleFromDescription(parsed.description);
 
     const createInput: {
       title: string;
       description: string;
       priority?: 'low' | 'medium' | 'high' | 'urgent';
       planningEnabled?: boolean;
+      skipAutoPlan?: boolean;
       agents?: Array<{
         agentId: string;
         role?: 'primary' | 'secondary' | 'reviewer';
@@ -238,6 +254,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     }
     if (parsed.planningEnabled !== undefined) {
       createInput.planningEnabled = parsed.planningEnabled;
+    }
+    if (parsed.skipAutoPlan !== undefined) {
+      createInput.skipAutoPlan = parsed.skipAutoPlan;
     }
     if (parsed.agents !== undefined) {
       createInput.agents = parsed.agents.map((a) => ({
@@ -619,7 +638,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
     const result = await taskService.createSubtask({
       taskId,
-      title: parsed.title,
+      title: parsed.title ?? deriveTitleFromDescription(parsed.description),
       description: parsed.description,
       ...(parsed.orderIndex !== undefined && {
         orderIndex: parsed.orderIndex,
@@ -850,6 +869,25 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
           message: 'description must not be empty',
         },
       };
+    }
+    // Title is optional — clearing it (with a description in the same
+    // request, which is how the workflow editor always saves the pair)
+    // re-derives it instead of persisting a blank/whitespace title. A
+    // title-only patch has no description to derive from, so it's
+    // rejected rather than silently persisting a blank title.
+    if (input.title !== undefined && input.title.trim() === '') {
+      if (input.description === undefined) {
+        reply.code(400);
+        return {
+          ok: false,
+          error: {
+            code: 'validation.empty_title',
+            message:
+              'title must not be empty unless description is supplied in the same request',
+          },
+        };
+      }
+      input.title = deriveTitleFromDescription(input.description);
     }
 
     const result = await taskService.updateSubtask(id, input);

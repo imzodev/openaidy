@@ -8,6 +8,7 @@
  */
 
 import { For, Show, createSignal } from 'solid-js';
+import { X, Maximize } from 'lucide-solid';
 import type { Subtask, SubtaskEdgeDto } from '../../../lib/api-tasks';
 import type { Agent } from '../AgentSelector';
 import { WorkflowNode } from './WorkflowNode';
@@ -56,6 +57,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = createSignal(false);
   const [drag, setDrag] = createSignal<DragState>({ kind: 'none' });
+  const [hoveredEdgeId, setHoveredEdgeId] = createSignal<string | null>(null);
   let panStart = { x: 0, y: 0, panX: 0, panY: 0 };
   let rootEl: HTMLDivElement | undefined;
 
@@ -68,8 +70,16 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
     };
   }
 
+  // Pointer capture (below) redirects all further move/up events for this
+  // pointer to rootEl regardless of what's actually under the cursor.
+  // Without it, dragging fast enough to cross out of the canvas's own
+  // bounds — easy to do given the panel sits right next to it, or on the
+  // narrow mobile layout — hands subsequent pointermove events to
+  // whatever sibling element the cursor is now over instead, so the drag
+  // silently stops a few pixels in.
   function onBackgroundPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;
+    rootEl?.setPointerCapture(e.pointerId);
     setIsPanning(true);
     panStart = { x: e.clientX, y: e.clientY, panX: pan().x, panY: pan().y };
     props.onSelectNode(null);
@@ -79,6 +89,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   function onNodeMoveStart(nodeId: string, e: PointerEvent) {
     const pos = props.positions[nodeId];
     if (!pos) return;
+    rootEl?.setPointerCapture(e.pointerId);
     setDrag({
       kind: 'move',
       nodeId,
@@ -91,6 +102,7 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   }
 
   function onNodeConnectStart(nodeId: string, e: PointerEvent) {
+    rootEl?.setPointerCapture(e.pointerId);
     const { x, y } = toCanvasCoords(e.clientX, e.clientY);
     setDrag({ kind: 'connect', sourceId: nodeId, cursorX: x, cursorY: y });
   }
@@ -125,6 +137,9 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   }
 
   function onPointerUp(e: PointerEvent) {
+    if (rootEl?.hasPointerCapture(e.pointerId)) {
+      rootEl.releasePointerCapture(e.pointerId);
+    }
     const d = drag();
     if (d.kind === 'move') {
       props.onNodeMoveEnd?.();
@@ -133,7 +148,11 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
         .elementFromPoint(e.clientX, e.clientY)
         ?.closest('[data-node-id]') as HTMLElement | null;
       const targetId = target?.dataset.nodeId;
-      if (targetId && targetId !== d.sourceId) {
+      // Dropping a connection back onto its own source is the natural way
+      // someone tries to "draw a loop" — let it through instead of
+      // silently discarding it, so onConnect can redirect to the real
+      // loop feature (a self-loop isn't a graph edge here).
+      if (targetId) {
         props.onConnect?.(d.sourceId, targetId);
       }
     }
@@ -148,21 +167,23 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
   return (
     <div
       ref={rootEl}
-      class="workflow-canvas relative w-full h-full overflow-hidden bg-gray-50 dark:bg-gray-950 cursor-grab"
+      class="workflow-canvas relative w-full h-full overflow-hidden cursor-grab bg-gray-50 dark:bg-gray-950 bg-[radial-gradient(circle,theme(colors.gray.300)_1px,transparent_1px)] dark:bg-[radial-gradient(circle,theme(colors.gray.800)_1px,transparent_1px)] [background-size:24px_24px]"
       classList={{ 'cursor-grabbing': isPanning() }}
+      style={{ 'background-position': `${pan().x}px ${pan().y}px` }}
       onPointerDown={onBackgroundPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerLeave={onPointerUp}
+      onPointerCancel={onPointerUp}
     >
       <button
         type="button"
-        class="absolute top-2 right-2 z-10 px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+        class="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         onClick={(e) => {
           e.stopPropagation();
           resetView();
         }}
       >
+        <Maximize class="w-3 h-3" />
         Reset view
       </button>
 
@@ -201,6 +222,8 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                 edge.condition
                   ? ` when ${edge.condition.operator} "${edge.condition.value}"`
                   : '';
+              const isActive = () =>
+                hoveredEdgeId() === edge.id || props.selectedEdgeId === edge.id;
               return (
                 <Show when={from()}>
                   {(f) => (
@@ -210,11 +233,18 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                           class="pointer-events-auto cursor-pointer"
                           tabIndex={0}
                           role="button"
-                          aria-label={`${toTitle()} depends on ${fromTitle()}${conditionLabel()}`}
+                          aria-label={`${toTitle()} depends on ${fromTitle()}${conditionLabel()}. Press Delete to remove.`}
+                          onPointerDown={(e) => e.stopPropagation()}
                           onClick={(e) => {
                             e.stopPropagation();
                             props.onSelectEdge(edge.id);
                           }}
+                          onPointerEnter={() => setHoveredEdgeId(edge.id)}
+                          onPointerLeave={() =>
+                            setHoveredEdgeId((cur) =>
+                              cur === edge.id ? null : cur,
+                            )
+                          }
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
@@ -228,16 +258,30 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                             }
                           }}
                         >
+                          {/* Invisible wide hit-area — the visible line
+                              below is too thin to click reliably. */}
+                          <path
+                            d={edgePath(f(), t())}
+                            fill="none"
+                            stroke="transparent"
+                            stroke-width={16}
+                          />
                           <path
                             d={edgePath(f(), t())}
                             fill="none"
                             stroke-width={
-                              props.selectedEdgeId === edge.id ? 2.5 : 1.5
+                              props.selectedEdgeId === edge.id
+                                ? 2.5
+                                : isActive()
+                                  ? 2
+                                  : 1.5
                             }
                             class={
                               edge.edgeKind === 'conditional'
                                 ? 'stroke-purple-400 dark:stroke-purple-500'
-                                : 'stroke-gray-400 dark:stroke-gray-500'
+                                : isActive()
+                                  ? 'stroke-blue-400 dark:stroke-blue-400'
+                                  : 'stroke-gray-400 dark:stroke-gray-500'
                             }
                             stroke-dasharray={
                               edge.edgeKind === 'conditional'
@@ -246,28 +290,6 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
                             }
                             marker-end="url(#wf-arrow)"
                           />
-                          <Show
-                            when={
-                              edge.edgeKind === 'conditional'
-                                ? edge.condition
-                                : null
-                            }
-                          >
-                            {(condition) => (
-                              <foreignObject
-                                x={(f().x + t().x) / 2 - 60}
-                                y={(f().y + t().y) / 2 - 10}
-                                width={120}
-                                height={20}
-                              >
-                                <div class="flex justify-center">
-                                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 whitespace-nowrap">
-                                    {condition().operator} "{condition().value}"
-                                  </span>
-                                </div>
-                              </foreignObject>
-                            )}
-                          </Show>
                         </g>
                       )}
                     </Show>
@@ -319,6 +341,80 @@ export function WorkflowCanvas(props: WorkflowCanvasProps) {
             );
           }}
         </For>
+
+        {/* Edge overlays (condition labels, delete button) rendered in a
+            second SVG layer AFTER the node cards in the DOM, so they paint
+            on top and stay clickable even when an edge's midpoint falls
+            underneath an unrelated node it happens to pass behind
+            (e.g. a dependency that skips over an intervening step). */}
+        <svg class="absolute inset-0 w-[6000px] h-[4000px] overflow-visible pointer-events-none">
+          <For each={props.edges}>
+            {(edge) => {
+              const from = () => props.positions[edge.dependsOnSubtaskId];
+              const to = () => props.positions[edge.subtaskId];
+              const isActive = () =>
+                hoveredEdgeId() === edge.id || props.selectedEdgeId === edge.id;
+              return (
+                <Show when={from()}>
+                  {(f) => (
+                    <Show when={to()}>
+                      {(t) => (
+                        <>
+                          <Show
+                            when={
+                              edge.edgeKind === 'conditional'
+                                ? edge.condition
+                                : null
+                            }
+                          >
+                            {(condition) => (
+                              <foreignObject
+                                x={(f().x + t().x) / 2 - 60}
+                                y={(f().y + t().y) / 2 - 26}
+                                width={120}
+                                height={20}
+                              >
+                                <div class="flex justify-center">
+                                  <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 whitespace-nowrap">
+                                    {condition().operator} "{condition().value}"
+                                  </span>
+                                </div>
+                              </foreignObject>
+                            )}
+                          </Show>
+                          {/* Delete button — appears on hover/selection so
+                              removing a connection doesn't require knowing
+                              the keyboard shortcut or the property panel. */}
+                          <Show when={isActive()}>
+                            <foreignObject
+                              x={(f().x + t().x) / 2 - 9}
+                              y={(f().y + t().y) / 2 - 9}
+                              width={18}
+                              height={18}
+                            >
+                              <button
+                                type="button"
+                                class="pointer-events-auto flex items-center justify-center w-[18px] h-[18px] rounded-full bg-red-500 hover:bg-red-600 text-white shadow"
+                                title="Delete this connection"
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  props.onDeleteEdge?.(edge.id);
+                                }}
+                              >
+                                <X class="w-3 h-3" />
+                              </button>
+                            </foreignObject>
+                          </Show>
+                        </>
+                      )}
+                    </Show>
+                  )}
+                </Show>
+              );
+            }}
+          </For>
+        </svg>
       </div>
     </div>
   );

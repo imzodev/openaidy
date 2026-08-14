@@ -167,10 +167,16 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
 
   async function handleAddSubtask(kind: SubtaskKind) {
     setActionError(null);
+    // No title — the server derives one from the description, so a fresh
+    // node's title tracks whatever placeholder/real description it has
+    // instead of getting stuck on a generic "New subtask" the user has to
+    // remember to overwrite.
     const result = await createSubtask({
       taskId: props.taskId,
-      title: kind === 'approval_gate' ? 'New approval gate' : 'New subtask',
-      description: 'Describe what this step should do.',
+      description:
+        kind === 'approval_gate'
+          ? 'Pause here for a human decision'
+          : 'New step — click to describe what it should do',
       subtaskKind: kind,
     });
     if (!result.ok) {
@@ -221,6 +227,12 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
 
   async function handleConnect(sourceId: string, targetId: string) {
     setActionError(null);
+    if (sourceId === targetId) {
+      setActionError(
+        'A node can\'t connect to itself. To repeat a step, select it and turn on "Repeat until condition" in the panel instead.',
+      );
+      return;
+    }
     if (
       wouldCreateCycle(
         edges().map((e) => ({
@@ -230,7 +242,9 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
         { subtaskId: targetId, dependsOnSubtaskId: sourceId },
       )
     ) {
-      setActionError('That connection would create a cycle.');
+      setActionError(
+        'That connection would create a cycle between multiple steps, which isn\'t supported. To repeat a single step, select it and turn on "Repeat until condition" in the panel instead.',
+      );
       return;
     }
     const result = await createSubtaskEdge(props.taskId, {
@@ -316,7 +330,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
           </button>
         </div>
       </Show>
-      <div class="flex-1 flex min-h-0">
+      <div class="flex-1 flex flex-col sm:flex-row min-h-0">
         <Show when={isLoading()}>
           <div class="flex-1 flex items-center justify-center text-gray-500 dark:text-gray-400">
             Loading workflow…
@@ -328,7 +342,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
           </div>
         </Show>
         <Show when={!isLoading() && !error()}>
-          <div class="flex-1 min-w-0">
+          <div class="flex-1 min-w-0 min-h-0">
             <WorkflowCanvas
               subtasks={subtasks()}
               edges={edges()}
@@ -344,7 +358,10 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
               onDeleteEdge={handleDeleteEdge}
             />
           </div>
-          <div class="w-72 flex-shrink-0">
+          {/* Below sm: a bottom sheet (bounded height, full width) so the
+              canvas keeps most of a narrow screen. sm and up: unchanged
+              fixed-width side column. */}
+          <div class="w-full sm:w-72 max-h-[45vh] sm:max-h-none flex-shrink-0">
             <WorkflowPropertyPanel
               subtasks={subtasks()}
               edges={edges()}
