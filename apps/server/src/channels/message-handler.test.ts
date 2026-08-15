@@ -110,4 +110,47 @@ describe('handleInboundChannelMessage', () => {
     expect(reply).toBeNull();
     expect(mockLogger.error).toHaveBeenCalled();
   });
+
+  describe('stripThinking', () => {
+    beforeEach(() => {
+      mockSessionService.submitMessageNonStreaming.mockResolvedValue({
+        ok: true,
+        assistantMessage: {
+          content: '<think>let me reason about this...</think>Final answer.',
+        },
+      });
+    });
+
+    it('strips <think> blocks by default (stripThinking omitted)', async () => {
+      const reply = await handleInboundChannelMessage(baseParams);
+      expect(reply).toBe('Final answer.');
+    });
+
+    it('strips <think> blocks when stripThinking is explicitly true', async () => {
+      const reply = await handleInboundChannelMessage({
+        ...baseParams,
+        stripThinking: true,
+      });
+      expect(reply).toBe('Final answer.');
+    });
+
+    it('leaves the raw reply untouched when stripThinking is false', async () => {
+      const reply = await handleInboundChannelMessage({
+        ...baseParams,
+        stripThinking: false,
+      });
+      expect(reply).toBe(
+        '<think>let me reason about this...</think>Final answer.',
+      );
+    });
+
+    it('is a no-op when the reply has no thinking block', async () => {
+      mockSessionService.submitMessageNonStreaming.mockResolvedValue({
+        ok: true,
+        assistantMessage: { content: 'Plain reply, nothing to strip.' },
+      });
+      const reply = await handleInboundChannelMessage(baseParams);
+      expect(reply).toBe('Plain reply, nothing to strip.');
+    });
+  });
 });

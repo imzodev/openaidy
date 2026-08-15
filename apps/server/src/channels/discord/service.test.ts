@@ -106,6 +106,7 @@ describe('DiscordChannel', () => {
       botToken: { kind: 'inline', value: 'plain-token' },
       respondToMentions: true,
       enabled: true,
+      stripThinking: true,
       ...overrides,
     };
   }
@@ -163,6 +164,30 @@ describe('DiscordChannel', () => {
     await tick();
     expect(submit).toHaveBeenCalled();
     expect(m.reply).toHaveBeenCalledWith('reply!');
+  });
+
+  it('strips <think> blocks from the reply by default', async () => {
+    submit.mockResolvedValue({
+      ok: true,
+      assistantMessage: { content: '<think>reasoning...</think>Answer.' },
+    });
+    const { client } = await connected(cfg());
+    const m = message({ guildId: null });
+    client.emitMessage(m);
+    await tick();
+    expect(m.reply).toHaveBeenCalledWith('Answer.');
+  });
+
+  it('leaves <think> blocks in the reply when config.stripThinking is false', async () => {
+    submit.mockResolvedValue({
+      ok: true,
+      assistantMessage: { content: '<think>reasoning...</think>Answer.' },
+    });
+    const { client } = await connected(cfg({ stripThinking: false }));
+    const m = message({ guildId: null });
+    client.emitMessage(m);
+    await tick();
+    expect(m.reply).toHaveBeenCalledWith('<think>reasoning...</think>Answer.');
   });
 
   it('ignores a DM from a sender not in dmAllowlist', async () => {

@@ -45,7 +45,8 @@ Add a channel entry to your `openaidy.json` config:
       "id": "my-whatsapp",
       "agentId": "default",
       "allowlist": ["15551234567"],
-      "enabled": true
+      "enabled": true,
+      "stripThinking": true
     }
   ]
 }
@@ -58,6 +59,7 @@ Fields:
 - `agentId` — which agent to use for this channel's conversations
 - `allowlist` — optional list of phone numbers that are allowed to message. Empty or omitted means everyone can interact
 - `enabled` — set to `true` to start the connection on server boot
+- `stripThinking` — strip `<think>...</think>` reasoning blocks from replies (default `true`); see [Stripping reasoning/thinking from replies](#stripping-reasoningthinking-from-replies)
 
 ### Step 2: Scan the QR code
 
@@ -84,7 +86,8 @@ Add a channel entry to your `openaidy.json` config:
       "dmAllowlist": ["123456789012345678"],
       "channelAllowlist": ["987654321098765432"],
       "respondToMentions": true,
-      "enabled": true
+      "enabled": true,
+      "stripThinking": true
     }
   ]
 }
@@ -96,6 +99,7 @@ Fields:
 - `dmAllowlist` — Discord user IDs allowed to DM the bot; empty or omitted means any DM is accepted
 - `channelAllowlist` — server channel IDs where the bot responds to every message
 - `respondToMentions` — when `true` (the default), the bot also replies in any server channel when it's @-mentioned, even if that channel isn't in `channelAllowlist`
+- `stripThinking` — strip `<think>...</think>` reasoning blocks from replies (default `true`); see [Stripping reasoning/thinking from replies](#stripping-reasoningthinking-from-replies)
 
 No QR step — once the bot token is valid, the channel connects on server boot (or when you hit Connect in the web UI).
 
@@ -115,6 +119,17 @@ You can monitor status through the web UI or the REST API.
 The allowlist restricts which phone numbers can trigger agent responses. If a message comes from a number not on the allowlist, it is silently ignored.
 
 Leave the allowlist empty (or omit it) to allow anyone to interact.
+
+## Stripping reasoning/thinking from replies
+
+Some models emit extended reasoning before their final answer. It shows up in one of two shapes:
+
+- **A separate field** — providers like DeepSeek and MiniMax stream reasoning into its own `reasoning_content`, kept apart from the reply text throughout. Channels only ever read the reply text, so this is never sent to a channel in the first place — nothing to strip.
+- **Inline in the reply text** — some models/routing paths (e.g. a raw reasoning model behind a generic OpenAI-compatible endpoint) instead wrap their reasoning in a literal `<think>...</think>` block right inside the reply.
+
+`stripThinking` (default `true` for every channel type) removes that inline block before the reply is sent, so a chat like Discord or WhatsApp only ever sees the final answer. Set it to `false` on a channel if you want the raw `<think>...</think>` block included in replies there.
+
+This applies uniformly to every channel — adding a new channel type picks up the same field and behavior automatically.
 
 ## Session routing
 

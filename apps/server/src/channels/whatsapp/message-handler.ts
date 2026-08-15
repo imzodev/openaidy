@@ -26,6 +26,8 @@ export async function handleInboundWhatsAppMessage(params: {
   channelId: string;
   agentId: string;
   allowlist: string[] | undefined;
+  /** See {@link handleInboundChannelMessage}'s `stripThinking` param. */
+  stripThinking?: boolean;
   sessionService: Pick<
     SessionMessageService,
     'listSessions' | 'createSession' | 'submitMessageNonStreaming'
@@ -40,6 +42,9 @@ export async function handleInboundWhatsAppMessage(params: {
     channelId: params.channelId,
     agentId: params.agentId,
     allowlist: params.allowlist,
+    ...(params.stripThinking !== undefined
+      ? { stripThinking: params.stripThinking }
+      : {}),
     sessionService: params.sessionService,
     logger: params.logger,
   });

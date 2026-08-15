@@ -483,6 +483,8 @@ export type WhatsAppChannelConfig = {
   agentId: string;
   allowlist?: string[];
   enabled?: boolean;
+  /** Strip `<think>...</think>`-style reasoning blocks from replies. Default true. */
+  stripThinking?: boolean;
 };
 
 /** A secret value: env-var reference or inline (encrypted at rest server-side). */
@@ -499,6 +501,8 @@ export type DiscordChannelConfig = {
   channelAllowlist?: string[];
   respondToMentions?: boolean;
   enabled?: boolean;
+  /** Strip `<think>...</think>`-style reasoning blocks from replies. Default true. */
+  stripThinking?: boolean;
 };
 
 export type ChannelConfig = WhatsAppChannelConfig | DiscordChannelConfig;

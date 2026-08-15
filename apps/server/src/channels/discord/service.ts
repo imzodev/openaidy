@@ -172,6 +172,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         // Gating (DM/mention/channel) is applied above; the handler's own
         // allowlist is unused for Discord.
         allowlist: undefined,
+        stripThinking: this.config.stripThinking,
         sessionService: this.deps.sessionService,
         logger: this.deps.logger,
       });
