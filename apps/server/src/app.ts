@@ -138,6 +138,39 @@ export async function buildApp() {
 
   // Initialize database if a DB backend is configured.
   let dbAdapter: DatabaseAdapter | undefined;
+  let dbClosed = false;
+  // Idempotent: both a backup `db`-section import (which must close the
+  // live connection before overwriting its files — see BackupService) and
+  // the normal onClose shutdown hook call this, and the underlying
+  // node:sqlite connection throws if closed twice. `dbClosed` is only set
+  // after `close()` actually succeeds — if it throws (e.g. a transient
+  // error mid WAL-checkpoint), a later call must still retry rather than
+  // silently no-op while the connection is never actually released.
+  const closeDatabase = async () => {
+    if (dbAdapter && !dbClosed) {
+      await dbAdapter.close();
+      dbClosed = true;
+    }
+  };
+  // Backup import's `db` section only ever restores a sqlite file path —
+  // on a DB_KIND=postgres deployment there's nothing for that section to
+  // do with the live connection pool, and closing it would tear down
+  // every other DB-backed route (sessions, jobs, tasks, memories,
+  // addons) for an import that never touches that pool.
+  //
+  // Known tradeoff: once this closes the live sqlite connection, any
+  // concurrent request that touches the DB (another tab, a websocket
+  // session, the task scheduler) hard-fails instead of the
+  // previously-tolerated stale-but-functional read, until the operator
+  // restarts per the `restartRequired` result. Quiescing every DB route
+  // during an in-flight import is a larger change than this bugfix pass
+  // carries; the crash this fixes (an import that reliably fails outright
+  // on Windows) is worse than that narrowed window.
+  const closeDatabaseForBackupImport = async () => {
+    if (dbAdapter?.kind === 'sqlite') {
+      await closeDatabase();
+    }
+  };
   let jobsRepo: JobsStore | undefined;
   let jobRunsRepo: JobRunsStore | undefined;
   let sessionsRepo: SessionsStore | undefined;
@@ -603,6 +636,7 @@ export async function buildApp() {
             addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
           },
           openAidyVersion,
+          { closeDatabase: closeDatabaseForBackupImport },
         ),
         authMiddleware,
       });
@@ -1134,9 +1168,7 @@ export async function buildApp() {
       await scheduler.stop();
       log.info('Scheduler stopped');
     }
-    if (dbAdapter) {
-      await dbAdapter.close();
-    }
+    await closeDatabase();
     // Close per-addon SQLite connections (checkpoints WAL) on shutdown.
     addonStorageEngine.closeAll();
   });

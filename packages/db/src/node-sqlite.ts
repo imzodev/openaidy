@@ -75,6 +75,7 @@ export interface TransactionRunner {
 export default class Database {
   private readonly db: DatabaseSync;
   private depth = 0;
+  private closed = false;
 
   constructor(path: string) {
     this.db = new DatabaseSync(path);
@@ -104,8 +105,20 @@ export default class Database {
     return this.db.prepare(`PRAGMA ${source}`).all();
   }
 
+  /** Idempotent — node:sqlite's DatabaseSync throws if closed twice, but
+   * callers (e.g. a backup import that closes the connection early so it
+   * can safely overwrite the on-disk file, ahead of the normal shutdown
+   * close) may legitimately call this more than once.
+   *
+   * Marks `closed` only after the underlying close actually succeeds: if
+   * `this.db.close()` throws (e.g. a transient error mid WAL-checkpoint),
+   * a later close attempt must still retry rather than silently no-op
+   * while the connection (and its un-checkpointed WAL data) is never
+   * actually released. */
   close(): void {
+    if (this.closed) return;
     this.db.close();
+    this.closed = true;
   }
 
   /**

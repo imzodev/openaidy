@@ -139,8 +139,8 @@ describe('BackupService.applySection', () => {
     fs.rmSync(destHome, { recursive: true, force: true });
   });
 
-  it('replaces the db file and flags restart required', () => {
-    const r = dest.applySection('db', sourceZip);
+  it('replaces the db file and flags restart required', async () => {
+    const r = await dest.applySection('db', sourceZip);
     expect(r).toMatchObject({
       section: 'db',
       success: true,
@@ -149,21 +149,21 @@ describe('BackupService.applySection', () => {
     expect(fs.readFileSync(destPaths.dbPath, 'utf-8')).toBe('SQLITEDATA');
   });
 
-  it('overwrites the config file', () => {
+  it('overwrites the config file', async () => {
     write(destPaths.configPath, '{"stale":true}');
-    const r = dest.applySection('config', sourceZip);
+    const r = await dest.applySection('config', sourceZip);
     expect(r.success).toBe(true);
     expect(fs.readFileSync(destPaths.configPath, 'utf-8')).toBe(
       '{"providers":[]}',
     );
   });
 
-  it('merges workspaces: existing overwritten, new added, none deleted', () => {
+  it('merges workspaces: existing overwritten, new added, none deleted', async () => {
     // Pre-existing files: one that will be overwritten, one that must survive.
     write(path.join(destPaths.workspacesDir, 'default', 'AGENT.md'), 'OLD');
     write(path.join(destPaths.workspacesDir, 'default', 'KEEP.md'), 'keep me');
 
-    const r = dest.applySection('workspaces', sourceZip);
+    const r = await dest.applySection('workspaces', sourceZip);
     expect(r.success).toBe(true);
     // Overwritten from backup:
     expect(
@@ -187,13 +187,13 @@ describe('BackupService.applySection', () => {
     ).toBe('keep me');
   });
 
-  it('is idempotent — re-applying yields the same bytes', () => {
-    dest.applySection('skills', sourceZip);
+  it('is idempotent — re-applying yields the same bytes', async () => {
+    await dest.applySection('skills', sourceZip);
     const first = fs.readFileSync(
       path.join(destPaths.skillsDir, 'my-skill', 'SKILL.md'),
       'utf-8',
     );
-    dest.applySection('skills', sourceZip);
+    await dest.applySection('skills', sourceZip);
     const second = fs.readFileSync(
       path.join(destPaths.skillsDir, 'my-skill', 'SKILL.md'),
       'utf-8',
@@ -201,11 +201,73 @@ describe('BackupService.applySection', () => {
     expect(second).toBe(first);
   });
 
-  it('merges addons files', () => {
-    const r = dest.applySection('addons', sourceZip);
+  it('merges addons files', async () => {
+    const r = await dest.applySection('addons', sourceZip);
     expect(r.success).toBe(true);
     expect(
       fs.existsSync(path.join(destPaths.addonsDir, 'my-addon', 'addon.json')),
     ).toBe(true);
+  });
+
+  it('closes the live db connection before overwriting db + sidecars', async () => {
+    const closeOrder: string[] = [];
+    const destWithClose = new BackupService(destPaths, '0.3.8', {
+      closeDatabase: async () => {
+        closeOrder.push('closed');
+      },
+    });
+
+    const r = await destWithClose.applySection('db', sourceZip);
+
+    expect(r.success).toBe(true);
+    expect(closeOrder).toEqual(['closed']);
+  });
+
+  it('flags restartRequired even when the write fails after the connection is already closed', async () => {
+    let closed = false;
+    // Force the write to fail regardless of platform: pre-create a
+    // directory at the destination path so fs.writeFileSync throws
+    // (EISDIR) instead of succeeding.
+    fs.mkdirSync(destPaths.dbPath, { recursive: true });
+
+    const destWithClose = new BackupService(destPaths, '0.3.8', {
+      closeDatabase: async () => {
+        closed = true;
+      },
+    });
+
+    const r = await destWithClose.applySection('db', sourceZip);
+
+    expect(closed).toBe(true);
+    expect(r.success).toBe(false);
+    // The connection was already closed before this write was attempted,
+    // so even on failure the caller must be told a restart is required —
+    // not just told "import failed" with no further signal.
+    expect(r.restartRequired).toBe(true);
+  });
+
+  it('overwrites a real WAL-mode db + its live -shm/-wal sidecars without throwing', async () => {
+    // Regression test for the Windows-only crash: overwriting db-shm/db-wal
+    // while a node:sqlite connection still holds them open/mmap'd fails
+    // with an unmapped libuv error ("UNKNOWN: unknown error, open '...-shm'")
+    // on Windows, even though POSIX tolerates it. Reproduce a real live
+    // WAL-mode connection (creating real -shm/-wal sidecars) and verify
+    // closeDatabase is what lets the overwrite succeed.
+    const { DatabaseSync } = await import('node:sqlite');
+    fs.mkdirSync(path.dirname(destPaths.dbPath), { recursive: true });
+    const liveDb = new DatabaseSync(destPaths.dbPath);
+    liveDb.exec('PRAGMA journal_mode = WAL');
+    liveDb.exec('CREATE TABLE t (id INTEGER)');
+    liveDb.exec('INSERT INTO t (id) VALUES (1)');
+    expect(fs.existsSync(`${destPaths.dbPath}-shm`)).toBe(true);
+
+    const destWithClose = new BackupService(destPaths, '0.3.8', {
+      closeDatabase: async () => liveDb.close(),
+    });
+
+    const r = await destWithClose.applySection('db', sourceZip);
+
+    expect(r.success).toBe(true);
+    expect(fs.readFileSync(destPaths.dbPath, 'utf-8')).toBe('SQLITEDATA');
   });
 });

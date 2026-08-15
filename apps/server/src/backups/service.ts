@@ -18,8 +18,11 @@ import {
   type BackupSection,
   type BackupManifest,
   type BackupSectionSummary,
+  type BackupServiceOptions,
   type ImportedSection,
 } from '@openaidy/shared-types';
+
+export type { BackupServiceOptions };
 
 /** Resolved filesystem locations for each backup section. */
 export type BackupPaths = {
@@ -89,6 +92,7 @@ export class BackupService {
   constructor(
     private readonly paths: BackupPaths,
     private readonly openaidyVersion: string,
+    private readonly options: BackupServiceOptions = {},
   ) {}
 
   private sectionSource(section: BackupSection): SectionSource {
@@ -241,7 +245,10 @@ export class BackupService {
    * (files overwritten/added, never deleted); db/config are file replacements.
    * Returns a per-section result; throws are caught by the caller.
    */
-  applySection(section: BackupSection, zip: AdmZip): ImportedSection {
+  async applySection(
+    section: BackupSection,
+    zip: AdmZip,
+  ): Promise<ImportedSection> {
     switch (section) {
       case 'db':
         return this.applyFilesReplace(
@@ -270,12 +277,12 @@ export class BackupService {
    * Replace a single-file section (db, config). For db this also restores the
    * WAL/SHM sidecars and removes stale ones so the imported DB is consistent.
    */
-  private applyFilesReplace(
+  private async applyFilesReplace(
     section: 'db' | 'config',
     destPath: string,
     zip: AdmZip,
     restartRequired: boolean,
-  ): ImportedSection {
+  ): Promise<ImportedSection> {
     const prefix = `${section}/`;
     const entries = zip
       .getEntries()
@@ -292,22 +299,45 @@ export class BackupService {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
 
     if (section === 'db') {
-      // Clear existing sidecars so we don't mix an old WAL with a new DB.
-      for (const suffix of ['-wal', '-shm']) {
-        try {
-          fs.rmSync(`${destPath}${suffix}`, { force: true });
-        } catch {
-          // ignore
+      // The live connection (if any) holds the WAL -shm sidecar
+      // memory-mapped; overwriting it out from under that handle fails
+      // outright on Windows and leaves a stale in-memory view on POSIX.
+      // Close it first — see BackupServiceOptions.closeDatabase.
+      await this.options.closeDatabase?.();
+
+      try {
+        // Clear existing sidecars so we don't mix an old WAL with a new DB.
+        for (const suffix of ['-wal', '-shm']) {
+          try {
+            fs.rmSync(`${destPath}${suffix}`, { force: true });
+          } catch {
+            // ignore
+          }
         }
-      }
-      for (const entry of entries) {
-        const base = path.basename(entry.entryName);
-        // Map the archived basename back onto the live db path family.
-        const target =
-          base === path.basename(destPath)
-            ? destPath
-            : path.join(path.dirname(destPath), base);
-        fs.writeFileSync(target, entry.getData());
+        for (const entry of entries) {
+          const base = path.basename(entry.entryName);
+          // Map the archived basename back onto the live db path family.
+          const target =
+            base === path.basename(destPath)
+              ? destPath
+              : path.join(path.dirname(destPath), base);
+          fs.writeFileSync(target, entry.getData());
+        }
+      } catch (err) {
+        // The live connection was already closed above (if one existed)
+        // before we got here, so regardless of whether this write itself
+        // failed partway through (corrupted entry, disk full, a lock on
+        // the destination), the db is left in an unknown state either
+        // way — always flag restartRequired rather than letting this
+        // failure look like a no-op the caller can just retry.
+        return {
+          section,
+          success: false,
+          error:
+            err instanceof Error ? err.message : 'Failed to write db files',
+          itemsImported: 0,
+          restartRequired: true,
+        };
       }
       return { section, success: true, itemsImported: 1, restartRequired };
     }
@@ -361,6 +391,7 @@ export class BackupService {
 export function createBackupService(
   paths: BackupPaths,
   openaidyVersion: string,
+  options?: BackupServiceOptions,
 ): BackupService {
-  return new BackupService(paths, openaidyVersion);
+  return new BackupService(paths, openaidyVersion, options);
 }
