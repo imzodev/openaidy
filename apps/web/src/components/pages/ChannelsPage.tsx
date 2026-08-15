@@ -7,6 +7,7 @@ import {
   Switch,
   Match,
   onCleanup,
+  type JSX,
 } from 'solid-js';
 import {
   Radio,
@@ -18,6 +19,7 @@ import {
   Plus,
   Trash2,
   X,
+  ExternalLink,
 } from 'lucide-solid';
 import { Layout } from './Layout';
 import type { ChannelStatusResponse } from '@openaidy/shared-types';
@@ -60,6 +62,22 @@ function StatusBadge(props: { status: ChannelStatusResponse['status'] }) {
         </span>
       </Match>
     </Switch>
+  );
+}
+
+function DocLink(props: { href: string; children: JSX.Element }) {
+  return (
+    <a
+      href="#"
+      onClick={(e) => {
+        e.preventDefault();
+        window.open(props.href, '_blank', 'noopener,noreferrer');
+      }}
+      class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+    >
+      <ExternalLink class="w-3 h-3" />
+      {props.children}
+    </a>
   );
 }
 
@@ -330,9 +348,13 @@ function AddChannelDialog(props: {
                 class={inputClass}
               />
               <p class="mt-1 text-xs text-text-tertiary">
-                From the Discord Developer Portal. Stored encrypted at rest.
-                Enable the “Message Content Intent” for your bot.
+                Stored encrypted at rest. Create a bot under an application,
+                then copy its token from the Bot tab and enable the “Message
+                Content Intent”.
               </p>
+              <DocLink href="https://discord.com/developers/applications">
+                Open the Discord Developer Portal
+              </DocLink>
             </div>
 
             <div>
@@ -367,6 +389,9 @@ function AddChannelDialog(props: {
                 Optional. Comma-separated channel IDs the bot replies in (all
                 messages).
               </p>
+              <DocLink href="https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Application-ID-">
+                How to find Discord user & channel IDs (enable Developer Mode)
+              </DocLink>
             </div>
 
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
