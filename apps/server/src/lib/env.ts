@@ -88,6 +88,20 @@ const envSchema = z
       .number()
       .positive()
       .default(31536000000),
+    // Proactive renewal: the server re-mints the bootstrap-admin token once
+    // the current one has this fraction of its lifetime left, so a
+    // long-running server (no periodic restarts) never leaves an operator
+    // stuck with an expired token and a manual `rm` + restart. Checked every
+    // BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS.
+    BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION: z.coerce
+      .number()
+      .positive()
+      .max(1)
+      .default(0.2),
+    BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS: z.coerce
+      .number()
+      .positive()
+      .default(21600000), // 6 hours
     // Optional override for the master key used to encrypt provider
     // credentials at rest (AES-256-GCM). When unset, a unique random key is
     // generated and persisted per install (see lib/encryption.ts), so the app
@@ -122,6 +136,27 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         path: ['DATABASE_URL'],
         message: 'DATABASE_URL is required when DB_KIND=postgres',
+      });
+    }
+
+    // The renewal timer only re-mints the token when a check happens to
+    // land inside the renewal window (the last `RENEW_THRESHOLD_FRACTION`
+    // of the token's lifetime). If the check interval is as long as, or
+    // longer than, that window, a check can easily never land inside it —
+    // the token silently expires before renewal ever fires, defeating the
+    // whole point of this feature. Require the interval to be small enough
+    // that at least a few checks are guaranteed to land inside the window.
+    const renewalWindowMs =
+      value.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS *
+      value.BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION;
+    if (value.BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS >= renewalWindowMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS'],
+        message:
+          'BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS must be smaller than ' +
+          'BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS * BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION, ' +
+          "or the renewal check can miss the token's renewal window entirely.",
       });
     }
   })

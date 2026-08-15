@@ -478,10 +478,16 @@ export async function buildApp() {
         tokenPath: env.BOOTSTRAP_ADMIN_TOKEN_PATH,
         clientId: env.BOOTSTRAP_ADMIN_CLIENT_ID,
         tokenExpiryMs: env.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS,
+        renewalThresholdFraction: env.BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION,
+        renewalCheckIntervalMs: env.BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS,
       })
     : undefined;
 
   await bootstrapAdmin?.ensureToken();
+  // Long-running servers (no periodic restart) would otherwise never
+  // re-run ensureToken() and could silently serve an expired token
+  // until someone manually deletes the file and restarts.
+  bootstrapAdmin?.startAutoRenew();
 
   // Create scheduler service if database is available
   if (dbAdapter && jobsRepo && jobRunsRepo && sessionsRepo) {
@@ -1147,6 +1153,7 @@ export async function buildApp() {
 
   // Clean up on close
   app.addHook('onClose', async () => {
+    await bootstrapAdmin?.stopAutoRenew();
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
