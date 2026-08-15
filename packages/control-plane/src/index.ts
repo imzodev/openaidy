@@ -38,6 +38,23 @@ export {
   type WorkflowLogger as BootstrapAdminLogger,
 } from './workflows/bootstrap-admin.js';
 
+// Bootstrap Admin Record — shared load/persist/inspect primitives, reused
+// by the server's BootstrapAdminManager so the two don't reimplement the
+// same structural-validation/expiry/atomic-write logic independently.
+export {
+  BOOTSTRAP_ADMIN_SCOPE,
+  isBootstrapAdminRecordExpired,
+  hasBootstrapAdminRecordShape,
+  loadValidBootstrapAdminRecord,
+  persistBootstrapAdminRecord,
+  inspectBootstrapAdminRecord,
+  type BootstrapAdminVerifier,
+  type BootstrapAdminDecoder,
+  type VerifiedBootstrapAdminPayload,
+  type BootstrapAdminInspectStatus,
+  type BootstrapAdminInspectOutcome,
+} from './lib/bootstrap-admin-record.js';
+
 // Pairing Workflow
 export {
   PairingWorkflow,

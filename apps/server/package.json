@@ -20,6 +20,7 @@
     "@mozilla/readability": "^0.6.0",
     "@openaidy/addon-scaffolding": "workspace:*",
     "@openaidy/config": "workspace:*",
+    "@openaidy/control-plane": "workspace:*",
     "@openaidy/db": "workspace:*",
     "@openaidy/providers": "workspace:*",
     "@openaidy/runtime": "workspace:*",
@@ -58,7 +59,6 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./bootstrap-admin": "./src/bootstrap-admin.ts",
-    "./bootstrap-admin-inspect": "./src/bootstrap-admin-inspect.ts"
+    "./bootstrap-admin": "./src/bootstrap-admin.ts"
   }
 }

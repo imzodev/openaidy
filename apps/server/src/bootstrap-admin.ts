@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, writeFile, chmod } from 'node:fs/promises';
-import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
+import {
+  loadValidBootstrapAdminRecord,
+  persistBootstrapAdminRecord,
+} from '@openaidy/control-plane';
 import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminEnsureResult = {
@@ -39,7 +40,10 @@ export class BootstrapAdminManager {
       return null;
     }
 
-    const existing = await this.loadValidRecord();
+    const existing = await loadValidBootstrapAdminRecord(
+      this.options.tokenPath,
+      (token) => this.authMiddleware.validateToken(token),
+    );
     if (existing) {
       this.currentRecord = existing;
       this.logger.info(
@@ -54,7 +58,7 @@ export class BootstrapAdminManager {
     }
 
     const record = await this.createRecord();
-    await this.persistRecord(record);
+    await persistBootstrapAdminRecord(this.options.tokenPath, record);
     this.currentRecord = record;
 
     this.logger.warn(
@@ -77,46 +81,6 @@ export class BootstrapAdminManager {
     return this.currentRecord;
   }
 
-  private async loadValidRecord(): Promise<BootstrapAdminRecord | null> {
-    try {
-      const raw = await readFile(this.options.tokenPath, 'utf-8');
-      const parsed = JSON.parse(raw) as Partial<BootstrapAdminRecord>;
-
-      if (
-        typeof parsed.clientId !== 'string' ||
-        typeof parsed.token !== 'string' ||
-        !Array.isArray(parsed.scopes) ||
-        typeof parsed.createdAt !== 'string' ||
-        typeof parsed.expiresAt !== 'string'
-      ) {
-        return null;
-      }
-
-      const payload = await this.authMiddleware.validateToken(parsed.token);
-      if (!payload) {
-        return null;
-      }
-
-      if (payload.sub !== parsed.clientId) {
-        return null;
-      }
-
-      if (!parsed.scopes.includes(CAPABILITIES.ADMIN)) {
-        return null;
-      }
-
-      return {
-        clientId: parsed.clientId,
-        token: parsed.token,
-        scopes: [...parsed.scopes],
-        createdAt: parsed.createdAt,
-        expiresAt: parsed.expiresAt,
-      };
-    } catch {
-      return null;
-    }
-  }
-
   private async createRecord(): Promise<BootstrapAdminRecord> {
     const token = await this.authMiddleware.generateToken({
       clientId: this.options.clientId,
@@ -137,22 +101,5 @@ export class BootstrapAdminManager {
       createdAt: new Date(payload.iat * 1000).toISOString(),
       expiresAt: new Date(payload.exp * 1000).toISOString(),
     };
-  }
-
-  private async persistRecord(record: BootstrapAdminRecord): Promise<void> {
-    await mkdir(dirname(this.options.tokenPath), { recursive: true });
-
-    // Unique temp name per write. A fixed `${tokenPath}.tmp` is a race: two
-    // managers pointed at the same token path (e.g. concurrent buildApp()s in
-    // tests) would each write the same temp file, and one's rename() pulls it
-    // out from under the other's chmod(), throwing ENOENT. A per-write suffix
-    // keeps the write atomic and isolated.
-    const tempPath = `${this.options.tokenPath}.${randomUUID()}.tmp`;
-    const contents = `${JSON.stringify(record, null, 2)}\n`;
-
-    await writeFile(tempPath, contents, { encoding: 'utf-8', mode: 0o600 });
-    await chmod(tempPath, 0o600);
-    await rename(tempPath, this.options.tokenPath);
-    await chmod(this.options.tokenPath, 0o600);
   }
 }
