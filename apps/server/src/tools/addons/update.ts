@@ -3,8 +3,8 @@
  *
  * Lets an agent modify an EXISTING addon: overwrite / add / delete its UI
  * files, and/or change manifest fields (name, description, version,
- * permissions, externalDomains, externalImageDomains). Keeps the on-disk
- * addon.json and the DB record in sync.
+ * permissions, externalDomains, externalImageDomains, externalMediaDomains).
+ * Keeps the on-disk addon.json and the DB record in sync.
  *
  * File edits:        direct fs writes/deletes under the addon directory
  * Manifest sync:     AddonService.updateAddon (in-process, no HTTP round-trip)
@@ -47,6 +47,7 @@ const MANIFEST_FIELD_KEYS = [
   'permissions',
   'externalDomains',
   'externalImageDomains',
+  'externalMediaDomains',
 ] as const;
 
 // ── Tool factory ──────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
       '  permissions         — replace the SDK permission set',
       '  externalDomains     — hostnames the addon may fetch() from (CSP connect-src)',
       '  externalImageDomains— hostnames the addon may load <img> from (CSP img-src)',
+      '  externalMediaDomains— hostnames the addon may play <audio>/<video> from (CSP media-src)',
       '',
       'Provide at least one of the above. Fields you omit are left unchanged.',
       '',
@@ -168,7 +170,9 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
             'workspace.write to scope it to one agent (e.g. "workspace.write:my-agent"); append ' +
             '":microphone" or ":camera" to media.read to scope it to one device. ' +
             'media.read also auto-grants playback of the data: URL it returns (<audio src>/<img src>) — ' +
-            'no externalDomains needed. See the SDK reference above for which method needs which permission.',
+            'no externalDomains needed. Playing back a REMOTELY hosted file instead (e.g. ' +
+            '<audio src="https://..."> pointing at a TTS/CDN host) needs externalMediaDomains, not media.read. ' +
+            'See the SDK reference above for which method needs which permission.',
         },
         externalDomains: {
           type: 'array',
@@ -183,6 +187,13 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           description:
             'Replacement list of bare hostnames the addon may load images from. ' +
             'REPLACES the previous list.',
+        },
+        externalMediaDomains: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Replacement list of bare hostnames the addon may play audio/video from ' +
+            '(e.g. ["oss.minimax.io"]). Enforced via CSP media-src. REPLACES the previous list.',
         },
       },
       required: ['id'],
@@ -228,7 +239,8 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           ok: false,
           error:
             'Nothing to update. Provide at least one of: files, deleteFiles, ' +
-            'name, description, version, permissions, externalDomains, externalImageDomains.',
+            'name, description, version, permissions, externalDomains, externalImageDomains, ' +
+            'externalMediaDomains.',
         };
       }
 
@@ -327,6 +339,7 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
       const permissions = args['permissions'];
       const externalDomains = args['externalDomains'];
       const externalImageDomains = args['externalImageDomains'];
+      const externalMediaDomains = args['externalMediaDomains'];
 
       if (name !== undefined && (typeof name !== 'string' || !name)) {
         return { ok: false, error: 'name must be a non-empty string' };
@@ -358,6 +371,15 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
         return {
           ok: false,
           error: 'externalImageDomains must be an array of strings',
+        };
+      }
+      if (
+        externalMediaDomains !== undefined &&
+        !isStringArray(externalMediaDomains)
+      ) {
+        return {
+          ok: false,
+          error: 'externalMediaDomains must be an array of strings',
         };
       }
 
@@ -420,6 +442,8 @@ export function createAddonUpdateTool(deps: AddonToolDeps): BuiltinTool {
           newManifest['externalDomains'] = externalDomains;
         if (externalImageDomains !== undefined)
           newManifest['externalImageDomains'] = externalImageDomains;
+        if (externalMediaDomains !== undefined)
+          newManifest['externalMediaDomains'] = externalMediaDomains;
 
         const oldPerms = Array.isArray(currentManifest['permissions'])
           ? (currentManifest['permissions'] as string[])

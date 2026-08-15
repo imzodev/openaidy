@@ -180,6 +180,9 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'Example — addon that loads images from GitHub:',
       '  externalImageDomains: ["raw.githubusercontent.com"]',
       '',
+      'Example — addon that plays a remotely-hosted audio file (e.g. a TTS URL):',
+      '  externalMediaDomains: ["oss.minimax.io"]',
+      '',
       'The OpenAidy server itself (localhost / the SDK proxy) is always allowed.',
       'Do NOT list it in externalDomains.',
       '',
@@ -261,7 +264,9 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             "workspace.write = share a file into an agent's workspace via sdk.shareFile(). " +
             'media.read = record audio (sdk.media.recordAudio) and/or take a photo (sdk.media.takePhoto) via the host — ' +
             'scope with ":microphone" or ":camera" to grant only one. Playing the returned data: URL back ' +
-            '(<audio src>/<img src>) works automatically once media.read is granted — no externalDomains needed.',
+            '(<audio src>/<img src>) works automatically once media.read is granted — no externalDomains needed. ' +
+            'Playing back a REMOTELY hosted file instead (e.g. <audio src="https://..."> pointing at a TTS/CDN ' +
+            'host) needs externalMediaDomains, not media.read.',
         },
         externalDomains: {
           type: 'array',
@@ -280,6 +285,15 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
             'Bare hostnames the addon is allowed to load images from ' +
             '(e.g. ["raw.githubusercontent.com", "assets.pokemon.com"]). ' +
             'Enforced via CSP img-src. Use this for <img src="https://..."> and CSS background images.',
+        },
+        externalMediaDomains: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Bare hostnames the addon is allowed to play audio/video from ' +
+            '(e.g. ["oss.minimax.io"]). Enforced via CSP media-src. Use this for ' +
+            '<audio src="https://...">/<video src="https://..."> pointing at a remotely-hosted file — ' +
+            "separate from the data: playback that media.read already grants for the addon's own recordings.",
         },
         files: {
           type: 'object',
@@ -334,6 +348,9 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
         : undefined;
       const externalImageDomains = Array.isArray(args['externalImageDomains'])
         ? (args['externalImageDomains'] as string[])
+        : undefined;
+      const externalMediaDomains = Array.isArray(args['externalMediaDomains'])
+        ? (args['externalMediaDomains'] as string[])
         : undefined;
       const storage =
         args['storage'] && typeof args['storage'] === 'object'
@@ -477,6 +494,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
         permissions: permissions as string[],
         externalDomains: externalDomainsWithTailwind,
         ...(externalImageDomains ? { externalImageDomains } : {}),
+        ...(externalMediaDomains ? { externalMediaDomains } : {}),
       });
 
       if (!generated.success) {

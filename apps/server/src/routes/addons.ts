@@ -82,15 +82,15 @@ export function rewriteAddonHtml(html: string, token: string): string {
 /**
  * Build the Content-Security-Policy header for an addon's static assets.
  *
- * `connect-src`/`img-src`/`style-src`/`font-src` are each extended per-addon
- * from the manifest's `externalDomains`/`externalImageDomains`/
- * `externalStyleDomains`/`externalFontDomains` fields (declared but unset
- * entries default to just the platform baseline). `script-src` is left to
- * the caller — it depends on the request host/env, not just the manifest
- * (see TAILWIND_CDN_ORIGIN above for why it's never manifest-extensible).
- * `media-src` isn't domain-list-extensible like the others — it's derived
- * from whether the manifest declares any `media.read` permission variant
- * (see below), since that's already required to use `sdk.media.*` at all.
+ * `connect-src`/`img-src`/`style-src`/`font-src`/`media-src` are each extended
+ * per-addon from the manifest's `externalDomains`/`externalImageDomains`/
+ * `externalStyleDomains`/`externalFontDomains`/`externalMediaDomains` fields
+ * (declared but unset entries default to just the platform baseline).
+ * `script-src` is left to the caller — it depends on the request host/env,
+ * not just the manifest (see TAILWIND_CDN_ORIGIN above for why it's never
+ * manifest-extensible). `media-src` additionally gets a `data:` allowance
+ * whenever the manifest declares any `media.read` permission variant (see
+ * below), since that's already required to use `sdk.media.*` at all.
  */
 export function buildAddonCsp(
   manifest: Record<string, unknown> | null,
@@ -105,6 +105,7 @@ export function buildAddonCsp(
   const externalImageDomains = stringArray(manifest?.['externalImageDomains']);
   const externalStyleDomains = stringArray(manifest?.['externalStyleDomains']);
   const externalFontDomains = stringArray(manifest?.['externalFontDomains']);
+  const externalMediaDomains = stringArray(manifest?.['externalMediaDomains']);
   const permissions = stringArray(manifest?.['permissions']);
 
   const normalizeHosts = (hosts: string[]) =>
@@ -126,13 +127,14 @@ export function buildAddonCsp(
   ].join(' ');
   const fontSrc = ["'self'", ...normalizeHosts(externalFontDomains)].join(' ');
 
-  // <audio>/<video> playback is governed by media-src, not img-src — it's
-  // 'none' by default (falling through to default-src) so an addon without
-  // any media.read variant can't play back a data: URI at all. An addon
+  // <audio>/<video> playback is governed by media-src, not img-src. An addon
   // that captures audio/photos via sdk.media.* gets its own recordings back
-  // as base64 data: URLs meant to be played/displayed inline, so granting
-  // media-src here is tied to the permission it already had to declare to
-  // use the feature — no separate externalDomains-style field needed.
+  // as base64 data: URLs meant to be played/displayed inline, so the data:
+  // scheme is granted whenever the manifest declares the permission it
+  // already had to declare to use that feature. Playing back a *remotely*
+  // hosted file (e.g. <audio src="https://..."> pointing at a TTS/CDN host)
+  // is a separate concern handled the same way as the sibling directives
+  // above — via manifest-declared externalMediaDomains.
   //
   // `media.*` / `*` can't currently reach here — AddonPermissionSchema only
   // accepts resource.action[:scope] with a fixed action set, so a bare
@@ -148,8 +150,14 @@ export function buildAddonCsp(
   );
   // No 'self' here (unlike the sibling directives above): the addon's
   // document has an opaque origin (sandboxed without allow-same-origin), so
-  // CSP 'self' can never match it — only the data: scheme actually matters.
-  const mediaSrc = hasMediaReadPermission ? 'data:' : "'none'";
+  // CSP 'self' can never match it — only the data: scheme and explicit
+  // externalMediaDomains hosts actually matter.
+  const mediaSrcSources = [
+    ...(hasMediaReadPermission ? ['data:'] : []),
+    ...normalizeHosts(externalMediaDomains),
+  ];
+  const mediaSrc =
+    mediaSrcSources.length > 0 ? mediaSrcSources.join(' ') : "'none'";
 
   return [
     "default-src 'none'",

@@ -290,6 +290,7 @@ describe('addon_update tool', () => {
     ['permissions', { permissions: 'agents.list' }],
     ['externalDomains', { externalDomains: 'api.example.com' }],
     ['externalImageDomains', { externalImageDomains: 5 }],
+    ['externalMediaDomains', { externalMediaDomains: 5 }],
     ['name', { name: '' }],
     ['version', { version: '' }],
   ])('rejects bad %s value', async (_label, patch) => {
@@ -366,6 +367,17 @@ describe('addon_update tool', () => {
       CTX,
     );
     expect(readManifest('rep')['externalDomains']).toEqual(['new.example.com']);
+  });
+
+  it('sets externalMediaDomains so an existing addon can allow remote audio/video', async () => {
+    const result = await tool.execute(
+      { id: 'demo', externalMediaDomains: ['oss.minimax.io'] },
+      CTX,
+    );
+    expect(result.ok).toBe(true);
+    expect(readManifest('demo')['externalMediaDomains']).toEqual([
+      'oss.minimax.io',
+    ]);
   });
 
   it('notes DB not configured when addonService is absent', async () => {
