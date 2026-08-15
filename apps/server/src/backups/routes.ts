@@ -104,11 +104,9 @@ export const backupRoutes: FastifyPluginAsync<BackupRoutesOptions> = async (
     async (request, reply) => {
       const sections = parseSections(request.body?.sections);
       if (sections === null) {
-        return reply
-          .code(400)
-          .send({
-            error: 'Invalid sections; expected an array of section names',
-          });
+        return reply.code(400).send({
+          error: 'Invalid sections; expected an array of section names',
+        });
       }
 
       const date = new Date().toISOString().slice(0, 10);
@@ -201,7 +199,7 @@ export const backupRoutes: FastifyPluginAsync<BackupRoutesOptions> = async (
     const results: ImportedSection[] = [];
     for (const section of sections) {
       try {
-        results.push(backupService.applySection(section, zip));
+        results.push(await backupService.applySection(section, zip));
       } catch (err) {
         results.push({
           section,

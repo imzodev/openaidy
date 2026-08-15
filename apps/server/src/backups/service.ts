@@ -85,10 +85,29 @@ function countTopLevel(dir: string): number {
   return fs.readdirSync(dir, { withFileTypes: true }).length;
 }
 
+export type BackupServiceOptions = {
+  /**
+   * Closes the server's live database connection. Called right before the
+   * `db` section's file/sidecar writes during import.
+   *
+   * The running `node:sqlite` connection keeps the WAL `-shm` sidecar
+   * memory-mapped for as long as it's open. On POSIX, overwriting an
+   * open/mapped file is silently allowed (if incoherent — the live
+   * connection's view goes stale, which is exactly why a `db` import
+   * always sets `restartRequired`). On Windows it isn't allowed at all:
+   * the write fails with an unmapped libuv error
+   * (`UNKNOWN: unknown error, open '...db-shm'`). Closing first makes the
+   * write succeed on both, and is a no-op improvement on POSIX since a
+   * restart was already required regardless.
+   */
+  closeDatabase?: () => Promise<void>;
+};
+
 export class BackupService {
   constructor(
     private readonly paths: BackupPaths,
     private readonly openaidyVersion: string,
+    private readonly options: BackupServiceOptions = {},
   ) {}
 
   private sectionSource(section: BackupSection): SectionSource {
@@ -241,7 +260,10 @@ export class BackupService {
    * (files overwritten/added, never deleted); db/config are file replacements.
    * Returns a per-section result; throws are caught by the caller.
    */
-  applySection(section: BackupSection, zip: AdmZip): ImportedSection {
+  async applySection(
+    section: BackupSection,
+    zip: AdmZip,
+  ): Promise<ImportedSection> {
     switch (section) {
       case 'db':
         return this.applyFilesReplace(
@@ -270,12 +292,12 @@ export class BackupService {
    * Replace a single-file section (db, config). For db this also restores the
    * WAL/SHM sidecars and removes stale ones so the imported DB is consistent.
    */
-  private applyFilesReplace(
+  private async applyFilesReplace(
     section: 'db' | 'config',
     destPath: string,
     zip: AdmZip,
     restartRequired: boolean,
-  ): ImportedSection {
+  ): Promise<ImportedSection> {
     const prefix = `${section}/`;
     const entries = zip
       .getEntries()
@@ -292,6 +314,11 @@ export class BackupService {
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
 
     if (section === 'db') {
+      // The live connection (if any) holds the WAL -shm sidecar
+      // memory-mapped; overwriting it out from under that handle fails
+      // outright on Windows and leaves a stale in-memory view on POSIX.
+      // Close it first — see BackupServiceOptions.closeDatabase.
+      await this.options.closeDatabase?.();
       // Clear existing sidecars so we don't mix an old WAL with a new DB.
       for (const suffix of ['-wal', '-shm']) {
         try {
@@ -361,6 +388,7 @@ export class BackupService {
 export function createBackupService(
   paths: BackupPaths,
   openaidyVersion: string,
+  options?: BackupServiceOptions,
 ): BackupService {
-  return new BackupService(paths, openaidyVersion);
+  return new BackupService(paths, openaidyVersion, options);
 }

@@ -138,6 +138,17 @@ export async function buildApp() {
 
   // Initialize database if a DB backend is configured.
   let dbAdapter: DatabaseAdapter | undefined;
+  let dbClosed = false;
+  // Idempotent: both a backup `db`-section import (which must close the
+  // live connection before overwriting its files — see BackupService) and
+  // the normal onClose shutdown hook call this, and the underlying
+  // node:sqlite connection throws if closed twice.
+  const closeDatabase = async () => {
+    if (dbAdapter && !dbClosed) {
+      dbClosed = true;
+      await dbAdapter.close();
+    }
+  };
   let jobsRepo: JobsStore | undefined;
   let jobRunsRepo: JobRunsStore | undefined;
   let sessionsRepo: SessionsStore | undefined;
@@ -597,6 +608,7 @@ export async function buildApp() {
             addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
           },
           openAidyVersion,
+          { closeDatabase },
         ),
         authMiddleware,
       });
@@ -1127,9 +1139,7 @@ export async function buildApp() {
       await scheduler.stop();
       log.info('Scheduler stopped');
     }
-    if (dbAdapter) {
-      await dbAdapter.close();
-    }
+    await closeDatabase();
     // Close per-addon SQLite connections (checkpoints WAL) on shutdown.
     addonStorageEngine.closeAll();
   });
