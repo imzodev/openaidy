@@ -17,35 +17,25 @@
 import { mkdir, readFile, rename, writeFile, chmod } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type {
+  BootstrapAdminRecord,
+  VerifiedBootstrapAdminPayload,
+  BootstrapAdminVerifier,
+  BootstrapAdminDecoder,
+  BootstrapAdminInspectStatus,
+  BootstrapAdminInspectOutcome,
+} from '@openaidy/shared-types';
+
+export type {
+  VerifiedBootstrapAdminPayload,
+  BootstrapAdminVerifier,
+  BootstrapAdminDecoder,
+  BootstrapAdminInspectStatus,
+  BootstrapAdminInspectOutcome,
+};
 
 /** The wildcard scope that marks a token as bootstrap-admin capable. */
 export const BOOTSTRAP_ADMIN_SCOPE = '*';
-
-/** Minimal shape a verified JWT payload must have to back a record. */
-export type VerifiedBootstrapAdminPayload = {
-  sub: string;
-  scopes: string[];
-};
-
-/**
- * Verify a token's signature and return its payload, or null if the
- * token is invalid/expired/malformed. May be sync or async.
- */
-export type BootstrapAdminVerifier = (
-  token: string,
-) =>
-  | Promise<VerifiedBootstrapAdminPayload | null>
-  | VerifiedBootstrapAdminPayload
-  | null;
-
-/**
- * Decode a token's payload without verifying its signature (used only
- * for read-only inspection). May be sync or async.
- */
-export type BootstrapAdminDecoder = (
-  token: string,
-) => Promise<Record<string, unknown> | null> | Record<string, unknown> | null;
 
 export function isBootstrapAdminRecordExpired(dateStr: string): boolean {
   try {
@@ -165,21 +155,6 @@ export async function persistBootstrapAdminRecord(
 // ============================================================================
 // Inspection (read-only status determination)
 // ============================================================================
-
-export type BootstrapAdminInspectStatus =
-  | 'disabled'
-  | 'missing'
-  | 'malformed'
-  | 'invalid'
-  | 'expired'
-  | 'valid';
-
-export type BootstrapAdminInspectOutcome = {
-  status: BootstrapAdminInspectStatus;
-  tokenPath: string;
-  enabled: boolean;
-  record?: BootstrapAdminRecord;
-};
 
 /**
  * Determine the bootstrap-admin token's status without any side

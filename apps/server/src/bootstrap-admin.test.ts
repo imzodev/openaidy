@@ -191,6 +191,37 @@ describe('BootstrapAdminManager', () => {
       };
       expect(persisted.token).toBe(renewed?.record.token);
     });
+
+    it("derives the renewal threshold from the loaded record's actual lifetime, not the currently configured tokenExpiryMs", async () => {
+      vi.useFakeTimers();
+
+      const mintManager = new BootstrapAdminManager(authMiddleware, logger, {
+        enabled: true,
+        tokenPath,
+        clientId: 'bootstrap-admin',
+        tokenExpiryMs: 100_000, // 100s issued lifetime -> 20% threshold = 20s remaining
+      });
+      await mintManager.ensureToken();
+
+      // 90s in: 10s remaining. Under the token's *actual* 100s lifetime
+      // this is inside the 20% (20s) renewal window. A reconfigured,
+      // much shorter tokenExpiryMs must not shrink that window.
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      const checkManager = new BootstrapAdminManager(authMiddleware, logger, {
+        enabled: true,
+        tokenPath,
+        clientId: 'bootstrap-admin',
+        tokenExpiryMs: 1_000, // operator lowered this after the token was minted
+      });
+      const loaded = await checkManager.ensureToken();
+      expect(loaded?.created).toBe(false);
+
+      const renewed = await checkManager.maybeRenewToken();
+
+      expect(renewed).not.toBeNull();
+      expect(renewed?.record.token).not.toBe(loaded?.record.token);
+    });
   });
 
   describe('startAutoRenew() / stopAutoRenew()', () => {
@@ -231,11 +262,41 @@ describe('BootstrapAdminManager', () => {
       const renewedToken = manager.getRecord()?.token;
       expect(renewedToken).not.toBe(first?.record.token);
 
-      manager.stopAutoRenew();
+      await manager.stopAutoRenew();
 
       // Nothing more should change once the timer is stopped.
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(manager.getRecord()?.token).toBe(renewedToken);
+    }, 10000);
+
+    it('checks for renewal immediately on startAutoRenew(), without waiting for the first tick', async () => {
+      const manager = new BootstrapAdminManager(authMiddleware, logger, {
+        enabled: true,
+        tokenPath,
+        clientId: 'bootstrap-admin',
+        tokenExpiryMs: 1000, // 1s lifetime, 20% threshold => 200ms remaining
+        // Long enough that only the immediate on-start check (not the
+        // interval tick) could plausibly renew within the test deadline.
+        renewalCheckIntervalMs: 60_000,
+      });
+      const first = await manager.ensureToken();
+
+      // Wait until the on-disk token is already inside its renewal window.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
+      manager.startAutoRenew();
+
+      const deadline = Date.now() + 2000;
+      while (
+        manager.getRecord()?.token === first?.record.token &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      expect(manager.getRecord()?.token).not.toBe(first?.record.token);
+
+      await manager.stopAutoRenew();
     }, 10000);
 
     it('does not start a second timer if already running, and is a no-op when disabled', () => {

@@ -36,6 +36,14 @@ export class BootstrapAdminManager {
   private options: BootstrapAdminOptions;
   private currentRecord: BootstrapAdminRecord | null = null;
   private renewalTimer: NodeJS.Timeout | null = null;
+  /**
+   * Tracks a renewal check/mint currently in flight so overlapping
+   * timer ticks don't race each other's `createRecord()` +
+   * `persistBootstrapAdminRecord()` calls, and so {@link stopAutoRenew}
+   * can wait for it to land before shutdown proceeds.
+   */
+  private renewalInFlight: Promise<BootstrapAdminEnsureResult | null> | null =
+    null;
 
   constructor(
     authMiddleware: AuthMiddleware,
@@ -70,24 +78,10 @@ export class BootstrapAdminManager {
       return { record: existing, created: false };
     }
 
-    const record = await this.createRecord();
-    await persistBootstrapAdminRecord(this.options.tokenPath, record);
-    this.currentRecord = record;
-
-    this.logger.warn(
-      {
-        clientId: record.clientId,
-        tokenPath: this.options.tokenPath,
-        expiresAt: record.expiresAt,
-      },
-      'Bootstrap admin token created',
-    );
-    this.logger.warn(
-      { token: record.token },
-      'Bootstrap admin token value (shown once on creation)',
-    );
-
-    return { record, created: true };
+    return this.mintAndPersist({
+      logMessage: 'Bootstrap admin token created',
+      tokenLogMessage: 'Bootstrap admin token value (shown once on creation)',
+    });
   }
 
   getRecord(): BootstrapAdminRecord | null {
@@ -110,21 +104,54 @@ export class BootstrapAdminManager {
     const intervalMs =
       this.options.renewalCheckIntervalMs ?? DEFAULT_RENEWAL_CHECK_INTERVAL_MS;
 
+    // Check once immediately: a token loaded from disk at boot (via
+    // ensureToken(), which only checks expiry, not the renewal threshold)
+    // may already be inside its renewal window, or have less time left
+    // than intervalMs. Waiting for the first tick could let it expire
+    // before renewal ever runs.
+    this.triggerRenewalCheck();
+
     this.renewalTimer = setInterval(() => {
-      this.maybeRenewToken().catch((err) => {
-        this.logger.error(
-          { err },
-          'Bootstrap admin token renewal check failed',
-        );
-      });
+      this.triggerRenewalCheck();
     }, intervalMs);
     this.renewalTimer.unref();
   }
 
-  stopAutoRenew(): void {
+  /**
+   * Run a renewal check, tracked via {@link renewalInFlight} so a tick
+   * that fires while a previous check/renewal is still in flight (slow
+   * disk, short custom interval) skips instead of racing it, and so
+   * {@link stopAutoRenew} can wait for it before shutdown proceeds.
+   */
+  private triggerRenewalCheck(): void {
+    if (this.renewalInFlight) {
+      return;
+    }
+
+    const promise = this.maybeRenewToken().catch((err) => {
+      this.logger.error({ err }, 'Bootstrap admin token renewal check failed');
+      return null;
+    });
+    this.renewalInFlight = promise;
+    void promise.finally(() => {
+      if (this.renewalInFlight === promise) {
+        this.renewalInFlight = null;
+      }
+    });
+  }
+
+  /**
+   * Stop the renewal timer and wait for any renewal check already in
+   * flight to finish, so a write started right before shutdown can't
+   * land after cleanup has moved on.
+   */
+  async stopAutoRenew(): Promise<void> {
     if (this.renewalTimer) {
       clearInterval(this.renewalTimer);
       this.renewalTimer = null;
+    }
+    if (this.renewalInFlight) {
+      await this.renewalInFlight;
     }
   }
 
@@ -141,7 +168,14 @@ export class BootstrapAdminManager {
     const fraction =
       this.options.renewalThresholdFraction ??
       DEFAULT_RENEWAL_THRESHOLD_FRACTION;
-    const thresholdMs = this.options.tokenExpiryMs * fraction;
+    // Derived from the loaded record's own issued lifetime rather than
+    // the currently configured tokenExpiryMs — if BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS
+    // changes after a token was minted, the threshold should still track
+    // that token's actual lifetime, not the new config value.
+    const issuedLifetimeMs =
+      new Date(this.currentRecord.expiresAt).getTime() -
+      new Date(this.currentRecord.createdAt).getTime();
+    const thresholdMs = issuedLifetimeMs * fraction;
     const remainingMs =
       new Date(this.currentRecord.expiresAt).getTime() - Date.now();
 
@@ -150,6 +184,18 @@ export class BootstrapAdminManager {
     }
 
     const previousExpiresAt = this.currentRecord.expiresAt;
+    return this.mintAndPersist({
+      logMessage: 'Bootstrap admin token proactively renewed before expiry',
+      tokenLogMessage: 'Bootstrap admin token value (shown once on renewal)',
+      extraLogFields: { previousExpiresAt },
+    });
+  }
+
+  private async mintAndPersist(opts: {
+    logMessage: string;
+    tokenLogMessage: string;
+    extraLogFields?: Record<string, unknown>;
+  }): Promise<BootstrapAdminEnsureResult> {
     const record = await this.createRecord();
     await persistBootstrapAdminRecord(this.options.tokenPath, record);
     this.currentRecord = record;
@@ -158,15 +204,12 @@ export class BootstrapAdminManager {
       {
         clientId: record.clientId,
         tokenPath: this.options.tokenPath,
-        previousExpiresAt,
         expiresAt: record.expiresAt,
+        ...opts.extraLogFields,
       },
-      'Bootstrap admin token proactively renewed before expiry',
+      opts.logMessage,
     );
-    this.logger.warn(
-      { token: record.token },
-      'Bootstrap admin token value (shown once on renewal)',
-    );
+    this.logger.warn({ token: record.token }, opts.tokenLogMessage);
 
     return { record, created: true };
   }

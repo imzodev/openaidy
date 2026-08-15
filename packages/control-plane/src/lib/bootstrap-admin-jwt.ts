@@ -9,17 +9,9 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { BootstrapAdminJwtPayload } from '@openaidy/shared-types';
 
-export type BootstrapAdminJwtPayload = {
-  sub: string;
-  type: 'access' | 'refresh' | 'pairing';
-  scopes: string[];
-  iat: number;
-  exp: number;
-  jti: string;
-  clientType?: string;
-  clientVersion?: string;
-};
+export type { BootstrapAdminJwtPayload };
 
 function base64UrlEncode(str: string): string {
   return Buffer.from(str, 'utf-8').toString('base64url');

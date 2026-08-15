@@ -138,6 +138,27 @@ const envSchema = z
         message: 'DATABASE_URL is required when DB_KIND=postgres',
       });
     }
+
+    // The renewal timer only re-mints the token when a check happens to
+    // land inside the renewal window (the last `RENEW_THRESHOLD_FRACTION`
+    // of the token's lifetime). If the check interval is as long as, or
+    // longer than, that window, a check can easily never land inside it —
+    // the token silently expires before renewal ever fires, defeating the
+    // whole point of this feature. Require the interval to be small enough
+    // that at least a few checks are guaranteed to land inside the window.
+    const renewalWindowMs =
+      value.BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS *
+      value.BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION;
+    if (value.BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS >= renewalWindowMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS'],
+        message:
+          'BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS must be smaller than ' +
+          'BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS * BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION, ' +
+          "or the renewal check can miss the token's renewal window entirely.",
+      });
+    }
   })
   .transform((value) => {
     const openAidyHome = value.OPENAIDY_HOME;

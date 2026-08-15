@@ -1119,7 +1119,7 @@ export async function buildApp() {
 
   // Clean up on close
   app.addHook('onClose', async () => {
-    bootstrapAdmin?.stopAutoRenew();
+    await bootstrapAdmin?.stopAutoRenew();
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
