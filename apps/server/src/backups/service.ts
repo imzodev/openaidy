@@ -18,8 +18,11 @@ import {
   type BackupSection,
   type BackupManifest,
   type BackupSectionSummary,
+  type BackupServiceOptions,
   type ImportedSection,
 } from '@openaidy/shared-types';
+
+export type { BackupServiceOptions };
 
 /** Resolved filesystem locations for each backup section. */
 export type BackupPaths = {
@@ -84,24 +87,6 @@ function countTopLevel(dir: string): number {
   if (!dirExists(dir)) return 0;
   return fs.readdirSync(dir, { withFileTypes: true }).length;
 }
-
-export type BackupServiceOptions = {
-  /**
-   * Closes the server's live database connection. Called right before the
-   * `db` section's file/sidecar writes during import.
-   *
-   * The running `node:sqlite` connection keeps the WAL `-shm` sidecar
-   * memory-mapped for as long as it's open. On POSIX, overwriting an
-   * open/mapped file is silently allowed (if incoherent — the live
-   * connection's view goes stale, which is exactly why a `db` import
-   * always sets `restartRequired`). On Windows it isn't allowed at all:
-   * the write fails with an unmapped libuv error
-   * (`UNKNOWN: unknown error, open '...db-shm'`). Closing first makes the
-   * write succeed on both, and is a no-op improvement on POSIX since a
-   * restart was already required regardless.
-   */
-  closeDatabase?: () => Promise<void>;
-};
 
 export class BackupService {
   constructor(
@@ -319,22 +304,40 @@ export class BackupService {
       // outright on Windows and leaves a stale in-memory view on POSIX.
       // Close it first — see BackupServiceOptions.closeDatabase.
       await this.options.closeDatabase?.();
-      // Clear existing sidecars so we don't mix an old WAL with a new DB.
-      for (const suffix of ['-wal', '-shm']) {
-        try {
-          fs.rmSync(`${destPath}${suffix}`, { force: true });
-        } catch {
-          // ignore
+
+      try {
+        // Clear existing sidecars so we don't mix an old WAL with a new DB.
+        for (const suffix of ['-wal', '-shm']) {
+          try {
+            fs.rmSync(`${destPath}${suffix}`, { force: true });
+          } catch {
+            // ignore
+          }
         }
-      }
-      for (const entry of entries) {
-        const base = path.basename(entry.entryName);
-        // Map the archived basename back onto the live db path family.
-        const target =
-          base === path.basename(destPath)
-            ? destPath
-            : path.join(path.dirname(destPath), base);
-        fs.writeFileSync(target, entry.getData());
+        for (const entry of entries) {
+          const base = path.basename(entry.entryName);
+          // Map the archived basename back onto the live db path family.
+          const target =
+            base === path.basename(destPath)
+              ? destPath
+              : path.join(path.dirname(destPath), base);
+          fs.writeFileSync(target, entry.getData());
+        }
+      } catch (err) {
+        // The live connection was already closed above (if one existed)
+        // before we got here, so regardless of whether this write itself
+        // failed partway through (corrupted entry, disk full, a lock on
+        // the destination), the db is left in an unknown state either
+        // way — always flag restartRequired rather than letting this
+        // failure look like a no-op the caller can just retry.
+        return {
+          section,
+          success: false,
+          error:
+            err instanceof Error ? err.message : 'Failed to write db files',
+          itemsImported: 0,
+          restartRequired: true,
+        };
       }
       return { section, success: true, itemsImported: 1, restartRequired };
     }

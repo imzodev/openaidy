@@ -223,6 +223,29 @@ describe('BackupService.applySection', () => {
     expect(closeOrder).toEqual(['closed']);
   });
 
+  it('flags restartRequired even when the write fails after the connection is already closed', async () => {
+    let closed = false;
+    // Force the write to fail regardless of platform: pre-create a
+    // directory at the destination path so fs.writeFileSync throws
+    // (EISDIR) instead of succeeding.
+    fs.mkdirSync(destPaths.dbPath, { recursive: true });
+
+    const destWithClose = new BackupService(destPaths, '0.3.8', {
+      closeDatabase: async () => {
+        closed = true;
+      },
+    });
+
+    const r = await destWithClose.applySection('db', sourceZip);
+
+    expect(closed).toBe(true);
+    expect(r.success).toBe(false);
+    // The connection was already closed before this write was attempted,
+    // so even on failure the caller must be told a restart is required —
+    // not just told "import failed" with no further signal.
+    expect(r.restartRequired).toBe(true);
+  });
+
   it('overwrites a real WAL-mode db + its live -shm/-wal sidecars without throwing', async () => {
     // Regression test for the Windows-only crash: overwriting db-shm/db-wal
     // while a node:sqlite connection still holds them open/mmap'd fails

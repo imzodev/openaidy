@@ -80,6 +80,30 @@ export type ImportResponse = {
   results: ImportedSection[];
 };
 
+/** Options passed to the backup service that don't come from the archive itself. */
+export type BackupServiceOptions = {
+  /**
+   * Closes the server's live sqlite connection. Called right before the
+   * `db` section's file/sidecar writes during import.
+   *
+   * The running `node:sqlite` connection keeps the WAL `-shm` sidecar
+   * memory-mapped for as long as it's open. On POSIX, overwriting an
+   * open/mapped file is silently allowed (if incoherent — the live
+   * connection's view goes stale, which is exactly why a `db` import
+   * always sets `restartRequired`). On Windows it isn't allowed at all:
+   * the write fails with an unmapped libuv error
+   * (`UNKNOWN: unknown error, open '...db-shm'`). Closing first makes the
+   * write succeed on both, and is a no-op improvement on POSIX since a
+   * restart was already required regardless.
+   *
+   * The caller is responsible for only providing this when the live
+   * connection is actually sqlite-backed — invoking it against a
+   * postgres deployment's connection pool would tear down every other
+   * DB-backed route for an import that never touches that pool.
+   */
+  closeDatabase?: () => Promise<void>;
+};
+
 /** Type guard for a parsed manifest. */
 export function isBackupManifest(value: unknown): value is BackupManifest {
   if (typeof value !== 'object' || value === null) return false;
