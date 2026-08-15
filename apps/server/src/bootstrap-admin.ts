@@ -186,14 +186,22 @@ export class BootstrapAdminManager {
     const previousExpiresAt = this.currentRecord.expiresAt;
     return this.mintAndPersist({
       logMessage: 'Bootstrap admin token proactively renewed before expiry',
-      tokenLogMessage: 'Bootstrap admin token value (shown once on renewal)',
+      // Deliberately no `tokenLogMessage` here: the plaintext token is
+      // logged once at initial creation only (see ensureToken()) — an
+      // operator retrieves a renewed value via `admin token show`,
+      // which reads the persisted file directly. Re-logging the raw
+      // secret on every renewal over a long-running server's lifetime
+      // would multiply its exposure through log aggregation for no
+      // operational benefit.
       extraLogFields: { previousExpiresAt },
     });
   }
 
   private async mintAndPersist(opts: {
     logMessage: string;
-    tokenLogMessage: string;
+    /** Only logged when provided — omit to avoid re-exposing the raw
+     * token value in log aggregation for non-initial mints. */
+    tokenLogMessage?: string;
     extraLogFields?: Record<string, unknown>;
   }): Promise<BootstrapAdminEnsureResult> {
     const record = await this.createRecord();
@@ -209,7 +217,9 @@ export class BootstrapAdminManager {
       },
       opts.logMessage,
     );
-    this.logger.warn({ token: record.token }, opts.tokenLogMessage);
+    if (opts.tokenLogMessage) {
+      this.logger.warn({ token: record.token }, opts.tokenLogMessage);
+    }
 
     return { record, created: true };
   }

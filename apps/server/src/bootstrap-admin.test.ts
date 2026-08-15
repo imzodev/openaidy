@@ -192,6 +192,42 @@ describe('BootstrapAdminManager', () => {
       expect(persisted.token).toBe(renewed?.record.token);
     });
 
+    it('does not re-log the plaintext token on renewal (only on initial creation)', async () => {
+      vi.useFakeTimers();
+
+      const manager = new BootstrapAdminManager(authMiddleware, logger, {
+        enabled: true,
+        tokenPath,
+        clientId: 'bootstrap-admin',
+        tokenExpiryMs: 1000, // 1s lifetime, 20% threshold => 200ms remaining
+      });
+      const first = await manager.ensureToken();
+      expect(first?.created).toBe(true);
+      // Creation logs the raw token once.
+      expect(logger.warn).toHaveBeenCalledWith(
+        { token: first?.record.token },
+        expect.stringContaining('shown once on creation'),
+      );
+
+      const warnCallsBeforeRenewal = (logger.warn as ReturnType<typeof vi.fn>)
+        .mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(850);
+      const renewed = await manager.maybeRenewToken();
+      expect(renewed?.record.token).not.toBe(first?.record.token);
+
+      // Renewal logs metadata but never the raw token value again — an
+      // operator retrieves it via `admin token show`, which reads the
+      // persisted file directly.
+      const warnCallsDuringRenewal = (
+        logger.warn as ReturnType<typeof vi.fn>
+      ).mock.calls.slice(warnCallsBeforeRenewal);
+      expect(warnCallsDuringRenewal.length).toBeGreaterThan(0);
+      for (const call of warnCallsDuringRenewal) {
+        expect(call[0]).not.toHaveProperty('token');
+      }
+    });
+
     it("derives the renewal threshold from the loaded record's actual lifetime, not the currently configured tokenExpiryMs", async () => {
       vi.useFakeTimers();
 
