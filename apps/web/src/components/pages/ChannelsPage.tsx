@@ -432,6 +432,7 @@ export function ChannelsPage() {
   const [qrOpen, setQrOpen] = createSignal<string | null>(null);
   const [showAdd, setShowAdd] = createSignal(false);
   const [confirmRemove, setConfirmRemove] = createSignal<string | null>(null);
+  const wsContext = useWebSocketContext();
 
   const handleAdded = (id: string, type: 'whatsapp' | 'discord') => {
     setShowAdd(false);
@@ -452,15 +453,43 @@ export function ChannelsPage() {
     }
   };
 
+  // Token-based channels (Discord) have no QR panel to subscribe on their
+  // behalf, so nothing previously told the UI when a background login
+  // succeeded or failed — the row just sat on its stale pre-connect status
+  // until the next manual refresh. Subscribe to this channel's status over
+  // the WebSocket and refetch the list once it reaches a terminal state, so
+  // e.g. a "disallowed intents" failure shows up without a page reload.
+  const watchUntilSettled = (id: string) => {
+    const client = wsContext.client();
+    if (!client) return;
+
+    const unsubStatus = client.on('channel.status', (msg: unknown) => {
+      const wsMsg = msg as { payload: { channelId: string; status: string } };
+      if (wsMsg.payload.channelId !== id) return;
+      if (
+        wsMsg.payload.status === 'connected' ||
+        wsMsg.payload.status === 'error'
+      ) {
+        unsubStatus();
+        void client.sendRequest('channel.unsubscribe', { channelId: id });
+        void refetch();
+      }
+    });
+    void client.sendRequest('channel.subscribe', { channelId: id });
+  };
+
   const handleConnect = async (id: string, type: string) => {
     setPending(id);
     try {
       await connectChannel(id);
-      // Only WhatsApp needs the QR pairing panel; Discord connects via token
-      // and flips to Connected over the status WebSocket.
-      if (type === 'whatsapp') setQrOpen(id);
+      if (type === 'whatsapp') {
+        // WhatsApp's own QR panel subscribes to this channel's status.
+        setQrOpen(id);
+      } else {
+        watchUntilSettled(id);
+      }
     } catch {
-      // connect error — QR panel won't open, user can retry
+      // connect error — retry from the row's Connect button
     } finally {
       setPending(null);
     }

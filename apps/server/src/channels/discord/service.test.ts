@@ -11,6 +11,8 @@ import { clearSessionMapForTesting } from '../message-handler.js';
 class MockClient {
   static lastInstance: MockClient | null = null;
   static lastToken: string | null = null;
+  /** Set before connect() to make the next login() call reject with this. */
+  static nextLoginError: unknown = null;
 
   options: unknown;
   user = { id: 'bot-123' };
@@ -19,6 +21,11 @@ class MockClient {
 
   login = vi.fn(async (token: string) => {
     MockClient.lastToken = token;
+    if (MockClient.nextLoginError) {
+      const err = MockClient.nextLoginError;
+      MockClient.nextLoginError = null;
+      throw err;
+    }
   });
   destroy = vi.fn(async () => {});
 
@@ -41,6 +48,9 @@ class MockClient {
   }
   emitMessage(msg: unknown): void {
     this.onHandlers.get('messageCreate')?.(msg);
+  }
+  emitError(err: unknown): void {
+    this.onHandlers.get('error')?.(err);
   }
 }
 
@@ -72,6 +82,7 @@ describe('DiscordChannel', () => {
     clearSessionMapForTesting();
     MockClient.lastInstance = null;
     MockClient.lastToken = null;
+    MockClient.nextLoginError = null;
     submit = vi.fn(async () => ({
       ok: true as const,
       assistantMessage: { content: 'reply!' },
@@ -154,6 +165,55 @@ describe('DiscordChannel', () => {
     await channel.connect();
     expect(channel.getStatus()).toBe('error');
     expect(MockClient.lastInstance).toBeNull();
+    expect(channel.getLastError()).toBeDefined();
+  });
+
+  it('translates a disallowed-intents login failure into an actionable message', async () => {
+    MockClient.nextLoginError = new Error('Used disallowed intents');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+
+    await channel.connect();
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toMatch(/message content intent/i);
+    expect(channel.getLastError()).toMatch(/developer portal/i);
+  });
+
+  it('surfaces other login failures as their own message', async () => {
+    MockClient.nextLoginError = new Error('An invalid token was provided.');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+
+    await channel.connect();
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toBe('An invalid token was provided.');
+  });
+
+  it('sets getLastError() from a client error event after a successful login', async () => {
+    const { channel, client } = await connected(cfg());
+    expect(channel.getLastError()).toBeUndefined();
+
+    client.emitError(new Error('websocket closed unexpectedly'));
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toBe('websocket closed unexpectedly');
+  });
+
+  it('clears a previous error once a reconnect succeeds', async () => {
+    MockClient.nextLoginError = new Error('Used disallowed intents');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+    await channel.connect();
+    expect(channel.getLastError()).toBeDefined();
+
+    // Login succeeds this time; getLastError() should reset once ready.
+    await channel.connect();
+    MockClient.lastInstance!.emitReady();
+
+    expect(channel.getStatus()).toBe('connected');
+    expect(channel.getLastError()).toBeUndefined();
   });
 
   it('replies to a DM from an allowed sender', async () => {

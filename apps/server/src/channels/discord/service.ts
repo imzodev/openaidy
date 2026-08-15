@@ -17,6 +17,28 @@ import { resolveBotToken } from './secret.js';
 const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
 /**
+ * discord.js throws this exact message (from gateway close code 4014,
+ * `GatewayCloseCodes.DisallowedIntents`) when the bot's application hasn't
+ * enabled a privileged intent it requested — for us, always Message Content
+ * Intent, the only privileged one in {@link DiscordChannel.connect}'s intent
+ * list. Translated into an actionable message since the raw string gives no
+ * indication of what to actually do about it.
+ */
+const DISALLOWED_INTENTS_MESSAGE = 'Used disallowed intents';
+
+function describeConnectError(err: unknown): string {
+  if (err instanceof Error && err.message === DISALLOWED_INTENTS_MESSAGE) {
+    return (
+      'Discord rejected this bot token: required privileged intents are ' +
+      'not enabled. Open the Discord Developer Portal → your application ' +
+      '→ Bot → Privileged Gateway Intents, enable "Message Content ' +
+      'Intent", then reconnect.'
+    );
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
  * Discord channel implementation using discord.js.
  *
  * Token-based (no QR), so it implements the base {@link IChannel} — not
@@ -35,6 +57,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
 
   private status: ChannelStatus = 'disconnected';
   private client: Client | null = null;
+  private lastError: string | undefined;
 
   constructor(
     private readonly config: DiscordChannelConfig,
@@ -47,6 +70,10 @@ export class DiscordChannel extends EventEmitter implements IChannel {
 
   getStatus(): ChannelStatus {
     return this.status;
+  }
+
+  getLastError(): string | undefined {
+    return this.lastError;
   }
 
   onStatusChange(cb: (status: ChannelStatus) => void): void {
@@ -67,6 +94,8 @@ export class DiscordChannel extends EventEmitter implements IChannel {
       return;
     }
 
+    this.lastError = undefined;
+
     let token: string;
     try {
       token = resolveBotToken(this.config.botToken);
@@ -75,6 +104,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         { err, channelId: this.id },
         'discord: failed to resolve bot token',
       );
+      this.lastError = describeConnectError(err);
       this.setStatus('error');
       return;
     }
@@ -92,6 +122,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
     this.client = client;
 
     client.once(Events.ClientReady, () => {
+      this.lastError = undefined;
       this.setStatus('connected');
       this.deps.logger.info({ channelId: this.id }, 'discord: connected');
     });
@@ -105,6 +136,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         { err, channelId: this.id },
         'discord: client error',
       );
+      this.lastError = describeConnectError(err);
       this.setStatus('error');
     });
 
@@ -115,6 +147,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         { err, channelId: this.id },
         'discord: login failed',
       );
+      this.lastError = describeConnectError(err);
       this.client = null;
       this.setStatus('error');
     }
