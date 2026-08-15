@@ -119,28 +119,35 @@ chmod 600 .openaidy/credentials/bootstrap-admin.json
 
 ### Token Rotation
 
-Currently, token rotation is manual:
+A running server automatically re-mints the token before it expires — no
+manual rotation needed for the normal case. By default, once the current
+token has 20% of its lifetime left, the server generates a fresh one and
+overwrites the credentials file in place (checked every 6 hours). This means
+`pnpm openaidy admin token show` always returns a currently-valid token as
+long as the server keeps running, even if it's never restarted.
 
-1. **Stop the server:**
+Tune this via environment variables:
 
-   ```bash
-   # Stop the running server
-   ```
+| Variable                                   | Default         | Meaning                                            |
+| ------------------------------------------ | --------------- | -------------------------------------------------- |
+| `BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION` | `0.2` (20%)     | Remaining-lifetime fraction that triggers renewal  |
+| `BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS`  | `21600000` (6h) | How often the server checks whether renewal is due |
 
+You can still force rotation manually at any time — e.g. to invalidate a
+token you suspect has leaked:
+
+1. **Stop the server.**
 2. **Delete the old token:**
-
    ```bash
    rm .openaidy/credentials/bootstrap-admin.json
    ```
-
 3. **Restart the server:**
    ```bash
    pnpm --filter @openaidy/server start
    ```
 
-A new token will be generated automatically.
-
-> **Future:** Automatic token rotation and revocation will be implemented in a future release.
+> **Future:** Explicit revocation (invalidating a token before its own
+> expiry without a restart) is not yet implemented.
 
 ## Common Operations
 
@@ -211,9 +218,18 @@ pnpm --filter @openaidy/server start
 
 **Error:** `Token is expired`
 
-**Cause:** Token has passed its expiration time.
+**Cause:** Token has passed its expiration time. This shouldn't happen while
+the server is running — see [Token Rotation](#token-rotation) — but can
+occur if the server was stopped for longer than the token's remaining
+lifetime when it stopped.
 
-**Solution:** Generate a new token:
+**Solution:** Start (or restart) the server to generate a new token:
+
+```bash
+pnpm --filter @openaidy/server start
+```
+
+If the file is still present but stale, delete it first:
 
 ```bash
 rm .openaidy/credentials/bootstrap-admin.json
@@ -267,10 +283,10 @@ Token behavior can be configured through environment variables:
 
 ## Future Enhancements
 
-The following features are planned for future releases:
+Automatic rotation (see [Token Rotation](#token-rotation)) is implemented.
+The following features are still planned for future releases:
 
-- **Automatic rotation** - Periodic token rotation
-- **Revocation** - Ability to revoke specific tokens
+- **Revocation** - Ability to revoke a specific token before its own expiry
 - **Multiple tokens** - Support for multiple admin tokens
 - **Remote management** - Token management via CLI from remote machines
 - **Audit logging** - Track token usage

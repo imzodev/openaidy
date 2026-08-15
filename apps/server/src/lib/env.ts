@@ -88,6 +88,20 @@ const envSchema = z
       .number()
       .positive()
       .default(31536000000),
+    // Proactive renewal: the server re-mints the bootstrap-admin token once
+    // the current one has this fraction of its lifetime left, so a
+    // long-running server (no periodic restarts) never leaves an operator
+    // stuck with an expired token and a manual `rm` + restart. Checked every
+    // BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS.
+    BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION: z.coerce
+      .number()
+      .positive()
+      .max(1)
+      .default(0.2),
+    BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS: z.coerce
+      .number()
+      .positive()
+      .default(21600000), // 6 hours
     // Optional override for the master key used to encrypt provider
     // credentials at rest (AES-256-GCM). When unset, a unique random key is
     // generated and persisted per install (see lib/encryption.ts), so the app
