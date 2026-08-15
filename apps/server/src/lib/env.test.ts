@@ -130,6 +130,26 @@ describe('parseEnv', () => {
       'postgres://postgres:postgres@localhost:5432/openaidy',
     );
   });
+
+  it('requires the renewal check interval to be small enough to land inside the renewal window', () => {
+    expect(() =>
+      parseEnv({
+        BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: '3600000', // 1h
+        BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION: '0.2', // 12min window
+        BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS: '21600000', // 6h default, way too coarse
+      }),
+    ).toThrow(/BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS/);
+  });
+
+  it('accepts a renewal check interval comfortably smaller than the renewal window', () => {
+    const parsed = parseEnv({
+      BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS: '3600000', // 1h
+      BOOTSTRAP_ADMIN_RENEW_THRESHOLD_FRACTION: '0.2', // 12min window
+      BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS: '60000', // 1min
+    });
+
+    expect(parsed.BOOTSTRAP_ADMIN_RENEW_CHECK_INTERVAL_MS).toBe(60000);
+  });
 });
 
 describe('parseEnv - WS_TOKEN_SECRET resolution', () => {

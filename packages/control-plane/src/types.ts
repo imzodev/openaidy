@@ -1,6 +1,6 @@
 /**
  * Control Plane - Types
- * 
+ *
  * Shared result and error types for control-plane workflows.
  * These types are designed to be independent of CLI rendering
  * and suitable for future JSON output.
@@ -30,7 +30,7 @@ export type WorkflowError = {
 
 /**
  * Standard workflow error codes.
- * 
+ *
  * These codes are designed to be:
  * - Stable (won't change frequently)
  * - Actionable (can be programmatically handled)
@@ -43,13 +43,13 @@ export type WorkflowErrorCode =
   | 'BOOTSTRAP_ADMIN_TOKEN_MALFORMED'
   | 'BOOTSTRAP_ADMIN_TOKEN_INVALID'
   | 'BOOTSTRAP_ADMIN_TOKEN_EXPIRED'
-  
+
   // Pairing Request Errors
   | 'PAIRING_REQUEST_NOT_FOUND'
   | 'PAIRING_REQUEST_NOT_PENDING'
   | 'PAIRING_REQUEST_EXPIRED'
   | 'PAIRING_REQUEST_ALREADY_PROCESSED'
-  
+
   // General Errors
   | 'INTERNAL_ERROR'
   | 'INVALID_INPUT';
@@ -97,7 +97,11 @@ export type BootstrapAdminInspectResult = WorkflowResult<{
 /**
  * Pairing request status.
  */
-export type PairingRequestStatus = 'pending' | 'approved' | 'denied' | 'expired';
+export type PairingRequestStatus =
+  | 'pending'
+  | 'approved'
+  | 'denied'
+  | 'expired';
 
 /**
  * Pairing request data.
@@ -161,7 +165,7 @@ export function failure<T = unknown>(
     error: {
       code,
       message,
-      details,
+      ...(details !== undefined ? { details } : {}),
     },
   };
 }

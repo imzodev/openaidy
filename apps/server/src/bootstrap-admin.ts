@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, writeFile, chmod } from 'node:fs/promises';
-import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
 import type { FastifyBaseLogger } from 'fastify';
 import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
+import {
+  loadValidBootstrapAdminRecord,
+  persistBootstrapAdminRecord,
+} from '@openaidy/control-plane';
 import type { BootstrapAdminRecord } from '@openaidy/shared-types';
 
 export type BootstrapAdminEnsureResult = {
@@ -15,13 +16,34 @@ export type BootstrapAdminOptions = {
   tokenPath: string;
   clientId: string;
   tokenExpiryMs: number;
+  /**
+   * Fraction of `tokenExpiryMs` remaining at which point the token is
+   * proactively re-minted (default 0.2 — renew once 20% of its
+   * lifetime is left). Lets a long-running server keep a valid token
+   * on disk indefinitely without ever needing a manual restart.
+   */
+  renewalThresholdFraction?: number;
+  /** How often to check whether renewal is due. Default 6 hours. */
+  renewalCheckIntervalMs?: number;
 };
+
+const DEFAULT_RENEWAL_THRESHOLD_FRACTION = 0.2;
+const DEFAULT_RENEWAL_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export class BootstrapAdminManager {
   private authMiddleware: AuthMiddleware;
   private logger: FastifyBaseLogger;
   private options: BootstrapAdminOptions;
   private currentRecord: BootstrapAdminRecord | null = null;
+  private renewalTimer: NodeJS.Timeout | null = null;
+  /**
+   * Tracks a renewal check/mint currently in flight so overlapping
+   * timer ticks don't race each other's `createRecord()` +
+   * `persistBootstrapAdminRecord()` calls, and so {@link stopAutoRenew}
+   * can wait for it to land before shutdown proceeds.
+   */
+  private renewalInFlight: Promise<BootstrapAdminEnsureResult | null> | null =
+    null;
 
   constructor(
     authMiddleware: AuthMiddleware,
@@ -39,7 +61,10 @@ export class BootstrapAdminManager {
       return null;
     }
 
-    const existing = await this.loadValidRecord();
+    const existing = await loadValidBootstrapAdminRecord(
+      this.options.tokenPath,
+      (token) => this.authMiddleware.validateToken(token),
+    );
     if (existing) {
       this.currentRecord = existing;
       this.logger.info(
@@ -53,8 +78,134 @@ export class BootstrapAdminManager {
       return { record: existing, created: false };
     }
 
+    return this.mintAndPersist({
+      logMessage: 'Bootstrap admin token created',
+      tokenLogMessage: 'Bootstrap admin token value (shown once on creation)',
+    });
+  }
+
+  getRecord(): BootstrapAdminRecord | null {
+    return this.currentRecord;
+  }
+
+  /**
+   * Start a background timer that periodically checks whether the
+   * current token is due for renewal (see {@link maybeRenewToken}).
+   * No-op if bootstrap admin is disabled or a timer is already running.
+   * The timer is `unref()`'d so it never keeps the process alive on
+   * its own — server shutdown still requires {@link stopAutoRenew}
+   * (wired into the app's `onClose` hook) to avoid a delayed handle.
+   */
+  startAutoRenew(): void {
+    if (!this.options.enabled || this.renewalTimer) {
+      return;
+    }
+
+    const intervalMs =
+      this.options.renewalCheckIntervalMs ?? DEFAULT_RENEWAL_CHECK_INTERVAL_MS;
+
+    // Check once immediately: a token loaded from disk at boot (via
+    // ensureToken(), which only checks expiry, not the renewal threshold)
+    // may already be inside its renewal window, or have less time left
+    // than intervalMs. Waiting for the first tick could let it expire
+    // before renewal ever runs.
+    this.triggerRenewalCheck();
+
+    this.renewalTimer = setInterval(() => {
+      this.triggerRenewalCheck();
+    }, intervalMs);
+    this.renewalTimer.unref();
+  }
+
+  /**
+   * Run a renewal check, tracked via {@link renewalInFlight} so a tick
+   * that fires while a previous check/renewal is still in flight (slow
+   * disk, short custom interval) skips instead of racing it, and so
+   * {@link stopAutoRenew} can wait for it before shutdown proceeds.
+   */
+  private triggerRenewalCheck(): void {
+    if (this.renewalInFlight) {
+      return;
+    }
+
+    const promise = this.maybeRenewToken().catch((err) => {
+      this.logger.error({ err }, 'Bootstrap admin token renewal check failed');
+      return null;
+    });
+    this.renewalInFlight = promise;
+    void promise.finally(() => {
+      if (this.renewalInFlight === promise) {
+        this.renewalInFlight = null;
+      }
+    });
+  }
+
+  /**
+   * Stop the renewal timer and wait for any renewal check already in
+   * flight to finish, so a write started right before shutdown can't
+   * land after cleanup has moved on.
+   */
+  async stopAutoRenew(): Promise<void> {
+    if (this.renewalTimer) {
+      clearInterval(this.renewalTimer);
+      this.renewalTimer = null;
+    }
+    if (this.renewalInFlight) {
+      await this.renewalInFlight;
+    }
+  }
+
+  /**
+   * Re-mint and persist the token if the current record is within
+   * `renewalThresholdFraction` of its expiry. No-op otherwise (or if
+   * disabled / no token has been loaded yet via {@link ensureToken}).
+   */
+  async maybeRenewToken(): Promise<BootstrapAdminEnsureResult | null> {
+    if (!this.options.enabled || !this.currentRecord) {
+      return null;
+    }
+
+    const fraction =
+      this.options.renewalThresholdFraction ??
+      DEFAULT_RENEWAL_THRESHOLD_FRACTION;
+    // Derived from the loaded record's own issued lifetime rather than
+    // the currently configured tokenExpiryMs — if BOOTSTRAP_ADMIN_TOKEN_EXPIRY_MS
+    // changes after a token was minted, the threshold should still track
+    // that token's actual lifetime, not the new config value.
+    const issuedLifetimeMs =
+      new Date(this.currentRecord.expiresAt).getTime() -
+      new Date(this.currentRecord.createdAt).getTime();
+    const thresholdMs = issuedLifetimeMs * fraction;
+    const remainingMs =
+      new Date(this.currentRecord.expiresAt).getTime() - Date.now();
+
+    if (remainingMs > thresholdMs) {
+      return null;
+    }
+
+    const previousExpiresAt = this.currentRecord.expiresAt;
+    return this.mintAndPersist({
+      logMessage: 'Bootstrap admin token proactively renewed before expiry',
+      // Deliberately no `tokenLogMessage` here: the plaintext token is
+      // logged once at initial creation only (see ensureToken()) — an
+      // operator retrieves a renewed value via `admin token show`,
+      // which reads the persisted file directly. Re-logging the raw
+      // secret on every renewal over a long-running server's lifetime
+      // would multiply its exposure through log aggregation for no
+      // operational benefit.
+      extraLogFields: { previousExpiresAt },
+    });
+  }
+
+  private async mintAndPersist(opts: {
+    logMessage: string;
+    /** Only logged when provided — omit to avoid re-exposing the raw
+     * token value in log aggregation for non-initial mints. */
+    tokenLogMessage?: string;
+    extraLogFields?: Record<string, unknown>;
+  }): Promise<BootstrapAdminEnsureResult> {
     const record = await this.createRecord();
-    await this.persistRecord(record);
+    await persistBootstrapAdminRecord(this.options.tokenPath, record);
     this.currentRecord = record;
 
     this.logger.warn(
@@ -62,59 +213,15 @@ export class BootstrapAdminManager {
         clientId: record.clientId,
         tokenPath: this.options.tokenPath,
         expiresAt: record.expiresAt,
+        ...opts.extraLogFields,
       },
-      'Bootstrap admin token created',
+      opts.logMessage,
     );
-    this.logger.warn(
-      { token: record.token },
-      'Bootstrap admin token value (shown once on creation)',
-    );
+    if (opts.tokenLogMessage) {
+      this.logger.warn({ token: record.token }, opts.tokenLogMessage);
+    }
 
     return { record, created: true };
-  }
-
-  getRecord(): BootstrapAdminRecord | null {
-    return this.currentRecord;
-  }
-
-  private async loadValidRecord(): Promise<BootstrapAdminRecord | null> {
-    try {
-      const raw = await readFile(this.options.tokenPath, 'utf-8');
-      const parsed = JSON.parse(raw) as Partial<BootstrapAdminRecord>;
-
-      if (
-        typeof parsed.clientId !== 'string' ||
-        typeof parsed.token !== 'string' ||
-        !Array.isArray(parsed.scopes) ||
-        typeof parsed.createdAt !== 'string' ||
-        typeof parsed.expiresAt !== 'string'
-      ) {
-        return null;
-      }
-
-      const payload = await this.authMiddleware.validateToken(parsed.token);
-      if (!payload) {
-        return null;
-      }
-
-      if (payload.sub !== parsed.clientId) {
-        return null;
-      }
-
-      if (!parsed.scopes.includes(CAPABILITIES.ADMIN)) {
-        return null;
-      }
-
-      return {
-        clientId: parsed.clientId,
-        token: parsed.token,
-        scopes: [...parsed.scopes],
-        createdAt: parsed.createdAt,
-        expiresAt: parsed.expiresAt,
-      };
-    } catch {
-      return null;
-    }
   }
 
   private async createRecord(): Promise<BootstrapAdminRecord> {
@@ -137,22 +244,5 @@ export class BootstrapAdminManager {
       createdAt: new Date(payload.iat * 1000).toISOString(),
       expiresAt: new Date(payload.exp * 1000).toISOString(),
     };
-  }
-
-  private async persistRecord(record: BootstrapAdminRecord): Promise<void> {
-    await mkdir(dirname(this.options.tokenPath), { recursive: true });
-
-    // Unique temp name per write. A fixed `${tokenPath}.tmp` is a race: two
-    // managers pointed at the same token path (e.g. concurrent buildApp()s in
-    // tests) would each write the same temp file, and one's rename() pulls it
-    // out from under the other's chmod(), throwing ENOENT. A per-write suffix
-    // keeps the write atomic and isolated.
-    const tempPath = `${this.options.tokenPath}.${randomUUID()}.tmp`;
-    const contents = `${JSON.stringify(record, null, 2)}\n`;
-
-    await writeFile(tempPath, contents, { encoding: 'utf-8', mode: 0o600 });
-    await chmod(tempPath, 0o600);
-    await rename(tempPath, this.options.tokenPath);
-    await chmod(this.options.tokenPath, 0o600);
   }
 }
