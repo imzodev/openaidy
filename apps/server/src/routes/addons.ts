@@ -592,8 +592,8 @@ export const addonRoutes: FastifyPluginAsync<AddonRoutesOptions> = async (
       const contentType = mimeTypes[ext] ?? 'application/octet-stream';
 
       // Read the addon manifest to extend connect-src/img-src/style-src/
-      // font-src per its declared externalDomains/externalImageDomains/
-      // externalStyleDomains/externalFontDomains.
+      // font-src/media-src per its declared externalDomains/externalImageDomains/
+      // externalStyleDomains/externalFontDomains/externalMediaDomains.
       // TODO: In the future, prompt the user to approve these domains before
       // the addon is enabled — similar to the permissions approval flow.
       const manifestPath = path.join(addonsDir, addonId, 'addon.json');
