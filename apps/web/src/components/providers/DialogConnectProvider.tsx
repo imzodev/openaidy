@@ -11,6 +11,7 @@ import type { ProviderPreset } from '@openaidy/shared-types';
 import {
   connectProviderWithApiKey,
   getOAuthStatus,
+  getProviderAuthMethods,
   startProviderOAuth,
   type ConnectProviderResponse,
   type OAuthStartResponse,
@@ -30,15 +31,27 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
   const [apiKey, setApiKey] = createSignal('');
   const [isConnecting, setIsConnecting] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [supportsOAuth, setSupportsOAuth] = createSignal(false);
 
-  // Reset state when provider changes
+  // Reset state when provider changes, then ask the server which auth
+  // methods this provider actually supports — the OAuth option is only
+  // ever shown once that check comes back true, so we never offer a
+  // flow the backend can't complete (see fix/oauth-auth-methods-gating).
   createEffect(() => {
-    if (props.provider) {
-      setAuthMethod('api_key');
-      setRegion('global');
-      setApiKey('');
-      setError(null);
-    }
+    const preset = props.provider;
+    if (!preset) return;
+
+    setAuthMethod('api_key');
+    setRegion('global');
+    setApiKey('');
+    setError(null);
+    setSupportsOAuth(false);
+
+    void getProviderAuthMethods(preset.id).then((methods) => {
+      if (props.provider?.id === preset.id) {
+        setSupportsOAuth(methods.some((m) => m.type === 'oauth'));
+      }
+    });
   });
 
   const handleConnect = async () => {
@@ -252,18 +265,11 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                     </div>
                   </div>
                 </label>
-                {/* OAuth is only shown for providers that actually
-                    support it. OpenCode Go (and the other API-key-only
-                    providers) must not surface this option — it would
-                    only confuse the user since the backend would reject
-                    the flow. */}
-                <Show
-                  when={
-                    props.provider!.id !== 'opencode-go' &&
-                    props.provider!.id !== 'opencode-go-anthropic' &&
-                    props.provider!.id !== 'opencode-zen'
-                  }
-                >
+                {/* OAuth is only shown for providers that actually support
+                    it, per GET /providers/:id/auth-methods — surfacing it
+                    for an API-key-only provider would just lead to a
+                    confusing "does not support OAuth" failure. */}
+                <Show when={supportsOAuth()}>
                   <label class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <input
                       type="radio"
@@ -299,6 +305,19 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                   placeholder={`Enter ${props.provider!.name} API key`}
                   class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400"
                 />
+                <Show when={props.provider!.apiKeyUrl}>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(props.provider!.apiKeyUrl, '_blank');
+                    }}
+                    class="inline-flex items-center gap-1 mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    <ExternalLink class="w-3 h-3" />
+                    Get an API key from {props.provider!.name}
+                  </a>
+                </Show>
               </div>
             </Show>
 

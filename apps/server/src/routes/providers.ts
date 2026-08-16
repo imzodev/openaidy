@@ -734,6 +734,29 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
     async (request, reply) => {
       const { providerId } = request.params as { providerId: string };
 
+      // Reject providers that don't support OAuth before validating the
+      // body — otherwise every non-OAuth provider (which never sends a
+      // redirectUri, since the frontend gates the OAuth option on
+      // GET /providers/:id/auth-methods) surfaces a confusing raw zod
+      // "redirectUri: Required" error instead of an actionable one.
+      let authMethods;
+      try {
+        authMethods = connectionService.getAuthMethods(providerId);
+      } catch (error) {
+        reply.code(404);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Provider not found',
+        };
+      }
+      if (!authMethods.some((m) => m.type === 'oauth')) {
+        reply.code(400);
+        return {
+          success: false,
+          error: `Provider ${providerId} does not support OAuth`,
+        };
+      }
+
       const bodySchema = z.object({
         redirectUri: z.string().url('Valid redirect URI is required'),
       });

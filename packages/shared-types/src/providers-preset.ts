@@ -34,6 +34,12 @@ export type ProviderPreset = {
   documentationUrl: string;
   icon: string;
   /**
+   * Direct link to the provider's "create/manage API keys" page. Shown in
+   * the connect dialog below the API key input. Omitted for local providers
+   * (no key needed) and for providers where no stable direct link exists.
+   */
+  apiKeyUrl?: string;
+  /**
    * A local provider (e.g. Ollama, LM Studio) reachable at a localhost base
    * URL and requiring no API key. The UI skips the credential/connect dialog
    * for these and configures them directly (base URL + discovered models);
@@ -50,6 +56,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.openai.com/v1',
     websiteUrl: 'https://openai.com',
     documentationUrl: 'https://platform.openai.com/docs/api-reference',
+    apiKeyUrl: 'https://platform.openai.com/api-keys',
     recommendedModel: 'gpt-4o-mini',
     icon: 'bi-robot',
     models: [
@@ -86,6 +93,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.anthropic.com/v1',
     websiteUrl: 'https://anthropic.com',
     documentationUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
+    apiKeyUrl: 'https://console.anthropic.com/settings/keys',
     recommendedModel: 'claude-sonnet-4-6',
     icon: 'bi-brain',
     models: [
@@ -117,6 +125,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     websiteUrl: 'https://ai.google.dev',
     documentationUrl:
       'https://cloud.google.com/alloydocs/ai-platform-key-features',
+    apiKeyUrl: 'https://aistudio.google.com/apikey',
     recommendedModel: 'gemini-2.0-flash',
     icon: 'bi-google',
     models: [
@@ -159,6 +168,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.groq.com/openai/v1',
     websiteUrl: 'https://console.groq.com',
     documentationUrl: 'https://console.groq.com/docs/models',
+    apiKeyUrl: 'https://console.groq.com/keys',
     recommendedModel: 'llama-3.3-70b-versatile',
     icon: 'bi-lightning-charge',
     models: [
@@ -189,6 +199,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.deepseek.com',
     websiteUrl: 'https://platform.deepseek.com',
     documentationUrl: 'https://platform.deepseek.com/api-docs',
+    apiKeyUrl: 'https://platform.deepseek.com/api_keys',
     recommendedModel: 'deepseek-v4-flash',
     icon: 'bi-database',
     models: [
@@ -215,6 +226,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.minimax.io/v1',
     websiteUrl: 'https://platform.minimax.io',
     documentationUrl: 'https://platform.minimax.io/docs',
+    apiKeyUrl:
+      'https://platform.minimax.io/user-center/basic-information/interface-key',
     recommendedModel: 'MiniMax-M3',
     icon: 'bi-stars',
     models: [
@@ -249,6 +262,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://opencode.ai/zen/go/v1',
     websiteUrl: 'https://opencode.ai/auth',
     documentationUrl: 'https://opencode.ai/docs/go',
+    apiKeyUrl: 'https://opencode.ai/auth',
     recommendedModel: 'kimi-k2.7',
     icon: 'bi-stars',
     models: [
@@ -339,6 +353,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://opencode.ai/zen/v1',
     websiteUrl: 'https://opencode.ai/zen',
     documentationUrl: 'https://opencode.ai/docs/zen',
+    apiKeyUrl: 'https://opencode.ai/auth',
     recommendedModel: 'mimo-v2.5-free',
     icon: 'bi-stars',
     models: [

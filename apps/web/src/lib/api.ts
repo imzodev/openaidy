@@ -4,7 +4,11 @@
  */
 
 import { ApiRequestError } from '@openaidy/shared-types';
-import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
+import type {
+  AuthMethod,
+  UpdateCheckResult,
+  UpdateState,
+} from '@openaidy/shared-types';
 import { getStoredToken } from './auth-token';
 
 export type {
@@ -1577,6 +1581,22 @@ export async function connectProviderWithApiKey(
     },
   );
   return res.json();
+}
+
+/**
+ * Fetch the authentication methods a provider actually supports, so the
+ * connect dialog can show only the options the backend can honor (e.g. most
+ * providers are API-key-only; only MiniMax currently supports OAuth).
+ */
+export async function getProviderAuthMethods(
+  providerId: string,
+): Promise<AuthMethod[]> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/${providerId}/auth-methods`,
+  );
+  if (!res.ok) return [];
+  const body = (await res.json()) as { authMethods?: AuthMethod[] };
+  return body.authMethods ?? [];
 }
 
 /**
