@@ -27,7 +27,18 @@ const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 const DISALLOWED_INTENTS_MESSAGE = 'Used disallowed intents';
 
 function describeConnectError(err: unknown): string {
-  if (err instanceof Error && err.message === DISALLOWED_INTENTS_MESSAGE) {
+  const isDisallowedIntents =
+    err instanceof Error &&
+    (err.message === DISALLOWED_INTENTS_MESSAGE ||
+      // discord.js's typed errors (DiscordjsError) carry a stable `.code`
+      // ('DisallowedIntents') distinct from the message text — prefer that
+      // when present so a future wording change to the raw gateway message
+      // above doesn't silently stop matching. The raw message is still
+      // needed as the primary check: the actual disallowed-intents failure
+      // (gateway close code 4014) is thrown as a plain untyped Error with
+      // just that message, not a DiscordjsError.
+      (err as { code?: string }).code === 'DisallowedIntents');
+  if (isDisallowedIntents) {
     return (
       'Discord rejected this bot token: required privileged intents are ' +
       'not enabled. Open the Discord Developer Portal → your application ' +
@@ -131,12 +142,25 @@ export class DiscordChannel extends EventEmitter implements IChannel {
       void this.handleMessage(message);
     });
 
-    client.on(Events.Error, (err) => {
+    // NOT Events.Error: discord.js only ever emits that for ShardingManager's
+    // multi-process ShardClientUtil, which this single-process client never
+    // uses — it's dead code here. Real post-connect gateway/connection
+    // failures (including this same disallowed-intents case, if it fires
+    // after a successful initial connect rather than during login()) surface
+    // as Events.ShardError.
+    client.on(Events.ShardError, (err) => {
       this.deps.logger.error(
         { err, channelId: this.id },
-        'discord: client error',
+        'discord: shard error',
       );
       this.lastError = describeConnectError(err);
+      // Mirror the login-failure catch block below: null the client so
+      // connect()'s early-return guard doesn't permanently block
+      // reconnection, leaving the channel stuck on "Error" until a server
+      // restart. Best-effort teardown first since the gateway connection is
+      // still considered live at this point (unlike a login() rejection).
+      void client.destroy().catch(() => {});
+      this.client = null;
       this.setStatus('error');
     });
 
