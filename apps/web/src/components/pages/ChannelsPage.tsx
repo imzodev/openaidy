@@ -194,6 +194,7 @@ function AddChannelDialog(props: {
   const [dmAllowlist, setDmAllowlist] = createSignal('');
   const [channelAllowlist, setChannelAllowlist] = createSignal('');
   const [respondToMentions, setRespondToMentions] = createSignal(true);
+  const [stripThinking, setStripThinking] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -222,6 +223,7 @@ function AddChannelDialog(props: {
           agentId: agentId(),
           botToken: botToken().trim(),
           respondToMentions: respondToMentions(),
+          stripThinking: stripThinking(),
           ...(dm.length > 0 ? { dmAllowlist: dm } : {}),
           ...(chans.length > 0 ? { channelAllowlist: chans } : {}),
         });
@@ -230,6 +232,7 @@ function AddChannelDialog(props: {
         await addWhatsAppChannel({
           id: id().trim(),
           agentId: agentId(),
+          stripThinking: stripThinking(),
           ...(allowlistArr.length > 0 ? { allowlist: allowlistArr } : {}),
         });
       }
@@ -315,6 +318,23 @@ function AddChannelDialog(props: {
             </select>
             <p class="mt-1 text-xs text-text-tertiary">
               The agent that replies to messages on this channel.
+            </p>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={stripThinking()}
+                onChange={(e) => setStripThinking(e.currentTarget.checked)}
+                class="rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary"
+              />
+              Strip reasoning/thinking from replies
+            </label>
+            <p class="mt-1 text-xs text-text-tertiary">
+              Some models include a <code>&lt;think&gt;...&lt;/think&gt;</code>{' '}
+              block of raw reasoning in their reply. Recommended — leave checked
+              so only the final answer reaches this channel.
             </p>
           </div>
 

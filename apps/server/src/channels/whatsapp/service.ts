@@ -209,6 +209,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
             channelId: this.id,
             agentId: this.config.agentId,
             allowlist: this.config.allowlist,
+            stripThinking: this.config.stripThinking,
             sessionService: this.deps.sessionService,
             logger: this.deps.logger,
           });

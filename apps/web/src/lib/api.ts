@@ -1429,6 +1429,7 @@ export async function addWhatsAppChannel(input: {
   id: string;
   agentId: string;
   allowlist?: string[];
+  stripThinking?: boolean;
 }): Promise<void> {
   const current = await getConfig();
   if (!('config' in current)) {
@@ -1444,6 +1445,7 @@ export async function addWhatsAppChannel(input: {
     id: input.id,
     agentId: input.agentId,
     enabled: true,
+    stripThinking: input.stripThinking ?? true,
     ...(input.allowlist && input.allowlist.length > 0
       ? { allowlist: input.allowlist }
       : {}),
@@ -1472,6 +1474,7 @@ export async function addDiscordChannel(input: {
   dmAllowlist?: string[];
   channelAllowlist?: string[];
   respondToMentions?: boolean;
+  stripThinking?: boolean;
 }): Promise<void> {
   const current = await getConfig();
   if (!('config' in current)) {
@@ -1490,6 +1493,7 @@ export async function addDiscordChannel(input: {
     botToken: { kind: 'inline', value: input.botToken },
     enabled: true,
     respondToMentions: input.respondToMentions ?? true,
+    stripThinking: input.stripThinking ?? true,
     ...(input.dmAllowlist && input.dmAllowlist.length > 0
       ? { dmAllowlist: input.dmAllowlist }
       : {}),

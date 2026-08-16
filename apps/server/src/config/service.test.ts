@@ -94,7 +94,7 @@ describe('AppConfigService channel reconciler', () => {
     await service.save({ ...baseConfig(), channels });
 
     expect(reconcile).toHaveBeenCalledOnce();
-    expect(reconcile).toHaveBeenCalledWith(channels);
+    expect(reconcile).toHaveBeenCalledWith([{ ...channels[0], stripThinking: true }]);
   });
 
   it('passes undefined channels through when none are configured', async () => {
