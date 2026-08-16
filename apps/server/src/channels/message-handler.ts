@@ -173,5 +173,17 @@ export async function handleInboundChannelMessage(params: {
 
   const reply = result.assistantMessage?.content ?? null;
   if (reply === null) return null;
-  return stripThinking ? stripThinkingBlocks(reply) : reply;
+  if (!stripThinking) return reply;
+
+  const stripped = stripThinkingBlocks(reply);
+  if (!stripped && reply.trim()) {
+    // The entire reply was a <think> block with no visible answer left after
+    // stripping. Callers treat an empty string as "nothing to send" and drop
+    // it, so log here — otherwise the dropped reply leaves no trace at all.
+    logger.warn(
+      { channelType, senderId, channelId },
+      `${channelType}: reply was entirely a <think> block; nothing to send`,
+    );
+  }
+  return stripped;
 }

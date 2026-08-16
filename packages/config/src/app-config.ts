@@ -31,7 +31,9 @@ export type McpSecretValue = z.infer<typeof mcpSecretValueSchema>;
  * Strip `<think>...</think>`-style reasoning blocks from the agent's reply
  * text before sending it to a channel. Shared across every channel type
  * (see `stripThinkingSchema`'s usage below) — a new channel schema (e.g.
- * Telegram) picks up the same field and behavior by reusing this constant.
+ * Telegram) should reuse this constant to pick up the same field and
+ * behavior. Nothing enforces that structurally, so remember to add
+ * `stripThinking: stripThinkingSchema` when authoring a new channel schema.
  *
  * Only covers reasoning embedded inline in the reply text itself: some
  * models/routing paths emit `<think>...</think>` directly in the message

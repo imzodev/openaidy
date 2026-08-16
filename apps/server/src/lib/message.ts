@@ -17,12 +17,20 @@
  * `<think>...</think>` tags before the final answer. This function removes
  * those blocks so callers can reliably parse the actual response.
  *
+ * A response truncated mid-reasoning (e.g. by a max-tokens cutoff) never
+ * emits a closing `</think>`, so an unterminated `<think>` is also stripped
+ * through to the end of the string rather than left to leak into the reply.
+ *
  * @example
  * stripThinking('<think>let me reason...</think>\nCOMPLETED')
  * // => 'COMPLETED'
  */
 export function stripThinking(content: string): string {
-  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (!/<think>/i.test(content)) return content;
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/i, '')
+    .trim();
 }
 
 /**

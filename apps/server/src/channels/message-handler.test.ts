@@ -152,5 +152,31 @@ describe('handleInboundChannelMessage', () => {
       const reply = await handleInboundChannelMessage(baseParams);
       expect(reply).toBe('Plain reply, nothing to strip.');
     });
+
+    it('strips a truncated <think> block with no closing tag', async () => {
+      mockSessionService.submitMessageNonStreaming.mockResolvedValue({
+        ok: true,
+        assistantMessage: {
+          content: '<think>reasoning cut off by a max-tokens limit...',
+        },
+      });
+      const reply = await handleInboundChannelMessage(baseParams);
+      expect(reply).toBe('');
+    });
+
+    it('logs a warning and returns empty when the reply is entirely a think block', async () => {
+      mockSessionService.submitMessageNonStreaming.mockResolvedValue({
+        ok: true,
+        assistantMessage: {
+          content: '<think>only reasoning, no visible answer</think>',
+        },
+      });
+      const reply = await handleInboundChannelMessage(baseParams);
+      expect(reply).toBe('');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ channelType: 'discord' }),
+        expect.stringContaining('nothing to send'),
+      );
+    });
   });
 });
