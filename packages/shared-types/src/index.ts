@@ -24,3 +24,4 @@ export * from './backups.js';
 export * from './update.js';
 export * from './skills.js';
 export * from './theme.js';
+export * from './workflow-templates.js';

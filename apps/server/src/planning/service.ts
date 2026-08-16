@@ -14,6 +14,7 @@ import type {
 import type { AgentRegistry } from '../agents';
 import { parseModelString } from '../agents/schema';
 import { createLogger } from '../lib/logger';
+import { buildSubtaskGraph } from '../tasks/subtask-graph-builder';
 import {
   PLANNING_AGENT_CONFIG,
   type PlanningOptions,
@@ -395,70 +396,34 @@ export class PlanningService {
   }
 
   /**
-   * Create subtasks in the database
+   * Create subtasks in the database. Thin adapter converting an
+   * AI-generated plan (dependencies as plan-local array indices) into
+   * the caller-local-key shape `buildSubtaskGraph` expects, then
+   * delegating to it — the same two-pass node/edge creation is also
+   * used by workflow template application.
    */
   private async createSubtasks(
     taskId: string,
     planned: PlannedSubtask[],
   ): Promise<void> {
-    // Create subtasks in order, then wire up dependency edges once all
-    // subtasks exist (an edge can reference a subtask later in the list).
-    const created = new Map<number, string>();
+    const nodes = planned.map((subtask, i) => ({
+      key: String(i),
+      title: subtask.title,
+      description: subtask.description,
+      orderIndex: i,
+      ...(subtask.assignedAgentId && {
+        assignedAgentId: subtask.assignedAgentId,
+      }),
+    }));
 
-    for (let i = 0; i < planned.length; i++) {
-      const subtask = planned[i];
-      if (!subtask) continue;
+    const edges = planned.flatMap((subtask, i) =>
+      subtask.dependencies.map((depIndex) => ({
+        subtaskKey: String(i),
+        dependsOnKey: String(depIndex),
+      })),
+    );
 
-      const createInput: {
-        taskId: string;
-        title: string;
-        description: string;
-        orderIndex: number;
-        assignedAgentId?: string;
-      } = {
-        taskId,
-        title: subtask.title,
-        description: subtask.description,
-        orderIndex: i,
-      };
-
-      if (subtask.assignedAgentId) {
-        createInput.assignedAgentId = subtask.assignedAgentId;
-      }
-
-      const createdSubtask = await this.subtasksRepo.create(createInput);
-
-      created.set(i, createdSubtask.id);
-    }
-
-    // Second pass: now that every subtask exists, resolve each planned
-    // subtask's full dependency list (not just the first one) into
-    // edges. Dependencies are plan-local indices into `planned`.
-    for (let i = 0; i < planned.length; i++) {
-      const subtask = planned[i];
-      if (!subtask || subtask.dependencies.length === 0) continue;
-
-      const subtaskId = created.get(i);
-      if (!subtaskId) continue;
-
-      const dependsOnIds: string[] = [];
-      for (const depIndex of subtask.dependencies) {
-        if (depIndex === i) continue; // ignore a self-referencing dependency
-        const depId = created.get(depIndex);
-        if (!depId) {
-          logger.warn(
-            'Planned subtask references a dependency index that was not created; skipping edge',
-            { taskId, subtaskIndex: i, dependencyIndex: depIndex },
-          );
-          continue;
-        }
-        dependsOnIds.push(depId);
-      }
-
-      if (dependsOnIds.length > 0) {
-        await this.subtasksRepo.addEdges(subtaskId, dependsOnIds);
-      }
-    }
+    await buildSubtaskGraph(this.subtasksRepo, taskId, nodes, edges, logger);
   }
 }
 

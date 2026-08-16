@@ -162,6 +162,11 @@ const resolveApprovalSchema = z.object({
   note: z.string().optional(),
 });
 
+const applyWorkflowTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  inputs: z.record(z.string()).optional(),
+});
+
 /**
  * Task routes options
  */
@@ -700,6 +705,54 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     // Fallback: return existing subtasks without AI planning
     const subtasks = await taskService.getSubtasks(id);
     return { ok: true, data: { subtasks } };
+  });
+
+  /**
+   * POST /tasks/:id/apply-template
+   * Seed a task's subtask graph from a workflow template (as an
+   * alternative to AI auto-planning or hand-authoring). Only creates
+   * subtasks/edges — it does not touch planningStatus.
+   */
+  app.post('/tasks/:id/apply-template', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    let parsed;
+    try {
+      parsed = applyWorkflowTemplateSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.applyWorkflowTemplate(
+      id,
+      parsed.templateId,
+      parsed.inputs ?? {},
+    );
+
+    if (result.ok) {
+      reply.code(201);
+      return { ok: true, data: result.data };
+    } else {
+      if (
+        result.error.code === 'task.not_found' ||
+        result.error.code === 'template.not_found'
+      ) {
+        reply.code(404);
+      } else if (result.error.code === 'template.missing_input') {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
   });
 
   /**
