@@ -19,6 +19,12 @@ export interface IChannel {
   readonly agentId: string;
   /** Current connection state */
   getStatus(): ChannelStatus;
+  /**
+   * Human-readable detail for the most recent `'error'` status, if the
+   * channel implementation tracks one. Cleared on the next successful
+   * `connect()` attempt. Surfaced to the UI via `ChannelStatusResponse.error`.
+   */
+  getLastError?(): string | undefined;
 
   /**
    * Start the channel connection.

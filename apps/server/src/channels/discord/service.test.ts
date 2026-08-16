@@ -11,6 +11,8 @@ import { clearSessionMapForTesting } from '../message-handler.js';
 class MockClient {
   static lastInstance: MockClient | null = null;
   static lastToken: string | null = null;
+  /** Set before connect() to make the next login() call reject with this. */
+  static nextLoginError: unknown = null;
 
   options: unknown;
   user = { id: 'bot-123' };
@@ -19,6 +21,11 @@ class MockClient {
 
   login = vi.fn(async (token: string) => {
     MockClient.lastToken = token;
+    if (MockClient.nextLoginError) {
+      const err = MockClient.nextLoginError;
+      MockClient.nextLoginError = null;
+      throw err;
+    }
   });
   destroy = vi.fn(async () => {});
 
@@ -42,6 +49,9 @@ class MockClient {
   emitMessage(msg: unknown): void {
     this.onHandlers.get('messageCreate')?.(msg);
   }
+  emitShardError(err: unknown): void {
+    this.onHandlers.get('shardError')?.(err);
+  }
 }
 
 vi.mock('discord.js', () => ({
@@ -49,7 +59,12 @@ vi.mock('discord.js', () => ({
   Events: {
     ClientReady: 'clientReady',
     MessageCreate: 'messageCreate',
-    Error: 'error',
+    // Real discord.js name for a post-connect gateway/connection failure —
+    // distinct from (never-emitted-here) Events.Error. Mocked under its
+    // real name so a test that binds the wrong event actually fails instead
+    // of passing against a mock that doesn't reproduce discord.js's real
+    // event routing.
+    ShardError: 'shardError',
   },
   GatewayIntentBits: {
     Guilds: 1,
@@ -72,6 +87,7 @@ describe('DiscordChannel', () => {
     clearSessionMapForTesting();
     MockClient.lastInstance = null;
     MockClient.lastToken = null;
+    MockClient.nextLoginError = null;
     submit = vi.fn(async () => ({
       ok: true as const,
       assistantMessage: { content: 'reply!' },
@@ -154,6 +170,87 @@ describe('DiscordChannel', () => {
     await channel.connect();
     expect(channel.getStatus()).toBe('error');
     expect(MockClient.lastInstance).toBeNull();
+    expect(channel.getLastError()).toBeDefined();
+  });
+
+  it('translates a disallowed-intents login failure into an actionable message', async () => {
+    MockClient.nextLoginError = new Error('Used disallowed intents');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+
+    await channel.connect();
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toMatch(/message content intent/i);
+    expect(channel.getLastError()).toMatch(/developer portal/i);
+  });
+
+  it('translates a disallowed-intents error carrying a .code but different wording', async () => {
+    // Guards against a future discord.js release rewording the raw gateway
+    // message (the primary match) while still tagging the error with its
+    // stable typed-error code.
+    const err = Object.assign(new Error('some future wording'), {
+      code: 'DisallowedIntents',
+    });
+    MockClient.nextLoginError = err;
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+
+    await channel.connect();
+
+    expect(channel.getLastError()).toMatch(/message content intent/i);
+  });
+
+  it('surfaces other login failures as their own message', async () => {
+    MockClient.nextLoginError = new Error('An invalid token was provided.');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+
+    await channel.connect();
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toBe('An invalid token was provided.');
+  });
+
+  it('sets getLastError() from a shard error event after a successful login', async () => {
+    const { channel, client } = await connected(cfg());
+    expect(channel.getLastError()).toBeUndefined();
+
+    client.emitShardError(new Error('websocket closed unexpectedly'));
+
+    expect(channel.getStatus()).toBe('error');
+    expect(channel.getLastError()).toBe('websocket closed unexpectedly');
+  });
+
+  it('nulls the client on a shard error so a subsequent connect() can reconnect', async () => {
+    const { channel } = await connected(cfg());
+    const firstInstance = MockClient.lastInstance;
+
+    MockClient.lastInstance!.emitShardError(new Error('connection reset'));
+    expect(channel.getStatus()).toBe('error');
+
+    // Without nulling `this.client`, connect()'s early-return guard would
+    // see the old (now-dead) client as still "connected" and skip
+    // reconnecting entirely, permanently stranding the channel on "Error".
+    await channel.connect();
+    expect(MockClient.lastInstance).not.toBe(firstInstance);
+    MockClient.lastInstance!.emitReady();
+    expect(channel.getStatus()).toBe('connected');
+  });
+
+  it('clears a previous error once a reconnect succeeds', async () => {
+    MockClient.nextLoginError = new Error('Used disallowed intents');
+    const { DiscordChannel } = await import('./service.js');
+    const channel = new DiscordChannel(cfg(), deps);
+    await channel.connect();
+    expect(channel.getLastError()).toBeDefined();
+
+    // Login succeeds this time; getLastError() should reset once ready.
+    await channel.connect();
+    MockClient.lastInstance!.emitReady();
+
+    expect(channel.getStatus()).toBe('connected');
+    expect(channel.getLastError()).toBeUndefined();
   });
 
   it('replies to a DM from an allowed sender', async () => {
