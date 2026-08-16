@@ -7,6 +7,7 @@ import {
   Switch,
   Match,
   onCleanup,
+  type JSX,
 } from 'solid-js';
 import {
   Radio,
@@ -18,9 +19,13 @@ import {
   Plus,
   Trash2,
   X,
+  ExternalLink,
 } from 'lucide-solid';
 import { Layout } from './Layout';
-import type { ChannelStatusResponse } from '@openaidy/shared-types';
+import type {
+  ChannelStatusResponse,
+  ChannelStatusEvent,
+} from '@openaidy/shared-types';
 import {
   listChannels,
   connectChannel,
@@ -60,6 +65,20 @@ function StatusBadge(props: { status: ChannelStatusResponse['status'] }) {
         </span>
       </Match>
     </Switch>
+  );
+}
+
+function DocLink(props: { href: string; children: JSX.Element }) {
+  return (
+    <a
+      href={props.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+    >
+      <ExternalLink class="w-3 h-3" />
+      {props.children}
+    </a>
   );
 }
 
@@ -103,19 +122,21 @@ function QrPanel(props: { channelId: string; onConnected: () => void }) {
     });
 
     // Subscribe to status events
-    const unsubStatus = client.on('channel.status', (msg: unknown) => {
-      console.log('[QrPanel] Received channel.status event:', msg);
-      const wsMsg = msg as { payload: { channelId: string; status: string } };
-      if (wsMsg.payload.channelId === props.channelId) {
-        if (wsMsg.payload.status === 'connected') {
-          setConnected(true);
-          props.onConnected();
+    const unsubStatus = client.on<ChannelStatusEvent>(
+      'channel.status',
+      (msg) => {
+        console.log('[QrPanel] Received channel.status event:', msg);
+        if (msg.payload.channelId === props.channelId) {
+          if (msg.payload.status === 'connected') {
+            setConnected(true);
+            props.onConnected();
+          }
+          if (msg.payload.status === 'error') {
+            setError('Connection error');
+          }
         }
-        if (wsMsg.payload.status === 'error') {
-          setError('Connection error');
-        }
-      }
-    });
+      },
+    );
 
     // Send subscribe request (fire and forget)
     console.log('[QrPanel] Sending channel.subscribe for:', props.channelId);
@@ -350,9 +371,13 @@ function AddChannelDialog(props: {
                 class={inputClass}
               />
               <p class="mt-1 text-xs text-text-tertiary">
-                From the Discord Developer Portal. Stored encrypted at rest.
-                Enable the “Message Content Intent” for your bot.
+                Stored encrypted at rest. Create a bot under an application,
+                then copy its token from the Bot tab and enable the “Message
+                Content Intent”.
               </p>
+              <DocLink href="https://discord.com/developers/applications">
+                Open the Discord Developer Portal
+              </DocLink>
             </div>
 
             <div>
@@ -387,6 +412,9 @@ function AddChannelDialog(props: {
                 Optional. Comma-separated channel IDs the bot replies in (all
                 messages).
               </p>
+              <DocLink href="https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Application-ID-">
+                How to find Discord user & channel IDs (enable Developer Mode)
+              </DocLink>
             </div>
 
             <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
@@ -427,6 +455,7 @@ export function ChannelsPage() {
   const [qrOpen, setQrOpen] = createSignal<string | null>(null);
   const [showAdd, setShowAdd] = createSignal(false);
   const [confirmRemove, setConfirmRemove] = createSignal<string | null>(null);
+  const wsContext = useWebSocketContext();
 
   const handleAdded = (id: string, type: 'whatsapp' | 'discord') => {
     setShowAdd(false);
@@ -447,15 +476,69 @@ export function ChannelsPage() {
     }
   };
 
+  // Token-based channels (Discord) have no QR panel to subscribe on their
+  // behalf, so nothing previously told the UI when a background login
+  // succeeded or failed — the row just sat on its stale pre-connect status
+  // until the next manual refresh. Subscribe to this channel's status over
+  // the WebSocket and refetch the list once it reaches a terminal state, so
+  // e.g. a "disallowed intents" failure shows up without a page reload.
+  //
+  // Tracked per channelId (rather than fire-and-forget) so a repeated
+  // Connect click before the first attempt settles replaces — rather than
+  // piles onto — the previous listener, and so any watcher still active
+  // when this page unmounts gets torn down instead of outliving the
+  // component and calling refetch() on a page nobody's on.
+  const statusWatchers = new Map<string, () => void>();
+  onCleanup(() => {
+    for (const teardown of statusWatchers.values()) teardown();
+    statusWatchers.clear();
+  });
+
+  const watchUntilSettled = (id: string) => {
+    const client = wsContext.client();
+    if (!client) return;
+
+    // Replace, don't accumulate, if a previous watch for this channel is
+    // still pending.
+    statusWatchers.get(id)?.();
+
+    const unsubStatus = client.on<ChannelStatusEvent>(
+      'channel.status',
+      (msg) => {
+        if (msg.payload.channelId !== id) return;
+        if (
+          msg.payload.status !== 'connected' &&
+          msg.payload.status !== 'error'
+        ) {
+          return;
+        }
+        unsubStatus();
+        void client.sendRequest('channel.unsubscribe', { channelId: id });
+        statusWatchers.delete(id);
+        void refetch();
+      },
+    );
+    // Unmount-time teardown: just unsubscribe, no refetch (nobody's
+    // watching this page anymore).
+    statusWatchers.set(id, () => {
+      unsubStatus();
+      void client.sendRequest('channel.unsubscribe', { channelId: id });
+    });
+    void client.sendRequest('channel.subscribe', { channelId: id });
+  };
+
   const handleConnect = async (id: string, type: string) => {
     setPending(id);
     try {
       await connectChannel(id);
-      // Only WhatsApp needs the QR pairing panel; Discord connects via token
-      // and flips to Connected over the status WebSocket.
-      if (type === 'whatsapp') setQrOpen(id);
+      if (type === 'whatsapp') {
+        // WhatsApp's own QR panel subscribes to this channel's status.
+        setQrOpen(id);
+      } else {
+        watchUntilSettled(id);
+      }
     } catch {
-      // connect error — QR panel won't open, user can retry
+      // connect error — retry from the row's Connect button
     } finally {
       setPending(null);
     }

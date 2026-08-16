@@ -75,12 +75,15 @@ const createMockChannel = (
       listeners.status.add(fn);
       return () => listeners.status.delete(fn);
     }),
-    removeListener: vi.fn(
-      (event: 'qr' | 'status', fn: (arg0: unknown) => unknown) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        listeners[event].delete(fn as any);
-      },
-    ),
+    // Matches the real IChannel/IQrChannel contract: 'status' listeners are
+    // removed via removeListener, 'qr' listeners via the separate
+    // removeQrListener — NOT a single removeListener('qr' | 'status', ...).
+    removeListener: vi.fn((_event: 'status', fn: (status: string) => void) => {
+      listeners.status.delete(fn);
+    }),
+    removeQrListener: vi.fn((fn: (qr: string) => void) => {
+      listeners.qr.delete(fn);
+    }),
     // Helper to emit events for testing
     _emitQr: (qr: string) => listeners.qr.forEach((fn) => fn(qr)),
     _emitStatus: (status: string) =>
@@ -254,6 +257,80 @@ describe('ChannelHandler', () => {
         type: 'channel.unsubscribed',
         payload: { channelId: 'personal' },
       });
+    });
+
+    it('removes the status listener from the channel, not just the bookkeeping Set', async () => {
+      const mockChannel = createMockChannel({ id: 'personal' });
+      vi.mocked(mockChannelRegistry.get).mockReturnValue(mockChannel);
+
+      await channelHandler.handleSubscribe(
+        'conn-1',
+        createSubscribeRequest('personal', 'req-1'),
+        {} as HandlerContext,
+      );
+      await channelHandler.handleUnsubscribe(
+        'conn-1',
+        createUnsubscribeRequest('personal', 'req-2'),
+        {} as HandlerContext,
+      );
+
+      expect(mockChannel.removeListener).toHaveBeenCalled();
+      mockConnectionManager.send.mockClear();
+
+      // With the listener actually removed, a status change after
+      // unsubscribing must not reach the (no longer interested) connection.
+      mockChannel._emitStatus('connected');
+      expect(mockConnectionManager.send).not.toHaveBeenCalled();
+    });
+
+    it('removes the QR listener via removeQrListener, not removeListener', async () => {
+      const mockChannel = createMockChannel({ id: 'personal', status: 'qr' });
+      vi.mocked(mockChannelRegistry.get).mockReturnValue(mockChannel);
+
+      await channelHandler.handleSubscribe(
+        'conn-1',
+        createSubscribeRequest('personal', 'req-1'),
+        {} as HandlerContext,
+      );
+      await channelHandler.handleUnsubscribe(
+        'conn-1',
+        createUnsubscribeRequest('personal', 'req-2'),
+        {} as HandlerContext,
+      );
+
+      expect(mockChannel.removeQrListener).toHaveBeenCalled();
+      mockConnectionManager.send.mockClear();
+
+      mockChannel._emitQr('leaked-qr');
+      expect(mockConnectionManager.send).not.toHaveBeenCalled();
+    });
+
+    it('does not accumulate a second listener when re-subscribing without an intervening unsubscribe', async () => {
+      const mockChannel = createMockChannel({ id: 'personal' });
+      vi.mocked(mockChannelRegistry.get).mockReturnValue(mockChannel);
+
+      // Simulates a client retrying Connect before the previous attempt
+      // settled — two subscribe requests, no unsubscribe in between.
+      await channelHandler.handleSubscribe(
+        'conn-1',
+        createSubscribeRequest('personal', 'req-1'),
+        {} as HandlerContext,
+      );
+      await channelHandler.handleSubscribe(
+        'conn-1',
+        createSubscribeRequest('personal', 'req-2'),
+        {} as HandlerContext,
+      );
+      mockConnectionManager.send.mockClear();
+
+      mockChannel._emitStatus('connected');
+
+      // Exactly one forwarded status event, not two — a second registered
+      // listener would double-send it.
+      const statusSends = mockConnectionManager.send.mock.calls.filter(
+        ([, msg]) => (msg as { type: string }).type === 'channel.status',
+      );
+      expect(statusSends.length).toBe(1);
     });
   });
 
