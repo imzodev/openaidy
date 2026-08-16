@@ -96,6 +96,23 @@ describe('buildAddonCsp', () => {
     expect(withoutIt).toContain("media-src 'none'");
   });
 
+  it('extends media-src from externalMediaDomains regardless of media.read', () => {
+    const withoutPermission = buildAddonCsp(
+      { externalMediaDomains: ['oss.minimax.io'] },
+      scriptSrcOrigins,
+    );
+    expect(withoutPermission).toContain('media-src https://oss.minimax.io');
+
+    const withBoth = buildAddonCsp(
+      { permissions: ['media.read'], externalMediaDomains: ['oss.minimax.io'] },
+      scriptSrcOrigins,
+    );
+    expect(withBoth).toContain('media-src data: https://oss.minimax.io');
+
+    const withNeither = buildAddonCsp({}, scriptSrcOrigins);
+    expect(withNeither).toContain("media-src 'none'");
+  });
+
   it('extends style-src and font-src for a Google Fonts manifest', () => {
     const csp = buildAddonCsp(
       {

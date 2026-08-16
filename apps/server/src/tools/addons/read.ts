@@ -183,6 +183,7 @@ export function createAddonReadTool(deps: AddonToolDeps): BuiltinTool {
           `permissions: ${formatList(manifest['permissions'])}`,
           `externalDomains: ${formatList(manifest['externalDomains'])}`,
           `externalImageDomains: ${formatList(manifest['externalImageDomains'])}`,
+          `externalMediaDomains: ${formatList(manifest['externalMediaDomains'])}`,
         ].join('\n');
 
         return {

@@ -316,6 +316,28 @@ export const AddonManifestSchema = z.object({
     )
     .max(20)
     .optional(),
+  /**
+   * External domains this addon is allowed to play audio/video from (browser-side).
+   * Each entry must be a bare hostname or hostname:port (e.g. "oss.minimax.io").
+   * Enforced via CSP media-src. Use this for <audio src="https://...">/<video src="https://...">
+   * pointing at a remotely-hosted file — this is separate from the `data:` allowance
+   * granted by the `media.read` permission, which only covers playing back the addon's
+   * own sdk.media.* recordings.
+   *
+   * TODO: Before an addon with externalMediaDomains is enabled, prompt the user to
+   * review and approve the listed domains — similar to the permissions approval flow.
+   */
+  externalMediaDomains: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[a-zA-Z0-9.-]+(:\d+)?$/,
+          'externalMediaDomains entries must be bare hostnames (e.g. "oss.minimax.io")',
+        ),
+    )
+    .max(20)
+    .optional(),
   icons: z
     .object({
       16: z.string().url().optional(),
