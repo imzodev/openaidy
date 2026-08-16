@@ -54,6 +54,7 @@ describe('WhatsAppChannel', () => {
       id: 'test-channel',
       agentId: 'test-agent',
       enabled: true,
+      stripThinking: true,
     };
 
     mockDeps = {

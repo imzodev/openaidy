@@ -27,6 +27,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
 
   private status: ChannelStatus = 'disconnected';
   private qr: string | null = null;
+  private lastError: string | undefined;
   private socket: ReturnType<typeof makeWASocket> | null = null;
   /** Ids of replies we sent, so their echoes don't re-trigger the handler. */
   private readonly sentMessageIds = new Set<string>();
@@ -42,6 +43,10 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
 
   getStatus(): ChannelStatus {
     return this.status;
+  }
+
+  getLastError(): string | undefined {
+    return this.lastError;
   }
 
   getQr(): string | null {
@@ -108,6 +113,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
           );
           const dataUrl = await QRCode.toDataURL(qr);
           this.qr = dataUrl.replace('data:image/png;base64,', '');
+          this.lastError = undefined;
           this.setStatus('qr');
           this.deps.logger.info(
             { channelId: this.id, qrLength: this.qr.length },
@@ -119,12 +125,14 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
             { err },
             'whatsapp: failed to generate QR PNG',
           );
+          this.lastError = err instanceof Error ? err.message : String(err);
           this.setStatus('error');
         }
       }
 
       if (connection === 'open') {
         this.qr = null;
+        this.lastError = undefined;
         this.setStatus('connected');
         this.deps.logger.info({ channelId: this.id }, 'whatsapp: connected');
       }
@@ -201,6 +209,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
             channelId: this.id,
             agentId: this.config.agentId,
             allowlist: this.config.allowlist,
+            stripThinking: this.config.stripThinking,
             sessionService: this.deps.sessionService,
             logger: this.deps.logger,
           });

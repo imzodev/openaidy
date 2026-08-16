@@ -27,12 +27,33 @@ export type McpSecretValue = z.infer<typeof mcpSecretValueSchema>;
 // Channel Configuration
 // ============================================================================
 
+/**
+ * Strip `<think>...</think>`-style reasoning blocks from the agent's reply
+ * text before sending it to a channel. Shared across every channel type
+ * (see `stripThinkingSchema`'s usage below) — a new channel schema (e.g.
+ * Telegram) should reuse this constant to pick up the same field and
+ * behavior. Nothing enforces that structurally, so remember to add
+ * `stripThinking: stripThinkingSchema` when authoring a new channel schema.
+ *
+ * Only covers reasoning embedded inline in the reply text itself: some
+ * models/routing paths emit `<think>...</think>` directly in the message
+ * content rather than in a separate structured field. When a provider
+ * instead returns reasoning via a separate field (e.g. `reasoning_content`),
+ * that's already tracked apart from `content` and never reaches the channel
+ * reply in the first place — nothing to strip there.
+ *
+ * Defaults to `true`: channels are for regular human chat, so raw
+ * chain-of-thought is noise there by default.
+ */
+const stripThinkingSchema = z.boolean().default(true);
+
 export const whatsappChannelConfigSchema = z.object({
   type: z.literal('whatsapp'),
   id: z.string().min(1),
   agentId: z.string().min(1),
   allowlist: z.array(z.string()).optional(),
   enabled: z.boolean().default(true),
+  stripThinking: stripThinkingSchema,
 });
 
 /**
@@ -54,6 +75,7 @@ export const discordChannelConfigSchema = z.object({
   /** In server channels, reply when the bot is @mentioned. */
   respondToMentions: z.boolean().default(true),
   enabled: z.boolean().default(true),
+  stripThinking: stripThinkingSchema,
 });
 
 export const channelConfigSchema = z.discriminatedUnion('type', [

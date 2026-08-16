@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../sessions/service.js';
+import { stripThinking as stripThinkingBlocks } from '../lib/message.js';
 
 /**
  * Build a session key namespaced by channel type, channel id, and sender.
@@ -97,6 +98,13 @@ export async function handleInboundChannelMessage(params: {
   channelId: string;
   agentId: string;
   allowlist: string[] | undefined;
+  /**
+   * Strip `<think>...</think>`-style reasoning blocks from the reply before
+   * returning it. Defaults to `true` (see `stripThinkingSchema` in
+   * `@openaidy/config`, whose default this mirrors for callers that omit it,
+   * e.g. tests).
+   */
+  stripThinking?: boolean;
   sessionService: Pick<
     SessionMessageService,
     'listSessions' | 'createSession' | 'submitMessageNonStreaming'
@@ -110,6 +118,7 @@ export async function handleInboundChannelMessage(params: {
     channelId,
     agentId,
     allowlist,
+    stripThinking = true,
     sessionService,
     logger,
   } = params;
@@ -162,5 +171,19 @@ export async function handleInboundChannelMessage(params: {
     return null;
   }
 
-  return result.assistantMessage?.content ?? null;
+  const reply = result.assistantMessage?.content ?? null;
+  if (reply === null) return null;
+  if (!stripThinking) return reply;
+
+  const stripped = stripThinkingBlocks(reply);
+  if (!stripped && reply.trim()) {
+    // The entire reply was a <think> block with no visible answer left after
+    // stripping. Callers treat an empty string as "nothing to send" and drop
+    // it, so log here — otherwise the dropped reply leaves no trace at all.
+    logger.warn(
+      { channelType, senderId, channelId },
+      `${channelType}: reply was entirely a <think> block; nothing to send`,
+    );
+  }
+  return stripped;
 }

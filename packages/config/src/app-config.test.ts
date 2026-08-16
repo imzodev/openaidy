@@ -3,6 +3,7 @@ import {
   mcpServerConfigSchema,
   appConfigSchema,
   whatsappChannelConfigSchema,
+  discordChannelConfigSchema,
 } from './app-config';
 
 describe('mcpServerConfigSchema', () => {
@@ -467,6 +468,36 @@ describe('channel config validation', () => {
       agentId: 'agent',
     });
     expect(result.enabled).toBe(true);
+  });
+
+  it('applies stripThinking default of true for whatsapp', () => {
+    const result = whatsappChannelConfigSchema.parse({
+      type: 'whatsapp',
+      id: 'test',
+      agentId: 'agent',
+    });
+    expect(result.stripThinking).toBe(true);
+  });
+
+  it('applies stripThinking default of true for discord', () => {
+    const result = discordChannelConfigSchema.parse({
+      type: 'discord',
+      id: 'test',
+      agentId: 'agent',
+      botToken: { kind: 'inline', value: 'enc:v1:ciphertext' },
+    });
+    expect(result.stripThinking).toBe(true);
+  });
+
+  it('honors an explicit stripThinking: false override', () => {
+    const result = discordChannelConfigSchema.parse({
+      type: 'discord',
+      id: 'test',
+      agentId: 'agent',
+      botToken: { kind: 'inline', value: 'enc:v1:ciphertext' },
+      stripThinking: false,
+    });
+    expect(result.stripThinking).toBe(false);
   });
 });
 

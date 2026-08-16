@@ -25,9 +25,21 @@ import {
 // Channel Handler Class
 // ============================================================================
 
+/** Listener callbacks registered on a channel's EventEmitter for one subscriber. */
+type ChannelListenerSet = {
+  onStatus: (status: ChannelStatus) => void;
+  onQr?: (qr: string) => void;
+};
+
 export class ChannelHandler {
   // connectionId -> Set of subscribed channel IDs
   private subscriptions: Map<string, Set<string>> = new Map();
+  // connectionId -> channelId -> the exact listener callbacks registered on
+  // that channel's EventEmitter, so unsubscribe can remove precisely those
+  // (channelRegistry.get() returns the same long-lived channel instance
+  // across calls, so listeners not removed here otherwise accumulate on it
+  // for the process lifetime).
+  private listeners: Map<string, Map<string, ChannelListenerSet>> = new Map();
 
   constructor(
     private channelRegistry: ChannelRegistry,
@@ -61,7 +73,10 @@ export class ChannelHandler {
     }
     this.subscriptions.get(connectionId)!.add(channelId);
 
-    // Setup listeners for this channel
+    // A repeated subscribe for the same connection+channel (e.g. the client
+    // retrying before the previous attempt settled) must replace, not stack
+    // on top of, the previously registered listeners.
+    this.teardownChannelListeners(connectionId, channelId);
     this.setupChannelListeners(connectionId, channelId);
 
     this.logger.info({ connectionId, channelId }, 'Channel subscription added');
@@ -92,6 +107,7 @@ export class ChannelHandler {
     if (subs) {
       subs.delete(channelId);
     }
+    this.teardownChannelListeners(connectionId, channelId);
 
     this.logger.info(
       { connectionId, channelId },
@@ -118,7 +134,14 @@ export class ChannelHandler {
     };
     channel.onStatusChange(onStatus);
 
-    if ('getQr' in channel && typeof channel.getQr === 'function') {
+    const listenerSet: ChannelListenerSet = { onStatus };
+
+    if (
+      'getQr' in channel &&
+      typeof channel.getQr === 'function' &&
+      'onQrUpdate' in channel &&
+      typeof channel.onQrUpdate === 'function'
+    ) {
       const onQr = (qr: string) => {
         this.logger.debug(
           { connectionId, channelId, qrLength: qr.length },
@@ -127,9 +150,44 @@ export class ChannelHandler {
         const event = createWSMessage('channel.qr', { channelId, qr });
         this.sendToConnection(connectionId, event);
       };
-      if ('onQrUpdate' in channel && typeof channel.onQrUpdate === 'function') {
-        channel.onQrUpdate(onQr);
-      }
+      channel.onQrUpdate(onQr);
+      listenerSet.onQr = onQr;
+    }
+
+    if (!this.listeners.has(connectionId)) {
+      this.listeners.set(connectionId, new Map());
+    }
+    this.listeners.get(connectionId)!.set(channelId, listenerSet);
+  }
+
+  /**
+   * Remove the listeners registered by `setupChannelListeners` for this
+   * connection+channel pair from the channel's EventEmitter. Safe to call
+   * even when nothing was ever set up (subscribe for an unknown channel,
+   * duplicate unsubscribe, etc.) — it's a no-op in that case.
+   */
+  private teardownChannelListeners(
+    connectionId: string,
+    channelId: string,
+  ): void {
+    const perConnection = this.listeners.get(connectionId);
+    const listenerSet = perConnection?.get(channelId);
+    if (!listenerSet) return;
+
+    const channel = this.channelRegistry.get(channelId);
+    channel?.removeListener('status', listenerSet.onStatus);
+    if (
+      listenerSet.onQr &&
+      channel &&
+      'removeQrListener' in channel &&
+      typeof channel.removeQrListener === 'function'
+    ) {
+      channel.removeQrListener(listenerSet.onQr);
+    }
+
+    perConnection!.delete(channelId);
+    if (perConnection!.size === 0) {
+      this.listeners.delete(connectionId);
     }
   }
 

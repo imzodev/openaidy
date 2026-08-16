@@ -29,7 +29,7 @@ function makeDeps(): ChannelRegistryDeps {
 }
 
 function wa(id: string, agentId = 'default'): WhatsAppChannelConfig {
-  return { type: 'whatsapp', id, agentId, enabled: true };
+  return { type: 'whatsapp', id, agentId, enabled: true, stripThinking: true };
 }
 
 function dc(id: string, agentId = 'default'): DiscordChannelConfig {
@@ -40,6 +40,7 @@ function dc(id: string, agentId = 'default'): DiscordChannelConfig {
     botToken: { kind: 'inline', value: 'tok' },
     respondToMentions: true,
     enabled: true,
+    stripThinking: true,
   };
 }
 
