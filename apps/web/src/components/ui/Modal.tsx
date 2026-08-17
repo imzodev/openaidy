@@ -50,7 +50,7 @@ export function Modal(props: ModalProps) {
 
   return (
     <Show when={props.isOpen}>
-      <div class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
         {/* Overlay */}
         <div
           class="absolute inset-0 bg-black/50"
@@ -58,15 +58,17 @@ export function Modal(props: ModalProps) {
           aria-hidden="true"
         />
 
-        {/* Modal Content */}
+        {/* Modal Content — capped to the viewport height with a scrollable
+            body so long forms never get clipped with no way to reach the
+            rest of the content or the footer actions below the fold. */}
         <div
-          class={`relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4 ${sizeClass()}`}
+          class={`relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4 max-h-[90vh] flex flex-col ${sizeClass()}`}
           role="dialog"
           aria-modal="true"
         >
           {/* Header */}
           <Show when={props.title}>
-            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
               <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
                 {props.title}
               </h2>
@@ -92,7 +94,7 @@ export function Modal(props: ModalProps) {
           </Show>
 
           {/* Body */}
-          <div class="p-4">{props.children}</div>
+          <div class="p-4 overflow-y-auto min-h-0">{props.children}</div>
         </div>
       </div>
     </Show>
