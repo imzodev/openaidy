@@ -307,6 +307,27 @@ export async function createTask(
 }
 
 /**
+ * Seed a task's subtask graph from a workflow template — an alternative
+ * to AI auto-planning or hand-authoring in the graph editor. Only
+ * creates subtasks/edges; call after `createTask` with `skipAutoPlan: true`.
+ */
+export async function applyWorkflowTemplate(
+  taskId: string,
+  templateId: string,
+  inputs: Record<string, string>,
+): Promise<ApiResult<{ nodeCount: number; edgeCount: number }>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/apply-template`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateId, inputs }),
+    },
+  );
+  return response.json();
+}
+
+/**
  * Update a task
  */
 export async function updateTask(

@@ -10,22 +10,33 @@
  */
 
 import { createSignal, Show, createEffect, on } from 'solid-js';
-import { X, Workflow, Sparkles, RefreshCw } from 'lucide-solid';
+import { X, Workflow, Sparkles, RefreshCw, LayoutTemplate } from 'lucide-solid';
 import type { CreateTaskInput } from '../../lib/api-tasks';
 import type { ScheduleInput } from '../../lib/types';
+import type { CreateWorkflowSubmitInput as CreateWorkflowSubmitInputOf } from '@openaidy/shared-types';
 import { ScheduleEditor } from '../common/ScheduleEditor';
+import { WorkflowTemplateGallery } from './WorkflowTemplateGallery';
+import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
 import { useEscapeKey } from '../settings/hooks';
+
+export type CreateWorkflowSubmitInput =
+  CreateWorkflowSubmitInputOf<CreateTaskInput>;
 
 export type CreateWorkflowModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (input: CreateTaskInput) => Promise<void>;
+  onSubmit: (input: CreateWorkflowSubmitInput) => Promise<void>;
   isLoading?: boolean;
 };
 
 export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
   const [description, setDescription] = createSignal('');
   const [autoGenerate, setAutoGenerate] = createSignal(false);
+  const [mode, setMode] = createSignal<'blank' | 'template'>('blank');
+  const [templateId, setTemplateId] = createSignal<string | null>(null);
+  const [templateInputs, setTemplateInputs] = createSignal<
+    Record<string, string>
+  >({});
   const [recurringEnabled, setRecurringEnabled] = createSignal(false);
   const [draftSchedule, setDraftSchedule] = createSignal<ScheduleInput | null>(
     null,
@@ -40,6 +51,9 @@ export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
         if (!isOpen) return;
         setDescription('');
         setAutoGenerate(false);
+        setMode('blank');
+        setTemplateId(null);
+        setTemplateInputs({});
         setRecurringEnabled(false);
         setDraftSchedule(null);
         setError(null);
@@ -50,26 +64,62 @@ export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
 
   const isLoading = () => props.isLoading || submitting();
 
+  function selectedTemplate() {
+    return WORKFLOW_TEMPLATES.find((t) => t.id === templateId());
+  }
+
   async function handleSubmit(e: Event) {
     e.preventDefault();
     if (!description().trim()) {
       setError('Description is required');
       return;
     }
+    if (mode() === 'template') {
+      const template = selectedTemplate();
+      if (!template) {
+        setError('Choose a template');
+        return;
+      }
+      // An input can be `required` and still have a `default` — the
+      // gallery pre-fills the field's *display* value from that default,
+      // but `templateInputs()` itself stays empty until the user types,
+      // so a default must also satisfy this check (the server applies
+      // the same default fallback in WorkflowTemplateOperations.applyTemplate).
+      const missing = template.inputs.find(
+        (input) =>
+          input.required &&
+          !templateInputs()[input.key]?.trim() &&
+          !input.default,
+      );
+      if (missing) {
+        setError(`"${missing.label}" is required`);
+        return;
+      }
+    }
 
     setSubmitting(true);
     setError(null);
     try {
       await props.onSubmit({
-        description: description().trim(),
-        planningEnabled: true,
-        // Inverted: checking "auto-generate" lets the existing AI planner
-        // run; leaving it unchecked (the default) means the user is about
-        // to hand-author the graph themselves in the editor, so the
-        // planner must not race an unrelated auto-generated one against it.
-        skipAutoPlan: !autoGenerate(),
-        ...(recurringEnabled() && draftSchedule()
-          ? { schedule: { schedule: draftSchedule()! } }
+        task: {
+          description: description().trim(),
+          planningEnabled: true,
+          // In 'blank' mode, checking "auto-generate" lets the existing AI
+          // planner run; leaving it unchecked means hand-authoring in the
+          // editor. In 'template' mode the graph always comes from the
+          // template, so the AI planner must never race it.
+          skipAutoPlan: mode() === 'template' ? true : !autoGenerate(),
+          ...(recurringEnabled() && draftSchedule()
+            ? { schedule: { schedule: draftSchedule()! } }
+            : {}),
+        },
+        ...(mode() === 'template' && templateId()
+          ? {
+              template: {
+                templateId: templateId()!,
+                inputs: templateInputs(),
+              },
+            }
           : {}),
       });
       setSubmitting(false);
@@ -135,35 +185,77 @@ export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
               </Show>
             </div>
 
-            <label
-              class={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                autoGenerate()
-                  ? 'border-primary/40 bg-primary/5'
-                  : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30'
-              }`}
-            >
-              <div class="w-8 h-8 rounded-md bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Sparkles class="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    Create workflow automatically
-                  </span>
-                  <input
-                    type="checkbox"
-                    class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900 flex-shrink-0"
-                    checked={autoGenerate()}
-                    onChange={(e) => setAutoGenerate(e.currentTarget.checked)}
-                    disabled={isLoading()}
-                  />
+            <div class="flex gap-2 p-1 rounded-lg bg-gray-100 dark:bg-gray-900">
+              <button
+                type="button"
+                class={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  mode() === 'blank'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+                onClick={() => setMode('blank')}
+                disabled={isLoading()}
+              >
+                Blank workflow
+              </button>
+              <button
+                type="button"
+                class={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  mode() === 'template'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+                onClick={() => setMode('template')}
+                disabled={isLoading()}
+              >
+                <LayoutTemplate class="w-3.5 h-3.5" />
+                From a template
+              </button>
+            </div>
+
+            <Show when={mode() === 'template'}>
+              <WorkflowTemplateGallery
+                selectedTemplateId={templateId()}
+                onSelectTemplate={setTemplateId}
+                inputValues={templateInputs()}
+                onInputChange={(key, value) =>
+                  setTemplateInputs((prev) => ({ ...prev, [key]: value }))
+                }
+                disabled={isLoading()}
+              />
+            </Show>
+
+            <Show when={mode() === 'blank'}>
+              <label
+                class={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  autoGenerate()
+                    ? 'border-primary/40 bg-primary/5'
+                    : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30'
+                }`}
+              >
+                <div class="w-8 h-8 rounded-md bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Sparkles class="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Let AI break the description into subtasks. Leave unchecked to
-                  build the graph yourself.
-                </p>
-              </div>
-            </label>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      Create workflow automatically
+                    </span>
+                    <input
+                      type="checkbox"
+                      class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900 flex-shrink-0"
+                      checked={autoGenerate()}
+                      onChange={(e) => setAutoGenerate(e.currentTarget.checked)}
+                      disabled={isLoading()}
+                    />
+                  </div>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Let AI break the description into subtasks. Leave unchecked
+                    to build the graph yourself.
+                  </p>
+                </div>
+              </label>
+            </Show>
 
             <label
               class={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${

@@ -12,15 +12,19 @@
 import { createSignal, createMemo, Show, For, onMount } from 'solid-js';
 import { Workflow, Plus, ArrowRight, AlertCircle } from 'lucide-solid';
 import { Layout } from './Layout';
-import { CreateWorkflowModal } from '../workflows/CreateWorkflowModal';
+import {
+  CreateWorkflowModal,
+  type CreateWorkflowSubmitInput,
+} from '../workflows/CreateWorkflowModal';
 import { WorkflowThumbnail } from '../workflows/WorkflowThumbnail';
 import {
   listTasks,
   createTask,
+  deleteTask,
+  applyWorkflowTemplate,
   type Task,
   type TaskStatus,
   type TaskPriority,
-  type CreateTaskInput,
 } from '../../lib/api-tasks';
 
 export type WorkflowsPageProps = {
@@ -94,10 +98,29 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
   const handleCreate = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
 
-  const handleSubmit = async (input: CreateTaskInput) => {
-    const result = await createTask(input);
+  const handleSubmit = async ({
+    task,
+    template,
+  }: CreateWorkflowSubmitInput) => {
+    const result = await createTask(task);
     if (!result.ok) {
       throw new Error(result.error.message);
+    }
+    if (template) {
+      const templateResult = await applyWorkflowTemplate(
+        result.data.id,
+        template.templateId,
+        template.inputs,
+      );
+      if (!templateResult.ok) {
+        // Roll back the just-created task rather than leaving a
+        // permanently-empty orphan behind — there's no UI path to attach
+        // a template to an existing task, so a half-created workflow is
+        // otherwise unrecoverable. Best-effort: if the delete itself
+        // fails, still surface the original template error.
+        await deleteTask(result.data.id).catch(() => {});
+        throw new Error(templateResult.error.message);
+      }
     }
     setIsModalOpen(false);
     props.onOpenWorkflow(result.data.id);

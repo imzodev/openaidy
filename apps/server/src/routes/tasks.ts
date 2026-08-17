@@ -5,18 +5,7 @@ import type { PlanningService } from '../planning/service';
 import type { DeliverablesRepository } from '@openaidy/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
-
-/**
- * Title is optional on both tasks and subtasks — when omitted (or blank),
- * derive a short display title from the description instead of forcing
- * the caller to invent one. Same truncation rule in both places so a
- * task and a subtask "look" the same when auto-named.
- */
-function deriveTitleFromDescription(description: string): string {
-  return description.length > 60
-    ? `${description.slice(0, 60).trimEnd()}…`
-    : description;
-}
+import { deriveTitleFromDescription } from '../tasks/derive-title';
 
 // Validation schemas
 
@@ -160,6 +149,11 @@ const updateSubtaskEdgeSchema = z.object({
 const resolveApprovalSchema = z.object({
   decision: z.enum(['approved', 'rejected']),
   note: z.string().optional(),
+});
+
+const applyWorkflowTemplateSchema = z.object({
+  templateId: z.string().min(1),
+  inputs: z.record(z.string()).optional(),
 });
 
 /**
@@ -700,6 +694,54 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     // Fallback: return existing subtasks without AI planning
     const subtasks = await taskService.getSubtasks(id);
     return { ok: true, data: { subtasks } };
+  });
+
+  /**
+   * POST /tasks/:id/apply-template
+   * Seed a task's subtask graph from a workflow template (as an
+   * alternative to AI auto-planning or hand-authoring). Only creates
+   * subtasks/edges — it does not touch planningStatus.
+   */
+  app.post('/tasks/:id/apply-template', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    let parsed;
+    try {
+      parsed = applyWorkflowTemplateSchema.parse(request.body);
+    } catch (error) {
+      reply.code(400);
+      return {
+        ok: false,
+        error: {
+          code: 'validation.invalid_request',
+          message:
+            error instanceof Error ? error.message : 'Invalid request body',
+        },
+      };
+    }
+
+    const result = await taskService.applyWorkflowTemplate(
+      id,
+      parsed.templateId,
+      parsed.inputs ?? {},
+    );
+
+    if (result.ok) {
+      reply.code(201);
+      return { ok: true, data: result.data };
+    } else {
+      if (
+        result.error.code === 'task.not_found' ||
+        result.error.code === 'template.not_found'
+      ) {
+        reply.code(404);
+      } else if (result.error.code === 'template.missing_input') {
+        reply.code(400);
+      } else {
+        reply.code(500);
+      }
+      return { ok: false, error: result.error };
+    }
   });
 
   /**

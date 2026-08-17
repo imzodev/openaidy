@@ -22,6 +22,7 @@
     "@openaidy/config": "workspace:*",
     "@openaidy/sdk": "workspace:*",
     "@openaidy/shared-types": "workspace:*",
+    "@openaidy/workflow-templates": "workspace:*",
     "@solidjs/router": "^0.15.4",
     "@tanstack/solid-query": "^5.90.26",
     "bootstrap-icons": "^1.13.1",

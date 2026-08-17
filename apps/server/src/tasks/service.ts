@@ -11,6 +11,7 @@ import { createLogger } from '../lib/logger';
 import type { TaskScheduleService } from './schedule-service';
 import { TaskOperations } from './operations/task-operations';
 import { SubtaskOperations } from './operations/subtask-operations';
+import { WorkflowTemplateOperations } from './operations/workflow-template-operations';
 import { TaskExecution } from './execution/task-execution';
 import type {
   TaskServiceOptions,
@@ -43,6 +44,7 @@ export type {
 export class TaskService {
   private readonly ops: TaskOperations;
   private readonly subtaskOps: SubtaskOperations;
+  private readonly templateOps: WorkflowTemplateOperations;
   private readonly execution: TaskExecution;
 
   constructor(
@@ -63,6 +65,11 @@ export class TaskService {
       options.tasksRepo,
       options.subtasksRepo,
       options.agents,
+      logger,
+    );
+    this.templateOps = new WorkflowTemplateOperations(
+      options.tasksRepo,
+      options.subtasksRepo,
       logger,
     );
     this.execution = new TaskExecution(
@@ -278,6 +285,18 @@ export class TaskService {
     subtaskId: string,
   ): Promise<ServiceResult<{ sessionId: string | null }>> {
     return this.subtaskOps.getSubtaskSession(subtaskId);
+  }
+
+  // ========================================
+  // Workflow Templates
+  // ========================================
+
+  async applyWorkflowTemplate(
+    taskId: string,
+    templateId: string,
+    inputs: Record<string, string>,
+  ): ReturnType<WorkflowTemplateOperations['applyTemplate']> {
+    return this.templateOps.applyTemplate(taskId, templateId, inputs);
   }
 
   // ========================================
