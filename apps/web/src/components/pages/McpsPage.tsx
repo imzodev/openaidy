@@ -343,6 +343,11 @@ function ServerFormModal(props: {
 
   const buildRequest = (): CreateMcpServerRequest | UpdateMcpServerRequest => {
     const base = {
+      // UpdateMcpServerRequest omits `id` (the server takes it from the URL
+      // param on PATCH); CreateMcpServerRequest requires it, so only include
+      // it when creating — otherwise the create request silently drops the
+      // id the form validated as required just above.
+      ...(isEdit() ? {} : { id: formData().id.trim() }),
       name: formData().name || undefined,
       transport: transport(),
     };
