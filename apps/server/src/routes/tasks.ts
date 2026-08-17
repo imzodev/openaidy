@@ -5,18 +5,7 @@ import type { PlanningService } from '../planning/service';
 import type { DeliverablesRepository } from '@openaidy/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
-
-/**
- * Title is optional on both tasks and subtasks — when omitted (or blank),
- * derive a short display title from the description instead of forcing
- * the caller to invent one. Same truncation rule in both places so a
- * task and a subtask "look" the same when auto-named.
- */
-function deriveTitleFromDescription(description: string): string {
-  return description.length > 60
-    ? `${description.slice(0, 60).trimEnd()}…`
-    : description;
-}
+import { deriveTitleFromDescription } from '../tasks/derive-title';
 
 // Validation schemas
 

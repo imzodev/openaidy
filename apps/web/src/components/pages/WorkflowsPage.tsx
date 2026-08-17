@@ -20,6 +20,7 @@ import { WorkflowThumbnail } from '../workflows/WorkflowThumbnail';
 import {
   listTasks,
   createTask,
+  deleteTask,
   applyWorkflowTemplate,
   type Task,
   type TaskStatus,
@@ -112,6 +113,12 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
         template.inputs,
       );
       if (!templateResult.ok) {
+        // Roll back the just-created task rather than leaving a
+        // permanently-empty orphan behind — there's no UI path to attach
+        // a template to an existing task, so a half-created workflow is
+        // otherwise unrecoverable. Best-effort: if the delete itself
+        // fails, still surface the original template error.
+        await deleteTask(result.data.id).catch(() => {});
         throw new Error(templateResult.error.message);
       }
     }

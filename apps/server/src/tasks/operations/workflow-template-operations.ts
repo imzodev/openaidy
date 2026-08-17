@@ -1,22 +1,13 @@
 import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
-import { getWorkflowTemplate } from '@openaidy/workflow-templates';
+import type { GraphEdgeInput, GraphNodeInput } from '@openaidy/shared-types';
+import {
+  getWorkflowTemplate,
+  substitutePlaceholders,
+} from '@openaidy/workflow-templates';
 import type { createLogger } from '../../lib/logger';
 import type { ServiceResult } from '../../types';
-import {
-  buildSubtaskGraph,
-  type GraphEdgeInput,
-  type GraphNodeInput,
-} from '../subtask-graph-builder';
-
-const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/g;
-
-/** Mirrors routes/tasks.ts's deriveTitleFromDescription so an untitled
- * template node "looks like" an untitled hand-authored subtask. */
-function deriveTitleFromDescription(description: string): string {
-  return description.length > 60
-    ? `${description.slice(0, 60).trimEnd()}…`
-    : description;
-}
+import { deriveTitleFromDescription } from '../derive-title';
+import { buildSubtaskGraph } from '../subtask-graph-builder';
 
 export class WorkflowTemplateOperations {
   constructor(
@@ -54,7 +45,12 @@ export class WorkflowTemplateOperations {
 
     const resolvedInputs: Record<string, string> = {};
     for (const input of template.inputs) {
-      const value = inputs[input.key] ?? input.default;
+      // A blank/whitespace-only value (e.g. an untouched form field that
+      // never got its default written into it) is treated the same as an
+      // absent one, so a required input with a default is never rejected
+      // just because the caller sent `''` instead of omitting the key.
+      const provided = inputs[input.key]?.trim();
+      const value = provided ? inputs[input.key] : input.default;
       if (input.required && !value) {
         return {
           ok: false,
@@ -68,10 +64,7 @@ export class WorkflowTemplateOperations {
     }
 
     const substitute = (text: string): string =>
-      text.replace(
-        PLACEHOLDER_PATTERN,
-        (match, key) => resolvedInputs[key] ?? match,
-      );
+      substitutePlaceholders(text, resolvedInputs);
 
     const nodes: GraphNodeInput[] = template.nodes.map((node) => {
       const description = substitute(node.description);

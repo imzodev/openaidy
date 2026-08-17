@@ -1,10 +1,31 @@
 import type { WorkflowTemplate } from '@openaidy/shared-types';
 
-const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/g;
+/**
+ * Matches a `{{inputKey}}` placeholder in template node/edge text. Shared
+ * by structural validation (below) and template application
+ * (`WorkflowTemplateOperations.applyTemplate`) so both agree on exactly
+ * one placeholder syntax.
+ */
+export const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/g;
 
-function extractPlaceholders(text: string | undefined): string[] {
+export function extractPlaceholders(text: string | undefined): string[] {
   if (!text) return [];
   return Array.from(text.matchAll(PLACEHOLDER_PATTERN), (m) => m[1]!);
+}
+
+/**
+ * Replaces every `{{inputKey}}` placeholder in `text` with its resolved
+ * value, leaving unresolved placeholders (no matching key in `values`)
+ * untouched.
+ */
+export function substitutePlaceholders(
+  text: string,
+  values: Record<string, string>,
+): string {
+  return text.replace(
+    PLACEHOLDER_PATTERN,
+    (match, key) => values[key] ?? match,
+  );
 }
 
 /**

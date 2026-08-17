@@ -106,3 +106,14 @@ export type WorkflowTemplate = {
   nodes: TemplateNode[];
   edges: TemplateEdge[];
 };
+
+/**
+ * Payload a workflow-creation form submits: the task to create, plus an
+ * optional template to seed its subtask graph from. Generic over the
+ * caller's own task-creation input shape so this package doesn't need a
+ * dependency on any particular `CreateTaskInput`.
+ */
+export type CreateWorkflowSubmitInput<TCreateTaskInput = unknown> = {
+  task: TCreateTaskInput;
+  template?: { templateId: string; inputs: Record<string, string> };
+};

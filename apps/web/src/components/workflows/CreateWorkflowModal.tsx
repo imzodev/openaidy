@@ -13,15 +13,14 @@ import { createSignal, Show, createEffect, on } from 'solid-js';
 import { X, Workflow, Sparkles, RefreshCw, LayoutTemplate } from 'lucide-solid';
 import type { CreateTaskInput } from '../../lib/api-tasks';
 import type { ScheduleInput } from '../../lib/types';
+import type { CreateWorkflowSubmitInput as CreateWorkflowSubmitInputOf } from '@openaidy/shared-types';
 import { ScheduleEditor } from '../common/ScheduleEditor';
 import { WorkflowTemplateGallery } from './WorkflowTemplateGallery';
 import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
 import { useEscapeKey } from '../settings/hooks';
 
-export type CreateWorkflowSubmitInput = {
-  task: CreateTaskInput;
-  template?: { templateId: string; inputs: Record<string, string> };
-};
+export type CreateWorkflowSubmitInput =
+  CreateWorkflowSubmitInputOf<CreateTaskInput>;
 
 export type CreateWorkflowModalProps = {
   isOpen: boolean;
@@ -81,8 +80,16 @@ export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
         setError('Choose a template');
         return;
       }
+      // An input can be `required` and still have a `default` — the
+      // gallery pre-fills the field's *display* value from that default,
+      // but `templateInputs()` itself stays empty until the user types,
+      // so a default must also satisfy this check (the server applies
+      // the same default fallback in WorkflowTemplateOperations.applyTemplate).
       const missing = template.inputs.find(
-        (input) => input.required && !templateInputs()[input.key]?.trim(),
+        (input) =>
+          input.required &&
+          !templateInputs()[input.key]?.trim() &&
+          !input.default,
       );
       if (missing) {
         setError(`"${missing.label}" is required`);

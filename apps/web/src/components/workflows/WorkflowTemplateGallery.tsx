@@ -9,7 +9,8 @@
  * capability the template expects.
  */
 
-import { createSignal, createMemo, For, Show, onMount } from 'solid-js';
+import { createMemo, For, Show } from 'solid-js';
+import { createQuery } from '@tanstack/solid-query';
 import { AlertTriangle, LayoutTemplate } from 'lucide-solid';
 import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
 import type { WorkflowTemplate } from '@openaidy/shared-types';
@@ -23,24 +24,26 @@ export type WorkflowTemplateGalleryProps = {
   disabled?: boolean;
 };
 
-export function WorkflowTemplateGallery(props: WorkflowTemplateGalleryProps) {
-  const [agents, setAgents] = createSignal<Agent[]>([]);
+/** A requirement's `key` matches an agent's `mcpServers[].id` (see
+ * `TemplateRequirement`/`McpServerRef`) — not just "has any MCP server at
+ * all", so an agent wired to an unrelated server (e.g. Slack) doesn't
+ * silently satisfy a template step that specifically needs GitHub. */
+function agentHasMcpServer(agents: Agent[], serverId: string): boolean {
+  return agents.some((a) => a.mcpServers?.some((s) => s.id === serverId));
+}
 
-  onMount(async () => {
-    try {
-      const result = await listAgents();
-      setAgents(result.items);
-    } catch {
-      // Advisory-only check; if it fails to load, just skip the notice.
-    }
-  });
+export function WorkflowTemplateGallery(props: WorkflowTemplateGalleryProps) {
+  // Shares the ['agents'] cache key App.tsx's own agentsQuery already
+  // populates, so opening this gallery doesn't issue a redundant fetch
+  // every time the modal's mode toggles between "blank"/"template".
+  const agentsQuery = createQuery(() => ({
+    queryKey: ['agents'],
+    queryFn: listAgents,
+  }));
+  const agents = createMemo<Agent[]>(() => agentsQuery.data?.items ?? []);
 
   const selectedTemplate = createMemo<WorkflowTemplate | undefined>(() =>
     WORKFLOW_TEMPLATES.find((t) => t.id === props.selectedTemplateId),
-  );
-
-  const hasAnyMcpConfiguredAgent = createMemo(() =>
-    agents().some((a) => (a.mcpServers?.length ?? 0) > 0),
   );
 
   return (
@@ -82,53 +85,57 @@ export function WorkflowTemplateGallery(props: WorkflowTemplateGalleryProps) {
       </div>
 
       <Show when={selectedTemplate()}>
-        {(template) => (
-          <div class="space-y-3 pl-1">
-            <Show
-              when={
-                template().requirements.some(
-                  (r) => r.check.mcpServerConfigured,
-                ) && !hasAnyMcpConfiguredAgent()
-              }
-            >
-              <div class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
-                <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-                <p class="text-xs text-amber-800 dark:text-amber-300">
-                  No agent has MCP tool access configured yet. This workflow has
-                  steps (
-                  {template()
-                    .requirements.filter((r) => r.check.mcpServerConfigured)
-                    .map((r) => r.label)
-                    .join(', ')}
-                  ) that will need one assigned before they can act.
-                </p>
-              </div>
-            </Show>
-
-            <For each={template().inputs}>
-              {(input) => (
-                <div>
-                  <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {input.label}
-                    <Show when={input.required}>
-                      <span class="text-red-500"> *</span>
-                    </Show>
-                  </label>
-                  <input
-                    type={input.type === 'number' ? 'number' : 'text'}
-                    class="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary dark:bg-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
-                    value={props.inputValues[input.key] ?? input.default ?? ''}
-                    onInput={(e) =>
-                      props.onInputChange(input.key, e.currentTarget.value)
-                    }
-                    placeholder={input.default}
-                    disabled={props.disabled}
-                  />
+        {(template) => {
+          const unmetRequirements = createMemo(() =>
+            template().requirements.filter(
+              (r) =>
+                r.check.mcpServerConfigured &&
+                !agentHasMcpServer(agents(), r.key),
+            ),
+          );
+          return (
+            <div class="space-y-3 pl-1">
+              <Show when={unmetRequirements().length > 0}>
+                <div class="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50">
+                  <AlertTriangle class="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p class="text-xs text-amber-800 dark:text-amber-300">
+                    No agent has the MCP tool access this workflow needs yet.
+                    This workflow has steps (
+                    {unmetRequirements()
+                      .map((r) => r.label)
+                      .join(', ')}
+                    ) that will need one assigned before they can act.
+                  </p>
                 </div>
-              )}
-            </For>
-          </div>
-        )}
+              </Show>
+
+              <For each={template().inputs}>
+                {(input) => (
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {input.label}
+                      <Show when={input.required}>
+                        <span class="text-red-500"> *</span>
+                      </Show>
+                    </label>
+                    <input
+                      type={input.type === 'number' ? 'number' : 'text'}
+                      class="w-full px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary dark:bg-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                      value={
+                        props.inputValues[input.key] ?? input.default ?? ''
+                      }
+                      onInput={(e) =>
+                        props.onInputChange(input.key, e.currentTarget.value)
+                      }
+                      placeholder={input.default}
+                      disabled={props.disabled}
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
+          );
+        }}
       </Show>
     </div>
   );

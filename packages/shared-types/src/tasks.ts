@@ -180,6 +180,35 @@ export type LoopConfig = {
 };
 
 /**
+ * One node to seed into a task's subtask graph via `buildSubtaskGraph`.
+ * `key` is a caller-local identifier (not a real subtask id) used to wire
+ * up `GraphEdgeInput`s; it's resolved to a real subtask id as the graph is
+ * built. Shared by the AI auto-planner and the workflow-template applier.
+ */
+export type GraphNodeInput = {
+  key: string;
+  title: string;
+  description: string;
+  orderIndex?: number;
+  assignedAgentId?: string;
+  subtaskKind?: SubtaskKind;
+  loop?: LoopConfig | null;
+};
+
+/**
+ * One dependency edge to seed into a task's subtask graph via
+ * `buildSubtaskGraph`, referencing `GraphNodeInput.key` values rather than
+ * real subtask ids.
+ */
+export type GraphEdgeInput = {
+  subtaskKey: string;
+  dependsOnKey: string;
+  edgeKind?: 'dependency' | 'conditional';
+  conditionOperator?: ConditionOperator;
+  conditionValue?: string;
+};
+
+/**
  * A subtask dependency-graph edge, as returned by the edge-CRUD API.
  */
 export type SubtaskEdgeDto = {

@@ -1,39 +1,11 @@
 import type { SubtasksRepository } from '@openaidy/db';
 import type {
-  ConditionOperator,
+  GraphEdgeInput,
+  GraphNodeInput,
   LoopConfig,
   SubtaskKind,
 } from '@openaidy/shared-types';
 import type { createLogger } from '../lib/logger';
-
-/**
- * One node to create in a subtask graph. `key` is caller-local (an AI
- * plan's array index, or a workflow template's node key) — not a real
- * subtask id — and is resolved to one as the graph is built.
- */
-export type GraphNodeInput = {
-  key: string;
-  title: string;
-  description: string;
-  orderIndex?: number;
-  assignedAgentId?: string;
-  subtaskKind?: SubtaskKind;
-  loop?: LoopConfig | null;
-};
-
-/**
- * One dependency edge to create, referencing two `GraphNodeInput` keys.
- * `subtaskKey` is the dependent node; `dependsOnKey` is the node it
- * depends on — matching `SubtasksRepository.addEdge`'s
- * `subtaskId`/`dependsOnSubtaskId` naming.
- */
-export type GraphEdgeInput = {
-  subtaskKey: string;
-  dependsOnKey: string;
-  edgeKind?: 'dependency' | 'conditional';
-  conditionOperator?: ConditionOperator;
-  conditionValue?: string;
-};
 
 /**
  * Create a whole subtask graph (nodes, then dependency/conditional
