@@ -380,7 +380,9 @@ function AppContent(props: AppContentProps) {
     // backstop (see websocket/index.ts) if left idle long enough. Surface
     // that instead of leaving the chat view silently pointed at a session
     // that no longer exists.
-    const handleSessionDeleted = (event: { payload: { sessionId: string } }) => {
+    const handleSessionDeleted = (event: {
+      payload: { sessionId: string };
+    }) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       if (selectedSessionId() === event.payload.sessionId) {
         setSelectedSessionId(undefined);
@@ -1024,6 +1026,22 @@ function AppContent(props: AppContentProps) {
   createEffect(() => {
     if (currentView() === 'sessions') {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    }
+  });
+
+  // Focus the chat input whenever the user is on the chat page. Depending on
+  // focusChatInput() (not just view()) matters for the fresh-landing case:
+  // view() can already be 'chat' before a session is auto-selected above, at
+  // which point the composer hasn't mounted yet and focusChatInput() is still
+  // undefined — this effect re-runs once the composer mounts and registers
+  // its focus fn, whether that happens immediately (session already
+  // selected) or shortly after (auto-select effect above sets one). Doesn't
+  // re-fire on a plain session switch, since the composer stays mounted
+  // (same Show boundary) and focusChatInput() keeps its existing reference.
+  createEffect(() => {
+    const focus = focusChatInput();
+    if (view() === 'chat' && focus) {
+      setTimeout(() => focus(), 50);
     }
   });
 
