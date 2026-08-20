@@ -6,6 +6,15 @@ import './index.css';
 import App from './App.tsx';
 import { setApiBase } from './lib/api';
 import { waitForServicePort } from './lib/tauri-bridge';
+import {
+  installStaleBuildRecovery,
+  clearStaleBuildGuard,
+} from './lib/stale-build-recovery';
+
+// Harmless no-op in the desktop build: the frontend is bundled statically
+// into the app at build time there, so a live server can never swap out
+// assets/ under a running tab the way it can for a browser deployment.
+installStaleBuildRecovery();
 
 // ============================================================================
 // Addon System Initialization
@@ -131,3 +140,4 @@ render(
   ),
   root!,
 );
+clearStaleBuildGuard();
