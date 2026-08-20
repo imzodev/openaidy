@@ -150,6 +150,12 @@ function AppContent(props: AppContentProps) {
   const [focusChatInput, setFocusChatInput] = createSignal<
     (() => void) | undefined
   >(undefined);
+  // Refocusing right after a DOM update (streaming ends, a choice prompt is
+  // dismissed, the chat page mounts) needs a tick for layout to settle first.
+  const CHAT_INPUT_REFOCUS_DELAY_MS = 50;
+  const refocusChatInput = () => {
+    setTimeout(() => focusChatInput()?.(), CHAT_INPUT_REFOCUS_DELAY_MS);
+  };
   const [selectedAgentId, setSelectedAgentId] = createSignal<
     string | undefined
   >(undefined);
@@ -357,7 +363,7 @@ function AppContent(props: AppContentProps) {
       // Drain the next queued message, if any, now that the run is idle.
       processQueue();
       // Focus the chat input after streaming completes
-      setTimeout(() => focusChatInput()?.(), 50);
+      refocusChatInput();
     };
 
     const handleStreamError = (event: {
@@ -453,7 +459,6 @@ function AppContent(props: AppContentProps) {
       unsubToolCancelled();
       unsubRunCancelled();
       unsubActivity();
-      setFocusChatInput(undefined); // Clear stale focus function
     });
   });
 
@@ -1039,9 +1044,8 @@ function AppContent(props: AppContentProps) {
   // re-fire on a plain session switch, since the composer stays mounted
   // (same Show boundary) and focusChatInput() keeps its existing reference.
   createEffect(() => {
-    const focus = focusChatInput();
-    if (view() === 'chat' && focus) {
-      setTimeout(() => focus(), 50);
+    if (view() === 'chat' && focusChatInput()) {
+      refocusChatInput();
     }
   });
 
@@ -1451,7 +1455,7 @@ function AppContent(props: AppContentProps) {
                       setCurrentChoices(null);
                       // Resume draining the queue now that the prompt is gone.
                       processQueue();
-                      setTimeout(() => focusChatInput()?.(), 50);
+                      refocusChatInput();
                     }}
                   />
                 )}

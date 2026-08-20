@@ -16,8 +16,12 @@ type ChatComposerProps = {
   agents: Agent[];
   selectedAgentId?: string;
   onAgentSelect: (agentId: string | undefined) => void;
-  /** Called when the component mounts, passing a focus function */
-  onInputReady?: (focus: () => void) => void;
+  /**
+   * Called with a focus function when the component mounts, and with
+   * `undefined` when it unmounts, so the parent never holds a reference to
+   * a focus function belonging to an already-unmounted composer.
+   */
+  onInputReady?: (focus: (() => void) | undefined) => void;
   /**
    * Attachments aren't supported in private chats (bytes live on disk
    * regardless of the session's persistence flag). Hides/disables the
@@ -49,10 +53,13 @@ export function ChatComposer(props: ChatComposerProps) {
   // Queue mode: usable composer, but submitting enqueues for later send.
   const isQueueing = () => !!props.isStreaming && !props.disabled;
 
-  // Expose focus function to parent via callback when textarea is mounted
+  // Expose focus function to parent via callback when textarea is mounted,
+  // and clear it on unmount so the parent doesn't keep calling a focus
+  // function whose textarea no longer exists.
   onMount(() => {
     if (props.onInputReady) {
       props.onInputReady(() => textareaRef?.focus());
+      onCleanup(() => props.onInputReady?.(undefined));
     }
 
     const mq = window.matchMedia?.('(max-width: 767px)');
