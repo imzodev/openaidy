@@ -2,6 +2,12 @@
 import { render } from 'solid-js/web';
 import './index.css';
 import App from './App.tsx';
+import {
+  installStaleBuildRecovery,
+  clearStaleBuildGuard,
+} from './lib/stale-build-recovery';
+
+installStaleBuildRecovery();
 
 // ============================================================================
 // Addon System Initialization
@@ -44,3 +50,4 @@ initializeAddonSystem().catch((err) => {
 const root = document.getElementById('root');
 
 render(() => <App />, root!);
+clearStaleBuildGuard();
