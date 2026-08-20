@@ -1,0 +1,86 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenAidy",
+  "version": "0.1.0",
+  "identifier": "dev.openaidy",
+  "build": {
+    "frontendDist": "../../web/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter web dev",
+    "beforeBuildCommand": "pnpm --filter web build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpenAidy",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "visible": true,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: https:;"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": ["scripts/openaidy-service.sh"],
+    "category": "Productivity",
+    "shortDescription": "AI Assistant Desktop App",
+    "longDescription": "OpenAidy is a desktop AI assistant that provides agent management, session handling, and extensible addons.",
+    "copyright": "Copyright © 2024",
+    "publisher": "OpenAidy",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "languages": ["English", "Spanish", "Portuguese"],
+        "displayLanguageSelector": true
+      },
+      "wix": {
+        "language": ["en-US", "es-ES", "pt-BR"]
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "frameworks": [],
+      "signingIdentity": "-",
+      "providerShortName": "OpenAidy",
+      "entitlements": "bundle/macos/entitlements.plist"
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libsecret-1-0"]
+      },
+      "rpm": {
+        "release": "1"
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

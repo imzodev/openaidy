@@ -1,0 +1,174 @@
+/**
+ * Tauri IPC Bridge
+ *
+ * Type-safe wrappers around Tauri invoke() calls.
+ * All commands are defined in apps/desktop/src-tauri/src/commands.rs
+ *
+ * This file is loaded by the Solid.js app in BOTH browser (dev) and
+ * Tauri WebView (prod). Commands gracefully no-op in browser mode.
+ */
+
+import { invoke, isTauri } from '@tauri-apps/api/core';
+
+// ─── Guards ──────────────────────────────────────────────────────────────────
+
+function assertTauri(): void {
+  if (!isTauri()) {
+    throw new Error('Tauri API called in non-Tauri environment');
+  }
+}
+
+// ─── Service Commands ────────────────────────────────────────────────────────
+
+export interface ServiceStatus {
+  state: string;
+  port: number | null;
+  restart_attempts: number;
+  pid: number | null;
+  openaidy_home: string;
+}
+
+export interface ServiceBridge {
+  getStatus(): Promise<ServiceStatus>;
+  restart(): Promise<number>; // returns port
+  stop(): Promise<void>;
+}
+
+/**
+ * Get current service status.
+ * Works in: Tauri WebView only.
+ */
+export async function getServiceStatus(): Promise<ServiceStatus> {
+  assertTauri();
+  return invoke<ServiceStatus>('get_service_status');
+}
+
+/**
+ * Restart the core service.
+ * Works in: Tauri WebView only.
+ */
+export async function restartService(): Promise<number> {
+  assertTauri();
+  return invoke<number>('restart_service');
+}
+
+/**
+ * Stop the core service.
+ * Works in: Tauri WebView only.
+ */
+export async function stopService(): Promise<void> {
+  assertTauri();
+  return invoke('stop_service');
+}
+
+// ─── Keychain Commands ────────────────────────────────────────────────────────
+
+export interface KeychainBridge {
+  storeCredential(account: string, value: string): Promise<void>;
+  getCredential(account: string): Promise<string>;
+  deleteCredential(account: string): Promise<void>;
+  listCredentials(): Promise<string[]>;
+}
+
+/**
+ * Store a credential (API key) in the OS keychain.
+ */
+export async function storeCredential(
+  account: string,
+  value: string,
+): Promise<void> {
+  assertTauri();
+  return invoke('store_credential', { account, value });
+}
+
+/**
+ * Retrieve a credential from the OS keychain.
+ */
+export async function getCredential(account: string): Promise<string> {
+  assertTauri();
+  return invoke<string>('get_credential', { account });
+}
+
+/**
+ * Delete a credential from the OS keychain.
+ */
+export async function deleteCredential(account: string): Promise<void> {
+  assertTauri();
+  return invoke('delete_credential', { account });
+}
+
+/**
+ * List all stored credential account names.
+ */
+export async function listCredentials(): Promise<string[]> {
+  assertTauri();
+  return invoke<string[]>('list_credentials');
+}
+
+// ─── Window Commands ──────────────────────────────────────────────────────────
+
+export interface WindowBridge {
+  minimize(): void;
+  maximize(): void;
+  close(): void;
+  hideToTray(): void;
+}
+
+/**
+ * Minimize the window.
+ */
+export async function minimizeWindow(): Promise<void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  getCurrentWindow().minimize();
+}
+
+/**
+ * Maximize or restore the window.
+ */
+export async function toggleMaximize(): Promise<void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  const win = getCurrentWindow();
+  const isMaximized = await win.isMaximized();
+  if (isMaximized) {
+    await win.unmaximize();
+  } else {
+    await win.maximize();
+  }
+}
+
+/**
+ * Close the window (app continues running in tray).
+ */
+export async function closeWindow(): Promise<void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  getCurrentWindow().hide();
+}
+
+/**
+ * Hide window to system tray (close button behavior).
+ */
+export async function hideToTray(): Promise<void> {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  getCurrentWindow().hide();
+}
+
+// ─── Environment Bridge ───────────────────────────────────────────────────────
+
+/**
+ * Get the port the spawned core service is actually listening on. Reuses
+ * get_service_status (already the single source of truth ServiceManager
+ * reports through) instead of reading a port file directly — the service's
+ * port is picked dynamically per launch, so a file read is both redundant
+ * and, on Windows, pointed at a path that doesn't exist there.
+ */
+export async function getServicePort(): Promise<number> {
+  if (isTauri()) {
+    const status = await getServiceStatus();
+    if (status.port == null) {
+      throw new Error('Core service has no port yet (not running)');
+    }
+    return status.port;
+  }
+  // Fallback for browser dev mode
+  return 3001;
+}

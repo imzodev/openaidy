@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.openaidy</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/openaidy-service</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENAIDY_HOME</key>
+    <string>~/.config/openaidy</string>
+    <key>DB_KIND</key>
+    <string>sqlite</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/openaidy.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/openaidy.err</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>LowPriorityIO</key>
+  <true/>
+</dict>
+</plist>
