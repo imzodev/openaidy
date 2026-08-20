@@ -77,29 +77,6 @@ pub fn setup_tray<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-/// Handle the window close event — hide to tray instead of quitting.
-/// DEPRECATED: This function is replaced by window::setup_close_to_tray
-#[allow(dead_code)]
-pub fn setup_window_close_handler<R: Runtime>(
-    app: &App<R>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let main_window = app
-        .get_webview_window("main")
-        .ok_or("Main window not found")?;
-
-    main_window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            info!("Main window close requested — hiding to tray");
-            // Prevent the window from closing
-            api.prevent_close();
-            // Hide the window instead
-            // Note: we need the window handle, which we get from the app
-        }
-    });
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     #[test]

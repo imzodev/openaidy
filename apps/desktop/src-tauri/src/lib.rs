@@ -1,7 +1,6 @@
 mod commands;
 mod keychain;
 mod service;
-mod service_install;
 mod tray;
 mod window;
 
@@ -27,25 +26,8 @@ pub fn run() {
 
     let service_manager = Arc::new(ServiceManager::new(openaidy_home.clone()));
 
-    // `run()` must stay a plain sync fn (the mobile entry point macro above
-    // calls it directly, not through an async runtime), so the async prep
-    // work — loading keychain creds, starting the core service — runs via
-    // Tauri's own async_runtime::block_on rather than #[tokio::main].
-    let port = tauri::async_runtime::block_on({
-        let service_manager = service_manager.clone();
-        async move {
-            let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();
-            service_manager
-                .start(keychain_creds)
-                .await
-                .expect("Failed to start core service")
-        }
-    });
-
-    info!("Core service started on port {port}");
-
     let app_state = AppState {
-        service: service_manager,
+        service: service_manager.clone(),
     };
 
     // Load saved window state for restoration
@@ -82,7 +64,31 @@ pub fn run() {
                 }
             }
 
-            info!("Tauri setup complete; core service on port {port}");
+            // Start the core service in the background rather than
+            // blocking window creation on it (it can take up to several
+            // seconds, and retries on a contended port on top of that) —
+            // the window now appears immediately, and the frontend waits
+            // for get_service_status() to report `Running` (or surfaces
+            // `Crashed`) before issuing any API call instead of the whole
+            // app silently hanging with no window at all for up to 15s, or
+            // — on failure — panicking with no UI feedback whatsoever.
+            //
+            // `resource_dir()` is where a packaged build's bundled copy of
+            // apps/server/dist actually lives; it's platform-specific (e.g.
+            // inside Contents/Resources on macOS) which is why service.rs
+            // needs it passed in rather than deriving it from the
+            // executable's own path.
+            let resource_dir = app.path().resource_dir().ok();
+            let service_manager = service_manager.clone();
+            tauri::async_runtime::spawn(async move {
+                let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();
+                match service_manager.start(keychain_creds, resource_dir).await {
+                    Ok(port) => info!("Core service started on port {port}"),
+                    Err(e) => error!("Failed to start core service: {e}"),
+                }
+            });
+
+            info!("Tauri setup complete");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -3,7 +3,7 @@
 //! Spawns `apps/server` as a managed subprocess, writes the assigned port to
 //! OPENAIDY_HOME/port, and handles graceful shutdown.
 
-use log::{error, info};
+use log::{error, info, warn};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{sleep, timeout, Duration};
+use tokio::time::{sleep, Duration};
 
 /// The origin the embedded WebView actually sends as its `Origin` header,
 /// per platform — Tauri v2 serves the frontend from this pseudo-origin, not
@@ -36,6 +36,16 @@ const MAX_RESTART_ATTEMPTS: u32 = 3;
 
 /// Initial delay between restarts (doubles each attempt)
 const INITIAL_RESTART_DELAY_MS: u64 = 1000;
+
+/// How many fresh ports to try, in a row, when the one `pick_free_port()`
+/// handed back turns out to already be taken by the time our own child
+/// tries to bind it (a TOCTOU race: the port is free at pick-time, but
+/// nothing reserves it between then and the child's own bind call).
+const MAX_BIND_ATTEMPTS: u32 = 3;
+
+/// How long to wait for the spawned server to confirm it's listening before
+/// treating the attempt as a genuine (non-contention) failure.
+const BIND_WAIT: Duration = Duration::from_secs(15);
 
 /// Service state
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -81,22 +91,40 @@ pub struct ServiceStatus {
     pub openaidy_home: PathBuf,
 }
 
-/// Thread-safe service manager
+/// Thread-safe service manager.
+///
+/// Every field is itself `Arc`-wrapped so that `#[derive(Clone)]` produces a
+/// *shallow* clone — one that shares the exact same locks as the original —
+/// rather than a fresh, independent instance. That matters because `start()`
+/// hands a clone to the background crash monitor: a deep clone (fresh
+/// `RwLock::const_new(ServiceState::Idle)` etc.) would leave the monitor
+/// reading its own permanently-`Idle` copy of the state while the real
+/// instance transitions to `Running`, so it would never observe a crash and
+/// auto-restart would silently never fire. Caught live: the monitor loop's
+/// very first iteration saw `Idle` and broke immediately.
+#[derive(Clone)]
 pub struct ServiceManager {
-    state: RwLock<ServiceState>,
-    child: Mutex<Option<Child>>,
-    port: RwLock<Option<u16>>,
-    restart_attempts: RwLock<u32>,
+    state: Arc<RwLock<ServiceState>>,
+    child: Arc<Mutex<Option<Child>>>,
+    port: Arc<RwLock<Option<u16>>>,
+    restart_attempts: Arc<RwLock<u32>>,
     openaidy_home: PathBuf,
+}
+
+/// Distinguishes a port-contention failure (worth retrying with a fresh
+/// port) from a genuine boot failure (retrying the same way won't help).
+enum StartOnceError {
+    PortContested(String),
+    Other(String),
 }
 
 impl ServiceManager {
     pub fn new(openaidy_home: PathBuf) -> Self {
         Self {
-            state: RwLock::const_new(ServiceState::Idle),
-            child: Mutex::const_new(None),
-            port: RwLock::const_new(None),
-            restart_attempts: RwLock::const_new(0),
+            state: Arc::new(RwLock::const_new(ServiceState::Idle)),
+            child: Arc::new(Mutex::const_new(None)),
+            port: Arc::new(RwLock::const_new(None)),
+            restart_attempts: Arc::new(RwLock::const_new(0)),
             openaidy_home,
         }
     }
@@ -118,15 +146,30 @@ impl ServiceManager {
         }
     }
 
-    /// Start the service, with retry logic on crash
-    pub async fn start(&self, keychain_creds: HashMap<String, String>) -> Result<u16, String> {
+    /// Start the service, with retry logic on crash.
+    ///
+    /// `resource_dir` is the Tauri-resolved bundled-resources directory
+    /// (`app.path().resource_dir()`) — where a packaged build's copy of
+    /// `apps/server/dist` actually lives. It's platform-specific (e.g.
+    /// inside `Contents/Resources` on macOS), which is why it has to come
+    /// from Tauri itself rather than being derived from the executable's own
+    /// path. `None` in dev mode, where the monorepo-relative fallback in
+    /// `locate_server_entry` applies instead.
+    pub async fn start(
+        &self,
+        keychain_creds: HashMap<String, String>,
+        resource_dir: Option<PathBuf>,
+    ) -> Result<u16, String> {
         // Set state to Starting
         {
             let mut s = self.state.write().await;
             *s = ServiceState::Starting;
         }
 
-        let port = match self.try_start(keychain_creds.clone()).await {
+        let port = match self
+            .try_start(&keychain_creds, resource_dir.as_deref())
+            .await
+        {
             Ok(port) => port,
             Err(e) => {
                 error!("Service start failed: {e}");
@@ -137,27 +180,71 @@ impl ServiceManager {
             }
         };
 
-        // Spawn background monitor
-        let manager = Arc::new(self.clone_manager());
-        let creds = keychain_creds;
-        tokio::spawn(async move {
-            manager.monitor_loop(creds).await;
-        });
-
         {
             let mut s = self.state.write().await;
             *s = ServiceState::Running { port };
         }
 
+        // Spawn background monitor — a true shallow clone (see the type's
+        // doc comment), so it observes the same state/child this instance
+        // mutates from here on.
+        let manager = Arc::new(self.clone());
+        let creds = keychain_creds;
+        tokio::spawn(async move {
+            manager.monitor_loop(creds, resource_dir).await;
+        });
+
         Ok(port)
     }
 
-    /// Attempt a single start
-    async fn try_start(&self, keychain_creds: HashMap<String, String>) -> Result<u16, String> {
+    /// Attempt to start the server, retrying with a fresh port up to
+    /// `MAX_BIND_ATTEMPTS` times if the chosen port turns out to already be
+    /// taken (see `try_start_once`'s doc comment for why that can happen).
+    async fn try_start(
+        &self,
+        keychain_creds: &HashMap<String, String>,
+        resource_dir: Option<&Path>,
+    ) -> Result<u16, String> {
+        let mut last_err = String::new();
+        for attempt in 1..=MAX_BIND_ATTEMPTS {
+            match self.try_start_once(keychain_creds, resource_dir).await {
+                Ok(port) => return Ok(port),
+                Err(StartOnceError::PortContested(e)) => {
+                    warn!(
+                        "Start attempt {attempt}/{MAX_BIND_ATTEMPTS} lost a port race ({e}), retrying with a fresh port"
+                    );
+                    last_err = e;
+                }
+                // Not a port race — retrying the same way won't help, so
+                // surface it immediately instead of burning the remaining
+                // attempts' worth of wait time.
+                Err(StartOnceError::Other(e)) => return Err(e),
+            }
+        }
+        Err(format!(
+            "gave up after {MAX_BIND_ATTEMPTS} port-contention retries: {last_err}"
+        ))
+    }
+
+    /// Single attempt: pick a port, spawn the server, and wait for it to
+    /// either confirm the port is bound or exit early.
+    ///
+    /// `pick_free_port()` binds a throwaway listener, reads its assigned
+    /// port, then drops it — nothing reserves that port between the drop and
+    /// the child process's own bind call, so another process on the machine
+    /// can grab it first. When that happens the child (a Node server) exits
+    /// almost immediately with an EADDRINUSE-style error; polling for that
+    /// early exit lets this return quickly instead of waiting out the full
+    /// `BIND_WAIT` window for a port that was never going to bind.
+    async fn try_start_once(
+        &self,
+        keychain_creds: &HashMap<String, String>,
+        resource_dir: Option<&Path>,
+    ) -> Result<u16, StartOnceError> {
         use std::env;
 
-        let port = pick_free_port().map_err(|e| e.to_string())?;
-        let (program, args, cwd) = locate_server_entry(&self.openaidy_home);
+        let port = pick_free_port().map_err(|e| StartOnceError::Other(e.to_string()))?;
+        let (program, args, cwd) = locate_server_entry(&self.openaidy_home, resource_dir);
 
         // Build env. Names must match what apps/server/src/lib/env.ts's zod
         // schema actually reads from process.env — it has no PORT/CORS_ORIGIN/
@@ -193,7 +280,37 @@ impl ServiceManager {
                 vars.push((k, v));
             }
         }
-        for (k, v) in &keychain_creds {
+
+        // apps/server/src/lib/env.ts derives its own APP_CONFIG_TEMPLATE_PATH
+        // / BUNDLED_SKILLS_DIR defaults from `import.meta.url`, walking a
+        // fixed number of parent directories up from wherever env.ts itself
+        // physically sits — correct when it's really at
+        // apps/server/src/lib/env.ts (dev mode), but that file is a *copy*
+        // once bundled (see locate_server_entry's doc comment), sitting at
+        // a completely different depth, so those defaults resolve to nonsense
+        // (observed: landing inside apps/desktop/config, which doesn't
+        // exist). `beforeBuildCommand` also copies the repo's own top-level
+        // config/ into the bundle as "shared-config" specifically so these
+        // can be pointed at a real location instead.
+        let shared_config_dir = cwd.join("shared-config");
+        if shared_config_dir.join("openaidy.template.json").exists() {
+            vars.push((
+                "APP_CONFIG_TEMPLATE_PATH".to_string(),
+                shared_config_dir
+                    .join("openaidy.template.json")
+                    .to_string_lossy()
+                    .to_string(),
+            ));
+            vars.push((
+                "BUNDLED_SKILLS_DIR".to_string(),
+                shared_config_dir
+                    .join("skills")
+                    .to_string_lossy()
+                    .to_string(),
+            ));
+        }
+
+        for (k, v) in keychain_creds {
             vars.push((k.clone(), v.clone()));
         }
 
@@ -206,7 +323,23 @@ impl ServiceManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("spawn error: {e}"))?;
+            .map_err(|e| {
+                // The packaged app bundles apps/server itself but not a
+                // Node.js runtime — `program` is plain "node", resolved via
+                // PATH — so a missing system Node is the single most likely
+                // reason this ever fails, and the raw io::Error ("program
+                // not found" / os error 2) gives the user no idea what to
+                // actually do about it.
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    StartOnceError::Other(
+                        "Node.js was not found on PATH. OpenAidy's core service requires \
+                         Node.js 18+ to be installed separately — see https://nodejs.org/"
+                            .to_string(),
+                    )
+                } else {
+                    StartOnceError::Other(format!("spawn error: {e}"))
+                }
+            })?;
 
         // Log stdout
         if let Some(stdout) = child.stdout.take() {
@@ -227,18 +360,26 @@ impl ServiceManager {
             });
         }
 
-        // Wait for server to bind
+        // Wait for server to bind, or exit early (a strong signal the port
+        // was contested rather than the server just being slow).
         let port_copy = port;
-        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        let deadline = std::time::Instant::now() + BIND_WAIT;
         while std::time::Instant::now() < deadline {
             sleep(Duration::from_millis(200)).await;
+
+            if let Ok(Some(status)) = child.try_wait() {
+                return Err(StartOnceError::PortContested(format!(
+                    "server exited early ({status:?}) before binding port {port_copy}"
+                )));
+            }
+
             if tokio::net::TcpStream::connect(format!("127.0.0.1:{port_copy}"))
                 .await
                 .is_ok()
             {
                 // Write port file
                 write_port_file(&self.openaidy_home, port_copy)
-                    .map_err(|e| format!("write_port_file: {e}"))?;
+                    .map_err(|e| StartOnceError::Other(format!("write_port_file: {e}")))?;
                 info!("Server confirmed on port {port_copy}");
 
                 {
@@ -254,11 +395,21 @@ impl ServiceManager {
             }
         }
 
-        Err("Server did not bind within 15 seconds".to_string())
+        // Timed out without binding *and* without exiting — genuinely slow
+        // or stuck, not a contended port. Kill it; the caller won't retry
+        // this kind of failure.
+        drop(child.kill());
+        Err(StartOnceError::Other(format!(
+            "server did not bind to port {port_copy} within {BIND_WAIT:?}"
+        )))
     }
 
     /// Monitor loop — restarts on crash
-    async fn monitor_loop(&self, keychain_creds: HashMap<String, String>) {
+    async fn monitor_loop(
+        &self,
+        keychain_creds: HashMap<String, String>,
+        resource_dir: Option<PathBuf>,
+    ) {
         loop {
             sleep(Duration::from_secs(2)).await;
 
@@ -292,7 +443,10 @@ impl ServiceManager {
                                     *s = ServiceState::Starting;
                                     drop(s);
 
-                                    match self.try_start(keychain_creds.clone()).await {
+                                    match self
+                                        .try_start(&keychain_creds, resource_dir.as_deref())
+                                        .await
+                                    {
                                         Ok(port) => {
                                             let mut st = self.state.write().await;
                                             *st = ServiceState::Running { port };
@@ -342,7 +496,7 @@ impl ServiceManager {
 
             // SIGTERM via kill(), then wait up to 10s for graceful shutdown
             drop(c.kill());
-            let result = timeout(Duration::from_secs(10), c.wait()).await;
+            let result = tokio::time::timeout(Duration::from_secs(10), c.wait()).await;
             match result {
                 Ok(Ok(status)) => info!("Server exited: {status:?}"),
                 Ok(Err(e)) => error!("wait() error: {e}"),
@@ -361,49 +515,9 @@ impl ServiceManager {
         *s = ServiceState::Idle;
         info!("Service stopped");
     }
-
-    fn clone_manager(&self) -> ServiceManager {
-        ServiceManager {
-            state: RwLock::const_new(ServiceState::Idle),
-            child: Mutex::const_new(None),
-            port: RwLock::const_new(None),
-            restart_attempts: RwLock::const_new(0),
-            openaidy_home: self.openaidy_home.clone(),
-        }
-    }
 }
 
-// ============================================================================
-// Legacy module-level helpers (retained for test compatibility)
-// ============================================================================
-
-/// Global service state
-#[allow(dead_code)]
-static SERVICE_HANDLE: Mutex<Option<ServiceHandle>> = Mutex::const_new(None);
-
-pub struct ServiceHandle {
-    child: Child,
-    #[allow(dead_code)]
-    pub port: u16,
-    #[allow(dead_code)]
-    openaidy_home: PathBuf,
-}
-
-impl Drop for ServiceHandle {
-    fn drop(&mut self) {
-        info!("ServiceHandle dropping — sending SIGTERM to server");
-        #[cfg(unix)]
-        {
-            drop(self.child.kill());
-        }
-        #[cfg(windows)]
-        {
-            drop(self.child.kill());
-        }
-    }
-}
-
-/// Locate the built server entry point.
+/// Locate the server entry point and how to run it.
 ///
 /// `openaidy_home` (the OS per-user app-data dir, e.g. `%APPDATA%/openaidy`
 /// on Windows) has no path relationship to where the monorepo source or a
@@ -412,58 +526,91 @@ impl Drop for ServiceHandle {
 /// outside of the one specific case where openaidy_home happened to be
 /// nested exactly two directories inside the workspace root.
 ///
-/// Dev mode: `apps/server/src/server.ts`, run via `node <tsx's cli.mjs>
-/// <server.ts>` rather than a bare `tsx` command — `tsx` is only ever a
-/// pnpm-local `node_modules/.bin` shim (a `.CMD`/`.ps1` wrapper on Windows,
-/// not something `std::process::Command` can exec directly, and not on PATH
-/// at all unless installed globally), while `node_modules/tsx` is a stable
-/// symlink pnpm creates at the workspace root regardless of platform. Found
-/// relative to this crate's own location in the monorepo via
-/// `CARGO_MANIFEST_DIR` (a compile-time constant — always
+/// Both dev and packaged mode run the *TypeScript source* directly through
+/// `node <tsx's cli.mjs> <server.ts>`, never `apps/server`'s own `tsc`-
+/// compiled `dist` output. The compiled output looked like the "proper"
+/// production path, but apps/server relies on the workspace's shared
+/// `moduleResolution: "Bundler"` tsconfig (needed elsewhere for esbuild/Vite
+/// tooling) — under that mode `tsc` leaves relative imports (`from
+/// './app'`) without a `.js` extension in its emitted JS, which plain
+/// Node's ESM loader then refuses to resolve at all
+/// (`ERR_MODULE_NOT_FOUND`). Running the original `.ts` source through tsx
+/// (an esbuild-backed loader tolerant of extensionless imports) is what
+/// apps/server's own `dev` script already does, and is the only path that's
+/// actually been proven to boot the full server end-to-end. A bare `tsx`
+/// command isn't used directly — it's only ever a pnpm-local
+/// `node_modules/.bin` shim (a `.CMD`/`.ps1` wrapper on Windows, not
+/// something `std::process::Command` can exec directly, and not on PATH at
+/// all unless installed globally) — `node_modules/tsx/dist/cli.mjs` is the
+/// real, portable entry point.
+///
+/// Packaged mode looks under `resource_dir` (`tauri::Manager::path()
+/// .resource_dir()` — the bundled-resources directory, which is *not*
+/// simply "next to the executable" on every platform, e.g. it's inside
+/// `Contents/Resources` in a macOS `.app` bundle) for `server-bundle`, the
+/// self-contained `pnpm --filter @openaidy/server deploy --prod` output
+/// `tauri.conf.json`'s `beforeBuildCommand` produces and `bundle.resources`
+/// ships — apps/server's own source plus its fully resolved production
+/// node_modules (`pnpm deploy` flattens the target package's own contents
+/// to the deploy dir, so `server-bundle/` here plays the same role
+/// `apps/server/` does for the dev fallback below). `tsx` is a direct
+/// dependency of `@openaidy/server` specifically so this deploy step
+/// captures it.
+///
+/// Dev mode: `apps/server/src/server.ts` plus the workspace root's own
+/// `node_modules/tsx`, found relative to this crate's own location in the
+/// monorepo via `CARGO_MANIFEST_DIR` (a compile-time constant — always
 /// `apps/desktop/src-tauri` — so this only works when built from the
 /// monorepo, which is exactly the dev case).
-/// Prod mode: `apps/server/dist/index.js` (node runs it directly), found
-/// relative to the running executable's own directory, where a packaged
-/// build's bundled resources would sit.
-#[allow(dead_code)]
-fn locate_server_entry(_openaidy_home: &Path) -> (String, Vec<String>, PathBuf) {
+fn locate_server_entry(
+    _openaidy_home: &Path,
+    resource_dir: Option<&Path>,
+) -> (String, Vec<String>, PathBuf) {
     let dev_workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
         .join("..");
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| PathBuf::from("."));
 
-    locate_server_entry_from(&dev_workspace_root, &exe_dir)
+    let bundled_server_root = resource_dir.map(|dir| dir.join("server-bundle"));
+
+    locate_server_entry_from(&dev_workspace_root, bundled_server_root.as_deref())
 }
 
 /// Injectable version of the search so tests can point it at temp
-/// directories instead of the real compile-time/executable-relative roots.
+/// directories instead of the real compile-time/resource-dir roots.
 fn locate_server_entry_from(
     dev_workspace_root: &Path,
-    exe_dir: &Path,
+    bundled_server_root: Option<&Path>,
 ) -> (String, Vec<String>, PathBuf) {
+    // apps/server has no src/index.ts — `server.ts` is the real entry
+    // point. (`apps/server/package.json`'s own `exports["."]` field claims
+    // `./src/index.ts`, which doesn't exist either — a pre-existing issue
+    // in that package, unrelated to this lookup.)
+    if let Some(bundled_root) = bundled_server_root {
+        let entry = bundled_root.join("src").join("server.ts");
+        let tsx_cli = bundled_root
+            .join("node_modules")
+            .join("tsx")
+            .join("dist")
+            .join("cli.mjs");
+        if entry.exists() && tsx_cli.exists() {
+            return (
+                "node".to_string(),
+                vec![
+                    tsx_cli.to_string_lossy().to_string(),
+                    entry.to_string_lossy().to_string(),
+                ],
+                bundled_root.to_path_buf(),
+            );
+        }
+    }
+
     let dev_entry = dev_workspace_root
         .join("apps")
         .join("server")
         .join("src")
         .join("server.ts");
-
-    let prod_entry = exe_dir
-        .join("apps")
-        .join("server")
-        .join("dist")
-        .join("index.js");
-
-    if prod_entry.exists() {
-        (
-            "node".to_string(),
-            vec![prod_entry.to_string_lossy().to_string()],
-            exe_dir.to_path_buf(),
-        )
-    } else if dev_entry.exists() {
+    if dev_entry.exists() {
         let tsx_cli = dev_workspace_root
             .join("node_modules")
             .join("tsx")
@@ -478,13 +625,14 @@ fn locate_server_entry_from(
             dev_workspace_root.to_path_buf(),
         )
     } else {
-        error!("Cannot find server entry. Tried:\n  dev:  {dev_entry:?}\n  prod: {prod_entry:?}");
+        error!(
+            "Cannot find server entry. Tried:\n  bundled: {bundled_server_root:?}\n  dev:     {dev_entry:?}"
+        );
         panic!("Server entry not found");
     }
 }
 
 /// Find a free port on the system.
-#[allow(dead_code)]
 fn pick_free_port() -> std::io::Result<u16> {
     use std::net::TcpListener;
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -492,52 +640,7 @@ fn pick_free_port() -> std::io::Result<u16> {
     Ok(addr.port())
 }
 
-/// Build the env vars passed to the server subprocess.
-#[allow(dead_code)]
-fn build_server_env(
-    port: u16,
-    openaidy_home: &Path,
-    keychain_creds: &HashMap<String, String>,
-) -> Vec<(String, String)> {
-    use std::env;
-
-    let mut vars: Vec<(String, String)> = env::vars().collect();
-
-    let additions = [
-        ("PORT".to_string(), port.to_string()),
-        (
-            "OPENAIDY_HOME".to_string(),
-            openaidy_home.to_string_lossy().to_string(),
-        ),
-        ("WS_PORT".to_string(), port.to_string()),
-        ("CORS_ORIGIN".to_string(), "app://0.0.0.0".to_string()),
-        ("DB_KIND".to_string(), "sqlite".to_string()),
-        (
-            "SQLITE_PATH".to_string(),
-            openaidy_home
-                .join("openaidy.db")
-                .to_string_lossy()
-                .to_string(),
-        ),
-    ];
-
-    for (k, v) in additions {
-        if let Some(existing) = vars.iter_mut().find(|(key, _)| key == &k) {
-            existing.1 = v;
-        } else {
-            vars.push((k, v));
-        }
-    }
-
-    for (key, value) in keychain_creds {
-        vars.push((key.clone(), value.clone()));
-    }
-
-    vars
-}
-
 /// Write the port file so the frontend IPC bridge can find it.
-#[allow(dead_code)]
 fn write_port_file(openaidy_home: &Path, port: u16) -> std::io::Result<()> {
     std::fs::create_dir_all(openaidy_home)?;
     let port_file = openaidy_home.join("port");
@@ -552,116 +655,6 @@ fn read_port_file(openaidy_home: &Path) -> Option<u16> {
     let port_file = openaidy_home.join("port");
     let content = std::fs::read_to_string(port_file).ok()?;
     content.trim().parse().ok()
-}
-
-/// Start the core service subprocess.
-#[allow(dead_code)]
-pub async fn start_service(
-    openaidy_home: PathBuf,
-    keychain_creds: HashMap<String, String>,
-) -> Result<ServiceHandle, String> {
-    if let Some(port) = read_port_file(&openaidy_home) {
-        info!("Server already running on port {port}");
-        if tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
-            .await
-            .is_ok()
-        {
-            let placeholder = Command::new("echo")
-                .arg("placeholder")
-                .spawn()
-                .map_err(|e| e.to_string())?;
-            return Ok(ServiceHandle {
-                child: placeholder,
-                port,
-                openaidy_home,
-            });
-        }
-    }
-
-    let port = pick_free_port().map_err(|e| e.to_string())?;
-    let (program, args, cwd) = locate_server_entry(&openaidy_home);
-    let env_vars = build_server_env(port, &openaidy_home, &keychain_creds);
-
-    info!("Spawning server: {program} {args:?} (port={port}, cwd={cwd:?})");
-
-    let mut child = Command::new(&program)
-        .args(&args)
-        .envs(env_vars)
-        .current_dir(&cwd)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to spawn server: {e}"))?;
-
-    if let Some(stdout) = child.stdout.take() {
-        let mut reader = BufReader::new(stdout).lines();
-        let op_name = program.clone();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                info!("[{op_name}] {line}");
-            }
-        });
-    }
-    if let Some(stderr) = child.stderr.take() {
-        let mut reader = BufReader::new(stderr).lines();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                error!("[server stderr] {line}");
-            }
-        });
-    }
-
-    let bound_port = Arc::new(Mutex::new(None));
-    let bound_port_clone = bound_port.clone();
-    let port_copy = port;
-
-    tokio::spawn(async move {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while std::time::Instant::now() < deadline {
-            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-            if tokio::net::TcpStream::connect(format!("127.0.0.1:{port_copy}"))
-                .await
-                .is_ok()
-            {
-                *bound_port_clone.lock().await = Some(port_copy);
-                info!("Server confirmed listening on port {port_copy}");
-                return;
-            }
-        }
-        error!("Server failed to bind within 10 seconds");
-    });
-
-    write_port_file(&openaidy_home, port).map_err(|e| e.to_string())?;
-
-    Ok(ServiceHandle {
-        child,
-        port,
-        openaidy_home,
-    })
-}
-
-/// Stop the running service.
-#[allow(dead_code)]
-pub async fn stop_service() {
-    let mut handle = SERVICE_HANDLE.lock().await;
-    if let Some(mut service) = handle.take() {
-        info!("Stopping core service (port {port})", port = service.port);
-        #[cfg(unix)]
-        {
-            drop(service.child.kill());
-        }
-        #[cfg(windows)]
-        {
-            drop(service.child.kill());
-        }
-    }
-}
-
-/// Get the current service port.
-#[allow(dead_code)]
-pub async fn get_service_port() -> Option<u16> {
-    let handle = SERVICE_HANDLE.lock().await;
-    handle.as_ref().map(|h| h.port)
 }
 
 // ============================================================================
@@ -711,7 +704,10 @@ mod tests {
     fn test_service_state_variant_name_is_bare_for_data_carrying_variants() {
         assert_eq!(ServiceState::Idle.variant_name(), "Idle");
         assert_eq!(ServiceState::Starting.variant_name(), "Starting");
-        assert_eq!(ServiceState::Running { port: 3000 }.variant_name(), "Running");
+        assert_eq!(
+            ServiceState::Running { port: 3000 }.variant_name(),
+            "Running"
+        );
         assert_eq!(
             ServiceState::Crashed { attempts: 3 }.variant_name(),
             "Crashed"
@@ -761,6 +757,27 @@ mod tests {
         let manager = ServiceManager::new(temp_dir.path().to_path_buf());
         let status = futures::executor::block_on(manager.status());
         assert_eq!(status.restart_attempts, 0);
+    }
+
+    // Regression test for the shared-state bug: a shallow clone (as used to
+    // hand the monitor loop a handle onto the same manager) must observe
+    // mutations made through the original, not a frozen snapshot from
+    // clone-time.
+    #[test]
+    fn test_service_manager_clone_shares_state() {
+        let temp_dir = TempDir::new().expect("should create temp dir");
+        let manager = ServiceManager::new(temp_dir.path().to_path_buf());
+        let clone = manager.clone();
+
+        futures::executor::block_on(async {
+            {
+                let mut s = manager.state.write().await;
+                *s = ServiceState::Running { port: 4242 };
+            }
+            let status = clone.status().await;
+            assert_eq!(status.state, "Running");
+            assert_eq!(status.port, None); // port signal wasn't touched here
+        });
     }
 
     // ----------------------------------------------------------------
@@ -820,7 +837,6 @@ mod tests {
     fn test_pick_free_port_returns_valid_port() {
         let port = pick_free_port().expect("should return a valid port");
         assert!(port > 0, "port should be non-zero");
-        assert!(port <= 65535, "port should be valid");
     }
 
     #[test]
@@ -831,96 +847,97 @@ mod tests {
     }
 
     // ----------------------------------------------------------------
-    // build_server_env
-    // ----------------------------------------------------------------
-
-    #[test]
-    fn test_build_server_env_includes_openaidy_vars() {
-        let temp_dir = TempDir::new().expect("should create temp dir");
-        let port: u16 = 12345;
-        let keychain_creds = HashMap::new();
-
-        let env_vars = build_server_env(port, temp_dir.path(), &keychain_creds);
-        let env_map: HashMap<_, _> = env_vars.into_iter().collect();
-
-        assert_eq!(env_map.get("PORT"), Some(&"12345".to_string()));
-        assert_eq!(
-            env_map.get("OPENAIDY_HOME"),
-            Some(&temp_dir.path().to_string_lossy().to_string())
-        );
-        assert_eq!(
-            env_map.get("CORS_ORIGIN"),
-            Some(&"app://0.0.0.0".to_string())
-        );
-        assert_eq!(env_map.get("DB_KIND"), Some(&"sqlite".to_string()));
-    }
-
-    #[test]
-    fn test_build_server_env_injects_keychain_credentials() {
-        let temp_dir = TempDir::new().expect("should create temp dir");
-        let port: u16 = 12345;
-
-        let mut keychain_creds = HashMap::new();
-        keychain_creds.insert("OPENAI_API_KEY".to_string(), "sk-test-123".to_string());
-        keychain_creds.insert("ANTHROPIC_API_KEY".to_string(), "***".to_string());
-
-        let env_vars = build_server_env(port, temp_dir.path(), &keychain_creds);
-        let env_map: HashMap<_, _> = env_vars.into_iter().collect();
-
-        assert_eq!(
-            env_map.get("OPENAI_API_KEY"),
-            Some(&"sk-test-123".to_string())
-        );
-        assert_eq!(env_map.get("ANTHROPIC_API_KEY"), Some(&"***".to_string()));
-    }
-
-    // ----------------------------------------------------------------
     // locate_server_entry
     // ----------------------------------------------------------------
 
     // These test locate_server_entry_from (the injectable version) rather
     // than locate_server_entry itself, since the real function's roots
-    // (CARGO_MANIFEST_DIR, current_exe()) aren't things a unit test can
-    // meaningfully redirect into a temp dir.
+    // (CARGO_MANIFEST_DIR, resource_dir/current_exe()) aren't things a unit
+    // test can meaningfully redirect into a temp dir.
 
     #[test]
-    fn test_locate_server_entry_prefers_prod_over_dev() {
+    fn test_locate_server_entry_prefers_bundled_over_dev() {
         let temp_dir = TempDir::new().expect("should create temp dir");
         let root = temp_dir.path();
 
-        let dev_dir = root.join("dev-root").join("apps").join("server").join("src");
+        let dev_dir = root
+            .join("dev-root")
+            .join("apps")
+            .join("server")
+            .join("src");
         fs::create_dir_all(&dev_dir).expect("should create dev dir");
         fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
 
-        let prod_dir = root.join("exe-dir").join("apps").join("server").join("dist");
-        fs::create_dir_all(&prod_dir).expect("should create prod dir");
-        fs::write(prod_dir.join("index.js"), "console.log('prod')")
-            .expect("should write prod entry");
+        // A complete bundled deploy needs both the entry *and* its own tsx —
+        // this is what `pnpm deploy --prod` for @openaidy/server (which now
+        // depends on tsx directly) actually produces.
+        let bundled_root = root.join("resource-dir").join("server-bundle");
+        fs::create_dir_all(bundled_root.join("src")).expect("should create bundled src dir");
+        fs::write(
+            bundled_root.join("src").join("server.ts"),
+            "console.log('bundled')",
+        )
+        .expect("should write bundled entry");
+        let tsx_dir = bundled_root.join("node_modules").join("tsx").join("dist");
+        fs::create_dir_all(&tsx_dir).expect("should create bundled tsx dir");
+        fs::write(tsx_dir.join("cli.mjs"), "// tsx cli").expect("should write bundled tsx cli");
 
         let (program, args, _) =
-            locate_server_entry_from(&root.join("dev-root"), &root.join("exe-dir"));
+            locate_server_entry_from(&root.join("dev-root"), Some(&bundled_root));
 
         assert_eq!(program, "node");
-        assert!(args[0].contains("index.js"));
+        assert!(args[0].contains("tsx") && args[0].contains("cli.mjs"));
+        assert!(args[1].contains("server.ts") && args[1].contains("resource-dir"));
     }
 
     #[test]
-    fn test_locate_server_entry_falls_back_to_dev() {
+    fn test_locate_server_entry_falls_back_to_dev_when_no_bundled_root_given() {
         let temp_dir = TempDir::new().expect("should create temp dir");
         let root = temp_dir.path();
 
-        let dev_dir = root.join("dev-root").join("apps").join("server").join("src");
+        let dev_dir = root
+            .join("dev-root")
+            .join("apps")
+            .join("server")
+            .join("src");
         fs::create_dir_all(&dev_dir).expect("should create dev dir");
         fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
 
-        // exe-dir deliberately has no apps/server/dist/index.js under it.
-        let (program, args, _) = locate_server_entry_from(
-            &root.join("dev-root"),
-            &root.join("exe-dir-without-prod-build"),
-        );
+        let (program, args, _) = locate_server_entry_from(&root.join("dev-root"), None);
 
         assert_eq!(program, "node");
         assert!(args[0].contains("tsx") && args[0].contains("cli.mjs"));
         assert!(args[1].contains("server.ts"));
+    }
+
+    #[test]
+    fn test_locate_server_entry_falls_back_to_dev_when_bundled_root_incomplete() {
+        let temp_dir = TempDir::new().expect("should create temp dir");
+        let root = temp_dir.path();
+
+        let dev_dir = root
+            .join("dev-root")
+            .join("apps")
+            .join("server")
+            .join("src");
+        fs::create_dir_all(&dev_dir).expect("should create dev dir");
+        fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
+
+        // Bundled root exists but is missing its own tsx (e.g. a
+        // half-finished/corrupted install) — should still fall back to dev
+        // rather than trying (and failing) to run without a tsx loader.
+        let bundled_root = root.join("resource-dir").join("server-bundle");
+        fs::create_dir_all(bundled_root.join("src")).expect("should create bundled src dir");
+        fs::write(
+            bundled_root.join("src").join("server.ts"),
+            "console.log('bundled')",
+        )
+        .expect("should write bundled entry");
+
+        let (program, args, _) =
+            locate_server_entry_from(&root.join("dev-root"), Some(&bundled_root));
+
+        assert_eq!(program, "node");
+        assert!(args[1].contains("dev-root"));
     }
 }

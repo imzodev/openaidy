@@ -19,9 +19,12 @@ serde_json = "1"
 log = "0.4"
 env_logger = "0.11"
 tokio = { version = "1", features = ["process", "io-util", "sync", "net", "macros", "rt-multi-thread"] }
-portpicker = "0.1"
 dirs = "5"
 tempfile = "3"
+# Only used to check the bootstrap-admin token's `expiresAt` (an RFC 3339
+# string written by apps/server/src/bootstrap-admin.ts's `toISOString()`)
+# against the current time.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # keyring's platform backends are opt-in per feature flag — plain
 # `keyring = "3"` with no features resolves to its default no-op mock store,

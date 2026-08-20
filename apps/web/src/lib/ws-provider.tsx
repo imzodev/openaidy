@@ -16,6 +16,7 @@ import {
 } from '@openaidy/sdk';
 import { setWebSocketApiClient } from './ws-api';
 import { resolveToken } from './auth-token';
+import { API_BASE } from './api';
 
 export type PresenceEntry = {
   clientId: string;
@@ -44,6 +45,14 @@ function resolveBaseUrl(): string {
   // an absolute WebSocket URL, so we construct one from window.location.
   const wsUrl = import.meta.env.OPENAIDY_VITE_WS_URL;
   if (wsUrl) return wsUrl;
+  // Desktop (Tauri): API_BASE gets resolved at runtime to the core
+  // service's actual http(s)://127.0.0.1:<port> origin, which is never
+  // the page's own origin there (the webview serves from a tauri://
+  // pseudo-origin) — reuse it rather than window.location so this stays
+  // one source of truth with the HTTP API.
+  if (API_BASE) {
+    return API_BASE.replace(/^http/, 'ws') + '/ws';
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}/ws`;
 }

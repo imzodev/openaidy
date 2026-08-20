@@ -183,3 +183,36 @@ export async function getServicePort(): Promise<number> {
   // Fallback for browser dev mode
   return 3001;
 }
+
+/**
+ * Poll until the core service reports a listening port, or has given up
+ * retrying after a crash. The Rust side starts the service asynchronously
+ * in the background rather than blocking window creation on it (see
+ * apps/desktop/src-tauri/src/lib.rs) — the window, and this app's JS, can
+ * both be up well before the service actually has a port — so callers that
+ * need a real API origin (see setApiBase in index.tsx) have to wait for it
+ * here rather than assuming it's already available.
+ */
+export async function waitForServicePort(
+  timeoutMs = 30_000,
+  pollIntervalMs = 250,
+): Promise<number> {
+  if (!isTauri()) return 3001;
+
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const status = await getServiceStatus();
+    if (status.state === 'Running' && status.port != null) {
+      return status.port;
+    }
+    if (status.state === 'Crashed') {
+      throw new Error(
+        `Core service crashed on startup (after ${status.restart_attempts} restart attempt(s))`,
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error('Timed out waiting for the core service to start');
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
