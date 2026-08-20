@@ -42,8 +42,26 @@
           function (event) {
             var target = event.target;
             if (!target) return;
+            // Only script/link tags load build assets — excludes things like
+            // an <img> whose unrelated, addon-supplied src happens to contain
+            // "/assets/" (e.g. a marketplace icon URL) from triggering a
+            // reload of the whole app.
+            var tag = target.tagName;
+            if (tag !== 'SCRIPT' && tag !== 'LINK') return;
             var src = target.src || target.href;
-            if (typeof src !== 'string' || src.indexOf('/assets/') === -1) return;
+            if (typeof src !== 'string') return;
+            var url;
+            try {
+              url = new URL(src, window.location.href);
+            } catch (e) {
+              return;
+            }
+            if (
+              url.origin !== window.location.origin ||
+              url.pathname.indexOf('/assets/') === -1
+            ) {
+              return;
+            }
             if (sessionStorage.getItem(GUARD_KEY)) {
               console.error(
                 '[stale-build] failed to load ' + src + ' — already reloaded once this session, not retrying',
