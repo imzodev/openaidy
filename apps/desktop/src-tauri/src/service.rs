@@ -52,6 +52,25 @@ pub enum ServiceState {
     Stopping,
 }
 
+impl ServiceState {
+    /// Bare variant name, exposed to the frontend via ServiceStatus.state.
+    /// Deliberately NOT the derived Debug format: `Running`/`Crashed` carry
+    /// fields, so `format!("{self:?}")` produces e.g. `"Running { port: 3001
+    /// }"` — the frontend's `isConnected()` does an exact `state === 'Running'`
+    /// check (apps/web/src/lib/tauri-provider.tsx), which can never match
+    /// against that. Caught live: the desktop app's own status bar showed
+    /// "Service stopped" forever despite the service actually running.
+    fn variant_name(&self) -> &'static str {
+        match self {
+            ServiceState::Idle => "Idle",
+            ServiceState::Starting => "Starting",
+            ServiceState::Running { .. } => "Running",
+            ServiceState::Crashed { .. } => "Crashed",
+            ServiceState::Stopping => "Stopping",
+        }
+    }
+}
+
 /// Service status for IPC exposure
 #[derive(Debug, Clone, Serialize)]
 pub struct ServiceStatus {
@@ -91,7 +110,7 @@ impl ServiceManager {
         let pid = child.as_ref().and_then(|c| c.id());
 
         ServiceStatus {
-            state: format!("{state:?}"),
+            state: state.variant_name().to_string(),
             port,
             restart_attempts,
             pid,
@@ -385,22 +404,54 @@ impl Drop for ServiceHandle {
 }
 
 /// Locate the built server entry point.
-/// In dev mode: ../../apps/server/src/server.ts  (tsx runs it)
-/// In prod mode: ../../apps/server/dist/index.js  (node runs it)
+///
+/// `openaidy_home` (the OS per-user app-data dir, e.g. `%APPDATA%/openaidy`
+/// on Windows) has no path relationship to where the monorepo source or a
+/// packaged build's resources live — it used to be (wrongly) used as the
+/// basis for this lookup, which meant this always failed to find the server
+/// outside of the one specific case where openaidy_home happened to be
+/// nested exactly two directories inside the workspace root.
+///
+/// Dev mode: `apps/server/src/server.ts`, run via `node <tsx's cli.mjs>
+/// <server.ts>` rather than a bare `tsx` command — `tsx` is only ever a
+/// pnpm-local `node_modules/.bin` shim (a `.CMD`/`.ps1` wrapper on Windows,
+/// not something `std::process::Command` can exec directly, and not on PATH
+/// at all unless installed globally), while `node_modules/tsx` is a stable
+/// symlink pnpm creates at the workspace root regardless of platform. Found
+/// relative to this crate's own location in the monorepo via
+/// `CARGO_MANIFEST_DIR` (a compile-time constant — always
+/// `apps/desktop/src-tauri` — so this only works when built from the
+/// monorepo, which is exactly the dev case).
+/// Prod mode: `apps/server/dist/index.js` (node runs it directly), found
+/// relative to the running executable's own directory, where a packaged
+/// build's bundled resources would sit.
 #[allow(dead_code)]
-fn locate_server_entry(openaidy_home: &Path) -> (String, Vec<String>, PathBuf) {
-    let workspace_root = openaidy_home
-        .parent() // .openaidy
-        .and_then(|p| p.parent()) // ~  (home)
-        .unwrap_or(openaidy_home);
+fn locate_server_entry(_openaidy_home: &Path) -> (String, Vec<String>, PathBuf) {
+    let dev_workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("..");
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
 
-    let dev_entry = workspace_root
+    locate_server_entry_from(&dev_workspace_root, &exe_dir)
+}
+
+/// Injectable version of the search so tests can point it at temp
+/// directories instead of the real compile-time/executable-relative roots.
+fn locate_server_entry_from(
+    dev_workspace_root: &Path,
+    exe_dir: &Path,
+) -> (String, Vec<String>, PathBuf) {
+    let dev_entry = dev_workspace_root
         .join("apps")
         .join("server")
         .join("src")
         .join("server.ts");
 
-    let prod_entry = workspace_root
+    let prod_entry = exe_dir
         .join("apps")
         .join("server")
         .join("dist")
@@ -410,13 +461,21 @@ fn locate_server_entry(openaidy_home: &Path) -> (String, Vec<String>, PathBuf) {
         (
             "node".to_string(),
             vec![prod_entry.to_string_lossy().to_string()],
-            workspace_root.to_path_buf(),
+            exe_dir.to_path_buf(),
         )
     } else if dev_entry.exists() {
+        let tsx_cli = dev_workspace_root
+            .join("node_modules")
+            .join("tsx")
+            .join("dist")
+            .join("cli.mjs");
         (
-            "tsx".to_string(),
-            vec![dev_entry.to_string_lossy().to_string()],
-            workspace_root.to_path_buf(),
+            "node".to_string(),
+            vec![
+                tsx_cli.to_string_lossy().to_string(),
+                dev_entry.to_string_lossy().to_string(),
+            ],
+            dev_workspace_root.to_path_buf(),
         )
     } else {
         error!("Cannot find server entry. Tried:\n  dev:  {dev_entry:?}\n  prod: {prod_entry:?}");
@@ -642,6 +701,24 @@ mod tests {
         }
     }
 
+    // Regression test: caught live in a real running desktop app — the
+    // frontend's isConnected() does an exact `state === 'Running'` string
+    // check, which silently never matched when this used to be the derived
+    // Debug format (`"Running { port: 3000 }"`) instead of the bare variant
+    // name. Covers every variant, not just Running, since Crashed also
+    // carries a field with the same bug shape.
+    #[test]
+    fn test_service_state_variant_name_is_bare_for_data_carrying_variants() {
+        assert_eq!(ServiceState::Idle.variant_name(), "Idle");
+        assert_eq!(ServiceState::Starting.variant_name(), "Starting");
+        assert_eq!(ServiceState::Running { port: 3000 }.variant_name(), "Running");
+        assert_eq!(
+            ServiceState::Crashed { attempts: 3 }.variant_name(),
+            "Crashed"
+        );
+        assert_eq!(ServiceState::Stopping.variant_name(), "Stopping");
+    }
+
     // ----------------------------------------------------------------
     // ServiceStatus tests
     // ----------------------------------------------------------------
@@ -801,40 +878,49 @@ mod tests {
     // locate_server_entry
     // ----------------------------------------------------------------
 
+    // These test locate_server_entry_from (the injectable version) rather
+    // than locate_server_entry itself, since the real function's roots
+    // (CARGO_MANIFEST_DIR, current_exe()) aren't things a unit test can
+    // meaningfully redirect into a temp dir.
+
     #[test]
     fn test_locate_server_entry_prefers_prod_over_dev() {
         let temp_dir = TempDir::new().expect("should create temp dir");
-        let home_dir = temp_dir.path();
+        let root = temp_dir.path();
 
-        let openaidy_home = home_dir.join(".config").join("openaidy");
-        fs::create_dir_all(&openaidy_home).expect("should create openaidy_home dir");
+        let dev_dir = root.join("dev-root").join("apps").join("server").join("src");
+        fs::create_dir_all(&dev_dir).expect("should create dev dir");
+        fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
 
-        let prod_dir = home_dir.join("apps").join("server").join("dist");
+        let prod_dir = root.join("exe-dir").join("apps").join("server").join("dist");
         fs::create_dir_all(&prod_dir).expect("should create prod dir");
         fs::write(prod_dir.join("index.js"), "console.log('prod')")
             .expect("should write prod entry");
 
-        let (program, args, _) = locate_server_entry(&openaidy_home);
+        let (program, args, _) =
+            locate_server_entry_from(&root.join("dev-root"), &root.join("exe-dir"));
 
         assert_eq!(program, "node");
-        assert!(args[0].contains("dist/index.js"));
+        assert!(args[0].contains("index.js"));
     }
 
     #[test]
     fn test_locate_server_entry_falls_back_to_dev() {
         let temp_dir = TempDir::new().expect("should create temp dir");
-        let home_dir = temp_dir.path();
+        let root = temp_dir.path();
 
-        let openaidy_home = home_dir.join(".config").join("openaidy");
-        fs::create_dir_all(&openaidy_home).expect("should create openaidy_home dir");
-
-        let dev_dir = home_dir.join("apps").join("server").join("src");
+        let dev_dir = root.join("dev-root").join("apps").join("server").join("src");
         fs::create_dir_all(&dev_dir).expect("should create dev dir");
         fs::write(dev_dir.join("server.ts"), "console.log('dev')").expect("should write dev entry");
 
-        let (program, args, _) = locate_server_entry(&openaidy_home);
+        // exe-dir deliberately has no apps/server/dist/index.js under it.
+        let (program, args, _) = locate_server_entry_from(
+            &root.join("dev-root"),
+            &root.join("exe-dir-without-prod-build"),
+        );
 
-        assert_eq!(program, "tsx");
-        assert!(args[0].contains("server.ts"));
+        assert_eq!(program, "node");
+        assert!(args[0].contains("tsx") && args[0].contains("cli.mjs"));
+        assert!(args[1].contains("server.ts"));
     }
 }
