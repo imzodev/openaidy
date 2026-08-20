@@ -176,17 +176,24 @@ apps/desktop/src-tauri/target/release/bundle/
 
 ## Environment Variables Passed to Core Service
 
+> Note: this table describes the original plan. The shipped implementation
+> lives in `apps/desktop/src-tauri/src/service.rs` (`try_start_once`) — see
+> that file's doc comments for the current source of truth. The names below
+> (`PORT`/`WS_PORT`/`CORS_ORIGIN`) don't match what
+> `apps/server/src/lib/env.ts`'s zod schema actually reads and were corrected
+> during implementation to `OPENAIDY_PORT`/`OPENAIDY_CORS_ORIGIN` (`WS_PORT`
+> isn't a real input — it's derived internally from the port).
+
 The Tauri backend starts `apps/server` with these env vars set:
 
-| Variable        | Source                                | Description                           |
-| --------------- | ------------------------------------- | ------------------------------------- |
-| `PORT`          | Allocates free port dynamically       | Core service HTTP port                |
-| `OPENAIDY_HOME` | `$HOME/.config/openaidy`              | All data/config lives here            |
-| `DB_KIND`       | Existing config or default `sqlite`   | Database type                         |
-| `SQLITE_PATH`   | `$OPENAIDY_HOME/openaidy.db`          | SQLite file path                      |
-| `DATABASE_URL`  | Existing config                       | Postgres connection (if used)         |
-| `WS_PORT`       | Same as `PORT`                        | WebSocket port                        |
-| `CORS_ORIGIN`   | `file://` (Tauri) or `app://` (Tauri) | CORS allowed origin                   |
-| API keys        | OS Keychain → env                     | Set via `keychain.rs` before spawning |
+| Variable               | Source                               | Description                           |
+| ---------------------- | ------------------------------------ | ------------------------------------- |
+| `OPENAIDY_PORT`        | Allocates free port dynamically      | Core service HTTP port                |
+| `OPENAIDY_HOME`        | OS per-user app-data dir             | All data/config lives here            |
+| `DB_KIND`              | Existing config or default `sqlite`  | Database type                         |
+| `SQLITE_PATH`          | `$OPENAIDY_HOME/openaidy.db`         | SQLite file path                      |
+| `DATABASE_URL`         | Existing config                      | Postgres connection (if used)         |
+| `OPENAIDY_CORS_ORIGIN` | The real per-OS Tauri WebView origin | CORS allowed origin                   |
+| API keys               | OS Keychain → env                    | Set via `keychain.rs` before spawning |
 
 The core service (`apps/server`) reads all of these via `env.ts` — no code changes needed.

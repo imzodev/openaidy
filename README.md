@@ -65,6 +65,10 @@ pnpm install && pnpm dev
 
 The dev mode runs the API server and Vite UI separately with hot reload.
 
+**Prefer a native app?** Download a Windows/macOS/Linux installer from the
+[Releases page](https://github.com/imzodev/openaidy/releases/latest) — see
+[docs/desktop/INSTALL.md](docs/desktop/INSTALL.md) for setup notes.
+
 ## Who is this for?
 
 ✅ **You're a good fit if you want to:**
