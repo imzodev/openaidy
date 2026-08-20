@@ -146,11 +146,16 @@ apt install -y \
   build-essential \
   curl \
   wget \
+  file \
   libssl-dev \
   pkg-config \
   libgtk-3-dev \
   libwebkit2gtk-4.1-dev \
-  libayatana-appindicator3-dev  # For system tray on GNOME
+  libayatana-appindicator3-dev \
+  libxdo-dev \
+  librsvg2-dev \
+  libfuse2  # AppImage bundling needs FUSE at build time; not installed by
+            # default on Ubuntu 24.04+ runners/desktops
 
 # Runtime (for users)
 sudo apt install \
