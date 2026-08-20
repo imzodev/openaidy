@@ -53,6 +53,17 @@ export async function restartService(): Promise<number> {
 }
 
 /**
+ * Read the spawned server's own bootstrap-admin token back from disk, so
+ * LoginScreen can pre-fill it — a desktop install has no separate "admin"
+ * to hand the user a token out-of-band. Returns null outside Tauri, or if
+ * the server hasn't created/persisted a token yet.
+ */
+export async function getBootstrapAdminToken(): Promise<string | null> {
+  if (!isTauri()) return null;
+  return invoke<string | null>('get_bootstrap_admin_token');
+}
+
+/**
  * Stop the core service.
  * Works in: Tauri WebView only.
  */

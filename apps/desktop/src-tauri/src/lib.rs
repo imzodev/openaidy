@@ -87,6 +87,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_service_status,
+            commands::get_bootstrap_admin_token,
             commands::restart_service,
             commands::stop_service,
             keychain::store_credential,
