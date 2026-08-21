@@ -11,7 +11,7 @@ Grab the installer for your OS from the [Releases page](https://github.com/imzod
 
 | OS      | File                                                          |
 | ------- | ------------------------------------------------------------- |
-| Windows | `OpenAidy_*_x64-setup.exe` (or the `.msi`)                    |
+| Windows | `OpenAidy_*_x64-setup.exe`                                    |
 | macOS   | `OpenAidy_*_universal.dmg` (Intel and Apple Silicon)          |
 | Linux   | `.deb`, `.rpm`, or `.AppImage`, whichever matches your distro |
 
