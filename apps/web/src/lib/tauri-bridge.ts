@@ -9,6 +9,8 @@
  */
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { check, type Update } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
 
 // ─── Guards ──────────────────────────────────────────────────────────────────
 
@@ -215,4 +217,43 @@ export async function waitForServicePort(
     }
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
+}
+
+// ─── Updater ──────────────────────────────────────────────────────────────────
+
+/**
+ * Check `updater.endpoints` (tauri.conf.json — the latest.json a tagged
+ * release publishes, see release.yml) for a newer version. Returns `null`
+ * in the browser build and when already up to date, so callers can treat
+ * "nothing to show" as a single falsy case.
+ */
+export async function checkForUpdate(): Promise<Update | null> {
+  if (!isTauri()) return null;
+  return check();
+}
+
+/**
+ * Download and install an update found by {@link checkForUpdate}, then
+ * relaunch so the new version actually takes effect — the updater plugin
+ * only replaces the installed binary, it doesn't restart the process
+ * itself. `onProgress` receives cumulative bytes downloaded once the total
+ * content length is known (some update artifacts don't report one, in
+ * which case it's never called).
+ */
+export async function installUpdate(
+  update: Update,
+  onProgress?: (downloaded: number, total: number | null) => void,
+): Promise<void> {
+  assertTauri();
+  let downloaded = 0;
+  let total: number | null = null;
+  await update.downloadAndInstall((event) => {
+    if (event.event === 'Started') {
+      total = event.data.contentLength ?? null;
+    } else if (event.event === 'Progress') {
+      downloaded += event.data.chunkLength;
+      onProgress?.(downloaded, total);
+    }
+  });
+  await relaunch();
 }

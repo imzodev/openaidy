@@ -26,6 +26,8 @@
     "@solidjs/router": "^0.15.4",
     "@tanstack/solid-query": "^5.90.26",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "bootstrap-icons": "^1.13.1",
     "dagre": "^0.8.5",
     "lucide-solid": "^0.577.0",
