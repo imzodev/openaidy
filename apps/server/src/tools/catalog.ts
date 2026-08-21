@@ -403,7 +403,11 @@ export const workflowCreateMeta: ToolMeta = {
     'workflow_apply_template for the template id list), and ' +
     'templateInputs (a record of placeholder values for the template). ' +
     'Workflows cannot be created without planning: planningEnabled is forced ' +
-    'to true regardless of what is passed. ' +
+    'to true regardless of what is passed. The auto-planner is suppressed ' +
+    '(skipAutoPlan=true): workflows are hand-authored graphs from the agent, ' +
+    'not AI-planned checklists. Build the graph yourself with ' +
+    'workflow_apply_template / workflow_node_create / workflow_edge_create; ' +
+    'do NOT chain this into tasks_create and expect the planner to fill it in. ' +
     'Returns the new workflow ID and a summary of created nodes/edges if a ' +
     'template was applied.',
 };

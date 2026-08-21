@@ -126,7 +126,7 @@ describe('createWorkflowTools', () => {
 // ── workflow_create ──────────────────────────────────────────────────────────
 
 describe('workflow_create', () => {
-  it('forces planningEnabled=true on the new task', async () => {
+  it('forces planningEnabled=true AND suppresses the auto-planner', async () => {
     const mocks = makeTaskServiceMock();
     mocks.createTask.mockResolvedValue({
       ok: true,
@@ -143,8 +143,11 @@ describe('workflow_create', () => {
     const result = await tool.execute({ description: 'desc' }, CTX);
 
     expect(result.ok).toBe(true);
+    // planningEnabled = true so workflow_* tools accept the task; skipAutoPlan
+    // = true so TaskOperations.createTask does NOT fire the LLM planner in the
+    // background and clobber the graph we are about to build.
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ planningEnabled: true }),
+      expect.objectContaining({ planningEnabled: true, skipAutoPlan: true }),
     );
   });
 

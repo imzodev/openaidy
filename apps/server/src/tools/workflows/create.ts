@@ -113,6 +113,15 @@ export function createWorkflowCreateTool(
           title: resolvedTitle,
           description: descriptionText,
           planningEnabled: true,
+          // Workflows are hand-authored graphs (template or manual nodes),
+          // not AI-planned checklists. Without this, TaskOperations.createTask
+          // fires the auto-planner after we return; the planner then races
+          // against any workflow_apply_template call (deleteByTask on success
+          // wipes the template's subtasks) and against workflow_execute (whose
+          // pending subtasks may not exist yet). The comment on CreateTaskInput
+          // in apps/server/src/types.ts calls out the workflow editor as the
+          // canonical skipAutoPlan consumer — we are that case.
+          skipAutoPlan: true,
         };
         if (typeof priority === 'string') {
           createInput.priority = priority as
