@@ -9,11 +9,11 @@ tagged release.
 
 Grab the installer for your OS from the [Releases page](https://github.com/imzodev/openaidy/releases/latest):
 
-| OS      | File                                                          |
-| ------- | ------------------------------------------------------------- |
-| Windows | `OpenAidy_*_x64-setup.exe`                                    |
-| macOS   | `OpenAidy_*_universal.dmg` (Intel and Apple Silicon)          |
-| Linux   | `.deb`, `.rpm`, or `.AppImage`, whichever matches your distro |
+| OS      | File                                                 |
+| ------- | ---------------------------------------------------- |
+| Windows | `OpenAidy_*_x64-setup.exe`                           |
+| macOS   | `OpenAidy_*_universal.dmg` (Intel and Apple Silicon) |
+| Linux   | `.deb` or `.rpm`, whichever matches your distro      |
 
 ## First run
 
@@ -26,9 +26,9 @@ install.
 
 ## Requirements
 
-- **Linux**: Node.js 18+ must already be on your system — the `.deb`/`.rpm`
-  packages declare this as a dependency, but the `.AppImage` doesn't enforce
-  it, so install Node yourself first if you're using that format.
+- **Linux**: Node.js 18+ must already be on your system — both `.deb` and
+  `.rpm` declare this as a dependency, so your package manager will pull
+  it in for you if it's missing.
 - **Windows / macOS**: nothing extra — the installer bundles everything else
   it needs.
 
@@ -42,8 +42,7 @@ first launch:
 - **macOS**: Gatekeeper will refuse to open it from a double-click. Instead,
   right-click (or Control-click) the app in Finder and choose **Open**, then
   confirm in the dialog that appears. You only need to do this once.
-- **Linux**: no equivalent warning; `.deb`/`.rpm`/`.AppImage` all run
-  normally.
+- **Linux**: no equivalent warning; `.deb`/`.rpm` both run normally.
 
 This is expected for now — proper code signing (a paid Windows cert and an
 Apple Developer ID) is tracked as follow-up work, not a sign anything is
@@ -51,10 +50,13 @@ wrong with the build.
 
 ## Updating
 
-The app checks for a newer release once per launch. If one's available, a
-small **Update available — install & restart** link appears next to the
-desktop status indicator; clicking it downloads, installs, and relaunches
-automatically. If you'd rather do it manually, downloading the latest
-installer from the [Releases page](https://github.com/imzodev/openaidy/releases/latest)
-and running it over your existing install works too — your data isn't
-touched either way.
+On Windows and macOS, the app checks for a newer release once per launch.
+If one's available, a small **Update available — install & restart** link
+appears next to the desktop status indicator; clicking it downloads,
+installs, and relaunches automatically.
+
+Linux doesn't have an in-app updater yet (there's no update-capable
+package format currently — `.deb`/`.rpm` are installed by your package
+manager, not self-replacing). Download the latest `.deb`/`.rpm` from the
+[Releases page](https://github.com/imzodev/openaidy/releases/latest) and
+install it over your existing one; your data isn't touched.

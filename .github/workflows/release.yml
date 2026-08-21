@@ -99,21 +99,17 @@ jobs:
             artifact-name: windows
           - platform: macos-latest
             artifact-name: macos
-          # Pinned to 22.04, not ubuntu-latest (24.04+): confirmed via a real
-          # failed run that linuxdeploy (the AppImage bundler tauri build
-          # shells out to) fails outright on 24.04 runners with "failed to
-          # run linuxdeploy" — a known FUSE2/FUSE3 incompatibility
-          # (24.04 ships libfuse2t64, a FUSE3-based compat shim, not real
-          # FUSE2). This exact runner pin is what Tauri's own official
-          # example GitHub Actions workflow uses for the same reason.
-          - platform: ubuntu-22.04
+          - platform: ubuntu-latest
             artifact-name: linux
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
       # Tauri's own Linux build prerequisites — see docs/desktop/DEPENDENCIES.md.
+      # No libfuse2/AppImage-specific deps: bundle.targets in tauri.conf.json
+      # deliberately excludes appimage (see that file's own note) — deb/rpm
+      # don't need linuxdeploy or FUSE at all.
       - name: Install Linux build dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -127,8 +123,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             libxdo-dev \
-            librsvg2-dev \
-            libfuse2
+            librsvg2-dev
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -182,25 +177,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # linuxdeploy (the AppImage bundler) tries to FUSE-mount itself,
-          # which GitHub-hosted runners' sandboxing doesn't support even
-          # with libfuse2 installed (confirmed: failed identically on both
-          # ubuntu-22.04 and -24.04) — this makes it extract-and-run
-          # instead. Harmless no-op on Windows/macOS, which never touch
-          # AppImage/linuxdeploy at all. Kept even though it alone didn't
-          # fix the Linux build (see NO_STRIP below) — still the correct
-          # thing to set for a FUSE-less sandbox.
-          APPIMAGE_EXTRACT_AND_RUN: '1'
-          # `strip = true` in Cargo.toml's [profile.release] plus
-          # linuxdeploy's own strip pass over the AppImage's bundled
-          # shared libs has a known failure mode on modern binutils
-          # ("Strip call failed: unknown type ... section '.relr.dyn'"),
-          # surfaced by tauri only as the same opaque "failed to run
-          # linuxdeploy" this build hit — a maintainer-confirmed Tauri
-          # workaround. Cargo already stripped the binary itself before
-          # linuxdeploy ever runs, so skipping linuxdeploy's redundant
-          # pass costs nothing.
-          NO_STRIP: 'true'
         # `pnpm --filter X tauri:build -- --target ...` silently mangles the
         # forwarded args (pnpm inserts a literal extra "--", so tauri sees
         # `build -- --target ...` and ignores the real flag) — confirmed
@@ -216,11 +192,10 @@ jobs:
       # refuse to open the app until the user right-click's > Open (Gatekeeper
       # blocks unsigned/un-notarized apps by default). Tracked as follow-up
       # work once real signing certs are in place — see docs/desktop/DEPENDENCIES.md.
-      # if: always() — one bundle format failing (e.g. appimage) shouldn't
-      # discard installers other formats already produced first in the
-      # same `tauri build` invocation (e.g. deb/rpm); upload-artifact
-      # itself already tolerates individual missing globs via
-      # if-no-files-found below.
+      # if: always() — one bundle format failing shouldn't discard
+      # installers other formats already produced first in the same
+      # `tauri build` invocation; upload-artifact itself already
+      # tolerates individual missing globs via if-no-files-found below.
       - name: Upload installer artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -236,7 +211,6 @@ jobs:
             apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
             apps/desktop/src-tauri/target/release/bundle/deb/*.deb
             apps/desktop/src-tauri/target/release/bundle/rpm/*.rpm
-            apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
             apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
             apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
           if-no-files-found: ignore

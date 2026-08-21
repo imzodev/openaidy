@@ -37,7 +37,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "dmg", "deb", "rpm", "appimage"],
+    "targets": ["nsis", "dmg", "deb", "rpm"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -68,9 +68,6 @@
       "entitlements": "bundle/macos/entitlements.plist"
     },
     "linux": {
-      "appimage": {
-        "bundleMediaFramework": false
-      },
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libsecret-1-0", "nodejs (>= 18)"]
       },

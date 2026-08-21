@@ -168,13 +168,14 @@ pnpm tauri build
 apps/desktop/src-tauri/target/release/bundle/
 ├── deb/   openaidy_0.1.0_amd64.deb
 ├── rpm/   openaidy_0.1.0_x86_64.rpm
-├── dmg/   openaidy_0.1.0.dmg
-└── appimage/ openaidy_0.1.0_amd64.AppImage
+└── dmg/   openaidy_0.1.0.dmg
 ```
 
-MSI is deliberately not built (see `bundle.targets` in `tauri.conf.json`) —
-its WiX-based bundler proved unreliable both locally and in CI, and nothing
-here needs it: NSIS is the Windows installer that actually ships.
+MSI and AppImage are deliberately not built (see `bundle.targets` in
+`tauri.conf.json`) — their bundlers (WiX and linuxdeploy respectively)
+both proved unreliable in CI with no working fix found after real
+attempts, and neither is needed: NSIS is the Windows installer that ships,
+and deb/rpm already cover Linux.
 
 ---
 
