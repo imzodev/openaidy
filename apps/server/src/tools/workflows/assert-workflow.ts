@@ -10,7 +10,14 @@
 
 type WorkflowLike = {
   id: string;
-  planningEnabled?: boolean | null;
+  /**
+   * TS schema (packages/db/src/schema/tasks.ts) types this as boolean, but
+   * at runtime the SQLite path returns the raw INTEGER value (0 or 1)
+   * because the schema is PG-flavored while the SQLite column is INTEGER.
+   * Accept both representations so the workflow surface works on every
+   * configured DB backend.
+   */
+  planningEnabled?: boolean | number | null;
 };
 
 export type AssertWorkflowResult = { ok: true } | { ok: false; error: string };
@@ -27,7 +34,7 @@ export function assertWorkflow(
   if (!task) {
     return { ok: false, error: 'Workflow not found' };
   }
-  if (task.planningEnabled !== true) {
+  if (task.planningEnabled !== true && task.planningEnabled !== 1) {
     return {
       ok: false,
       error: `Task "${task.id}" is not a workflow (planningEnabled must be true). Use tasks_* tools for regular tasks, or set planningEnabled to convert it.`,

@@ -97,12 +97,20 @@ export class TasksRepository {
       sessionId?: string | null;
     },
   ): Promise<schema.Task | null> {
+    // Coerce planningEnabled to the integer the SQLite driver expects, the
+    // same way `create` does. Without this the spread below hands a raw
+    // JS boolean to node:sqlite, which rejects it with
+    // "Provided value cannot be bound to SQLite parameter 1".
+    const setValues: Record<string, unknown> = {
+      ...input,
+      updatedAt: new Date(),
+    };
+    if (input.planningEnabled !== undefined) {
+      setValues['planningEnabled'] = input.planningEnabled ? 1 : 0;
+    }
     const results = await this.db
       .update(schema.tasks)
-      .set({
-        ...input,
-        updatedAt: new Date(),
-      })
+      .set(setValues)
       .where(eq(schema.tasks.id, id))
       .returning();
 
