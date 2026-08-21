@@ -96,6 +96,22 @@ _old_ public key baked in and won't trust updates signed with a new one, so
 losing it means those installs can never auto-update again (manual
 reinstall from the Releases page still always works).
 
+**Known gap — macOS**: the universal build (`--target
+universal-apple-darwin`) only produces the `.dmg`; despite
+`createUpdaterArtifacts: true`, Tauri's bundler logged "Finished 1 bundle
+at:" for macOS on a real release run (confirmed via
+`gh run view --log`) instead of the 2 (`.dmg` + `.app.tar.gz`) a
+non-universal build reportedly produces elsewhere. Not yet root-caused —
+no CI access to a Mac to test a non-universal build in isolation, and no
+authoritative documentation found confirming this as a known
+universal-target limitation vs. something else in this config. Windows
+already has working auto-update; macOS ships an installer-only release
+until this is investigated further.
+
+**Known gap — Linux**: no update-capable package format at all (see the
+AppImage note above) — accepted, not planned to revisit unless a real fix
+for the linuxdeploy failure surfaces upstream.
+
 ---
 
 ## Node Dependencies (package.json)
