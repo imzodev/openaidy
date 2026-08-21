@@ -472,6 +472,49 @@ export const workflowListMeta: ToolMeta = {
     'Use this to discover workflow IDs before any other workflow_* call.',
 };
 
+export const workflowNodeCreateMeta: ToolMeta = {
+  name: 'workflow_node_create',
+  category: 'Workflows',
+  description:
+    'Add a subtask (node) to an existing workflow. The workflow must have ' +
+    'planningEnabled=true — non-workflow tasks are rejected. ' +
+    'REQUIRED: workflowId, title, description. ' +
+    'Optional: subtaskKind (default "agent"; use "approval_gate" to pause ' +
+    'execution until a human resolves it), loop (bounded re-run config — ' +
+    'the node keeps running until its result matches the condition or the ' +
+    'iteration cap is hit), assignedAgentId (must reference an existing ' +
+    'enabled agent), orderIndex (cosmetic layout hint). ' +
+    'Edges are NOT created here — use workflow_edge_create after the node ' +
+    'exists so the graph mutation is explicit and reviewable. ' +
+    'Returns the new node ID and its initial status.',
+};
+
+export const workflowNodeUpdateMeta: ToolMeta = {
+  name: 'workflow_node_update',
+  category: 'Workflows',
+  description:
+    'Patch an existing workflow node. Pass only the fields you want to ' +
+    'change — omitted fields keep their current value. ' +
+    'Optional fields: title, description, subtaskKind, loop (set to null ' +
+    'explicitly to clear an existing loop; omit to preserve it), orderIndex. ' +
+    "If you change the node's title or description, a node that was already " +
+    "'completed' or 'failed' is automatically reset to 'pending' so the next " +
+    'execution picks up the new instructions — no special-casing required. ' +
+    'Refuses any node whose parent task has planningEnabled=false.',
+};
+
+export const workflowNodeDeleteMeta: ToolMeta = {
+  name: 'workflow_node_delete',
+  category: 'Workflows',
+  description:
+    'Delete a single node from a workflow. Incoming and outgoing edges ' +
+    'cascade away (subtask_edges has ON DELETE CASCADE), so the agent does ' +
+    'not need to clean edges up first. Requires confirm=true to prevent ' +
+    'accidental removal. Refuses nodes whose parent task has ' +
+    'planningEnabled=false. To delete an entire workflow and its whole ' +
+    'graph at once, use workflow_delete instead.',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -652,6 +695,9 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowExecuteMeta,
   workflowApplyTemplateMeta,
   workflowListMeta,
+  workflowNodeCreateMeta,
+  workflowNodeUpdateMeta,
+  workflowNodeDeleteMeta,
 ];
 
 /** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */

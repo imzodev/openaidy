@@ -191,6 +191,10 @@ export class TaskService {
     return this.subtaskOps.createSubtask(input);
   }
 
+  async getSubtask(id: string): Promise<Subtask | null> {
+    return this.subtaskOps.getSubtask(id);
+  }
+
   async getSubtasks(
     taskId: string,
   ): Promise<(Subtask & { dependsOnSubtaskIds: string[] })[]> {

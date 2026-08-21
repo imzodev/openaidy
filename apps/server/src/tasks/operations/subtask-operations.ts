@@ -71,6 +71,10 @@ export class SubtaskOperations {
     }));
   }
 
+  async getSubtask(id: string): Promise<Subtask | null> {
+    return this.subtasksRepo.findById(id);
+  }
+
   async updateSubtask(
     id: string,
     input: UpdateSubtaskInput,
