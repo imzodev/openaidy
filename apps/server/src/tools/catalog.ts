@@ -370,6 +370,95 @@ export const tasksDeleteMeta: ToolMeta = {
     'Requires confirm=true to prevent accidental deletion.',
 };
 
+// ── Workflows ─────────────────────────────────────────────────────────────────
+//
+// A workflow is a Task with `planningEnabled: true` — i.e. a task whose
+// author committed to a subtask graph instead of a flat checklist. These
+// tools are the only way for an agent to operate on workflows; the generic
+// `tasks_*` tools still work but they neither enforce workflow-only
+// semantics nor expose workflow-specific affordances like templates.
+
+export const workflowGetMeta: ToolMeta = {
+  name: 'workflow_get',
+  category: 'Workflows',
+  description:
+    'Read the full state of a workflow: task metadata, all subtask nodes, ' +
+    'and every edge connecting them (including conditional, loop, and ' +
+    'dependency edges). Returns a JSON object whose shape is round-trippable: ' +
+    'workflow_create accepts the same `nodes`/`edges` arrays back, so this ' +
+    'is the canonical "fetch → mutate → save" pattern. ' +
+    'Pass includeNodes=false or includeEdges=false to slim the response when ' +
+    'you only need one part.',
+};
+
+export const workflowCreateMeta: ToolMeta = {
+  name: 'workflow_create',
+  category: 'Workflows',
+  description:
+    'Create a new workflow (a Task with planningEnabled=true). The workflow ' +
+    'is immediately visible in the Workflows page. ' +
+    'REQUIRED: description (full prose of what the workflow achieves). ' +
+    'Optional: title (derived from description if absent), priority, ' +
+    'templateId (apply a built-in template atomically — see ' +
+    'workflow_apply_template for the template id list), and ' +
+    'templateInputs (a record of placeholder values for the template). ' +
+    'Workflows cannot be created without planning: planningEnabled is forced ' +
+    'to true regardless of what is passed. ' +
+    'Returns the new workflow ID and a summary of created nodes/edges if a ' +
+    'template was applied.',
+};
+
+export const workflowUpdateMeta: ToolMeta = {
+  name: 'workflow_update',
+  category: 'Workflows',
+  description:
+    'Update an existing workflow — change its title, description, priority, ' +
+    'or status. Pass only the fields you want to change; omitted fields are ' +
+    'left as-is. To edit the subtask graph (nodes/edges), use the dedicated ' +
+    'node/edge tools. Rejects any task whose planningEnabled is false (use ' +
+    'tasks_update for regular tasks). Returns the updated workflow summary.',
+};
+
+export const workflowDeleteMeta: ToolMeta = {
+  name: 'workflow_delete',
+  category: 'Workflows',
+  description:
+    'Permanently delete a workflow and its entire subtask graph (subtasks ' +
+    'and edges cascade via foreign keys). ' +
+    'This action cannot be undone. Requires confirm=true to prevent ' +
+    'accidental deletion. Rejects any task whose planningEnabled is false. ' +
+    'If you only want to remove a single node, use the node tools instead.',
+};
+
+export const workflowExecuteMeta: ToolMeta = {
+  name: 'workflow_execute',
+  category: 'Workflows',
+  description:
+    'Run a workflow. By default this starts the workflow from its first ' +
+    'ready-to-execute nodes (the workflow entry points — nodes with no unmet ' +
+    'dependencies). Pass subtaskId to execute a single node in isolation ' +
+    '(useful for retries or for running one branch independently). ' +
+    'Returns the session id(s) that were started; the runs are async, so ' +
+    'follow up with sessions_read to track progress. ' +
+    'Rejects any task whose planningEnabled is false.',
+};
+
+export const workflowApplyTemplateMeta: ToolMeta = {
+  name: 'workflow_apply_template',
+  category: 'Workflows',
+  description:
+    'Apply a built-in workflow template to an existing workflow, replacing ' +
+    'its current subtask graph with the template nodes and edges. ' +
+    'Available template IDs: "software-development" (a multi-stage software ' +
+    'delivery workflow). Pass templateInputs to fill template placeholders ' +
+    '(each template declares its own inputs; required ones must be provided). ' +
+    'Pass clearExisting=true to remove all existing nodes/edges before the ' +
+    'template is applied (default false: the template graph is added on top ' +
+    'of whatever is there). ' +
+    'Rejects any task whose planningEnabled is false. ' +
+    'Returns the count of nodes and edges created.',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -543,6 +632,12 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   taskSchedulesDeleteMeta,
   taskSchedulesTriggerMeta,
   taskSchedulesListExecutionsMeta,
+  workflowGetMeta,
+  workflowCreateMeta,
+  workflowUpdateMeta,
+  workflowDeleteMeta,
+  workflowExecuteMeta,
+  workflowApplyTemplateMeta,
 ];
 
 /** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */
