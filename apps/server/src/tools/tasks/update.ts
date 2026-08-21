@@ -2,6 +2,7 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import type { PlanningService } from '../../planning';
 import { tasksUpdateMeta } from '../catalog.js';
+import { formatToolError, requireService, requireString } from '../shared.js';
 
 export function createTasksUpdateTool(
   getTaskService: () => TaskService | undefined,
@@ -53,13 +54,9 @@ export function createTasksUpdateTool(
     },
 
     async execute(args, _ctx) {
-      const taskService = getTaskService();
-      if (!taskService) {
-        return {
-          ok: false,
-          error: 'Task service is not available (database might be disabled).',
-        };
-      }
+      const resolved = requireService(getTaskService, 'Task service');
+      if (!resolved.ok) return resolved;
+      const taskService = resolved.service;
 
       const planningService = getPlanningService?.();
 
@@ -70,17 +67,15 @@ export function createTasksUpdateTool(
       const status = args['status'];
       const planningEnabled = args['planningEnabled'];
 
-      if (typeof id !== 'string' || !id.trim()) {
-        return {
-          ok: false,
-          error: 'id is required and must be a non-empty string',
-        };
+      const idError = requireString(id, 'id');
+      if (idError) {
+        return { ok: false, error: idError };
       }
 
       try {
         if (typeof status === 'string') {
           const statusResult = await taskService.updateTaskStatus(
-            id,
+            id as string,
             status as
               | 'backlog'
               | 'todo'
@@ -122,20 +117,23 @@ export function createTasksUpdateTool(
         }
 
         if (Object.keys(updateInput).length > 0) {
-          const updateResult = await taskService.updateTask(id, updateInput);
+          const updateResult = await taskService.updateTask(
+            id as string,
+            updateInput,
+          );
           if (!updateResult.ok) {
             return { ok: false, error: updateResult.error.message };
           }
         }
 
         if (planningService && shouldReplan) {
-          const subtasks = await taskService.getSubtasks(id);
+          const subtasks = await taskService.getSubtasks(id as string);
           if (subtasks.length > 0) {
-            await planningService.planTask(id);
+            await planningService.planTask(id as string);
           }
         }
 
-        const task = await taskService.getTask(id);
+        const task = await taskService.getTask(id as string);
         if (!task) {
           return { ok: false, error: `Task "${id}" not found` };
         }
@@ -145,10 +143,7 @@ export function createTasksUpdateTool(
           content: `Task updated successfully!\n\nID: ${task.id}\nTitle: ${task.title}\nDescription: ${task.description}\nStatus: ${task.status}\nPriority: ${task.priority ?? 'medium'}`,
         };
       } catch (err) {
-        return {
-          ok: false,
-          error: `Unexpected error updating task: ${err instanceof Error ? err.message : String(err)}`,
-        };
+        return formatToolError('Unexpected error updating task', err);
       }
     },
   };
