@@ -50,13 +50,24 @@ wrong with the build.
 
 ## Updating
 
-On Windows and macOS, the app checks for a newer release once per launch.
-If one's available, a small **Update available — install & restart** link
-appears next to the desktop status indicator; clicking it downloads,
-installs, and relaunches automatically.
+On Windows, the app checks for a newer release once per launch. If one's
+available, a small **Update available — install & restart** link appears
+next to the desktop status indicator; clicking it downloads, installs, and
+relaunches automatically.
 
-Linux doesn't have an in-app updater yet (there's no update-capable
-package format currently — `.deb`/`.rpm` are installed by your package
-manager, not self-replacing). Download the latest `.deb`/`.rpm` from the
+macOS and Linux don't have a working in-app updater yet:
+
+- **macOS**: the updater code path is in place, but the release build
+  (a universal Intel + Apple Silicon binary via `--target
+  universal-apple-darwin`) doesn't currently produce the signed
+  `.app.tar.gz` artifact the updater needs — only the `.dmg` installer.
+  Not yet root-caused; tracked as follow-up (see
+  `docs/desktop/DEPENDENCIES.md`).
+- **Linux**: no update-capable package format exists at all — `.deb`/`.rpm`
+  are installed by your package manager, not self-replacing (AppImage
+  would have been update-capable but its bundler proved too unreliable in
+  CI to ship — see `DEPENDENCIES.md`).
+
+On both, download the latest installer from the
 [Releases page](https://github.com/imzodev/openaidy/releases/latest) and
 install it over your existing one; your data isn't touched.
