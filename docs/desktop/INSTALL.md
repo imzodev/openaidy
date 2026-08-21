@@ -51,6 +51,10 @@ wrong with the build.
 
 ## Updating
 
-There's no in-app auto-updater yet. Download the latest installer from the
-[Releases page](https://github.com/imzodev/openaidy/releases/latest) and run
-it over your existing install; your data isn't touched.
+The app checks for a newer release once per launch. If one's available, a
+small **Update available — install & restart** link appears next to the
+desktop status indicator; clicking it downloads, installs, and relaunches
+automatically. If you'd rather do it manually, downloading the latest
+installer from the [Releases page](https://github.com/imzodev/openaidy/releases/latest)
+and running it over your existing install works too — your data isn't
+touched either way.

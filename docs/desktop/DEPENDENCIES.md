@@ -57,18 +57,44 @@ strip = true
 
 ### Why Each Rust Dependency
 
-| Crate                 | Purpose                 | Why Needed                              |
-| --------------------- | ----------------------- | --------------------------------------- |
-| `tauri = "2"`         | Core framework          | App shell, WebView, window management   |
-| `tauri-plugin-shell`  | Execute commands        | Invoke Vite dev server, system apps     |
-| `tauri-plugin-opener` | Open URLs               | Open external links in default browser  |
-| `serde`               | Serialization           | Config file I/O, IPC structs            |
-| `serde_json`          | JSON parsing            | Port file, window state                 |
-| `keyring`             | Cross-platform keychain | Store API keys in OS credential manager |
-| `tokio`               | Async runtime           | Service spawning, process management    |
-| `portpicker`          | Port selection          | Find free port for server               |
-| `dirs`                | Platform directories    | `~/.config/openaidy` on all platforms   |
-| `log` + `env_logger`  | Logging                 | Structured logging in Rust backend      |
+> Note: the Cargo.toml snippet above is the original plan and has drifted
+> from the real file — see `apps/desktop/src-tauri/Cargo.toml` itself for
+> the current dependency list (e.g. `portpicker` was removed, `chrono` and
+> per-OS `keyring` feature flags were added). The table below is kept
+> current.
+
+| Crate                  | Purpose                 | Why Needed                                         |
+| ---------------------- | ----------------------- | -------------------------------------------------- |
+| `tauri = "2"`          | Core framework          | App shell, WebView, window management              |
+| `tauri-plugin-shell`   | Execute commands        | Invoke Vite dev server, system apps                |
+| `tauri-plugin-opener`  | Open URLs               | Open external links in default browser             |
+| `tauri-plugin-updater` | Self-update             | Checks/downloads/installs new releases (see below) |
+| `tauri-plugin-process` | Process control         | Relaunches the app after an update installs        |
+| `serde`                | Serialization           | Config file I/O, IPC structs                       |
+| `serde_json`           | JSON parsing            | Port file, window state                            |
+| `keyring`              | Cross-platform keychain | Store API keys in OS credential manager            |
+| `tokio`                | Async runtime           | Service spawning, process management               |
+| `dirs`                 | Platform directories    | Per-OS app-data dir (e.g. `%APPDATA%/openaidy`)    |
+| `chrono`               | Date/time               | Checks the bootstrap-admin token's `expiresAt`     |
+| `log` + `env_logger`   | Logging                 | Structured logging in Rust backend                 |
+
+### Auto-update
+
+`apps/desktop/src-tauri/tauri.conf.json`'s `plugins.updater` holds a public
+key (minisign format) whose private counterpart lives only as the
+`TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` GitHub
+Actions secrets — `release.yml`'s `build-desktop` job signs each
+update-capable artifact with it, and `attach-desktop-installers` publishes
+the resulting `latest.json` (via `scripts/desktop-update-manifest.mjs`) to
+the release. This is unrelated to OS code signing (still absent — see the
+next section): it only lets the updater plugin verify a downloaded update
+actually came from this repo's own CI, not that the OS trusts the binary.
+If the private key is ever lost, generate a new pair with
+`pnpm tauri signer generate` and update both the secrets and
+`plugins.updater.pubkey` — but note every already-installed copy has the
+_old_ public key baked in and won't trust updates signed with a new one, so
+losing it means those installs can never auto-update again (manual
+reinstall from the Releases page still always works).
 
 ---
 
@@ -125,12 +151,14 @@ strip = true
 ```json
 {
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-updater": "^2",
+    "@tauri-apps/plugin-process": "^2"
   }
 }
 ```
 
-The existing `apps/web` dependencies (Solid.js, `@solidjs/router`, TanStack Query, etc.) are reused without modification. Only `@tauri-apps/api` is added to enable IPC calls.
+The existing `apps/web` dependencies (Solid.js, `@solidjs/router`, TanStack Query, etc.) are reused without modification. `@tauri-apps/api` enables IPC calls; `plugin-updater`/`plugin-process` are the JS bindings for the Rust plugins of the same name (`check()`/`downloadAndInstall()`/`relaunch()`, wrapped in `apps/web/src/lib/tauri-bridge.ts`'s `checkForUpdate`/`installUpdate`).
 
 ---
 
