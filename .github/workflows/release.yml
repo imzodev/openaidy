@@ -99,16 +99,21 @@ jobs:
             artifact-name: windows
           - platform: macos-latest
             artifact-name: macos
-          - platform: ubuntu-latest
+          # Pinned to 22.04, not ubuntu-latest (24.04+): confirmed via a real
+          # failed run that linuxdeploy (the AppImage bundler tauri build
+          # shells out to) fails outright on 24.04 runners with "failed to
+          # run linuxdeploy" — a known FUSE2/FUSE3 incompatibility
+          # (24.04 ships libfuse2t64, a FUSE3-based compat shim, not real
+          # FUSE2). This exact runner pin is what Tauri's own official
+          # example GitHub Actions workflow uses for the same reason.
+          - platform: ubuntu-22.04
             artifact-name: linux
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
       # Tauri's own Linux build prerequisites — see docs/desktop/DEPENDENCIES.md.
-      # libfuse2 specifically: AppImage bundling needs FUSE at build time and
-      # ubuntu-latest (24.04+) no longer installs it by default.
       - name: Install Linux build dependencies
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
