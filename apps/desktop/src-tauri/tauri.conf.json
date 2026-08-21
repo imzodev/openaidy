@@ -8,7 +8,7 @@
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm --filter web dev",
     "beforeBuildCommand": {
-      "script": "node -e \"require('fs').rmSync('apps/desktop/src-tauri/server-bundle',{recursive:true,force:true})\" && pnpm --filter @openaidy/server deploy --prod --legacy apps/desktop/src-tauri/server-bundle && node -e \"require('fs').cpSync('config','apps/desktop/src-tauri/server-bundle/shared-config',{recursive:true})\" && pnpm --filter web build",
+      "script": "node scripts/desktop-prebuild.mjs",
       "cwd": "../../../"
     }
   },

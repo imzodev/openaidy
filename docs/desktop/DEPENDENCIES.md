@@ -183,7 +183,14 @@ apt install -y \
   libxdo-dev \
   librsvg2-dev \
   libfuse2  # AppImage bundling needs FUSE at build time; not installed by
-            # default on Ubuntu 24.04+ runners/desktops
+            # default on Ubuntu 24.04+ runners/desktops. On 24.04 this
+            # package is actually libfuse2t64, a FUSE3-based compat shim —
+            # linuxdeploy (the AppImage bundler `tauri build` shells out
+            # to) has been observed failing outright on it regardless
+            # ("failed to run linuxdeploy"). If you hit that building
+            # locally on 24.04+, building on/in an Ubuntu 22.04 environment
+            # is the known-working fix — see release.yml's build-desktop
+            # job, which pins ubuntu-22.04 for exactly this reason.
 
 # Runtime (for users)
 sudo apt install \
