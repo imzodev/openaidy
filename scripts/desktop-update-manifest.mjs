@@ -6,9 +6,12 @@
 // time (release.yml); this script turns those into the manifest the
 // updater plugin actually understands. Not every bundle format is
 // update-capable — .deb/.rpm are package-manager-installed, not
-// self-replacing, so only the NSIS installer (Windows), the .app.tar.gz
-// (macOS — a separate artifact from the user-facing .dmg), and the
-// .AppImage (Linux) ever get a `.sig`.
+// self-replacing, so only the NSIS installer (Windows) and the
+// .app.tar.gz (macOS — a separate artifact from the user-facing .dmg)
+// ever get a `.sig`. Linux has no updater-capable format at all right
+// now: AppImage would have been the one, but its bundler (linuxdeploy)
+// proved too unreliable in CI to ship (see tauri.conf.json's bundle
+// section) — Linux users update by re-downloading .deb/.rpm manually.
 //
 // Two subcommands, run from repo root:
 //   fragment <platform-name> <out-file>
@@ -37,9 +40,6 @@ function platformKeysFor(sigPath) {
   }
   if (normalized.endsWith('.app.tar.gz.sig')) {
     return ['darwin-x86_64', 'darwin-aarch64'];
-  }
-  if (normalized.endsWith('.AppImage.sig')) {
-    return ['linux-x86_64'];
   }
   // .msi.sig deliberately excluded: NSIS is the canonical Windows
   // auto-update artifact here, and a platform key can only point at one

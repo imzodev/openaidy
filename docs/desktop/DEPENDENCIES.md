@@ -181,16 +181,16 @@ apt install -y \
   libwebkit2gtk-4.1-dev \
   libayatana-appindicator3-dev \
   libxdo-dev \
-  librsvg2-dev \
-  libfuse2  # AppImage bundling needs FUSE at build time; not installed by
-            # default on Ubuntu 24.04+ runners/desktops. On 24.04 this
-            # package is actually libfuse2t64, a FUSE3-based compat shim —
-            # linuxdeploy (the AppImage bundler `tauri build` shells out
-            # to) has been observed failing outright on it regardless
-            # ("failed to run linuxdeploy"). If you hit that building
-            # locally on 24.04+, building on/in an Ubuntu 22.04 environment
-            # is the known-working fix — see release.yml's build-desktop
-            # job, which pins ubuntu-22.04 for exactly this reason.
+  librsvg2-dev
+
+# Deliberately no libfuse2/AppImage support: bundle.targets in
+# tauri.conf.json excludes appimage. Its bundler (linuxdeploy) failed
+# with an opaque "failed to run linuxdeploy" on real GitHub Actions
+# runners across several independently-researched fixes (ubuntu-22.04
+# pin, APPIMAGE_EXTRACT_AND_RUN, NO_STRIP) — none resolved it, while
+# .deb/.rpm (which don't touch linuxdeploy/FUSE at all) built
+# successfully every time. Not worth continuing to chase for a format
+# that isn't essential; revisit if a real fix surfaces upstream.
 
 # Runtime (for users)
 sudo apt install \
