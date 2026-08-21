@@ -41,10 +41,9 @@ export function createWorkflowListTool(
         },
         limit: {
           type: 'integer',
-          minimum: 1,
-          maximum: 500,
           description:
-            'Maximum number of workflows to return. Defaults to 100.',
+            'Maximum number of workflows to return. Defaults to 100. ' +
+            'Capped at 500.',
         },
       },
     },

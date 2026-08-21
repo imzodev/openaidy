@@ -515,6 +515,43 @@ export const workflowNodeDeleteMeta: ToolMeta = {
     'graph at once, use workflow_delete instead.',
 };
 
+export const workflowEdgeCreateMeta: ToolMeta = {
+  name: 'workflow_edge_create',
+  category: 'Workflows',
+  description:
+    'Connect two existing nodes of the same workflow with a directed ' +
+    'dependency edge. `fromNodeId` is the upstream node; `toNodeId` ' +
+    'cannot run until `fromNodeId` completes. ' +
+    'REQUIRED: workflowId, fromNodeId, toNodeId. ' +
+    'Optional edgeKind (default "dependency"; use "conditional" to gate ' +
+    'on the upstream result), conditionOperator + conditionValue (required ' +
+    'when edgeKind=conditional). The service rejects self-edges and ' +
+    'cycles, so an edge that would deadlock the graph returns an error ' +
+    'instead of being persisted.',
+};
+
+export const workflowEdgeUpdateMeta: ToolMeta = {
+  name: 'workflow_edge_update',
+  category: 'Workflows',
+  description:
+    'Patch an existing workflow edge. Pass only the fields you want to ' +
+    'change — omitted fields keep their current value. ' +
+    'Optional: edgeKind (switch between dependency and conditional), ' +
+    'condition (pass {operator, value} to set/replace, null explicitly ' +
+    'to clear, omit to preserve). ' +
+    'Refuses any edge whose source subtask belongs to a non-workflow task.',
+};
+
+export const workflowEdgeDeleteMeta: ToolMeta = {
+  name: 'workflow_edge_delete',
+  category: 'Workflows',
+  description:
+    'Delete a single edge from a workflow. The two endpoint nodes are ' +
+    'preserved so the agent can re-wire the graph afterwards. Requires ' +
+    'confirm=true to prevent accidental severance. Refuses any edge whose ' +
+    'source subtask belongs to a non-workflow task.',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -698,6 +735,9 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowNodeCreateMeta,
   workflowNodeUpdateMeta,
   workflowNodeDeleteMeta,
+  workflowEdgeCreateMeta,
+  workflowEdgeUpdateMeta,
+  workflowEdgeDeleteMeta,
 ];
 
 /** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */

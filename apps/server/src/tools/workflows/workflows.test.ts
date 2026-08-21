@@ -102,7 +102,7 @@ function workflowTask(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createWorkflowTools', () => {
-  it('returns the ten workflow tools (workflow-level + nodes)', () => {
+  it('returns the thirteen workflow tools (workflow + nodes + edges)', () => {
     const tools = createWorkflowTools(() => undefined);
     const names = tools.map((t) => t.name);
     expect(names).toEqual([
@@ -116,6 +116,9 @@ describe('createWorkflowTools', () => {
       'workflow_node_create',
       'workflow_node_update',
       'workflow_node_delete',
+      'workflow_edge_create',
+      'workflow_edge_update',
+      'workflow_edge_delete',
     ]);
   });
 });
