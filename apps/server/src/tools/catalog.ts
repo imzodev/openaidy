@@ -459,6 +459,19 @@ export const workflowApplyTemplateMeta: ToolMeta = {
     'Returns the count of nodes and edges created.',
 };
 
+export const workflowListMeta: ToolMeta = {
+  name: 'workflow_list',
+  category: 'Workflows',
+  description:
+    'List every workflow (Task with planningEnabled=true) the agent can see, ' +
+    'as a summary array: id, title, description, status, priority, and ' +
+    'timestamps. Does not include nodes or edges — call workflow_get on a ' +
+    'specific id to fetch the full graph. ' +
+    'Filter by status (one of backlog/todo/in_progress/review/done/cancelled). ' +
+    'Returns at most `limit` workflows (default 100, max 500). ' +
+    'Use this to discover workflow IDs before any other workflow_* call.',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -638,6 +651,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowDeleteMeta,
   workflowExecuteMeta,
   workflowApplyTemplateMeta,
+  workflowListMeta,
 ];
 
 /** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */

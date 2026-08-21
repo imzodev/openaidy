@@ -5,6 +5,7 @@ import {
   createWorkflowDeleteTool,
   createWorkflowExecuteTool,
   createWorkflowGetTool,
+  createWorkflowListTool,
   createWorkflowTools,
   createWorkflowUpdateTool,
 } from './index';
@@ -32,6 +33,7 @@ function makeTaskServiceMock(): {
   executeSubtasks: ReturnType<typeof vi.fn>;
   getSubtasks: ReturnType<typeof vi.fn>;
   deleteSubtask: ReturnType<typeof vi.fn>;
+  listTasks: ReturnType<typeof vi.fn>;
 } {
   const notImplemented = () =>
     Promise.reject(new Error('method not stubbed in this test'));
@@ -47,6 +49,7 @@ function makeTaskServiceMock(): {
   const executeSubtasks = vi.fn(notImplemented);
   const getSubtasks = vi.fn(notImplemented);
   const deleteSubtask = vi.fn(notImplemented);
+  const listTasks = vi.fn(notImplemented);
 
   const service = {
     getTask,
@@ -61,6 +64,7 @@ function makeTaskServiceMock(): {
     executeSubtasks,
     getSubtasks,
     deleteSubtask,
+    listTasks,
   } as unknown as TaskService;
 
   return {
@@ -77,6 +81,7 @@ function makeTaskServiceMock(): {
     executeSubtasks,
     getSubtasks,
     deleteSubtask,
+    listTasks,
   };
 }
 
@@ -97,11 +102,12 @@ function workflowTask(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createWorkflowTools', () => {
-  it('returns the six workflow tools', () => {
+  it('returns the seven workflow tools', () => {
     const tools = createWorkflowTools(() => undefined);
     const names = tools.map((t) => t.name);
     expect(names).toEqual([
       'workflow_get',
+      'workflow_list',
       'workflow_create',
       'workflow_update',
       'workflow_delete',
@@ -665,5 +671,96 @@ describe('workflow_get', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/not found/);
+  });
+});
+
+// ── workflow_list ────────────────────────────────────────────────────────────
+
+describe('workflow_list', () => {
+  function makeTask(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'wf-1',
+      title: 'Workflow 1',
+      description: 'desc',
+      status: 'todo' as const,
+      priority: 'medium' as const,
+      planningEnabled: true,
+      createdAt: new Date('2026-01-01'),
+      updatedAt: new Date('2026-01-02'),
+      ...overrides,
+    };
+  }
+
+  it('returns only tasks with planningEnabled=true', async () => {
+    const mocks = makeTaskServiceMock();
+    mocks.listTasks.mockResolvedValue([
+      makeTask({ id: 'wf-1' }),
+      makeTask({
+        id: 'task-2',
+        title: 'Regular task',
+        planningEnabled: false,
+      }),
+      makeTask({ id: 'wf-3', title: 'Another workflow' }),
+    ]);
+
+    const tool = createWorkflowListTool(() => mocks.service);
+    const result = await tool.execute({}, CTX);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const parsed = JSON.parse(result.content);
+    expect(parsed.count).toBe(2);
+    expect(parsed.workflows.map((w: { id: string }) => w.id)).toEqual([
+      'wf-1',
+      'wf-3',
+    ]);
+  });
+
+  it('passes the status filter through to listTasks', async () => {
+    const mocks = makeTaskServiceMock();
+    mocks.listTasks.mockResolvedValue([]);
+
+    const tool = createWorkflowListTool(() => mocks.service);
+    await tool.execute({ status: 'in_progress' }, CTX);
+
+    expect(mocks.listTasks).toHaveBeenCalledWith('in_progress');
+  });
+
+  it('caps the response at the requested limit', async () => {
+    const mocks = makeTaskServiceMock();
+    const many = Array.from({ length: 10 }, (_, i) =>
+      makeTask({ id: `wf-${i}` }),
+    );
+    mocks.listTasks.mockResolvedValue(many);
+
+    const tool = createWorkflowListTool(() => mocks.service);
+    const result = await tool.execute({ limit: 3 }, CTX);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const parsed = JSON.parse(result.content);
+    expect(parsed.workflows).toHaveLength(3);
+  });
+
+  it('rejects an out-of-enum status', async () => {
+    const mocks = makeTaskServiceMock();
+    const tool = createWorkflowListTool(() => mocks.service);
+    const result = await tool.execute({ status: 'archived' }, CTX);
+    expect(result.ok).toBe(false);
+    expect(mocks.listTasks).not.toHaveBeenCalled();
+  });
+
+  it('returns empty array when no workflows exist', async () => {
+    const mocks = makeTaskServiceMock();
+    mocks.listTasks.mockResolvedValue([]);
+
+    const tool = createWorkflowListTool(() => mocks.service);
+    const result = await tool.execute({}, CTX);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const parsed = JSON.parse(result.content);
+    expect(parsed.count).toBe(0);
+    expect(parsed.workflows).toEqual([]);
   });
 });

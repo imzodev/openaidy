@@ -5,6 +5,7 @@ import { createWorkflowCreateTool } from './create.js';
 import { createWorkflowDeleteTool } from './delete.js';
 import { createWorkflowExecuteTool } from './execute.js';
 import { createWorkflowGetTool } from './get.js';
+import { createWorkflowListTool } from './list.js';
 import { createWorkflowUpdateTool } from './update.js';
 
 export { createWorkflowApplyTemplateTool } from './apply-template.js';
@@ -12,6 +13,7 @@ export { createWorkflowCreateTool } from './create.js';
 export { createWorkflowDeleteTool } from './delete.js';
 export { createWorkflowExecuteTool } from './execute.js';
 export { createWorkflowGetTool } from './get.js';
+export { createWorkflowListTool } from './list.js';
 export { createWorkflowUpdateTool } from './update.js';
 
 /**
@@ -28,6 +30,7 @@ export function createWorkflowTools(
 ): BuiltinTool[] {
   return [
     createWorkflowGetTool(getTaskService),
+    createWorkflowListTool(getTaskService),
     createWorkflowCreateTool(getTaskService),
     createWorkflowUpdateTool(getTaskService),
     createWorkflowDeleteTool(getTaskService),
