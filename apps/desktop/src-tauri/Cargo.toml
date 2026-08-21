@@ -1,0 +1,54 @@
+[package]
+name = "openaidy-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "openaidy_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+tokio = { version = "1", features = ["process", "io-util", "sync", "net", "macros", "rt-multi-thread"] }
+dirs = "5"
+tempfile = "3"
+# Only used to check the bootstrap-admin token's `expiresAt` (an RFC 3339
+# string written by apps/server/src/bootstrap-admin.ts's `toISOString()`)
+# against the current time.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# keyring's platform backends are opt-in per feature flag — plain
+# `keyring = "3"` with no features resolves to its default no-op mock store,
+# which silently accepts writes and never actually persists them (discovered
+# via failing store/get round-trip tests: writes "succeed" but reads always
+# come back NoEntry). Selected per-OS to match the actual bundle targets this
+# app ships (deb/rpm/appimage, dmg, nsis/wix) — linux-native-sync-persistent
+# adds the secret-service D-Bus backend, matching the libsecret-1-0 runtime
+# dependency the Linux deb bundle already declares below.
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["linux-native-sync-persistent"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+[dev-dependencies]
+futures = "0.3.32"

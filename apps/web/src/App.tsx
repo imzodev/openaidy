@@ -21,9 +21,11 @@ import {
 } from './lib/ws-api';
 import { useInfiniteMessages } from './lib/use-infinite-messages';
 import { ThemeProvider, useTheme } from './lib/theme';
+import { TauriProvider } from './lib/tauri-provider';
 import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
+import { DesktopStatusBar } from './components/DesktopStatusBar';
 import { Sidebar } from './components/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
 import { ChatView } from './components/ChatView';
@@ -380,7 +382,9 @@ function AppContent(props: AppContentProps) {
     // backstop (see websocket/index.ts) if left idle long enough. Surface
     // that instead of leaving the chat view silently pointed at a session
     // that no longer exists.
-    const handleSessionDeleted = (event: { payload: { sessionId: string } }) => {
+    const handleSessionDeleted = (event: {
+      payload: { sessionId: string };
+    }) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       if (selectedSessionId() === event.payload.sessionId) {
         setSelectedSessionId(undefined);
@@ -1240,6 +1244,7 @@ function AppContent(props: AppContentProps) {
                 </button>
               </Show>
 
+              <DesktopStatusBar />
               <ConnectionStatus />
               <PresenceIndicator class="hidden md:flex" />
               <button
@@ -1520,12 +1525,14 @@ function AuthGate() {
     >
       <WebSocketProvider>
         <QueryClientProvider client={queryClient}>
-          <AppContent
-            onLogout={() => {
-              clearToken();
-              setAuthenticated(false);
-            }}
-          />
+          <TauriProvider>
+            <AppContent
+              onLogout={() => {
+                clearToken();
+                setAuthenticated(false);
+              }}
+            />
+          </TauriProvider>
         </QueryClientProvider>
       </WebSocketProvider>
     </Show>
