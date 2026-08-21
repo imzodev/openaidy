@@ -187,8 +187,20 @@ jobs:
           # with libfuse2 installed (confirmed: failed identically on both
           # ubuntu-22.04 and -24.04) — this makes it extract-and-run
           # instead. Harmless no-op on Windows/macOS, which never touch
-          # AppImage/linuxdeploy at all.
+          # AppImage/linuxdeploy at all. Kept even though it alone didn't
+          # fix the Linux build (see NO_STRIP below) — still the correct
+          # thing to set for a FUSE-less sandbox.
           APPIMAGE_EXTRACT_AND_RUN: '1'
+          # `strip = true` in Cargo.toml's [profile.release] plus
+          # linuxdeploy's own strip pass over the AppImage's bundled
+          # shared libs has a known failure mode on modern binutils
+          # ("Strip call failed: unknown type ... section '.relr.dyn'"),
+          # surfaced by tauri only as the same opaque "failed to run
+          # linuxdeploy" this build hit — a maintainer-confirmed Tauri
+          # workaround. Cargo already stripped the binary itself before
+          # linuxdeploy ever runs, so skipping linuxdeploy's redundant
+          # pass costs nothing.
+          NO_STRIP: 'true'
         # `pnpm --filter X tauri:build -- --target ...` silently mangles the
         # forwarded args (pnpm inserts a literal extra "--", so tauri sees
         # `build -- --target ...` and ignores the real flag) — confirmed
@@ -204,7 +216,13 @@ jobs:
       # refuse to open the app until the user right-click's > Open (Gatekeeper
       # blocks unsigned/un-notarized apps by default). Tracked as follow-up
       # work once real signing certs are in place — see docs/desktop/DEPENDENCIES.md.
+      # if: always() — one bundle format failing (e.g. appimage) shouldn't
+      # discard installers other formats already produced first in the
+      # same `tauri build` invocation (e.g. deb/rpm); upload-artifact
+      # itself already tolerates individual missing globs via
+      # if-no-files-found below.
       - name: Upload installer artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-installer-${{ matrix.artifact-name }}
@@ -228,6 +246,7 @@ jobs:
       # "updater manifest fragment" apart without needing to filter by
       # filename pattern.
       - name: Generate update manifest fragment
+        if: always()
         shell: bash
         run: |
           node scripts/desktop-update-manifest.mjs fragment \
@@ -235,6 +254,7 @@ jobs:
             "update-fragment-${{ matrix.artifact-name }}.json" \
             "${{ steps.tag.outputs.tag }}"
       - name: Upload update manifest fragment
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: desktop-update-fragment-${{ matrix.artifact-name }}
