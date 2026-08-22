@@ -205,6 +205,22 @@ export class SubtasksRepository {
   }
 
   /**
+   * Look up a single edge by id without mutating it. Used by the workflow
+   * agent tools (workflow_edge_update / workflow_edge_delete) to resolve
+   * the parent workflow before allowing a mutation — edges do not carry
+   * `taskId` directly, so the caller follows the edge's `subtaskId` to
+   * the subtask to find the workflow.
+   */
+  async findEdgeById(id: string): Promise<schema.SubtaskEdge | null> {
+    const results = await this.db
+      .select()
+      .from(schema.subtaskEdges)
+      .where(eq(schema.subtaskEdges.id, id))
+      .limit(1);
+    return results[0] ?? null;
+  }
+
+  /**
    * Like `listEdgesByTask`, but includes the edge id/kind/condition
    * columns needed by the workflow editor's edge-CRUD API. Kept separate
    * so `listEdgesByTask`'s existing minimal shape (used by execution and

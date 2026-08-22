@@ -71,6 +71,14 @@ export class SubtaskOperations {
     }));
   }
 
+  async getSubtask(id: string): Promise<Subtask | null> {
+    return this.subtasksRepo.findById(id);
+  }
+
+  async getSubtaskEdge(id: string): Promise<SubtaskEdge | null> {
+    return this.subtasksRepo.findEdgeById(id);
+  }
+
   async updateSubtask(
     id: string,
     input: UpdateSubtaskInput,

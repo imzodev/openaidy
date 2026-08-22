@@ -370,6 +370,192 @@ export const tasksDeleteMeta: ToolMeta = {
     'Requires confirm=true to prevent accidental deletion.',
 };
 
+// ── Workflows ─────────────────────────────────────────────────────────────────
+//
+// A workflow is a Task with `planningEnabled: true` — i.e. a task whose
+// author committed to a subtask graph instead of a flat checklist. These
+// tools are the only way for an agent to operate on workflows; the generic
+// `tasks_*` tools still work but they neither enforce workflow-only
+// semantics nor expose workflow-specific affordances like templates.
+
+export const workflowGetMeta: ToolMeta = {
+  name: 'workflow_get',
+  category: 'Workflows',
+  description:
+    'Read the full state of a workflow: task metadata, all subtask nodes, ' +
+    'and every edge connecting them (including conditional, loop, and ' +
+    'dependency edges). Returns a JSON object whose shape is round-trippable: ' +
+    'workflow_create accepts the same `nodes`/`edges` arrays back, so this ' +
+    'is the canonical "fetch → mutate → save" pattern. ' +
+    'Pass includeNodes=false or includeEdges=false to slim the response when ' +
+    'you only need one part.',
+};
+
+export const workflowCreateMeta: ToolMeta = {
+  name: 'workflow_create',
+  category: 'Workflows',
+  description:
+    'Create a new workflow (a Task with planningEnabled=true). The workflow ' +
+    'is immediately visible in the Workflows page. ' +
+    'REQUIRED: description (full prose of what the workflow achieves). ' +
+    'Optional: title (derived from description if absent), priority, ' +
+    'templateId (apply a built-in template atomically — see ' +
+    'workflow_apply_template for the template id list), and ' +
+    'templateInputs (a record of placeholder values for the template). ' +
+    'Workflows cannot be created without planning: planningEnabled is forced ' +
+    'to true regardless of what is passed. The auto-planner is suppressed ' +
+    '(skipAutoPlan=true): workflows are hand-authored graphs from the agent, ' +
+    'not AI-planned checklists. Build the graph yourself with ' +
+    'workflow_apply_template / workflow_node_create / workflow_edge_create; ' +
+    'do NOT chain this into tasks_create and expect the planner to fill it in. ' +
+    'Returns the new workflow ID and a summary of created nodes/edges if a ' +
+    'template was applied.',
+};
+
+export const workflowUpdateMeta: ToolMeta = {
+  name: 'workflow_update',
+  category: 'Workflows',
+  description:
+    'Update an existing workflow — change its title, description, priority, ' +
+    'or status. Pass only the fields you want to change; omitted fields are ' +
+    'left as-is. To edit the subtask graph (nodes/edges), use the dedicated ' +
+    'node/edge tools. Rejects any task whose planningEnabled is false (use ' +
+    'tasks_update for regular tasks). Returns the updated workflow summary.',
+};
+
+export const workflowDeleteMeta: ToolMeta = {
+  name: 'workflow_delete',
+  category: 'Workflows',
+  description:
+    'Permanently delete a workflow and its entire subtask graph (subtasks ' +
+    'and edges cascade via foreign keys). ' +
+    'This action cannot be undone. Requires confirm=true to prevent ' +
+    'accidental deletion. Rejects any task whose planningEnabled is false. ' +
+    'If you only want to remove a single node, use the node tools instead.',
+};
+
+export const workflowExecuteMeta: ToolMeta = {
+  name: 'workflow_execute',
+  category: 'Workflows',
+  description:
+    'Run a workflow. By default this starts the workflow from its first ' +
+    'ready-to-execute nodes (the workflow entry points — nodes with no unmet ' +
+    'dependencies). Pass subtaskId to execute a single node in isolation ' +
+    '(useful for retries or for running one branch independently). ' +
+    'Returns the session id(s) that were started; the runs are async, so ' +
+    'follow up with sessions_read to track progress. ' +
+    'Rejects any task whose planningEnabled is false.',
+};
+
+export const workflowApplyTemplateMeta: ToolMeta = {
+  name: 'workflow_apply_template',
+  category: 'Workflows',
+  description:
+    'Apply a built-in workflow template to an existing workflow, replacing ' +
+    'its current subtask graph with the template nodes and edges. ' +
+    'Available template IDs: "software-development" (a multi-stage software ' +
+    'delivery workflow). Pass templateInputs to fill template placeholders ' +
+    '(each template declares its own inputs; required ones must be provided). ' +
+    'Pass clearExisting=true to remove all existing nodes/edges before the ' +
+    'template is applied (default false: the template graph is added on top ' +
+    'of whatever is there). ' +
+    'Rejects any task whose planningEnabled is false. ' +
+    'Returns the count of nodes and edges created.',
+};
+
+export const workflowListMeta: ToolMeta = {
+  name: 'workflow_list',
+  category: 'Workflows',
+  description:
+    'List every workflow (Task with planningEnabled=true) the agent can see, ' +
+    'as a summary array: id, title, description, status, priority, and ' +
+    'timestamps. Does not include nodes or edges — call workflow_get on a ' +
+    'specific id to fetch the full graph. ' +
+    'Filter by status (one of backlog/todo/in_progress/review/done/cancelled). ' +
+    'Returns at most `limit` workflows (default 100, max 500). ' +
+    'Use this to discover workflow IDs before any other workflow_* call.',
+};
+
+export const workflowNodeCreateMeta: ToolMeta = {
+  name: 'workflow_node_create',
+  category: 'Workflows',
+  description:
+    'Add a subtask (node) to an existing workflow. The workflow must have ' +
+    'planningEnabled=true — non-workflow tasks are rejected. ' +
+    'REQUIRED: workflowId, title, description. ' +
+    'Optional: subtaskKind (default "agent"; use "approval_gate" to pause ' +
+    'execution until a human resolves it), loop (bounded re-run config — ' +
+    'the node keeps running until its result matches the condition or the ' +
+    'iteration cap is hit), assignedAgentId (must reference an existing ' +
+    'enabled agent), orderIndex (cosmetic layout hint). ' +
+    'Edges are NOT created here — use workflow_edge_create after the node ' +
+    'exists so the graph mutation is explicit and reviewable. ' +
+    'Returns the new node ID and its initial status.',
+};
+
+export const workflowNodeUpdateMeta: ToolMeta = {
+  name: 'workflow_node_update',
+  category: 'Workflows',
+  description:
+    'Patch an existing workflow node. Pass only the fields you want to ' +
+    'change — omitted fields keep their current value. ' +
+    'Optional fields: title, description, subtaskKind, loop (set to null ' +
+    'explicitly to clear an existing loop; omit to preserve it), orderIndex. ' +
+    "If you change the node's title or description, a node that was already " +
+    "'completed' or 'failed' is automatically reset to 'pending' so the next " +
+    'execution picks up the new instructions — no special-casing required. ' +
+    'Refuses any node whose parent task has planningEnabled=false.',
+};
+
+export const workflowNodeDeleteMeta: ToolMeta = {
+  name: 'workflow_node_delete',
+  category: 'Workflows',
+  description:
+    'Delete a single node from a workflow. Incoming and outgoing edges ' +
+    'cascade away (subtask_edges has ON DELETE CASCADE), so the agent does ' +
+    'not need to clean edges up first. Requires confirm=true to prevent ' +
+    'accidental removal. Refuses nodes whose parent task has ' +
+    'planningEnabled=false. To delete an entire workflow and its whole ' +
+    'graph at once, use workflow_delete instead.',
+};
+
+export const workflowEdgeCreateMeta: ToolMeta = {
+  name: 'workflow_edge_create',
+  category: 'Workflows',
+  description:
+    'Connect two existing nodes of the same workflow with a directed ' +
+    'dependency edge. `fromNodeId` is the upstream node; `toNodeId` ' +
+    'cannot run until `fromNodeId` completes. ' +
+    'REQUIRED: workflowId, fromNodeId, toNodeId. ' +
+    'Optional edgeKind (default "dependency"; use "conditional" to gate ' +
+    'on the upstream result), conditionOperator + conditionValue (required ' +
+    'when edgeKind=conditional). The service rejects self-edges and ' +
+    'cycles, so an edge that would deadlock the graph returns an error ' +
+    'instead of being persisted.',
+};
+
+export const workflowEdgeUpdateMeta: ToolMeta = {
+  name: 'workflow_edge_update',
+  category: 'Workflows',
+  description:
+    'Patch an existing workflow edge. Pass only the fields you want to ' +
+    'change — omitted fields keep their current value. ' +
+    'Optional: edgeKind (switch between dependency and conditional), ' +
+    'condition (pass {operator, value} to set/replace, null explicitly ' +
+    'to clear, omit to preserve). ' +
+    'Refuses any edge whose source subtask belongs to a non-workflow task.',
+};
+
+export const workflowEdgeDeleteMeta: ToolMeta = {
+  name: 'workflow_edge_delete',
+  category: 'Workflows',
+  description:
+    'Delete a single edge from a workflow. The two endpoint nodes are ' +
+    'preserved so the agent can re-wire the graph afterwards. Requires ' +
+    'confirm=true to prevent accidental severance. Refuses any edge whose ' +
+    'source subtask belongs to a non-workflow task.',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -543,6 +729,19 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   taskSchedulesDeleteMeta,
   taskSchedulesTriggerMeta,
   taskSchedulesListExecutionsMeta,
+  workflowGetMeta,
+  workflowCreateMeta,
+  workflowUpdateMeta,
+  workflowDeleteMeta,
+  workflowExecuteMeta,
+  workflowApplyTemplateMeta,
+  workflowListMeta,
+  workflowNodeCreateMeta,
+  workflowNodeUpdateMeta,
+  workflowNodeDeleteMeta,
+  workflowEdgeCreateMeta,
+  workflowEdgeUpdateMeta,
+  workflowEdgeDeleteMeta,
 ];
 
 /** Derived lookup: tool name → category string. Updated automatically from ALL_TOOL_METAS. */

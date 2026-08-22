@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { tasksDeleteMeta } from '../catalog.js';
+import { formatToolError, requireService, requireString } from '../shared.js';
 
 export function createTasksDeleteTool(
   getTaskService: () => TaskService | undefined,
@@ -25,22 +26,16 @@ export function createTasksDeleteTool(
     },
 
     async execute(args, _ctx) {
-      const taskService = getTaskService();
-      if (!taskService) {
-        return {
-          ok: false,
-          error: 'Task service is not available (database might be disabled).',
-        };
-      }
+      const resolved = requireService(getTaskService, 'Task service');
+      if (!resolved.ok) return resolved;
+      const taskService = resolved.service;
 
       const id = args['id'];
       const confirm = args['confirm'];
 
-      if (typeof id !== 'string' || !id.trim()) {
-        return {
-          ok: false,
-          error: 'id is required and must be a non-empty string',
-        };
+      const idError = requireString(id, 'id');
+      if (idError) {
+        return { ok: false, error: idError };
       }
 
       if (confirm !== true) {
@@ -51,7 +46,7 @@ export function createTasksDeleteTool(
       }
 
       try {
-        const result = await taskService.deleteTask(id);
+        const result = await taskService.deleteTask(id as string);
 
         if (result.ok) {
           return {
@@ -65,10 +60,7 @@ export function createTasksDeleteTool(
           };
         }
       } catch (err) {
-        return {
-          ok: false,
-          error: `Unexpected error deleting task: ${err instanceof Error ? err.message : String(err)}`,
-        };
+        return formatToolError('Unexpected error deleting task', err);
       }
     },
   };

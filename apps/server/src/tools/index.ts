@@ -38,6 +38,7 @@ import { createTaskTools } from './tasks';
 import type { PulseToolDeps } from './pulses';
 import { createPulseTools } from './pulses';
 import { createTaskScheduleTools } from './task-schedules';
+import { createWorkflowTools } from './workflows';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
 import type { SkillRegistry } from '../skills/index';
@@ -64,6 +65,7 @@ export { createPulseTools } from './pulses';
 export type { PulseToolDeps } from './pulses';
 export { createTaskScheduleTools } from './task-schedules';
 export type { TaskScheduleToolDeps } from './task-schedules';
+export { createWorkflowTools } from './workflows';
 
 export type BuiltinToolRegistryDeps = {
   workspace: WorkspaceService;
@@ -165,6 +167,10 @@ export function createBuiltinToolRegistry(
       deps.getTaskService,
       deps.getPlanningService,
     )) {
+      registry.register(tool);
+    }
+
+    for (const tool of createWorkflowTools(deps.getTaskService)) {
       registry.register(tool);
     }
   }
