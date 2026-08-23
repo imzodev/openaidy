@@ -68,6 +68,7 @@ import {
   createRecurringTasksService,
 } from './recurring';
 import { createMcpClientService } from './mcp/client';
+import { EnvPlaceholderResolver } from './mcp/placeholder-resolver';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry } from './agents';
@@ -280,6 +281,9 @@ export async function buildApp() {
   // Create MCP client service (before sessionService so it can be injected)
   const mcpService = createMcpClientService({
     logger: pinoLog,
+    resolver: new EnvPlaceholderResolver(process.env, () =>
+      configService.getMcpSecrets(),
+    ),
   });
 
   // Create workspace service before sessionService so it can be injected into builtin tools
