@@ -80,6 +80,14 @@ const buffer: McpServerConfig = {
   headers: { Authorization: 'Bearer ${BUFFER_API_KEY}' },
 };
 
+const supabase: McpServerConfig = {
+  id: 'supabase',
+  name: 'Supabase',
+  transport: 'http',
+  url: 'https://mcp.supabase.com/mcp?features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching',
+  headers: { Authorization: 'Bearer ${SUPABASE_ACCESS_TOKEN}' },
+};
+
 /** The full preinstalled set shipped in `config/openaidy.template.json`. */
 const allPreinstalled: McpServerConfig[] = [
   github,
@@ -90,6 +98,7 @@ const allPreinstalled: McpServerConfig[] = [
   braveSearch,
   tavily,
   buffer,
+  supabase,
 ];
 
 describe('reconcilePreinstalledMcpServers', () => {

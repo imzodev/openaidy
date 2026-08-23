@@ -296,6 +296,7 @@ The following MCP servers ship preinstalled (reconciled into every install on st
 | Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
 | Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
 | Buffer              | http      | `${BUFFER_API_KEY}`               | [Buffer](https://buffer.com) social media scheduling — per-account API key                                     |
+| Supabase            | http      | `${SUPABASE_ACCESS_TOKEN}`        | [personal access token](https://supabase.com/dashboard/account/tokens) — database, docs, functions, branching  |
 
 #### Setting API keys
 
