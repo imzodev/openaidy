@@ -51,4 +51,9 @@ export const MCP_SERVER_SETUP_CATALOG: Record<string, McpServerSetupInfo> = {
     instructions:
       'Generate a personal access token from your Supabase account settings.',
   },
+  notion: {
+    setupUrl: 'https://www.notion.so/my-integrations',
+    instructions:
+      'Create an internal integration, then share the pages/databases you want it to access from each page’s "Connections" menu.',
+  },
 };
