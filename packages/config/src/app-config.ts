@@ -95,9 +95,6 @@ export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 
 /**
  * MCP server transport type - stdio for local processes, http for remote servers
- *
- * NOTE: HTTP transport is not yet implemented. Use stdio for now.
- * See: https://github.com/imzodev/openaidy/issues/200
  */
 export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
 
@@ -106,7 +103,7 @@ export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
  *
  * Supports two transport types:
  * - stdio: Local process communication (e.g., npx @modelcontextprotocol/server-filesystem)
- * - http: Remote HTTP server communication (NOT YET IMPLEMENTED - see issue #200)
+ * - http: Remote HTTP server communication (e.g., https://api.githubcopilot.com/mcp/)
  */
 export const mcpServerConfigSchema = z
   .object({
@@ -117,7 +114,7 @@ export const mcpServerConfigSchema = z
     command: z.string().min(1).optional(),
     args: z.array(z.string()).optional(),
     env: z.record(mcpSecretValueSchema).optional(),
-    // http transport fields (NOT YET IMPLEMENTED)
+    // http transport fields
     url: z.string().url().optional(),
     headers: z.record(mcpSecretValueSchema).optional(),
   })

@@ -19,6 +19,7 @@ import type {
   McpSecretValue,
   McpSecretField,
 } from '../../lib/api';
+import { MCP_SERVER_SETUP_CATALOG } from '../../lib/mcp-server-catalog';
 
 /**
  * A single row in the structured env/headers editor. Mirrors {@link
@@ -1199,6 +1200,21 @@ export function McpsPage() {
                       </code>{' '}
                       placeholder, or set it in the server environment.
                     </p>
+                    <Show when={MCP_SERVER_SETUP_CATALOG[selected()!.id]}>
+                      {(info) => (
+                        <p class="mt-2 text-xs">
+                          {info().instructions}{' '}
+                          <a
+                            href={info().setupUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="underline hover:no-underline"
+                          >
+                            Get your key →
+                          </a>
+                        </p>
+                      )}
+                    </Show>
                   </div>
                 </Show>
                 <Show when={selected()!.transport === 'stdio'}>
