@@ -156,6 +156,73 @@ describe('EnvPlaceholderResolver', () => {
     });
   });
 
+  describe('named-secrets store fallback', () => {
+    it('resolves a ${VAR} from the secrets store when unset in the environment', () => {
+      const resolver = new EnvPlaceholderResolver(env, {
+        NOTION_TOKEN: encryptSecret('secret_abc'),
+      });
+      expect(
+        resolver.resolveRecord({ A: 'Bearer ${NOTION_TOKEN}' }, 'env'),
+      ).toEqual({ A: 'Bearer secret_abc' });
+    });
+
+    it('uses a not-yet-encrypted secrets-store value as-is', () => {
+      const resolver = new EnvPlaceholderResolver(env, {
+        NOTION_TOKEN: 'plaintext-token',
+      });
+      expect(resolver.resolveRecord({ A: '${NOTION_TOKEN}' }, 'env')).toEqual({
+        A: 'plaintext-token',
+      });
+    });
+
+    it('prefers the process environment over the secrets store when both are set', () => {
+      const resolver = new EnvPlaceholderResolver(
+        { ...env, NOTION_TOKEN: 'from-env' },
+        { NOTION_TOKEN: encryptSecret('from-store') },
+      );
+      expect(resolver.resolveRecord({ A: '${NOTION_TOKEN}' }, 'env')).toEqual({
+        A: 'from-env',
+      });
+    });
+
+    it('findMissingVars is satisfied by a secrets-store value alone', () => {
+      const resolver = new EnvPlaceholderResolver(env, {
+        NOTION_TOKEN: encryptSecret('secret_abc'),
+      });
+      expect(resolver.findMissingVars({ A: '${NOTION_TOKEN}' })).toEqual([]);
+    });
+
+    it('reports missing when neither the environment nor the secrets store has it', () => {
+      const resolver = new EnvPlaceholderResolver(env, {});
+      expect(() =>
+        resolver.resolveRecord({ A: '${NOTION_TOKEN}' }, 'env'),
+      ).toThrow(MissingEnvVarsError);
+      expect(resolver.findMissingVars({ A: '${NOTION_TOKEN}' })).toEqual([
+        'NOTION_TOKEN',
+      ]);
+    });
+
+    it('treats an empty stored secret as unset', () => {
+      const resolver = new EnvPlaceholderResolver(env, { NOTION_TOKEN: '' });
+      expect(resolver.findMissingVars({ A: '${NOTION_TOKEN}' })).toEqual([
+        'NOTION_TOKEN',
+      ]);
+    });
+
+    it('reads a function secrets source live on every lookup', () => {
+      let stored: Record<string, string> = {};
+      const resolver = new EnvPlaceholderResolver(env, () => stored);
+      expect(resolver.findMissingVars({ A: '${NOTION_TOKEN}' })).toEqual([
+        'NOTION_TOKEN',
+      ]);
+      stored = { NOTION_TOKEN: encryptSecret('secret_abc') };
+      expect(resolver.findMissingVars({ A: '${NOTION_TOKEN}' })).toEqual([]);
+      expect(resolver.resolveRecord({ A: '${NOTION_TOKEN}' }, 'env')).toEqual({
+        A: 'secret_abc',
+      });
+    });
+  });
+
   it('defaults to process.env when no source is injected', () => {
     process.env.__MCP_TEST_VAR__ = 'from-process-env';
     try {

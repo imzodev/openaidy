@@ -28,14 +28,14 @@ A server whose secret is unset sits in "Awaiting configuration" instead of tryin
 
 ## Setting API keys
 
-A server that needs a secret references it as `${VAR_NAME}` in its `headers` (http transport) or `env` (stdio transport). Two ways to satisfy it:
+A server that needs a secret references it as `${VAR_NAME}` in its `headers` (http transport) or `env` (stdio transport). On the MCP page, a server missing one shows an **Awaiting configuration** banner with a plain "paste your API key" field for each `${VAR_NAME}` it needs — paste the key and save. OpenAidy encrypts it at rest (AES-256-GCM) and resolves it into the placeholder at connection time; the server's own `env`/`headers` config is never edited, so there's nothing to break and future updates to a preinstalled server's definition still apply.
 
-1. **Set the environment variable before starting the server** — recommended, keeps secrets out of the config file:
-   ```bash
-   export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
-   openaidy start
-   ```
-2. **Edit the server in the UI** and replace `${VAR}` with the literal key. This encrypts and persists the key in your config — convenient, but the key lives on disk.
+For self-hosted/ops deployments that want a secret out of the config file entirely, set the real environment variable before starting the server instead — it takes priority over a pasted key if both are set:
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
+openaidy start
+```
 
 ## Adding your own server
 

@@ -16,6 +16,7 @@ export {
   EnvPlaceholderResolver,
   MissingEnvVarsError,
   type EnvSource,
+  type McpSecretsSource,
 } from './placeholder-resolver';
 
 export {

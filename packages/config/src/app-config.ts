@@ -393,6 +393,13 @@ export const appConfigSchema = z
     providers: z.array(appProviderConfigSchema),
     agents: z.array(appAgentConfigSchema).min(1),
     mcpServers: z.array(mcpServerConfigSchema).optional(),
+    /**
+     * Named MCP secrets (e.g. `NOTION_TOKEN`), encrypted at rest, resolved
+     * into `${VAR}` placeholders in `mcpServers[].env`/`headers` at connection
+     * time. Decoupled from any single server's config so a server's template
+     * fields never need editing to supply a key (see `mcp/placeholder-resolver.ts`).
+     */
+    mcpSecrets: z.record(z.string(), z.string()).optional(),
     channels: z.array(channelConfigSchema).optional(),
     /** Optional per-model pricing overrides for cost estimation */
     modelPricing: z.record(z.string(), modelPricingSchema).optional(),

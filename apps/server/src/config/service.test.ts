@@ -94,7 +94,9 @@ describe('AppConfigService channel reconciler', () => {
     await service.save({ ...baseConfig(), channels });
 
     expect(reconcile).toHaveBeenCalledOnce();
-    expect(reconcile).toHaveBeenCalledWith([{ ...channels[0], stripThinking: true }]);
+    expect(reconcile).toHaveBeenCalledWith([
+      { ...channels[0], stripThinking: true },
+    ]);
   });
 
   it('passes undefined channels through when none are configured', async () => {
@@ -181,6 +183,83 @@ describe('AppConfigService channel reconciler', () => {
     expect(written.channels[0].botToken).toEqual({
       kind: 'env',
       value: 'DISCORD_BOT_TOKEN',
+    });
+  });
+
+  describe('named MCP secrets', () => {
+    it('starts empty', async () => {
+      const service = makeService();
+      await service.load();
+      expect(service.getMcpSecrets()).toEqual({});
+    });
+
+    it('encrypts a pasted key and persists it, decoupled from any server config', async () => {
+      const service = makeService();
+      await service.load();
+
+      await service.setMcpSecret('NOTION_TOKEN', 'secret_abc123');
+
+      expect(service.getMcpSecrets()).toEqual({
+        NOTION_TOKEN: 'enc:v1:secret_abc123',
+      });
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(written.mcpSecrets).toEqual({
+        NOTION_TOKEN: 'enc:v1:secret_abc123',
+      });
+      // Never written next to any server's own env/headers record.
+      expect(written.mcpServers).toBeUndefined();
+    });
+
+    it('setting a second secret preserves the first', async () => {
+      const service = makeService();
+      await service.load();
+
+      await service.setMcpSecret('NOTION_TOKEN', 'notion-key');
+      await service.setMcpSecret('GH_TOKEN', 'gh-key');
+
+      expect(service.getMcpSecrets()).toEqual({
+        NOTION_TOKEN: 'enc:v1:notion-key',
+        GH_TOKEN: 'enc:v1:gh-key',
+      });
+    });
+
+    it('deleteMcpSecret removes only the named entry', async () => {
+      const service = makeService();
+      await service.load();
+
+      await service.setMcpSecret('NOTION_TOKEN', 'notion-key');
+      await service.setMcpSecret('GH_TOKEN', 'gh-key');
+      await service.deleteMcpSecret('NOTION_TOKEN');
+
+      expect(service.getMcpSecrets()).toEqual({ GH_TOKEN: 'enc:v1:gh-key' });
+    });
+
+    it('encrypts a plaintext mcpSecrets value found on save (defensive, e.g. a restored/imported config)', async () => {
+      const service = makeService();
+      await service.load();
+
+      await service.save({
+        ...baseConfig(),
+        mcpSecrets: { NOTION_TOKEN: 'plaintext-from-import' },
+      });
+
+      expect(service.getMcpSecrets()).toEqual({
+        NOTION_TOKEN: 'enc:v1:plaintext-from-import',
+      });
+    });
+
+    it('leaves an already-encrypted mcpSecrets value unchanged (idempotent)', async () => {
+      const service = makeService();
+      await service.load();
+
+      await service.save({
+        ...baseConfig(),
+        mcpSecrets: { NOTION_TOKEN: 'enc:v1:already' },
+      });
+
+      expect(service.getMcpSecrets()).toEqual({
+        NOTION_TOKEN: 'enc:v1:already',
+      });
     });
   });
 });

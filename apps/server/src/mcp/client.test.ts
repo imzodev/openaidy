@@ -223,6 +223,19 @@ describe('McpClientService', () => {
       expect(service.missingSecrets(config)).toEqual([]);
     });
 
+    it('is empty when the var is only satisfied by the named-secrets store, not process.env', () => {
+      const service = createMcpClientService({
+        resolver: new EnvPlaceholderResolver({}, { GH_TOKEN: 'ghp_x' }),
+      });
+      const config: McpServerConfig = {
+        id: 'gh',
+        transport: 'http',
+        url: 'https://api.githubcopilot.com/mcp/',
+        headers: { Authorization: 'Bearer ${GH_TOKEN}' },
+      };
+      expect(service.missingSecrets(config)).toEqual([]);
+    });
+
     it('is empty for a server with no secret-bearing fields', () => {
       const service = createMcpClientService({
         resolver: new EnvPlaceholderResolver({}),
