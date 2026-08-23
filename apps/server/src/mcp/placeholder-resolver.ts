@@ -4,17 +4,26 @@
  * A record value is one of (see {@link McpSecretValue}):
  * - a legacy plain string, possibly containing `${VAR}` placeholders, e.g.
  *   `{ "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}" }` — resolved
- *   from the process environment at connection time, keeping the raw secret
- *   out of the persisted config and API responses.
+ *   from the process environment (or the named-secrets store, see below) at
+ *   connection time, keeping the raw secret out of the config's literal
+ *   template string.
  * - `{ kind: 'env', value }` — the structured form of the above.
  * - `{ kind: 'inline', value }` — a secret encrypted at rest (see
  *   `./secret-crypto`); decrypted at connection time. Never "missing" — the
  *   value is always available once stored.
  *
+ * A `${VAR}` placeholder additionally resolves against a named-secrets store
+ * (encrypted values a user pasted via the "paste your API key" UI, keyed by
+ * variable name — see `AppConfigService.getMcpSecrets`) when unset in the
+ * environment. This is what lets a preinstalled server's template string
+ * (e.g. Notion's `OPENAPI_MCP_HEADERS` JSON blob) stay byte-identical while
+ * still being satisfiable by pasting just the token — the user never edits
+ * the template itself.
+ *
  * Single responsibility: turn a record of these into a record of resolved
- * plain strings, failing loudly when a referenced `${VAR}` is unset. The
- * environment source is injected so the behaviour is testable without
- * mutating `process.env`.
+ * plain strings, failing loudly when a referenced `${VAR}` is unset in both
+ * sources. The environment source and secrets store are injected so the
+ * behaviour is testable without mutating `process.env`.
  */
 
 import type { McpSecretValue } from '@openaidy/shared-types';
@@ -25,6 +34,17 @@ import { decryptSecret, isEncryptedSecret } from './secret-crypto';
  * tests inject a plain object.
  */
 export type EnvSource = Record<string, string | undefined>;
+
+/**
+ * A source of named MCP secrets (`AppConfigService.getMcpSecrets()`), keyed by
+ * `${VAR}` name. Values may be `enc:v1:...` ciphertext (decrypted on lookup)
+ * or, defensively, plaintext. A function is read live on every lookup — use
+ * this in production so a key pasted after the resolver was constructed is
+ * picked up without recreating it; tests can pass a plain object.
+ */
+export type McpSecretsSource =
+  | Record<string, string | undefined>
+  | (() => Record<string, string | undefined>);
 
 /** Matches `${VAR_NAME}` placeholders. */
 const PLACEHOLDER_PATTERN = /\$\{([^}]+)\}/g;
@@ -51,16 +71,37 @@ export class MissingEnvVarsError extends Error {
  * Resolves `${VAR}` placeholders in MCP config records from an env source.
  */
 export class EnvPlaceholderResolver {
-  constructor(private readonly env: EnvSource = process.env) {}
+  constructor(
+    private readonly env: EnvSource = process.env,
+    private readonly secrets: McpSecretsSource = {},
+  ) {}
 
   /**
-   * Replace every `${VAR}` in a string with its env value, recording any that
-   * are unset (treating empty strings as unset — a blank secret is unusable).
+   * Look up a `${VAR}` name: the process environment always wins (an ops
+   * override of a pasted key), falling back to the named-secrets store.
+   */
+  private lookup(name: string): string | undefined {
+    const fromEnv = this.env[name];
+    if (fromEnv !== undefined && fromEnv !== '') return fromEnv;
+
+    const secrets =
+      typeof this.secrets === 'function' ? this.secrets() : this.secrets;
+    const fromSecrets = secrets[name];
+    if (fromSecrets === undefined || fromSecrets === '') return undefined;
+    return isEncryptedSecret(fromSecrets)
+      ? decryptSecret(fromSecrets)
+      : fromSecrets;
+  }
+
+  /**
+   * Replace every `${VAR}` in a string with its resolved value, recording any
+   * that are unset in both sources (treating empty strings as unset — a
+   * blank secret is unusable).
    */
   private resolveString(value: string, missing: Set<string>): string {
     return value.replace(PLACEHOLDER_PATTERN, (_match, name: string) => {
-      const resolved = this.env[name];
-      if (resolved === undefined || resolved === '') {
+      const resolved = this.lookup(name);
+      if (resolved === undefined) {
         missing.add(name);
         return '';
       }

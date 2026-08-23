@@ -578,6 +578,93 @@ export async function registerMcpRoutes(
     );
 
     /**
+     * PUT /mcp/secrets/:name
+     *
+     * Paste-a-key entry point: stores a single named secret (e.g.
+     * `NOTION_TOKEN`) encrypted at rest, resolved into any server's `${VAR}`
+     * placeholder that references it (see `mcp/placeholder-resolver.ts`).
+     * Deliberately decoupled from any one server's `env`/`headers` config —
+     * a preinstalled server's template string never needs editing, and the
+     * user never chooses a storage mechanism, they just paste the key.
+     * Attempts to connect any server that becomes fully configured as a
+     * result.
+     */
+    authRequired.put<{
+      Params: { name: string };
+      Body: { value: string };
+    }>(
+      '/mcp/secrets/:name',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            required: ['name'],
+            properties: { name: { type: 'string', minLength: 1 } },
+          },
+          body: {
+            type: 'object',
+            required: ['value'],
+            properties: { value: { type: 'string', minLength: 1 } },
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{
+          Params: { name: string };
+          Body: { value: string };
+        }>,
+        reply: FastifyReply,
+      ) => {
+        const check = ensureInlineEncryptionAvailable();
+        if (!check.ok) {
+          return reply.status(check.statusCode).send({
+            error: check.error,
+            message: check.message,
+          });
+        }
+
+        const { name } = request.params;
+        await configService.setMcpSecret(name, request.body.value);
+
+        for (const server of configService.getMcpServers()) {
+          await connectIfReady(
+            server,
+            `Failed to connect MCP server "${server.id}" after setting secret "${name}"`,
+          );
+        }
+
+        return reply.send({ name });
+      },
+    );
+
+    /**
+     * DELETE /mcp/secrets/:name
+     *
+     * Clears a named secret. Any server relying solely on it (no matching
+     * process environment variable) reverts to "awaiting configuration" on
+     * its next connection attempt.
+     */
+    authRequired.delete<{ Params: { name: string } }>(
+      '/mcp/secrets/:name',
+      {
+        schema: {
+          params: {
+            type: 'object',
+            required: ['name'],
+            properties: { name: { type: 'string', minLength: 1 } },
+          },
+        },
+      },
+      async (
+        request: FastifyRequest<{ Params: { name: string } }>,
+        reply: FastifyReply,
+      ) => {
+        await configService.deleteMcpSecret(request.params.name);
+        return reply.status(204).send();
+      },
+    );
+
+    /**
      * PATCH /mcp/servers/:id
      *
      * Update an existing MCP server config.
