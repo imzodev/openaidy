@@ -1,6 +1,7 @@
 import type {
   Task,
   Subtask,
+  SubtaskEdge,
   TaskAgent,
   TaskStatus,
   PlanningStatus,
@@ -189,6 +190,14 @@ export class TaskService {
     input: CreateSubtaskInput,
   ): Promise<ServiceResult<Subtask>> {
     return this.subtaskOps.createSubtask(input);
+  }
+
+  async getSubtask(id: string): Promise<Subtask | null> {
+    return this.subtaskOps.getSubtask(id);
+  }
+
+  async getSubtaskEdge(id: string): Promise<SubtaskEdge | null> {
+    return this.subtaskOps.getSubtaskEdge(id);
   }
 
   async getSubtasks(

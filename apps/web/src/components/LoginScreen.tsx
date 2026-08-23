@@ -1,6 +1,7 @@
-import { createSignal } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import { verifyToken } from '../lib/api';
 import { consumeTokenFromUrl, storeToken } from '../lib/auth-token';
+import { getBootstrapAdminToken } from '../lib/tauri-bridge';
 
 type LoginScreenProps = {
   onAuthenticated: () => void;
@@ -13,6 +14,21 @@ export function LoginScreen(props: LoginScreenProps) {
   const [token, setToken] = createSignal(consumeTokenFromUrl() ?? '');
   const [error, setError] = createSignal<string | undefined>(undefined);
   const [isVerifying, setIsVerifying] = createSignal(false);
+
+  // Desktop app: the spawned server writes its own bootstrap-admin token to
+  // disk, so there's no separate "admin" to hand a deep link out — read it
+  // back via IPC and pre-fill the same way, rather than leaving a desktop
+  // user with no way to discover their token short of digging through
+  // %APPDATA%. Async (goes through Tauri IPC), so this can't live in the
+  // signal's initializer above; only fills in if nothing else already did
+  // (a ?token=... deep link, if present, wins).
+  onMount(async () => {
+    if (token()) return;
+    const desktopToken = await getBootstrapAdminToken().catch(() => null);
+    if (desktopToken && !token()) {
+      setToken(desktopToken);
+    }
+  });
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();

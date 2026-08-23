@@ -1,6 +1,7 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { tasksCreateMeta } from '../catalog.js';
+import { formatToolError, requireService, requireString } from '../shared.js';
 
 export function createTasksCreateTool(
   getTaskService: () => TaskService | undefined,
@@ -35,44 +36,49 @@ export function createTasksCreateTool(
     },
 
     async execute(args, _ctx) {
-      const taskService = getTaskService();
-      if (!taskService) {
-        return {
-          ok: false,
-          error: 'Task service is not available (database might be disabled).',
-        };
-      }
+      const resolved = requireService(getTaskService, 'Task service');
+      if (!resolved.ok) return resolved;
+      const taskService = resolved.service;
 
       const description = args['description'];
       const title = args['title'];
       const priority = args['priority'];
       const planningEnabled = args['planningEnabled'];
 
-      if (typeof description !== 'string' || !description.trim()) {
-        return {
-          ok: false,
-          error: 'description is required and must be a non-empty string',
-        };
+      const descriptionError = requireString(description, 'description');
+      if (descriptionError) {
+        return { ok: false, error: descriptionError };
       }
 
-      if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
-        return {
-          ok: false,
-          error: 'title must be a non-empty string if provided',
-        };
+      const titleError =
+        title === undefined ? null : requireString(title, 'title');
+      if (titleError) {
+        return { ok: false, error: titleError };
       }
 
       try {
-        const result = await taskService.createTask({
-          title:
-            title ??
-            (description.length > 60
-              ? `${description.slice(0, 60).trimEnd()}…`
-              : description),
-          description,
-          priority: priority as 'low' | 'medium' | 'high' | 'urgent',
+        const descriptionText = description as string;
+        const titleText =
+          typeof title === 'string'
+            ? title
+            : descriptionText.length > 60
+              ? `${descriptionText.slice(0, 60).trimEnd()}…`
+              : descriptionText;
+
+        const createInput: Parameters<TaskService['createTask']>[0] = {
+          title: titleText,
+          description: descriptionText,
           planningEnabled: planningEnabled === true,
-        });
+        };
+        if (typeof priority === 'string') {
+          createInput.priority = priority as
+            | 'low'
+            | 'medium'
+            | 'high'
+            | 'urgent';
+        }
+
+        const result = await taskService.createTask(createInput);
 
         if (result.ok) {
           return {
@@ -86,10 +92,7 @@ export function createTasksCreateTool(
           };
         }
       } catch (err) {
-        return {
-          ok: false,
-          error: `Unexpected error creating task: ${err instanceof Error ? err.message : String(err)}`,
-        };
+        return formatToolError('Unexpected error creating task', err);
       }
     },
   };

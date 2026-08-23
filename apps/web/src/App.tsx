@@ -21,9 +21,11 @@ import {
 } from './lib/ws-api';
 import { useInfiniteMessages } from './lib/use-infinite-messages';
 import { ThemeProvider, useTheme } from './lib/theme';
+import { TauriProvider } from './lib/tauri-provider';
 import { WebSocketProvider, useWebSocketContext } from './lib/ws-provider';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
+import { DesktopStatusBar } from './components/DesktopStatusBar';
 import { Sidebar } from './components/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
 import { ChatView } from './components/ChatView';
@@ -1262,6 +1264,7 @@ function AppContent(props: AppContentProps) {
                 </button>
               </Show>
 
+              <DesktopStatusBar />
               <ConnectionStatus />
               <PresenceIndicator class="hidden md:flex" />
               <button
@@ -1542,12 +1545,14 @@ function AuthGate() {
     >
       <WebSocketProvider>
         <QueryClientProvider client={queryClient}>
-          <AppContent
-            onLogout={() => {
-              clearToken();
-              setAuthenticated(false);
-            }}
-          />
+          <TauriProvider>
+            <AppContent
+              onLogout={() => {
+                clearToken();
+                setAuthenticated(false);
+              }}
+            />
+          </TauriProvider>
         </QueryClientProvider>
       </WebSocketProvider>
     </Show>

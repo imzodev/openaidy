@@ -122,6 +122,17 @@ const EPHEMERAL_UNSAFE_TOOLS = new Set([
   'code_edit',
   'skill_create',
   'skill_update',
+  'workflow_create',
+  'workflow_update',
+  'workflow_delete',
+  'workflow_execute',
+  'workflow_apply_template',
+  'workflow_node_create',
+  'workflow_node_update',
+  'workflow_node_delete',
+  'workflow_edge_create',
+  'workflow_edge_update',
+  'workflow_edge_delete',
 ]);
 
 /**

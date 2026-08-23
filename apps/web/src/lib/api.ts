@@ -157,9 +157,20 @@ function getApiBase(): string {
 }
 
 /**
- * API base URL (computed once at module load)
+ * API base URL. Initialized once at module load, but — unlike a `const` —
+ * overridable afterward via {@link setApiBase}. The desktop (Tauri) build
+ * needs this: same-origin is wrong there, since the webview's own origin
+ * (a `tauri://` pseudo-origin) is never the core service's real
+ * `http://127.0.0.1:<port>` origin, and that port is only known once the
+ * service finishes its own async startup (see `waitForServicePort` in
+ * ./tauri-bridge, called from index.tsx before the app renders).
  */
-export const API_BASE = typeof window !== 'undefined' ? getApiBase() : '';
+export let API_BASE = typeof window !== 'undefined' ? getApiBase() : '';
+
+/** See {@link API_BASE}. */
+export function setApiBase(base: string): void {
+  API_BASE = base;
+}
 
 // Export getApiBase for testing
 export { getApiBase };

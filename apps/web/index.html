@@ -17,6 +17,65 @@
         }
       })();
     </script>
+    <script>
+      // Recover from a stale build after a server update/restart (self-update,
+      // manual `openaidy start`, or an SSH-triggered reinstall). Asset
+      // filenames are content-hashed per build; a restart replaces the whole
+      // assets/ directory, so a tab that already has an older index.html
+      // cached (HTTP cache, back/forward-cache restore, or just being open
+      // across the restart) can request an asset that no longer exists. The
+      // SPA route falls back to 200 + this same index.html for any unmatched
+      // path, so the browser gets HTML back where it expected JS/CSS, and the
+      // module script below fails strict MIME-type checking — silently
+      // blanking the page with no visible error but a console one.
+      //
+      // This has to be a plain, non-module script registered BEFORE the
+      // module script tag: if that tag itself is what fails, nothing inside
+      // it (including any handler defined there) ever runs to catch it. See
+      // src/lib/stale-build-recovery.ts for the complementary case — a
+      // dynamically-imported route chunk going stale mid-session, once the
+      // app is already running.
+      (function () {
+        var GUARD_KEY = 'openaidy_stale_build_reload';
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event.target;
+            if (!target) return;
+            // Only script/link tags load build assets — excludes things like
+            // an <img> whose unrelated, addon-supplied src happens to contain
+            // "/assets/" (e.g. a marketplace icon URL) from triggering a
+            // reload of the whole app.
+            var tag = target.tagName;
+            if (tag !== 'SCRIPT' && tag !== 'LINK') return;
+            var src = target.src || target.href;
+            if (typeof src !== 'string') return;
+            var url;
+            try {
+              url = new URL(src, window.location.href);
+            } catch (e) {
+              return;
+            }
+            if (
+              url.origin !== window.location.origin ||
+              url.pathname.indexOf('/assets/') === -1
+            ) {
+              return;
+            }
+            if (sessionStorage.getItem(GUARD_KEY)) {
+              console.error(
+                '[stale-build] failed to load ' + src + ' — already reloaded once this session, not retrying',
+              );
+              return;
+            }
+            sessionStorage.setItem(GUARD_KEY, '1');
+            console.warn('[stale-build] failed to load ' + src + ' — reloading to pick up the current build');
+            window.location.reload();
+          },
+          true,
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

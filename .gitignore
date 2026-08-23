@@ -18,6 +18,13 @@ coverage
 *.log
 apps/web/.solid
 apps/server/data/
+# Self-contained server + prod node_modules produced by `pnpm deploy` for
+# bundling into the desktop app (see apps/desktop/src-tauri/tauri.conf.json's
+# beforeBuildCommand). .gitkeep stays tracked so `cargo check`/`cargo test`
+# in apps/desktop/src-tauri don't fail validating the bundle.resources glob
+# on a fresh checkout that's never run `tauri build`/the deploy step.
+apps/desktop/src-tauri/server-bundle/*
+!apps/desktop/src-tauri/server-bundle/.gitkeep
 .openaidy/
 *.tsbuildinfo
 # gentle-ai

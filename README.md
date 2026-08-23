@@ -65,6 +65,10 @@ pnpm install && pnpm dev
 
 The dev mode runs the API server and Vite UI separately with hot reload.
 
+**Prefer a native app?** Download a Windows/macOS/Linux installer from the
+[Releases page](https://github.com/imzodev/openaidy/releases/latest) — see
+[docs/desktop/INSTALL.md](docs/desktop/INSTALL.md) for setup notes.
+
 ## Who is this for?
 
 ✅ **You're a good fit if you want to:**
@@ -292,6 +296,7 @@ The following MCP servers ship preinstalled (reconciled into every install on st
 | Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
 | Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
 | Buffer              | http      | `${BUFFER_API_KEY}`               | [Buffer](https://buffer.com) social media scheduling — per-account API key                                     |
+| Supabase            | http      | `${SUPABASE_ACCESS_TOKEN}`        | [personal access token](https://supabase.com/dashboard/account/tokens) — database, docs, functions, branching  |
 
 #### Setting API keys
 
