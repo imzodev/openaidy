@@ -9,6 +9,7 @@ import {
   connectMcpServer,
   disconnectMcpServer,
   importMcpServers,
+  setMcpSecret,
   type McpServerRecord,
 } from '../../lib/api';
 import type {
@@ -19,11 +20,19 @@ import type {
   McpSecretValue,
   McpSecretField,
 } from '../../lib/api';
+import { MCP_SERVER_SETUP_CATALOG } from '../../lib/mcp-server-catalog';
 
 /**
  * A single row in the structured env/headers editor. Mirrors {@link
  * McpSecretField} plus form-only UI state (`replaced`, `revealed`) that never
  * leaves the client.
+ *
+ * There is no user-facing choice of storage mechanism: every row the user
+ * fills in here is a literal value they paste, always stored as `kind:
+ * 'inline'` (encrypted at rest). `kind: 'env'` only ever appears on a row
+ * loaded from an existing config that already used a `${VAR}` reference
+ * (from before this simplification, or a hand-edited import) — it's shown
+ * as plain, editable text but can't be created or switched to from the UI.
  */
 type SecretRow = {
   key: string;
@@ -41,8 +50,15 @@ type SecretRow = {
   revealed: boolean;
 };
 
-function emptyRow(kind: McpSecretKind = 'env'): SecretRow {
-  return { key: '', kind, value: '', replaced: true, revealed: kind === 'env' };
+/** A freshly added row: always a pasted value, encrypted on save. */
+function emptyRow(): SecretRow {
+  return {
+    key: '',
+    kind: 'inline',
+    value: '',
+    replaced: true,
+    revealed: false,
+  };
 }
 
 function rowsFromRecord(
@@ -83,20 +99,12 @@ function recordFromRows(
 function useSecretRows(initial: SecretRow[]) {
   const [rows, setRows] = createStore<SecretRow[]>(initial);
 
-  const addRow = (kind: McpSecretKind = 'env') =>
-    setRows((prev) => [...prev, emptyRow(kind)]);
+  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
   const removeRow = (index: number) =>
     setRows((prev) => prev.filter((_, i) => i !== index));
   const setKey = (index: number, key: string) => setRows(index, 'key', key);
   const setValue = (index: number, value: string) =>
     setRows(index, 'value', value);
-  const setKind = (index: number, kind: McpSecretKind) =>
-    setRows(index, {
-      kind,
-      value: '',
-      replaced: kind === 'env',
-      revealed: kind === 'env',
-    });
   const startReplace = (index: number) =>
     setRows(index, { replaced: true, value: '', revealed: false });
   const toggleReveal = (index: number) =>
@@ -108,20 +116,23 @@ function useSecretRows(initial: SecretRow[]) {
     removeRow,
     setKey,
     setValue,
-    setKind,
     startReplace,
     toggleReveal,
   };
 }
 
-/** A single key/value row: key input, env-vs-inline toggle, value input. */
+/**
+ * A single key/value row: key input, value input. There is no storage-kind
+ * toggle — a row loaded with `kind: 'env'` (a pre-existing `${VAR}`
+ * reference) is shown as plain editable text; every other row is a pasted
+ * value, always encrypted at rest.
+ */
 function SecretRowEditor(props: {
   row: SecretRow;
   index: number;
   keyPlaceholder: string;
   envPlaceholder: string;
   onKeyChange: (index: number, key: string) => void;
-  onKindChange: (index: number, kind: McpSecretKind) => void;
   onValueChange: (index: number, value: string) => void;
   onReplace: (index: number) => void;
   onToggleReveal: (index: number) => void;
@@ -140,31 +151,6 @@ function SecretRowEditor(props: {
       />
 
       <div class="flex flex-col gap-1 flex-1 min-w-0">
-        <div class="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-xs w-fit">
-          <button
-            type="button"
-            onClick={() => props.onKindChange(props.index, 'env')}
-            class={`px-2 py-1 transition-colors ${
-              props.row.kind === 'env'
-                ? 'bg-primary text-white'
-                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            Env var
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onKindChange(props.index, 'inline')}
-            class={`px-2 py-1 border-l border-gray-200 dark:border-gray-700 transition-colors ${
-              props.row.kind === 'inline'
-                ? 'bg-primary text-white'
-                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-            }`}
-          >
-            Inline secret
-          </button>
-        </div>
-
         <Show when={props.row.kind === 'env'}>
           <input
             type="text"
@@ -241,7 +227,6 @@ function SecretRowsField(props: {
   helpText: string;
   onAdd: () => void;
   onKeyChange: (index: number, key: string) => void;
-  onKindChange: (index: number, kind: McpSecretKind) => void;
   onValueChange: (index: number, value: string) => void;
   onReplace: (index: number) => void;
   onToggleReveal: (index: number) => void;
@@ -270,7 +255,6 @@ function SecretRowsField(props: {
               keyPlaceholder={props.keyPlaceholder}
               envPlaceholder={props.envPlaceholder}
               onKeyChange={props.onKeyChange}
-              onKindChange={props.onKindChange}
               onValueChange={props.onValueChange}
               onReplace={props.onReplace}
               onToggleReveal={props.onToggleReveal}
@@ -292,6 +276,15 @@ function isAwaitingConfig(server: McpServerRecord): boolean {
   return (server.missingSecrets?.length ?? 0) > 0;
 }
 
+/** The `${VAR}` names referenced anywhere in an env/header value, if any. */
+function extractPlaceholderNames(value: string): string[] {
+  const names = new Set<string>();
+  for (const match of value.matchAll(/\$\{([^}]+)\}/g)) {
+    if (match[1]) names.add(match[1]);
+  }
+  return [...names];
+}
+
 function StatusBadge(props: { connected: boolean; awaitingConfig?: boolean }) {
   const label = () =>
     props.connected
@@ -311,6 +304,93 @@ function StatusBadge(props: { connected: boolean; awaitingConfig?: boolean }) {
     >
       {label()}
     </span>
+  );
+}
+
+/**
+ * Paste-a-key control for one named `${VAR}` secret (e.g. `NOTION_TOKEN`).
+ * The only choice the user makes is what to paste — OpenAidy stores it
+ * encrypted and resolves it into every server's template that references
+ * this name, without ever touching that template's literal value. Used both
+ * in the "Awaiting configuration" banner (unset) and the server detail
+ * panel (already configured, with a way to rotate it).
+ */
+function ApiKeyField(props: {
+  name: string;
+  configured: boolean;
+  onSave: (name: string, value: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = createSignal(!props.configured);
+  const [value, setValue] = createSignal('');
+  const [revealed, setRevealed] = createSignal(false);
+  const [saving, setSaving] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+
+  const save = async () => {
+    const trimmed = value().trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await props.onSave(props.name, trimmed);
+      setValue('');
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save key');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div class="mt-2">
+      <div class="flex items-center justify-between gap-2">
+        <code class="text-xs px-1 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded">
+          {props.name}
+        </code>
+        <Show when={!editing()}>
+          <div class="flex items-center gap-1.5 text-xs whitespace-nowrap">
+            <span class="text-green-700 dark:text-green-400">Configured</span>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              class="text-primary hover:underline"
+            >
+              Change
+            </button>
+          </div>
+        </Show>
+      </div>
+      <Show when={editing()}>
+        <div class="mt-1 flex items-center gap-2">
+          <input
+            type={revealed() ? 'text' : 'password'}
+            value={value()}
+            onInput={(e) => setValue(e.currentTarget.value)}
+            placeholder="Paste your API key"
+            class="flex-1 min-w-0 px-2 py-1.5 border border-amber-300 dark:border-amber-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button
+            type="button"
+            onClick={() => setRevealed((v) => !v)}
+            class="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors whitespace-nowrap"
+          >
+            {revealed() ? 'Hide' : 'Show'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={saving() || !value().trim()}
+            class="px-3 py-1.5 text-xs text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {saving() ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+        <Show when={error()}>
+          <p class="mt-1 text-xs text-red-600 dark:text-red-400">{error()}</p>
+        </Show>
+      </Show>
+    </div>
   );
 }
 
@@ -528,10 +608,9 @@ function ServerFormModal(props: {
               rows={envRows.rows}
               keyPlaceholder="KEY"
               envPlaceholder="e.g. ${GITHUB_PERSONAL_ACCESS_TOKEN}"
-              helpText="Reference env var: resolved from the server environment at connection time. Inline secret: encrypted at rest, never shown again."
+              helpText="Paste the value — OpenAidy encrypts it before storing, never shown again."
               onAdd={() => envRows.addRow()}
               onKeyChange={envRows.setKey}
-              onKindChange={envRows.setKind}
               onValueChange={envRows.setValue}
               onReplace={envRows.startReplace}
               onToggleReveal={envRows.toggleReveal}
@@ -561,10 +640,9 @@ function ServerFormModal(props: {
               rows={headerRows.rows}
               keyPlaceholder="Authorization"
               envPlaceholder="e.g. Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
-              helpText="Reference env var: resolved from the server environment at connection time. Inline secret: encrypted at rest, never shown again."
+              helpText="Paste the value — OpenAidy encrypts it before storing, never shown again."
               onAdd={() => headerRows.addRow()}
               onKeyChange={headerRows.setKey}
-              onKindChange={headerRows.setKind}
               onValueChange={headerRows.setValue}
               onReplace={headerRows.startReplace}
               onToggleReveal={headerRows.toggleReveal}
@@ -886,6 +964,17 @@ export function McpsPage() {
     await loadServers();
   };
 
+  /**
+   * Paste-a-key entry point (banner + detail panel `ApiKeyField`s). Stores
+   * the value encrypted, decoupled from any server's own config, then
+   * refetches so a now-fully-configured server's `connected`/`missingSecrets`
+   * state reflects the auto-connect the server just attempted.
+   */
+  const handleSetSecret = async (name: string, value: string) => {
+    await setMcpSecret(name, value);
+    await loadServers();
+  };
+
   const connectedCount = () => servers().filter((s) => s.connected).length;
   const totalTools = () =>
     servers()
@@ -1179,26 +1268,33 @@ export function McpsPage() {
                   <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300">
                     <p class="text-sm font-medium">Awaiting configuration</p>
                     <p class="mt-1 text-xs">
-                      This server needs a value for{' '}
-                      <For each={selected()!.missingSecrets}>
-                        {(name, i) => (
-                          <>
-                            <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded">
-                              {name}
-                            </code>
-                            {i() < selected()!.missingSecrets.length - 1
-                              ? ', '
-                              : ''}
-                          </>
-                        )}
-                      </For>{' '}
-                      before it can connect. Click <strong>Edit</strong> and
-                      paste your API key in place of the{' '}
-                      <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/40 rounded">
-                        ${'{…}'}
-                      </code>{' '}
-                      placeholder, or set it in the server environment.
+                      Paste the key below — OpenAidy stores it encrypted and
+                      connects automatically once it's set.
                     </p>
+                    <Show when={MCP_SERVER_SETUP_CATALOG[selected()!.id]}>
+                      {(info) => (
+                        <p class="mt-1 text-xs">
+                          {info().instructions}{' '}
+                          <a
+                            href={info().setupUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="underline hover:no-underline"
+                          >
+                            Get your key →
+                          </a>
+                        </p>
+                      )}
+                    </Show>
+                    <For each={selected()!.missingSecrets}>
+                      {(name) => (
+                        <ApiKeyField
+                          name={name}
+                          configured={false}
+                          onSave={handleSetSecret}
+                        />
+                      )}
+                    </For>
                   </div>
                 </Show>
                 <Show when={selected()!.transport === 'stdio'}>
@@ -1236,20 +1332,39 @@ export function McpsPage() {
                     <span class="text-xs text-text-tertiary">
                       Environment Variables
                     </span>
-                    <div class="mt-1 space-y-0.5">
+                    <div class="mt-1 space-y-1">
                       <For each={Object.entries(selected()!.env!)}>
                         {([key, field]) => (
-                          <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
-                            {key}=
-                            <span class="text-text-tertiary">
-                              {field.value}
-                            </span>
-                            <Show when={field.kind === 'inline'}>
-                              <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
-                                encrypted
+                          <div>
+                            <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
+                              {key}=
+                              <span class="text-text-tertiary">
+                                {field.value}
                               </span>
-                            </Show>
-                          </p>
+                              <Show when={field.kind === 'inline'}>
+                                <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
+                                  encrypted
+                                </span>
+                              </Show>
+                            </p>
+                            <For
+                              each={
+                                field.kind === 'env'
+                                  ? extractPlaceholderNames(field.value)
+                                  : []
+                              }
+                            >
+                              {(name) => (
+                                <ApiKeyField
+                                  name={name}
+                                  configured={
+                                    !selected()!.missingSecrets.includes(name)
+                                  }
+                                  onSave={handleSetSecret}
+                                />
+                              )}
+                            </For>
+                          </div>
                         )}
                       </For>
                     </div>
@@ -1264,20 +1379,39 @@ export function McpsPage() {
                 >
                   <div>
                     <span class="text-xs text-text-tertiary">Headers</span>
-                    <div class="mt-1 space-y-0.5">
+                    <div class="mt-1 space-y-1">
                       <For each={Object.entries(selected()!.headers!)}>
                         {([key, field]) => (
-                          <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
-                            {key}:{' '}
-                            <span class="text-text-tertiary">
-                              {field.value}
-                            </span>
-                            <Show when={field.kind === 'inline'}>
-                              <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
-                                encrypted
+                          <div>
+                            <p class="font-mono text-xs text-gray-700 dark:text-gray-300">
+                              {key}:{' '}
+                              <span class="text-text-tertiary">
+                                {field.value}
                               </span>
-                            </Show>
-                          </p>
+                              <Show when={field.kind === 'inline'}>
+                                <span class="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-text-tertiary">
+                                  encrypted
+                                </span>
+                              </Show>
+                            </p>
+                            <For
+                              each={
+                                field.kind === 'env'
+                                  ? extractPlaceholderNames(field.value)
+                                  : []
+                              }
+                            >
+                              {(name) => (
+                                <ApiKeyField
+                                  name={name}
+                                  configured={
+                                    !selected()!.missingSecrets.includes(name)
+                                  }
+                                  onSave={handleSetSecret}
+                                />
+                              )}
+                            </For>
+                          </div>
                         )}
                       </For>
                     </div>

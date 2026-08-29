@@ -80,6 +80,26 @@ const buffer: McpServerConfig = {
   headers: { Authorization: 'Bearer ${BUFFER_API_KEY}' },
 };
 
+const supabase: McpServerConfig = {
+  id: 'supabase',
+  name: 'Supabase',
+  transport: 'http',
+  url: 'https://mcp.supabase.com/mcp?features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching',
+  headers: { Authorization: 'Bearer ${SUPABASE_ACCESS_TOKEN}' },
+};
+
+const notion: McpServerConfig = {
+  id: 'notion',
+  name: 'Notion',
+  transport: 'stdio',
+  command: 'npx',
+  args: ['-y', '@notionhq/notion-mcp-server'],
+  env: {
+    OPENAPI_MCP_HEADERS:
+      '{"Authorization": "Bearer ${NOTION_TOKEN}", "Notion-Version": "2025-09-03"}',
+  },
+};
+
 /** The full preinstalled set shipped in `config/openaidy.template.json`. */
 const allPreinstalled: McpServerConfig[] = [
   github,
@@ -90,6 +110,8 @@ const allPreinstalled: McpServerConfig[] = [
   braveSearch,
   tavily,
   buffer,
+  supabase,
+  notion,
 ];
 
 describe('reconcilePreinstalledMcpServers', () => {

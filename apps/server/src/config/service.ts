@@ -91,6 +91,32 @@ export class AppConfigService {
     return this.getConfig().mcpServers?.find((server) => server.id === id);
   }
 
+  /**
+   * Named MCP secrets (e.g. `NOTION_TOKEN`), keyed by the `${VAR}` name they
+   * satisfy. Values are encrypted (`enc:v1:...`) once persisted — see
+   * `mcp/secret-crypto.ts` — and resolved by `EnvPlaceholderResolver`.
+   */
+  getMcpSecrets(): Record<string, string> {
+    return this.getConfig().mcpSecrets ?? {};
+  }
+
+  /** Paste-a-key entry point: encrypts and persists a single named secret. */
+  async setMcpSecret(name: string, plaintext: string): Promise<void> {
+    await this.save({
+      ...this.getConfig(),
+      mcpSecrets: {
+        ...this.getMcpSecrets(),
+        [name]: encryptSecret(plaintext),
+      },
+    });
+  }
+
+  /** Removes a named secret (e.g. so a server falls back to "awaiting configuration"). */
+  async deleteMcpSecret(name: string): Promise<void> {
+    const { [name]: _removed, ...rest } = this.getMcpSecrets();
+    await this.save({ ...this.getConfig(), mcpSecrets: rest });
+  }
+
   getStatus(): AppConfigStatus {
     return {
       issues: [...this.issues],
@@ -175,6 +201,7 @@ export class AppConfigService {
   async save(input: unknown): Promise<OpenAidyAppConfig> {
     const parsed = appConfigSchema.parse(input);
     this.encryptChannelSecrets(parsed);
+    this.encryptMcpSecrets(parsed);
     this.writeConfigFile(parsed);
     await this.applyConfig(parsed);
     this.currentConfig = parsed;
@@ -237,6 +264,21 @@ export class AppConfigService {
         !isEncryptedSecret(token.value)
       ) {
         token.value = encryptSecret(token.value);
+      }
+    }
+  }
+
+  /**
+   * Encrypt any plaintext `mcpSecrets` values before the config is written
+   * (defensive: `setMcpSecret` always encrypts already, but a config could
+   * also be imported/restored with a plaintext value). Idempotent, mirrors
+   * {@link encryptChannelSecrets}.
+   */
+  private encryptMcpSecrets(config: OpenAidyAppConfig): void {
+    if (!config.mcpSecrets) return;
+    for (const [name, value] of Object.entries(config.mcpSecrets)) {
+      if (!isEncryptedSecret(value)) {
+        config.mcpSecrets[name] = encryptSecret(value);
       }
     }
   }

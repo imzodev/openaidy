@@ -1088,6 +1088,41 @@ export async function getMcpServerTools(
   return response.json();
 }
 
+/**
+ * Paste-a-key entry point: stores a single named MCP secret (e.g.
+ * `NOTION_TOKEN`), encrypted at rest, resolved into any server's `${VAR}`
+ * placeholder that references it. Never echoed back over the API.
+ */
+export async function setMcpSecret(name: string, value: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/secrets/${encodeURIComponent(name)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+}
+
+/**
+ * Clear a named MCP secret. Any server relying solely on it (no matching
+ * process environment variable) reverts to "awaiting configuration".
+ */
+export async function deleteMcpSecret(name: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/secrets/${encodeURIComponent(name)}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok && response.status !== 204) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+}
+
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
 }

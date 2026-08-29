@@ -1,6 +1,51 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor, cleanup } from '@solidjs/testing-library';
+import { QueryClient, QueryClientProvider } from '@tanstack/solid-query';
+import { Show } from 'solid-js';
 import { AgentsPage } from './AgentsPage';
+
+// AgentsPage calls useQueryClient() (to invalidate the shared ['agents']
+// query on create — see handleAgentCreated), which throws without a
+// QueryClientProvider ancestor. A fresh client per render keeps each test's
+// cache isolated; retry: false keeps a mocked-rejection test from hanging.
+function renderAgentsPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const result = render(() => (
+    <QueryClientProvider client={queryClient}>
+      <AgentsPage />
+    </QueryClientProvider>
+  ));
+  return { ...result, queryClient };
+}
+
+// The real form (name/model/provider fields) isn't this suite's concern —
+// only that AgentsPage reacts correctly to onCreated. Stubbed to a single
+// button that fires it with a fixed input once the modal is open.
+const mockCreateAgentInput = {
+  id: 'new-agent',
+  name: 'New Agent',
+  systemPrompt: 'Be helpful.',
+  model: 'openai/gpt-4o-mini',
+};
+vi.mock('./CreateAgentModal', () => ({
+  CreateAgentModal: (props: {
+    isOpen: boolean;
+    onCreated: (agent: typeof mockCreateAgentInput) => void;
+  }) => (
+    // A plain `props.isOpen ? <A/> : null` ternary here would only
+    // evaluate once at initial render (false, before any click) — it's not
+    // inside a JSX child position Solid's compiler wraps reactively, so it
+    // would never pick up showCreateModal() flipping true later. <Show>
+    // is what actually re-evaluates when `isOpen` changes.
+    <Show when={props.isOpen}>
+      <button onClick={() => props.onCreated(mockCreateAgentInput)}>
+        Submit new agent
+      </button>
+    </Show>
+  ),
+}));
 
 // Stub the icons the AgentsPage render tree imports from lucide-solid.
 // Plain-object factory — a Proxy module mock hangs vitest collection here.
@@ -123,7 +168,7 @@ describe('AgentsPage', () => {
   describe('delete agent flow', () => {
     it('should show confirmation dialog when delete button is clicked', async () => {
       setupMocks();
-      const { container } = render(() => <AgentsPage />);
+      const { container } = renderAgentsPage();
       await waitForAgentsToRender(container);
 
       // Window.confirm should be defined before we test it
@@ -151,7 +196,7 @@ describe('AgentsPage', () => {
 
     it('should call deleteAgent when user confirms deletion', async () => {
       setupMocks();
-      const { container } = render(() => <AgentsPage />);
+      const { container } = renderAgentsPage();
       await waitForAgentsToRender(container);
 
       const originalConfirm = window.confirm;
@@ -178,7 +223,7 @@ describe('AgentsPage', () => {
       setupMocks();
       mockDeleteAgent.mockRejectedValue(new Error('Failed to delete agent'));
 
-      const { container } = render(() => <AgentsPage />);
+      const { container } = renderAgentsPage();
       await waitForAgentsToRender(container);
 
       const originalConfirm = window.confirm;
@@ -210,7 +255,7 @@ describe('AgentsPage', () => {
 
     it('should not call deleteAgent when user cancels confirmation', async () => {
       setupMocks();
-      const { container } = render(() => <AgentsPage />);
+      const { container } = renderAgentsPage();
       await waitForAgentsToRender(container);
 
       const originalConfirm = window.confirm;
@@ -231,6 +276,42 @@ describe('AgentsPage', () => {
       } finally {
         window.confirm = originalConfirm;
       }
+    });
+  });
+
+  describe('create agent flow', () => {
+    // Regression test: a freshly created agent used to not show up as
+    // selected on the Chat page. Root cause was that handleAgentCreated
+    // refreshed only this page's own local `agents` signal, never the
+    // App.tsx-level ['agents'] query ChatComposer/AgentPicker actually
+    // render from — so the new agent existed here but not there. Asserting
+    // the invalidation call directly (rather than re-deriving App.tsx's
+    // whole query/picker chain in this file) is what actually pins the fix.
+    it('invalidates the shared agents query cache after creating an agent', async () => {
+      setupMocks();
+      const { container, queryClient } = renderAgentsPage();
+      await waitForAgentsToRender(container);
+
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+      const newAgentButton = container.querySelector(
+        'button[title="New agent"]',
+      );
+      expect(newAgentButton).toBeTruthy();
+      fireEvent.click(newAgentButton!);
+
+      const submitButton = await waitFor(() => {
+        const button = Array.from(container.querySelectorAll('button')).find(
+          (b) => b.textContent === 'Submit new agent',
+        );
+        expect(button).toBeTruthy();
+        return button!;
+      });
+      fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['agents'] });
+      });
     });
   });
 });

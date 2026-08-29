@@ -8,6 +8,7 @@ import {
   onCleanup,
   onMount,
 } from 'solid-js';
+import { useQueryClient } from '@tanstack/solid-query';
 import {
   Bot,
   Folder,
@@ -73,6 +74,13 @@ const WORKSPACE_PERMISSION_LABELS: Record<
 };
 
 export function AgentsPage(props: AgentsPageProps) {
+  // Shared with App.tsx's `agentsQuery` (queryKey: ['agents']) — that's what
+  // ChatComposer/AgentPicker actually render their agent list from. Without
+  // invalidating it here, a freshly created agent exists in this page's own
+  // local `agents` signal but not in App.tsx's, so "Start Chat" navigates to
+  // a chat that can't find/select the new agent (AgentPicker falls back to
+  // "Default agent" since it's not in `props.agents`).
+  const queryClient = useQueryClient();
   const [agents, setAgents] = createSignal<Agent[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [selectedAgentId, setSelectedAgentId] = createSignal<string | null>(
@@ -344,6 +352,10 @@ export function AgentsPage(props: AgentsPageProps) {
       const response = await listAgents();
       setAgents(response.items);
       setSelectedAgentId(input.id);
+      // Invalidate (not just setQueryData) so the query refetches from the
+      // server rather than being seeded with this page's possibly-stale
+      // `response` — cheap, and avoids the two lists ever silently diverging.
+      await queryClient.invalidateQueries({ queryKey: ['agents'] });
     } catch {
       // ignore refresh error
     }

@@ -286,16 +286,18 @@ OpenAidy connects to external MCP servers via stdio or HTTP transport. Configure
 
 The following MCP servers ship preinstalled (reconciled into every install on startup from `config/openaidy.template.json`):
 
-| Server              | Transport | Auth                              | Notes                                                                                                          |
-| ------------------- | --------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| GitHub              | http      | `${GITHUB_PERSONAL_ACCESS_TOKEN}` | [PAT](https://github.com/settings/tokens) with `repo` + `read:user` scopes                                     |
-| Sequential Thinking | stdio     | none                              | step-by-step reasoning                                                                                         |
-| Time                | stdio     | none                              | time + timezone conversion (`@guanxiong/mcp-server-time`)                                                      |
-| Playwright Browser  | stdio     | none                              | Microsoft-maintained browser automation                                                                        |
-| Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}` |
-| Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                   |
-| Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                               |
-| Buffer              | http      | `${BUFFER_API_KEY}`               | [Buffer](https://buffer.com) social media scheduling — per-account API key                                     |
+| Server              | Transport | Auth                              | Notes                                                                                                                                   |
+| ------------------- | --------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub              | http      | `${GITHUB_PERSONAL_ACCESS_TOKEN}` | [PAT](https://github.com/settings/tokens) with `repo` + `read:user` scopes                                                              |
+| Sequential Thinking | stdio     | none                              | step-by-step reasoning                                                                                                                  |
+| Time                | stdio     | none                              | time + timezone conversion (`@guanxiong/mcp-server-time`)                                                                               |
+| Playwright Browser  | stdio     | none                              | Microsoft-maintained browser automation                                                                                                 |
+| Context7 Docs       | http      | optional                          | [free tier](https://context7.com/dashboard) works without a key; higher rate limits with `${CONTEXT7_API_KEY}`                          |
+| Brave Search        | stdio     | `${BRAVE_API_KEY}`                | [free tier](https://brave.com/search/api/) (~2000 req/month)                                                                            |
+| Tavily Search       | stdio     | `${TAVILY_API_KEY}`               | [free tier](https://tavily.com/)                                                                                                        |
+| Buffer              | http      | `${BUFFER_API_KEY}`               | [Buffer](https://buffer.com) social media scheduling — per-account API key                                                              |
+| Supabase            | http      | `${SUPABASE_ACCESS_TOKEN}`        | [personal access token](https://supabase.com/dashboard/account/tokens) — database, docs, functions, branching                           |
+| Notion              | stdio     | `${NOTION_TOKEN}`                 | [internal integration](https://www.notion.so/my-integrations) token — share pages/databases with it from each page's "Connections" menu |
 
 #### Setting API keys
 

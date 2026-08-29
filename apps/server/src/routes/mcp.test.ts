@@ -9,6 +9,7 @@ import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { McpServerConfig } from '@openaidy/config';
 import { EnvPlaceholderResolver } from '../mcp/placeholder-resolver';
+import { encryptSecret } from '../mcp/secret-crypto';
 
 // ---------------------------------------------------------------------------
 // Helpers / stubs
@@ -63,6 +64,9 @@ function makeServerConfig(
 function makeMcpService(
   _servers: McpServerConfig[] = [],
   connected: string[] = [],
+  // Mirrors the production wiring in app.ts: a live secrets-store getter,
+  // so a server's missingSecrets reflects a key pasted after construction.
+  secretsSource: () => Record<string, string> = () => ({}),
 ): McpClientService {
   return {
     isConnected: vi.fn((id: string) => connected.includes(id)),
@@ -78,9 +82,10 @@ function makeMcpService(
     disconnect: vi.fn(),
     callTool: vi.fn(),
     // Mirror the real service: any ${VAR} in the relevant field is "missing"
-    // when resolved against an empty environment.
+    // unless it resolves from the (empty by default) environment or the
+    // injected named-secrets store.
     missingSecrets: vi.fn((config: McpServerConfig) => {
-      const resolver = new EnvPlaceholderResolver({});
+      const resolver = new EnvPlaceholderResolver({}, secretsSource);
       const record = config.transport === 'http' ? config.headers : config.env;
       return resolver.findMissingVars(record);
     }),
@@ -89,6 +94,7 @@ function makeMcpService(
 
 function makeConfigService(servers: McpServerConfig[] = []): AppConfigService {
   let currentServers = [...servers];
+  let currentSecrets: Record<string, string> = {};
   return {
     getConfig: vi.fn(() => ({
       version: 1,
@@ -96,15 +102,30 @@ function makeConfigService(servers: McpServerConfig[] = []): AppConfigService {
       providers: [],
       agents: [],
       mcpServers: currentServers,
+      mcpSecrets: currentSecrets,
     })),
     getMcpServers: vi.fn(() => currentServers),
     getMcpServer: vi.fn((id: string) =>
       currentServers.find((s) => s.id === id),
     ),
-    save: vi.fn(async (cfg: { mcpServers?: McpServerConfig[] }) => {
-      currentServers = cfg.mcpServers ?? [];
-      return cfg;
+    getMcpSecrets: vi.fn(() => currentSecrets),
+    setMcpSecret: vi.fn(async (name: string, value: string) => {
+      currentSecrets = { ...currentSecrets, [name]: encryptSecret(value) };
     }),
+    deleteMcpSecret: vi.fn(async (name: string) => {
+      const { [name]: _removed, ...rest } = currentSecrets;
+      currentSecrets = rest;
+    }),
+    save: vi.fn(
+      async (cfg: {
+        mcpServers?: McpServerConfig[];
+        mcpSecrets?: Record<string, string>;
+      }) => {
+        currentServers = cfg.mcpServers ?? [];
+        if (cfg.mcpSecrets !== undefined) currentSecrets = cfg.mcpSecrets;
+        return cfg;
+      },
+    ),
   } as unknown as AppConfigService;
 }
 
@@ -1085,6 +1106,142 @@ describe('MCP Routes', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('PUT /mcp/secrets/:name', () => {
+    beforeEach(async () => {
+      const server: McpServerConfig = {
+        id: 'notion',
+        transport: 'stdio',
+        command: 'npx',
+        env: {
+          OPENAPI_MCP_HEADERS:
+            '{"Authorization": "Bearer ${NOTION_TOKEN}", "Notion-Version": "2025-09-03"}',
+        },
+      } as McpServerConfig;
+      configService = makeConfigService([server]);
+      mcpService = makeMcpService([server], [], () =>
+        configService.getMcpSecrets(),
+      );
+      app = await buildApp(mcpService, configService);
+    });
+
+    it('stores the pasted key encrypted, without touching the server template', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/mcp/secrets/NOTION_TOKEN',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        payload: { value: 'secret_abc123' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ name: 'NOTION_TOKEN' });
+      // Never echoed back.
+      expect(JSON.stringify(res.body)).not.toContain('secret_abc123');
+
+      // The server's own env record is untouched — still the literal
+      // template string, byte-identical to what was seeded.
+      const stored = configService.getMcpServer('notion');
+      expect(stored?.env?.OPENAPI_MCP_HEADERS).toBe(
+        '{"Authorization": "Bearer ${NOTION_TOKEN}", "Notion-Version": "2025-09-03"}',
+      );
+
+      // The secret itself is encrypted at rest, not plaintext.
+      expect(configService.getMcpSecrets().NOTION_TOKEN).toMatch(/^enc:v1:/);
+    });
+
+    it("clears the server's missingSecrets and attempts to connect it", async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/mcp/secrets/NOTION_TOKEN',
+        headers: {
+          authorization: 'Bearer test-token',
+          'content-type': 'application/json',
+        },
+        payload: { value: 'secret_abc123' },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const listRes = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/servers',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      const server = listRes.json().servers[0];
+      expect(server.missingSecrets).toEqual([]);
+      expect(mcpService.connect).toHaveBeenCalled();
+    });
+
+    it('rejects a non-admin token with 403', async () => {
+      app = await buildApp(mcpService, configService, nonAdminAuthMiddleware);
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/mcp/secrets/NOTION_TOKEN',
+        headers: { 'content-type': 'application/json' },
+        payload: { value: 'secret_abc123' },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('INSUFFICIENT_SCOPE');
+    });
+
+    it('returns 503 when encryption is unavailable', async () => {
+      const crypto = await import('../mcp/secret-crypto');
+      const spy = vi
+        .spyOn(crypto, 'ensureEncryptionKey')
+        .mockImplementation(() => {
+          throw new Error('master key file unwritable');
+        });
+
+      try {
+        const res = await app.inject({
+          method: 'PUT',
+          url: '/api/mcp/secrets/NOTION_TOKEN',
+          headers: {
+            authorization: 'Bearer test-token',
+            'content-type': 'application/json',
+          },
+          payload: { value: 'secret_abc123' },
+        });
+        expect(res.statusCode).toBe(503);
+        expect(res.json().error).toBe('ENCRYPTION_UNAVAILABLE');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('DELETE /mcp/secrets/:name', () => {
+    beforeEach(async () => {
+      configService = makeConfigService([]);
+      mcpService = makeMcpService([], [], () => configService.getMcpSecrets());
+      app = await buildApp(mcpService, configService);
+    });
+
+    it('clears a stored secret', async () => {
+      await configService.setMcpSecret('NOTION_TOKEN', 'secret_abc123');
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/mcp/secrets/NOTION_TOKEN',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(configService.getMcpSecrets().NOTION_TOKEN).toBeUndefined();
+    });
+
+    it('rejects a non-admin token with 403', async () => {
+      app = await buildApp(mcpService, configService, nonAdminAuthMiddleware);
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/mcp/secrets/NOTION_TOKEN',
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('INSUFFICIENT_SCOPE');
     });
   });
 });

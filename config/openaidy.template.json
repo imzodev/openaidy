@@ -68,6 +68,25 @@
       "headers": {
         "Authorization": "Bearer ${BUFFER_API_KEY}"
       }
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "transport": "http",
+      "url": "https://mcp.supabase.com/mcp?features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
+      }
+    },
+    {
+      "id": "notion",
+      "name": "Notion",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ${NOTION_TOKEN}\", \"Notion-Version\": \"2025-09-03\"}"
+      }
     }
   ],
   "providers": [],
