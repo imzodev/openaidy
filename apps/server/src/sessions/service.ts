@@ -13,7 +13,9 @@ import {
 } from '../mcp/screenshot-capture';
 import {
   containsWorkspaceFileRef,
+  containsWorkspaceRelativeRef,
   resolveWorkspaceFileRefs,
+  tryResolveWorkspaceRelativeRefs,
 } from '../mcp/workspace-file-refs';
 import type { BuiltinToolRegistry } from '../tools';
 import type { MediaShareResult } from '../tools/media/share';
@@ -2030,6 +2032,15 @@ export class SessionMessageService {
               // only in the copy forwarded to the tool — `tc.arguments`, what
               // gets persisted in history, keeps the short reference, never
               // the encoded bytes.
+              //
+              // Defensive second pass: if the strict `workspace://` check
+              // finds nothing, fall back to a loose detector that catches
+              // bare workspace-relative paths (e.g. `screenshots/foo.png`
+              // instead of `workspace://screenshots/foo.png`). The model is
+              // told in the system prompt to use the prefix; this rescues the
+              // common case where it doesn't, while still leaving the
+              // `workspace://` path as the canonical form (the strict
+              // resolver throws on missing files so it stays loud).
               let mcpResult: McpToolResult | undefined;
               if (this.workspace && containsWorkspaceFileRef(forwardedArgs)) {
                 try {
@@ -2038,6 +2049,44 @@ export class SessionMessageService {
                     this.workspace,
                     agentId,
                   );
+                  mcpResult = await this.mcp?.callTool(
+                    mcpServerId,
+                    mcpToolName,
+                    resolvedArgs,
+                  );
+                } catch (e) {
+                  toolIsError = true;
+                  mcpResult = {
+                    content: [
+                      {
+                        type: 'text' as const,
+                        text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+                      },
+                    ],
+                  };
+                }
+              } else if (
+                this.workspace &&
+                containsWorkspaceRelativeRef(forwardedArgs)
+              ) {
+                try {
+                  const { args: resolvedArgs, rescued } =
+                    await tryResolveWorkspaceRelativeRefs(
+                      forwardedArgs,
+                      this.workspace,
+                      agentId,
+                    );
+                  if (rescued.length > 0) {
+                    log.warn(
+                      {
+                        agentId,
+                        mcpServerId,
+                        mcpToolName,
+                        rescued,
+                      },
+                      'MCP tool call had bare workspace-relative paths; resolved as data: URIs. The model should use workspace:// prefix per the system prompt.',
+                    );
+                  }
                   mcpResult = await this.mcp?.callTool(
                     mcpServerId,
                     mcpToolName,
