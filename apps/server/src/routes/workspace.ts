@@ -42,7 +42,11 @@ export interface FileMetadataResponse {
   name: string;
   path: string;
   isDirectory: boolean;
-  size: number;
+  /**
+   * Byte size for regular files, `null` for directories (kernel-reported
+   * directory size is meaningless — see `WorkspaceService.FileInfo.size`).
+   */
+  size: number | null;
   modifiedAt: string;
 }
 

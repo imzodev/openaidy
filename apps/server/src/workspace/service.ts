@@ -17,12 +17,18 @@ const log = createLogger('workspace');
 
 /**
  * File information returned by listFiles
+ *
+ * `size` is the byte size of the file. For directories it is `null` — the
+ * kernel-reported "size" of a directory entry is meaningless (always 0 on
+ * Windows, varies on Unix) and historically misled LLM consumers into
+ * reading `size: 0` as "this directory is empty". Callers that need a
+ * directory's contents must list them with another call.
  */
 export interface FileInfo {
   name: string;
   path: string;
   isDirectory: boolean;
-  size: number;
+  size: number | null;
   modifiedAt: Date;
 }
 
@@ -421,11 +427,18 @@ export class WorkspaceService {
           continue;
         }
 
+        const isDir = entry.isDirectory();
         fileInfos.push({
           name: entry.name,
           path: relative(this.getWorkspacePath(agentId), entryPath),
-          isDirectory: entry.isDirectory(),
-          size: stats.size,
+          isDirectory: isDir,
+          // Kernel-reported directory size is meaningless (0 on Windows,
+          // varies on Unix) and historically misled LLM consumers into
+          // thinking the dir was empty. Report null instead so the absence
+          // of a numeric size is an explicit signal that this entry isn't a
+          // regular file. The full contents are still discoverable via a
+          // follow-up listFiles() with the directory's path.
+          size: isDir ? null : stats.size,
           modifiedAt: stats.mtime,
         });
       }
