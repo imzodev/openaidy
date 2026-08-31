@@ -2,7 +2,7 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import type { SessionsToolDeps } from './index.js';
 import { sessionsReadMeta } from '../catalog.js';
 
-const MAX_TOOL_ARGS_PREVIEW_CHARS = 200;
+const TOOL_ARGS_PREVIEW_PREFIX_CHARS = 200;
 const MAX_CONTENT_PREVIEW_CHARS = 500;
 const ROLE_VALUES = ['system', 'user', 'assistant', 'tool'] as const;
 
@@ -39,6 +39,12 @@ function truncateContent(content: unknown, fullContent: boolean): unknown {
   return content.slice(0, MAX_CONTENT_PREVIEW_CHARS) + '...';
 }
 
+function truncateToolArgs(args: unknown): unknown {
+  if (typeof args !== 'string') return args;
+  if (args.length <= TOOL_ARGS_PREVIEW_PREFIX_CHARS) return args;
+  return args.slice(0, TOOL_ARGS_PREVIEW_PREFIX_CHARS) + '...';
+}
+
 function readToolCalls(message: Record<string, unknown>): unknown[] {
   const direct = message['toolCalls'];
   if (Array.isArray(direct)) return direct;
@@ -68,15 +74,10 @@ function buildMessageItem(
     if (toolCalls.length > 0) {
       item['toolCalls'] = toolCalls.map((tc) => {
         const rec = tc as Record<string, unknown>;
-        const args = rec['arguments'];
-        const argsPreview =
-          typeof args === 'string' && args.length > MAX_TOOL_ARGS_PREVIEW_CHARS
-            ? args.slice(0, MAX_TOOL_ARGS_PREVIEW_CHARS) + '...'
-            : args;
         return {
           id: rec['id'] ?? null,
           name: rec['name'] ?? null,
-          arguments: argsPreview,
+          arguments: truncateToolArgs(rec['arguments']),
         };
       });
     }
@@ -102,6 +103,29 @@ function applyOffsetLimit<T>(
     end = typeof limit === 'number' ? Math.min(start + limit, total) : total;
   }
   return [...items.slice(start, end)];
+}
+
+function filterByRole<T>(items: readonly T[], role: string | undefined): T[] {
+  if (role === undefined) return [...items];
+  return items.filter((m) => {
+    const r = m as Record<string, unknown>;
+    return r['role'] === role;
+  });
+}
+
+function buildRunItems(runs: readonly unknown[]): Record<string, unknown>[] {
+  return runs.map((r) => {
+    const rec = r as Record<string, unknown>;
+    return {
+      id: rec['id'],
+      agentId: rec['agentId'],
+      status: rec['status'],
+      finishReason: rec['finishReason'] ?? null,
+      errorCode: rec['errorCode'] ?? null,
+      errorMessage: rec['errorMessage'] ?? null,
+      createdAt: rec['createdAt'] ?? null,
+    };
+  });
 }
 
 export function createSessionsReadTool(deps: SessionsToolDeps): BuiltinTool {
@@ -241,42 +265,53 @@ export function createSessionsReadTool(deps: SessionsToolDeps): BuiltinTool {
         }
 
         const s = session as Record<string, unknown>;
-        const allMessages = await sessionService.listMessages(sessionId.trim());
-        const allRuns = await sessionService.listRuns(sessionId.trim());
-
-        let messagesForOutput: unknown[];
-        let totalMessages: number;
-        let truncated = false;
+        const trimmedId = sessionId.trim();
 
         if (messageId !== undefined) {
-          const found = allMessages.find((m) => {
-            const r = m as Record<string, unknown>;
-            return r['id'] === messageId;
-          });
-          if (!found) {
+          const found = await sessionService.findMessageById(messageId);
+          if (
+            !found ||
+            (found as Record<string, unknown>)['sessionId'] !== trimmedId
+          ) {
             return {
               ok: false,
               error: `Message "${messageId}" not found in session "${sessionId}".`,
             };
           }
-          messagesForOutput = [
-            buildMessageItem(
-              found as Record<string, unknown>,
-              true,
-              includeToolCalls,
-            ),
-          ];
-          totalMessages = allMessages.length;
-          truncated = false;
-        } else if (includeMessages) {
-          const filtered =
-            role === undefined
-              ? allMessages
-              : allMessages.filter((m) => {
-                  const r = m as Record<string, unknown>;
-                  return r['role'] === role;
-                });
-          totalMessages = filtered.length;
+          const allRuns = includeRuns
+            ? await sessionService.listRuns(trimmedId)
+            : [];
+          const result: Record<string, unknown> = {
+            id: s['id'],
+            title: s['title'],
+            createdAt: s['createdAt'] ?? null,
+            messageCount: 1,
+            filteredMessageCount: 1,
+            messages: [
+              buildMessageItem(
+                found as Record<string, unknown>,
+                true,
+                includeToolCalls,
+              ),
+            ],
+            ...(includeRuns && {
+              runCount: allRuns.length,
+              runs: buildRunItems(allRuns),
+            }),
+          };
+          return {
+            ok: true,
+            content: JSON.stringify(result, null, 2),
+          };
+        }
+
+        const allMessages = await sessionService.listMessages(trimmedId);
+        const filtered = filterByRole(allMessages, role);
+        const filteredMessageCount = filtered.length;
+        let messagesForOutput: unknown[] = [];
+        let truncated = false;
+
+        if (includeMessages) {
           const sliced = applyOffsetLimit(filtered, offset, limit, fromEnd);
           const ordered = order === 'desc' ? [...sliced].reverse() : sliced;
           messagesForOutput = ordered.map((m) =>
@@ -287,24 +322,10 @@ export function createSessionsReadTool(deps: SessionsToolDeps): BuiltinTool {
             ),
           );
           truncated = sliced.length < filtered.length;
-        } else {
-          messagesForOutput = [];
-          totalMessages = allMessages.length;
         }
 
-        const runItems = includeRuns
-          ? allRuns.map((r) => {
-              const rec = r as Record<string, unknown>;
-              return {
-                id: rec['id'],
-                agentId: rec['agentId'],
-                status: rec['status'],
-                finishReason: rec['finishReason'] ?? null,
-                errorCode: rec['errorCode'] ?? null,
-                errorMessage: rec['errorMessage'] ?? null,
-                createdAt: rec['createdAt'] ?? null,
-              };
-            })
+        const allRuns = includeRuns
+          ? await sessionService.listRuns(trimmedId)
           : [];
 
         const result: Record<string, unknown> = {
@@ -312,18 +333,17 @@ export function createSessionsReadTool(deps: SessionsToolDeps): BuiltinTool {
           title: s['title'],
           createdAt: s['createdAt'] ?? null,
           messageCount: allMessages.length,
-          filteredMessageCount: totalMessages,
-          ...(messageId === undefined &&
-            typeof limit === 'number' && { limit }),
-          ...(messageId === undefined && { offset }),
-          ...(messageId === undefined && { fromEnd }),
-          ...(messageId === undefined && { order }),
-          ...(messageId === undefined && role !== undefined && { role }),
-          ...(messageId === undefined && { truncated }),
+          filteredMessageCount,
+          limit: limit ?? null,
+          offset,
+          fromEnd,
+          order,
+          ...(role !== undefined && { role }),
+          truncated,
           ...(includeMessages && { messages: messagesForOutput }),
           ...(includeRuns && {
-            runCount: runItems.length,
-            runs: runItems,
+            runCount: allRuns.length,
+            runs: buildRunItems(allRuns),
           }),
         };
 

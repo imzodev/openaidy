@@ -75,8 +75,8 @@ export const sessionsReadMeta: ToolMeta = {
     '`order` (asc/desc), and `role` (filter by system/user/assistant/tool). ' +
     "Set `includeToolCalls: true` to also get each message's tool-call summary (id, name, " +
     'truncated args). Set `includeMessages: false` or `includeRuns: false` to skip a section. ' +
-    'Pass `messageId` to fetch one message with full, untruncated content — useful after ' +
-    'sessions_inspect tells you which message you actually need. ' +
+    'Pass `messageId` to fetch one message by id with full, untruncated content — ' +
+    'useful when you already have a message id from a prior read. ' +
     'Runs show the execution lifecycle: queued → running → succeeded / failed. ' +
     'For a cheap summary (counts, last-run status, tool-call inventory) without message bodies, ' +
     'use sessions_inspect instead.',
@@ -90,11 +90,11 @@ export const sessionsInspectMeta: ToolMeta = {
     'Returns session id/title/status, message and run counts, role counts ' +
     "(user/assistant/tool/system), the last run's status and finish reason, " +
     'and a tool-call inventory: one entry per tool that was called, with total ' +
-    'call count, error count, first/last call timestamps, and the id of the ' +
-    'last message that used the tool. Use this to understand what a session ' +
-    'did (which tools ran, whether it succeeded, how big it is) without paying ' +
-    'the cost of loading all messages. Drill into specific messages with ' +
-    'sessions_read({ messageId }).',
+    'call count, first/last call timestamps, and the id of the assistant ' +
+    'message that most recently invoked the tool. Use this to understand what ' +
+    'a session did (which tools ran, whether it succeeded, how big it is) ' +
+    'without paying the cost of loading all messages. Drill into specific ' +
+    'messages with sessions_read({ messageId }) once you have an id.',
 };
 
 export const sessionsSendMeta: ToolMeta = {

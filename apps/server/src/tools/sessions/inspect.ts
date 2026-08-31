@@ -6,7 +6,7 @@ interface ToolCallBucket {
   calls: number;
   firstAt: string | null;
   lastAt: string | null;
-  lastMessageId: string | null;
+  lastCallerMessageId: string | null;
 }
 
 function readToolCalls(message: Record<string, unknown>): unknown[] {
@@ -24,23 +24,10 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function compareTimestamps(a: string | null, b: string | null): number | null {
-  if (a === null && b === null) return null;
-  if (a === null) return b === null ? null : Date.parse(b);
-  if (b === null) return Date.parse(a);
-  const aTime = Date.parse(a);
-  const bTime = Date.parse(b);
-  if (Number.isNaN(aTime)) return bTime;
-  if (Number.isNaN(bTime)) return aTime;
-  return Math.min(aTime, bTime);
-}
-
 function pickEarliest(
   current: string | null,
   candidate: string | null,
 ): string | null {
-  const compared = compareTimestamps(current, candidate);
-  if (compared === null) return current ?? candidate;
   if (current === null) return candidate;
   if (candidate === null) return current;
   return Date.parse(current) <= Date.parse(candidate) ? current : candidate;
@@ -111,14 +98,17 @@ export function createSessionsInspectTool(deps: SessionsToolDeps): BuiltinTool {
           if (role !== null && role in roleCounts) {
             roleCounts[role] = (roleCounts[role] ?? 0) + 1;
           }
-          const content = r['content'];
-          if (typeof content === 'string') {
-            totalContentChars += content.length;
+          if (role !== 'tool') {
+            const content = r['content'];
+            if (typeof content === 'string') {
+              totalContentChars += content.length;
+            }
           }
           const createdAt = asString(r['createdAt']);
           if (createdAt !== null) {
             lastMessageAt = pickLatest(lastMessageAt, createdAt);
           }
+          if (role !== 'assistant') continue;
           for (const tc of readToolCalls(r)) {
             const rec = tc as Record<string, unknown>;
             const name = asString(rec['name']);
@@ -127,13 +117,13 @@ export function createSessionsInspectTool(deps: SessionsToolDeps): BuiltinTool {
               calls: 0,
               firstAt: null,
               lastAt: null,
-              lastMessageId: null,
+              lastCallerMessageId: null,
             };
             bucket.calls += 1;
             bucket.firstAt = pickEarliest(bucket.firstAt, createdAt);
             bucket.lastAt = pickLatest(bucket.lastAt, createdAt);
             const messageId = asString(r['id']);
-            if (messageId !== null) bucket.lastMessageId = messageId;
+            if (messageId !== null) bucket.lastCallerMessageId = messageId;
             toolInventory.set(name, bucket);
           }
         }
@@ -169,7 +159,7 @@ export function createSessionsInspectTool(deps: SessionsToolDeps): BuiltinTool {
             calls: bucket.calls,
             firstAt: bucket.firstAt,
             lastAt: bucket.lastAt,
-            lastMessageId: bucket.lastMessageId,
+            lastCallerMessageId: bucket.lastCallerMessageId,
           }))
           .sort((a, b) => b.calls - a.calls);
 

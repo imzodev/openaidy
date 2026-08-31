@@ -46,6 +46,18 @@ function makeSessionService(
         createdAt: '2025-01-01T00:00:00Z',
       },
     ]),
+    findMessageById: vi.fn().mockImplementation(async (id: string) => {
+      const messages = [
+        {
+          id: 'msg-1',
+          sessionId: 'sess-1',
+          role: 'user',
+          content: 'Hello',
+          createdAt: '2025-01-01T00:00:00Z',
+        },
+      ];
+      return messages.find((m) => m.id === id) ?? null;
+    }),
     submitMessageStreaming: vi.fn().mockResolvedValue({
       ok: true,
       assistantMessage: { content: 'response' },
@@ -449,6 +461,42 @@ describe('session tools', () => {
       }
     });
 
+    it('reports filteredMessageCount consistently when includeMessages=false', async () => {
+      const tool = makeTool({
+        listMessages: vi.fn().mockResolvedValue([
+          {
+            id: 'm1',
+            role: 'user',
+            content: 'u1',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+          {
+            id: 'm2',
+            role: 'assistant',
+            content: 'a1',
+            createdAt: '2025-01-01T00:00:01Z',
+          },
+          {
+            id: 'm3',
+            role: 'user',
+            content: 'u2',
+            createdAt: '2025-01-01T00:00:02Z',
+          },
+        ]),
+      });
+      const result = await tool.execute(
+        { sessionId: 'sess-1', role: 'user', includeMessages: false },
+        CTX,
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const parsed = JSON.parse(result.content);
+        expect(parsed.messageCount).toBe(3);
+        expect(parsed.filteredMessageCount).toBe(2);
+        expect(parsed.messages).toBeUndefined();
+      }
+    });
+
     it('returns full content when fullContent=true', async () => {
       const longContent = 'a'.repeat(800);
       const tool = makeTool({
@@ -475,6 +523,18 @@ describe('session tools', () => {
     it('fetches a single message with full content when messageId is set', async () => {
       const longContent = 'a'.repeat(800);
       const tool = makeTool({
+        findMessageById: vi.fn().mockImplementation(async (id: string) => {
+          if (id === 'm2') {
+            return {
+              id: 'm2',
+              sessionId: 'sess-1',
+              role: 'assistant',
+              content: longContent,
+              createdAt: '2025-01-01T00:00:01Z',
+            };
+          }
+          return null;
+        }),
         listMessages: vi.fn().mockResolvedValue([
           {
             id: 'm1',
@@ -500,11 +560,14 @@ describe('session tools', () => {
         expect(parsed.messages).toHaveLength(1);
         expect(parsed.messages[0].id).toBe('m2');
         expect(parsed.messages[0].content).toBe(longContent);
+        expect(parsed.messageCount).toBe(1);
       }
     });
 
     it('returns error when messageId does not exist', async () => {
-      const tool = makeTool();
+      const tool = makeTool({
+        findMessageById: vi.fn().mockResolvedValue(null),
+      });
       const result = await tool.execute(
         { sessionId: 'sess-1', messageId: 'missing' },
         CTX,
@@ -512,6 +575,49 @@ describe('session tools', () => {
       expect(result.ok).toBe(false);
       if (!result.ok)
         expect(result.error).toMatch(/Message "missing" not found/);
+    });
+
+    it('does not load the full transcript when messageId is set', async () => {
+      const listSpy = vi.fn().mockResolvedValue([]);
+      const findSpy = vi.fn().mockImplementation(async (id: string) =>
+        id === 'm42'
+          ? {
+              id: 'm42',
+              sessionId: 'sess-1',
+              role: 'assistant',
+              content: 'hello',
+              createdAt: '2025-01-01T00:00:00Z',
+            }
+          : null,
+      );
+      const tool = makeTool({
+        listMessages: listSpy,
+        findMessageById: findSpy,
+      });
+      await tool.execute({ sessionId: 'sess-1', messageId: 'm42' }, CTX);
+      expect(listSpy).not.toHaveBeenCalled();
+      expect(findSpy).toHaveBeenCalledWith('m42');
+    });
+
+    it('rejects a messageId that belongs to a different session', async () => {
+      const tool = makeTool({
+        findMessageById: vi.fn().mockResolvedValue({
+          id: 'm99',
+          sessionId: 'other-session',
+          role: 'user',
+          content: 'leaked',
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+      });
+      const result = await tool.execute(
+        { sessionId: 'sess-1', messageId: 'm99' },
+        CTX,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok)
+        expect(result.error).toMatch(
+          /Message "m99" not found in session "sess-1"/,
+        );
     });
 
     it('includes toolCalls per message when includeToolCalls=true', async () => {
@@ -715,9 +821,7 @@ describe('session tools', () => {
           assistant: 2,
           tool: 1,
         });
-        expect(parsed.totalContentChars).toBe(
-          'hi'.length + 'tool-result'.length,
-        );
+        expect(parsed.totalContentChars).toBe('hi'.length);
         expect(parsed.lastMessageAt).toBe('2025-01-01T00:00:03Z');
         expect(parsed.lastRun).toEqual({
           id: 'r2',
@@ -734,18 +838,86 @@ describe('session tools', () => {
             calls: 2,
             firstAt: '2025-01-01T00:00:01Z',
             lastAt: '2025-01-01T00:00:03Z',
-            lastMessageId: 'm4',
+            lastCallerMessageId: 'm4',
           },
           {
             toolName: 'exec_run',
             calls: 1,
             firstAt: '2025-01-01T00:00:01Z',
             lastAt: '2025-01-01T00:00:01Z',
-            lastMessageId: 'm2',
+            lastCallerMessageId: 'm2',
           },
         ]);
         expect(JSON.stringify(parsed)).not.toContain('tool-result');
         expect(JSON.stringify(parsed).includes('hi')).toBe(false);
+      }
+    });
+
+    it('excludes tool-message content from totalContentChars', async () => {
+      const tool = makeTool({
+        listMessages: vi.fn().mockResolvedValue([
+          {
+            id: 'm1',
+            role: 'user',
+            content: 'hi',
+            createdAt: '2025-01-01T00:00:00Z',
+          },
+          {
+            id: 'm2',
+            role: 'tool',
+            content: 'x'.repeat(10_000),
+            createdAt: '2025-01-01T00:00:01Z',
+          },
+        ]),
+        listRuns: vi.fn().mockResolvedValue([]),
+      });
+      const result = await tool.execute({ sessionId: 'sess-1' }, CTX);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const parsed = JSON.parse(result.content);
+        expect(parsed.totalContentChars).toBe('hi'.length);
+      }
+    });
+
+    it('only attributes tool calls to assistant messages', async () => {
+      const tool = makeTool({
+        listMessages: vi.fn().mockResolvedValue([
+          {
+            id: 'm1',
+            role: 'user',
+            content: 'hi',
+            createdAt: '2025-01-01T00:00:00Z',
+            metadata: {
+              toolCalls: [
+                { id: 'tc-1', name: 'should_not_count', arguments: '{}' },
+              ],
+            },
+          },
+          {
+            id: 'm2',
+            role: 'assistant',
+            content: '',
+            createdAt: '2025-01-01T00:00:01Z',
+            metadata: {
+              toolCalls: [{ id: 'tc-2', name: 'real_tool', arguments: '{}' }],
+            },
+          },
+        ]),
+        listRuns: vi.fn().mockResolvedValue([]),
+      });
+      const result = await tool.execute({ sessionId: 'sess-1' }, CTX);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const parsed = JSON.parse(result.content);
+        expect(parsed.toolCallInventory).toEqual([
+          {
+            toolName: 'real_tool',
+            calls: 1,
+            firstAt: '2025-01-01T00:00:01Z',
+            lastAt: '2025-01-01T00:00:01Z',
+            lastCallerMessageId: 'm2',
+          },
+        ]);
       }
     });
 
