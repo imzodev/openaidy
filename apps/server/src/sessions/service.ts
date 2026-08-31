@@ -2077,7 +2077,7 @@ export class SessionMessageService {
                       agentId,
                     );
                   if (rescued.length > 0) {
-                    log.warn(
+                    this.logger?.warn(
                       {
                         agentId,
                         mcpServerId,
