@@ -42,8 +42,18 @@ export interface FileMetadataResponse {
   name: string;
   path: string;
   isDirectory: boolean;
-  size: number;
+  /**
+   * Byte size for regular files, `null` for directories (kernel-reported
+   * directory size is meaningless — see `WorkspaceService.FileInfo.size`).
+   */
+  size: number | null;
   modifiedAt: string;
+  /**
+   * Number of immediate children (files + subdirectories) for directory
+   * entries. Omitted for regular files. Tells LLM consumers that a
+   * directory is non-empty so they know it's worth listing deeper.
+   */
+  childCount?: number;
 }
 
 export interface FileContentResponse {
@@ -136,6 +146,7 @@ export const workspaceRoutes: FastifyPluginAsync<
           isDirectory: f.isDirectory,
           size: f.size,
           modifiedAt: f.modifiedAt.toISOString(),
+          ...(f.childCount !== undefined && { childCount: f.childCount }),
         }));
         return { items: response };
       } catch (error) {
@@ -208,6 +219,7 @@ export const workspaceRoutes: FastifyPluginAsync<
             isDirectory: f.isDirectory,
             size: f.size,
             modifiedAt: f.modifiedAt.toISOString(),
+            ...(f.childCount !== undefined && { childCount: f.childCount }),
           }));
           return { items: response, path: fullPath };
         } catch {

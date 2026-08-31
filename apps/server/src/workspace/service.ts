@@ -17,13 +17,27 @@ const log = createLogger('workspace');
 
 /**
  * File information returned by listFiles
+ *
+ * `size` is the byte size of the file. For directories it is `null` — the
+ * kernel-reported "size" of a directory entry is meaningless (always 0 on
+ * Windows, varies on Unix) and historically misled LLM consumers into
+ * reading `size: 0` as "this directory is empty". Callers that need a
+ * directory's contents must list them with another call.
+ *
+ * `childCount`, when present, is the number of immediate entries inside
+ * a directory (files + subdirectories, one level deep, no recursion).
+ * Only populated for directory entries. LLM consumers that see
+ * `isDirectory: true, size: null` cannot tell whether the directory is
+ * empty or full — `childCount` is the signal that tells them it's worth
+ * recursing with a follow-up listFiles() call.
  */
 export interface FileInfo {
   name: string;
   path: string;
   isDirectory: boolean;
-  size: number;
+  size: number | null;
   modifiedAt: Date;
+  childCount?: number;
 }
 
 export interface FileReadResult {
@@ -421,12 +435,34 @@ export class WorkspaceService {
           continue;
         }
 
+        const isDir = entry.isDirectory();
+
+        let childCount: number | undefined;
+        if (isDir) {
+          try {
+            // One level of children — files + subdirs, no recursion. The
+            // point isn't to enumerate (that's what a follow-up listFiles
+            // on the directory's path does); it's to tell LLM consumers
+            // that a directory is non-empty so they know to recurse.
+            childCount = (await readdir(entryPath)).length;
+          } catch {
+            childCount = undefined;
+          }
+        }
+
         fileInfos.push({
           name: entry.name,
           path: relative(this.getWorkspacePath(agentId), entryPath),
-          isDirectory: entry.isDirectory(),
-          size: stats.size,
+          isDirectory: isDir,
+          // Kernel-reported directory size is meaningless (0 on Windows,
+          // varies on Unix) and historically misled LLM consumers into
+          // thinking the dir was empty. Report null instead so the absence
+          // of a numeric size is an explicit signal that this entry isn't a
+          // regular file. The full contents are still discoverable via a
+          // follow-up listFiles() with the directory's path.
+          size: isDir ? null : stats.size,
           modifiedAt: stats.mtime,
+          ...(childCount !== undefined && { childCount }),
         });
       }
 

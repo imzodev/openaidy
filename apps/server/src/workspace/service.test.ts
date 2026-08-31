@@ -201,6 +201,81 @@ describe('WorkspaceService', () => {
       // `path` uses OS-native separators (relative()), so compare with join().
       expect(files[0]!.path).toBe(join('subdir', 'nested.txt'));
     });
+
+    it('reports size: null for directory entries (never 0)', async () => {
+      // Regression: previously, listFiles() pushed `stats.size` for every
+      // entry. The kernel-reported size of a directory is 0 on Windows and
+      // varies on Unix, which led LLM consumers to read the listing as
+      // "empty directory" when it actually held files. We now report `null`
+      // for directories so the absence of a numeric size is an explicit
+      // signal that this entry isn't a regular file.
+      const agentId = 'dir-size-test-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      await mkdir(join(workspacePath, 'populated'), { recursive: true });
+      // Put real content inside — `stats.size` for the directory entry on
+      // most filesystems is unrelated to this, but the regression we're
+      // pinning is about the listing's `size` field, not the dir's stats.
+      await fsWriteFile(
+        join(workspacePath, 'populated', 'inside.txt'),
+        'something inside',
+      );
+      await mkdir(join(workspacePath, 'empty'), { recursive: true });
+
+      const files = await service.listFiles(agentId);
+      const populated = files.find((f) => f.name === 'populated');
+      const empty = files.find((f) => f.name === 'empty');
+      const inside = await service.listFiles(agentId, 'populated');
+
+      expect(populated).toBeDefined();
+      expect(populated!.isDirectory).toBe(true);
+      expect(populated!.size).toBeNull();
+      expect(empty!.size).toBeNull();
+      expect(inside[0]!.isDirectory).toBe(false);
+      expect(inside[0]!.size).toBe('something inside'.length);
+    });
+
+    it('reports childCount for directory entries (files + subdirs, one level deep)', async () => {
+      // Real failure mode this defends against: an LLM consumer looking at
+      // the listing saw `screenshots` with size: null and had no signal
+      // whether the directory was empty or full. childCount is that
+      // signal — it tells the model "yes, this dir has 15 children,
+      // recurse into it" instead of leaving it guessing.
+      const agentId = 'child-count-test-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      await mkdir(join(workspacePath, 'with-files'), { recursive: true });
+      await fsWriteFile(join(workspacePath, 'with-files', 'a.txt'), 'a');
+      await fsWriteFile(join(workspacePath, 'with-files', 'b.txt'), 'b');
+      await fsWriteFile(join(workspacePath, 'with-files', 'c.txt'), 'c');
+
+      await mkdir(join(workspacePath, 'with-subdirs'), { recursive: true });
+      await mkdir(join(workspacePath, 'with-subdirs', 'nested'), {
+        recursive: true,
+      });
+      await fsWriteFile(
+        join(workspacePath, 'with-subdirs', 'nested', 'deep.txt'),
+        'd',
+      );
+
+      await mkdir(join(workspacePath, 'empty'), { recursive: true });
+      await fsWriteFile(join(workspacePath, 'top-level.txt'), 'x');
+
+      const files = await service.listFiles(agentId);
+      const withFiles = files.find((f) => f.name === 'with-files')!;
+      const withSubdirs = files.find((f) => f.name === 'with-subdirs')!;
+      const empty = files.find((f) => f.name === 'empty')!;
+      const regular = files.find((f) => f.name === 'top-level.txt')!;
+
+      expect(withFiles.childCount).toBe(3);
+      // One level deep — nested.txt doesn't count.
+      expect(withSubdirs.childCount).toBe(1);
+      expect(empty.childCount).toBe(0);
+      // Regular files don't have a childCount (the field is omitted).
+      expect(regular.childCount).toBeUndefined();
+    });
   });
 
   describe('readFile', () => {
