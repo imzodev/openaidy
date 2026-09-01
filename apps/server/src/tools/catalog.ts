@@ -69,9 +69,32 @@ export const sessionsReadMeta: ToolMeta = {
   name: 'sessions_read',
   category: 'Sessions',
   description:
-    'Read the full state of a session: its metadata, messages, and runs with their statuses. ' +
-    'Use this to check the progress of a session after dispatching a message with sessions_send. ' +
-    'Runs show the execution lifecycle: queued → running → succeeded / failed.',
+    'Read a session with full control over scope and cost. Default behavior matches legacy: ' +
+    'all messages, runs included, content truncated to 500 chars. Slice cheaply with ' +
+    '`limit` + `fromEnd: true` (read the last N messages), `offset` (skip first N), ' +
+    '`order` (asc/desc), and `role` (filter by system/user/assistant/tool). ' +
+    "Set `includeToolCalls: true` to also get each message's tool-call summary (id, name, " +
+    'truncated args). Set `includeMessages: false` or `includeRuns: false` to skip a section. ' +
+    'Pass `messageId` to fetch one message by id with full, untruncated content — ' +
+    'useful when you already have a message id from a prior read. ' +
+    'Runs show the execution lifecycle: queued → running → succeeded / failed. ' +
+    'For a cheap summary (counts, last-run status, tool-call inventory) without message bodies, ' +
+    'use sessions_inspect instead.',
+};
+
+export const sessionsInspectMeta: ToolMeta = {
+  name: 'sessions_inspect',
+  category: 'Sessions',
+  description:
+    'Cheap metadata view of a session — no message bodies, no run payloads. ' +
+    'Returns session id/title/status, message and run counts, role counts ' +
+    "(user/assistant/tool/system), the last run's status and finish reason, " +
+    'and a tool-call inventory: one entry per tool that was called, with total ' +
+    'call count, first/last call timestamps, and the id of the assistant ' +
+    'message that most recently invoked the tool. Use this to understand what ' +
+    'a session did (which tools ran, whether it succeeded, how big it is) ' +
+    'without paying the cost of loading all messages. Drill into specific ' +
+    'messages with sessions_read({ messageId }) once you have an id.',
 };
 
 export const sessionsSendMeta: ToolMeta = {
@@ -690,6 +713,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   sessionsCreateMeta,
   sessionsListMeta,
   sessionsReadMeta,
+  sessionsInspectMeta,
   sessionsSendMeta,
   workspaceReadMeta,
   workspaceWriteMeta,

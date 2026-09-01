@@ -53,7 +53,9 @@ export function createSessionRecord(
  * `appendMessageRecord`) and never hits the TTL. Cascades messages/runs via
  * the existing delete path. Returns the ids of the sessions removed.
  */
-export function deleteExpiredEphemeralSessionRecords(maxAgeMs: number): string[] {
+export function deleteExpiredEphemeralSessionRecords(
+  maxAgeMs: number,
+): string[] {
   const now = Date.now();
   const removed: string[] = [];
   for (const record of Array.from(sessions.values())) {
@@ -177,6 +179,12 @@ export function listSessionMessageRecords(
   return Array.from(messages.values())
     .filter((m) => m.sessionId === sessionId)
     .sort((a, b) => a.sequence - b.sequence);
+}
+
+export function findSessionMessageRecord(
+  id: string,
+): SessionMessageRecord | undefined {
+  return messages.get(id);
 }
 
 // Run operations

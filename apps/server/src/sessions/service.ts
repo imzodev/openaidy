@@ -50,6 +50,7 @@ import {
   updateSessionFavoriteRecord,
   appendMessageRecord,
   listSessionMessageRecords,
+  findSessionMessageRecord,
   createRunRecord,
   markRunRunning,
   markRunSucceeded,
@@ -716,6 +717,23 @@ export class SessionMessageService {
       }) as SessionMessage[];
     }
     return listSessionMessageRecords(sessionId);
+  }
+
+  /**
+   * Find a single message by id.
+   *
+   * Uses the DB repository when available (so a tool can fetch one message
+   * from a 10k-message session without loading the whole transcript), and
+   * falls back to the in-memory store for ephemeral sessions. Attachments
+   * are not hydrated here — callers that need them should use listMessages.
+   */
+  async findMessageById(
+    messageId: string,
+  ): Promise<SessionMessageRecord | SessionMessage | null> {
+    if (this.messagesRepo) {
+      return this.messagesRepo.findById(messageId);
+    }
+    return findSessionMessageRecord(messageId) ?? null;
   }
 
   /**
