@@ -105,7 +105,10 @@ function applyOffsetLimit<T>(
   return [...items.slice(start, end)];
 }
 
-function filterByRole<T>(items: readonly T[], role: string | undefined): T[] {
+function filterByRole(
+  items: readonly unknown[],
+  role: string | undefined,
+): unknown[] {
   if (role === undefined) return [...items];
   return items.filter((m) => {
     const r = m as Record<string, unknown>;
