@@ -2362,6 +2362,20 @@ export class SessionMessageService {
             : 'I wasn’t able to produce a response for this turn. Reply "continue" to have me try again.';
       }
 
+      // Detect a malformed tool-call leak that survived the codec layer:
+      // the model finished with `finish_reason: stop` but the accumulated
+      // content still contains tool-call markup — meaning the model
+      // emitted a tool invocation as plain text instead of structured
+      // output. Persist the content (preserves the agent's partial
+      // output for the user to read) but flag the run as degraded so the
+      // UI can surface it instead of treating it as a clean answer.
+      // Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT`.
+      const looksLikeMalformedToolCall =
+        finalFinishReason === 'stop' &&
+        /<(invoke|tool_call|function_calls?|antml:[a-z]+)\b/i.test(
+          accumulatedContent,
+        );
+
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
         runId: run.id,
@@ -2377,6 +2391,16 @@ export class SessionMessageService {
       });
 
       // 8. Update run with success
+      if (looksLikeMalformedToolCall) {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            contentPreview: accumulatedContent.slice(0, 200),
+          },
+          'Model emitted tool-call markup as content — marking run as degraded',
+        );
+      }
       const updatedRun = await this.markRunSucceeded(run, {
         finishReason: (finalFinishReason as FinishReason) ?? 'stop',
         promptTokens: finalUsage.promptTokens,
@@ -2387,7 +2411,16 @@ export class SessionMessageService {
           cacheCreationTokens: finalUsage.cacheCreationTokens,
         }),
         firstMessageId: assistantMessage.id,
-        metadata: { providerId: finalProviderId, model: finalModelId },
+        metadata: {
+          providerId: finalProviderId,
+          model: finalModelId,
+          ...(looksLikeMalformedToolCall && {
+            degraded: true,
+            errorCode: 'malformed_tool_call',
+            errorMessage:
+              'The model emitted tool-call markup as content instead of a structured tool call.',
+          }),
+        },
       });
 
       // 9. Update session's agentId to reflect the agent that just ran
