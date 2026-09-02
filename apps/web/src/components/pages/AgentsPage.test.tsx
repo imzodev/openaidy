@@ -284,15 +284,25 @@ describe('AgentsPage', () => {
     // selected on the Chat page. Root cause was that handleAgentCreated
     // refreshed only this page's own local `agents` signal, never the
     // App.tsx-level ['agents'] query ChatComposer/AgentPicker actually
-    // render from — so the new agent existed here but not there. Asserting
-    // the invalidation call directly (rather than re-deriving App.tsx's
-    // whole query/picker chain in this file) is what actually pins the fix.
-    it('invalidates the shared agents query cache after creating an agent', async () => {
+    // render from — so the new agent existed here but not there.
+    //
+    // Earlier fix attempts (#545, #547, #551) called `invalidateQueries`
+    // after the create, which marked the shared query stale and refetched
+    // in the background. A fast "Start Chat" click could navigate before
+    // the refetch completed, so ChatComposer/AgentPicker mounted on stale
+    // data and the new agent didn't appear in the picker. Calling
+    // `setQueryData` instead updates the cache synchronously with the
+    // data we just fetched, so any navigation after handleAgentCreated
+    // resolves sees the new agent immediately, with no race window.
+    // Asserting the setQueryData call directly (rather than re-deriving
+    // App.tsx's whole query/picker chain in this file) is what pins the
+    // fix.
+    it('updates the shared agents query cache after creating an agent', async () => {
       setupMocks();
       const { container, queryClient } = renderAgentsPage();
       await waitForAgentsToRender(container);
 
-      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+      const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
 
       const newAgentButton = container.querySelector(
         'button[title="New agent"]',
@@ -310,7 +320,10 @@ describe('AgentsPage', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['agents'] });
+        expect(setQueryDataSpy).toHaveBeenCalledWith(
+          ['agents'],
+          expect.objectContaining({ items: expect.any(Array) }),
+        );
       });
     });
   });
