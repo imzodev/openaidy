@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MiniMax-specific codec.
  *
  * Most of the MiniMax wire shape matches OpenAI Chat
@@ -17,7 +17,7 @@
  * The sanitization is stateless and per-chunk: it cannot
  * reconstruct a tool call whose wrapping was split across
  * multiple deltas. That would require a stateful parser and a
- * separate rework of the streaming loop — out of scope here.
+ * separate rework of the streaming loop ΓÇö out of scope here.
  */
 
 import type { ToolDefinition } from '@openaidy/runtime';
@@ -72,7 +72,7 @@ export class MiniMaxAdapterCodec implements ProviderAdapterCodec {
 
     // 2. Strip orphan openers and the rest of the chunk after
     //    them. The lookahead fired because the closer is missing
-    //    from this chunk — assume the rest of the payload is the
+    //    from this chunk ΓÇö assume the rest of the payload is the
     //    first fragment of a leaked tool invocation.
     for (const pattern of MINIMAX_TOOL_BLOCK_OPENERS) {
       cleaned = cleaned.replace(pattern, '');
@@ -83,6 +83,17 @@ export class MiniMaxAdapterCodec implements ProviderAdapterCodec {
     //    that immediately precedes a tool block does not leave
     //    a dangling token behind.
     cleaned = cleaned.replace(MINIMAX_FRAMING_TOKEN_RE, '');
+
+    // 4. Final safety net: scan for any remaining tool-call-like
+    //    tag. If found, drop from the first match to end of chunk.
+    //    Catches formats the regexes above don't enumerate (new
+    //    model variants, zero-width-space bypasses, etc.). False
+    //    positives are unlikely because these codecs only run on
+    //    assistant content (never on user-supplied text).
+    const toolTag = cleaned.match(MINIMAX_GENERIC_TOOL_TAG_RE);
+    if (toolTag && toolTag.index !== undefined) {
+      cleaned = cleaned.slice(0, toolTag.index);
+    }
 
     return cleaned;
   }
@@ -111,7 +122,7 @@ const MINIMAX_FRAMING_TOKEN_RE = /\]\<\][^\s\]]+\[>\[/g;
  * Tool-call wrapper blocks that can leak into a content delta.
  * Each pattern is paired with its closing counterpart. The inner
  * content is dropped because it is a tool payload that should
- * have been routed through `stream.tool_call` — surfacing it as
+ * have been routed through `stream.tool_call` ΓÇö surfacing it as
  * text is the leak we are preventing.
  */
 const MINIMAX_TOOL_BLOCK_PATTERNS: readonly RegExp[] = [
@@ -119,13 +130,14 @@ const MINIMAX_TOOL_BLOCK_PATTERNS: readonly RegExp[] = [
   /<function_calls>[\s\S]*?<\/function_calls>/g,
   /<tools>[\s\S]*?<\/tools>/g,
   /\[TOOL_CALLS\][\s\S]*?\[\/TOOL_CALLS\]/g,
-  /\[\{tool_[a-zA-Z0-9_-]+\}[\s\S]*?\{\/tool_[a-zA-Z0-9_-]+\}\]/g,
+  /\[{tool_[a-zA-Z0-9_-]+\}[\s\S]*?\{\/tool_[a-zA-Z0-9_-]+\}\]/g,
+  /<invoke\b[^>]*>[\s\S]*?<\/invoke>/g,
 ];
 
 /**
  * Orphan tool-block openers. When a chunk contains an opener
  * but no matching close, the rest of the chunk is almost
- * certainly the first fragment of a leaked tool invocation —
+ * certainly the first fragment of a leaked tool invocation ΓÇö
  * drop the opener AND everything after it. The matching close
  * sits in the next chunk (or was truncated by the model). Either
  * way, the partial payload cannot be safely reconstituted as a
@@ -138,4 +150,19 @@ const MINIMAX_TOOL_BLOCK_OPENERS: readonly RegExp[] = [
   /<tools>(?![\s\S]*?<\/tools>)[\s\S]*/g,
   /\[TOOL_CALLS\](?![\s\S]*?\[\/TOOL_CALLS\])[\s\S]*/g,
   /\[{tool_[a-zA-Z0-9_-]+\}(?![\s\S]*?\{\/tool_[a-zA-Z0-9_-]+\})[\s\S]*/g,
+  /<invoke\b[^>]*>(?![\s\S]*?<\/invoke>)[\s\S]*/g,
 ];
+
+/**
+ * Final-pass safety net. After every known wrapper pattern has
+ * been stripped, scan for any remaining tool-call-looking tag.
+ * Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT` — the model
+ * emitted `<invoke name="exec_run">…</invoke>` without any
+ * `<tool_call>` wrapper and the existing pattern set missed it.
+ * Also catches zero-width-space bypasses and future model
+ * variants we haven't enumerated. False positives are unlikely
+ * because these codecs only run on assistant content (never on
+ * user-supplied text).
+ */
+export const MINIMAX_GENERIC_TOOL_TAG_RE =
+  /<(invoke|tool_call|function_calls?|antml:[a-z]+)\b/i;

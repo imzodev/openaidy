@@ -55,6 +55,18 @@ export type SuccessOptions = {
   /** Estimated cost in USD; null/omitted when pricing is unknown */
   cost?: number | null;
   firstMessageId?: string;
+  /**
+   * Top-level error fields populated when a run finishes with
+   * `status: 'succeeded'` but a non-fatal quality issue was detected
+   * (e.g. the model emitted tool-call markup as plain content). The
+   * web layer reads `run.errorCode` / `run.errorMessage` from the
+   * top-level run columns (`apps/web/src/lib/ws-api.ts:460`) — keeping
+   * these at the top level (not just in metadata) lets the UI surface
+   * degraded runs the same way it surfaces failed ones. Mirrors
+   * `FailureOptions`.
+   */
+  errorCode?: string;
+  errorMessage?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -188,6 +200,14 @@ export class SessionRunsRepository {
 
     if (input.firstMessageId) {
       updates.firstMessageId = input.firstMessageId;
+    }
+
+    if (input.errorCode !== undefined) {
+      updates.errorCode = input.errorCode;
+    }
+
+    if (input.errorMessage !== undefined) {
+      updates.errorMessage = input.errorMessage;
     }
 
     if (input.metadata) {

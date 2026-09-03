@@ -60,6 +60,7 @@ import {
   deleteSessionRecord,
   deleteExpiredEphemeralSessionRecords,
 } from './store';
+import { MINIMAX_GENERIC_TOOL_TAG_RE } from '../providers/infrastructure/openai-compatible/provider-codec/minimax';
 import type {
   SubmitMessageInput,
   SubmitMessageStreamingInput,
@@ -2362,6 +2363,18 @@ export class SessionMessageService {
             : 'I wasn’t able to produce a response for this turn. Reply "continue" to have me try again.';
       }
 
+      // Detect a malformed tool-call leak that survived the codec layer:
+      // the model finished with `finish_reason: stop` but the accumulated
+      // content still contains tool-call markup — meaning the model
+      // emitted a tool invocation as plain text instead of structured
+      // output. Persist the content (preserves the agent's partial
+      // output for the user to read) but flag the run as degraded so the
+      // UI can surface it instead of treating it as a clean answer.
+      // Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT`.
+      const looksLikeMalformedToolCall =
+        finalFinishReason === 'stop' &&
+        MINIMAX_GENERIC_TOOL_TAG_RE.test(accumulatedContent);
+
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
         runId: run.id,
@@ -2377,6 +2390,16 @@ export class SessionMessageService {
       });
 
       // 8. Update run with success
+      if (looksLikeMalformedToolCall) {
+        this.logger?.warn(
+          {
+            sessionId: input.sessionId,
+            runId: run.id,
+            contentPreview: accumulatedContent.slice(0, 200),
+          },
+          'Model emitted tool-call markup as content — marking run as degraded',
+        );
+      }
       const updatedRun = await this.markRunSucceeded(run, {
         finishReason: (finalFinishReason as FinishReason) ?? 'stop',
         promptTokens: finalUsage.promptTokens,
@@ -2387,7 +2410,31 @@ export class SessionMessageService {
           cacheCreationTokens: finalUsage.cacheCreationTokens,
         }),
         firstMessageId: assistantMessage.id,
-        metadata: { providerId: finalProviderId, model: finalModelId },
+        // Mirror markRunFailed: when a degraded run is flagged, set the
+        // top-level errorCode/errorMessage so the UI (which reads these
+        // from the top-level run columns) can surface the problem
+        // instead of treating the run as a clean success.
+        ...(looksLikeMalformedToolCall && {
+          errorCode: 'malformed_tool_call',
+          // TODO(i18n): this is hardcoded English. When the message
+          // becomes user-facing in the chat UI, route it through the
+          // server's i18n layer rather than inlining the string here.
+          errorMessage:
+            'The model emitted tool-call markup as content instead of a structured tool call.',
+        }),
+        metadata: {
+          providerId: finalProviderId,
+          model: finalModelId,
+          ...(looksLikeMalformedToolCall && {
+            degraded: true,
+            // Mirror the top-level fields for callers that already
+            // inspect run.metadata.* (keeps backwards compatibility
+            // for anyone reading from the old location).
+            errorCode: 'malformed_tool_call',
+            errorMessage:
+              'The model emitted tool-call markup as content instead of a structured tool call.',
+          }),
+        },
       });
 
       // 9. Update session's agentId to reflect the agent that just ran

@@ -730,6 +730,83 @@ describe('SessionMessageService — agentic loop round exhaustion', () => {
     expect(result.assistantMessage.content.trim().length).toBeGreaterThan(0);
     expect(result.assistantMessage.content.toLowerCase()).toContain('continue');
   });
+
+  it('marks the run as degraded when content carries leaked tool-call markup (finishReason stop)', async () => {
+    // Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT`. The model emitted a
+    // bare `<invoke>` block as plain text, finished with finishReason `stop`,
+    // and the codec missed it. The run was persisted as `succeeded` with
+    // garbage content. Now: content is still preserved (so the user can read
+    // what the model tried) but the run is flagged as degraded with
+    // errorCode `malformed_tool_call` so the UI can surface it instead of
+    // pretending the agent answered cleanly.
+    //
+    // NOTE: this test deliberately injects `stream.content_delta` with the
+    // leaked markup rather than going through the real MiniMax provider
+    // adapter. The codec's translation logic (e.g. stripping `antml:invoke`
+    // blocks to structured tool_calls) is exercised separately in
+    // provider-codec.test.ts -- this test only covers the service-level
+    // detection that runs *after* the codec. If the codec starts to handle
+    // bare `<invoke>` blocks itself, the assertion here will fail (and
+    // rightly so: the service shouldn't be doing this work).
+    const leaked =
+      '<invoke name="exec_run"><command>node scripts/patch.mjs</command></invoke>';
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.content_delta', delta: leaked });
+        yield ok({ type: 'stream.finished', finishReason: 'stop' });
+      },
+    });
+
+    const session = await service.createSession('Malformed tool call');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.assistantMessage.content).toBe(leaked);
+    expect(result.run.status).toBe('succeeded');
+    expect(result.run.finishReason).toBe('stop');
+    // Top-level fields (so the UI can read them without inspecting metadata)
+    expect(result.run.errorCode).toBe('malformed_tool_call');
+    expect(result.run.errorMessage).toMatch(/tool-call markup/i);
+    // Metadata fields (backwards-compat mirror for callers that still
+    // read from the old location)
+    const metadata = result.run.metadata as Record<string, unknown> | null;
+    expect(metadata).toEqual(
+      expect.objectContaining({
+        providerId: 'mock',
+        model: 'mock',
+        degraded: true,
+        errorCode: 'malformed_tool_call',
+      }),
+    );
+  });
+
+  it('does NOT mark the run as degraded when content has no tool-call markup', async () => {
+    const { service } = makeStreamingService({
+      maxToolRounds: 2,
+      invokeStream: async function* () {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        yield ok({ type: 'stream.content_delta', delta: 'all good' });
+        yield ok({ type: 'stream.finished', finishReason: 'stop' });
+      },
+    });
+
+    const session = await service.createSession('Clean run');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const metadata = result.run.metadata as Record<string, unknown> | null;
+    expect(metadata?.degraded).toBeUndefined();
+    expect(metadata?.errorCode).toBeUndefined();
+    // Top-level fields stay clean too
+    expect(result.run.errorCode).toBeUndefined();
+    expect(result.run.errorMessage).toBeUndefined();
+  });
 });
 
 // ============================================================================

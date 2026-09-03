@@ -323,6 +323,41 @@ describe('MiniMaxAdapterCodec', () => {
       expect(codec.sanitizeContentDelta(input)).toBe('leading  trailing');
     });
 
+    it('strips a bare <invoke>...</invoke> block without a tool_call wrapper', () => {
+      // Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT` — the model
+      // emitted `<invoke name="exec_run">…</invoke>` without any
+      // `<tool_call>` wrapping. The previous pattern set only caught
+      // `<invoke>` *inside* a `<tool_call>` block.
+      const input =
+        'leading <invoke name="exec_run"><command>ls</command></invoke> trailing';
+      expect(codec.sanitizeContentDelta(input)).toBe('leading  trailing');
+    });
+
+    it('strips an orphan <invoke> opener and the rest of the chunk', () => {
+      expect(
+        codec.sanitizeContentDelta('leading <invoke name="exec_run">orphan'),
+      ).toBe('leading ');
+    });
+
+    it('drops content from the first remaining tool-tag onward (generic safety net)', () => {
+      // Final-pass detector for formats the regex set doesn't enumerate
+      // (new model variants, zero-width-space bypasses). Catches anything
+      // that looks like a structured tool-call markup tag.
+      expect(codec.sanitizeContentDelta('a <antml:invoke> b')).toBe('a ');
+      expect(
+        codec.sanitizeContentDelta('fine text <function_calls> oops'),
+      ).toBe('fine text ');
+    });
+
+    it('does not mangle legitimate text that resembles tool-call tags', () => {
+      expect(codec.sanitizeContentDelta('a <b>inline</b> c')).toBe(
+        'a <b>inline</b> c',
+      );
+      expect(codec.sanitizeContentDelta('plain text only')).toBe(
+        'plain text only',
+      );
+    });
+
     it('strips an orphan tool_call opener and the rest of the chunk', () => {
       const input = 'leading <tool_call>orphan payload';
       expect(codec.sanitizeContentDelta(input)).toBe('leading ');
