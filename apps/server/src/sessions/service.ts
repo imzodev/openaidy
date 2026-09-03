@@ -60,6 +60,7 @@ import {
   deleteSessionRecord,
   deleteExpiredEphemeralSessionRecords,
 } from './store';
+import { MINIMAX_GENERIC_TOOL_TAG_RE } from '../providers/infrastructure/openai-compatible/provider-codec/minimax';
 import type {
   SubmitMessageInput,
   SubmitMessageStreamingInput,
@@ -2372,9 +2373,7 @@ export class SessionMessageService {
       // Real session evidence: run `FhvhPZ5j3SpiKYvaNzrsT`.
       const looksLikeMalformedToolCall =
         finalFinishReason === 'stop' &&
-        /<(invoke|tool_call|function_calls?|antml:[a-z]+)\b/i.test(
-          accumulatedContent,
-        );
+        MINIMAX_GENERIC_TOOL_TAG_RE.test(accumulatedContent);
 
       const assistantMessage = await this.appendMessage({
         sessionId: input.sessionId,
@@ -2411,11 +2410,26 @@ export class SessionMessageService {
           cacheCreationTokens: finalUsage.cacheCreationTokens,
         }),
         firstMessageId: assistantMessage.id,
+        // Mirror markRunFailed: when a degraded run is flagged, set the
+        // top-level errorCode/errorMessage so the UI (which reads these
+        // from the top-level run columns) can surface the problem
+        // instead of treating the run as a clean success.
+        ...(looksLikeMalformedToolCall && {
+          errorCode: 'malformed_tool_call',
+          // TODO(i18n): this is hardcoded English. When the message
+          // becomes user-facing in the chat UI, route it through the
+          // server's i18n layer rather than inlining the string here.
+          errorMessage:
+            'The model emitted tool-call markup as content instead of a structured tool call.',
+        }),
         metadata: {
           providerId: finalProviderId,
           model: finalModelId,
           ...(looksLikeMalformedToolCall && {
             degraded: true,
+            // Mirror the top-level fields for callers that already
+            // inspect run.metadata.* (keeps backwards compatibility
+            // for anyone reading from the old location).
             errorCode: 'malformed_tool_call',
             errorMessage:
               'The model emitted tool-call markup as content instead of a structured tool call.',

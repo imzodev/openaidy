@@ -736,9 +736,18 @@ describe('SessionMessageService — agentic loop round exhaustion', () => {
     // bare `<invoke>` block as plain text, finished with finishReason `stop`,
     // and the codec missed it. The run was persisted as `succeeded` with
     // garbage content. Now: content is still preserved (so the user can read
-    // what the model tried) but the run metadata flags it as `degraded` with
+    // what the model tried) but the run is flagged as degraded with
     // errorCode `malformed_tool_call` so the UI can surface it instead of
     // pretending the agent answered cleanly.
+    //
+    // NOTE: this test deliberately injects `stream.content_delta` with the
+    // leaked markup rather than going through the real MiniMax provider
+    // adapter. The codec's translation logic (e.g. stripping `antml:invoke`
+    // blocks to structured tool_calls) is exercised separately in
+    // provider-codec.test.ts -- this test only covers the service-level
+    // detection that runs *after* the codec. If the codec starts to handle
+    // bare `<invoke>` blocks itself, the assertion here will fail (and
+    // rightly so: the service shouldn't be doing this work).
     const leaked =
       '<invoke name="exec_run"><command>node scripts/patch.mjs</command></invoke>';
     const { service } = makeStreamingService({
@@ -759,6 +768,11 @@ describe('SessionMessageService — agentic loop round exhaustion', () => {
     expect(result.assistantMessage.content).toBe(leaked);
     expect(result.run.status).toBe('succeeded');
     expect(result.run.finishReason).toBe('stop');
+    // Top-level fields (so the UI can read them without inspecting metadata)
+    expect(result.run.errorCode).toBe('malformed_tool_call');
+    expect(result.run.errorMessage).toMatch(/tool-call markup/i);
+    // Metadata fields (backwards-compat mirror for callers that still
+    // read from the old location)
     const metadata = result.run.metadata as Record<string, unknown> | null;
     expect(metadata).toEqual(
       expect.objectContaining({
@@ -789,6 +803,9 @@ describe('SessionMessageService — agentic loop round exhaustion', () => {
     const metadata = result.run.metadata as Record<string, unknown> | null;
     expect(metadata?.degraded).toBeUndefined();
     expect(metadata?.errorCode).toBeUndefined();
+    // Top-level fields stay clean too
+    expect(result.run.errorCode).toBeUndefined();
+    expect(result.run.errorMessage).toBeUndefined();
   });
 });
 

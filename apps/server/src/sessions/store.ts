@@ -239,6 +239,16 @@ export function markRunSucceeded(
     cacheCreationTokens?: number;
     cost?: number | null;
     firstMessageId?: string;
+    /**
+     * Optional top-level error code/message for runs that finish
+     * "succeeded" but in a degraded state (e.g. the model emitted
+     * tool-call markup as content and the codec missed it). Mirrors
+     * the top-level fields `markRunFailed` sets, so the chat UI --
+     * which reads `run.errorCode` from the top-level run columns --
+     * can surface the problem without having to inspect metadata.
+     */
+    errorCode?: string;
+    errorMessage?: string;
     metadata?: Record<string, unknown>;
   },
 ): SessionRunRecord | undefined {
@@ -262,6 +272,9 @@ export function markRunSucceeded(
   if (input.cost !== undefined) updates.cost = input.cost;
   if (input.firstMessageId !== undefined)
     updates.firstMessageId = input.firstMessageId;
+  if (input.errorCode !== undefined) updates.errorCode = input.errorCode;
+  if (input.errorMessage !== undefined)
+    updates.errorMessage = input.errorMessage;
   if (input.metadata !== undefined) updates.metadata = input.metadata;
 
   return updateRunRecord(id, updates);

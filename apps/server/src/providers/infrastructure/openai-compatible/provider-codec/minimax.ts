@@ -164,5 +164,5 @@ const MINIMAX_TOOL_BLOCK_OPENERS: readonly RegExp[] = [
  * because these codecs only run on assistant content (never on
  * user-supplied text).
  */
-const MINIMAX_GENERIC_TOOL_TAG_RE =
+export const MINIMAX_GENERIC_TOOL_TAG_RE =
   /<(invoke|tool_call|function_calls?|antml:[a-z]+)\b/i;
