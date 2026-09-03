@@ -29,6 +29,22 @@ const mockCreateAgentInput = {
   systemPrompt: 'Be helpful.',
   model: 'openai/gpt-4o-mini',
 };
+
+// Full-shape counterpart of mockCreateAgentInput — what `listAgents` would
+// return for it after a successful create (the create-flow modal mock skips
+// the createAgent round-trip and calls onCreated directly, but the
+// post-create refresh in handleAgentCreated hits listAgents and the real
+// server would include the just-created agent in that response).
+const mockNewAgent = {
+  id: 'new-agent',
+  name: 'New Agent',
+  description: '',
+  enabled: true,
+  systemPrompt: 'Be helpful.',
+  model: 'openai/gpt-4o-mini',
+  defaults: { providerId: 'openai', modelId: 'gpt-4o-mini' },
+  tags: [],
+};
 vi.mock('./CreateAgentModal', () => ({
   CreateAgentModal: (props: {
     isOpen: boolean;
@@ -139,7 +155,7 @@ describe('AgentsPage', () => {
   });
 
   const setupMocks = () => {
-    mockListAgents.mockResolvedValue({ items: mockAgents });
+    mockListAgents.mockResolvedValue({ items: [...mockAgents, mockNewAgent] });
     mockListBuiltinTools.mockResolvedValue({ items: [] });
     mockUpdateAgentTools.mockResolvedValue(undefined);
     mockListAgentSkills.mockResolvedValue({ items: [] });
@@ -322,7 +338,11 @@ describe('AgentsPage', () => {
       await waitFor(() => {
         expect(setQueryDataSpy).toHaveBeenCalledWith(
           ['agents'],
-          expect.objectContaining({ items: expect.any(Array) }),
+          expect.objectContaining({
+            items: expect.arrayContaining([
+              expect.objectContaining({ id: 'new-agent' }),
+            ]),
+          }),
         );
       });
     });

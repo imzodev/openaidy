@@ -352,13 +352,9 @@ export function AgentsPage(props: AgentsPageProps) {
       const response = await listAgents();
       setAgents(response.items);
       setSelectedAgentId(input.id);
-      // Update the shared ['agents'] cache synchronously with the data we
-      // just fetched. setQueryData (not invalidateQueries) eliminates the
-      // race window where navigating to chat could happen before the
-      // invalidated query's background refetch completes, leaving
-      // ChatComposer/AgentPicker to render from a stale pre-creation
-      // snapshot. `response` is the just-fetched server response, so
-      // there's no staleness to "fix" by invalidating instead.
+      // Update the shared ['agents'] cache synchronously -- invalidateQueries
+      // would only refetch in the background, opening a race window where
+      // "Start Chat" can navigate before the refetch completes.
       queryClient.setQueryData(['agents'], response);
     } catch {
       // ignore refresh error
