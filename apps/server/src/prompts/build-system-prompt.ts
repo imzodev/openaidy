@@ -10,6 +10,7 @@ import { ALL_TOOL_METAS } from '../tools/catalog';
 import { formatSessionSearchResultDocs } from '@openaidy/db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { platform } from 'node:os';
 import { parseSkillMd } from '../skills/parser';
 import { logger } from '../lib/logger';
 
@@ -116,12 +117,59 @@ function loadAgentWorkspaceSkills(
 }
 
 /**
+ * Build the [RUNTIME_OS] block telling the agent what shell it is
+ * actually running commands in. Without this, agents default to bash
+ * idioms (head, sed, awk, xargs, jq) and fail on Windows hosts with
+ * "is not recognized as an internal or external command" — a real
+ * recurring failure mode reported by users.
+ *
+ * Always emitted (no conditional) so the guidance is in the prompt
+ * from the first message regardless of which tools the agent holds.
+ * `os.platform()` returns 'win32' | 'darwin' | 'linux' | 'aix' |
+ * 'freebsd' | 'openbsd' | 'sunos' | 'cygwin' | 'netbsd' — we map the
+ * three the OpenAidy server actually runs on (the rest fall through
+ * to the Linux guidance as a sensible default).
+ *
+ * Tests assert on this function by mocking `process.platform`
+ * rather than stubbing `os.platform()`. The two are coupled today —
+ * Node's `os.platform()` returns `process.platform` verbatim — but the
+ * coupling is on Node's documented behavior, not on this function.
+ * If the call site at line ~206 ever reads from a different source
+ * (e.g. an env-var override), the mock target will need to follow.
+ */
+function buildRuntimeOsBlock(platform: NodeJS.Platform): string {
+  const isWindows = platform === 'win32';
+  const isMac = platform === 'darwin';
+  const label = isWindows
+    ? 'Windows (win32) — PowerShell'
+    : isMac
+      ? 'macOS (darwin) — bash'
+      : `${platform} — bash`;
+
+  const advice = isWindows
+    ? [
+        'On Windows the shell is PowerShell, not bash. Prefer native cmdlets (Get-ChildItem, Get-Content, Select-String, Get-Item, Copy-Item, Move-Item) or their built-in aliases (ls, cat, grep, cp, mv, rm).',
+        'Do NOT use Unix-only tools that PowerShell does not provide: head, sed, awk, xargs, jq, tail -f (use Get-Content -Wait), touch (use New-Item), or multi-line `for ... do ... done` blocks (use foreach or pipeline-style).',
+        'If a command fails with "is not recognized as an internal or external command", treat it as a missing Unix tool and use the PowerShell equivalent. Long shell pipelines via `|` still work.',
+      ].join(' ')
+    : [
+        `On ${platform} the shell is bash. Standard Unix idioms (ls, cat, grep, sed, awk, xargs, jq, head, tail) all work.`,
+        'Use bash-style multi-line constructs (for ... do ... done, while, case). Heredocs and process substitution are available.',
+      ].join(' ');
+
+  return `\n\n[RUNTIME_OS]
+You are running on ${label}. ${advice}
+[/RUNTIME_OS]`;
+}
+
+/**
  * Build the full system prompt for an agent.
  *
  * Injection order:
  * 1. Base system prompt
- * 2. Personality markdown files (AGENT_IDENTITY, USER_CONTEXT, MISSION_CONTEXT, RULES)
- * 3. Skill bodies wrapped in [SKILL_CONTEXTS] delimiters
+ * 2. Runtime-OS block (always-on, tells the agent what shell it's in)
+ * 3. Personality markdown files (AGENT_IDENTITY, USER_CONTEXT, MISSION_CONTEXT, RULES)
+ * 4. Skill bodies wrapped in [SKILL_CONTEXTS] delimiters
  *
  * Skill bodies are sanitized and wrapped in structural delimiters to prevent
  * prompt injection — content inside is treated as context data, not instructions.
@@ -158,6 +206,12 @@ export async function buildSystemPrompt(
   }
 
   let prompt = basePrompt;
+
+  // Always-include runtime-OS block so the agent knows what shell it's
+  // actually running commands in. Without this, agents default to bash
+  // idioms (head, sed, awk, xargs, jq) and fail on Windows hosts with
+  // "is not recognized as an internal or external command".
+  prompt += buildRuntimeOsBlock(platform());
 
   if (personalityService) {
     const blocks = await personalityService.readAllForInjection(agentId);
