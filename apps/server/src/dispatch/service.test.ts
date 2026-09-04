@@ -958,7 +958,13 @@ describe('DispatchService streaming', () => {
       );
 
       expect(messages[0]?.role).toBe('system');
-      expect(messages[0]?.content).toBe('You are a helpful assistant.');
+      // buildSystemPrompt now appends a [RUNTIME_OS] block to every system
+      // message. Asserting exact equality with the base prompt would couple
+      // this test to that unrelated block; assert the base is preserved and
+      // no skill sections were added.
+      expect(messages[0]?.content).toContain('You are a helpful assistant.');
+      expect(messages[0]?.content).not.toContain('[SKILL_CONTEXTS]');
+      expect(messages[0]?.content).not.toContain('[SKILLS_AVAILABLE]');
     });
 
     it('silently skips unknown skill IDs', async () => {

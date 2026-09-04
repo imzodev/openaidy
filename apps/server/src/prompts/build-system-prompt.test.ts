@@ -61,6 +61,125 @@ describe('buildSystemPrompt — onboarding block (#373)', () => {
   });
 });
 
+describe('buildSystemPrompt — [RUNTIME_OS] block', () => {
+  it('emits a Windows-specific block on win32 (no head/sed/awk/xargs/jq)', async () => {
+    // CI runs on linux; mock the platform so this assertion is platform-agnostic.
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+      configurable: true,
+    });
+    try {
+      const prompt = await buildSystemPrompt({
+        agentId: 'a1',
+        basePrompt: 'BASE',
+        personalityService: mockPersonality([]),
+      });
+      expect(prompt).toContain('[RUNTIME_OS]');
+      expect(prompt).toMatch(/Windows \(win32\) — PowerShell/);
+      expect(prompt).toContain('Get-ChildItem');
+      expect(prompt).toContain('Get-Content');
+      expect(prompt).toContain('Select-String');
+      expect(prompt).toContain(
+        'is not recognized as an internal or external command',
+      );
+      // Hard-negative: PowerShell guidance must NOT silently endorse bash-only idioms.
+      expect(prompt).not.toMatch(
+        /do NOT use[^.]*\bhead\b[^.]*\bsed\b[^.]*\bawk\b/,
+      );
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: original,
+        configurable: true,
+      });
+    }
+  });
+
+  it('emits a bash guidance block on linux', async () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: 'linux',
+      configurable: true,
+    });
+    try {
+      const prompt = await buildSystemPrompt({
+        agentId: 'a1',
+        basePrompt: 'BASE',
+        personalityService: mockPersonality([]),
+      });
+      expect(prompt).toContain('[RUNTIME_OS]');
+      expect(prompt).toMatch(/linux — bash/);
+      expect(prompt).toContain('Standard Unix idioms');
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: original,
+        configurable: true,
+      });
+    }
+  });
+
+  it('emits a bash guidance block on darwin', async () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: 'darwin',
+      configurable: true,
+    });
+    try {
+      const prompt = await buildSystemPrompt({
+        agentId: 'a1',
+        basePrompt: 'BASE',
+        personalityService: mockPersonality([]),
+      });
+      expect(prompt).toMatch(/macOS \(darwin\) — bash/);
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: original,
+        configurable: true,
+      });
+    }
+  });
+
+  it('falls back to bash guidance for unknown platforms (e.g. freebsd)', async () => {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', {
+      value: 'freebsd',
+      configurable: true,
+    });
+    try {
+      const prompt = await buildSystemPrompt({
+        agentId: 'a1',
+        basePrompt: 'BASE',
+        personalityService: mockPersonality([]),
+      });
+      expect(prompt).toMatch(/freebsd — bash/);
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: original,
+        configurable: true,
+      });
+    }
+  });
+
+  it('places [RUNTIME_OS] before [TOOL_GUIDELINES]', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      personalityService: mockPersonality([]),
+      tools: [
+        {
+          name: 'workspace_read',
+          description: 'read a file',
+          parameters: { type: 'object', properties: {} },
+        } as unknown as ToolDefinition,
+      ],
+    });
+    expect(prompt.indexOf('[RUNTIME_OS]')).toBeGreaterThan(-1);
+    expect(prompt.indexOf('[RUNTIME_OS]')).toBeLessThan(
+      prompt.indexOf('[TOOL_GUIDELINES]'),
+    );
+  });
+});
+
 describe('buildSystemPrompt — [ADDONS_AVAILABLE] block', () => {
   const ADDON_TOOL = {
     name: 'addon_update',
