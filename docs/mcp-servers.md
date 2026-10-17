@@ -62,6 +62,39 @@ openaidy mcp import servers.json     # from a file
 cat servers.json | openaidy mcp import   # from stdin
 ```
 
+## Example: Parallel web search and page fetching
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) provides `web_search` for current web information and `web_fetch` for reading specific URLs. The anonymous endpoint is free to use without an account or API key; search uses Fast mode. Anonymous requests have lower rate limits, so this setup suits exploration and light use.
+
+Save the following as `parallel-mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "parallel-search": {
+      "name": "Parallel Search",
+      "type": "http",
+      "url": "https://search.parallel.ai/mcp",
+      "headers": {
+        "User-Agent": "OpenAidy"
+      }
+    }
+  }
+}
+```
+
+With your OpenAidy server running and your CLI authenticated, import it:
+
+```bash
+openaidy mcp import parallel-mcp.json
+```
+
+You can also paste the same JSON into **MCP Servers → Import** in the web UI. OpenAidy connects the imported server and discovers its tools. Check that **Parallel Search** is connected, then open **Agents**, select your agent, and enable **Parallel Search** in its **MCP Servers** tab. Importing a server does not enable it for every agent.
+
+In a chat with that agent, try: "Use Parallel to find the current Node.js LTS release on nodejs.org, fetch the release page, and summarize the support dates with source URLs." The tools work together: `web_search` finds candidate pages, and `web_fetch` reads the selected URLs. Use a model that supports tool calling.
+
+This adds an optional server alongside your existing MCP servers. To stop using it, disable it for the agent or remove the server from **MCP Servers**.
+
 ## Related
 
 - [Addons](./addons/README.md) — an addon's own permission for MCP access is granted indirectly through whatever agent it's allowed to invoke, not declared directly
