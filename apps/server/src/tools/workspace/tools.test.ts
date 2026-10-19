@@ -192,6 +192,25 @@ describe('workspace tools', () => {
       expect(result.ok).toBe(false);
     });
 
+    it('deletes a non-empty directory only with recursive: true', async () => {
+      await workspace.writeFile(CTX.agentId, 'old-dir/nested/a.txt', 'a');
+      const tool = createWorkspaceDeleteTool(workspace);
+
+      const refused = await tool.execute({ path: 'old-dir' }, CTX);
+      expect(refused).toMatchObject({
+        ok: false,
+        error: expect.stringContaining('recursive'),
+      });
+
+      const result = await tool.execute(
+        { path: 'old-dir', recursive: true },
+        CTX,
+      );
+      expect(result.ok).toBe(true);
+      const files = await workspace.listFiles(CTX.agentId);
+      expect(files.some((f) => f.path.startsWith('old-dir'))).toBe(false);
+    });
+
     it('returns error when path is missing', async () => {
       const tool = createWorkspaceDeleteTool(workspace);
       const result = await tool.execute({}, CTX);

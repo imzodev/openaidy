@@ -477,6 +477,54 @@ describe('WorkspaceService', () => {
         service.deleteFile(agentId, '../../../tmp/important.txt'),
       ).rejects.toThrow(WorkspaceError);
     });
+
+    it('should delete an empty directory', async () => {
+      const agentId = 'delete-empty-dir-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      await mkdir(join(workspacePath, 'empty'));
+      await service.deleteFile(agentId, 'empty');
+
+      expect(await service.listFiles(agentId)).toHaveLength(0);
+    });
+
+    it('should refuse a non-empty directory without recursive', async () => {
+      const agentId = 'delete-nonempty-dir-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      await mkdir(join(workspacePath, 'dir'));
+      await fsWriteFile(join(workspacePath, 'dir', 'a.txt'), 'a');
+
+      await expect(service.deleteFile(agentId, 'dir')).rejects.toMatchObject({
+        code: 'DIRECTORY_NOT_EMPTY',
+      });
+      expect(await service.listFiles(agentId)).toHaveLength(1);
+    });
+
+    it('should delete a non-empty directory with recursive', async () => {
+      const agentId = 'delete-recursive-dir-agent';
+      await service.ensureWorkspace(agentId);
+      const workspacePath = service.getWorkspacePath(agentId);
+
+      await mkdir(join(workspacePath, 'dir', 'nested'), { recursive: true });
+      await fsWriteFile(join(workspacePath, 'dir', 'nested', 'a.txt'), 'a');
+      await service.deleteFile(agentId, 'dir', { recursive: true });
+
+      expect(await service.listFiles(agentId)).toHaveLength(0);
+    });
+
+    it('should refuse to delete the workspace root', async () => {
+      const agentId = 'delete-root-agent';
+      await service.ensureWorkspace(agentId);
+
+      for (const path of ['.', './', 'dir/..']) {
+        await expect(
+          service.deleteFile(agentId, path, { recursive: true }),
+        ).rejects.toMatchObject({ code: 'INVALID_PATH' });
+      }
+    });
   });
 
   describe('renameFile', () => {
