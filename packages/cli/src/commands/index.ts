@@ -366,8 +366,8 @@ registerCommand(
   },
   {
     description: 'Start the OpenAidy server as a background process',
-    usage: 'openaidy start',
-    examples: ['openaidy start'],
+    usage: 'openaidy start [--port <N>] [--foreground]',
+    examples: ['openaidy start', 'openaidy start --foreground'],
   },
 );
 
@@ -411,6 +411,73 @@ registerCommand(
     description: 'Show the current server status',
     usage: 'openaidy status',
     examples: ['openaidy status'],
+  },
+);
+
+// ============================================================================
+// Service Command Group (systemd supervision)
+// ============================================================================
+
+registerGroup({
+  name: 'service',
+  description: 'Run OpenAidy under systemd so it restarts automatically',
+  commands: {
+    'service install': {
+      description:
+        'Install + start the systemd service (auto-restart, starts at boot)',
+      usage: 'openaidy service install [--port <N>]',
+      examples: ['openaidy service install'],
+    },
+    'service uninstall': {
+      description: 'Stop and remove the systemd service',
+      usage: 'openaidy service uninstall',
+      examples: ['openaidy service uninstall'],
+    },
+    'service status': {
+      description: 'Show the systemd service status',
+      usage: 'openaidy service status',
+      examples: ['openaidy service status'],
+    },
+  },
+});
+
+registerCommand(
+  'service install',
+  async (args: string[]) => {
+    const { serviceInstallHandler } = await import('./service.js');
+    return serviceInstallHandler(args);
+  },
+  {
+    description:
+      'Install + start the systemd service (auto-restart, starts at boot)',
+    usage: 'openaidy service install [--port <N>]',
+    examples: ['openaidy service install'],
+  },
+);
+
+registerCommand(
+  'service uninstall',
+  async (args: string[]) => {
+    const { serviceUninstallHandler } = await import('./service.js');
+    return serviceUninstallHandler(args);
+  },
+  {
+    description: 'Stop and remove the systemd service',
+    usage: 'openaidy service uninstall',
+    examples: ['openaidy service uninstall'],
+  },
+);
+
+registerCommand(
+  'service status',
+  async (args: string[]) => {
+    const { serviceStatusHandler } = await import('./service.js');
+    return serviceStatusHandler(args);
+  },
+  {
+    description: 'Show the systemd service status',
+    usage: 'openaidy service status',
+    examples: ['openaidy service status'],
   },
 );
 

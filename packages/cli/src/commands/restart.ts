@@ -20,7 +20,13 @@ import { homedir } from 'node:os';
 import type { CommandResult } from '../types.js';
 import { readPidFile } from '../lib/process-manager.js';
 import { stopHandler } from './stop.js';
-import { startHandler } from './start.js';
+import { pollHealth, resolveStartPort, startHandler } from './start.js';
+import {
+  SERVICE_NAME,
+  describeFailure,
+  detectInstalledService,
+  systemctl,
+} from '../lib/service-manager.js';
 
 const HELP_TEXT = `
 Usage: openaidy restart [options]
@@ -34,6 +40,9 @@ but in a single command with port preservation and a coherent exit code:
 
 The port from the previous server PID file is preserved by default. Pass
 --port to override (same semantics as \`openaidy start\`).
+
+When the OpenAidy service is installed (\`openaidy service install\`),
+this restarts it through systemctl; the port comes from the unit.
 
 Options:
   -h, --help          Show this help message
@@ -70,6 +79,30 @@ export async function restartHandler(args: string[]): Promise<CommandResult> {
       output:
         'Error: --server-only and --integrated are mutually exclusive. ' +
         'The server was NOT restarted.',
+    };
+  }
+
+  const service = detectInstalledService();
+  if (service) {
+    // Read the port before the bounce removes and rewrites the PID file.
+    const openaidyHome =
+      process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
+    const record = await readPidFile(resolve(openaidyHome, 'state/server.pid'));
+    const result = await systemctl(service.scope, ['restart', SERVICE_NAME]);
+    if (result.code !== 0) {
+      return {
+        exitCode: 1,
+        output: `Error: systemctl restart ${SERVICE_NAME} failed: ${describeFailure(result)}`,
+      };
+    }
+    const fallback = resolveStartPort(args, process.env);
+    const port = record?.port ?? (fallback.ok ? fallback.port : 3001);
+    const healthy = await pollHealth(port);
+    return {
+      exitCode: healthy ? 0 : 1,
+      output: healthy
+        ? `Server restarted (${SERVICE_NAME}.service) on http://localhost:${port}`
+        : `Error: ${SERVICE_NAME}.service restarted but /health did not respond within 30 seconds. Check \`openaidy service status\`.`,
     };
   }
 

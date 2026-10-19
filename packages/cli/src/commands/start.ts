@@ -29,8 +29,15 @@ import { unlink } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { request } from 'node:http';
+import type { ChildProcess } from 'node:child_process';
 import type { CommandResult } from '../types.js';
 import { writePidFile, writeWebPidFile } from '../lib/process-manager.js';
+import {
+  SERVICE_NAME,
+  describeFailure,
+  detectInstalledService,
+  systemctl,
+} from '../lib/service-manager.js';
 
 /**
  * Default server port. Kept in sync with DEFAULT_SERVER_PORT in
@@ -78,6 +85,12 @@ Options:
   --integrated        Build the web bundle first and have the server
                       serve it directly (same-origin). The Vite dev
                       server is NOT spawned. Requires pnpm.
+  --foreground        Run the server attached to this process and exit
+                      when it exits (no web frontend). This is what the
+                      systemd unit from \`openaidy service install\` runs.
+
+When the OpenAidy service is installed (\`openaidy service install\`),
+this command starts it through systemctl instead of spawning a server.
 
 Exit Codes:
   0  Server started and healthy (and web started unless --server-only)
@@ -137,7 +150,10 @@ export function resolveStartPort(
  * Poll GET /health until the server responds with 200.
  * Resolves true on success, false on timeout.
  */
-function pollHealth(port: number, maxPolls: number): Promise<boolean> {
+export function pollHealth(
+  port: number,
+  maxPolls: number = HEALTH_MAX_POLLS,
+): Promise<boolean> {
   return new Promise((resolve) => {
     let attempts = 0;
 
@@ -246,6 +262,27 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   }
   const port = portResult.port;
 
+  const foreground = args.includes('--foreground');
+  if (!foreground) {
+    const service = detectInstalledService();
+    if (service) {
+      const result = await systemctl(service.scope, ['start', SERVICE_NAME]);
+      if (result.code !== 0) {
+        return {
+          exitCode: 1,
+          output: `Error: systemctl start ${SERVICE_NAME} failed: ${describeFailure(result)}`,
+        };
+      }
+      const healthy = await pollHealth(port);
+      return {
+        exitCode: healthy ? 0 : 1,
+        output: healthy
+          ? `Server running on http://localhost:${port} (managed by systemd: ${SERVICE_NAME}.service)`
+          : `Error: ${SERVICE_NAME}.service started but /health did not respond within 30 seconds. Check \`openaidy service status\`.`,
+      };
+    }
+  }
+
   // Ensure state directory and build paths
   const stateDir = resolve(openaidyHome, 'state');
   const logFile = resolve(openaidyHome, 'logs', 'server.log');
@@ -343,7 +380,7 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
   const fs = await import('node:fs');
   const logFd = fs.openSync(logFile, 'a');
   const child = spawn(nodeBin, runtimeArgs, {
-    detached: true,
+    detached: !foreground,
     stdio: ['ignore', logFd, logFd],
     shell: process.platform === 'win32',
     env: childEnv,
@@ -359,6 +396,10 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
     logFile,
   };
   await writePidFile(pidFilePath, rec);
+
+  if (foreground) {
+    return runForeground(child, pidFilePath);
+  }
 
   // Unref the child so it can outlive the CLI process
   child.unref();
@@ -472,6 +513,55 @@ export async function startHandler(args: string[]): Promise<CommandResult> {
       '',
     ].join('\n'),
   };
+}
+
+// ============================================================================
+// Foreground mode (systemd)
+// ============================================================================
+
+/**
+ * Stay attached to the server: forward SIGTERM/SIGINT to it and exit with
+ * its exit code, so a supervisor (systemd) sees a crash as this process
+ * exiting and restarts it.
+ */
+function runForeground(
+  child: ChildProcess,
+  pidFilePath: string,
+): Promise<CommandResult> {
+  return new Promise((resolveResult) => {
+    const forward = (signal: NodeJS.Signals) => {
+      try {
+        child.kill(signal);
+      } catch {
+        /* already gone */
+      }
+    };
+    const onTerm = () => forward('SIGTERM');
+    const onInt = () => forward('SIGINT');
+    process.on('SIGTERM', onTerm);
+    process.on('SIGINT', onInt);
+
+    const finish = async (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ) => {
+      process.off('SIGTERM', onTerm);
+      process.off('SIGINT', onInt);
+      await unlink(pidFilePath).catch(() => {});
+      resolveResult({
+        exitCode: code ?? (signal ? 1 : 0),
+        output: signal
+          ? `Server exited on ${signal}`
+          : `Server exited with code ${code ?? 0}`,
+      });
+    };
+    // The server may already have exited while the PID file was written.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      void finish(child.exitCode, child.signalCode);
+    } else {
+      child.once('exit', (code, signal) => void finish(code, signal));
+    }
+  });
 }
 
 // ============================================================================

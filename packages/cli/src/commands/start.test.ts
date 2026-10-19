@@ -106,6 +106,68 @@ describe('openaidy start', () => {
     }
   }, 60_000);
 
+  describe('--foreground', () => {
+    const itIfUnix = process.platform === 'win32' ? it.skip : it;
+
+    async function stubRepo(body: string[]): Promise<string> {
+      const repoHome = join(tmpdir(), `openaidy-start-fg-${randomUUID()}`);
+      const srcDir = join(repoHome, 'apps/server/src');
+      await mkdir(srcDir, { recursive: true });
+      await writeFile(join(srcDir, 'server.ts'), body.join('\n'));
+      return repoHome;
+    }
+
+    afterEach(() => {
+      delete process.env.OPENAIDY_REPO;
+    });
+
+    itIfUnix(
+      "stays attached and exits with the server's exit code",
+      async () => {
+        process.env.OPENAIDY_REPO = await stubRepo(['process.exit(3);']);
+        const { probeFreePort } = await import('../lib/process-manager.js');
+        const port = await probeFreePort(32000, 50);
+        const result = await startHandler([
+          '--foreground',
+          '--port',
+          String(port),
+        ]);
+        expect(result.exitCode).toBe(3);
+        const { existsSync } = await import('node:fs');
+        expect(existsSync(join(testHome, 'state', 'server.pid'))).toBe(false);
+      },
+      60_000,
+    );
+
+    itIfUnix(
+      'forwards SIGTERM to the server and exits cleanly',
+      async () => {
+        process.env.OPENAIDY_REPO = await stubRepo([
+          "import { createServer } from 'node:http';",
+          'const server = createServer((req, res) => { res.writeHead(200); res.end(); });',
+          "server.listen(Number(process.env.PORT), '127.0.0.1');",
+          "process.on('SIGTERM', () => server.close(() => process.exit(0)));",
+        ]);
+        const { probeFreePort } = await import('../lib/process-manager.js');
+        const port = await probeFreePort(32100, 50);
+        const before = new Set(process.listeners('SIGTERM'));
+        const running = startHandler(['--foreground', '--port', String(port)]);
+        const { pollHealth } = await import('./start.js');
+        expect(await pollHealth(port)).toBe(true);
+        // What systemd does on `systemctl stop`. Fire only the listener this
+        // run installed (earlier tests leave their own on the process).
+        const added = process
+          .listeners('SIGTERM')
+          .filter((l) => !before.has(l));
+        expect(added).toHaveLength(1);
+        added[0]!('SIGTERM');
+        const result = await running;
+        expect(result.exitCode).toBe(0);
+      },
+      60_000,
+    );
+  });
+
   it('probeFreePort returns a valid port', async () => {
     const { probeFreePort } = await import('../lib/process-manager.js');
     const port = await probeFreePort(31000, 5);

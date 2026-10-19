@@ -679,6 +679,11 @@ main() {
         esac
         echo ""
         echo "Use 'openaidy stop' to stop the server."
+        if [ "$OS" = "linux" ] && [ -d /run/systemd/system ]; then
+            echo ""
+            echo "Tip: run 'openaidy service install' to keep OpenAidy running with"
+            echo "systemd - it starts at boot and restarts automatically if it crashes."
+        fi
     else
         AUTH_URL="http://localhost:3001/?token=$(printf '%s' "$BOOTSTRAP_TOKEN" | sed 's/#/%23/g; s/&/%26/g; s/?/%3F/g')"
         echo "Run 'openaidy start' to bring the server online,"

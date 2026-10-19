@@ -24,6 +24,12 @@ import {
   readWebPidFile,
   isProcessAlive,
 } from '../lib/process-manager.js';
+import {
+  SERVICE_NAME,
+  describeFailure,
+  detectInstalledService,
+  systemctl,
+} from '../lib/service-manager.js';
 
 // ============================================================================
 // Constants
@@ -42,6 +48,9 @@ Gracefully shuts down processes by:
   - Sending SIGTERM (Unix) or taskkill (Windows)
   - Waiting up to 10 seconds for clean shutdown
   - Escalating to SIGKILL if needed
+
+When the OpenAidy service is installed (\`openaidy service install\`),
+this stops it through systemctl (it stays stopped until started again).
 
 Options:
   -h, --help          Show this help message
@@ -110,6 +119,17 @@ export async function stopHandler(args: string[]): Promise<CommandResult> {
   // Help flag
   if (args.includes('--help') || args.includes('-h')) {
     return { exitCode: 0, output: HELP_TEXT.trim() };
+  }
+
+  const service = detectInstalledService();
+  if (service) {
+    const result = await systemctl(service.scope, ['stop', SERVICE_NAME]);
+    return result.code === 0
+      ? { exitCode: 0, output: `Server stopped (${SERVICE_NAME}.service).` }
+      : {
+          exitCode: 1,
+          output: `Error: systemctl stop ${SERVICE_NAME} failed: ${describeFailure(result)}`,
+        };
   }
 
   // --server-only: stop only the server, leave the web frontend running

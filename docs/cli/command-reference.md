@@ -678,7 +678,12 @@ Start the OpenAidy server as a background process.
 
 ```bash
 openaidy start
+openaidy start --foreground
 ```
+
+`--foreground` keeps the CLI attached to the server: it forwards `SIGTERM`/`SIGINT` and exits with the server's exit code. That's what the systemd unit from `openaidy service install` runs, so a crash shows up to systemd as the process exiting and it restarts the server. Foreground mode never starts the Vite web frontend.
+
+When the service is installed, `start`, `stop` and `restart` control it through `systemctl` instead of spawning or killing a server themselves, so only one server ever runs.
 
 #### `stop`
 
@@ -708,6 +713,39 @@ Show the current server status.
 
 ```bash
 openaidy status
+```
+
+### `service` - Run Under systemd
+
+`openaidy start` on its own isn't supervised: if the server dies (for example, killed for running out of memory) it stays down. Installing the service hands the server to systemd, which starts it at boot and restarts it within 5 seconds whenever it exits. Linux with systemd only.
+
+As root, the unit is installed system-wide at `/etc/systemd/system/openaidy.service`. Other users get a user unit at `~/.config/systemd/user/openaidy.service`, with lingering enabled (`loginctl enable-linger`) so it keeps running after logout.
+
+#### `service install`
+
+Write the unit, enable it and start it. A server already running from `openaidy start` is stopped first and handed over. Re-run it to update the unit (e.g. after changing `--port`).
+
+```bash
+openaidy service install
+openaidy service install --port 3001
+```
+
+Logs still go to `$OPENAIDY_HOME/logs/server.log`.
+
+#### `service uninstall`
+
+Stop and disable the service and remove its unit file. Data in `OPENAIDY_HOME` is untouched; run `openaidy start` to go back to an unmanaged server.
+
+```bash
+openaidy service uninstall
+```
+
+#### `service status`
+
+Show whether the service is installed, enabled and running (`systemctl status openaidy`).
+
+```bash
+openaidy service status
 ```
 
 ---
