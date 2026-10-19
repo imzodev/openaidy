@@ -138,7 +138,8 @@ export const workspaceListMeta: ToolMeta = {
 export const workspaceDeleteMeta: ToolMeta = {
   name: 'workspace_delete',
   category: 'Workspace',
-  description: 'Delete a file from the agent workspace.',
+  description:
+    'Delete a file or directory from the agent workspace. Set recursive: true to delete a non-empty directory.',
 };
 
 // ── Media ─────────────────────────────────────────────────────────────────────

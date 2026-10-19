@@ -6,7 +6,8 @@ import { workspaceDeleteMeta } from '../catalog.js';
 /**
  * workspace_delete
  *
- * Deletes a file from the agent's workspace.
+ * Deletes a file or directory from the agent's workspace. Non-empty
+ * directories require `recursive: true`.
  */
 export function createWorkspaceDeleteTool(
   workspace: WorkspaceService,
@@ -20,7 +21,12 @@ export function createWorkspaceDeleteTool(
         path: {
           type: 'string',
           description:
-            'Relative path to the file to delete within the workspace',
+            'Relative path to the file or directory to delete within the workspace',
+        },
+        recursive: {
+          type: 'boolean',
+          description:
+            'Required to delete a non-empty directory and everything inside it. Defaults to false.',
         },
       },
       required: ['path'],
@@ -32,16 +38,18 @@ export function createWorkspaceDeleteTool(
         return { ok: false, error: 'path is required and must be a string' };
       }
 
+      const recursive = args['recursive'] === true;
+
       try {
-        await workspace.deleteFile(ctx.agentId, filePath);
-        return { ok: true, content: `File deleted: ${filePath}` };
+        await workspace.deleteFile(ctx.agentId, filePath, { recursive });
+        return { ok: true, content: `Deleted: ${filePath}` };
       } catch (err) {
         if (err instanceof WorkspaceError) {
           return { ok: false, error: err.message };
         }
         return {
           ok: false,
-          error: `Failed to delete file: ${err instanceof Error ? err.message : String(err)}`,
+          error: `Failed to delete: ${err instanceof Error ? err.message : String(err)}`,
         };
       }
     },
