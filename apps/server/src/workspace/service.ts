@@ -4,6 +4,9 @@ import {
   readFile,
   writeFile,
   unlink,
+  rm,
+  rmdir,
+  lstat,
   stat,
   rename,
   open,
@@ -628,27 +631,61 @@ export class WorkspaceService {
   }
 
   /**
-   * Delete a file from the workspace
+   * Delete a file or directory from the workspace.
+   *
+   * Directories are only removed when empty unless `recursive` is set, so a
+   * stray call can't wipe a whole tree. The workspace root itself can never
+   * be deleted. Symlinks are removed as links, never followed.
    */
-  async deleteFile(agentId: string, filePath: string): Promise<void> {
+  async deleteFile(
+    agentId: string,
+    filePath: string,
+    options: { recursive?: boolean } = {},
+  ): Promise<void> {
     const absolutePath = this.validatePath(agentId, filePath);
-    log.debug('Deleting file:', { agentId, filePath, absolutePath });
+    log.debug('Deleting path:', { agentId, filePath, absolutePath });
+
+    if (relative(this.getWorkspacePath(agentId), absolutePath) === '') {
+      throw new WorkspaceError(
+        'Cannot delete the workspace root',
+        'INVALID_PATH',
+      );
+    }
 
     try {
-      await unlink(absolutePath);
-      log.info('File deleted:', { agentId, filePath });
+      const stats = await lstat(absolutePath);
+      if (!stats.isDirectory()) {
+        await unlink(absolutePath);
+      } else if (options.recursive) {
+        await rm(absolutePath, { recursive: true });
+      } else {
+        await rmdir(absolutePath);
+      }
+      log.info('Path deleted:', {
+        agentId,
+        filePath,
+        directory: stats.isDirectory(),
+      });
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT') {
         throw new WorkspaceError(
           `File not found: ${filePath}`,
           'FILE_NOT_FOUND',
           err,
         );
       }
-      log.error('Failed to delete file:', { agentId, filePath }, err);
+      if (code === 'ENOTEMPTY' || code === 'EEXIST') {
+        throw new WorkspaceError(
+          `Directory is not empty: ${filePath} (pass recursive: true to delete it and its contents)`,
+          'DIRECTORY_NOT_EMPTY',
+          err,
+        );
+      }
+      log.error('Failed to delete path:', { agentId, filePath }, err);
       throw new WorkspaceError(
-        `Failed to delete file: ${filePath}`,
+        `Failed to delete: ${filePath}`,
         'DELETE_FILE_FAILED',
         err,
       );

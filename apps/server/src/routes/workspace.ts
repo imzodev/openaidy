@@ -429,15 +429,19 @@ export const workspaceRoutes: FastifyPluginAsync<
 
   /**
    * DELETE /workspace/:agentId/files/*
-   * Delete a file
+   * Delete a file or directory (`?recursive=true` for non-empty directories)
    */
   app.delete(
     '/workspace/:agentId/files/*',
     async (
-      request: FastifyRequest<{ Params: { agentId: string; '*': string } }>,
+      request: FastifyRequest<{
+        Params: { agentId: string; '*': string };
+        Querystring: { recursive?: string };
+      }>,
       reply,
     ) => {
       const { agentId: targetAgentId, '*': filePath } = request.params;
+      const recursive = request.query.recursive === 'true';
 
       if (!filePath) {
         reply.code(400);
@@ -451,13 +455,29 @@ export const workspaceRoutes: FastifyPluginAsync<
       }
 
       try {
-        await workspaceService.deleteFile(targetAgentId, filePath);
+        await workspaceService.deleteFile(targetAgentId, filePath, {
+          recursive,
+        });
         return { success: true, path: filePath };
       } catch (error) {
         const workspaceError = error as { code?: string };
         if (workspaceError.code === 'FILE_NOT_FOUND') {
           reply.code(404);
           return { error: 'File not found', code: 'NOT_FOUND' };
+        }
+        if (workspaceError.code === 'DIRECTORY_NOT_EMPTY') {
+          reply.code(409);
+          return {
+            error: 'Directory is not empty',
+            code: 'DIRECTORY_NOT_EMPTY',
+          };
+        }
+        if (workspaceError.code === 'INVALID_PATH') {
+          reply.code(400);
+          return {
+            error: 'Cannot delete the workspace root',
+            code: 'BAD_REQUEST',
+          };
         }
         log.error(
           'Failed to delete file',
