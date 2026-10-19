@@ -28,10 +28,37 @@ export const BACKUP_SECTIONS: readonly BackupSection[] = [
   'addons',
 ];
 
+/**
+ * Folder names treated as "heavy" inside workspaces: dependency installs,
+ * VCS metadata and tool caches. They are large, rebuildable, and skipped by
+ * default on export (opt back in with `includeHeavyFolders`).
+ */
+export const BACKUP_HEAVY_FOLDER_NAMES: readonly string[] = [
+  'node_modules',
+  '.git',
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.pytest_cache',
+  '.mypy_cache',
+  '.ruff_cache',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.parcel-cache',
+  '.gradle',
+];
+
 /** Per-section item count and size info for display. */
 export type BackupSectionSummary = {
   itemCount: number;
+  /** Total bytes, heavy folders included. */
   sizeBytes: number;
+  /**
+   * Bytes that live inside heavy folders (see BACKUP_HEAVY_FOLDER_NAMES).
+   * Only reported for sections the heavy-folder filter applies to.
+   */
+  heavyBytes?: number;
 };
 
 /** The manifest written into every backup zip. */
@@ -42,6 +69,8 @@ export type BackupManifest = {
   createdAt: string;
   openaidyVersion: string;
   sections: Record<BackupSection, BackupSectionSummary>;
+  /** Whether heavy workspace folders were included (absent on older backups). */
+  includesHeavyFolders?: boolean;
 };
 
 /** Response body of `GET /api/backups/manifest` (live snapshot of OPENAIDY_HOME). */
@@ -49,18 +78,26 @@ export type BackupManifestResponse = {
   manifest: BackupManifest;
 };
 
-/** Response body of `POST /api/backups/preview`. */
-export type BackupPreview = {
-  manifest: BackupManifest;
-  zipSizeBytes: number;
-};
-
-/** Request body of `POST /api/backups/export` (omit `sections` for all). */
+/** Request body of `POST /api/backups/exports` (omit `sections` for all). */
 export type ExportRequest = {
   sections?: BackupSection[];
+  /** Include node_modules, .git, … inside workspaces. Default false. */
+  includeHeavyFolders?: boolean;
 };
 
-/** Request body of `POST /api/backups/import`. */
+/**
+ * An uploaded backup staged on disk, ready to import. Response body of
+ * `POST /api/backups/uploads`.
+ */
+export type BackupUpload = {
+  id: string;
+  manifest: BackupManifest;
+  zipSizeBytes: number;
+  /** ISO 8601 — the staged file is deleted after this unless an import is running. */
+  expiresAt: string;
+};
+
+/** Request body of `POST /api/backups/uploads/:id/import`. */
 export type ImportRequest = {
   sections: BackupSection[];
 };
@@ -75,9 +112,45 @@ export type ImportedSection = {
   restartRequired?: boolean;
 };
 
-/** Response body of `POST /api/backups/import`. */
-export type ImportResponse = {
-  results: ImportedSection[];
+export type BackupJobKind = 'export' | 'import';
+
+export type BackupJobStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
+
+/**
+ * A background export or import. Exports are written to a temp file on the
+ * server and downloaded once `status === 'succeeded'`; imports apply sections
+ * from a staged upload. Poll `GET /api/backups/jobs/:id` for progress.
+ */
+export type BackupJob = {
+  id: string;
+  kind: BackupJobKind;
+  status: BackupJobStatus;
+  /** Human-readable current step, e.g. "Snapshotting database". */
+  phase: string;
+  processedBytes: number;
+  totalBytes: number;
+  /** ISO 8601 */
+  startedAt: string;
+  /** ISO 8601 */
+  finishedAt?: string;
+  error?: string;
+  /** export: size of the finished zip. */
+  fileSizeBytes?: number;
+  /**
+   * export: relative URL that downloads the finished zip. Carries a
+   * job-scoped key so the browser can fetch it natively (no auth header),
+   * which lets it stream to disk and resume an interrupted download.
+   */
+  downloadUrl?: string;
+  /** export: ISO 8601 — the finished zip is deleted after this. */
+  expiresAt?: string;
+  /** import: per-section results once finished. */
+  results?: ImportedSection[];
+};
+
+/** Response body of the job endpoints. */
+export type BackupJobResponse = {
+  job: BackupJob;
 };
 
 /** Options passed to the backup service that don't come from the archive itself. */

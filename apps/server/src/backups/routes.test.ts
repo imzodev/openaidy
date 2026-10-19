@@ -2,22 +2,28 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
-import AdmZip from 'adm-zip';
+import type { BackupJob } from '@openaidy/shared-types';
 import { backupRoutes } from './routes';
 import { BackupService, type BackupPaths } from './service';
+import { BackupJobManager } from './jobs';
 import { AuthMiddleware } from '../websocket/middleware/auth';
 
 const mockAuthMiddleware = {
-  validateToken: async () => ({
-    sub: 'test',
-    scopes: ['*'],
-    type: 'access' as const,
-    iat: 0,
-    exp: 9999999999,
-  }),
-  extractFromHeader: (_h: string) => 'test-token',
+  validateToken: async (token: string) =>
+    token === 'test-token'
+      ? {
+          sub: 'test',
+          scopes: ['*'],
+          type: 'access' as const,
+          iat: 0,
+          exp: 9999999999,
+        }
+      : null,
+  extractFromHeader: (h: string) => h.replace(/^Bearer /, ''),
+  extractFromQuery: () => null,
   hasCapability: () => true,
 } as unknown as AuthMiddleware;
 
@@ -57,17 +63,59 @@ function multipart(
 let home: string;
 let paths: BackupPaths;
 let service: BackupService;
+let jobs: BackupJobManager;
 let app: FastifyInstance;
+let freeBytes: number;
 
 function write(p: string, content: string) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, content);
 }
 
-async function validBackupBuffer(): Promise<Buffer> {
-  const zipPath = path.join(home, 'valid.zip');
-  await service.buildZip([], fs.createWriteStream(zipPath));
-  return fs.readFileSync(zipPath);
+async function waitForJob(id: string): Promise<BackupJob> {
+  for (let i = 0; i < 200; i++) {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/backups/jobs/${id}`,
+      headers: AUTH,
+    });
+    const { job } = res.json() as { job: BackupJob };
+    if (job.status !== 'running') return job;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('job never finished');
+}
+
+async function finishedExport(payload: object = {}): Promise<BackupJob> {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/backups/exports',
+    headers: AUTH,
+    payload,
+  });
+  expect(res.statusCode).toBe(202);
+  return waitForJob(res.json().job.id);
+}
+
+async function exportedZip(payload: object = {}): Promise<Buffer> {
+  const job = await finishedExport(payload);
+  const res = await app.inject({ method: 'GET', url: job.downloadUrl! });
+  expect(res.statusCode).toBe(200);
+  return res.rawPayload;
+}
+
+async function upload(content: Buffer) {
+  const { body, contentType } = multipart({
+    field: 'file',
+    filename: 'b.zip',
+    content,
+  });
+  return app.inject({
+    method: 'POST',
+    url: '/api/backups/uploads',
+    headers: { ...AUTH, 'content-type': contentType },
+    payload: body,
+  });
 }
 
 beforeEach(async () => {
@@ -79,10 +127,22 @@ beforeEach(async () => {
     skillsDir: path.join(home, 'skills'),
     addonsDir: path.join(home, 'addons'),
   };
-  write(paths.dbPath, 'DB');
+  fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
+  const db = new DatabaseSync(paths.dbPath);
+  db.exec('CREATE TABLE t (v INTEGER); INSERT INTO t VALUES (1);');
+  db.close();
   write(paths.configPath, '{"providers":[]}');
   write(path.join(paths.skillsDir, 's1', 'SKILL.md'), '# s');
   service = new BackupService(paths, '0.3.8');
+  freeBytes = Number.MAX_SAFE_INTEGER;
+  jobs = new BackupJobManager({
+    service,
+    tmpDir: path.join(home, 'tmp', 'backups'),
+    downloadUrlFor: (id, key) =>
+      `/api/backups/exports/${id}/download?key=${key}`,
+    freeBytes: async () => freeBytes,
+  });
+  await jobs.init();
 
   app = Fastify({ logger: false });
   await app.register(sensible);
@@ -90,7 +150,9 @@ beforeEach(async () => {
     async (api) => {
       await api.register(backupRoutes, {
         backupService: service,
+        jobs,
         authMiddleware: mockAuthMiddleware,
+        restoreRoot: home,
       });
     },
     { prefix: '/api' },
@@ -100,6 +162,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
+  await jobs.dispose();
   fs.rmSync(home, { recursive: true, force: true });
 });
 
@@ -115,180 +178,224 @@ describe('GET /api/backups/manifest', () => {
     expect(body.manifest.kind).toBe('openaidy-backup');
     expect(body.manifest.sections.config.itemCount).toBe(1);
   });
+
+  it('requires admin auth', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/backups/manifest',
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });
 
-describe('POST /api/backups/export', () => {
-  it('returns a zip archive', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/backups/export',
-      headers: AUTH,
-      payload: {},
-    });
+describe('exports', () => {
+  it('builds a zip in the background and serves it via the download URL', async () => {
+    const job = await finishedExport();
+    expect(job).toMatchObject({ kind: 'export', status: 'succeeded' });
+    expect(job.fileSizeBytes).toBeGreaterThan(0);
+
+    const res = await app.inject({ method: 'GET', url: job.downloadUrl! });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/zip');
+    expect(res.headers['accept-ranges']).toBe('bytes');
+    expect(res.headers['content-disposition']).toMatch(
+      /openaidy-backup-.*\.zip/,
+    );
+    expect(res.rawPayload.length).toBe(job.fileSizeBytes);
     // PK zip magic bytes.
-    expect(res.rawPayload.slice(0, 2).toString('latin1')).toBe('PK');
+    expect(res.rawPayload.subarray(0, 2).toString('latin1')).toBe('PK');
   });
 
-  it('honors a section filter', async () => {
+  it('serves byte ranges so interrupted downloads can resume', async () => {
+    const job = await finishedExport();
+    const full = (await app.inject({ method: 'GET', url: job.downloadUrl! }))
+      .rawPayload;
+
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/backups/export',
-      headers: AUTH,
-      payload: { sections: ['config'] },
+      method: 'GET',
+      url: job.downloadUrl!,
+      headers: { range: 'bytes=10-' },
     });
-    expect(res.statusCode).toBe(200);
-    const zip = new AdmZip(res.rawPayload);
-    expect(zip.getEntry('config/openaidy.json')).toBeTruthy();
-    expect(zip.getEntry('skills/s1/SKILL.md')).toBeFalsy();
+    expect(res.statusCode).toBe(206);
+    expect(res.headers['content-range']).toBe(
+      `bytes 10-${full.length - 1}/${full.length}`,
+    );
+    expect(res.rawPayload.equals(full.subarray(10))).toBe(true);
+
+    const bad = await app.inject({
+      method: 'GET',
+      url: job.downloadUrl!,
+      headers: { range: `bytes=${full.length + 5}-` },
+    });
+    expect(bad.statusCode).toBe(416);
+  });
+
+  it('rejects a download with the wrong key', async () => {
+    const job = await finishedExport();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/backups/exports/${job.id}/download?key=nope`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('honors the section filter and heavy-folder flag', async () => {
+    write(path.join(paths.workspacesDir, 'w', 'node_modules', 'x.js'), 'x');
+    const lean = await exportedZip({ sections: ['workspaces'] });
+    expect(lean.includes('node_modules/x.js')).toBe(false);
+    const full = await exportedZip({
+      sections: ['workspaces'],
+      includeHeavyFolders: true,
+    });
+    expect(full.includes('node_modules/x.js')).toBe(true);
+    expect(full.includes('skills/s1')).toBe(false);
   });
 
   it('rejects an invalid sections value', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/api/backups/export',
+      url: '/api/backups/exports',
       headers: AUTH,
       payload: { sections: ['nope'] },
     });
     expect(res.statusCode).toBe(400);
   });
-});
 
-describe('POST /api/backups/preview', () => {
-  it('returns the manifest for a valid backup zip', async () => {
-    const buf = await validBackupBuffer();
-    const { body, contentType } = multipart({
-      field: 'file',
-      filename: 'backup.zip',
-      content: buf,
+  it('refuses a second job while one is running', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/backups/exports',
+      headers: AUTH,
+      payload: {},
     });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/backups/exports',
+      headers: AUTH,
+      payload: {},
+    });
+    expect(second.statusCode).toBe(409);
+    await waitForJob(first.json().job.id);
+  });
+
+  it('refuses to start when the disk is nearly full', async () => {
+    freeBytes = 1024;
     const res = await app.inject({
       method: 'POST',
-      url: '/api/backups/preview',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
+      url: '/api/backups/exports',
+      headers: AUTH,
+      payload: {},
     });
-    expect(res.statusCode).toBe(200);
-    const json = res.json();
-    expect(json.manifest.kind).toBe('openaidy-backup');
-    expect(json.zipSizeBytes).toBe(buf.length);
+    expect(res.statusCode).toBe(507);
+  });
+
+  it('discards a finished export, invalidating its download URL', async () => {
+    const job = await finishedExport();
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/backups/jobs/${job.id}`,
+      headers: AUTH,
+    });
+    expect(del.statusCode).toBe(204);
+    const res = await app.inject({ method: 'GET', url: job.downloadUrl! });
+    expect(res.statusCode).toBe(404);
+  });
+});
+
+describe('uploads + import', () => {
+  it('stages a valid backup and returns its manifest', async () => {
+    const res = await upload(await exportedZip());
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.id).toBeTruthy();
+    expect(body.manifest.kind).toBe('openaidy-backup');
+    expect(body.zipSizeBytes).toBeGreaterThan(0);
   });
 
   it('rejects a non-zip file with 400', async () => {
-    const { body, contentType } = multipart({
-      field: 'file',
-      filename: 'x.zip',
-      content: Buffer.from('not a zip'),
-    });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/backups/preview',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
-    });
+    const res = await upload(Buffer.from('not a zip at all'));
     expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/zip/i);
   });
 
-  it('rejects a zip missing manifest.json with 400', async () => {
-    const zip = new AdmZip();
-    zip.addFile('db/openaidy.db', Buffer.from('x'));
-    const { body, contentType } = multipart({
-      field: 'file',
-      filename: 'x.zip',
-      content: zip.toBuffer(),
-    });
+  it('rejects an upload larger than the free disk space with 507', async () => {
+    const zip = await exportedZip();
+    freeBytes = 256 * 1024 * 1024 + 10; // reserve + a few bytes
+    const res = await upload(zip);
+    expect(res.statusCode).toBe(507);
+  });
+
+  it('applies the requested sections as a job and reports per-section results', async () => {
+    const zip = await exportedZip();
+    write(paths.configPath, '{"changed":true}');
+    fs.rmSync(paths.skillsDir, { recursive: true, force: true });
+
+    const staged = (await upload(zip)).json();
     const res = await app.inject({
       method: 'POST',
-      url: '/api/backups/preview',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
+      url: `/api/backups/uploads/${staged.id}/import`,
+      headers: AUTH,
+      payload: { sections: ['config', 'skills'] },
     });
-    expect(res.statusCode).toBe(400);
-  });
-});
+    expect(res.statusCode).toBe(202);
+    const job = await waitForJob(res.json().job.id);
 
-describe('POST /api/backups/import', () => {
-  it('applies the requested sections and returns per-section results', async () => {
-    const buf = await validBackupBuffer();
-    // Restore into a different home so we can assert files were written.
-    const destHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-dest-'));
-    const destService = new BackupService(
-      {
-        dbPath: path.join(destHome, 'data', 'openaidy.db'),
-        configPath: path.join(destHome, 'openaidy.json'),
-        workspacesDir: path.join(destHome, 'workspaces'),
-        skillsDir: path.join(destHome, 'skills'),
-        addonsDir: path.join(destHome, 'addons'),
-      },
-      '0.3.8',
-    );
-    const destApp = Fastify({ logger: false });
-    await destApp.register(sensible);
-    await destApp.register(
-      async (api) => {
-        await api.register(backupRoutes, {
-          backupService: destService,
-          authMiddleware: mockAuthMiddleware,
-        });
-      },
-      { prefix: '/api' },
-    );
-    await destApp.ready();
-
-    const { body, contentType } = multipart(
-      { field: 'file', filename: 'backup.zip', content: buf },
-      { sections: JSON.stringify(['config', 'skills']) },
-    );
-    const res = await destApp.inject({
-      method: 'POST',
-      url: '/api/backups/import',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
-    });
-    expect(res.statusCode).toBe(200);
-    const results = res.json().results as Array<{
-      section: string;
-      success: boolean;
-    }>;
-    expect(results.map((r) => r.section).sort()).toEqual(['config', 'skills']);
-    expect(results.every((r) => r.success)).toBe(true);
-    expect(fs.existsSync(path.join(destHome, 'openaidy.json'))).toBe(true);
-    expect(fs.existsSync(path.join(destHome, 'skills', 's1', 'SKILL.md'))).toBe(
+    expect(job.status).toBe('succeeded');
+    expect(job.results).toEqual([
+      expect.objectContaining({ section: 'config', success: true }),
+      expect.objectContaining({ section: 'skills', success: true }),
+    ]);
+    expect(fs.readFileSync(paths.configPath, 'utf-8')).toBe('{"providers":[]}');
+    expect(fs.existsSync(path.join(paths.skillsDir, 's1', 'SKILL.md'))).toBe(
       true,
     );
 
-    await destApp.close();
-    fs.rmSync(destHome, { recursive: true, force: true });
+    // The staged upload is consumed by the import.
+    const again = await app.inject({
+      method: 'POST',
+      url: `/api/backups/uploads/${staged.id}/import`,
+      headers: AUTH,
+      payload: { sections: ['config'] },
+    });
+    expect(again.statusCode).toBe(404);
   });
 
   it('rejects import with no sections', async () => {
-    const buf = await validBackupBuffer();
-    const { body, contentType } = multipart(
-      { field: 'file', filename: 'backup.zip', content: buf },
-      { sections: '[]' },
-    );
+    const staged = (await upload(await exportedZip())).json();
     const res = await app.inject({
       method: 'POST',
-      url: '/api/backups/import',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
+      url: `/api/backups/uploads/${staged.id}/import`,
+      headers: AUTH,
+      payload: { sections: [] },
     });
     expect(res.statusCode).toBe(400);
   });
 
   it('rejects an unknown section', async () => {
-    const buf = await validBackupBuffer();
-    const { body, contentType } = multipart(
-      { field: 'file', filename: 'backup.zip', content: buf },
-      { sections: JSON.stringify(['bogus']) },
-    );
+    const staged = (await upload(await exportedZip())).json();
     const res = await app.inject({
       method: 'POST',
-      url: '/api/backups/import',
-      headers: { ...AUTH, 'content-type': contentType },
-      payload: body,
+      url: `/api/backups/uploads/${staged.id}/import`,
+      headers: AUTH,
+      payload: { sections: ['bogus'] },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('404s for an unknown or discarded upload', async () => {
+    const staged = (await upload(await exportedZip())).json();
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/api/backups/uploads/${staged.id}`,
+      headers: AUTH,
+    });
+    expect(del.statusCode).toBe(204);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/backups/uploads/${staged.id}/import`,
+      headers: AUTH,
+      payload: { sections: ['config'] },
+    });
+    expect(res.statusCode).toBe(404);
   });
 });

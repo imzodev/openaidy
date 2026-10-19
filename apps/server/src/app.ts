@@ -49,6 +49,7 @@ import { addonRoutes } from './routes/addons';
 import { addonProxyRoutes } from './addons/proxy-routes';
 import { backupRoutes } from './backups/routes';
 import { createBackupService } from './backups/service';
+import { BackupJobManager } from './backups/jobs';
 import { updateRoutes } from './routes/update';
 import { createUpdateService } from './update/service';
 import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
@@ -139,6 +140,7 @@ export async function buildApp() {
 
   // Initialize database if a DB backend is configured.
   let dbAdapter: DatabaseAdapter | undefined;
+  let backupJobs: BackupJobManager | undefined;
   let dbClosed = false;
   // Idempotent: both a backup `db`-section import (which must close the
   // live connection before overwriting its files — see BackupService) and
@@ -624,25 +626,36 @@ export async function buildApp() {
 
       // Backup export/import (admin-only). Sections map to files/dirs under
       // OPENAIDY_HOME; paths are resolved from env with sensible fallbacks.
+      // Exports/imports run as background jobs staged under tmp/backups.
+      const backupService = createBackupService(
+        {
+          dbPath:
+            env.SQLITE_PATH ??
+            path.join(env.OPENAIDY_HOME, 'data', 'openaidy.db'),
+          configPath:
+            env.APP_CONFIG_PATH ??
+            path.join(env.OPENAIDY_HOME, 'openaidy.json'),
+          workspacesDir:
+            env.WORKSPACE_BASE_DIR ??
+            path.join(env.OPENAIDY_HOME, 'workspaces'),
+          skillsDir: env.SKILLS_DIR ?? path.join(env.OPENAIDY_HOME, 'skills'),
+          addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
+        },
+        openAidyVersion,
+        { closeDatabase: closeDatabaseForBackupImport },
+      );
+      backupJobs = new BackupJobManager({
+        service: backupService,
+        tmpDir: path.join(env.OPENAIDY_HOME, 'tmp', 'backups'),
+        downloadUrlFor: (id, key) =>
+          `/api/backups/exports/${id}/download?key=${key}`,
+      });
+      await backupJobs.init();
       await api.register(backupRoutes, {
-        backupService: createBackupService(
-          {
-            dbPath:
-              env.SQLITE_PATH ??
-              path.join(env.OPENAIDY_HOME, 'data', 'openaidy.db'),
-            configPath:
-              env.APP_CONFIG_PATH ??
-              path.join(env.OPENAIDY_HOME, 'openaidy.json'),
-            workspacesDir:
-              env.WORKSPACE_BASE_DIR ??
-              path.join(env.OPENAIDY_HOME, 'workspaces'),
-            skillsDir: env.SKILLS_DIR ?? path.join(env.OPENAIDY_HOME, 'skills'),
-            addonsDir: path.join(env.OPENAIDY_HOME, 'addons'),
-          },
-          openAidyVersion,
-          { closeDatabase: closeDatabaseForBackupImport },
-        ),
+        backupService,
+        jobs: backupJobs,
         authMiddleware,
+        restoreRoot: env.OPENAIDY_HOME,
       });
 
       // In-app self-update (admin-only). Checks the npm registry and, for a
@@ -1158,6 +1171,7 @@ export async function buildApp() {
   // Clean up on close
   app.addHook('onClose', async () => {
     await bootstrapAdmin?.stopAutoRenew();
+    await backupJobs?.dispose();
     if (stuckSubtaskInterval) {
       clearInterval(stuckSubtaskInterval);
       log.info('Stuck subtask checker stopped');
