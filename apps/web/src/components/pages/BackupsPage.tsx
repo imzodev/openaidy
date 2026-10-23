@@ -442,9 +442,9 @@ function ImportTab() {
   return (
     <div class="space-y-4">
       <p class="text-sm text-text-secondary">
-        Restore is non-destructive: existing records are kept and matching files
-        are overwritten. The database and configuration take effect after a
-        server restart.
+        Workspaces, skills and addons are merged: existing files are kept and
+        matching files are overwritten. The database and configuration are
+        replaced entirely and take effect after a server restart.
       </p>
 
       <div>
