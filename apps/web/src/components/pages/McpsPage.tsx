@@ -1,5 +1,12 @@
 import { Layout } from './Layout';
-import { For, Show, createSignal, onMount, createMemo } from 'solid-js';
+import {
+  For,
+  Show,
+  createSignal,
+  onMount,
+  onCleanup,
+  createMemo,
+} from 'solid-js';
 import { createStore } from 'solid-js/store';
 import {
   listMcpServers,
@@ -10,8 +17,16 @@ import {
   disconnectMcpServer,
   importMcpServers,
   setMcpSecret,
+  startMcpOAuth,
+  signOutMcpOAuth,
+  mcpOAuthOrigin,
+  installMcpCatalogEntry,
   type McpServerRecord,
 } from '../../lib/api';
+import {
+  McpCatalogModal,
+  type McpCatalogConnectRequest,
+} from '../mcp/McpCatalogModal';
 import type {
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
@@ -19,6 +34,7 @@ import type {
   McpSecretKind,
   McpSecretValue,
   McpSecretField,
+  McpServerAuth as McpServerAuthInput,
 } from '../../lib/api';
 import { MCP_SERVER_SETUP_CATALOG } from '../../lib/mcp-server-catalog';
 
@@ -276,6 +292,11 @@ function isAwaitingConfig(server: McpServerRecord): boolean {
   return (server.missingSecrets?.length ?? 0) > 0;
 }
 
+/** An OAuth server nobody has signed in to yet (or whose sign-in expired). */
+function needsSignIn(server: McpServerRecord): boolean {
+  return server.authStatus === 'needs_sign_in';
+}
+
 /** The `${VAR}` names referenced anywhere in an env/header value, if any. */
 function extractPlaceholderNames(value: string): string[] {
   const names = new Set<string>();
@@ -285,17 +306,23 @@ function extractPlaceholderNames(value: string): string[] {
   return [...names];
 }
 
-function StatusBadge(props: { connected: boolean; awaitingConfig?: boolean }) {
+function StatusBadge(props: {
+  connected: boolean;
+  awaitingConfig?: boolean;
+  needsSignIn?: boolean;
+}) {
   const label = () =>
     props.connected
       ? 'Connected'
-      : props.awaitingConfig
-        ? 'Needs API key'
-        : 'Disconnected';
+      : props.needsSignIn
+        ? 'Needs sign-in'
+        : props.awaitingConfig
+          ? 'Needs API key'
+          : 'Disconnected';
   const classes = () =>
     props.connected
       ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-      : props.awaitingConfig
+      : props.awaitingConfig || props.needsSignIn
         ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
         : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
   return (
@@ -412,6 +439,15 @@ function ServerFormModal(props: {
     args: props.server?.args?.join(' ') ?? '',
     url: props.server?.url ?? '',
   });
+  const [useOAuth, setUseOAuth] = createSignal(!!props.server?.auth);
+  const [oauthClientId, setOauthClientId] = createSignal(
+    props.server?.auth?.clientId ?? '',
+  );
+  // Empty = keep the stored secret (it's never sent back to the browser).
+  const [oauthClientSecret, setOauthClientSecret] = createSignal('');
+  const [oauthScopes, setOauthScopes] = createSignal(
+    props.server?.auth?.scopes?.join(' ') ?? '',
+  );
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
@@ -420,6 +456,33 @@ function ServerFormModal(props: {
 
   const isEdit = () => props.mode === 'edit';
   const isStdio = () => transport() === 'stdio';
+
+  /**
+   * OAuth settings for the request. On edit, unchecking the box sends
+   * `auth: null` to remove OAuth; a blank secret field keeps the stored one
+   * by echoing the masked value back.
+   */
+  const buildAuth = (): { auth?: McpServerAuthInput | null } => {
+    if (!useOAuth())
+      return isEdit() && props.server?.auth ? { auth: null } : {};
+    const clientId = oauthClientId().trim();
+    const scopes = oauthScopes().trim().split(/\s+/).filter(Boolean);
+    const secret = oauthClientSecret().trim();
+    const storedSecret = props.server?.auth?.clientSecret;
+    const clientSecret: McpSecretValue | undefined = !clientId
+      ? undefined
+      : secret
+        ? { kind: 'inline', value: secret }
+        : storedSecret;
+    return {
+      auth: {
+        type: 'oauth',
+        ...(clientId ? { clientId } : {}),
+        ...(clientSecret ? { clientSecret } : {}),
+        ...(scopes.length > 0 ? { scopes } : {}),
+      },
+    };
+  };
 
   const buildRequest = (): CreateMcpServerRequest | UpdateMcpServerRequest => {
     const base = {
@@ -444,6 +507,7 @@ function ServerFormModal(props: {
         ...base,
         url: formData().url || undefined,
         headers: recordFromRows(headerRows.rows),
+        ...buildAuth(),
       };
     }
   };
@@ -633,6 +697,70 @@ function ServerFormModal(props: {
                 placeholder="https://my-mcp-server.com/mcp"
                 class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
               />
+            </div>
+
+            <div class="p-3 border border-gray-200 dark:border-gray-700 rounded-lg space-y-3">
+              <label class="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useOAuth()}
+                  onChange={(e) => setUseOAuth(e.currentTarget.checked)}
+                  class="mt-0.5 accent-primary"
+                />
+                <span>
+                  <span class="block text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Sign in with OAuth
+                  </span>
+                  <span class="block text-xs text-text-tertiary">
+                    For hosted servers that ask you to log in (Notion, Stripe,
+                    Linear…). No API key needed.
+                  </span>
+                </span>
+              </label>
+              <Show when={useOAuth()}>
+                <div class="space-y-2 pl-6">
+                  <p class="text-xs text-text-tertiary">
+                    Leave the client ID blank if the server supports automatic
+                    registration (most do). Google, Microsoft and GitHub need an
+                    OAuth app you create in their developer console.
+                  </p>
+                  <input
+                    type="text"
+                    value={oauthClientId()}
+                    onInput={(e) => setOauthClientId(e.currentTarget.value)}
+                    placeholder="Client ID (optional)"
+                    class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                  />
+                  <Show when={oauthClientId().trim()}>
+                    <input
+                      type="password"
+                      value={oauthClientSecret()}
+                      onInput={(e) =>
+                        setOauthClientSecret(e.currentTarget.value)
+                      }
+                      placeholder={
+                        props.server?.auth?.clientSecret
+                          ? 'Client secret (leave blank to keep current)'
+                          : 'Client secret (optional)'
+                      }
+                      class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                    />
+                  </Show>
+                  <input
+                    type="text"
+                    value={oauthScopes()}
+                    onInput={(e) => setOauthScopes(e.currentTarget.value)}
+                    placeholder="Scopes, space-separated (optional)"
+                    class="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                  />
+                  <p class="text-xs text-text-tertiary">
+                    Redirect URL to register:{' '}
+                    <code class="font-mono">
+                      {mcpOAuthOrigin()}/api/mcp/oauth/callback
+                    </code>
+                  </p>
+                </div>
+              </Show>
             </div>
 
             <SecretRowsField
@@ -866,6 +994,7 @@ export function McpsPage() {
     null,
   );
   const [showImport, setShowImport] = createSignal(false);
+  const [showCatalog, setShowCatalog] = createSignal(false);
 
   const selected = createMemo(() =>
     servers().find((s) => s.id === selectedId()),
@@ -975,6 +1104,136 @@ export function McpsPage() {
     await loadServers();
   };
 
+  /**
+   * OAuth sign-in. The popup is opened synchronously (inside the click) so
+   * popup blockers allow it, then pointed at the authorization URL once the
+   * server returns it. The callback page posts a message back when done; if
+   * that never arrives (e.g. the user just closes the window), noticing the
+   * popup closed refreshes the list anyway.
+   */
+  let signInPopup: Window | null = null;
+  let popupWatch: ReturnType<typeof setInterval> | undefined;
+  const stopWatchingPopup = () => {
+    if (popupWatch) clearInterval(popupWatch);
+    popupWatch = undefined;
+    signInPopup = null;
+  };
+
+  const openSignInPopup = () =>
+    window.open('about:blank', 'openaidy-mcp-oauth', 'width=520,height=720');
+
+  /**
+   * `popup` defaults to one opened right now — callers that await something
+   * first (catalog install) must open it themselves inside the click.
+   */
+  const handleSignIn = async (
+    server: McpServerRecord,
+    popup: Window | null = openSignInPopup(),
+  ) => {
+    setActionId(server.id);
+    setActionError(null);
+    stopWatchingPopup();
+    try {
+      const result = await startMcpOAuth(server.id);
+      if (result.status === 'authorized') {
+        popup?.close();
+        await loadServers();
+        return;
+      }
+      if (!popup) {
+        // Popup blocked — fall back to a full-page redirect in a new tab.
+        window.open(result.authorizationUrl, '_blank', 'noopener');
+        return;
+      }
+      popup.location.href = result.authorizationUrl;
+      signInPopup = popup;
+      popupWatch = setInterval(() => {
+        if (signInPopup?.closed) {
+          stopWatchingPopup();
+          setActionId(null);
+          void loadServers();
+        }
+      }, 750);
+    } catch (err) {
+      popup?.close();
+      setActionError(
+        err instanceof Error ? err.message : 'Failed to start sign-in',
+      );
+    } finally {
+      if (!signInPopup) setActionId(null);
+    }
+  };
+
+  /**
+   * Install a catalog integration, then go straight into its sign-in — or,
+   * with an API token, just install (the server connects it right away).
+   */
+  const handleCatalogConnect = async ({
+    entry,
+    clientId,
+    clientSecret,
+    apiKey,
+  }: McpCatalogConnectRequest) => {
+    if (apiKey) {
+      const { server } = await installMcpCatalogEntry(entry.id, { apiKey });
+      setServers((prev) => [...prev, server]);
+      setSelectedId(server.id);
+      setShowCatalog(false);
+      return;
+    }
+    const popup = openSignInPopup();
+    let server: McpServerRecord;
+    try {
+      server = (
+        await installMcpCatalogEntry(entry.id, { clientId, clientSecret })
+      ).server;
+    } catch (err) {
+      popup?.close();
+      throw err;
+    }
+    setServers((prev) => [...prev, server]);
+    setSelectedId(server.id);
+    setShowCatalog(false);
+    await handleSignIn(server, popup);
+  };
+
+  const handleOAuthMessage = (event: MessageEvent) => {
+    if (event.origin !== mcpOAuthOrigin()) return;
+    const data = event.data as {
+      type?: string;
+      success?: boolean;
+      error?: string;
+    } | null;
+    if (data?.type !== 'openaidy:mcp-oauth') return;
+    stopWatchingPopup();
+    setActionId(null);
+    if (!data.success) {
+      setActionError(`Sign-in failed: ${data.error ?? 'unknown error'}`);
+    }
+    void loadServers();
+  };
+
+  onMount(() => window.addEventListener('message', handleOAuthMessage));
+  onCleanup(() => {
+    window.removeEventListener('message', handleOAuthMessage);
+    stopWatchingPopup();
+  });
+
+  const handleSignOut = async (server: McpServerRecord) => {
+    setActionId(server.id);
+    setActionError(null);
+    try {
+      const result = await signOutMcpOAuth(server.id);
+      setServers((prev) =>
+        prev.map((s) => (s.id === server.id ? result.server : s)),
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to sign out');
+    } finally {
+      setActionId(null);
+    }
+  };
+
   const connectedCount = () => servers().filter((s) => s.connected).length;
   const totalTools = () =>
     servers()
@@ -987,6 +1246,12 @@ export function McpsPage() {
       description="Manage Model Context Protocol server connections"
       actions={
         <div class="flex items-center gap-2">
+          <button
+            onClick={() => setShowCatalog(true)}
+            class="flex items-center gap-2 px-3 py-2 text-sm text-primary border border-primary/40 rounded-lg hover:bg-primary/5 transition-colors"
+          >
+            Browse integrations
+          </button>
           <button
             onClick={() => setShowImport(true)}
             class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1127,15 +1392,18 @@ export function McpsPage() {
                       <StatusBadge
                         connected={server.connected}
                         awaitingConfig={isAwaitingConfig(server)}
+                        needsSignIn={needsSignIn(server)}
                       />
                     </div>
                     <div class="text-xs text-text-tertiary">
                       {server.transport} ·{' '}
                       {server.connected
                         ? `${server.toolCount} tool${server.toolCount !== 1 ? 's' : ''}`
-                        : isAwaitingConfig(server)
-                          ? 'needs API key'
-                          : 'disconnected'}
+                        : needsSignIn(server)
+                          ? 'needs sign-in'
+                          : isAwaitingConfig(server)
+                            ? 'needs API key'
+                            : 'disconnected'}
                     </div>
                   </button>
                 )}
@@ -1171,7 +1439,20 @@ export function McpsPage() {
                 </div>
 
                 <div class="flex items-center gap-2 flex-shrink-0">
-                  <Show when={!selected()!.connected}>
+                  <Show when={needsSignIn(selected()!)}>
+                    <button
+                      onClick={() => void handleSignIn(selected()!)}
+                      disabled={actionId() === selected()!.id}
+                      class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {actionId() === selected()!.id
+                        ? 'Waiting for sign-in…'
+                        : 'Sign in'}
+                    </button>
+                  </Show>
+                  <Show
+                    when={!selected()!.connected && !needsSignIn(selected()!)}
+                  >
                     <button
                       onClick={() => void handleConnect(selected()!)}
                       disabled={actionId() === selected()!.id}
@@ -1296,6 +1577,43 @@ export function McpsPage() {
                       )}
                     </For>
                   </div>
+                </Show>
+                <Show when={selected()!.auth}>
+                  <Show
+                    when={needsSignIn(selected()!)}
+                    fallback={
+                      <div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center justify-between gap-3">
+                        <p class="text-sm text-green-800 dark:text-green-300">
+                          Signed in with OAuth.
+                        </p>
+                        <div class="flex items-center gap-3 text-xs">
+                          <button
+                            onClick={() => void handleSignIn(selected()!)}
+                            disabled={actionId() === selected()!.id}
+                            class="text-green-800 dark:text-green-300 underline hover:no-underline disabled:opacity-50"
+                          >
+                            Switch account
+                          </button>
+                          <button
+                            onClick={() => void handleSignOut(selected()!)}
+                            disabled={actionId() === selected()!.id}
+                            class="text-red-600 dark:text-red-400 underline hover:no-underline disabled:opacity-50"
+                          >
+                            Sign out
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300">
+                      <p class="text-sm font-medium">Sign-in required</p>
+                      <p class="mt-1 text-xs">
+                        Click <strong>Sign in</strong> and approve access in the
+                        window that opens. OpenAidy stores the tokens encrypted
+                        and refreshes them automatically.
+                      </p>
+                    </div>
+                  </Show>
                 </Show>
                 <Show when={selected()!.transport === 'stdio'}>
                   <div>
@@ -1470,6 +1788,16 @@ export function McpsPage() {
           server={showDelete()!}
           onConfirm={handleDelete}
           onClose={() => setShowDelete(null)}
+        />
+      </Show>
+
+      <Show when={showCatalog()}>
+        <McpCatalogModal
+          onConnect={handleCatalogConnect}
+          onClose={() => {
+            setShowCatalog(false);
+            void loadServers();
+          }}
         />
       </Show>
 

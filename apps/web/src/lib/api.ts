@@ -80,6 +80,9 @@ export type {
   McpSecretKind,
   McpSecretField,
   McpSecretValue,
+  McpServerAuth,
+  McpCatalogEntry,
+  InstallMcpCatalogEntryRequest,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
   ImportMcpServersRequest,
@@ -1067,6 +1070,86 @@ export async function disconnectMcpServer(
     {
       method: 'POST',
     },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/**
+ * Origin the OAuth callback must land on: the API server's own origin (the
+ * callback is an API route), which is the page's origin unless the UI talks
+ * to a separate server (OPENAIDY_VITE_SERVER_URL, desktop build).
+ */
+export function mcpOAuthOrigin(): string {
+  return API_BASE ? new URL(API_BASE).origin : window.location.origin;
+}
+
+/**
+ * Begin OAuth sign-in for an MCP server. Returns the authorization URL to
+ * open in a popup, or `authorized` when no browser step was needed.
+ */
+export async function startMcpOAuth(
+  id: string,
+): Promise<
+  { status: 'authorized' } | { status: 'redirect'; authorizationUrl: string }
+> {
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/servers/${encodeURIComponent(id)}/oauth/start`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin: mcpOAuthOrigin() }),
+    },
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/** The curated integrations gallery. */
+export async function listMcpCatalog(): Promise<{
+  entries: McpCatalogEntry[];
+}> {
+  const response = await apiFetch(`${API_BASE}/api/mcp/catalog`);
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, body);
+  }
+  return response.json();
+}
+
+/** Add a catalog integration as an MCP server (sign-in comes next). */
+export async function installMcpCatalogEntry(
+  id: string,
+  body: InstallMcpCatalogEntryRequest = {},
+): Promise<{ server: McpServerRecord }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/catalog/${encodeURIComponent(id)}/install`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({}))) as ApiError;
+    throw new ApiRequestError(response.status, error);
+  }
+  return response.json();
+}
+
+/** Forget an MCP server's OAuth sign-in and disconnect it. */
+export async function signOutMcpOAuth(
+  id: string,
+): Promise<{ server: McpServerRecord }> {
+  const response = await apiFetch(
+    `${API_BASE}/api/mcp/servers/${encodeURIComponent(id)}/oauth/signout`,
+    { method: 'POST' },
   );
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as ApiError;

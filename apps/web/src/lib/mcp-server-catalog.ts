@@ -41,19 +41,9 @@ export const MCP_SERVER_SETUP_CATALOG: Record<string, McpServerSetupInfo> = {
     setupUrl: 'https://tavily.com/',
     instructions: 'Free tier available — sign up and copy your API key.',
   },
-  buffer: {
-    setupUrl: 'https://buffer.com/developers/api',
-    instructions:
-      'Generate a per-account API key from Buffer’s developer settings.',
-  },
   supabase: {
     setupUrl: 'https://supabase.com/dashboard/account/tokens',
     instructions:
       'Generate a personal access token from your Supabase account settings.',
-  },
-  notion: {
-    setupUrl: 'https://www.notion.so/my-integrations',
-    instructions:
-      'Create an internal integration, then share the pages/databases you want it to access from each page’s "Connections" menu.',
   },
 };

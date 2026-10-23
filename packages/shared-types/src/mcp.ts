@@ -34,6 +34,25 @@ export type McpSecretField = {
 export type McpSecretValue = string | McpSecretField;
 
 /**
+ * OAuth sign-in settings for a remote (http) MCP server. Omitting `clientId`
+ * means the server supports dynamic client registration ("one-click").
+ */
+export type McpServerAuth = {
+  type: 'oauth';
+  clientId?: string | undefined;
+  clientSecret?: McpSecretValue | undefined;
+  scopes?: string[] | undefined;
+};
+
+/**
+ * OAuth sign-in state of a server:
+ * - `none`: the server doesn't use OAuth
+ * - `signed_in`: tokens are stored
+ * - `needs_sign_in`: no tokens yet, or the stored ones were rejected
+ */
+export type McpAuthStatus = 'none' | 'signed_in' | 'needs_sign_in';
+
+/**
  * MCP server transport config fields (shared shape for both transports)
  */
 export type McpServerTransportConfig = {
@@ -45,6 +64,7 @@ export type McpServerTransportConfig = {
   env?: Record<string, McpSecretValue> | undefined;
   url?: string | undefined;
   headers?: Record<string, McpSecretValue> | undefined;
+  auth?: McpServerAuth | undefined;
 };
 
 /**
@@ -64,10 +84,18 @@ export type McpToolSummary = {
  */
 export type McpServerRecord = Omit<
   McpServerTransportConfig,
-  'env' | 'headers'
+  'env' | 'headers' | 'auth'
 > & {
   env?: Record<string, McpSecretField> | undefined;
   headers?: Record<string, McpSecretField> | undefined;
+  /** OAuth settings; `clientSecret` is redacted like any other secret. */
+  auth?:
+    | (Omit<McpServerAuth, 'clientSecret'> & {
+        clientSecret?: McpSecretField | undefined;
+      })
+    | undefined;
+  /** OAuth sign-in state (`none` for servers that don't use OAuth). */
+  authStatus: McpAuthStatus;
   /** Live runtime state */
   connected: boolean;
   toolCount: number;
@@ -91,8 +119,11 @@ export type CreateMcpServerRequest = McpServerTransportConfig;
  */
 export type UpdateMcpServerRequest = Omit<
   Partial<McpServerTransportConfig>,
-  'id'
->;
+  'id' | 'auth'
+> & {
+  /** An object replaces the OAuth settings; `null` removes them. */
+  auth?: McpServerAuth | null | undefined;
+};
 
 /**
  * MCP tool with its input schema exposed (for UI exploration)
@@ -127,4 +158,64 @@ export type McpServerImportEntry = {
  */
 export type ImportMcpServersRequest = {
   mcpServers: Record<string, McpServerImportEntry>;
+};
+
+/**
+ * How connecting a catalog integration works:
+ * - `oauth`: one click — the server registers OpenAidy automatically
+ * - `oauth-own-app`: sign-in, but the user must first create an OAuth app
+ *   with the provider and paste its client ID/secret
+ */
+export type McpCatalogSetup = 'oauth' | 'oauth-own-app';
+
+export type McpCatalogCategory =
+  | 'productivity'
+  | 'payments'
+  | 'marketing'
+  | 'google'
+  | 'developer';
+
+/**
+ * An alternative to sign-in for providers that also accept a pasted API
+ * token, sent as `<headerName>: <valuePrefix><token>`.
+ */
+export type McpCatalogApiKeyOption = {
+  /** What the provider calls it, e.g. "API token". */
+  label: string;
+  /** Where the user creates one. */
+  setupUrl: string;
+  headerName: string;
+  valuePrefix: string;
+};
+
+/** An integration offered in the "Browse integrations" gallery. */
+export type McpCatalogEntry = {
+  /** Also the id of the MCP server it installs. */
+  id: string;
+  name: string;
+  description: string;
+  category: McpCatalogCategory;
+  setup: McpCatalogSetup;
+  /** Remote MCP endpoint. */
+  url: string;
+  /** Provider docs for this MCP server / creating the OAuth app. */
+  docsUrl: string;
+  /** Default OAuth scopes (`oauth-own-app` providers need them explicit). */
+  scopes?: string[] | undefined;
+  /** Set when the provider also accepts a pasted API token. */
+  apiKey?: McpCatalogApiKeyOption | undefined;
+  /** Whether a server with this id is already configured. */
+  installed: boolean;
+};
+
+/** Body of POST /mcp/catalog/:id/install. */
+export type InstallMcpCatalogEntryRequest = {
+  /** Required for `oauth-own-app` entries. */
+  clientId?: string | undefined;
+  clientSecret?: string | undefined;
+  /**
+   * Connect with this API token instead of signing in. Only for entries
+   * with an `apiKey` option.
+   */
+  apiKey?: string | undefined;
 };
