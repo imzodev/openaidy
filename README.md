@@ -55,6 +55,14 @@ openaidy status   # check whether it's running
 openaidy init     # regenerate the bootstrap admin token if needed
 ```
 
+**Running on a Linux server?** Let systemd keep it up: it starts at boot and restarts within seconds after a crash. `start`/`stop`/`restart` keep working and go through systemd.
+
+```bash
+openaidy service install
+```
+
+**Moving servers?** **System → Backups** in the UI exports your database, config, workspaces, skills and addons to one zip and restores it on the new machine. It streams to disk, so multi-GB backups work even on a 1 GB droplet. See [docs/backups.md](docs/backups.md).
+
 **For contributors** — building from source:
 
 ```bash
@@ -112,6 +120,7 @@ This is an honest comparison, not a sales pitch. Choose the tool that fits the j
 - Schedule and automate agent work with cron and one-shot jobs
 - Connect agents to messaging channels (WhatsApp ships today; Telegram, Discord, Slack planned)
 - Manage trusted devices and runtime instances through a pairing system
+- Back up everything to one zip and restore it on another server, from the UI
 - Extend the platform with plugins: custom tools, UI panels, channels, integrations
 - Connect to any MCP server, and expose selected platform capabilities back through MCP
 

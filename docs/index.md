@@ -37,4 +37,5 @@ New here? Start with [Getting Started](./getting-started.md).
 - [Configuration](./config.md) — `openaidy.json`, the Settings UI, execution tuning
 - [Access Tokens & Device Pairing](./access-tokens.md) — API credentials and approving new devices
 - [Usage](./usage.md) — token and cost tracking
+- [Backups](./backups.md) — export and restore your data, or move to another server
 - [CLI Reference](./cli/README.md) — every `openaidy` command, install and bootstrap-admin guides

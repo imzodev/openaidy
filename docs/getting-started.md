@@ -41,6 +41,18 @@ openaidy status   # check whether it's running
 openaidy init     # regenerate the bootstrap admin token if it's lost or expired
 ```
 
+### Keep it running on a Linux server
+
+`openaidy start` isn't supervised: if the server crashes or the machine reboots, it stays down. On a VPS or any always-on Linux host, hand it to systemd instead:
+
+```bash
+openaidy service install    # start at boot, restart within 5s if it ever exits
+openaidy service status     # is it installed, enabled and running?
+openaidy service uninstall  # go back to plain `openaidy start`
+```
+
+Once the service is installed, `openaidy start`, `stop` and `restart` control it through `systemctl`, so you keep using the same commands and only one server ever runs. Run it as root for a system-wide service, or as a normal user for a user service that keeps running after you log out. See the [CLI reference](./cli/command-reference.md#service---run-under-systemd) for details.
+
 ## 3. Log in
 
 If the browser didn't open automatically, go to `http://localhost:3001` and paste the bootstrap admin token shown by the installer (or by `openaidy init`). This token is a full-access credential meant for initial setup — once you're in, create a scoped access token for anything else (see [Access Tokens](./access-tokens.md)).
@@ -65,6 +77,7 @@ From here:
 - [Tasks](./tasks.md) — structured, multi-step work with a kanban board and a visual workflow graph
 - [Channels](./channels.md) — connect WhatsApp or Discord so agents can handle real conversations
 - [Addons](./addons/README.md) — build or install a mini-app that plugs into OpenAidy
+- [Backups](./backups.md) — export your data, or move OpenAidy to another server
 
 ## Building from source
 
