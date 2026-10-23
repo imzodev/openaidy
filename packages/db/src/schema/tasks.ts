@@ -103,6 +103,9 @@ export const subtaskStatusEnum = pgEnum('subtask_status', [
   'in_progress',
   'completed',
   'failed',
+  // Never ran in this run: its branch was not taken, or an upstream
+  // step failed. Terminal, like completed/failed.
+  'skipped',
 ]);
 
 /**
@@ -277,6 +280,9 @@ export type NewTaskSchedule = typeof taskSchedules.$inferInsert;
 export type TaskExecutionHistoryRow = typeof taskExecutionHistory.$inferSelect;
 export type NewTaskExecutionHistoryRow =
   typeof taskExecutionHistory.$inferInsert;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type WorkflowRunStatus = WorkflowRun['status'];
+export type WorkflowRunTrigger = WorkflowRun['trigger'];
 
 // Enum type exports
 export type TaskStatus = (typeof taskStatusEnum.enumValues)[number];
@@ -452,5 +458,54 @@ export const taskExecutionHistory = pgTable(
     startedAtIdx: index('task_execution_history_started_at_idx').on(
       table.startedAt,
     ),
+  }),
+);
+
+/**
+ * Workflow runs table
+ *
+ * One row per execution of a task's subtask graph, whatever started it
+ * (the Run button, an agent tool, or a schedule). Subtask rows hold the
+ * live state of the current run; when a run finishes, `summary` keeps a
+ * JSON snapshot (ExecutionSubtaskSummary) of how each step ended, since
+ * the next run resets the subtasks. Scheduled runs also link their
+ * `task_execution_history` row so it can be finalised with the run.
+ */
+export const workflowRuns = pgTable(
+  'workflow_runs',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    trigger: text('trigger', { enum: ['manual', 'schedule', 'agent'] })
+      .notNull()
+      .default('manual'),
+    status: text('status', {
+      enum: ['running', 'completed', 'failed', 'cancelled'],
+    })
+      .notNull()
+      .default('running'),
+    sessionId: text('session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    // The scheduled run's task_execution_history row, if any. Not a
+    // foreign key: that table is not created on every Postgres install.
+    historyId: text('history_id'),
+    error: text('error'),
+    summary: text('summary'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (table) => ({
+    taskIdIdx: index('workflow_runs_task_id_idx').on(
+      table.taskId,
+      table.startedAt,
+    ),
+    statusIdx: index('workflow_runs_status_idx').on(table.status),
   }),
 );

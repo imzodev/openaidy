@@ -20,6 +20,7 @@ export * from './repositories/subtasks';
 export * from './repositories/task-agents';
 export * from './repositories/task-schedules';
 export * from './repositories/task-execution-history';
+export * from './repositories/workflow-runs';
 export * from './repositories/deliverables';
 export * from './repositories/access-tokens';
 export * from './repositories/addons';

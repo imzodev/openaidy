@@ -49,6 +49,10 @@ export type {
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
+  // Workflow runs (one per execution of a task's subtask graph).
+  WorkflowRunDto,
+  WorkflowRunStatus,
+  WorkflowRunTrigger,
   // Agent memory types from shared-types — single source of truth.
   Memory,
   CreateMemoryInput,

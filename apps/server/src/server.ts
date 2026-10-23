@@ -42,3 +42,11 @@ const shutdown = (signal: NodeJS.Signals) => {
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// A stray rejected promise (e.g. background workflow work) must be logged,
+// not crash the server — Node's default for unhandled rejections is to exit.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+  });
+});

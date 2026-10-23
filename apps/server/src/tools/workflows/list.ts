@@ -2,6 +2,7 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { formatToolError, requireService } from '../shared.js';
 import { workflowListMeta } from '../catalog.js';
+import { isWorkflowTask } from './assert-workflow.js';
 
 const ALLOWED_STATUS = [
   'backlog',
@@ -75,7 +76,7 @@ export function createWorkflowListTool(
         );
 
         const workflows = allTasks
-          .filter((task) => task.planningEnabled === true)
+          .filter((task) => isWorkflowTask(task))
           .slice(0, limit)
           .map((task) => ({
             id: task.id,

@@ -8,7 +8,14 @@
  * for identity/status/run/delete. No card chrome, no fixed-height box.
  */
 
-import { createSignal, onMount, For, Show } from 'solid-js';
+import {
+  createSignal,
+  createEffect,
+  onCleanup,
+  onMount,
+  For,
+  Show,
+} from 'solid-js';
 import { ArrowLeft, Play, Trash2, Pencil, Workflow } from 'lucide-solid';
 import { WorkflowEditor } from '../tasks/workflow/WorkflowEditor';
 import {
@@ -62,6 +69,14 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
     if (result.ok) setTask(result.data);
     setIsLoading(false);
   };
+
+  // A run continues in the background after Run returns, so keep the
+  // workflow's status fresh while it is in progress.
+  createEffect(() => {
+    if (task()?.status !== 'in_progress') return;
+    const interval = window.setInterval(() => void load(), 3000);
+    onCleanup(() => window.clearInterval(interval));
+  });
 
   onMount(() => {
     void load();

@@ -49,6 +49,10 @@ const createMockTaskService = () => ({
   updateSubtaskEdge: vi.fn(),
   deleteSubtaskEdge: vi.fn(),
   resolveApproval: vi.fn(),
+  executeTask: vi.fn(),
+  listRuns: vi.fn(),
+  cancelRun: vi.fn(),
+  retrySubtask: vi.fn(),
 });
 
 type MockTaskService = ReturnType<typeof createMockTaskService>;
@@ -1229,6 +1233,104 @@ describe('taskRoutes', () => {
       expect((result as { ok: boolean }).ok).toBe(false);
       expect(reply.code).toHaveBeenCalledWith(400);
       expect(mockService.resolveApproval).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('workflow run routes', () => {
+    async function route(method: string, url: string) {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      return app._routes.find((r) => r.method === method && r.url === url)!;
+    }
+
+    const runRow = {
+      id: 'run1',
+      taskId: 'task1',
+      trigger: 'manual',
+      status: 'failed',
+      sessionId: 's1',
+      historyId: null,
+      error: '"A" failed: boom',
+      summary: JSON.stringify({
+        total: 1,
+        completed: 0,
+        failed: 1,
+        inProgress: 0,
+        pending: 0,
+        items: [],
+      }),
+      startedAt: new Date('2026-10-23T10:00:00Z'),
+      finishedAt: new Date('2026-10-23T10:01:00Z'),
+    };
+
+    it('lists runs as DTOs with parsed summaries', async () => {
+      const r = await route('GET', '/tasks/:id/runs');
+      mockService.getTask.mockResolvedValue(mockTask);
+      mockService.listRuns.mockResolvedValue([runRow]);
+
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler(
+        { params: { id: 'task1' }, query: {} },
+        reply,
+      )) as { ok: boolean; data: Array<Record<string, unknown>> };
+
+      expect(result.ok).toBe(true);
+      expect(result.data[0]).toMatchObject({
+        id: 'run1',
+        status: 'failed',
+        error: '"A" failed: boom',
+        startedAt: '2026-10-23T10:00:00.000Z',
+        summary: { failed: 1 },
+      });
+      expect(mockService.listRuns).toHaveBeenCalledWith('task1', 20);
+    });
+
+    it('returns 404 for runs of an unknown task', async () => {
+      const r = await route('GET', '/tasks/:id/runs');
+      mockService.getTask.mockResolvedValue(null);
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler({ params: { id: 'nope' }, query: {} }, reply);
+      expect(reply.code).toHaveBeenCalledWith(404);
+    });
+
+    it('returns 409 when Run is pressed while a run is going', async () => {
+      const r = await route('POST', '/tasks/:id/execute');
+      mockService.executeTask.mockResolvedValue({
+        ok: false,
+        error: { code: 'workflow.already_running', message: 'running' },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler({ params: { id: 'task1' } }, reply);
+      expect(reply.code).toHaveBeenCalledWith(409);
+    });
+
+    it('cancels the running run', async () => {
+      const r = await route('POST', '/tasks/:id/runs/cancel');
+      mockService.cancelRun.mockResolvedValue({
+        ok: true,
+        data: { ...runRow, status: 'cancelled' },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler({ params: { id: 'task1' } }, reply)) as {
+        ok: boolean;
+        data: { status: string };
+      };
+      expect(result.ok).toBe(true);
+      expect(result.data.status).toBe('cancelled');
+    });
+
+    it('returns 409 when retrying a step that did not fail', async () => {
+      const r = await route('POST', '/subtasks/:id/retry');
+      mockService.retrySubtask.mockResolvedValue({
+        ok: false,
+        error: { code: 'subtask.not_retryable', message: 'not failed' },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler({ params: { id: 'sub1' } }, reply);
+      expect(reply.code).toHaveBeenCalledWith(409);
     });
   });
 });

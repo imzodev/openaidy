@@ -10,6 +10,21 @@ type Database = DatabaseClient;
  *
  * Provides data access methods for subtask records.
  */
+/** Column values for a subtask that has never run in the current run. */
+const FRESH_RUN_STATE = {
+  status: 'pending',
+  result: null,
+  sessionId: null,
+  retryCount: 0,
+  pendingVerificationResult: null,
+  awaitingApprovalSince: null,
+  approvalDecision: null,
+  approvalNote: null,
+  approvedBy: null,
+  loopIterationCount: 0,
+  loopLastResult: null,
+} as const;
+
 export class SubtasksRepository {
   constructor(private readonly db: Database) {}
 
@@ -390,6 +405,7 @@ export class SubtasksRepository {
       in_progress: 0,
       completed: 0,
       failed: 0,
+      skipped: 0,
     };
     for (const subtask of subtasks) {
       counts[subtask.status]++;
@@ -400,8 +416,8 @@ export class SubtasksRepository {
   /**
    * Reset all subtasks for a task so a recurring run can execute them again.
    *
-   * Clears previous results, session links, retry counts and pending
-   * verification state, and moves every subtask back to `pending`. This is
+   * Clears previous results, session links, retry counts, verification,
+   * approval and loop state, and moves every subtask back to `pending`. This is
    * used by the recurring-task executor when `replanPolicy` is `never` or
    * `on-description-change` and the description has not changed — the existing
    * plan is reused, but each run must start from scratch.
@@ -409,14 +425,7 @@ export class SubtasksRepository {
   async resetByTask(taskId: string): Promise<schema.Subtask[]> {
     const results = await this.db
       .update(schema.subtasks)
-      .set({
-        status: 'pending',
-        result: null,
-        sessionId: null,
-        retryCount: 0,
-        pendingVerificationResult: null,
-        updatedAt: new Date(),
-      })
+      .set({ ...FRESH_RUN_STATE, updatedAt: new Date() })
       .where(eq(schema.subtasks.taskId, taskId))
       .returning();
     return results;
@@ -434,20 +443,7 @@ export class SubtasksRepository {
   async resetOne(id: string): Promise<schema.Subtask | null> {
     const results = await this.db
       .update(schema.subtasks)
-      .set({
-        status: 'pending',
-        result: null,
-        sessionId: null,
-        retryCount: 0,
-        pendingVerificationResult: null,
-        awaitingApprovalSince: null,
-        approvalDecision: null,
-        approvalNote: null,
-        approvedBy: null,
-        loopIterationCount: 0,
-        loopLastResult: null,
-        updatedAt: new Date(),
-      })
+      .set({ ...FRESH_RUN_STATE, updatedAt: new Date() })
       .where(eq(schema.subtasks.id, id))
       .returning();
     return results[0] ?? null;
@@ -613,11 +609,49 @@ export class SubtasksRepository {
         status: 'pending',
         sessionId: null,
         pendingVerificationResult: null,
+        // Each iteration gets a fresh set of verification retries; the
+        // iteration cap (loopMaxIterations) bounds the loop itself.
+        retryCount: 0,
         loopLastResult: input.result,
         loopIterationCount: sql`${schema.subtasks.loopIterationCount} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(schema.subtasks.id, id))
+      .returning();
+    return results[0] ?? null;
+  }
+
+  /**
+   * Atomically move a `pending` subtask to `in_progress`. Returns the row
+   * only for the caller that won the transition, so two concurrent
+   * dispatch passes can never start the same subtask twice.
+   */
+  async claimPending(id: string): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({ status: 'in_progress', updatedAt: new Date() })
+      .where(
+        and(eq(schema.subtasks.id, id), eq(schema.subtasks.status, 'pending')),
+      )
+      .returning();
+    return results[0] ?? null;
+  }
+
+  /**
+   * Mark a `pending` subtask as skipped (its branch was not taken, or an
+   * upstream step failed). `reason` is stored as the result so the UI can
+   * explain why the step never ran.
+   */
+  async skipSubtask(
+    id: string,
+    reason: string,
+  ): Promise<schema.Subtask | null> {
+    const results = await this.db
+      .update(schema.subtasks)
+      .set({ status: 'skipped', result: reason, updatedAt: new Date() })
+      .where(
+        and(eq(schema.subtasks.id, id), eq(schema.subtasks.status, 'pending')),
+      )
       .returning();
     return results[0] ?? null;
   }

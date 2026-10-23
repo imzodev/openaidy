@@ -54,12 +54,14 @@ export const softwareDevelopmentWorkflowTemplate: WorkflowTemplate = {
       key: 'test',
       title: 'Test',
       description:
-        'Run the test suite against the implemented changes. End the result with OUTCOME: PASS or OUTCOME: FAIL.',
+        'Run the test suite against the implemented changes. If anything fails, fix it and run the tests again. End the result with OUTCOME: PASS when every test passes, or OUTCOME: FAIL if failures remain.',
       kind: 'agent',
+      // Repeats until the tests pass; the step fails (and the run stops
+      // before review) if they still fail after 3 iterations.
       loop: {
         maxIterations: 3,
-        conditionOperator: 'contains',
-        conditionValue: 'FAIL',
+        conditionOperator: 'equals',
+        conditionValue: 'PASS',
       },
     },
     {
@@ -80,13 +82,7 @@ export const softwareDevelopmentWorkflowTemplate: WorkflowTemplate = {
   edges: [
     { from: 'plan', to: 'implement', edgeKind: 'dependency' },
     { from: 'implement', to: 'test', edgeKind: 'dependency' },
-    {
-      from: 'test',
-      to: 'code_review',
-      edgeKind: 'conditional',
-      conditionOperator: 'contains',
-      conditionValue: 'PASS',
-    },
+    { from: 'test', to: 'code_review', edgeKind: 'dependency' },
     { from: 'code_review', to: 'merge_deploy', edgeKind: 'dependency' },
   ],
 };

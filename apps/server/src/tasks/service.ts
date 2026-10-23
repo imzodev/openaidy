@@ -13,7 +13,12 @@ import type { TaskScheduleService } from './schedule-service';
 import { TaskOperations } from './operations/task-operations';
 import { SubtaskOperations } from './operations/subtask-operations';
 import { WorkflowTemplateOperations } from './operations/workflow-template-operations';
-import { TaskExecution } from './execution/task-execution';
+import {
+  TaskExecution,
+  type StartRunOptions,
+} from './execution/task-execution';
+import type { WorkflowRun } from '@openaidy/db';
+import type { WorkflowRunTrigger } from '@openaidy/shared-types';
 import type {
   TaskServiceOptions,
   CreateTaskInput,
@@ -84,6 +89,7 @@ export class TaskService {
       options.workspaceBaseDir,
       options.taskExecutionHistoryRepo,
       options.getExecutionConfig,
+      options.workflowRunsRepo,
     );
   }
 
@@ -315,21 +321,52 @@ export class TaskService {
   async executeTask(
     taskId: string,
     options: { sessionId?: string } = {},
-  ): Promise<ServiceResult<{ sessionId: string }>> {
+  ): Promise<ServiceResult<{ sessionId: string; runId: string }>> {
     return this.execution.executeTask(taskId, options);
+  }
+
+  async startRun(
+    taskId: string,
+    options: StartRunOptions = {},
+  ): Promise<ServiceResult<{ runId: string; sessionId: string }>> {
+    return this.execution.startRun(taskId, options);
+  }
+
+  async cancelRun(taskId: string): Promise<ServiceResult<WorkflowRun>> {
+    return this.execution.cancelRun(taskId);
+  }
+
+  async retrySubtask(subtaskId: string): Promise<ServiceResult<Subtask>> {
+    return this.execution.retrySubtask(subtaskId);
+  }
+
+  async listRuns(taskId: string, limit?: number): Promise<WorkflowRun[]> {
+    return this.execution.listRuns(taskId, limit);
+  }
+
+  async getRun(runId: string): Promise<WorkflowRun | null> {
+    return this.execution.getRun(runId);
+  }
+
+  async recoverInterruptedRuns(): Promise<void> {
+    return this.execution.recoverInterruptedRuns();
+  }
+
+  /** Resolves once background workflow work has settled (tests). */
+  async whenIdle(): Promise<void> {
+    return this.execution.whenIdle();
   }
 
   async executeSubtask(
     subtaskId: string,
-    options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string | null }>> {
-    return this.execution.executeSubtask(subtaskId, options);
+    return this.execution.executeSubtask(subtaskId);
   }
 
   async executeSubtasks(
     taskId: string,
-    options: { sessionId?: string } = {},
-  ): Promise<ServiceResult<{ startedCount: number }>> {
+    options: { trigger?: WorkflowRunTrigger } = {},
+  ): Promise<ServiceResult<{ startedCount: number; runId: string }>> {
     return this.execution.executeSubtasks(taskId, options);
   }
 

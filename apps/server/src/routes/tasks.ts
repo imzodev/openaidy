@@ -2,7 +2,8 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
 import type { PlanningService } from '../planning/service';
-import type { DeliverablesRepository } from '@openaidy/db';
+import type { DeliverablesRepository, WorkflowRun } from '@openaidy/db';
+import type { WorkflowRunDto } from '@openaidy/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { deriveTitleFromDescription } from '../tasks/derive-title';
@@ -165,6 +166,47 @@ export type TaskRoutesOptions = {
   deliverablesRepo?: DeliverablesRepository;
   authMiddleware: AuthMiddleware;
 };
+
+/** HTTP status for workflow-run error codes. */
+function runErrorStatus(code: string): number {
+  switch (code) {
+    case 'task.not_found':
+    case 'subtask.not_found':
+      return 404;
+    case 'session.not_configured':
+      return 503;
+    case 'workflow.already_running':
+    case 'workflow.not_running':
+    case 'subtask.already_executed':
+    case 'subtask.dependency_not_met':
+    case 'subtask.not_retryable':
+      return 409;
+    default:
+      return 500;
+  }
+}
+
+function toWorkflowRunDto(run: WorkflowRun): WorkflowRunDto {
+  let summary: WorkflowRunDto['summary'] = null;
+  if (run.summary) {
+    try {
+      summary = JSON.parse(run.summary) as WorkflowRunDto['summary'];
+    } catch {
+      summary = null;
+    }
+  }
+  return {
+    id: run.id,
+    taskId: run.taskId,
+    trigger: run.trigger,
+    status: run.status,
+    sessionId: run.sessionId,
+    error: run.error,
+    summary,
+    startedAt: new Date(run.startedAt).toISOString(),
+    finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
+  };
+}
 
 export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
   app,
@@ -501,7 +543,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
   /**
    * POST /tasks/:id/execute
-   * Execute a task by creating a session
+   * Start a new run of the task's workflow (every step is reset first).
+   * Returns as soon as the run has started; steps continue in the
+   * background.
    */
   app.post('/tasks/:id/execute', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -511,15 +555,58 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      if (result.error.code === 'task.not_found') {
-        reply.code(404);
-      } else if (result.error.code === 'session.not_configured') {
-        reply.code(503);
-      } else {
-        reply.code(500);
-      }
+      reply.code(runErrorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
+  });
+
+  /**
+   * GET /tasks/:id/runs
+   * The task's workflow runs, newest first.
+   */
+  app.get('/tasks/:id/runs', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const query = request.query as { limit?: string };
+    const task = await taskService.getTask(id);
+    if (!task) {
+      reply.code(404);
+      return {
+        ok: false,
+        error: { code: 'task.not_found', message: `Task "${id}" not found` },
+      };
+    }
+    const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
+    const runs = await taskService.listRuns(id, limit);
+    return { ok: true, data: runs.map(toWorkflowRunDto) };
+  });
+
+  /**
+   * POST /tasks/:id/runs/cancel
+   * Stop the task's running workflow run.
+   */
+  app.post('/tasks/:id/runs/cancel', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await taskService.cancelRun(id);
+    if (result.ok) {
+      return { ok: true, data: toWorkflowRunDto(result.data) };
+    }
+    reply.code(runErrorStatus(result.error.code));
+    return { ok: false, error: result.error };
+  });
+
+  /**
+   * POST /subtasks/:id/retry
+   * Run a failed or skipped step again (with everything after it),
+   * continuing the latest run.
+   */
+  app.post('/subtasks/:id/retry', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await taskService.retrySubtask(id);
+    if (result.ok) {
+      return { ok: true, data: result.data };
+    }
+    reply.code(runErrorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -555,13 +642,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      if (result.error.code === 'subtask.not_found') {
-        reply.code(404);
-      } else if (result.error.code === 'session.not_configured') {
-        reply.code(503);
-      } else {
-        reply.code(500);
-      }
+      reply.code(runErrorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
   });
@@ -756,11 +837,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      if (result.error.code === 'task.not_found') {
-        reply.code(404);
-      } else {
-        reply.code(500);
-      }
+      reply.code(runErrorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
   });

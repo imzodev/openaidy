@@ -462,12 +462,13 @@ export const workflowExecuteMeta: ToolMeta = {
   name: 'workflow_execute',
   category: 'Workflows',
   description:
-    'Run a workflow. By default this starts the workflow from its first ' +
-    'ready-to-execute nodes (the workflow entry points — nodes with no unmet ' +
-    'dependencies). Pass subtaskId to execute a single node in isolation ' +
-    '(useful for retries or for running one branch independently). ' +
-    'Returns the session id(s) that were started; the runs are async, so ' +
-    'follow up with sessions_read to track progress. ' +
+    'Run a workflow. By default this starts a new run of the whole ' +
+    'workflow: every node is reset, then the entry nodes start and the ' +
+    'rest follow as their dependencies finish. Fails if a run is already ' +
+    'going. Pass subtaskId to start one ready node of the current run ' +
+    'instead (a run is started without resetting if none is going). ' +
+    'Returns immediately with the run id; nodes run in the background, ' +
+    'so check progress with workflow_get. ' +
     'Rejects any task whose planningEnabled is false.',
 };
 

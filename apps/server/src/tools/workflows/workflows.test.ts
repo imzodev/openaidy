@@ -31,6 +31,8 @@ function makeTaskServiceMock(): {
   applyWorkflowTemplate: ReturnType<typeof vi.fn>;
   executeSubtask: ReturnType<typeof vi.fn>;
   executeSubtasks: ReturnType<typeof vi.fn>;
+  startRun: ReturnType<typeof vi.fn>;
+  getSubtask: ReturnType<typeof vi.fn>;
   getSubtasks: ReturnType<typeof vi.fn>;
   deleteSubtask: ReturnType<typeof vi.fn>;
   listTasks: ReturnType<typeof vi.fn>;
@@ -47,6 +49,8 @@ function makeTaskServiceMock(): {
   const applyWorkflowTemplate = vi.fn(notImplemented);
   const executeSubtask = vi.fn(notImplemented);
   const executeSubtasks = vi.fn(notImplemented);
+  const startRun = vi.fn(notImplemented);
+  const getSubtask = vi.fn(notImplemented);
   const getSubtasks = vi.fn(notImplemented);
   const deleteSubtask = vi.fn(notImplemented);
   const listTasks = vi.fn(notImplemented);
@@ -62,6 +66,8 @@ function makeTaskServiceMock(): {
     applyWorkflowTemplate,
     executeSubtask,
     executeSubtasks,
+    startRun,
+    getSubtask,
     getSubtasks,
     deleteSubtask,
     listTasks,
@@ -79,6 +85,8 @@ function makeTaskServiceMock(): {
     applyWorkflowTemplate,
     executeSubtask,
     executeSubtasks,
+    startRun,
+    getSubtask,
     getSubtasks,
     deleteSubtask,
     listTasks,
@@ -420,27 +428,60 @@ describe('workflow_delete', () => {
 // ── workflow_execute ─────────────────────────────────────────────────────────
 
 describe('workflow_execute', () => {
-  it('starts every ready node when no subtaskId is provided', async () => {
+  it('starts a new run of the whole workflow when no subtaskId is provided', async () => {
     const mocks = makeTaskServiceMock();
     mocks.getTask.mockResolvedValue(workflowTask());
-    mocks.executeSubtasks.mockResolvedValue({
+    mocks.startRun.mockResolvedValue({
       ok: true,
-      data: { startedCount: 3 },
+      data: { runId: 'run-7', sessionId: 'sess-1' },
     });
 
     const tool = createWorkflowExecuteTool(() => mocks.service);
     const result = await tool.execute({ workflowId: 'wf-1' }, CTX);
 
     expect(result.ok).toBe(true);
-    expect(mocks.executeSubtasks).toHaveBeenCalledWith('wf-1');
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-1', { trigger: 'agent' });
     if (result.ok) {
-      expect(result.content).toContain('Started 3');
+      expect(result.content).toContain('run-7');
     }
+  });
+
+  it('reports when a run is already going', async () => {
+    const mocks = makeTaskServiceMock();
+    mocks.getTask.mockResolvedValue(workflowTask());
+    mocks.startRun.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'workflow.already_running',
+        message:
+          'This workflow is already running. Stop the current run first.',
+      },
+    });
+
+    const tool = createWorkflowExecuteTool(() => mocks.service);
+    const result = await tool.execute({ workflowId: 'wf-1' }, CTX);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('already running');
+  });
+
+  it('refuses a node from a different workflow', async () => {
+    const mocks = makeTaskServiceMock();
+    mocks.getTask.mockResolvedValue(workflowTask());
+    mocks.getSubtask.mockResolvedValue({ id: 'sub-9', taskId: 'other-wf' });
+
+    const tool = createWorkflowExecuteTool(() => mocks.service);
+    const result = await tool.execute(
+      { workflowId: 'wf-1', subtaskId: 'sub-9' },
+      CTX,
+    );
+    expect(result.ok).toBe(false);
+    expect(mocks.executeSubtask).not.toHaveBeenCalled();
   });
 
   it('executes a single node when subtaskId is provided', async () => {
     const mocks = makeTaskServiceMock();
     mocks.getTask.mockResolvedValue(workflowTask());
+    mocks.getSubtask.mockResolvedValue({ id: 'sub-1', taskId: 'wf-1' });
     mocks.executeSubtask.mockResolvedValue({
       ok: true,
       data: { sessionId: 'sess-42' },
@@ -454,7 +495,7 @@ describe('workflow_execute', () => {
 
     expect(result.ok).toBe(true);
     expect(mocks.executeSubtask).toHaveBeenCalledWith('sub-1');
-    expect(mocks.executeSubtasks).not.toHaveBeenCalled();
+    expect(mocks.startRun).not.toHaveBeenCalled();
     if (result.ok) {
       expect(result.content).toContain('sess-42');
     }
@@ -467,7 +508,7 @@ describe('workflow_execute', () => {
     const tool = createWorkflowExecuteTool(() => mocks.service);
     const result = await tool.execute({ workflowId: 'wf-1' }, CTX);
     expect(result.ok).toBe(false);
-    expect(mocks.executeSubtasks).not.toHaveBeenCalled();
+    expect(mocks.startRun).not.toHaveBeenCalled();
   });
 });
 

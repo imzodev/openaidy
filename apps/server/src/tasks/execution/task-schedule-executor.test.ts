@@ -133,8 +133,7 @@ type ExecutorMocks = {
     markFailed: ReturnType<typeof vi.fn>;
   };
   taskService: {
-    executeTask: ReturnType<typeof vi.fn>;
-    executeSubtasks: ReturnType<typeof vi.fn>;
+    startRun: ReturnType<typeof vi.fn>;
   };
   planningService:
     | {
@@ -208,13 +207,9 @@ function makeHarness(
     markFailed: vi.fn().mockResolvedValue({ id: 'history-1' }),
   };
   const taskService = {
-    executeTask: vi.fn().mockResolvedValue({
+    startRun: vi.fn().mockResolvedValue({
       ok: true,
-      data: { sessionId: 'session-1' },
-    }),
-    executeSubtasks: vi.fn().mockResolvedValue({
-      ok: true,
-      data: { startedCount: subtasks.length },
+      data: { runId: 'run-1', sessionId: 'session-1' },
     }),
   };
 
@@ -406,11 +401,6 @@ describe('TaskScheduleExecutor.execute', () => {
     const { executor, mocks } = harness;
     const subtask = makeSubtask();
     mocks.subtasksRepo.listByTask.mockResolvedValue([subtask]);
-    // Mock executeSubtasks to return startedCount: 1 (one subtask was executed)
-    mocks.taskService.executeSubtasks.mockResolvedValue({
-      ok: true,
-      data: { startedCount: 1 },
-    });
     const schedule = makeSchedule({ replanPolicy: 'never' });
     await executor.execute('sched-1', payloadFor({ schedule }));
     // No planning call
@@ -418,22 +408,19 @@ describe('TaskScheduleExecutor.execute', () => {
     // Subtasks are reset (not deleted) so the existing plan runs again.
     expect(mocks.subtasksRepo.resetByTask).toHaveBeenCalledWith('task-1');
     expect(mocks.subtasksRepo.deleteByTask).not.toHaveBeenCalled();
-    // Subtasks were executed (the existing plan was reused) and the
-    // session created by the executor was passed through so we don't
-    // create a duplicate "Subtask: <title>" session.
-    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith(
-      'task-1',
-      expect.objectContaining({ sessionId: expect.any(String) }),
-    );
-    // executeTask is NOT called because work was submitted (startedCount > 0)
-    expect(mocks.taskService.executeTask).not.toHaveBeenCalled();
+    // A run starts in the executor's session, linked to the history row,
+    // without resetting the steps a second time.
+    expect(mocks.taskService.startRun).toHaveBeenCalledWith('task-1', {
+      trigger: 'schedule',
+      sessionId: expect.any(String),
+      historyId: 'history-1',
+      reset: false,
+    });
   });
 
   it('resets completed subtasks on the second recurrent run so the session is not empty', async () => {
     // Regression: on run #2 all subtasks from run #1 are completed. Without
-    // a reset, executeSubtasks finds nothing pending and the executor falls
-    // through to executeTask, which also sees subtasks and submits no work —
-    // leaving the newly created session empty.
+    // a reset the run would find nothing to do.
     const completedSubtask = makeSubtask({
       status: 'completed',
       result: 'done',
@@ -455,22 +442,15 @@ describe('TaskScheduleExecutor.execute', () => {
       return Promise.resolve([completedSubtask]);
     });
     mocks.subtasksRepo.listByTask.mockResolvedValue([completedSubtask]);
-    mocks.taskService.executeSubtasks.mockResolvedValue({
-      ok: true,
-      data: { startedCount: 1 },
-    });
 
     const result = await executor.execute('sched-1', payloadFor({ schedule }));
 
     expect(result.ok).toBe(true);
     expect(mocks.subtasksRepo.resetByTask).toHaveBeenCalledWith('task-1');
-    expect(mocks.taskService.executeSubtasks).toHaveBeenCalledWith(
+    expect(mocks.taskService.startRun).toHaveBeenCalledWith(
       'task-1',
-      expect.objectContaining({ sessionId: expect.any(String) }),
+      expect.objectContaining({ reset: false }),
     );
-    // executeTask must NOT be called: the reset made subtasks pending, so
-    // real work was submitted.
-    expect(mocks.taskService.executeTask).not.toHaveBeenCalled();
     expect(mocks.sessionService.createSession).toHaveBeenCalledWith(
       'Task: Daily summary (run #2)',
       'task',
@@ -560,17 +540,16 @@ describe('TaskScheduleExecutor.execute', () => {
     }
   });
 
-  it('falls back to executeTask (description) when the task has no subtasks', async () => {
+  it('starts a run in its own session when the task has no subtasks', async () => {
     const { executor, mocks } = harness;
     mocks.subtasksRepo.listByTask.mockResolvedValue([]);
     await executor.execute('sched-1', payloadFor());
-    // The session created by the executor is passed through so the
-    // duplicate "Task: <title>" session is no longer created.
-    expect(mocks.taskService.executeTask).toHaveBeenCalledWith(
+    // The run (which sends the description when there are no steps) uses
+    // the "run #N" session instead of creating another one.
+    expect(mocks.taskService.startRun).toHaveBeenCalledWith(
       'task-1',
       expect.objectContaining({ sessionId: expect.any(String) }),
     );
-    expect(mocks.taskService.executeSubtasks).not.toHaveBeenCalled();
   });
 
   it('marks history as failed when planning fails', async () => {
@@ -591,27 +570,37 @@ describe('TaskScheduleExecutor.execute', () => {
     );
   });
 
-  it('returns ok and marks verifying when execute succeeds', async () => {
+  it('returns ok and leaves the history row for the run to finish', async () => {
     const { executor, mocks } = harness;
     const result = await executor.execute('sched-1', payloadFor());
     expect(result.ok).toBe(true);
-    expect(mocks.taskExecutionHistoryRepo.updateStatus).toHaveBeenCalledWith(
+    // The run marks it completed/failed; the executor never claims it is
+    // done (or "verifying") on its own.
+    expect(
+      mocks.taskExecutionHistoryRepo.updateStatus,
+    ).not.toHaveBeenCalledWith(
       'history-1',
       expect.objectContaining({ status: 'verifying' }),
     );
+    expect(
+      mocks.taskExecutionHistoryRepo.updateStatus,
+    ).toHaveBeenLastCalledWith(
+      'history-1',
+      expect.objectContaining({ status: 'executing' }),
+    );
   });
 
-  it('logs and returns an error result when taskService.executeSubtasks fails', async () => {
+  it('logs and returns an error result when the run cannot start', async () => {
     const { executor, mocks } = harness;
     mocks.subtasksRepo.listByTask.mockResolvedValue([makeSubtask()]);
-    mocks.taskService.executeSubtasks.mockResolvedValue({
+    mocks.taskService.startRun.mockResolvedValue({
       ok: false,
-      error: { code: 'subtask.boom', message: 'subtask failed' },
+      error: { code: 'workflow.already_running', message: 'already running' },
     });
     const result = await executor.execute('sched-1', payloadFor());
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.message).toMatch(/executeSubtasks failed/);
+      expect(result.error.message).toMatch(/Starting the run failed/);
     }
     expect(mocks.log.error).toHaveBeenCalled();
     expect(mocks.taskExecutionHistoryRepo.markFailed).toHaveBeenCalled();
@@ -723,7 +712,12 @@ describe('TaskScheduleExecutor.triggerNow', () => {
     const result = await executor.triggerNow('sched-1');
     expect(result.ok).toBe(true);
     expect(result.historyId).toBe('history-1');
-    expect(mocks.taskExecutionHistoryRepo.create).toHaveBeenCalled();
+    // One history row only: execute() reuses the one returned to the caller.
+    expect(mocks.taskExecutionHistoryRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.taskService.startRun).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({ historyId: 'history-1' }),
+    );
     // The full execute() ran, which means the session was created.
     expect(mocks.sessionService.createSession).toHaveBeenCalled();
   });
@@ -753,16 +747,14 @@ describe('Phase 7 — additional coverage', () => {
   it('handles missing planning service gracefully (falls back to description)', async () => {
     // When the task has planningEnabled=true but no planning service
     // is available (planningService=undefined), the executor should
-    // log a warning and run the task via the description path
-    // (executeTask), not throw.
+    // log a warning and still start the run, not throw.
     const { executor, mocks } = makeHarness({
       planningService: 'none',
       subtasks: [],
     });
     const result = await executor.execute('sched-1', makePayload());
     expect(result.ok).toBe(true);
-    // The fallback path is executeTask (description).
-    expect(mocks.taskService.executeTask).toHaveBeenCalled();
+    expect(mocks.taskService.startRun).toHaveBeenCalled();
     // The planning service was never reached because it doesn't exist.
     expect(mocks.planningService).toBeUndefined();
   });
@@ -793,7 +785,7 @@ describe('Phase 7 — additional coverage', () => {
 
   it('uses the primary assigned agent as the "from" agent when no subtasks', async () => {
     // The executor's `execute()` path (when there are no subtasks)
-    // delegates to `taskService.executeTask(taskId)`. The executor
+    // delegates to `taskService.startRun(taskId)`. The executor
     // doesn't pass an agentId explicitly — agent selection is
     // `taskService`'s job. We verify here that the executor does
     // NOT default to the wrong agent (e.g. a hardcoded one). The
@@ -819,7 +811,7 @@ describe('Phase 7 — additional coverage', () => {
     // The task service is invoked with just the taskId (plus the
     // session created by the executor) — agent selection happens
     // downstream.
-    expect(mocks.taskService.executeTask).toHaveBeenCalledWith(
+    expect(mocks.taskService.startRun).toHaveBeenCalledWith(
       'task-1',
       expect.objectContaining({ sessionId: expect.any(String) }),
     );

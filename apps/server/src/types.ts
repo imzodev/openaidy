@@ -184,6 +184,7 @@ export type TaskServiceOptions = {
   taskAgentsRepo: import('@openaidy/db').TaskAgentsRepository;
   deliverablesRepo?: import('@openaidy/db').DeliverablesRepository;
   taskExecutionHistoryRepo?: import('@openaidy/db').TaskExecutionHistoryRepository;
+  workflowRunsRepo?: import('@openaidy/db').WorkflowRunsRepository;
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
   planningService?: import('./planning').PlanningService;

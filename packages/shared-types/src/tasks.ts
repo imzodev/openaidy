@@ -1,3 +1,5 @@
+import type { ExecutionSubtaskSummary } from './task-schedules.js';
+
 // ========================================
 // Task Type Values (shared between types and runtime)
 // ========================================
@@ -24,6 +26,20 @@ export const SUBTASK_STATUS_VALUES = [
   'in_progress',
   'completed',
   'failed',
+  'skipped',
+] as const;
+
+export const WORKFLOW_RUN_STATUS_VALUES = [
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
+
+export const WORKFLOW_RUN_TRIGGER_VALUES = [
+  'manual',
+  'schedule',
+  'agent',
 ] as const;
 
 export const SUBTASK_KIND_VALUES = ['agent', 'approval_gate'] as const;
@@ -267,6 +283,26 @@ export type SubtaskSummary = {
   approvalNote?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUS_VALUES)[number];
+export type WorkflowRunTrigger = (typeof WORKFLOW_RUN_TRIGGER_VALUES)[number];
+
+/**
+ * One execution of a workflow (a task's subtask graph).
+ */
+export type WorkflowRunDto = {
+  id: string;
+  taskId: string;
+  trigger: WorkflowRunTrigger;
+  status: WorkflowRunStatus;
+  sessionId: string | null;
+  /** Why the run failed (first failing step), or null. */
+  error: string | null;
+  /** How each step ended; null while the run is still going. */
+  summary: ExecutionSubtaskSummary | null;
+  startedAt: string;
+  finishedAt: string | null;
 };
 
 /**

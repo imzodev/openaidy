@@ -16,6 +16,7 @@ import { createSubtasksRepository } from './repositories/subtasks';
 import { createTaskAgentsRepository } from './repositories/task-agents';
 import { createTaskSchedulesRepository } from './repositories/task-schedules';
 import { createTaskExecutionHistoryRepository } from './repositories/task-execution-history';
+import { createWorkflowRunsRepository } from './repositories/workflow-runs';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
 import { createDeliverablesRepository } from './repositories/deliverables';
@@ -43,6 +44,7 @@ export async function createDatabaseAdapter(
     taskAgents: createTaskAgentsRepository(client),
     taskSchedules: createTaskSchedulesRepository(client),
     taskExecutionHistory: createTaskExecutionHistoryRepository(client),
+    workflowRuns: createWorkflowRunsRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
     deliverables: createDeliverablesRepository(client),

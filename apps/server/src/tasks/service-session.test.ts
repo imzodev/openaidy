@@ -31,6 +31,7 @@ describe('TaskService Session Integration', () => {
     createSession: ReturnType<typeof vi.fn>;
     submitMessageStreaming: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
+    listMessages: ReturnType<typeof vi.fn>;
   };
   let mockTasksRepo: {
     findById: ReturnType<typeof vi.fn>;
@@ -51,6 +52,11 @@ describe('TaskService Session Integration', () => {
     getCountsByStatus: ReturnType<typeof vi.fn>;
     assignAgent: ReturnType<typeof vi.fn>;
     setResult: ReturnType<typeof vi.fn>;
+    resetByTask: ReturnType<typeof vi.fn>;
+    claimPending: ReturnType<typeof vi.fn>;
+    incrementRetryCount: ReturnType<typeof vi.fn>;
+    completeSubtask: ReturnType<typeof vi.fn>;
+    failSubtask: ReturnType<typeof vi.fn>;
   };
   let mockTaskAgentsRepo: {
     listByTask: ReturnType<typeof vi.fn>;
@@ -63,6 +69,7 @@ describe('TaskService Session Integration', () => {
       createSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
       submitMessageStreaming: vi.fn().mockResolvedValue({ ok: true }),
       getSession: vi.fn().mockResolvedValue({ id: 'session-1' }),
+      listMessages: vi.fn().mockResolvedValue([]),
     };
 
     mockTasksRepo = {
@@ -110,6 +117,18 @@ describe('TaskService Session Integration', () => {
       }),
       assignAgent: vi.fn().mockResolvedValue({}),
       setResult: vi.fn().mockResolvedValue({}),
+      resetByTask: vi.fn().mockResolvedValue([]),
+      claimPending: vi.fn().mockResolvedValue({
+        id: 'subtask-1',
+        taskId: 'task-1',
+        title: 'Subtask',
+        description: 'Subtask description',
+        status: 'in_progress',
+        sessionId: null,
+      } as MockSubtask),
+      incrementRetryCount: vi.fn().mockResolvedValue({ retryCount: 1 }),
+      completeSubtask: vi.fn().mockResolvedValue({}),
+      failSubtask: vi.fn().mockResolvedValue({}),
     };
 
     mockTaskAgentsRepo = {
@@ -151,6 +170,7 @@ describe('TaskService Session Integration', () => {
 
     it('submits task description as initial message', async () => {
       await taskService.executeTask('task-1');
+      await taskService.whenIdle();
 
       expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -174,28 +194,9 @@ describe('TaskService Session Integration', () => {
       mockSubtasksRepo.listByTask.mockResolvedValueOnce([]);
 
       await taskService.executeTask('task-1');
+      await taskService.whenIdle();
 
       expect(mockTasksRepo.updateStatus).toHaveBeenCalledWith(
-        'task-1',
-        'review',
-      );
-    });
-
-    it('keeps task in progress after execution when subtasks exist', async () => {
-      mockSubtasksRepo.listByTask.mockResolvedValueOnce([
-        {
-          id: 'subtask-1',
-          taskId: 'task-1',
-          title: 'Subtask',
-          description: 'Subtask description',
-          status: 'pending',
-          sessionId: null,
-        } as MockSubtask,
-      ]);
-
-      await taskService.executeTask('task-1');
-
-      expect(mockTasksRepo.updateStatus).not.toHaveBeenCalledWith(
         'task-1',
         'review',
       );
@@ -248,17 +249,15 @@ describe('TaskService Session Integration', () => {
       });
     });
 
-    it('updates subtask status to in_progress', async () => {
+    it('claims the subtask (pending -> in_progress) before starting it', async () => {
       await taskService.executeSubtask('subtask-1');
 
-      expect(mockSubtasksRepo.updateStatus).toHaveBeenCalledWith(
-        'subtask-1',
-        'in_progress',
-      );
+      expect(mockSubtasksRepo.claimPending).toHaveBeenCalledWith('subtask-1');
     });
 
     it('submits subtask description as initial message', async () => {
       await taskService.executeSubtask('subtask-1');
+      await taskService.whenIdle();
 
       expect(mockSessionService.submitMessageStreaming).toHaveBeenCalledWith(
         expect.objectContaining({

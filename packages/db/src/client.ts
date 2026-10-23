@@ -331,6 +331,22 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS task_execution_history_session_id_idx ON task_execution_history(session_id);
     CREATE INDEX IF NOT EXISTS task_execution_history_started_at_idx ON task_execution_history(started_at);
 
+    CREATE TABLE IF NOT EXISTS workflow_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      trigger TEXT NOT NULL DEFAULT 'manual',
+      status TEXT NOT NULL DEFAULT 'running',
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      history_id TEXT,
+      error TEXT,
+      summary TEXT,
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_runs_task_id_idx ON workflow_runs(task_id, started_at);
+    CREATE INDEX IF NOT EXISTS workflow_runs_status_idx ON workflow_runs(status);
+
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -848,6 +864,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0016_workflow_conditions_loops_approval.sql'),
     'utf-8',
   );
+  const workflowRunsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0018_workflow_runs.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -857,6 +877,7 @@ export async function createDatabaseClient(
     await client.query(sessionFavoritesMigrationSql);
     await client.query(subtaskEdgesMigrationSql);
     await client.query(workflowMigrationSql);
+    await client.query(workflowRunsMigrationSql);
   } finally {
     client.release();
   }

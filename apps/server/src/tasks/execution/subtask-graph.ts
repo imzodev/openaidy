@@ -24,7 +24,7 @@ export type SubtaskDependencyEdge = {
   conditionValue?: string | null;
 };
 
-const OUTCOME_TAG_RE = /^OUTCOME:\s*(.+)$/im;
+const OUTCOME_TAG_RE = /^OUTCOME:\s*(.+)$/gim;
 // When an agent doesn't emit an OUTCOME tag, extractOutcome falls back to
 // the raw result text as the condition operand. Cap that fallback so a
 // large (potentially MB-scale) result can't become the operand wholesale.
@@ -32,13 +32,17 @@ const OUTCOME_FALLBACK_MAX_CHARS = 2000;
 
 /**
  * Pull the structured `OUTCOME: <tag>` line out of a subtask result
- * (see subtaskNeedsOutcomeTag), falling back to the raw result text
+ * (see subtaskNeedsOutcomeTag) — the last one when there are several —
+ * falling back to the raw result text
  * (capped to OUTCOME_FALLBACK_MAX_CHARS) when the agent didn't emit one.
  */
 export function extractOutcome(result: string | null | undefined): string {
   if (!result) return '';
-  const match = result.match(OUTCOME_TAG_RE);
-  if (match?.[1]) return match[1].trim();
+  // The agent is asked to END with the tag, so the last one wins (an
+  // earlier OUTCOME line may just be quoted context).
+  const tags = [...result.matchAll(OUTCOME_TAG_RE)];
+  const last = tags[tags.length - 1]?.[1]?.trim();
+  if (last) return last;
   return result.slice(0, OUTCOME_FALLBACK_MAX_CHARS).trim();
 }
 
@@ -58,7 +62,9 @@ export function evaluateCondition(
     case 'equals':
       return outcome.toLowerCase() === condition.value.trim().toLowerCase();
     case 'contains':
-      return outcome.toLowerCase().includes(condition.value.toLowerCase());
+      return outcome
+        .toLowerCase()
+        .includes(condition.value.trim().toLowerCase());
     case 'matches_regex':
       try {
         return new RegExp(condition.value, 'i').test(outcome);
@@ -70,36 +76,134 @@ export function evaluateCondition(
   }
 }
 
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'skipped']);
+
+/** Completed, failed or skipped: the step will not change again this run. */
+export function isTerminalStatus(status: string): boolean {
+  return TERMINAL_STATUSES.has(status);
+}
+
+export type SubtaskResolution =
+  | { action: 'run' }
+  | { action: 'wait' }
+  | { action: 'skip'; reason: string };
+
 /**
- * A subtask is executable once every subtask it depends on satisfies
- * its edge: a plain `dependency` edge requires the dependency to have
- * reached `completed`; a `conditional` edge additionally requires
- * `evaluateCondition` against the dependency's result. A subtask with
- * no incoming edges is always executable (subject to its own status
- * already being `pending`, which callers check separately). An unmet
- * condition simply never satisfies that edge — same silent
- * branch-halt semantics as a failed plain dependency.
+ * Decide what happens to a pending step, given the current state of the
+ * steps it depends on:
+ *
+ * - **wait** while any upstream step is still pending or running.
+ * - **skip** when an upstream step failed, or when an upstream step
+ *   completed but its edge here is not satisfied: a conditional edge
+ *   whose condition doesn't match the upstream result, or a plain edge
+ *   out of a *rejected* approval gate.
+ * - **run** otherwise, provided at least one incoming edge is satisfied.
+ *
+ * Edges from skipped steps are ignored, so a step where exclusive
+ * branches meet again runs after whichever branch was taken, while a
+ * normal fan-in still needs every upstream step to succeed. A step
+ * whose upstream steps were all skipped is skipped too.
+ */
+export function resolveSubtask(
+  subtask: Subtask,
+  allSubtasks: Subtask[],
+  edges: SubtaskDependencyEdge[],
+): SubtaskResolution {
+  const incoming = edges.filter((e) => e.subtaskId === subtask.id);
+  if (incoming.length === 0) return { action: 'run' };
+
+  const byId = new Map(allSubtasks.map((s) => [s.id, s]));
+  let satisfied = 0;
+  let skippedUpstream: Subtask | undefined;
+  for (const edge of incoming) {
+    const dep = byId.get(edge.dependsOnSubtaskId);
+    if (!dep) continue;
+    if (!isTerminalStatus(dep.status)) return { action: 'wait' };
+  }
+  for (const edge of incoming) {
+    const dep = byId.get(edge.dependsOnSubtaskId);
+    if (!dep) continue;
+    if (dep.status === 'failed') {
+      return {
+        action: 'skip',
+        reason: `Skipped because "${dep.title}" failed.`,
+      };
+    }
+    if (dep.status === 'skipped') {
+      skippedUpstream ??= dep;
+      continue;
+    }
+    if (edge.edgeKind === 'conditional' && edge.conditionOperator) {
+      const matched = evaluateCondition(dep.result, {
+        operator: edge.conditionOperator as ConditionOperator,
+        value: edge.conditionValue ?? '',
+      });
+      if (!matched) {
+        return {
+          action: 'skip',
+          reason: `Skipped: the result of "${dep.title}" did not match ${edge.conditionOperator} "${edge.conditionValue ?? ''}".`,
+        };
+      }
+    } else if (
+      (dep as { subtaskKind?: string }).subtaskKind === 'approval_gate' &&
+      (dep as { approvalDecision?: string | null }).approvalDecision ===
+        'rejected'
+    ) {
+      return {
+        action: 'skip',
+        reason: `Skipped because "${dep.title}" was rejected.`,
+      };
+    }
+    satisfied++;
+  }
+
+  if (satisfied > 0) return { action: 'run' };
+  return {
+    action: 'skip',
+    reason: skippedUpstream
+      ? `Skipped because "${skippedUpstream.title}" was skipped.`
+      : 'Skipped: none of the steps before it ran.',
+  };
+}
+
+/**
+ * True when a pending step can start now (see resolveSubtask).
  */
 export function isSubtaskExecutable(
   subtask: Subtask,
   allSubtasks: Subtask[],
   edges: SubtaskDependencyEdge[],
 ): boolean {
-  const dependsOn = edges.filter((e) => e.subtaskId === subtask.id);
-  if (dependsOn.length === 0) return true;
+  return resolveSubtask(subtask, allSubtasks, edges).action === 'run';
+}
 
-  const byId = new Map(allSubtasks.map((s) => [s.id, s]));
-  return dependsOn.every((edge) => {
-    const dep = byId.get(edge.dependsOnSubtaskId);
-    if (dep?.status !== 'completed') return false;
-    if (edge.edgeKind === 'conditional' && edge.conditionOperator) {
-      return evaluateCondition(dep.result, {
-        operator: edge.conditionOperator as ConditionOperator,
-        value: edge.conditionValue ?? '',
-      });
+/**
+ * Every step reachable downstream of `subtaskId` (not including it),
+ * in breadth-first order.
+ */
+export function getDownstreamSubtaskIds(
+  subtaskId: string,
+  edges: SubtaskDependencyEdge[],
+): string[] {
+  const forward = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = forward.get(e.dependsOnSubtaskId);
+    if (list) list.push(e.subtaskId);
+    else forward.set(e.dependsOnSubtaskId, [e.subtaskId]);
+  }
+  const seen = new Set<string>([subtaskId]);
+  const order: string[] = [];
+  const queue = [subtaskId];
+  let current: string | undefined;
+  while ((current = queue.shift()) !== undefined) {
+    for (const next of forward.get(current) ?? []) {
+      if (seen.has(next)) continue;
+      seen.add(next);
+      order.push(next);
+      queue.push(next);
     }
-    return true;
-  });
+  }
+  return order;
 }
 
 /**

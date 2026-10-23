@@ -768,6 +768,7 @@ export async function buildApp() {
           taskAgentsRepo: dbAdapter.repositories.taskAgents,
           deliverablesRepo: dbAdapter.repositories.deliverables,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          workflowRunsRepo: dbAdapter.repositories.workflowRuns,
           agents: services.agents,
           sessionService: services.sessions,
           planningService,
@@ -804,9 +805,8 @@ export async function buildApp() {
           taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
           taskService: {
-            executeTask: (taskId, options) =>
-              taskService!.executeTask(taskId, options),
-            executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+            startRun: (taskId, options) =>
+              taskService!.startRun(taskId, options),
           },
           sessionService: sessionServiceForExecutor,
           defaultAgentIdProvider: () =>
@@ -857,25 +857,11 @@ export async function buildApp() {
 
         // The recurring service logger is the same pino instance — the
         // GenericLogger mismatch is only in method signature shape.
-        // We also wire the run-event subscription so history rows are
-        // finalised (planned -> verifying -> completed/failed) when the
-        // task session the executor created finishes its run.
+        // History rows are finalised by the workflow run itself.
         recurringTasksService = createRecurringTasksService({
           taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
           executor: taskScheduleExecutor,
-          runEvents: services.runEvents,
-          // Pull the session type from the SessionsStore (or fall through
-          // to a type field if it's on the record). This filters out
-          // subtask and chat sessions so we only finalise history rows
-          // for the top-level task runs the executor created.
-          getSessionType: async (sessionId) => {
-            const session =
-              await dbAdapter!.repositories.sessions.findById(sessionId);
-            return session && 'type' in session
-              ? (session as { type?: string }).type
-              : null;
-          },
           logger: log as unknown as Parameters<
             typeof createRecurringTasksService
           >[0] extends infer T
@@ -1071,6 +1057,11 @@ export async function buildApp() {
 
     // Start periodic stuck subtask check
     if (taskService) {
+      // Steps that were running when the previous process stopped lost
+      // their agent run: fail them so those runs finish instead of hanging.
+      await taskService
+        .recoverInterruptedRuns()
+        .catch((err) => log.error('Workflow run recovery failed', err));
       stuckSubtaskInterval = setInterval(
         () => {
           taskService!.checkStuckSubtasks().catch((err) => {

@@ -10,6 +10,7 @@ import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   CreateTaskScheduleInput,
+  WorkflowRunDto,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -89,7 +90,8 @@ export type SubtaskStatus =
   | 'assigned'
   | 'in_progress'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'skipped';
 
 /**
  * Subtask kind — 'agent' runs a normal LLM session; 'approval_gate'
@@ -602,10 +604,49 @@ export async function assignSubtaskAgent(
  */
 export async function executeTask(
   taskId: string,
-): Promise<ApiResult<{ sessionId: string }>> {
+): Promise<ApiResult<{ sessionId: string; runId: string }>> {
   const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/execute`, {
     method: 'POST',
   });
+  return response.json();
+}
+
+/**
+ * The task's workflow runs, newest first.
+ */
+export async function listWorkflowRuns(
+  taskId: string,
+  limit = 20,
+): Promise<ApiResult<WorkflowRunDto[]>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/runs?limit=${limit}`,
+  );
+  return response.json();
+}
+
+/**
+ * Stop the task's running workflow run.
+ */
+export async function cancelWorkflowRun(
+  taskId: string,
+): Promise<ApiResult<WorkflowRunDto>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/runs/cancel`,
+    { method: 'POST' },
+  );
+  return response.json();
+}
+
+/**
+ * Run a failed or skipped step again (with everything after it).
+ */
+export async function retrySubtask(
+  subtaskId: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/retry`,
+    { method: 'POST' },
+  );
   return response.json();
 }
 

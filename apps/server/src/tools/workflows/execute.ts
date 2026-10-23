@@ -9,17 +9,14 @@ import { assertWorkflow } from './assert-workflow.js';
  *
  * Starts a workflow run. Two modes:
  *
- * - Default: kicks off every node whose dependencies are already met
- *   (the workflow's entry points). Backed by `TaskService.executeSubtasks`,
- *   which the same scheduler uses when a workflow is started from the UI.
+ * - Default: a new run of the whole workflow (every node reset), the
+ *   same as the Run button. Backed by `TaskService.startRun`.
  *
- * - subtaskId provided: executes a single node in isolation. Backed by
- *   `TaskService.executeSubtask`. Useful for retries and for letting the
- *   agent run a specific branch without re-entering through the entry
- *   points.
+ * - subtaskId provided: starts one ready node of the current run.
+ *   Backed by `TaskService.executeSubtask`.
  *
- * Both modes are async: the returned sessionId(s) can be polled via
- * sessions_read to track progress.
+ * Both return as soon as the work has started; nodes run in the
+ * background.
  */
 export function createWorkflowExecuteTool(
   getTaskService: () => TaskService | undefined,
@@ -70,6 +67,13 @@ export function createWorkflowExecuteTool(
         if (!workflowCheck.ok) return workflowCheck;
 
         if (typeof subtaskId === 'string' && subtaskId) {
+          const node = await taskService.getSubtask(subtaskId);
+          if (!node || node.taskId !== workflowId) {
+            return {
+              ok: false,
+              error: `Node "${subtaskId}" is not part of workflow "${workflowId}"`,
+            };
+          }
           const result = await taskService.executeSubtask(subtaskId);
           if (!result.ok) {
             return { ok: false, error: result.error.message };
@@ -83,13 +87,15 @@ export function createWorkflowExecuteTool(
           };
         }
 
-        const result = await taskService.executeSubtasks(workflowId);
+        const result = await taskService.startRun(workflowId, {
+          trigger: 'agent',
+        });
         if (!result.ok) {
           return { ok: false, error: result.error.message };
         }
         return {
           ok: true,
-          content: `Workflow "${workflowId}" execution started.\n\nStarted ${result.data.startedCount} ready node(s). Use sessions_read to track progress.`,
+          content: `Workflow "${workflowId}" run started.\n\nRun: ${result.data.runId}\nNodes run in the background; use workflow_get to check their status.`,
         };
       } catch (err) {
         return formatToolError('Unexpected error executing workflow', err);
