@@ -10,6 +10,7 @@ import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { McpServerConfig } from '@openaidy/config';
 import { EnvPlaceholderResolver } from '../mcp/placeholder-resolver';
 import { encryptSecret } from '../mcp/secret-crypto';
+import type { McpOAuthService } from '../mcp/oauth';
 
 // ---------------------------------------------------------------------------
 // Helpers / stubs
@@ -81,6 +82,10 @@ function makeMcpService(
     connect: vi.fn(),
     disconnect: vi.fn(),
     callTool: vi.fn(),
+    authStatus: vi.fn(async (config: McpServerConfig) =>
+      config.auth ? 'needs_sign_in' : 'none',
+    ),
+    resetAuthState: vi.fn(),
     // Mirror the real service: any ${VAR} in the relevant field is "missing"
     // unless it resolves from the (empty by default) environment or the
     // injected named-secrets store.
@@ -133,6 +138,7 @@ async function buildApp(
   mcpService: McpClientService,
   configService: AppConfigService,
   authMiddleware: AuthMiddleware = mockAuthMiddleware,
+  oauth?: McpOAuthService,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(cors, { origin: '*' });
@@ -144,6 +150,7 @@ async function buildApp(
         mcpService,
         configService,
         authMiddleware,
+        oauth,
       });
     },
     { prefix: '/api' },
@@ -1242,6 +1249,317 @@ describe('MCP Routes', () => {
       });
       expect(res.statusCode).toBe(403);
       expect(res.json().error).toBe('INSUFFICIENT_SCOPE');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('OAuth sign-in', () => {
+    const oauthServer = makeServerConfig({
+      id: 'notion',
+      transport: 'http',
+      command: undefined,
+      args: undefined,
+      url: 'https://mcp.example.com/mcp',
+      auth: {
+        type: 'oauth',
+        clientId: 'my-client',
+        clientSecret: { kind: 'inline', value: encryptSecret('top-secret') },
+      },
+    });
+    let oauth: McpOAuthService;
+
+    beforeEach(async () => {
+      configService = makeConfigService([oauthServer, makeServerConfig()]);
+      mcpService = makeMcpService();
+      oauth = {
+        startAuthorization: vi.fn(async () => ({
+          status: 'redirect',
+          authorizationUrl: 'https://auth.example.com/authorize?state=abc',
+        })),
+        consumeFlowState: vi.fn(async (state: string) =>
+          state === 'abc'
+            ? { serverId: 'notion', origin: 'http://localhost:5173' }
+            : null,
+        ),
+        completeAuthorization: vi.fn(async () => {}),
+        signOut: vi.fn(async () => {}),
+      } as unknown as McpOAuthService;
+      app = await buildApp(
+        mcpService,
+        configService,
+        mockAuthMiddleware,
+        oauth,
+      );
+    });
+
+    it('reports authStatus and redacts the client secret', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/servers/notion',
+      });
+      const { server } = res.json();
+      expect(server.authStatus).toBe('needs_sign_in');
+      expect(server.auth.clientId).toBe('my-client');
+      expect(server.auth.clientSecret).toEqual({
+        kind: 'inline',
+        value: '••••••',
+      });
+      expect(res.body).not.toContain('enc:v1:');
+    });
+
+    it('start returns the authorization URL for the browser origin', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/notion/oauth/start',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { origin: 'http://localhost:5173/mcps' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().authorizationUrl).toContain('auth.example.com');
+      expect(oauth.startAuthorization).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'notion' }),
+        'http://localhost:5173',
+      );
+    });
+
+    it('start rejects servers without OAuth and bad origins', async () => {
+      const notOauth = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/test-server/oauth/start',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { origin: 'http://localhost:5173' },
+      });
+      expect(notOauth.statusCode).toBe(400);
+
+      const badOrigin = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/notion/oauth/start',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { origin: 'javascript:alert(1)' },
+      });
+      expect(badOrigin.statusCode).toBe(400);
+    });
+
+    it('start requires auth', async () => {
+      app = await buildApp(mcpService, configService, noAuthMiddleware, oauth);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/notion/oauth/start',
+        payload: { origin: 'http://localhost:5173' },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('callback exchanges the code, connects, and notifies the opener', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/oauth/callback?code=the-code&state=abc',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.body).toContain('openaidy:mcp-oauth');
+      expect(res.body).toContain('"http://localhost:5173"');
+      expect(oauth.completeAuthorization).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'notion' }),
+        'the-code',
+      );
+      expect(mcpService.connect).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'notion' }),
+      );
+    });
+
+    it('callback rejects an unknown state without touching any server', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/oauth/callback?code=x&state=forged',
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.body).not.toContain('postMessage');
+      expect(oauth.completeAuthorization).not.toHaveBeenCalled();
+    });
+
+    it('callback escapes a provider error message', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/mcp/oauth/callback?state=abc&error=access_denied&error_description=%3Cscript%3Ex%3C%2Fscript%3E',
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.body).not.toContain('<script>x</script>');
+    });
+
+    it('signout forgets credentials and disconnects', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers/notion/oauth/signout',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(oauth.signOut).toHaveBeenCalledWith('notion');
+      expect(mcpService.disconnect).toHaveBeenCalledWith('notion');
+    });
+
+    it('encrypts a new inline client secret on create', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          config: {
+            id: 'gcal',
+            transport: 'http',
+            url: 'https://calendarmcp.googleapis.com/mcp/v1',
+            auth: {
+              type: 'oauth',
+              clientId: 'cid',
+              clientSecret: { kind: 'inline', value: 'plain-secret' },
+            },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const saved = configService.getMcpServer('gcal');
+      const secret = saved?.auth?.clientSecret as {
+        kind: string;
+        value: string;
+      };
+      expect(secret.kind).toBe('inline');
+      expect(secret.value.startsWith('enc:v1:')).toBe(true);
+      expect(res.body).not.toContain('plain-secret');
+    });
+
+    it('rejects OAuth on a stdio server', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/servers',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {
+          config: {
+            id: 'local',
+            transport: 'stdio',
+            command: 'npx',
+            auth: { type: 'oauth' },
+          },
+        },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('integrations catalog', () => {
+    beforeEach(async () => {
+      configService = makeConfigService([makeServerConfig({ id: 'notion' })]);
+      mcpService = makeMcpService();
+      app = await buildApp(mcpService, configService);
+    });
+
+    it('lists entries flagged with installed state', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/mcp/catalog' });
+      expect(res.statusCode).toBe(200);
+      const entries = res.json().entries as Array<{
+        id: string;
+        installed: boolean;
+      }>;
+      expect(entries.find((e) => e.id === 'notion')?.installed).toBe(true);
+      expect(entries.find((e) => e.id === 'stripe')?.installed).toBe(false);
+    });
+
+    it('installs a one-click entry as an OAuth server awaiting sign-in', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/stripe/install',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().server).toMatchObject({
+        id: 'stripe',
+        url: 'https://mcp.stripe.com',
+        authStatus: 'needs_sign_in',
+      });
+      expect(configService.getMcpServer('stripe')?.auth).toEqual({
+        type: 'oauth',
+      });
+      expect(mcpService.connect).not.toHaveBeenCalled();
+    });
+
+    it('requires a client ID for own-app entries and encrypts the secret', async () => {
+      const missing = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/gmail/install',
+        headers: { authorization: 'Bearer test-token' },
+        payload: {},
+      });
+      expect(missing.statusCode).toBe(400);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/gmail/install',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { clientId: 'cid', clientSecret: 'plain-secret' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.body).not.toContain('plain-secret');
+      const secret = configService.getMcpServer('gmail')?.auth
+        ?.clientSecret as { value: string };
+      expect(secret.value.startsWith('enc:v1:')).toBe(true);
+    });
+
+    it('rejects unknown and already-installed entries', async () => {
+      const unknown = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/nope/install',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(unknown.statusCode).toBe(404);
+
+      const dup = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/notion/install',
+        headers: { authorization: 'Bearer test-token' },
+      });
+      expect(dup.statusCode).toBe(409);
+    });
+
+    it('installs DigitalOcean with an API token instead of sign-in', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/digitalocean/install',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { apiKey: 'dop_v1_secret' },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.body).not.toContain('dop_v1_secret');
+      const saved = configService.getMcpServer('digitalocean');
+      expect(saved?.auth).toBeUndefined();
+      const header = saved?.headers?.['Authorization'] as {
+        kind: string;
+        value: string;
+      };
+      expect(header.kind).toBe('inline');
+      expect(header.value.startsWith('enc:v1:')).toBe(true);
+      expect(mcpService.connect).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'digitalocean' }),
+      );
+    });
+
+    it('rejects an API token for sign-in-only entries', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/stripe/install',
+        headers: { authorization: 'Bearer test-token' },
+        payload: { apiKey: 'sk_live_x' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(configService.getMcpServer('stripe')).toBeUndefined();
+    });
+
+    it('install requires auth', async () => {
+      app = await buildApp(mcpService, configService, noAuthMiddleware);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/mcp/catalog/stripe/install',
+      });
+      expect(res.statusCode).toBe(401);
     });
   });
 });

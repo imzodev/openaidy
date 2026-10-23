@@ -6,6 +6,8 @@
  * - Runtime connect/disconnect
  * - Tool discovery
  * - One-shot inline-secret migration (issue #401)
+ * - OAuth sign-in for remote servers (start / callback / sign-out)
+ * - Integrations catalog (browse + one-click install)
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -15,6 +17,8 @@ import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { McpServerConfig, McpSecretValue } from '@openaidy/config';
 import {
   type McpToolWithSchema,
+  type McpCatalogEntry,
+  type InstallMcpCatalogEntryRequest,
   type CreateMcpServerRequest,
   type UpdateMcpServerRequest,
 } from '@openaidy/shared-types';
@@ -35,6 +39,16 @@ import {
   isEncryptedSecret,
 } from '../mcp/secret-crypto';
 import { migrateAllInlineSecrets } from '../mcp/migrate-secrets';
+import {
+  MCP_CATALOG,
+  catalogServerConfig,
+  findCatalogEntry,
+} from '../mcp/catalog';
+import {
+  McpAuthRequiredError,
+  usesOAuth,
+  type McpOAuthService,
+} from '../mcp/oauth';
 
 /**
  * Managing MCP servers means running arbitrary local processes (stdio) or
@@ -63,6 +77,71 @@ const secretValueSchema = {
     },
   ],
 };
+
+/** JSON schema for the optional OAuth block of an http server. */
+const authSchema = {
+  type: 'object',
+  required: ['type'],
+  properties: {
+    type: { type: 'string', enum: ['oauth'] },
+    clientId: { type: 'string', minLength: 1 },
+    clientSecret: secretValueSchema,
+    scopes: { type: 'array', items: { type: 'string', minLength: 1 } },
+  },
+};
+
+/**
+ * Encrypt a newly supplied inline `auth.clientSecret` (keeping the stored one
+ * when the client echoes back the masked value), via the same
+ * {@link unmaskRecord} path as `env`/`headers`.
+ */
+function unmaskAuth(
+  incoming: McpServerConfig['auth'],
+  existing: McpServerConfig['auth'],
+): McpServerConfig['auth'] {
+  if (!incoming || incoming.clientSecret === undefined) return incoming;
+  const clientSecret = unmaskRecord(
+    { clientSecret: incoming.clientSecret },
+    existing?.clientSecret !== undefined
+      ? { clientSecret: existing.clientSecret }
+      : undefined,
+  )?.['clientSecret'];
+  return { ...incoming, ...(clientSecret ? { clientSecret } : {}) };
+}
+
+/** `{ clientSecret }` as a record, for the inline-secret encryption guard. */
+function authSecretRecord(
+  auth: McpServerConfig['auth'] | undefined,
+): Record<string, McpSecretValue> | undefined {
+  return auth?.clientSecret !== undefined
+    ? { clientSecret: auth.clientSecret }
+    : undefined;
+}
+
+/**
+ * HTML returned to the sign-in popup. It reports the outcome to the window
+ * that opened it (only if that window is on `origin`, the OpenAidy UI) and
+ * closes itself; the text is a fallback for when there is no opener.
+ */
+function oauthResultPage(
+  origin: string | null,
+  result: { serverId: string | null; success: boolean; error?: string },
+): string {
+  const message = JSON.stringify({ type: 'openaidy:mcp-oauth', ...result })
+    // Keep the payload inert inside the <script> element.
+    .replace(/</g, '\\u003c');
+  const text = result.success
+    ? 'Signed in. You can close this window.'
+    : `Sign-in failed: ${result.error ?? 'unknown error'}`;
+  const escapedText = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const notify = origin
+    ? `if (window.opener) { window.opener.postMessage(${message}, ${JSON.stringify(origin)}); window.close(); }`
+    : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>OpenAidy</title></head><body style="font-family:system-ui,sans-serif;padding:2rem"><p>${escapedText}</p><script>${notify}</script></body></html>`;
+}
 
 /**
  * Result of validating that any newly-supplied inline secret in a request
@@ -152,6 +231,8 @@ export type McpRoutesOptions = {
   mcpService: McpClientService;
   configService: AppConfigService;
   authMiddleware: AuthMiddleware;
+  /** OAuth sign-in for remote servers. Absent → OAuth routes return 503. */
+  oauth?: McpOAuthService | undefined;
 };
 
 /**
@@ -161,7 +242,7 @@ export async function registerMcpRoutes(
   fastify: FastifyInstance,
   options: McpRoutesOptions,
 ): Promise<void> {
-  const { mcpService, configService, authMiddleware } = options;
+  const { mcpService, configService, authMiddleware, oauth } = options;
 
   /**
    * Live connection state for a server, used to enrich the persisted config
@@ -169,7 +250,9 @@ export async function registerMcpRoutes(
    * needs (so the UI can flag it as "awaiting configuration" rather than a
    * plain disconnected server).
    */
-  const runtimeStatus = (config: McpServerConfig): McpRuntimeStatus => {
+  const runtimeStatus = async (
+    config: McpServerConfig,
+  ): Promise<McpRuntimeStatus> => {
     const connected = mcpService.isConnected(config.id);
     const tools = connected
       ? mcpService.getTools(config.id).map((t) => ({
@@ -181,8 +264,13 @@ export async function registerMcpRoutes(
       connected,
       tools,
       missingSecrets: mcpService.missingSecrets(config),
+      authStatus: await mcpService.authStatus(config),
     };
   };
+
+  /** API record for a server: redacted config + live runtime status. */
+  const toRecord = async (config: McpServerConfig) =>
+    toMcpServerRecord(config, await runtimeStatus(config));
 
   /**
    * Connect a freshly saved/imported server unless it's still awaiting its
@@ -202,6 +290,8 @@ export async function registerMcpRoutes(
     try {
       await mcpService.connect(serverConfig);
     } catch (error) {
+      // Awaiting sign-in is a setup state, not a failure.
+      if (error instanceof McpAuthRequiredError) return;
       fastify.log.warn(
         {
           serverId: serverConfig.id,
@@ -222,11 +312,9 @@ export async function registerMcpRoutes(
   fastify.get(
     '/mcp/servers',
     async (_request: FastifyRequest, _reply: FastifyReply) => {
-      const servers = configService
-        .getMcpServers()
-        .map((serverConfig) =>
-          toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
-        );
+      const servers = await Promise.all(
+        configService.getMcpServers().map(toRecord),
+      );
 
       return { servers };
     },
@@ -252,9 +340,7 @@ export async function registerMcpRoutes(
         });
       }
 
-      return {
-        server: toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
-      };
+      return { server: await toRecord(serverConfig) };
     },
   );
 
@@ -286,6 +372,94 @@ export async function registerMcpRoutes(
       return { tools };
     },
   );
+
+  /**
+   * GET /mcp/catalog
+   *
+   * The curated integrations gallery, each flagged with whether a server
+   * with its id is already configured.
+   */
+  fastify.get('/mcp/catalog', async () => {
+    const installedIds = new Set(
+      configService.getMcpServers().map((s) => s.id),
+    );
+    const entries: McpCatalogEntry[] = MCP_CATALOG.map((entry) => ({
+      ...entry,
+      installed: installedIds.has(entry.id),
+    }));
+    return { entries };
+  });
+
+  /**
+   * GET /mcp/oauth/callback
+   *
+   * Where the authorization server sends the browser after sign-in. Public
+   * (the popup carries no OpenAidy credentials); the single-use `state`
+   * issued by /oauth/start is what ties the request to a server. Exchanges
+   * the code for tokens, connects the server, and reports back to the UI.
+   */
+  fastify.get<{
+    Querystring: {
+      code?: string;
+      state?: string;
+      error?: string;
+      error_description?: string;
+    };
+  }>('/mcp/oauth/callback', async (request, reply) => {
+    const { code, state, error, error_description } = request.query;
+    reply.type('text/html; charset=utf-8');
+
+    const flow = oauth && state ? await oauth.consumeFlowState(state) : null;
+    if (!oauth || !flow) {
+      return reply.status(400).send(
+        oauthResultPage(null, {
+          serverId: null,
+          success: false,
+          error: 'This sign-in link is invalid or has expired',
+        }),
+      );
+    }
+
+    const { serverId, origin } = flow;
+    const fail = (status: number, message: string) =>
+      reply
+        .status(status)
+        .send(
+          oauthResultPage(origin, { serverId, success: false, error: message }),
+        );
+
+    if (error) return fail(400, error_description ?? error);
+    if (!code) return fail(400, 'Authorization code missing');
+
+    const serverConfig = configService.getMcpServer(serverId);
+    if (!serverConfig || !usesOAuth(serverConfig)) {
+      return fail(404, `MCP server "${serverId}" no longer exists`);
+    }
+
+    try {
+      await oauth.completeAuthorization(serverConfig, code);
+    } catch (err) {
+      fastify.log.warn(
+        { serverId, err: err instanceof Error ? err.message : String(err) },
+        'MCP OAuth code exchange failed',
+      );
+      return fail(
+        502,
+        err instanceof Error ? err.message : 'Token exchange failed',
+      );
+    }
+
+    // Reconnect with the new tokens (dropping any connection made with the
+    // previous account).
+    mcpService.resetAuthState(serverId);
+    await mcpService.disconnect(serverId);
+    await connectIfReady(
+      serverConfig,
+      'MCP server signed in but connection failed',
+    );
+
+    return reply.send(oauthResultPage(origin, { serverId, success: true }));
+  });
 
   // -----------------------------------------------------------------------
   // All routes below require authentication.
@@ -332,6 +506,7 @@ export async function registerMcpRoutes(
                     type: 'object',
                     additionalProperties: secretValueSchema,
                   },
+                  auth: authSchema,
                 },
               },
             },
@@ -355,9 +530,17 @@ export async function registerMcpRoutes(
         // Fail fast (with a clean 503) if this request introduces inline
         // secrets but encryption is unavailable — better than crashing in
         // encryptSecret() halfway through the save.
+        if (config.auth && config.transport !== 'http') {
+          return reply.status(400).send({
+            error: 'INVALID_CONFIG',
+            message: 'OAuth sign-in is only supported for http servers',
+          });
+        }
+
         if (
           patchIntroducesNewInlineSecret(config.env) ||
-          patchIntroducesNewInlineSecret(config.headers)
+          patchIntroducesNewInlineSecret(config.headers) ||
+          patchIntroducesNewInlineSecret(authSecretRecord(config.auth))
         ) {
           const check = ensureInlineEncryptionAvailable();
           if (!check.ok) {
@@ -375,6 +558,14 @@ export async function registerMcpRoutes(
           ...(config as McpServerConfig),
           env: unmaskRecord(config.env, undefined),
           headers: unmaskRecord(config.headers, undefined),
+          ...(config.auth
+            ? {
+                auth: unmaskAuth(
+                  config.auth as McpServerConfig['auth'],
+                  undefined,
+                ),
+              }
+            : {}),
         };
 
         // Persist to config
@@ -390,9 +581,7 @@ export async function registerMcpRoutes(
           'MCP server saved but initial connection failed',
         );
 
-        return reply.status(201).send({
-          server: toMcpServerRecord(newConfig, runtimeStatus(newConfig)),
-        });
+        return reply.status(201).send({ server: await toRecord(newConfig) });
       },
     );
 
@@ -520,9 +709,7 @@ export async function registerMcpRoutes(
             serverConfig,
             'MCP server imported but initial connection failed',
           );
-          records.push(
-            toMcpServerRecord(serverConfig, runtimeStatus(serverConfig)),
-          );
+          records.push(await toRecord(serverConfig));
         }
 
         return reply.status(201).send({ servers: records });
@@ -695,6 +882,7 @@ export async function registerMcpRoutes(
                 type: 'object',
                 additionalProperties: secretValueSchema,
               },
+              auth: { anyOf: [authSchema, { type: 'null' }] },
             },
           },
         },
@@ -722,7 +910,10 @@ export async function registerMcpRoutes(
         // MASKED_VALUE echo isn't blocked by a transient crypto outage).
         if (
           patchIntroducesNewInlineSecret(patch.env) ||
-          patchIntroducesNewInlineSecret(patch.headers)
+          patchIntroducesNewInlineSecret(patch.headers) ||
+          patchIntroducesNewInlineSecret(
+            authSecretRecord(patch.auth ?? undefined),
+          )
         ) {
           const check = ensureInlineEncryptionAvailable();
           if (!check.ok) {
@@ -752,6 +943,21 @@ export async function registerMcpRoutes(
             ? { headers: unmaskRecord(patch.headers, existing.headers) }
             : {}),
         };
+        // `auth: null` removes OAuth; an object replaces it.
+        if (patch.auth === null) {
+          delete updated.auth;
+        } else if (patch.auth !== undefined) {
+          updated.auth = unmaskAuth(
+            patch.auth as McpServerConfig['auth'],
+            existing.auth,
+          );
+        }
+        if (updated.auth && updated.transport !== 'http') {
+          return reply.status(400).send({
+            error: 'INVALID_CONFIG',
+            message: 'OAuth sign-in is only supported for http servers',
+          });
+        }
 
         // Persist to config
         const fullConfig = configService.getConfig();
@@ -760,7 +966,7 @@ export async function registerMcpRoutes(
         );
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
-        return { server: toMcpServerRecord(updated, runtimeStatus(updated)) };
+        return { server: await toRecord(updated) };
       },
     );
 
@@ -807,6 +1013,13 @@ export async function registerMcpRoutes(
         );
         await configService.save({ ...fullConfig, mcpServers: newServers });
 
+        // Forget its OAuth credentials so a future server reusing the id
+        // doesn't inherit someone else's sign-in.
+        if (oauth) {
+          await oauth.signOut(id);
+          mcpService.resetAuthState(id);
+        }
+
         return reply.status(204).send();
       },
     );
@@ -840,6 +1053,12 @@ export async function registerMcpRoutes(
           await mcpService.connect(serverConfig);
           return { serverId: id, connected: true };
         } catch (error) {
+          if (error instanceof McpAuthRequiredError) {
+            return reply.status(401).send({
+              error: 'AUTH_REQUIRED',
+              message: `MCP server "${id}" needs you to sign in first`,
+            });
+          }
           const message =
             error instanceof Error ? error.message : 'Unknown error';
           return reply.status(500).send({
@@ -942,6 +1161,213 @@ export async function registerMcpRoutes(
             message: `Failed to call MCP tool: ${message}`,
           });
         }
+      },
+    );
+
+    /**
+     * POST /mcp/catalog/:id/install
+     *
+     * Add a catalog integration as an MCP server. Normally it isn't
+     * connected yet — the user signs in next, which the UI starts right
+     * away. Entries that also accept an API token can be installed with
+     * `apiKey` instead, and connect immediately.
+     */
+    authRequired.post<{
+      Params: { id: string };
+      Body: InstallMcpCatalogEntryRequest | undefined;
+    }>(
+      '/mcp/catalog/:id/install',
+      {
+        schema: {
+          body: {
+            type: ['object', 'null'],
+            properties: {
+              clientId: { type: 'string' },
+              clientSecret: { type: 'string' },
+              apiKey: { type: 'string' },
+            },
+          },
+        },
+      },
+      async (request, reply) => {
+        const entry = findCatalogEntry(request.params.id);
+        if (!entry) {
+          return reply.status(404).send({
+            error: 'NOT_FOUND',
+            message: `No catalog integration "${request.params.id}"`,
+          });
+        }
+        if (configService.getMcpServer(entry.id)) {
+          return reply.status(409).send({
+            error: 'CONFLICT',
+            message: `${entry.name} is already installed`,
+          });
+        }
+
+        const body = request.body ?? {};
+        const useApiKey = !!body.apiKey?.trim();
+        if (useApiKey && !entry.apiKey) {
+          return reply.status(400).send({
+            error: 'API_KEY_UNSUPPORTED',
+            message: `${entry.name} connects by signing in, not with an API key`,
+          });
+        }
+        if (
+          !useApiKey &&
+          entry.setup === 'oauth-own-app' &&
+          !body.clientId?.trim()
+        ) {
+          return reply.status(400).send({
+            error: 'CLIENT_ID_REQUIRED',
+            message: `${entry.name} needs the client ID of an OAuth app you create in the provider's console`,
+          });
+        }
+
+        const draft = catalogServerConfig(entry, body);
+        if (
+          patchIntroducesNewInlineSecret(authSecretRecord(draft.auth)) ||
+          patchIntroducesNewInlineSecret(draft.headers)
+        ) {
+          const check = ensureInlineEncryptionAvailable();
+          if (!check.ok) {
+            return reply.status(check.statusCode).send({
+              error: check.error,
+              message: check.message,
+            });
+          }
+        }
+        const serverConfig: McpServerConfig = {
+          ...draft,
+          ...(draft.auth ? { auth: unmaskAuth(draft.auth, undefined) } : {}),
+          ...(draft.headers
+            ? { headers: unmaskRecord(draft.headers, undefined) }
+            : {}),
+        };
+
+        const fullConfig = configService.getConfig();
+        await configService.save({
+          ...fullConfig,
+          mcpServers: [...(fullConfig.mcpServers ?? []), serverConfig],
+        });
+
+        // An API-token install is ready to go; sign-in installs wait for the
+        // browser flow the UI starts next.
+        if (!usesOAuth(serverConfig)) {
+          await connectIfReady(
+            serverConfig,
+            'Catalog integration installed but initial connection failed',
+          );
+        }
+
+        return reply.status(201).send({ server: await toRecord(serverConfig) });
+      },
+    );
+
+    /**
+     * POST /mcp/servers/:id/oauth/start
+     *
+     * Begin OAuth sign-in. `origin` is the browser origin of the OpenAidy
+     * UI; the callback URL is built on it so the redirect returns to the
+     * same host. Returns the URL to open in a popup, or `authorized` when no
+     * browser step is needed.
+     */
+    authRequired.post<{
+      Params: { id: string };
+      Body: { origin: string };
+    }>(
+      '/mcp/servers/:id/oauth/start',
+      {
+        schema: {
+          body: {
+            type: 'object',
+            required: ['origin'],
+            properties: { origin: { type: 'string', minLength: 1 } },
+          },
+        },
+      },
+      async (request, reply) => {
+        const { id } = request.params;
+        if (!oauth) {
+          return reply.status(503).send({
+            error: 'OAUTH_UNAVAILABLE',
+            message: 'OAuth sign-in requires the database to be enabled',
+          });
+        }
+
+        const serverConfig = configService.getMcpServer(id);
+        if (!serverConfig) {
+          return reply.status(404).send({
+            error: 'NOT_FOUND',
+            message: `MCP server "${id}" not found in config`,
+          });
+        }
+        if (!usesOAuth(serverConfig)) {
+          return reply.status(400).send({
+            error: 'NOT_OAUTH',
+            message: `MCP server "${id}" does not use OAuth sign-in`,
+          });
+        }
+
+        let origin: string;
+        try {
+          const parsed = new URL(request.body.origin);
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('unsupported protocol');
+          }
+          origin = parsed.origin;
+        } catch {
+          return reply.status(400).send({
+            error: 'INVALID_ORIGIN',
+            message: 'origin must be an http(s) URL',
+          });
+        }
+
+        try {
+          const result = await oauth.startAuthorization(serverConfig, origin);
+          if (result.status === 'authorized') {
+            mcpService.resetAuthState(id);
+            await connectIfReady(
+              serverConfig,
+              'MCP server authorized but connection failed',
+            );
+          }
+          return result;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          fastify.log.warn(
+            { serverId: id, err: message },
+            'MCP OAuth start failed',
+          );
+          return reply.status(502).send({
+            error: 'OAUTH_START_FAILED',
+            message: `Could not start sign-in for "${id}": ${message}`,
+          });
+        }
+      },
+    );
+
+    /**
+     * POST /mcp/servers/:id/oauth/signout
+     *
+     * Forget the server's stored OAuth credentials and disconnect it.
+     */
+    authRequired.post<{ Params: { id: string } }>(
+      '/mcp/servers/:id/oauth/signout',
+      async (request, reply) => {
+        const { id } = request.params;
+        const serverConfig = configService.getMcpServer(id);
+        if (!serverConfig) {
+          return reply.status(404).send({
+            error: 'NOT_FOUND',
+            message: `MCP server "${id}" not found in config`,
+          });
+        }
+
+        await mcpService.disconnect(id);
+        if (oauth) await oauth.signOut(id);
+        mcpService.resetAuthState(id);
+
+        return { server: await toRecord(serverConfig) };
       },
     );
   }); // end authRequired plugin

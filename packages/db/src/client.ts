@@ -12,6 +12,7 @@ import * as pairingSchema from './schema/pairing';
 import * as sessionSchema from './schema/sessions';
 import * as providerCredentialsSchema from './schema/provider-credentials';
 import * as oauthFlowStateSchema from './schema/oauth-flow-state';
+import * as mcpOAuthCredentialsSchema from './schema/mcp-oauth-credentials';
 
 export type DatabaseSchema = typeof sessionSchema &
   typeof jobSchema &
@@ -19,7 +20,8 @@ export type DatabaseSchema = typeof sessionSchema &
   typeof accessTokenSchema &
   typeof addonSchema &
   typeof providerCredentialsSchema &
-  typeof oauthFlowStateSchema;
+  typeof oauthFlowStateSchema &
+  typeof mcpOAuthCredentialsSchema;
 export type DatabaseClient = ReturnType<typeof JSON.parse>;
 
 export type DatabaseClientConfig =
@@ -46,6 +48,7 @@ const schema: DatabaseSchema = {
   ...addonSchema,
   ...providerCredentialsSchema,
   ...oauthFlowStateSchema,
+  ...mcpOAuthCredentialsSchema,
 };
 
 function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
@@ -438,6 +441,16 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS provider_credentials_provider_id_idx ON provider_credentials(provider_id);
     CREATE INDEX IF NOT EXISTS provider_credentials_status_idx ON provider_credentials(status);
+
+    -- ------------------------------------------------------------
+    -- MCP server OAuth credentials (encrypted JSON blob per server)
+    -- ------------------------------------------------------------
+    CREATE TABLE IF NOT EXISTS mcp_oauth_credentials (
+      server_id      TEXT PRIMARY KEY,
+      encrypted_data TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       title,
@@ -848,6 +861,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0016_workflow_conditions_loops_approval.sql'),
     'utf-8',
   );
+  const mcpOAuthCredentialsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0017_mcp_oauth_credentials.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -857,6 +874,7 @@ export async function createDatabaseClient(
     await client.query(sessionFavoritesMigrationSql);
     await client.query(subtaskEdgesMigrationSql);
     await client.query(workflowMigrationSql);
+    await client.query(mcpOAuthCredentialsMigrationSql);
   } finally {
     client.release();
   }
