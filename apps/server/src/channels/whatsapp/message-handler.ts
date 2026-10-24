@@ -1,6 +1,9 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service.js';
-import { handleInboundChannelMessage } from '../message-handler.js';
+import {
+  handleInboundChannelMessage,
+  type ChannelWorkflowTriggers,
+} from '../message-handler.js';
 
 // Re-export so existing WhatsApp callers/tests keep importing from here.
 export { clearSessionMapForTesting } from '../message-handler.js';
@@ -33,6 +36,9 @@ export async function handleInboundWhatsAppMessage(params: {
     'listSessions' | 'createSession' | 'submitMessageNonStreaming'
   >;
   logger: FastifyBaseLogger;
+  workflowTriggers?: ChannelWorkflowTriggers | undefined;
+  /** Chat JID replies go to. */
+  replyTarget?: string;
 }): Promise<string | null> {
   return handleInboundChannelMessage({
     channelType: 'whatsapp',
@@ -51,5 +57,7 @@ export async function handleInboundWhatsAppMessage(params: {
       : {}),
     sessionService: params.sessionService,
     logger: params.logger,
+    workflowTriggers: params.workflowTriggers,
+    ...(params.replyTarget ? { replyTarget: params.replyTarget } : {}),
   });
 }

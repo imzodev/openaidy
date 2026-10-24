@@ -57,6 +57,11 @@ import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
+import {
+  webhookRoutes,
+  workflowTriggerRoutes,
+} from './routes/workflow-triggers';
+import { WorkflowTriggerService } from './tasks/triggers/service';
 import { taskScheduleRoutes } from './routes/task-schedules';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
@@ -332,6 +337,9 @@ export async function buildApp() {
   let sessionService: SessionMessageService | undefined;
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
+  // Created with the task service (needs the database); channels look it
+  // up lazily so a message can start a workflow.
+  let workflowTriggerService: WorkflowTriggerService | undefined;
   let recurringTasksService: RecurringTasksService | undefined;
   let taskScheduleService: TaskScheduleService | undefined;
 
@@ -373,6 +381,7 @@ export async function buildApp() {
         }
       : {}),
     getTaskService: () => taskService,
+    getWorkflowTriggerService: () => workflowTriggerService,
     getPlanningService: () => planningService,
     // The schedule service is constructed later (when dbAdapter +
     // RECURRING_TASKS_ENABLED are both available), so this getter
@@ -457,6 +466,7 @@ export async function buildApp() {
     sessionService,
     authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
     logger: pinoLog,
+    getWorkflowTriggers: () => workflowTriggerService,
   };
   const channelRegistry = createChannelRegistry(
     configService.getConfig().channels,
@@ -801,6 +811,25 @@ export async function buildApp() {
           planningService,
           deliverablesRepo: dbAdapter.repositories.deliverables,
           authMiddleware,
+        });
+
+        // Webhooks and channel messages that start workflows.
+        workflowTriggerService = new WorkflowTriggerService({
+          triggersRepo: dbAdapter.repositories.workflowTriggers,
+          taskService,
+          listChannelIds: () =>
+            (configService.getConfig().channels ?? []).map((c) => c.id),
+          sendToChannel: async (channelId, target, text) =>
+            (await channelRegistry.get(channelId)?.send?.(target, text)) ??
+            false,
+          logger: createLogger('WorkflowTriggers'),
+        });
+        await api.register(workflowTriggerRoutes, {
+          triggerService: workflowTriggerService,
+          authMiddleware,
+        });
+        await api.register(webhookRoutes, {
+          triggerService: workflowTriggerService,
         });
 
         // Memory management routes (browse/search/create/edit/delete).

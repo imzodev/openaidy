@@ -20,6 +20,8 @@ export class WorkflowRunsRepository {
     trigger: schema.WorkflowRunTrigger;
     sessionId?: string | null;
     historyId?: string | null;
+    input?: string | null;
+    replyTarget?: string | null;
   }): Promise<schema.WorkflowRun> {
     const [run] = await this.db
       .insert(schema.workflowRuns)
@@ -30,6 +32,8 @@ export class WorkflowRunsRepository {
         status: 'running',
         sessionId: input.sessionId ?? null,
         historyId: input.historyId ?? null,
+        input: input.input ?? null,
+        replyTarget: input.replyTarget ?? null,
         startedAt: new Date(),
       })
       .returning();

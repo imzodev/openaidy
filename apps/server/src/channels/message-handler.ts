@@ -77,6 +77,20 @@ async function findOrCreateSession(
 }
 
 /**
+ * Lets a channel message start a workflow instead of going to the chat
+ * agent (implemented by WorkflowTriggerService). Returns the reply to send
+ * when a trigger matched, or null to carry on as a normal chat.
+ */
+export type ChannelWorkflowTriggers = {
+  handleChannelMessage(message: {
+    channelId: string;
+    senderIds: string[];
+    text: string;
+    replyTarget: string;
+  }): Promise<string | null>;
+};
+
+/**
  * Handle an inbound message from any channel.
  *
  * Single responsibility: translate an inbound message into a session
@@ -110,6 +124,10 @@ export async function handleInboundChannelMessage(params: {
     'listSessions' | 'createSession' | 'submitMessageNonStreaming'
   >;
   logger: FastifyBaseLogger;
+  /** Workflow triggers to check before the message goes to the agent. */
+  workflowTriggers?: ChannelWorkflowTriggers | undefined;
+  /** The chat a reply goes to; needed for workflow triggers. */
+  replyTarget?: string;
 }): Promise<string | null> {
   const {
     channelType,
@@ -151,11 +169,31 @@ export async function handleInboundChannelMessage(params: {
     return null;
   }
 
-  // 2. Build session key and find or create session
+  // 2. A message that matches a workflow trigger starts that workflow
+  //    instead of being answered by the chat agent.
+  if (params.workflowTriggers && params.replyTarget) {
+    try {
+      const reply = await params.workflowTriggers.handleChannelMessage({
+        channelId,
+        senderIds: candidateIds,
+        text,
+        replyTarget: params.replyTarget,
+      });
+      if (reply !== null) return reply;
+    } catch (err) {
+      // A broken trigger must not stop the channel from answering.
+      logger.error(
+        { err, channelType, channelId },
+        `${channelType}: workflow trigger check failed; answering as chat`,
+      );
+    }
+  }
+
+  // 3. Build session key and find or create session
   const sessionKey = buildChannelSessionKey(channelType, channelId, senderId);
   const sessionId = await findOrCreateSession(sessionKey, sessionService);
 
-  // 3. Submit message (non-streaming — channel needs full reply text)
+  // 4. Submit message (non-streaming — channel needs full reply text)
   const result = await sessionService.submitMessageNonStreaming({
     sessionId,
     role: 'user',

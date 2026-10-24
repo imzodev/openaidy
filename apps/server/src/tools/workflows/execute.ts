@@ -37,6 +37,12 @@ export function createWorkflowExecuteTool(
             'Optional ID of a specific node to execute. If omitted, the ' +
             'workflow starts from all ready-to-execute entry nodes.',
         },
+        input: {
+          type: 'string',
+          description:
+            'Optional text the run should work on, e.g. the details the ' +
+            'user just gave you. Every step sees it as the workflow input.',
+        },
       },
       required: ['workflowId'],
     },
@@ -87,8 +93,10 @@ export function createWorkflowExecuteTool(
           };
         }
 
+        const input = args['input'];
         const result = await taskService.startRun(workflowId, {
           trigger: 'agent',
+          ...(typeof input === 'string' && input.trim() ? { input } : {}),
         });
         if (!result.ok) {
           return { ok: false, error: result.error.message };

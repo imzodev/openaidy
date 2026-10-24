@@ -491,6 +491,38 @@ export const workflowExecuteMeta: ToolMeta = {
     'Rejects any task whose planningEnabled is false.',
 };
 
+export const workflowTriggerCreateMeta: ToolMeta = {
+  name: 'workflow_trigger_create',
+  category: 'Workflows',
+  description:
+    'Make a workflow start by itself. kind "webhook" creates a URL that ' +
+    'other services (forms, Zapier, Stripe…) POST to; the request body ' +
+    'becomes the workflow input, and the token is shown only once. kind ' +
+    '"channel_message" starts the workflow when a message on a channel ' +
+    '(WhatsApp, Discord) matches — e.g. matchType "starts_with", matchValue ' +
+    '"quote" — gives every step the message as input, replies right away, ' +
+    'and sends the result back to the same chat when the run ends. A ' +
+    'matching message goes to the workflow instead of the chat agent. ' +
+    'Optional: senders (limit who can trigger it), ackText, replyWithResult.',
+};
+
+export const workflowTriggerListMeta: ToolMeta = {
+  name: 'workflow_trigger_list',
+  category: 'Workflows',
+  description:
+    'List the triggers (webhooks and message triggers) of one workflow, or ' +
+    'of every workflow when workflowId is omitted, with their ids, rules ' +
+    'and when they last fired.',
+};
+
+export const workflowTriggerDeleteMeta: ToolMeta = {
+  name: 'workflow_trigger_delete',
+  category: 'Workflows',
+  description:
+    'Delete a workflow trigger by id (see workflow_trigger_list). A deleted ' +
+    'webhook URL stops working immediately.',
+};
+
 export const workflowApplyTemplateMeta: ToolMeta = {
   name: 'workflow_apply_template',
   category: 'Workflows',
@@ -808,6 +840,9 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowApprovalResolveMeta,
   workflowApplyTemplateMeta,
   workflowSetGraphMeta,
+  workflowTriggerCreateMeta,
+  workflowTriggerListMeta,
+  workflowTriggerDeleteMeta,
   workflowListMeta,
   workflowNodeCreateMeta,
   workflowNodeUpdateMeta,

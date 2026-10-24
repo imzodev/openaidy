@@ -431,7 +431,7 @@ export class TaskService {
 
   async executeTask(
     taskId: string,
-    options: { sessionId?: string } = {},
+    options: { sessionId?: string; input?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string; runId: string }>> {
     const invalid = await this.refuseInvalidGraph(taskId);
     if (invalid) return invalid;
@@ -468,6 +468,11 @@ export class TaskService {
     Array<Subtask & { taskTitle: string }>
   > {
     return this.execution.listPendingApprovals();
+  }
+
+  /** Subscribe to runs finishing or reaching an approval step. */
+  onRunEvent(listener: Parameters<TaskExecution['onRunEvent']>[0]): () => void {
+    return this.execution.onRunEvent(listener);
   }
 
   /** Subscribe to run/step changes (task id per change). */

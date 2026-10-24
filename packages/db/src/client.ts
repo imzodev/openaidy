@@ -340,12 +340,30 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
       history_id TEXT,
       error TEXT,
       summary TEXT,
+      input TEXT,
+      reply_target TEXT,
       started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       finished_at TEXT
     );
 
     CREATE INDEX IF NOT EXISTS workflow_runs_task_id_idx ON workflow_runs(task_id, started_at);
     CREATE INDEX IF NOT EXISTS workflow_runs_status_idx ON workflow_runs(status);
+
+    CREATE TABLE IF NOT EXISTS workflow_triggers (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      secret_hash TEXT,
+      last_fired_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_triggers_task_id_idx ON workflow_triggers(task_id);
+    CREATE INDEX IF NOT EXISTS workflow_triggers_kind_idx ON workflow_triggers(kind);
 
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY NOT NULL,
@@ -799,6 +817,17 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   if (!edgeInfo.some((col) => col.name === 'condition_value')) {
     sqlite.exec(`ALTER TABLE subtask_edges ADD COLUMN condition_value TEXT`);
   }
+
+  // Migration: run input and reply target (0020_workflow_triggers). The
+  // workflow_triggers table itself is created by initializeSqliteSchema.
+  const runInfo = sqlite.pragma('table_info(workflow_runs)') as Array<{
+    name: string;
+  }>;
+  for (const column of ['input', 'reply_target']) {
+    if (!runInfo.some((col) => col.name === column)) {
+      sqlite.exec(`ALTER TABLE workflow_runs ADD COLUMN ${column} TEXT`);
+    }
+  }
 }
 
 export async function createDatabaseClient(
@@ -875,6 +904,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0019_subtask_positions.sql'),
     'utf-8',
   );
+  const workflowTriggersMigrationSql = readFileSync(
+    resolve(drizzleDir, '0020_workflow_triggers.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -886,6 +919,7 @@ export async function createDatabaseClient(
     await client.query(workflowMigrationSql);
     await client.query(workflowRunsMigrationSql);
     await client.query(subtaskPositionsMigrationSql);
+    await client.query(workflowTriggersMigrationSql);
   } finally {
     client.release();
   }

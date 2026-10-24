@@ -1339,7 +1339,7 @@ function AppContent(props: AppContentProps) {
         </Show>
 
         <Show when={view() === 'webhooks'}>
-          <WebhooksPage />
+          <WebhooksPage onOpenWorkflow={navigateToWorkflow} />
         </Show>
 
         <Show when={view() === 'agents'}>

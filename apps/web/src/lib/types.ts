@@ -54,6 +54,11 @@ export type {
   PendingApprovalDto,
   WorkflowRunStatus,
   WorkflowRunTrigger,
+  // Webhooks and channel messages that start workflows.
+  WorkflowTriggerDto,
+  WebhookTokenDto,
+  ChannelMessageTriggerConfig,
+  MessageMatchType,
   // Agent memory types from shared-types — single source of truth.
   Memory,
   CreateMemoryInput,

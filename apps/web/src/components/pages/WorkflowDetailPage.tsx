@@ -33,10 +33,12 @@ import {
   Check,
   X,
   Loader2,
+  Zap,
 } from 'lucide-solid';
 import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
 import { WorkflowEditor } from '../tasks/workflow/WorkflowEditor';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { WorkflowTriggersPanel } from '../workflows/WorkflowTriggersPanel';
 import {
   getTask,
   updateTask,
@@ -117,7 +119,16 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
   const [isStopping, setIsStopping] = createSignal(false);
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
-  const [showRuns, setShowRuns] = createSignal(false);
+  // One side panel at a time: run history or triggers.
+  const [sidePanel, setSidePanel] = createSignal<'runs' | 'triggers' | null>(
+    null,
+  );
+  const showRuns = () => sidePanel() === 'runs';
+  const setShowRuns = (show: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof show === 'function' ? show(showRuns()) : show;
+    setSidePanel(next ? 'runs' : null);
+  };
+  const showTriggers = () => sidePanel() === 'triggers';
   const [refreshKey, setRefreshKey] = createSignal(0);
   const [resolvingId, setResolvingId] = createSignal<string | null>(null);
 
@@ -428,6 +439,18 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
           >
             <History class="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setSidePanel(showTriggers() ? null : 'triggers')}
+            class={`p-1.5 rounded-lg transition-colors ${
+              showTriggers()
+                ? 'bg-primary/10 text-primary'
+                : 'text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+            title="Triggers"
+            aria-pressed={showTriggers()}
+          >
+            <Zap class="w-4 h-4" />
+          </button>
           <Show
             when={isRunActive()}
             fallback={
@@ -536,6 +559,14 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
             <WorkflowRunsPanel
               runs={runs()}
               onClose={() => setShowRuns(false)}
+            />
+          </div>
+        </Show>
+        <Show when={showTriggers()}>
+          <div class="absolute inset-y-0 right-0 z-20 shadow-xl sm:shadow-none sm:static w-80 max-w-[85vw] flex-shrink-0">
+            <WorkflowTriggersPanel
+              taskId={props.taskId}
+              onClose={() => setSidePanel(null)}
             />
           </div>
         </Show>

@@ -89,6 +89,8 @@ class InMemoryRunStore implements RunStore {
     trigger: WorkflowRunTrigger;
     sessionId?: string | null;
     historyId?: string | null;
+    input?: string | null;
+    replyTarget?: string | null;
   }): Promise<WorkflowRun> {
     const run: WorkflowRun = {
       id: nanoid(),
@@ -99,6 +101,8 @@ class InMemoryRunStore implements RunStore {
       historyId: input.historyId ?? null,
       error: null,
       summary: null,
+      input: input.input ?? null,
+      replyTarget: input.replyTarget ?? null,
       startedAt: new Date(),
       finishedAt: null,
     };
@@ -172,7 +176,22 @@ export type StartRunOptions = {
    * reset or re-planned the graph pass false.
    */
   reset?: boolean;
+  /**
+   * What started the run (webhook body, channel message, text from the
+   * caller). Every step's prompt includes it.
+   */
+  input?: string;
+  /** JSON {channelId, target}: where to send the result (channel runs). */
+  replyTarget?: string;
 };
+
+/** Longest run input kept; the rest is cut off. */
+export const MAX_RUN_INPUT_CHARS = 20_000;
+
+/** Run-level moments other parts of the server react to. */
+export type WorkflowRunEvent =
+  | { type: 'run.finished'; run: WorkflowRun }
+  | { type: 'approval.waiting'; run: WorkflowRun; subtask: Subtask };
 
 /**
  * Runs a task's subtask graph (a "workflow").
@@ -199,6 +218,9 @@ export class TaskExecution {
   /** Background work started by this executor (awaited by whenIdle). */
   private readonly background = new Set<Promise<unknown>>();
   private readonly changeListeners = new Set<(taskId: string) => void>();
+  private readonly runEventListeners = new Set<
+    (event: WorkflowRunEvent) => void | Promise<void>
+  >();
 
   constructor(
     private readonly tasksRepo: TasksRepository,
@@ -251,6 +273,31 @@ export class TaskExecution {
   onWorkflowChange(listener: (taskId: string) => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
+  }
+
+  /** Called when a run finishes or reaches an approval step. */
+  onRunEvent(
+    listener: (event: WorkflowRunEvent) => void | Promise<void>,
+  ): () => void {
+    this.runEventListeners.add(listener);
+    return () => this.runEventListeners.delete(listener);
+  }
+
+  private emitRunEvent(event: WorkflowRunEvent): void {
+    for (const listener of this.runEventListeners) {
+      // Listeners do slow things (sending a WhatsApp message); they must
+      // never hold up or break the run.
+      this.track(
+        Promise.resolve()
+          .then(() => listener(event))
+          .catch((err: unknown) => {
+            this.logger.warn('Workflow run listener failed', {
+              type: event.type,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }),
+      );
+    }
   }
 
   private notifyChange(taskId: string): void {
@@ -372,6 +419,10 @@ export class TaskExecution {
         trigger: options.trigger ?? 'manual',
         sessionId,
         historyId: options.historyId ?? null,
+        input: options.input?.trim()
+          ? options.input.slice(0, MAX_RUN_INPUT_CHARS)
+          : null,
+        replyTarget: options.replyTarget ?? null,
       });
       this.logger.info('Workflow run started', {
         taskId,
@@ -480,11 +531,12 @@ export class TaskExecution {
   /** Run the whole workflow (resets every step first). */
   async executeTask(
     taskId: string,
-    options: { sessionId?: string } = {},
+    options: { sessionId?: string; input?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string; runId: string }>> {
     return this.startRun(taskId, {
       trigger: 'manual',
       ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options.input ? { input: options.input } : {}),
     });
   }
 
@@ -689,6 +741,7 @@ export class TaskExecution {
       summary: JSON.stringify(summary),
     });
     if (!finished) return null;
+    this.emitRunEvent({ type: 'run.finished', run: finished });
 
     this.logger.info('Workflow run finished', {
       taskId: run.taskId,
@@ -763,11 +816,13 @@ export class TaskExecution {
     allSubtasks: Subtask[],
     edges: SubtaskDependencyEdge[],
   ): Promise<string | null> {
+    const run = await this.runs.findRunning(subtask.taskId);
     if (subtask.subtaskKind === 'approval_gate') {
       await this.subtasksRepo.setAwaitingApproval(subtask.id, true);
       this.logger.info('Approval gate paused, awaiting human decision', {
         subtaskId: subtask.id,
       });
+      if (run) this.emitRunEvent({ type: 'approval.waiting', run, subtask });
       return null;
     }
 
@@ -777,7 +832,12 @@ export class TaskExecution {
     );
     await this.subtasksRepo.update(subtask.id, { sessionId: session.id });
 
-    const content = this.buildStepPrompt(subtask, allSubtasks, edges);
+    const content = this.buildStepPrompt(
+      subtask,
+      allSubtasks,
+      edges,
+      run?.input ?? null,
+    );
     this.track(this.runStepTurn(subtask, session.id, content));
     return session.id;
   }
@@ -786,6 +846,7 @@ export class TaskExecution {
     subtask: Subtask,
     allSubtasks: Subtask[],
     edges: SubtaskDependencyEdge[],
+    runInput: string | null = null,
   ): string {
     // Scope the handoff to this subtask's actual dependencies only
     // (not every completed subtask in the task), and bound its size so
@@ -812,6 +873,19 @@ export class TaskExecution {
         contextParts.push(`## Result from "${dep.title}":\n${truncatedResult}`);
       }
       messageContent = `${subtask.description}\n\n---\n\n**Context from completed dependencies:**\n\n${contextParts.join('\n\n')}`;
+    }
+
+    // What started the run (a webhook body, a customer's message…) is
+    // given to every step: entry steps act on it, later ones can refer
+    // back to it.
+    if (runInput) {
+      const { depContextPerItemChars } = this.getExecutionConfig();
+      const input = truncateWithBudget(
+        runInput,
+        depContextPerItemChars,
+        createContextBudget(depContextPerItemChars),
+      );
+      messageContent = `**Workflow input** (what started this run):\n${input}\n\n---\n\n${messageContent}`;
     }
 
     // Loop iteration context: on iterations after the first, prepend the

@@ -77,6 +77,10 @@ export type BuiltinToolRegistryDeps = {
   sessions?: { getSessionService: () => SessionMessageService };
   memory?: MemoryToolDeps;
   getTaskService?: () => TaskService | undefined;
+  /** Webhook / channel-message triggers for workflows (workflow_trigger_*). */
+  getWorkflowTriggerService?: () =>
+    | import('../tasks/triggers/service').WorkflowTriggerService
+    | undefined;
   getPlanningService?: () => import('../planning').PlanningService | undefined;
   pulses?: PulseToolDeps;
   /**
@@ -170,7 +174,10 @@ export function createBuiltinToolRegistry(
       registry.register(tool);
     }
 
-    for (const tool of createWorkflowTools(deps.getTaskService)) {
+    for (const tool of createWorkflowTools(
+      deps.getTaskService,
+      deps.getWorkflowTriggerService,
+    )) {
       registry.register(tool);
     }
   }

@@ -13,6 +13,9 @@ import type {
   CreateTaskScheduleInput,
   WorkflowRunDto,
   PendingApprovalDto,
+  WorkflowTriggerDto,
+  WebhookTokenDto,
+  ChannelMessageTriggerConfig,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -611,10 +614,112 @@ export async function assignSubtaskAgent(
  */
 export async function executeTask(
   taskId: string,
+  input?: string,
 ): Promise<ApiResult<{ sessionId: string; runId: string }>> {
   const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/execute`, {
     method: 'POST',
+    ...(input
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input }),
+        }
+      : {}),
   });
+  return response.json();
+}
+
+/**
+ * The workflow's triggers (webhooks and message triggers).
+ */
+export async function listWorkflowTriggers(
+  taskId: string,
+): Promise<ApiResult<WorkflowTriggerDto[]>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`);
+  return response.json();
+}
+
+/**
+ * Every trigger across workflows, optionally of one kind.
+ */
+export async function listAllWorkflowTriggers(
+  kind?: WorkflowTriggerDto['kind'],
+): Promise<ApiResult<WorkflowTriggerDto[]>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workflow-triggers${kind ? `?kind=${kind}` : ''}`,
+  );
+  return response.json();
+}
+
+/**
+ * Create a webhook. The token in the result is only ever shown this once.
+ */
+export async function createWebhookTrigger(
+  taskId: string,
+  name?: string,
+): Promise<ApiResult<WebhookTokenDto>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'webhook', ...(name ? { name } : {}) }),
+  });
+  return response.json();
+}
+
+/**
+ * Start the workflow when a matching message arrives on a channel.
+ */
+export async function createChannelTrigger(
+  taskId: string,
+  channel: ChannelMessageTriggerConfig,
+  name?: string,
+): Promise<ApiResult<WorkflowTriggerDto>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind: 'channel_message',
+      channel,
+      ...(name ? { name } : {}),
+    }),
+  });
+  return response.json();
+}
+
+export async function updateWorkflowTrigger(
+  id: string,
+  updates: {
+    name?: string;
+    enabled?: boolean;
+    channel?: Partial<ChannelMessageTriggerConfig>;
+  },
+): Promise<ApiResult<WorkflowTriggerDto>> {
+  const response = await apiFetch(`${API_BASE}/api/workflow-triggers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  return response.json();
+}
+
+export async function deleteWorkflowTrigger(
+  id: string,
+): Promise<ApiResult<true>> {
+  const response = await apiFetch(`${API_BASE}/api/workflow-triggers/${id}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+}
+
+/**
+ * Replace a webhook's token; the old one stops working.
+ */
+export async function regenerateWebhookToken(
+  id: string,
+): Promise<ApiResult<WebhookTokenDto>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workflow-triggers/${id}/regenerate-token`,
+    { method: 'POST' },
+  );
   return response.json();
 }
 

@@ -35,6 +35,8 @@ const TRIGGER_LABEL: Record<WorkflowRunDto['trigger'], string> = {
   manual: 'Run button',
   schedule: 'Schedule',
   agent: 'Agent',
+  webhook: 'Webhook',
+  channel: 'Message',
 };
 
 /** A rejected approval step completes with `OUTCOME: rejected`. */
@@ -128,6 +130,16 @@ export function WorkflowRunsPanel(props: WorkflowRunsPanelProps) {
 
                     <Show when={isOpen()}>
                       <div class="px-3 pb-3 pl-8">
+                        <Show when={run.input}>
+                          <details class="mb-2 text-xs">
+                            <summary class="cursor-pointer text-text-tertiary">
+                              Input
+                            </summary>
+                            <pre class="mt-1 whitespace-pre-wrap break-words bg-gray-50 dark:bg-gray-900 rounded p-1.5 max-h-40 overflow-y-auto text-text-secondary">
+                              {run.input}
+                            </pre>
+                          </details>
+                        </Show>
                         <Show
                           when={run.summary}
                           fallback={

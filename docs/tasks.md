@@ -72,6 +72,15 @@ If the server restarts in the middle of a run, steps that were in progress are m
 
 On the board, a run that completes moves the task to `review`; a failed or stopped run moves it back to `todo`.
 
+## Triggers: starting a workflow by itself
+
+Besides **Run**, schedules and agents, a workflow can start when something happens outside OpenAidy. Open the workflow and use the **Triggers** panel (the lightning button):
+
+- **Webhook** — a URL other services (a website form, Zapier, a payment provider…) POST to. The request body (JSON, form or text) becomes the run's input. Each webhook has its own token, shown once when it's created; send it as `Authorization: Bearer <token>`, or as `?token=<token>` for services that can't set headers. **New token** replaces it, and the old one stops working. The response is `202` with the run id; `401` for a wrong token, `404` for an unknown or switched-off webhook, `409` if the workflow is already running and `422` if it can't run as built. All webhooks are listed on the **Webhooks** page.
+- **Message trigger** — a message on a [channel](./channels.md) (WhatsApp, Discord) that matches a rule: starts with, contains, is exactly, matches a regex, or any message, ignoring case. You can limit it to certain senders. A matching message starts the workflow **instead of** going to the channel's chat agent: the sender gets an immediate reply ("On it — running …", or your own text), and when the run ends the result of its last steps is sent back to the same chat (or why it failed or was stopped). If an approval step is reached, the chat is told it's waiting for approval in OpenAidy. If the workflow is already running, the sender is asked to try again once it has finished.
+
+What started a run is its **input**: every step's instructions begin with it, and it's shown in the run's entry in the Runs panel. A run started with **Run** or by an agent can be given input too (`input` on `POST /tasks/:id/execute` and on `workflow_execute`).
+
 ## Editing a workflow
 
 Edits are saved as you make them; "Saved" appears once the server has confirmed the change, and an error banner explains anything it refused. The same rules apply everywhere — the editor, the agent tools and the API all use one validator — so a graph accepted by one is never rejected or mis-run by another. A single edit is only refused for a problem it introduces, not for an older one elsewhere in the graph.
@@ -114,25 +123,34 @@ Agents manage workflows with the `workflow_*` tools. The most reliable way for a
 - `workflow_set_graph` replaces an existing workflow's whole graph the same way (`dryRun: true` only validates). `workflow_get` returns the graph in a shape `workflow_set_graph` accepts back, plus a `problems` list.
 - Node fields: `key`, `title`, `description`, `kind` (`agent` or `approval_gate`), `agent` (an agent id or name), `loop` (`{maxIterations, conditionOperator, conditionValue}`). Edge fields: `from`, `to`, and optionally `condition` (the outcome value) with `operator` (`equals` by default, `contains` or `matches_regex`).
 - For small changes there are `workflow_node_*` and `workflow_edge_*` tools, and `workflow_apply_template` for templates.
-- `workflow_execute` starts a run and returns immediately; `workflow_approval_list` and `workflow_approval_resolve` let an agent relay approval decisions. An agent should only resolve an approval with a decision the user actually gave.
+- `workflow_trigger_create`, `workflow_trigger_list` and `workflow_trigger_delete` add and manage webhooks and message triggers (for example "when someone sends a WhatsApp message starting with _quote_, run this workflow").
+- `workflow_execute` starts a run (optionally with `input`) and returns immediately; `workflow_approval_list` and `workflow_approval_resolve` let an agent relay approval decisions. An agent should only resolve an approval with a decision the user actually gave.
 
 ## API
 
 The web UI uses these routes (all under `/api`, authenticated):
 
-| Route                                 | Purpose                                                                             |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET /tasks/:id/workflow-check`       | Errors and warnings for the current graph (the pre-run checklist)                   |
-| `PUT /tasks/:id/graph`                | Replace the whole graph (`{nodes, edges, dryRun?}`, same format as the agent tools) |
-| `PUT /tasks/:id/layout`               | Save node positions (`{positions: {[stepId]: {x, y}}}`)                             |
-| `POST /tasks/:id/apply-template`      | Apply a template (`{templateId, inputs?, clearExisting?}`)                          |
-| `POST /tasks/:id/execute`             | Start a run                                                                         |
-| `POST /tasks/:id/runs/cancel`         | Stop the current run                                                                |
-| `GET /tasks/:id/runs`                 | Run history                                                                         |
-| `POST /subtasks/:id/retry`            | Retry a failed or skipped step and continue the run                                 |
-| `POST /subtasks/:id/approval/resolve` | Approve or reject (`{decision, note?}`)                                             |
-| `GET /approvals/pending`              | Approval steps waiting for a decision, across all workflows                         |
-| `POST /subtasks/:id/assign`           | Assign an agent (`{agentId}`, or `{agentId: null}` for the default agent)           |
+| Route                                          | Purpose                                                                                                                                                                 |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /tasks/:id/workflow-check`                | Errors and warnings for the current graph (the pre-run checklist)                                                                                                       |
+| `PUT /tasks/:id/graph`                         | Replace the whole graph (`{nodes, edges, dryRun?}`, same format as the agent tools)                                                                                     |
+| `PUT /tasks/:id/layout`                        | Save node positions (`{positions: {[stepId]: {x, y}}}`)                                                                                                                 |
+| `POST /tasks/:id/apply-template`               | Apply a template (`{templateId, inputs?, clearExisting?}`)                                                                                                              |
+| `POST /tasks/:id/execute`                      | Start a run (`{input?}`)                                                                                                                                                |
+| `GET /tasks/:id/triggers`                      | The workflow's webhooks and message triggers                                                                                                                            |
+| `POST /tasks/:id/triggers`                     | Add one (`{kind: 'webhook'}` returns the token once, or `{kind: 'channel_message', channel: {channelId, match: {type, value?}, senders?, replyWithResult?, ackText?}}`) |
+| `PATCH /workflow-triggers/:id`                 | Rename, switch on/off, change a message rule                                                                                                                            |
+| `DELETE /workflow-triggers/:id`                | Delete a trigger                                                                                                                                                        |
+| `POST /workflow-triggers/:id/regenerate-token` | Replace a webhook's token                                                                                                                                               |
+| `GET /workflow-triggers?kind=webhook`          | Every trigger across workflows                                                                                                                                          |
+| `POST /tasks/:id/runs/cancel`                  | Stop the current run                                                                                                                                                    |
+| `GET /tasks/:id/runs`                          | Run history                                                                                                                                                             |
+| `POST /subtasks/:id/retry`                     | Retry a failed or skipped step and continue the run                                                                                                                     |
+| `POST /subtasks/:id/approval/resolve`          | Approve or reject (`{decision, note?}`)                                                                                                                                 |
+| `GET /approvals/pending`                       | Approval steps waiting for a decision, across all workflows                                                                                                             |
+| `POST /subtasks/:id/assign`                    | Assign an agent (`{agentId}`, or `{agentId: null}` for the default agent)                                                                                               |
+
+The webhook endpoint itself, `POST /api/hooks/:triggerId`, is not behind the login; its token is the credential.
 
 A graph that fails validation returns `400` with `error.code: "workflow.invalid_graph"` and the individual problems in `error.details.issues`; an edit while a run is going returns `409` with `workflow.locked`. Run and step changes are also pushed over the WebSocket as `workflow.updated` events (`{taskId}`), which is how the editor updates live.
 

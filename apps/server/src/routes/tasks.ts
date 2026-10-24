@@ -241,6 +241,7 @@ function toWorkflowRunDto(run: WorkflowRun): WorkflowRunDto {
     sessionId: run.sessionId,
     error: run.error,
     summary,
+    input: run.input ?? null,
     startedAt: new Date(run.startedAt).toISOString(),
     finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
   };
@@ -587,8 +588,12 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    */
   app.post('/tasks/:id/execute', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const input = (request.body as { input?: unknown } | undefined)?.input;
 
-    const result = await taskService.executeTask(id);
+    const result = await taskService.executeTask(
+      id,
+      typeof input === 'string' && input.trim() ? { input } : {},
+    );
 
     if (result.ok) {
       return { ok: true, data: result.data };
