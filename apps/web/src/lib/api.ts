@@ -138,6 +138,8 @@ import type {
   PersonalityFile,
   McpServerRecord,
   McpToolWithSchema,
+  McpCatalogEntry,
+  InstallMcpCatalogEntryRequest,
   CreateMcpServerRequest,
   UpdateMcpServerRequest,
   ImportMcpServersRequest,
