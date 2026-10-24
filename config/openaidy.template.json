@@ -65,8 +65,8 @@
       "name": "Buffer",
       "transport": "http",
       "url": "https://mcp.buffer.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${BUFFER_API_KEY}"
+      "auth": {
+        "type": "oauth"
       }
     },
     {
@@ -81,11 +81,10 @@
     {
       "id": "notion",
       "name": "Notion",
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@notionhq/notion-mcp-server"],
-      "env": {
-        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer ${NOTION_TOKEN}\", \"Notion-Version\": \"2025-09-03\"}"
+      "transport": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "auth": {
+        "type": "oauth"
       }
     }
   ],
