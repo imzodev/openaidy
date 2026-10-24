@@ -1,21 +1,34 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { createWorkflowApplyTemplateTool } from './apply-template.js';
+import {
+  createWorkflowApprovalListTool,
+  createWorkflowApprovalResolveTool,
+} from './approvals.js';
 import { createWorkflowCreateTool } from './create.js';
 import { createWorkflowDeleteTool } from './delete.js';
 import { createWorkflowExecuteTool } from './execute.js';
 import { createWorkflowGetTool } from './get.js';
 import { createWorkflowListTool } from './list.js';
+import { createWorkflowSetGraphTool } from './set-graph.js';
+import { createWorkflowTriggerTools } from './triggers.js';
+import type { WorkflowTriggerService } from '../../tasks/triggers/service';
 import { createWorkflowEdgeTools } from './edges/index.js';
 import { createWorkflowNodeTools } from './nodes/index.js';
 import { createWorkflowUpdateTool } from './update.js';
 
 export { createWorkflowApplyTemplateTool } from './apply-template.js';
+export {
+  createWorkflowApprovalListTool,
+  createWorkflowApprovalResolveTool,
+} from './approvals.js';
 export { createWorkflowCreateTool } from './create.js';
 export { createWorkflowDeleteTool } from './delete.js';
 export { createWorkflowExecuteTool } from './execute.js';
 export { createWorkflowGetTool } from './get.js';
 export { createWorkflowListTool } from './list.js';
+export { createWorkflowSetGraphTool } from './set-graph.js';
+export { createWorkflowTriggerTools } from './triggers.js';
 export { createWorkflowEdgeTools } from './edges/index.js';
 export { createWorkflowNodeTools } from './nodes/index.js';
 export { createWorkflowUpdateTool } from './update.js';
@@ -31,6 +44,7 @@ export { createWorkflowUpdateTool } from './update.js';
  */
 export function createWorkflowTools(
   getTaskService: () => TaskService | undefined,
+  getTriggerService?: () => WorkflowTriggerService | undefined,
 ): BuiltinTool[] {
   return [
     createWorkflowGetTool(getTaskService),
@@ -39,8 +53,14 @@ export function createWorkflowTools(
     createWorkflowUpdateTool(getTaskService),
     createWorkflowDeleteTool(getTaskService),
     createWorkflowExecuteTool(getTaskService),
+    createWorkflowApprovalListTool(getTaskService),
+    createWorkflowApprovalResolveTool(getTaskService),
+    createWorkflowSetGraphTool(getTaskService),
     createWorkflowApplyTemplateTool(getTaskService),
     ...createWorkflowNodeTools(getTaskService),
     ...createWorkflowEdgeTools(getTaskService),
+    ...(getTriggerService
+      ? createWorkflowTriggerTools({ getTaskService, getTriggerService })
+      : []),
   ];
 }

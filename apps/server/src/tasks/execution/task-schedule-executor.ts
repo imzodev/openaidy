@@ -57,18 +57,20 @@ export type TaskSchedulePayload = {
  * a structural shape so the executor can be unit-tested with a fake.
  */
 export type ExecutorTaskService = {
-  executeTask(
+  /**
+   * Start a workflow run. The run finalises the history row itself
+   * (completed/failed) once every step has finished.
+   */
+  startRun(
     taskId: string,
-    options?: { sessionId?: string },
+    options: {
+      trigger: 'schedule';
+      sessionId: string;
+      historyId: string;
+      reset: false;
+    },
   ): Promise<
-    | { ok: true; data: { sessionId: string } }
-    | { ok: false; error: { code: string; message: string } }
-  >;
-  executeSubtasks(
-    taskId: string,
-    options?: { sessionId?: string },
-  ): Promise<
-    | { ok: true; data: { startedCount: number } }
+    | { ok: true; data: { runId: string; sessionId: string } }
     | { ok: false; error: { code: string; message: string } }
   >;
 };
@@ -232,20 +234,24 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
   async execute(
     id: string,
     payload: TaskSchedulePayload,
+    existingHistoryId?: string,
   ): Promise<ExecutionResult> {
     const start = Date.now();
     const { schedule, taskTitle, taskDescription, currentDescriptionHash } =
       payload;
     const taskId = schedule.taskId;
 
-    // 1. Create the history row (always, even if we skip planning).
-    const history = await this.deps.taskExecutionHistoryRepo.create({
-      taskId,
-      scheduleId: schedule.id,
-      taskTitle,
-      taskDescription,
-      attemptNumber: schedule.executionCount + 1,
-    });
+    // 1. Create the history row (always, even if we skip planning) —
+    //    unless triggerNow already created one for its caller to poll.
+    const history = existingHistoryId
+      ? { id: existingHistoryId }
+      : await this.deps.taskExecutionHistoryRepo.create({
+          taskId,
+          scheduleId: schedule.id,
+          taskTitle,
+          taskDescription,
+          attemptNumber: schedule.executionCount + 1,
+        });
 
     try {
       // 2. Decide whether to replan this run. Re-planning is OPT-IN; the
@@ -314,52 +320,21 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
         );
       }
 
-      // 6. Run the work. We re-use the existing `TaskService` flow
-      //    rather than re-implementing session/subtask dispatch here.
-      //    The session was already created above (with the "run #N"
-      //    title) — pass its id through so `executeTask` /
-      //    `executeSubtasks` reuse it instead of creating a second
-      //    "Task: <title>" or "Subtask: <title>" session for the
-      //    same run.
-      const subtasks = await this.deps.subtasksRepo.listByTask(taskId);
-      let submittedWork = false;
-      if (subtasks.length > 0) {
-        const result = await this.deps.taskService.executeSubtasks(taskId, {
-          sessionId: session.id,
-        });
-        if (!result.ok) {
-          throw new Error(
-            `executeSubtasks failed: ${result.error.code} — ${result.error.message}`,
-          );
-        }
-        // If no subtasks were actually executed (all completed or no pending),
-        // fall through to executeTask to submit the task description to the
-        // executor's session. This ensures the "run #N" session always has content.
-        submittedWork = result.data.startedCount > 0;
-      }
-
-      // If no work was submitted (no subtasks, or all subtasks were already done),
-      // submit the task description directly to the executor's session so the
-      // "run #N" session always has content.
-      if (!submittedWork) {
-        const result = await this.deps.taskService.executeTask(taskId, {
-          sessionId: session.id,
-        });
-        if (!result.ok) {
-          throw new Error(
-            `executeTask failed: ${result.error.code} — ${result.error.message}`,
-          );
-        }
-      }
-
-      // 7. The history row will be transitioned to `completed` or
-      //    `failed` by the existing `TaskExecution.handleRunEvent` flow
-      //    (via RunEventEmitter), which the user wires up in app.ts.
-      //    We mark `verifying` here to signal that the work has been
-      //    submitted and is awaiting confirmation.
-      await this.deps.taskExecutionHistoryRepo.updateStatus(history.id, {
-        status: 'verifying',
+      // 6. Start the workflow run in the session created above. The steps
+      //    were already reset (or re-planned) in step 3, so the run must
+      //    not reset them again. The run marks the history row completed
+      //    or failed when its last step finishes.
+      const run = await this.deps.taskService.startRun(taskId, {
+        trigger: 'schedule',
+        sessionId: session.id,
+        historyId: history.id,
+        reset: false,
       });
+      if (!run.ok) {
+        throw new Error(
+          `Starting the run failed: ${run.error.code} — ${run.error.message}`,
+        );
+      }
 
       return { ok: true, durationMs: Date.now() - start };
     } catch (error) {
@@ -509,7 +484,7 @@ export class TaskScheduleExecutor implements ScheduledRunnable<TaskSchedulePaylo
       attemptNumber: schedule.executionCount + 1,
     });
 
-    const result = await this.execute(schedule.id, payload);
+    const result = await this.execute(schedule.id, payload, history.id);
     return {
       ok: result.ok,
       historyId: history.id,

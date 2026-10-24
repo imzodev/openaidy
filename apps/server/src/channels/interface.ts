@@ -45,6 +45,14 @@ export interface IChannel {
   /** Remove a registered status change callback */
   removeListener(event: 'status', cb: (status: ChannelStatus) => void): this;
 
+  /**
+   * Send a message to a chat outside a reply (e.g. a workflow's result).
+   * `target` is the chat the channel passed as `replyTarget` with the
+   * inbound message (WhatsApp chat JID, Discord channel id). Resolves false
+   * when the channel isn't connected or the chat can't be reached.
+   */
+  send?(target: string, text: string): Promise<boolean>;
+
   /** Optional QR code getter for channels that support QR (e.g., WhatsApp) */
   getQr?: () => string | null;
   /** Optional QR code update callback registration */

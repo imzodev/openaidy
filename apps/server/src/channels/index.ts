@@ -3,6 +3,7 @@ import type { ChannelConfig } from '@openaidy/config';
 import type { SessionMessageService } from '../sessions/service';
 import { ChannelRegistry } from './registry.js';
 import type { IChannel } from './interface.js';
+import type { ChannelWorkflowTriggers } from './message-handler.js';
 import { WhatsAppChannel } from './whatsapp/service.js';
 import { DiscordChannel } from './discord/service.js';
 
@@ -10,6 +11,8 @@ export type ChannelRegistryDeps = {
   sessionService: SessionMessageService;
   authBaseDir: string;
   logger: FastifyBaseLogger;
+  /** Workflow triggers checked before a message goes to the agent. */
+  getWorkflowTriggers?: () => ChannelWorkflowTriggers | undefined;
 };
 
 // Re-export all public types

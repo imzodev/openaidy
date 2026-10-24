@@ -659,6 +659,11 @@ export type WebSocketGatewayOptions = {
   pairingConfig?: Partial<PairingConfig>;
   /** Whether to enable the gateway */
   enabled?: boolean;
+  /**
+   * Receives the gateway once it is created, so code outside this plugin's
+   * scope (its decorator is not visible there) can push events to clients.
+   */
+  onGateway?: (gateway: WebSocketGateway) => void;
 };
 
 // ============================================================================
@@ -698,6 +703,7 @@ export const websocketGatewayPlugin: FastifyPluginAsync<
 
   // Store gateway in app
   fastify.decorate('websocketGateway', gateway);
+  options.onGateway?.(gateway);
 
   // Setup periodic cleanup tasks
   const cleanupInterval = setInterval(() => {

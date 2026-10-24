@@ -117,7 +117,15 @@ export type TaskScheduleRoutesOptions = {
 
 export type ServiceResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        /** Structured extras, e.g. the issues of an invalid workflow graph. */
+        details?: Record<string, unknown>;
+      };
+    };
 
 export type CreateTaskInput = {
   title: string;
@@ -164,6 +172,9 @@ export type UpdateSubtaskInput = {
   loop?: LoopConfig | null;
 };
 
+/** Whether a task's graph may be edited right now (no run is going). */
+export type GraphEditGuard = (taskId: string) => Promise<boolean>;
+
 export type TaskWithDetails = Task & {
   agents: TaskAgent[];
   subtasks: Subtask[];
@@ -184,6 +195,7 @@ export type TaskServiceOptions = {
   taskAgentsRepo: import('@openaidy/db').TaskAgentsRepository;
   deliverablesRepo?: import('@openaidy/db').DeliverablesRepository;
   taskExecutionHistoryRepo?: import('@openaidy/db').TaskExecutionHistoryRepository;
+  workflowRunsRepo?: import('@openaidy/db').WorkflowRunsRepository;
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
   planningService?: import('./planning').PlanningService;

@@ -1,3 +1,5 @@
+import type { ExecutionSubtaskSummary } from './task-schedules.js';
+
 // ========================================
 // Task Type Values (shared between types and runtime)
 // ========================================
@@ -24,6 +26,22 @@ export const SUBTASK_STATUS_VALUES = [
   'in_progress',
   'completed',
   'failed',
+  'skipped',
+] as const;
+
+export const WORKFLOW_RUN_STATUS_VALUES = [
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+] as const;
+
+export const WORKFLOW_RUN_TRIGGER_VALUES = [
+  'manual',
+  'schedule',
+  'agent',
+  'webhook',
+  'channel',
 ] as const;
 
 export const SUBTASK_KIND_VALUES = ['agent', 'approval_gate'] as const;
@@ -267,6 +285,106 @@ export type SubtaskSummary = {
   approvalNote?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUS_VALUES)[number];
+export type WorkflowRunTrigger = (typeof WORKFLOW_RUN_TRIGGER_VALUES)[number];
+
+/**
+ * WebSocket event sent to authenticated clients whenever a workflow run
+ * or one of its steps changes. Clients refetch the workflow's steps and
+ * runs; the payload only says which workflow changed.
+ */
+export const WORKFLOW_UPDATED_EVENT = 'workflow.updated';
+
+/** An approval gate waiting for a person's decision. */
+export type PendingApprovalDto = {
+  subtaskId: string;
+  title: string;
+  description: string;
+  taskId: string;
+  taskTitle: string;
+  /** ISO time the gate started waiting. */
+  since: string;
+};
+export type WorkflowUpdatedPayload = { taskId: string };
+
+/**
+ * One execution of a workflow (a task's subtask graph).
+ */
+export type WorkflowRunDto = {
+  id: string;
+  taskId: string;
+  trigger: WorkflowRunTrigger;
+  status: WorkflowRunStatus;
+  sessionId: string | null;
+  /** Why the run failed (first failing step), or null. */
+  error: string | null;
+  /** How each step ended; null while the run is still going. */
+  summary: ExecutionSubtaskSummary | null;
+  /** What started the run (webhook body, channel message…), if anything. */
+  input: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
+// ========================================
+// Workflow triggers
+// ========================================
+
+export const WORKFLOW_TRIGGER_KIND_VALUES = [
+  'webhook',
+  'channel_message',
+] as const;
+
+export type WorkflowTriggerKind = (typeof WORKFLOW_TRIGGER_KIND_VALUES)[number];
+
+export const MESSAGE_MATCH_TYPE_VALUES = [
+  'any',
+  'equals',
+  'starts_with',
+  'contains',
+  'regex',
+] as const;
+
+export type MessageMatchType = (typeof MESSAGE_MATCH_TYPE_VALUES)[number];
+
+/** Settings of a trigger that starts a run from a channel message. */
+export type ChannelMessageTriggerConfig = {
+  /** Channel id from the `channels` config (e.g. a WhatsApp channel). */
+  channelId: string;
+  /** Which messages start the run (case-insensitive). */
+  match: { type: MessageMatchType; value?: string };
+  /** Only these senders (phone numbers / user ids); empty = anyone the
+   * channel already accepts. */
+  senders?: string[];
+  /** Send the workflow's result back to the chat when the run ends. */
+  replyWithResult: boolean;
+  /** Reply sent right away; default "On it — running <workflow>." */
+  ackText?: string;
+};
+
+export type WorkflowTriggerDto = {
+  id: string;
+  taskId: string;
+  /** The workflow's title, for lists spanning workflows. */
+  taskTitle?: string;
+  kind: WorkflowTriggerKind;
+  name: string;
+  enabled: boolean;
+  /** Channel triggers only. */
+  channel?: ChannelMessageTriggerConfig;
+  /** Webhook triggers only: the path to POST to (under the server URL). */
+  webhookPath?: string;
+  lastFiredAt: string | null;
+  createdAt: string;
+};
+
+/** Returned once when a webhook is created or its token regenerated. */
+export type WebhookTokenDto = {
+  trigger: WorkflowTriggerDto;
+  /** Send as `Authorization: Bearer <token>` or `?token=<token>`. Not stored. */
+  token: string;
 };
 
 /**

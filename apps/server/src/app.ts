@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import type { FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
@@ -56,6 +57,11 @@ import { AddonStorageEngine, DEFAULT_QUOTAS } from './addons/storage/engine';
 import { ManifestValidator } from './addons/manifest-validator';
 import { createAddonService } from './addons/service';
 import { taskRoutes } from './routes/tasks';
+import {
+  webhookRoutes,
+  workflowTriggerRoutes,
+} from './routes/workflow-triggers';
+import { WorkflowTriggerService } from './tasks/triggers/service';
 import { taskScheduleRoutes } from './routes/task-schedules';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
@@ -83,7 +89,11 @@ import {
   createPulseRunnableAdapter,
 } from './scheduler';
 import { createAppConfigService } from './config/service';
-import { websocketGatewayPlugin } from './websocket';
+import { websocketGatewayPlugin, type WebSocketGateway } from './websocket';
+import {
+  WORKFLOW_UPDATED_EVENT,
+  type WorkflowUpdatedPayload,
+} from '@openaidy/shared-types';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService } from './workspace';
@@ -344,6 +354,9 @@ export async function buildApp() {
   let sessionService: SessionMessageService | undefined;
 
   let taskService: ReturnType<typeof createTaskService> | undefined;
+  // Created with the task service (needs the database); channels look it
+  // up lazily so a message can start a workflow.
+  let workflowTriggerService: WorkflowTriggerService | undefined;
   let recurringTasksService: RecurringTasksService | undefined;
   let taskScheduleService: TaskScheduleService | undefined;
 
@@ -385,6 +398,7 @@ export async function buildApp() {
         }
       : {}),
     getTaskService: () => taskService,
+    getWorkflowTriggerService: () => workflowTriggerService,
     getPlanningService: () => planningService,
     // The schedule service is constructed later (when dbAdapter +
     // RECURRING_TASKS_ENABLED are both available), so this getter
@@ -469,6 +483,7 @@ export async function buildApp() {
     sessionService,
     authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
     logger: pinoLog,
+    getWorkflowTriggers: () => workflowTriggerService,
   };
   const channelRegistry = createChannelRegistry(
     configService.getConfig().channels,
@@ -582,10 +597,14 @@ export async function buildApp() {
   registerHttpLogger(app);
 
   // Register WebSocket gateway
+  let wsGateway: WebSocketGateway | undefined;
   await app.register(websocketGatewayPlugin, {
     enabled: env.WS_ENABLED,
     wsConfig,
     pairingConfig,
+    onGateway: (gateway) => {
+      wsGateway = gateway;
+    },
   });
 
   const authMiddleware = new AuthMiddleware(wsConfig);
@@ -785,6 +804,7 @@ export async function buildApp() {
           taskAgentsRepo: dbAdapter.repositories.taskAgents,
           deliverablesRepo: dbAdapter.repositories.deliverables,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
+          workflowRunsRepo: dbAdapter.repositories.workflowRuns,
           agents: services.agents,
           sessionService: services.sessions,
           planningService,
@@ -792,11 +812,41 @@ export async function buildApp() {
           workspaceBaseDir: env.WORKSPACE_BASE_DIR,
           getExecutionConfig: () => configService.getConfig().execution,
         });
+        // Tell connected clients when a workflow run or step changes, so
+        // the workflow pages refresh instead of polling.
+        taskService.onWorkflowChange((taskId) => {
+          const payload: WorkflowUpdatedPayload = { taskId };
+          wsGateway?.connectionManager.broadcastAuthenticated({
+            id: randomUUID(),
+            type: WORKFLOW_UPDATED_EVENT,
+            timestamp: new Date().toISOString(),
+            payload,
+          });
+        });
         await api.register(taskRoutes, {
           taskService,
           planningService,
           deliverablesRepo: dbAdapter.repositories.deliverables,
           authMiddleware,
+        });
+
+        // Webhooks and channel messages that start workflows.
+        workflowTriggerService = new WorkflowTriggerService({
+          triggersRepo: dbAdapter.repositories.workflowTriggers,
+          taskService,
+          listChannelIds: () =>
+            (configService.getConfig().channels ?? []).map((c) => c.id),
+          sendToChannel: async (channelId, target, text) =>
+            (await channelRegistry.get(channelId)?.send?.(target, text)) ??
+            false,
+          logger: createLogger('WorkflowTriggers'),
+        });
+        await api.register(workflowTriggerRoutes, {
+          triggerService: workflowTriggerService,
+          authMiddleware,
+        });
+        await api.register(webhookRoutes, {
+          triggerService: workflowTriggerService,
         });
 
         // Memory management routes (browse/search/create/edit/delete).
@@ -821,9 +871,8 @@ export async function buildApp() {
           taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
           taskService: {
-            executeTask: (taskId, options) =>
-              taskService!.executeTask(taskId, options),
-            executeSubtasks: (taskId) => taskService!.executeSubtasks(taskId),
+            startRun: (taskId, options) =>
+              taskService!.startRun(taskId, options),
           },
           sessionService: sessionServiceForExecutor,
           defaultAgentIdProvider: () =>
@@ -874,25 +923,11 @@ export async function buildApp() {
 
         // The recurring service logger is the same pino instance — the
         // GenericLogger mismatch is only in method signature shape.
-        // We also wire the run-event subscription so history rows are
-        // finalised (planned -> verifying -> completed/failed) when the
-        // task session the executor created finishes its run.
+        // History rows are finalised by the workflow run itself.
         recurringTasksService = createRecurringTasksService({
           taskSchedulesRepo: dbAdapter.repositories.taskSchedules,
           taskExecutionHistoryRepo: dbAdapter.repositories.taskExecutionHistory,
           executor: taskScheduleExecutor,
-          runEvents: services.runEvents,
-          // Pull the session type from the SessionsStore (or fall through
-          // to a type field if it's on the record). This filters out
-          // subtask and chat sessions so we only finalise history rows
-          // for the top-level task runs the executor created.
-          getSessionType: async (sessionId) => {
-            const session =
-              await dbAdapter!.repositories.sessions.findById(sessionId);
-            return session && 'type' in session
-              ? (session as { type?: string }).type
-              : null;
-          },
           logger: log as unknown as Parameters<
             typeof createRecurringTasksService
           >[0] extends infer T
@@ -1093,6 +1128,11 @@ export async function buildApp() {
 
     // Start periodic stuck subtask check
     if (taskService) {
+      // Steps that were running when the previous process stopped lost
+      // their agent run: fail them so those runs finish instead of hanging.
+      await taskService
+        .recoverInterruptedRuns()
+        .catch((err) => log.error('Workflow run recovery failed', err));
       stuckSubtaskInterval = setInterval(
         () => {
           taskService!.checkStuckSubtasks().catch((err) => {

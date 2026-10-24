@@ -52,6 +52,16 @@ export type {
   UpdateTaskScheduleInput,
   ListTaskExecutionsFilters,
   PaginatedTaskExecutions,
+  // Workflow runs (one per execution of a task's subtask graph).
+  WorkflowRunDto,
+  PendingApprovalDto,
+  WorkflowRunStatus,
+  WorkflowRunTrigger,
+  // Webhooks and channel messages that start workflows.
+  WorkflowTriggerDto,
+  WebhookTokenDto,
+  ChannelMessageTriggerConfig,
+  MessageMatchType,
   // Agent memory types from shared-types — single source of truth.
   Memory,
   CreateMemoryInput,

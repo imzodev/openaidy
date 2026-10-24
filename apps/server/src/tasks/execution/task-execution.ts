@@ -1,19 +1,25 @@
+import { nanoid } from 'nanoid';
 import type {
   TasksRepository,
   SubtasksRepository,
   TaskAgentsRepository,
   DeliverablesRepository,
   TaskExecutionHistoryRepository,
+  WorkflowRunsRepository,
+  WorkflowRun,
   Subtask,
   SessionMessage,
 } from '@openaidy/db';
 import type { AgentRegistry } from '../../agents';
 import type { SessionMessageService } from '../../sessions/service';
-import type { SubmitMessageStreamingInput } from '../../sessions/types';
+import type {
+  SubmitMessageResult,
+  SubmitMessageStreamingInput,
+} from '../../sessions/types';
 import type { RunEventEmitter } from '../../dispatch/events';
 import type {
-  SessionType,
   ExecutionSubtaskSummary,
+  WorkflowRunTrigger,
 } from '@openaidy/shared-types';
 import {
   DEFAULT_EXECUTION_CONFIG,
@@ -27,10 +33,13 @@ import {
 } from '../../lib/context-budget';
 import type { SessionMessageRecord, ServiceResult } from '../../types';
 import {
-  isSubtaskExecutable,
+  resolveSubtask,
   getDependencySubtasks,
+  getDownstreamSubtaskIds,
   evaluateCondition,
   subtaskNeedsOutcomeTag,
+  expectedOutcomes,
+  isTerminalStatus,
   type SubtaskDependencyEdge,
   type ConditionOperator,
 } from './subtask-graph';
@@ -39,15 +48,179 @@ import {
   buildRetryMessage,
 } from './verification-verdict';
 
-const STUCK_TIMEOUT_MINUTES = 3;
+/**
+ * A step whose agent run is no longer tracked by this process (e.g. the
+ * run was lost) is failed once it has been quiet this long.
+ */
+const ORPHANED_STEP_MINUTES = 3;
 // Bound on how much of a verifier's rejection reason gets echoed back into
 // the retry message, so a verbose verdict can't unboundedly grow the next
 // attempt's opening message.
 const RETRY_REASON_MAX_CHARS = 1500;
+// Per-step result text kept in a finished run's summary.
+const SUMMARY_RESULT_MAX_CHARS = 500;
 
+const RESTART_MESSAGE =
+  'The server restarted while this step was running. Retry the step to continue.';
+const ORPHANED_MESSAGE =
+  'This step stopped responding (its agent run was lost). Retry the step to continue.';
+
+type RunStore = Pick<
+  WorkflowRunsRepository,
+  | 'create'
+  | 'findById'
+  | 'findRunning'
+  | 'findLatest'
+  | 'listByTask'
+  | 'listRunning'
+  | 'finish'
+  | 'reopen'
+>;
+
+/**
+ * Process-local run store, used when no database repository is wired
+ * (in-memory deployments and unit tests).
+ */
+class InMemoryRunStore implements RunStore {
+  private readonly runs = new Map<string, WorkflowRun>();
+
+  async create(input: {
+    taskId: string;
+    trigger: WorkflowRunTrigger;
+    sessionId?: string | null;
+    historyId?: string | null;
+    input?: string | null;
+    replyTarget?: string | null;
+  }): Promise<WorkflowRun> {
+    const run: WorkflowRun = {
+      id: nanoid(),
+      taskId: input.taskId,
+      trigger: input.trigger,
+      status: 'running',
+      sessionId: input.sessionId ?? null,
+      historyId: input.historyId ?? null,
+      error: null,
+      summary: null,
+      input: input.input ?? null,
+      replyTarget: input.replyTarget ?? null,
+      startedAt: new Date(),
+      finishedAt: null,
+    };
+    this.runs.set(run.id, run);
+    return { ...run };
+  }
+  async findById(id: string) {
+    const run = this.runs.get(id);
+    return run ? { ...run } : null;
+  }
+  async findRunning(taskId: string) {
+    return (
+      (await this.listByTask(taskId)).find((r) => r.status === 'running') ??
+      null
+    );
+  }
+  async findLatest(taskId: string) {
+    return (await this.listByTask(taskId))[0] ?? null;
+  }
+  async listByTask(taskId: string, limit = 50) {
+    return [...this.runs.values()]
+      .filter((r) => r.taskId === taskId)
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+      .slice(0, limit)
+      .map((r) => ({ ...r }));
+  }
+  async listRunning() {
+    return [...this.runs.values()]
+      .filter((r) => r.status === 'running')
+      .map((r) => ({ ...r }));
+  }
+  async finish(
+    id: string,
+    input: {
+      status: Exclude<WorkflowRun['status'], 'running'>;
+      error?: string | null;
+      summary?: string | null;
+    },
+  ) {
+    const run = this.runs.get(id);
+    if (!run || run.status !== 'running') return null;
+    Object.assign(run, {
+      status: input.status,
+      error: input.error ?? null,
+      summary: input.summary ?? null,
+      finishedAt: new Date(),
+    });
+    return { ...run };
+  }
+  async reopen(id: string) {
+    const run = this.runs.get(id);
+    if (!run) return null;
+    Object.assign(run, {
+      status: 'running',
+      error: null,
+      summary: null,
+      finishedAt: null,
+    });
+    return { ...run };
+  }
+}
+
+export type StartRunOptions = {
+  trigger?: WorkflowRunTrigger;
+  /** Reuse a session the caller already created (scheduled runs). */
+  sessionId?: string;
+  /** Scheduled runs: the task_execution_history row to finalise. */
+  historyId?: string;
+  /**
+   * Reset every step before starting (default). Callers that already
+   * reset or re-planned the graph pass false.
+   */
+  reset?: boolean;
+  /**
+   * What started the run (webhook body, channel message, text from the
+   * caller). Every step's prompt includes it.
+   */
+  input?: string;
+  /** JSON {channelId, target}: where to send the result (channel runs). */
+  replyTarget?: string;
+};
+
+/** Longest run input kept; the rest is cut off. */
+export const MAX_RUN_INPUT_CHARS = 20_000;
+
+/** Run-level moments other parts of the server react to. */
+export type WorkflowRunEvent =
+  | { type: 'run.finished'; run: WorkflowRun }
+  | { type: 'approval.waiting'; run: WorkflowRun; subtask: Subtask };
+
+/**
+ * Runs a task's subtask graph (a "workflow").
+ *
+ * Every execution is a workflow run. A run dispatches each step once
+ * its incoming edges resolve, skips steps whose branch was not taken,
+ * and finishes when every step is terminal (completed, failed or
+ * skipped). Agent steps run in the background: their outcome is read
+ * from the returned turn rather than correlated from run events, and
+ * all state transitions for a task happen under a per-task lock so
+ * concurrent completions can't double-dispatch or overwrite each other.
+ */
 export class TaskExecution {
   private readonly logger: ReturnType<typeof createLogger>;
-  private unsubscribeRunEvents: (() => void) | undefined;
+  private readonly runs: RunStore;
+  /** taskId -> tail of the queue of state transitions for that task. */
+  private readonly locks = new Map<string, Promise<unknown>>();
+  /** taskId -> tail of the verification queue (one verifier turn at a time). */
+  private readonly verifyQueues = new Map<string, Promise<unknown>>();
+  /** subtaskId -> number of in-process pipelines working on it. */
+  private readonly busy = new Map<string, number>();
+  /** subtaskId -> key that cancels its current agent turn. */
+  private readonly cancelKeys = new Map<string, string>();
+  /** Background work started by this executor (awaited by whenIdle). */
+  private readonly background = new Set<Promise<unknown>>();
+  private readonly changeListeners = new Set<(taskId: string) => void>();
+  private readonly runEventListeners = new Set<
+    (event: WorkflowRunEvent) => void | Promise<void>
+  >();
 
   constructor(
     private readonly tasksRepo: TasksRepository,
@@ -56,7 +229,7 @@ export class TaskExecution {
     private readonly deliverablesRepo: DeliverablesRepository | undefined,
     private readonly agents: AgentRegistry | undefined,
     private readonly sessionService: SessionMessageService | undefined,
-    private readonly runEvents: RunEventEmitter | undefined,
+    _runEvents: RunEventEmitter | undefined,
     private readonly workspaceBaseDir: string | undefined,
     private readonly taskExecutionHistoryRepo:
       | TaskExecutionHistoryRepository
@@ -66,195 +239,137 @@ export class TaskExecution {
     // subtask run without restarting the server.
     private readonly getExecutionConfig: () => ExecutionConfig = () =>
       DEFAULT_EXECUTION_CONFIG,
+    workflowRunsRepo?: RunStore,
   ) {
     this.logger = createLogger('TaskExecution');
-
-    if (this.runEvents) {
-      this.unsubscribeRunEvents = this.runEvents.subscribeAll((event) => {
-        void this.handleRunEvent(event);
-      });
-    }
+    this.runs = workflowRunsRepo ?? new InMemoryRunStore();
   }
 
   destroy(): void {
-    if (this.unsubscribeRunEvents) {
-      this.unsubscribeRunEvents();
-      this.unsubscribeRunEvents = void 0;
+    // Nothing to unsubscribe: step outcomes come from awaited turns.
+  }
+
+  /** Resolves once all background work started so far has settled. */
+  async whenIdle(): Promise<void> {
+    while (this.background.size > 0) {
+      await Promise.allSettled([...this.background]);
     }
   }
 
-  // ========================================
-  // Run event handler
-  // ========================================
-
-  private async handleRunEvent(
-    event: import('../../dispatch/events').RunEvent,
-  ): Promise<void> {
-    if (event.type !== 'run.completed' && event.type !== 'run.failed') return;
-
-    // Check for pending verification on a task session
-    const task = await this.tasksRepo.findBySessionId?.(event.sessionId);
-    if (task) {
-      const subtasks = await this.subtasksRepo.listByTask(task.id);
-      const pendingSubtask = subtasks.find(
-        (s) =>
-          s.pendingVerificationResult !== null &&
-          s.pendingVerificationResult !== undefined,
-      );
-      if (pendingSubtask) {
-        await this.subtasksRepo.setPendingVerificationResult(
-          pendingSubtask.id,
-          null,
-        );
-        if (event.type === 'run.completed') {
-          await this.handleVerificationResult(
-            pendingSubtask.id,
-            pendingSubtask.pendingVerificationResult!,
-            event.sessionId,
-          );
-        } else {
-          this.logger.warn(
-            'Verification run failed, auto-completing subtask as fallback',
-            {
-              subtaskId: pendingSubtask.id,
-            },
-          );
-          await this.completeSubtask(
-            pendingSubtask.id,
-            pendingSubtask.pendingVerificationResult!,
-            event.sessionId,
-          );
-        }
-        return;
-      }
-    }
-
-    this.logger.info('Handling run event', {
-      type: event.type,
-      sessionId: event.sessionId,
-      runId: event.runId,
-    });
-
-    try {
-      const sessionRecord = await this.sessionService?.getSession(
-        event.sessionId,
-      );
-      const sessionType =
-        sessionRecord && 'type' in sessionRecord
-          ? (sessionRecord as { type?: SessionType }).type
-          : null;
-
-      if (sessionType !== 'task' && sessionType !== 'subtask') {
-        this.logger.debug('Skipping subtask lookup for regular chat session', {
-          sessionId: event.sessionId,
-          sessionType: sessionType ?? 'unknown',
-        });
-        return;
-      }
-
-      const linkedSubtask = await this.subtasksRepo.findBySessionId(
-        event.sessionId,
-      );
-      if (!linkedSubtask) {
-        this.logger.warn('No subtask found linked to session', {
-          sessionId: event.sessionId,
-        });
-        return;
-      }
-
-      this.logger.info('Found linked subtask', {
-        subtaskId: linkedSubtask.id,
-        taskId: linkedSubtask.taskId,
-        currentStatus: linkedSubtask.status,
-      });
-
-      if (
-        linkedSubtask.status === 'completed' ||
-        linkedSubtask.status === 'failed'
-      ) {
-        this.logger.debug('Subtask already in terminal state, skipping', {
-          subtaskId: linkedSubtask.id,
-          status: linkedSubtask.status,
-        });
-        return;
-      }
-
-      if (event.type === 'run.completed') {
-        const sessionMessages = await this.sessionService?.listMessages(
-          event.sessionId,
-        );
-        const lastAssistantMessage = sessionMessages
-          ?.slice()
-          .reverse()
-          .find((m) => m.role === 'assistant');
-        const result = stripThinking(
-          lastAssistantMessage?.content ?? 'Completed',
-        );
-
-        this.logger.info('Subtask run completed, sending to verification', {
-          subtaskId: linkedSubtask.id,
-          subtaskTitle: linkedSubtask.title,
-          lastMessagePreview: result.substring(0, 300),
-        });
-
-        const updatedSubtask = await this.subtasksRepo.incrementRetryCount(
-          linkedSubtask.id,
-        );
-        const retryCount = updatedSubtask?.retryCount ?? 0;
-        const { maxRetries } = this.getExecutionConfig();
-
-        if (retryCount >= maxRetries) {
-          this.logger.warn('Max retries exceeded, marking subtask as failed', {
-            subtaskId: linkedSubtask.id,
-            retryCount,
-          });
-          await this.failSubtask(
-            linkedSubtask.id,
-            `Failed after ${maxRetries} attempts. Last message: ${result.substring(0, 200)}`,
-          );
-        } else {
-          const verified = await this.submitVerificationToTaskSession(
-            linkedSubtask,
-            result,
-            sessionMessages,
-          );
-          if (!verified) {
-            this.logger.info(
-              'No task session for verification, auto-completing subtask',
-              {
-                subtaskId: linkedSubtask.id,
-                sessionId: event.sessionId,
-              },
-            );
-            await this.completeSubtask(linkedSubtask.id, result);
-          }
-        }
-      } else if (event.type === 'run.failed') {
-        this.logger.info('Auto-failing subtask after session run failed', {
-          subtaskId: linkedSubtask.id,
-          sessionId: event.sessionId,
-        });
-        const errorMessage =
-          (event.data.errorMessage as string | undefined) ?? 'Run failed';
-        await this.failSubtask(linkedSubtask.id, errorMessage);
-      }
-    } catch (err) {
-      this.logger.error('Failed to handle run event for subtask', {
+  private track<T>(promise: Promise<T>): void {
+    const tracked = promise.catch((err) => {
+      this.logger.error('Background workflow work failed', {
         error: err instanceof Error ? err.message : String(err),
-        sessionId: event.sessionId,
-        runId: event.runId,
       });
+    });
+    this.background.add(tracked);
+    void tracked.finally(() => this.background.delete(tracked));
+  }
+
+  /**
+   * Called with the task id after any change to a run or its steps, so
+   * clients can refresh instead of polling.
+   */
+  onWorkflowChange(listener: (taskId: string) => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  /** Called when a run finishes or reaches an approval step. */
+  onRunEvent(
+    listener: (event: WorkflowRunEvent) => void | Promise<void>,
+  ): () => void {
+    this.runEventListeners.add(listener);
+    return () => this.runEventListeners.delete(listener);
+  }
+
+  private emitRunEvent(event: WorkflowRunEvent): void {
+    for (const listener of this.runEventListeners) {
+      // Listeners do slow things (sending a WhatsApp message); they must
+      // never hold up or break the run.
+      this.track(
+        Promise.resolve()
+          .then(() => listener(event))
+          .catch((err: unknown) => {
+            this.logger.warn('Workflow run listener failed', {
+              type: event.type,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }),
+      );
     }
   }
 
+  private notifyChange(taskId: string): void {
+    for (const listener of this.changeListeners) {
+      try {
+        listener(taskId);
+      } catch (err) {
+        this.logger.warn('Workflow change listener failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  /**
+   * Serialise state transitions per task. Every transition runs under
+   * this lock, so it is also where changes are announced.
+   */
+  private withLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(taskId) ?? Promise.resolve();
+    const next = prev
+      .catch(() => undefined)
+      .then(fn)
+      .finally(() => this.notifyChange(taskId));
+    this.locks.set(taskId, next);
+    void next
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.locks.get(taskId) === next) this.locks.delete(taskId);
+      });
+    return next;
+  }
+
+  private markBusy(subtaskId: string): () => void {
+    this.busy.set(subtaskId, (this.busy.get(subtaskId) ?? 0) + 1);
+    return () => {
+      const n = (this.busy.get(subtaskId) ?? 1) - 1;
+      if (n <= 0) this.busy.delete(subtaskId);
+      else this.busy.set(subtaskId, n);
+    };
+  }
+
   // ========================================
-  // Execution
+  // Runs
   // ========================================
 
-  async executeTask(
+  async listRuns(taskId: string, limit?: number): Promise<WorkflowRun[]> {
+    return this.runs.listByTask(taskId, limit);
+  }
+
+  async getRun(runId: string): Promise<WorkflowRun | null> {
+    return this.runs.findById(runId);
+  }
+
+  /** Gates waiting for a decision whose step is still in progress. */
+  async listPendingApprovals(): Promise<
+    Array<Subtask & { taskTitle: string }>
+  > {
+    const rows = await this.subtasksRepo.listAwaitingApproval();
+    return rows.filter((s) => s.status === 'in_progress');
+  }
+
+  /**
+   * Start a new run of the task. By default every step is reset first,
+   * so "Run" always runs the whole workflow again. Returns as soon as
+   * the first steps are dispatched; agent steps continue in the
+   * background.
+   */
+  async startRun(
     taskId: string,
-    options: { sessionId?: string } = {},
-  ): Promise<ServiceResult<{ sessionId: string }>> {
+    options: StartRunOptions = {},
+  ): Promise<ServiceResult<{ runId: string; sessionId: string }>> {
     if (!this.sessionService) {
       return {
         ok: false,
@@ -264,90 +379,204 @@ export class TaskExecution {
         },
       };
     }
+    const sessionService = this.sessionService;
 
-    const task = await this.tasksRepo.findById(taskId);
-    if (!task) {
+    return this.withLock(taskId, async () => {
+      const task = await this.tasksRepo.findById(taskId);
+      if (!task) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'task.not_found',
+            message: `Task "${taskId}" not found`,
+          },
+        };
+      }
+      const running = await this.runs.findRunning(taskId);
+      if (running) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'workflow.already_running',
+            message:
+              'This workflow is already running. Stop the current run first.',
+          },
+        };
+      }
+
+      if (options.reset !== false) {
+        await this.subtasksRepo.resetByTask(taskId);
+      }
+
+      const sessionId =
+        options.sessionId ??
+        (await sessionService.createSession(`Task: ${task.title}`, 'task')).id;
+      await this.tasksRepo.update(taskId, { sessionId });
+      await this.tasksRepo.updateStatus(taskId, 'in_progress');
+
+      const run = await this.runs.create({
+        taskId,
+        trigger: options.trigger ?? 'manual',
+        sessionId,
+        historyId: options.historyId ?? null,
+        input: options.input?.trim()
+          ? options.input.slice(0, MAX_RUN_INPUT_CHARS)
+          : null,
+        replyTarget: options.replyTarget ?? null,
+      });
+      this.logger.info('Workflow run started', {
+        taskId,
+        runId: run.id,
+        trigger: run.trigger,
+      });
+
+      const subtasks = await this.subtasksRepo.listByTask(taskId);
+      if (subtasks.length === 0) {
+        // No graph: the task description is the whole job.
+        this.track(this.runDescription(taskId, run, sessionId));
+      } else {
+        await this.advanceLocked(taskId);
+      }
+      return { ok: true as const, data: { runId: run.id, sessionId } };
+    });
+  }
+
+  /**
+   * Stop a running run: abort agent steps in flight, fail every step
+   * that was still going, and mark the run cancelled.
+   */
+  async cancelRun(taskId: string): Promise<ServiceResult<WorkflowRun>> {
+    return this.withLock(taskId, async () => {
+      const run = await this.runs.findRunning(taskId);
+      if (!run) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'workflow.not_running',
+            message: 'This workflow is not running',
+          },
+        };
+      }
+      const subtasks = await this.subtasksRepo.listByTask(taskId);
+      for (const subtask of subtasks) {
+        if (subtask.status !== 'in_progress') continue;
+        const key = this.cancelKeys.get(subtask.id);
+        if (key) this.sessionService?.cancelRun(key);
+        if (subtask.awaitingApprovalSince != null) {
+          await this.subtasksRepo.setAwaitingApproval(subtask.id, false);
+        }
+        await this.subtasksRepo.failSubtask(subtask.id, 'Run stopped');
+      }
+      const finished = await this.finishRun(run, 'cancelled', 'Run stopped');
+      return finished
+        ? { ok: true as const, data: finished }
+        : {
+            ok: false as const,
+            error: {
+              code: 'workflow.not_running',
+              message: 'This workflow is not running',
+            },
+          };
+    });
+  }
+
+  /**
+   * Run a failed (or skipped) step again, along with everything
+   * downstream of it, continuing the task's latest run.
+   */
+  /** Whether a run of this task is going right now. */
+  async isRunning(taskId: string): Promise<boolean> {
+    return Boolean(await this.runs.findRunning(taskId));
+  }
+
+  async retrySubtask(subtaskId: string): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) return notFound(subtaskId);
+    if (subtask.status !== 'failed' && subtask.status !== 'skipped') {
       return {
         ok: false,
         error: {
-          code: 'task.not_found',
-          message: `Task "${taskId}" not found`,
+          code: 'subtask.not_retryable',
+          message: `Only failed or skipped steps can be retried (this one is ${subtask.status})`,
         },
       };
     }
+    return this.withLock(subtask.taskId, async () => {
+      const edges = await this.subtasksRepo.listEdgesByTask(subtask.taskId);
+      const toReset = [subtaskId, ...getDownstreamSubtaskIds(subtaskId, edges)];
+      for (const id of toReset) await this.subtasksRepo.resetOne(id);
 
-    // Reuse the existing session when the caller (e.g. the
-    // recurring-task executor) has already created one and just needs
-    // us to dispatch the work. Without this, every recurring run
-    // would create a second "Task: <title>" session on top of the
-    // "Task: <title> (run #N)" session the executor created.
-    let session: { id: string };
-    if (options.sessionId) {
-      session = { id: options.sessionId };
-    } else {
-      session = await this.sessionService.createSession(
-        `Task: ${task.title}`,
-        'task',
-      );
-    }
-    await this.tasksRepo.update(taskId, { sessionId: session.id });
-    await this.tasksRepo.updateStatus(taskId, 'in_progress');
-    this.logger.info('Task moved to in_progress', { taskId });
-
-    const subtasks = await this.subtasksRepo.listByTask(taskId);
-    if (subtasks.length > 0) {
-      this.logger.info('Task has subtasks, executing subtasks', {
-        taskId,
-        subtaskCount: subtasks.length,
-      });
-      // Only pass the session down to subtasks if the caller (e.g. the
-      // recurring-task executor) already created one. For normal API
-      // calls, each subtask should create its own session.
-      const executeSubtasksOptions = options.sessionId
-        ? { sessionId: options.sessionId }
-        : {};
-      const result = await this.executeSubtasks(taskId, executeSubtasksOptions);
-      if (!result.ok) return { ok: false, error: result.error };
-      return { ok: true, data: { sessionId: session.id } };
-    }
-
-    const executionResult = await this.sessionService.submitMessageStreaming({
-      sessionId: session.id,
-      content: task.description,
-      role: 'user',
-      onStreamEvent: () => {},
+      const running = await this.runs.findRunning(subtask.taskId);
+      if (!running) {
+        const latest = await this.runs.findLatest(subtask.taskId);
+        if (latest) {
+          await this.runs.reopen(latest.id);
+        } else {
+          await this.runs.create({ taskId: subtask.taskId, trigger: 'manual' });
+        }
+      }
+      await this.tasksRepo.updateStatus(subtask.taskId, 'in_progress');
+      await this.advanceLocked(subtask.taskId);
+      const reloaded = await this.subtasksRepo.findById(subtaskId);
+      return reloaded
+        ? { ok: true as const, data: reloaded }
+        : notFound(subtaskId);
     });
-
-    if (!executionResult.ok) {
-      this.logger.warn(
-        'Task execution failed while submitting initial message',
-        {
-          taskId,
-          sessionId: session.id,
-          errorCode: executionResult.error.code,
-        },
-      );
-      return { ok: false, error: executionResult.error };
-    }
-
-    await this.tasksRepo.updateStatus(taskId, 'review');
-    this.logger.info('Task moved to review', { taskId, reason: 'no_subtasks' });
-
-    return { ok: true, data: { sessionId: session.id } };
   }
 
+  // ========================================
+  // Execution entry points
+  // ========================================
+
+  /** Run the whole workflow (resets every step first). */
+  async executeTask(
+    taskId: string,
+    options: { sessionId?: string; input?: string } = {},
+  ): Promise<ServiceResult<{ sessionId: string; runId: string }>> {
+    return this.startRun(taskId, {
+      trigger: 'manual',
+      ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options.input ? { input: options.input } : {}),
+    });
+  }
+
+  /**
+   * Start whichever steps are ready, without resetting anything. Starts a
+   * run if none is going.
+   */
+  async executeSubtasks(
+    taskId: string,
+    options: { trigger?: WorkflowRunTrigger } = {},
+  ): Promise<ServiceResult<{ startedCount: number; runId: string }>> {
+    const before = await this.countInProgress(taskId);
+    const running = await this.runs.findRunning(taskId);
+    let runId: string;
+    if (running) {
+      runId = running.id;
+      await this.advance(taskId);
+    } else {
+      const started = await this.startRun(taskId, {
+        trigger: options.trigger ?? 'manual',
+        reset: false,
+      });
+      if (!started.ok) return started;
+      runId = started.data.runId;
+    }
+    const after = await this.countInProgress(taskId);
+    return {
+      ok: true,
+      data: { startedCount: Math.max(0, after - before), runId },
+    };
+  }
+
+  private async countInProgress(taskId: string): Promise<number> {
+    const subtasks = await this.subtasksRepo.listByTask(taskId);
+    return subtasks.filter((s) => s.status === 'in_progress').length;
+  }
+
+  /** Start one ready step. Starts a run (without resetting) if none is going. */
   async executeSubtask(
     subtaskId: string,
-    options: {
-      sessionId?: string;
-      // Lets executeSubtasks() pass the task's subtasks/edges it already
-      // fetched for the batch, instead of this method re-fetching the
-      // same data per subtask.
-      preloadedGraph?: {
-        allSubtasks: Subtask[];
-        edges: SubtaskDependencyEdge[];
-      };
-    } = {},
   ): Promise<ServiceResult<{ sessionId: string | null }>> {
     if (!this.sessionService) {
       return {
@@ -358,88 +587,267 @@ export class TaskExecution {
         },
       };
     }
-
     const subtask = await this.subtasksRepo.findById(subtaskId);
-    if (!subtask) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_found',
-          message: `Subtask "${subtaskId}" not found`,
-        },
-      };
+    if (!subtask) return notFound(subtaskId);
+    const taskId = subtask.taskId;
+
+    return this.withLock(taskId, async () => {
+      const current = await this.subtasksRepo.findById(subtaskId);
+      if (!current) return notFound(subtaskId);
+      if (current.status !== 'pending') {
+        return {
+          ok: false as const,
+          error: {
+            code: 'subtask.already_executed',
+            message: `Subtask "${subtaskId}" is already ${current.status}`,
+          },
+        };
+      }
+      const allSubtasks = await this.subtasksRepo.listByTask(taskId);
+      const edges = await this.subtasksRepo.listEdgesByTask(taskId);
+      if (resolveSubtask(current, allSubtasks, edges).action !== 'run') {
+        return {
+          ok: false as const,
+          error: {
+            code: 'subtask.dependency_not_met',
+            message: 'One or more dependencies not completed',
+          },
+        };
+      }
+
+      let run = await this.runs.findRunning(taskId);
+      if (!run) {
+        const task = await this.tasksRepo.findById(taskId);
+        run = await this.runs.create({
+          taskId,
+          trigger: 'manual',
+          sessionId: task?.sessionId ?? null,
+        });
+        await this.tasksRepo.updateStatus(taskId, 'in_progress');
+      }
+
+      const claimed = await this.subtasksRepo.claimPending(subtaskId);
+      if (!claimed) {
+        return {
+          ok: false as const,
+          error: {
+            code: 'subtask.already_executed',
+            message: `Subtask "${subtaskId}" was started by another request`,
+          },
+        };
+      }
+      const sessionId = await this.dispatch(claimed, allSubtasks, edges);
+      return { ok: true as const, data: { sessionId } };
+    });
+  }
+
+  // ========================================
+  // Graph progression
+  // ========================================
+
+  private advance(taskId: string): Promise<void> {
+    return this.withLock(taskId, () => this.advanceLocked(taskId));
+  }
+
+  /**
+   * Skip steps that can no longer run, dispatch steps that are ready,
+   * and finish the run once every step is terminal. Caller holds the
+   * task lock.
+   */
+  private async advanceLocked(taskId: string): Promise<void> {
+    const run = await this.runs.findRunning(taskId);
+    if (!run) return;
+
+    let subtasks = await this.subtasksRepo.listByTask(taskId);
+    const edges = await this.subtasksRepo.listEdgesByTask(taskId);
+
+    // Skips cascade (a skipped step can make its dependents skippable),
+    // so resolve until nothing changes.
+    for (;;) {
+      let skippedAny = false;
+      for (const subtask of subtasks) {
+        if (subtask.status !== 'pending') continue;
+        const decision = resolveSubtask(subtask, subtasks, edges);
+        if (decision.action === 'skip') {
+          await this.subtasksRepo.skipSubtask(subtask.id, decision.reason);
+          skippedAny = true;
+        }
+      }
+      if (!skippedAny) break;
+      subtasks = await this.subtasksRepo.listByTask(taskId);
     }
 
-    if (subtask.status === 'in_progress' || subtask.status === 'completed') {
-      this.logger.info('Subtask already executed, skipping', {
-        subtaskId,
-        status: subtask.status,
-      });
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.already_executed',
-          message: `Subtask "${subtaskId}" is already ${subtask.status}`,
-        },
-      };
+    for (const subtask of subtasks) {
+      if (subtask.status !== 'pending') continue;
+      if (resolveSubtask(subtask, subtasks, edges).action !== 'run') continue;
+      const claimed = await this.subtasksRepo.claimPending(subtask.id);
+      if (!claimed) continue;
+      await this.dispatch(claimed, subtasks, edges);
     }
 
-    const allSubtasks =
-      options.preloadedGraph?.allSubtasks ??
-      (await this.subtasksRepo.listByTask(subtask.taskId));
-    const edges =
-      options.preloadedGraph?.edges ??
-      (await this.subtasksRepo.listEdgesByTask(subtask.taskId));
+    await this.finishIfDone(run);
+  }
 
-    if (!isSubtaskExecutable(subtask, allSubtasks, edges)) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.dependency_not_met',
-          message: 'One or more dependencies not completed',
-        },
-      };
-    }
+  private async finishIfDone(run: WorkflowRun): Promise<void> {
+    const subtasks = await this.subtasksRepo.listByTask(run.taskId);
+    if (subtasks.some((s) => s.status === 'in_progress')) return;
 
-    // Approval gates pause execution for a human decision instead of
-    // running an agent. No session is created and submitMessageStreaming
-    // is never called, so this subtask stays completely outside the
-    // RunEvent/session-correlation machinery — resolveApproval() is the
-    // only thing that moves it forward.
-    if (subtask.subtaskKind === 'approval_gate') {
-      await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
-      await this.subtasksRepo.setAwaitingApproval(subtaskId, true);
-      this.logger.info('Approval gate paused, awaiting human decision', {
-        subtaskId,
-      });
-      return { ok: true, data: { sessionId: null } };
-    }
-
-    // Reuse the existing session if the caller (e.g. the recurring-task
-    // executor) already created one. Otherwise create a per-subtask
-    // session like before.
-    let session: { id: string };
-    if (options.sessionId) {
-      session = { id: options.sessionId };
-    } else {
-      session = await this.sessionService.createSession(
-        `Subtask: ${subtask.title}`,
-        'subtask',
+    const waiting = subtasks.filter((s) => !isTerminalStatus(s.status));
+    if (waiting.length > 0) {
+      // Nothing is running but some steps never became ready: their
+      // dependencies wait on each other.
+      for (const s of waiting) {
+        await this.subtasksRepo.skipSubtask(
+          s.id,
+          'Never became ready to run (its dependencies wait on each other).',
+        );
+      }
+      await this.finishRun(
+        run,
+        'failed',
+        `Steps wait on each other and can never start: ${waiting
+          .map((s) => `"${s.title}"`)
+          .join(', ')}`,
       );
+      return;
     }
-    this.logger.info(
-      options.sessionId
-        ? 'Reusing session for subtask (called by recurring executor)'
-        : 'Created session for subtask',
-      {
-        subtaskId,
-        sessionId: session.id,
-      },
+
+    const failed = subtasks.find((s) => s.status === 'failed');
+    if (failed) {
+      await this.finishRun(
+        run,
+        'failed',
+        `"${failed.title}" failed: ${(failed.result ?? 'no details').slice(0, 300)}`,
+      );
+    } else {
+      await this.finishRun(run, 'completed');
+    }
+  }
+
+  /**
+   * Move the run to a terminal status and settle the task and its
+   * schedule history row. Returns null if the run had already finished.
+   */
+  private async finishRun(
+    run: WorkflowRun,
+    status: 'completed' | 'failed' | 'cancelled',
+    error?: string,
+  ): Promise<WorkflowRun | null> {
+    const subtasks = await this.subtasksRepo.listByTask(run.taskId);
+    const summary = buildRunSummary(subtasks);
+    const finished = await this.runs.finish(run.id, {
+      status,
+      error: error ?? null,
+      summary: JSON.stringify(summary),
+    });
+    if (!finished) return null;
+    this.emitRunEvent({ type: 'run.finished', run: finished });
+
+    this.logger.info('Workflow run finished', {
+      taskId: run.taskId,
+      runId: run.id,
+      status,
+    });
+
+    // Only one run per task is ever running, so this run owns the task.
+    await this.tasksRepo.updateStatus(
+      run.taskId,
+      status === 'completed' ? 'review' : 'todo',
     );
+    if (status === 'completed') await this.verifyDeliverables(run.taskId);
 
-    await this.subtasksRepo.update(subtaskId, { sessionId: session.id });
-    await this.subtasksRepo.updateStatus(subtaskId, 'in_progress');
+    if (run.historyId && this.taskExecutionHistoryRepo) {
+      const durationMs = Date.now() - run.startedAt.getTime();
+      await this.taskExecutionHistoryRepo.update(run.historyId, {
+        subtaskSummary: JSON.stringify(summary),
+      });
+      if (status === 'completed') {
+        await this.taskExecutionHistoryRepo.markCompleted(
+          run.historyId,
+          durationMs,
+        );
+      } else {
+        await this.taskExecutionHistoryRepo.markFailed(
+          run.historyId,
+          durationMs,
+          {
+            code: status === 'cancelled' ? 'RUN_CANCELLED' : 'RUN_FAILED',
+            message: error ?? 'Run failed',
+          },
+        );
+      }
+    }
+    return finished;
+  }
 
+  /** A task with no steps: send its description and wait for the answer. */
+  private async runDescription(
+    taskId: string,
+    run: WorkflowRun,
+    sessionId: string,
+  ): Promise<void> {
+    const task = await this.tasksRepo.findById(taskId);
+    const result = await this.sessionService!.submitMessageStreaming({
+      sessionId,
+      content: task?.description ?? '',
+      role: 'user',
+      onStreamEvent: () => {},
+    });
+    await this.withLock(taskId, async () => {
+      if (result.ok) {
+        await this.finishRun(run, 'completed');
+      } else {
+        await this.finishRun(run, 'failed', result.error.message);
+      }
+    });
+  }
+
+  // ========================================
+  // Steps
+  // ========================================
+
+  /**
+   * Start a claimed (now in_progress) step. Approval gates pause for a
+   * person; agent steps get their own session and run in the
+   * background. Returns the step's session id (null for gates).
+   */
+  private async dispatch(
+    subtask: Subtask,
+    allSubtasks: Subtask[],
+    edges: SubtaskDependencyEdge[],
+  ): Promise<string | null> {
+    const run = await this.runs.findRunning(subtask.taskId);
+    if (subtask.subtaskKind === 'approval_gate') {
+      await this.subtasksRepo.setAwaitingApproval(subtask.id, true);
+      this.logger.info('Approval gate paused, awaiting human decision', {
+        subtaskId: subtask.id,
+      });
+      if (run) this.emitRunEvent({ type: 'approval.waiting', run, subtask });
+      return null;
+    }
+
+    const session = await this.sessionService!.createSession(
+      `Subtask: ${subtask.title}`,
+      'subtask',
+    );
+    await this.subtasksRepo.update(subtask.id, { sessionId: session.id });
+
+    const content = this.buildStepPrompt(
+      subtask,
+      allSubtasks,
+      edges,
+      run?.input ?? null,
+    );
+    this.track(this.runStepTurn(subtask, session.id, content));
+    return session.id;
+  }
+
+  private buildStepPrompt(
+    subtask: Subtask,
+    allSubtasks: Subtask[],
+    edges: SubtaskDependencyEdge[],
+    runInput: string | null = null,
+  ): string {
     // Scope the handoff to this subtask's actual dependencies only
     // (not every completed subtask in the task), and bound its size so
     // a large upstream result can't unboundedly grow this session.
@@ -465,10 +873,19 @@ export class TaskExecution {
         contextParts.push(`## Result from "${dep.title}":\n${truncatedResult}`);
       }
       messageContent = `${subtask.description}\n\n---\n\n**Context from completed dependencies:**\n\n${contextParts.join('\n\n')}`;
-      this.logger.info('Including context from completed dependencies', {
-        subtaskId,
-        depCount: contextParts.length,
-      });
+    }
+
+    // What started the run (a webhook body, a customer's message…) is
+    // given to every step: entry steps act on it, later ones can refer
+    // back to it.
+    if (runInput) {
+      const { depContextPerItemChars } = this.getExecutionConfig();
+      const input = truncateWithBudget(
+        runInput,
+        depContextPerItemChars,
+        createContextBudget(depContextPerItemChars),
+      );
+      messageContent = `**Workflow input** (what started this run):\n${input}\n\n---\n\n${messageContent}`;
     }
 
     // Loop iteration context: on iterations after the first, prepend the
@@ -496,68 +913,291 @@ export class TaskExecution {
     // structured signal rather than free text — ask the agent to end its
     // final message with an OUTCOME line.
     if (subtaskNeedsOutcomeTag(subtask, edges)) {
-      messageContent = `${messageContent}\n\n---\n\nEnd your final message with a line "OUTCOME: <short-tag>" summarizing the outcome in a few words (e.g. "OUTCOME: approved" or "OUTCOME: needs-revision"). This is used to decide what happens next.`;
+      const expected = expectedOutcomes(subtask, edges);
+      const choices =
+        expected.length > 0
+          ? ` Use one of these tags, exactly as written, so the workflow can decide what happens next: ${expected.map((v) => `"OUTCOME: ${v}"`).join(', ')}. If none fits, pick the closest.`
+          : ' This is used to decide what happens next.';
+      messageContent = `${messageContent}\n\n---\n\nEnd your final message with a line "OUTCOME: <short-tag>" summarizing the outcome in a few words (e.g. "OUTCOME: approved" or "OUTCOME: needs-revision").${choices}`;
     }
-
-    const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
-    this.logger.info('Submitting message to session', {
-      subtaskId,
-      sessionId: session.id,
-      agentId,
-    });
-
-    const messageInput: SubmitMessageStreamingInput = {
-      sessionId: session.id,
-      content: messageContent,
-      role: 'user',
-      onStreamEvent: () => {},
-    };
-    if (agentId !== undefined) messageInput.agentId = agentId;
-
-    await this.sessionService.submitMessageStreaming(messageInput);
-    return { ok: true, data: { sessionId: session.id } };
+    return messageContent;
   }
 
-  async executeSubtasks(
-    taskId: string,
-    options: { sessionId?: string } = {},
-  ): Promise<ServiceResult<{ startedCount: number }>> {
-    const task = await this.tasksRepo.findById(taskId);
-    if (!task) {
+  /**
+   * Run one agent turn for a step and act on its outcome: verify and
+   * complete it, retry it, or fail it.
+   */
+  private async runStepTurn(
+    subtask: Subtask,
+    sessionId: string,
+    content: string,
+  ): Promise<void> {
+    const release = this.markBusy(subtask.id);
+    try {
+      const cancelKey = `workflow:${subtask.id}:${nanoid(8)}`;
+      this.cancelKeys.set(subtask.id, cancelKey);
+      const input: SubmitMessageStreamingInput = {
+        sessionId,
+        content,
+        role: 'user',
+        runId: cancelKey,
+        onStreamEvent: () => {},
+      };
+      if (subtask.assignedAgentId) input.agentId = subtask.assignedAgentId;
+
+      let result: SubmitMessageResult;
+      try {
+        result = await this.sessionService!.submitMessageStreaming(input);
+      } catch (err) {
+        result = {
+          ok: false,
+          error: {
+            code: 'exception',
+            message: err instanceof Error ? err.message : String(err),
+          },
+        };
+      } finally {
+        if (this.cancelKeys.get(subtask.id) === cancelKey) {
+          this.cancelKeys.delete(subtask.id);
+        }
+      }
+      await this.onStepTurnFinished(subtask.id, sessionId, result);
+    } finally {
+      release();
+    }
+  }
+
+  private async onStepTurnFinished(
+    subtaskId: string,
+    sessionId: string,
+    result: SubmitMessageResult,
+  ): Promise<void> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask || subtask.status !== 'in_progress') return;
+
+    if (!result.ok) {
+      const reason =
+        result.error.code === 'cancelled'
+          ? 'Stopped by user'
+          : `The agent run failed: ${result.error.message}`;
+      await this.settleStep(subtask, { kind: 'fail', reason });
+      return;
+    }
+
+    const text =
+      stripThinking(
+        (result.assistantMessage as { content?: string } | undefined)
+          ?.content ?? '',
+      ).trim() || 'Completed';
+    const updated = await this.subtasksRepo.incrementRetryCount(subtaskId);
+    const attempts = updated?.retryCount ?? 1;
+    const { maxRetries } = this.getExecutionConfig();
+
+    const messages = await this.sessionService?.listMessages(sessionId);
+    const verdict = await this.verifyStep(subtask, text, messages);
+
+    if (!verdict || verdict.isComplete || hasConcreteArtifacts(text)) {
+      if (verdict && !verdict.isComplete) {
+        this.logger.warn(
+          'Verifier said INCOMPLETE but executor response contains concrete success artifacts; completing to avoid duplicate side effects',
+          { subtaskId },
+        );
+      }
+      await this.settleStep(subtask, { kind: 'complete', result: text });
+      return;
+    }
+
+    if (attempts >= maxRetries) {
+      await this.settleStep(subtask, {
+        kind: 'fail',
+        reason:
+          `Did not pass verification after ${attempts} attempts: ${verdict.reason}`.slice(
+            0,
+            2000,
+          ),
+      });
+      return;
+    }
+
+    // Retry in the same session, telling the agent what was missing.
+    const fresh = await this.subtasksRepo.findById(subtaskId);
+    const run = await this.runs.findRunning(subtask.taskId);
+    if (fresh?.status !== 'in_progress' || !run) return;
+    this.logger.info('Verification says incomplete, retrying step', {
+      subtaskId,
+      attempts,
+    });
+    this.track(
+      this.runStepTurn(
+        fresh,
+        sessionId,
+        buildRetryMessage(verdict.reason, RETRY_REASON_MAX_CHARS),
+      ),
+    );
+  }
+
+  /**
+   * Apply a step's outcome under the task lock, then move the graph on.
+   * Ignored if the step is no longer running (stopped, reset or edited).
+   */
+  private async settleStep(
+    subtask: Subtask,
+    outcome:
+      | { kind: 'complete'; result: string }
+      | { kind: 'fail'; reason: string },
+  ): Promise<void> {
+    await this.withLock(subtask.taskId, async () => {
+      const current = await this.subtasksRepo.findById(subtask.id);
+      if (!current || current.status !== 'in_progress') return;
+      if (!(await this.runs.findRunning(subtask.taskId))) return;
+
+      if (outcome.kind === 'fail') {
+        await this.subtasksRepo.failSubtask(current.id, outcome.reason);
+      } else {
+        await this.completeOrLoop(current, outcome.result);
+      }
+      await this.advanceLocked(subtask.taskId);
+    });
+  }
+
+  /**
+   * Complete a step — unless it is a bounded loop whose condition isn't
+   * met yet, in which case it goes back to pending for another
+   * iteration (or fails once the iteration cap is reached). Caller
+   * holds the task lock.
+   */
+  private async completeOrLoop(
+    subtask: Subtask,
+    result: string,
+  ): Promise<void> {
+    if (subtask.loopMaxIterations != null) {
+      if (!subtask.loopConditionOperator || !subtask.loopConditionValue) {
+        await this.subtasksRepo.failSubtask(
+          subtask.id,
+          'This loop has no condition to check. Set "repeat until" on the step and run it again.',
+        );
+        return;
+      }
+      const converged = evaluateCondition(result, {
+        operator: subtask.loopConditionOperator as ConditionOperator,
+        value: subtask.loopConditionValue,
+      });
+      if (!converged) {
+        const nextIteration = subtask.loopIterationCount + 1;
+        if (nextIteration >= subtask.loopMaxIterations) {
+          await this.subtasksRepo.failSubtask(
+            subtask.id,
+            `Stopped after ${subtask.loopMaxIterations} iterations without meeting its condition (${subtask.loopConditionOperator} "${subtask.loopConditionValue}"). Last result: ${result.slice(0, 300)}`,
+          );
+          return;
+        }
+        await this.subtasksRepo.recordLoopIteration(subtask.id, { result });
+        this.logger.info('Loop condition not met, re-running step', {
+          subtaskId: subtask.id,
+          iteration: nextIteration,
+          maxIterations: subtask.loopMaxIterations,
+        });
+        return;
+      }
+    }
+    await this.subtasksRepo.completeSubtask(subtask.id, result);
+  }
+
+  /**
+   * Mark a step completed by hand (API). Moves the graph on if a run is
+   * going.
+   */
+  async completeSubtask(
+    subtaskId: string,
+    result: string,
+  ): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) return notFound(subtaskId);
+    return this.withLock(subtask.taskId, async () => {
+      const updated = await this.subtasksRepo.completeSubtask(
+        subtaskId,
+        result,
+      );
+      await this.advanceLocked(subtask.taskId);
+      return updated
+        ? { ok: true as const, data: updated }
+        : notFound(subtaskId);
+    });
+  }
+
+  /** Mark a step failed by hand (API). */
+  async failSubtask(
+    subtaskId: string,
+    error: string,
+  ): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) return notFound(subtaskId);
+    return this.withLock(subtask.taskId, async () => {
+      const key = this.cancelKeys.get(subtaskId);
+      if (key) this.sessionService?.cancelRun(key);
+      const updated = await this.subtasksRepo.failSubtask(subtaskId, error);
+      await this.advanceLocked(subtask.taskId);
+      return updated
+        ? { ok: true as const, data: updated }
+        : notFound(subtaskId);
+    });
+  }
+
+  /**
+   * Resolve a paused approval gate. Both decisions complete the gate
+   * with an `OUTCOME: approved|rejected` result, so conditional edges
+   * can branch on it; plain edges out of a rejected gate are not
+   * followed.
+   */
+  async resolveApproval(
+    subtaskId: string,
+    decision: 'approved' | 'rejected',
+    note?: string,
+    approvedBy?: string,
+  ): Promise<ServiceResult<Subtask>> {
+    const subtask = await this.subtasksRepo.findById(subtaskId);
+    if (!subtask) return notFound(subtaskId);
+    if (subtask.subtaskKind !== 'approval_gate') {
       return {
         ok: false,
         error: {
-          code: 'task.not_found',
-          message: `Task "${taskId}" not found`,
+          code: 'subtask.not_approval_gate',
+          message: `Subtask "${subtaskId}" is not an approval gate`,
         },
       };
     }
 
-    const subtasks = await this.subtasksRepo.listByTask(taskId);
-    const edges = await this.subtasksRepo.listEdgesByTask(taskId);
-    const executable = subtasks
-      .filter((s) => s.status === 'pending')
-      .filter((subtask) => isSubtaskExecutable(subtask, subtasks, edges));
-
-    // Executable subtasks already have every dependency in a terminal
-    // `completed` state as of this snapshot, and a dependency's status
-    // and result never change once completed — so it's safe to reuse
-    // this same snapshot for every subtask in the batch instead of each
-    // executeSubtask() call re-fetching it.
-    const preloadedGraph = { allSubtasks: subtasks, edges };
-
-    let startedCount = 0;
-    for (const subtask of executable) {
-      const result = await this.executeSubtask(subtask.id, {
-        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
-        preloadedGraph,
+    return this.withLock(subtask.taskId, async () => {
+      const current = await this.subtasksRepo.findById(subtaskId);
+      if (current?.status !== 'in_progress') {
+        return notAwaiting(subtaskId);
+      }
+      // The "still awaiting approval" check is enforced atomically inside
+      // this UPDATE's WHERE clause, so two concurrent resolve calls can't
+      // both win.
+      const resolved = await this.subtasksRepo.resolveApproval(subtaskId, {
+        decision,
+        note: note ?? null,
+        approvedBy: approvedBy ?? null,
       });
-      if (result.ok) startedCount++;
-    }
+      if (!resolved) return notAwaiting(subtaskId);
 
-    return { ok: true, data: { startedCount } };
+      const updated = await this.subtasksRepo.completeSubtask(
+        subtaskId,
+        `OUTCOME: ${decision}${note ? `\n\n${note}` : ''}`,
+      );
+      await this.advanceLocked(subtask.taskId);
+      return updated
+        ? { ok: true as const, data: updated }
+        : notFound(subtaskId);
+    });
   }
 
+  /**
+   * Re-send a step's session a retry message. Kept for callers that
+   * want to nudge a running step; normal retries happen automatically
+   * after verification.
+   */
   async triggerSubtaskRetry(
     subtaskId: string,
     reason?: string,
@@ -571,20 +1211,9 @@ export class TaskExecution {
         },
       };
     }
-
     const subtask = await this.subtasksRepo.findById(subtaskId);
-    if (!subtask) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_found',
-          message: `Subtask "${subtaskId}" not found`,
-        },
-      };
-    }
-
-    const sessionId = subtask.sessionId;
-    if (!sessionId) {
+    if (!subtask) return notFound(subtaskId);
+    if (!subtask.sessionId) {
       return {
         ok: false,
         error: {
@@ -593,270 +1222,84 @@ export class TaskExecution {
         },
       };
     }
-
-    const agentId = (subtask as { assignedAgentId?: string }).assignedAgentId;
-    this.logger.info(
-      reason
-        ? 'Triggering verification-driven subtask retry'
-        : 'Triggering stuck-subtask retry',
-      {
-        subtaskId,
+    const sessionId = subtask.sessionId;
+    this.track(
+      this.runStepTurn(
+        subtask,
         sessionId,
-        agentId,
-        hasReason: Boolean(reason),
-      },
+        buildRetryMessage(reason, RETRY_REASON_MAX_CHARS),
+      ),
     );
-
-    // When a verification verdict supplied a reason, tell the agent
-    // specifically what was wrong or missing instead of the generic
-    // "try again" — without it, a retry just repeats the same mistake.
-    const content = buildRetryMessage(reason, RETRY_REASON_MAX_CHARS);
-
-    const messageInput: SubmitMessageStreamingInput = {
-      sessionId,
-      content,
-      role: 'user',
-      onStreamEvent: () => {},
-    };
-    if (agentId !== undefined) messageInput.agentId = agentId;
-
-    await this.sessionService.submitMessageStreaming(messageInput);
     return { ok: true, data: { sessionId } };
   }
 
   // ========================================
-  // Completion lifecycle
+  // Recovery
   // ========================================
 
-  async completeSubtask(
-    subtaskId: string,
-    result: string,
-    taskSessionId?: string,
-  ): Promise<ServiceResult<Subtask>> {
-    const subtask = await this.subtasksRepo.findById(subtaskId);
-    if (!subtask) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_found',
-          message: `Subtask "${subtaskId}" not found`,
-        },
-      };
-    }
-
-    // Bounded self-loop: this subtask keeps re-running itself until its
-    // own result satisfies loopConditionOperator/loopConditionValue, or
-    // the iteration cap is hit (then it fails instead of completing).
-    // retryCount/maxRetries is a separate concept (run-failure
-    // recovery) and is untouched by this branch.
-    if (subtask.loopMaxIterations != null) {
-      // The API always requires conditionOperator/conditionValue together
-      // with maxIterations, so this should be unreachable in practice. If
-      // it ever isn't, fail loudly instead of silently defaulting to an
-      // operator that could mask a data-integrity bug.
-      if (!subtask.loopConditionOperator || !subtask.loopConditionValue) {
-        this.logger.error(
-          'Loop subtask is missing its condition operator/value',
-          { subtaskId },
-        );
-        return this.failSubtask(
-          subtaskId,
-          'Loop subtask is missing its condition operator/value — this is a data-integrity bug, not a normal loop failure.',
-        );
-      }
-
-      const converged = evaluateCondition(result, {
-        operator: subtask.loopConditionOperator as ConditionOperator,
-        value: subtask.loopConditionValue,
-      });
-      if (!converged) {
-        const nextIteration = subtask.loopIterationCount + 1;
-        if (nextIteration >= subtask.loopMaxIterations) {
-          this.logger.warn(
-            'Loop exceeded max iterations without satisfying its condition',
-            { subtaskId, loopMaxIterations: subtask.loopMaxIterations },
-          );
-          return this.failSubtask(
-            subtaskId,
-            `Loop exceeded ${subtask.loopMaxIterations} iterations without satisfying its condition. Last result: ${result.slice(0, 200)}`,
-          );
+  /**
+   * On startup: steps that were running when the process stopped have
+   * lost their agent run. Fail them so their runs finish instead of
+   * hanging (approval gates keep waiting).
+   */
+  async recoverInterruptedRuns(): Promise<void> {
+    const running = await this.runs.listRunning();
+    for (const run of running) {
+      await this.withLock(run.taskId, async () => {
+        const subtasks = await this.subtasksRepo.listByTask(run.taskId);
+        for (const s of subtasks) {
+          if (s.status !== 'in_progress' || s.awaitingApprovalSince != null) {
+            continue;
+          }
+          await this.subtasksRepo.failSubtask(s.id, RESTART_MESSAGE);
         }
-        await this.subtasksRepo.recordLoopIteration(subtaskId, { result });
-        this.logger.info('Loop condition not met, re-running subtask', {
-          subtaskId,
-          iteration: nextIteration,
-          maxIterations: subtask.loopMaxIterations,
-        });
-        // Same cascade normal completion triggers below — picks this
-        // subtask (now back to 'pending') straight back up.
-        await this.executeSubtasks(subtask.taskId);
-        const reloaded = await this.subtasksRepo.findById(subtaskId);
-        return reloaded
-          ? { ok: true, data: reloaded }
-          : {
-              ok: false,
-              error: {
-                code: 'subtask.not_found',
-                message: `Subtask "${subtaskId}" not found after loop iteration`,
-              },
-            };
-      }
-      // Condition holds — fall through to normal completion below.
-    }
-
-    const updated = await this.subtasksRepo.completeSubtask(subtaskId, result);
-
-    this.logger.info('Subtask completed, checking for dependent subtasks', {
-      subtaskId,
-      taskId: subtask.taskId,
-    });
-
-    await this.checkTaskCompletion(subtask.taskId, taskSessionId);
-
-    const executeResult = await this.executeSubtasks(subtask.taskId);
-    if (executeResult.ok && executeResult.data.startedCount > 0) {
-      this.logger.info('Started dependent subtasks after completion', {
-        subtaskId,
-        taskId: subtask.taskId,
-        startedCount: executeResult.data.startedCount,
+        if (subtasks.length === 0) {
+          await this.finishRun(run, 'failed', RESTART_MESSAGE);
+          return;
+        }
+        await this.advanceLocked(run.taskId);
       });
     }
-
-    return { ok: true, data: updated! };
+    if (running.length > 0) {
+      this.logger.info('Recovered interrupted workflow runs', {
+        count: running.length,
+      });
+    }
   }
 
   /**
-   * Resolve a paused approval-gate subtask with a human decision.
-   * Deliberately outside handleRunEvent/session correlation — an
-   * approval gate never created a session or LLM run, so there's
-   * nothing for a RunEvent to correlate back to here.
+   * Periodic safety net: fail agent steps that are marked running but
+   * that no pipeline in this process is working on (their run was lost).
+   * Steps still being worked on are left alone however long they take.
    */
-  async resolveApproval(
-    subtaskId: string,
-    decision: 'approved' | 'rejected',
-    note?: string,
-    approvedBy?: string,
-  ): Promise<ServiceResult<Subtask>> {
-    const subtask = await this.subtasksRepo.findById(subtaskId);
-    if (!subtask) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_found',
-          message: `Subtask "${subtaskId}" not found`,
-        },
-      };
-    }
-    if (subtask.subtaskKind !== 'approval_gate') {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_approval_gate',
-          message: `Subtask "${subtaskId}" is not an approval gate`,
-        },
-      };
-    }
-
-    // The "still awaiting approval" check is enforced atomically inside
-    // this UPDATE's WHERE clause (not as a separate read-then-check), so
-    // two concurrent resolve calls can't both win the race: only the
-    // first clears `awaitingApprovalSince` and gets a row back.
-    const resolved = await this.subtasksRepo.resolveApproval(subtaskId, {
-      decision,
-      note: note ?? null,
-      approvedBy: approvedBy ?? null,
-    });
-    if (!resolved) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_awaiting_approval',
-          message: `Subtask "${subtaskId}" is not awaiting approval`,
-        },
-      };
-    }
-
-    // Give the completed/failed result an explicit OUTCOME tag so any
-    // downstream conditional edge has a predictable value to match
-    // against, instead of the human's free-text note.
-    return decision === 'approved'
-      ? this.completeSubtask(
-          subtaskId,
-          `OUTCOME: approved${note ? `\n\n${note}` : ''}`,
-        )
-      : this.failSubtask(
-          subtaskId,
-          `OUTCOME: rejected${note ? `\n\n${note}` : ''}`,
-        );
-  }
-
-  async failSubtask(
-    subtaskId: string,
-    error: string,
-  ): Promise<ServiceResult<Subtask>> {
-    const subtask = await this.subtasksRepo.findById(subtaskId);
-    if (!subtask) {
-      return {
-        ok: false,
-        error: {
-          code: 'subtask.not_found',
-          message: `Subtask "${subtaskId}" not found`,
-        },
-      };
-    }
-    const updated = await this.subtasksRepo.failSubtask(subtaskId, error);
-    return { ok: true, data: updated! };
-  }
-
   async checkStuckSubtasks(): Promise<void> {
     const allSubtasks = await this.subtasksRepo.listAll();
-    // Approval gates are supposed to sit in_progress indefinitely while
-    // awaiting a human decision — that's not "stuck".
-    const inProgress = allSubtasks.filter(
-      (s) => s.status === 'in_progress' && s.awaitingApprovalSince == null,
-    );
-
-    if (inProgress.length === 0) return;
-
-    this.logger.info('Checking for stuck subtasks', {
-      count: inProgress.length,
+    const now = Date.now();
+    const orphaned = allSubtasks.filter((s) => {
+      if (s.status !== 'in_progress' || s.awaitingApprovalSince != null) {
+        return false;
+      }
+      if (this.busy.has(s.id)) return false;
+      const updatedAt = s.updatedAt ? new Date(s.updatedAt).getTime() : now;
+      return now - updatedAt >= ORPHANED_STEP_MINUTES * 60_000;
     });
 
-    const now = new Date();
-    for (const subtask of inProgress) {
-      const updatedAt = subtask.updatedAt ? new Date(subtask.updatedAt) : null;
-      if (!updatedAt) continue;
-
-      const minutesSinceUpdate =
-        (now.getTime() - updatedAt.getTime()) / (1000 * 60);
-      if (minutesSinceUpdate < STUCK_TIMEOUT_MINUTES) continue;
-
-      const retryCount = (subtask as { retryCount?: number }).retryCount ?? 0;
-
-      if (retryCount >= this.getExecutionConfig().maxRetries) {
-        this.logger.warn('Subtask exceeded max retries, marking as failed', {
-          subtaskId: subtask.id,
-          retryCount,
-        });
-        await this.subtasksRepo.updateStatus(subtask.id, 'failed');
-        continue;
-      }
-
-      this.logger.info('Auto-retrying stuck subtask', {
+    for (const subtask of orphaned) {
+      this.logger.warn('Failing orphaned workflow step', {
         subtaskId: subtask.id,
-        retryCount,
-        minutesStuck: Math.round(minutesSinceUpdate),
       });
-
-      await this.subtasksRepo.incrementRetryCount(subtask.id);
-      const result = await this.triggerSubtaskRetry(subtask.id);
-
-      if (!result.ok) {
-        this.logger.error('Auto-retry failed for stuck subtask', {
-          subtaskId: subtask.id,
-          error: result.error,
-        });
-      }
+      await this.withLock(subtask.taskId, async () => {
+        const current = await this.subtasksRepo.findById(subtask.id);
+        if (current?.status !== 'in_progress' || this.busy.has(subtask.id)) {
+          return;
+        }
+        await this.subtasksRepo.failSubtask(subtask.id, ORPHANED_MESSAGE);
+        if (await this.runs.findRunning(subtask.taskId)) {
+          await this.advanceLocked(subtask.taskId);
+        } else {
+          await this.tasksRepo.updateStatus(subtask.taskId, 'todo');
+        }
+      });
     }
   }
 
@@ -864,12 +1307,39 @@ export class TaskExecution {
   // Verification
   // ========================================
 
-  private async submitVerificationToTaskSession(
+  /**
+   * Ask the task's verifier whether a step's work was really done.
+   * Verifier turns share the task session, so they run one at a time
+   * per task. Returns null when there is nothing to verify with (the
+   * step is then accepted as is).
+   */
+  private async verifyStep(
     subtask: Subtask,
     subtaskResult: string,
     sessionMessages?: (SessionMessage | SessionMessageRecord)[],
-  ): Promise<boolean> {
-    if (!this.sessionService) return false;
+  ): Promise<{ isComplete: boolean; reason: string } | null> {
+    const prev = this.verifyQueues.get(subtask.taskId) ?? Promise.resolve();
+    const next = prev
+      .catch(() => undefined)
+      .then(() =>
+        this.runVerification(subtask, subtaskResult, sessionMessages),
+      );
+    this.verifyQueues.set(subtask.taskId, next);
+    try {
+      return await next;
+    } finally {
+      if (this.verifyQueues.get(subtask.taskId) === next) {
+        this.verifyQueues.delete(subtask.taskId);
+      }
+    }
+  }
+
+  private async runVerification(
+    subtask: Subtask,
+    subtaskResult: string,
+    sessionMessages?: (SessionMessage | SessionMessageRecord)[],
+  ): Promise<{ isComplete: boolean; reason: string } | null> {
+    if (!this.sessionService) return null;
 
     const task = await this.tasksRepo.findById(subtask.taskId);
     if (!task?.sessionId) {
@@ -877,7 +1347,7 @@ export class TaskExecution {
         subtaskId: subtask.id,
         taskId: subtask.taskId,
       });
-      return false;
+      return null;
     }
 
     const taskAgents = await this.taskAgentsRepo.listByTask(subtask.taskId);
@@ -1017,164 +1487,32 @@ export class TaskExecution {
       subtask.id,
       subtaskResult,
     );
-    await this.sessionService.submitMessageStreaming(messageInput);
-    return true;
-  }
+    let result: SubmitMessageResult;
+    try {
+      result = await this.sessionService.submitMessageStreaming(messageInput);
+    } finally {
+      await this.subtasksRepo.setPendingVerificationResult(subtask.id, null);
+    }
+    if (!result.ok) {
+      this.logger.warn('Verification run failed; accepting the step as is', {
+        subtaskId: subtask.id,
+        error: result.error.message,
+      });
+      return null;
+    }
 
-  private async handleVerificationResult(
-    subtaskId: string,
-    originalResult: string,
-    verificationSessionId: string,
-  ): Promise<void> {
-    const messages = await this.sessionService?.listMessages(
-      verificationSessionId,
+    const content = stripThinking(
+      (result.assistantMessage as { content?: string } | undefined)?.content ??
+        '',
     );
-    const lastMsg = messages
-      ?.slice()
-      .reverse()
-      .find((m) => (m as { role: string }).role === 'assistant');
-    const rawContent = (lastMsg as { content?: string })?.content ?? '';
-    const content = stripThinking(rawContent);
-
-    const {
-      isComplete,
-      reason: verdictReason,
-      rawVerdict,
-    } = parseVerificationVerdict(content);
-
+    const { isComplete, reason, rawVerdict } =
+      parseVerificationVerdict(content);
     this.logger.info('Subtask verification result received', {
-      subtaskId,
+      subtaskId: subtask.id,
       isComplete,
       verdict: rawVerdict ?? null,
-      verificationSummaryLength: content.length,
-      verificationSummaryPreview: content.slice(0, 400),
     });
-
-    if (isComplete) {
-      await this.completeSubtask(
-        subtaskId,
-        originalResult,
-        verificationSessionId,
-      );
-    } else {
-      // Guard against false-INCOMPLETE verdicts: a verifier LLM can
-      // wrongly mark work as incomplete (e.g. because a tool name is
-      // not in its own toolset). Re-running the subtask would repeat
-      // side effects (duplicate tweets, duplicate API posts, …). If
-      // the executor's final response already reports success with
-      // concrete artifacts (IDs, URLs), override the verdict and
-      // complete the subtask instead of retrying.
-      if (hasConcreteArtifacts(originalResult)) {
-        this.logger.warn(
-          'Verifier said INCOMPLETE but executor response contains concrete success artifacts; overriding to COMPLETED to avoid duplicate side effects',
-          { subtaskId, verdict: rawVerdict ?? null },
-        );
-        await this.completeSubtask(
-          subtaskId,
-          originalResult,
-          verificationSessionId,
-        );
-      } else {
-        this.logger.info('Verification says incomplete, triggering retry', {
-          subtaskId,
-          reasonLength: verdictReason.length,
-          reasonPreview: verdictReason.slice(0, 400),
-        });
-        await this.triggerSubtaskRetry(subtaskId, verdictReason);
-      }
-    }
-  }
-
-  // ========================================
-  // Internal helpers
-  // ========================================
-
-  private async checkTaskCompletion(
-    taskId: string,
-    taskSessionId?: string,
-  ): Promise<void> {
-    const subtasks = await this.subtasksRepo.listByTask(taskId);
-    const allComplete =
-      subtasks.length > 0 && subtasks.every((s) => s.status === 'completed');
-
-    // Snapshot subtask statuses into the execution history row when
-    // all subtasks have reached a terminal state (completed or failed).
-    // Because subtasks are reset between recurring runs, without this
-    // snapshot historical runs would have no subtask data in the UI.
-    const allTerminal =
-      subtasks.length > 0 &&
-      subtasks.every((s) => s.status === 'completed' || s.status === 'failed');
-    if (allTerminal) {
-      await this.snapshotSubtaskSummary(taskId, subtasks, taskSessionId);
-    }
-
-    if (allComplete) {
-      await this.tasksRepo.updateStatus(taskId, 'review');
-      this.logger.info('Task moved to review', {
-        taskId,
-        status: 'review',
-        reason: 'all_subtasks_completed',
-      });
-
-      // Trigger deliverable verification when all subtasks are complete
-      await this.verifyDeliverables(taskId);
-    }
-  }
-
-  /**
-   * Write a JSON snapshot of the current subtask statuses into the
-   * `task_execution_history` row for the task's current run.
-   *
-   * The history row is found by its `sessionId`. The caller MUST pass
-   * `taskSessionId` from the verification flow — the task session that
-   * performed the verification. This is critical for recurring tasks:
-   * the next run's executor can change `task.sessionId` BEFORE the
-   * current run's last verification completes, which would cause the
-   * snapshot to be written to the wrong history row (or lost entirely).
-   * When `taskSessionId` is unavailable (e.g. the fallback auto-complete
-   * path with no task session), we fall back to `task.sessionId`.
-   */
-  private async snapshotSubtaskSummary(
-    taskId: string,
-    subtasks: Subtask[],
-    taskSessionId?: string,
-  ): Promise<void> {
-    if (!this.taskExecutionHistoryRepo) return;
-
-    const sessionId =
-      taskSessionId ?? (await this.tasksRepo.findById(taskId))?.sessionId;
-    if (!sessionId) return;
-
-    const history =
-      await this.taskExecutionHistoryRepo.findBySessionId(sessionId);
-    if (!history) return;
-
-    const summary: ExecutionSubtaskSummary = {
-      total: subtasks.length,
-      completed: subtasks.filter((s) => s.status === 'completed').length,
-      failed: subtasks.filter((s) => s.status === 'failed').length,
-      inProgress: subtasks.filter((s) => s.status === 'in_progress').length,
-      pending: subtasks.filter(
-        (s) => s.status === 'pending' || s.status === 'assigned',
-      ).length,
-      items: subtasks.map((s) => ({
-        id: s.id,
-        title: s.title,
-        status: s.status,
-        sessionId: s.sessionId ?? null,
-      })),
-    };
-
-    await this.taskExecutionHistoryRepo.update(history.id, {
-      subtaskSummary: JSON.stringify(summary),
-    });
-    this.logger.info('Subtask summary snapshotted to history row', {
-      taskId,
-      historyId: history.id,
-      total: summary.total,
-      completed: summary.completed,
-      failed: summary.failed,
-    });
+    return { isComplete, reason };
   }
 
   // ========================================
@@ -1301,4 +1639,51 @@ function hasConcreteArtifacts(text: string): boolean {
   const longHexId = /\b[a-f0-9]{20,}\b/i;
   const url = /https?:\/\/\S+/i;
   return longHexId.test(text) || url.test(text);
+}
+
+function notFound(subtaskId: string): {
+  ok: false;
+  error: { code: string; message: string };
+} {
+  return {
+    ok: false,
+    error: {
+      code: 'subtask.not_found',
+      message: `Subtask "${subtaskId}" not found`,
+    },
+  };
+}
+
+function notAwaiting(subtaskId: string): {
+  ok: false;
+  error: { code: string; message: string };
+} {
+  return {
+    ok: false,
+    error: {
+      code: 'subtask.not_awaiting_approval',
+      message: `Subtask "${subtaskId}" is not awaiting approval`,
+    },
+  };
+}
+
+/** Snapshot of how each step ended, kept on the finished run. */
+export function buildRunSummary(subtasks: Subtask[]): ExecutionSubtaskSummary {
+  return {
+    total: subtasks.length,
+    completed: subtasks.filter((s) => s.status === 'completed').length,
+    failed: subtasks.filter((s) => s.status === 'failed').length,
+    skipped: subtasks.filter((s) => s.status === 'skipped').length,
+    inProgress: subtasks.filter((s) => s.status === 'in_progress').length,
+    pending: subtasks.filter(
+      (s) => s.status === 'pending' || s.status === 'assigned',
+    ).length,
+    items: subtasks.map((s) => ({
+      id: s.id,
+      title: s.title,
+      status: s.status,
+      sessionId: s.sessionId ?? null,
+      result: s.result ? s.result.slice(0, SUMMARY_RESULT_MAX_CHARS) : null,
+    })),
+  };
 }

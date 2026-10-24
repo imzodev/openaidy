@@ -2,6 +2,7 @@
  * API client for task endpoints
  */
 
+import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
 import { API_BASE } from './api';
 import { getStoredToken } from './auth-token';
 import type {
@@ -10,6 +11,11 @@ import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   CreateTaskScheduleInput,
+  WorkflowRunDto,
+  PendingApprovalDto,
+  WorkflowTriggerDto,
+  WebhookTokenDto,
+  ChannelMessageTriggerConfig,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -89,7 +95,8 @@ export type SubtaskStatus =
   | 'assigned'
   | 'in_progress'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'skipped';
 
 /**
  * Subtask kind — 'agent' runs a normal LLM session; 'approval_gate'
@@ -155,6 +162,9 @@ export type Subtask = {
   awaitingApprovalSince?: string | null;
   approvalDecision?: 'approved' | 'rejected' | null;
   approvalNote?: string | null;
+  /** Saved canvas position; null/absent means auto-layout. */
+  positionX?: number | null;
+  positionY?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -241,6 +251,7 @@ type ApiError = {
   error: {
     code: string;
     message: string;
+    details?: Record<string, unknown>;
   };
 };
 
@@ -585,9 +596,10 @@ export async function deleteSubtaskEdge(
 /**
  * (Re)assign an agent to a subtask.
  */
+/** Assign an agent to a step, or `null` to use the default agent. */
 export async function assignSubtaskAgent(
   id: string,
-  agentId: string,
+  agentId: string | null,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/assign`, {
     method: 'POST',
@@ -602,10 +614,189 @@ export async function assignSubtaskAgent(
  */
 export async function executeTask(
   taskId: string,
-): Promise<ApiResult<{ sessionId: string }>> {
+  input?: string,
+): Promise<ApiResult<{ sessionId: string; runId: string }>> {
   const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/execute`, {
     method: 'POST',
+    ...(input
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input }),
+        }
+      : {}),
   });
+  return response.json();
+}
+
+/**
+ * The workflow's triggers (webhooks and message triggers).
+ */
+export async function listWorkflowTriggers(
+  taskId: string,
+): Promise<ApiResult<WorkflowTriggerDto[]>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`);
+  return response.json();
+}
+
+/**
+ * Every trigger across workflows, optionally of one kind.
+ */
+export async function listAllWorkflowTriggers(
+  kind?: WorkflowTriggerDto['kind'],
+): Promise<ApiResult<WorkflowTriggerDto[]>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workflow-triggers${kind ? `?kind=${kind}` : ''}`,
+  );
+  return response.json();
+}
+
+/**
+ * Create a webhook. The token in the result is only ever shown this once.
+ */
+export async function createWebhookTrigger(
+  taskId: string,
+  name?: string,
+): Promise<ApiResult<WebhookTokenDto>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'webhook', ...(name ? { name } : {}) }),
+  });
+  return response.json();
+}
+
+/**
+ * Start the workflow when a matching message arrives on a channel.
+ */
+export async function createChannelTrigger(
+  taskId: string,
+  channel: ChannelMessageTriggerConfig,
+  name?: string,
+): Promise<ApiResult<WorkflowTriggerDto>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/triggers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind: 'channel_message',
+      channel,
+      ...(name ? { name } : {}),
+    }),
+  });
+  return response.json();
+}
+
+export async function updateWorkflowTrigger(
+  id: string,
+  updates: {
+    name?: string;
+    enabled?: boolean;
+    channel?: Partial<ChannelMessageTriggerConfig>;
+  },
+): Promise<ApiResult<WorkflowTriggerDto>> {
+  const response = await apiFetch(`${API_BASE}/api/workflow-triggers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  return response.json();
+}
+
+export async function deleteWorkflowTrigger(
+  id: string,
+): Promise<ApiResult<true>> {
+  const response = await apiFetch(`${API_BASE}/api/workflow-triggers/${id}`, {
+    method: 'DELETE',
+  });
+  return response.json();
+}
+
+/**
+ * Replace a webhook's token; the old one stops working.
+ */
+export async function regenerateWebhookToken(
+  id: string,
+): Promise<ApiResult<WebhookTokenDto>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/workflow-triggers/${id}/regenerate-token`,
+    { method: 'POST' },
+  );
+  return response.json();
+}
+
+/**
+ * The task's workflow runs, newest first.
+ */
+export async function listWorkflowRuns(
+  taskId: string,
+  limit = 20,
+): Promise<ApiResult<WorkflowRunDto[]>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/runs?limit=${limit}`,
+  );
+  return response.json();
+}
+
+/**
+ * Approval steps waiting for a decision, across all workflows.
+ */
+export async function listPendingApprovals(): Promise<
+  ApiResult<PendingApprovalDto[]>
+> {
+  const response = await apiFetch(`${API_BASE}/api/approvals/pending`);
+  return response.json();
+}
+
+/**
+ * Stop the task's running workflow run.
+ */
+export async function cancelWorkflowRun(
+  taskId: string,
+): Promise<ApiResult<WorkflowRunDto>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/runs/cancel`,
+    { method: 'POST' },
+  );
+  return response.json();
+}
+
+/**
+ * What would stop the workflow from running (errors) and what looks
+ * unintended (warnings) — the pre-run checklist.
+ */
+export async function checkWorkflow(
+  taskId: string,
+): Promise<ApiResult<WorkflowGraphCheck>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/workflow-check`,
+  );
+  return response.json();
+}
+
+/**
+ * Save where the workflow's nodes sit on the canvas.
+ */
+export async function saveWorkflowLayout(
+  taskId: string,
+  positions: Record<string, { x: number; y: number }>,
+): Promise<ApiResult<{ updated: number }>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/layout`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ positions }),
+  });
+  return response.json();
+}
+
+/**
+ * Run a failed or skipped step again (with everything after it).
+ */
+export async function retrySubtask(
+  subtaskId: string,
+): Promise<ApiResult<Subtask>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/subtasks/${subtaskId}/retry`,
+    { method: 'POST' },
+  );
   return response.json();
 }
 

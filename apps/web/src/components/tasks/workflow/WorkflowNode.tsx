@@ -2,12 +2,13 @@
  * A single subtask card on the workflow canvas. Two visual variants:
  * a standard rounded card for 'agent' subtasks, and an amber
  * accented card for 'approval_gate' subtasks (with a pulsing badge
- * while paused). Loop-configured agent subtasks get a small corner
- * badge showing their iteration count.
+ * while paused). Running agent steps show a spinner, skipped steps are
+ * dashed and muted, and failed or rejected steps say so. Loop-configured
+ * agent subtasks get a small corner badge showing their iteration count.
  */
 
 import { Show } from 'solid-js';
-import { Hourglass, Repeat, User } from 'lucide-solid';
+import { Hourglass, Loader2, Repeat, User } from 'lucide-solid';
 import type { Subtask } from '../../../lib/api-tasks';
 import type { Agent } from '../AgentSelector';
 import { STATUS_ICONS, STATUS_BADGE_BG } from '../subtask-status';
@@ -40,13 +41,20 @@ const STATUS_BG: Record<string, string> = {
   completed:
     'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
   failed: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
+  skipped:
+    'bg-gray-50 dark:bg-gray-800/50 border-dashed border-gray-300 dark:border-gray-600 opacity-60',
 };
 
 export function WorkflowNode(props: WorkflowNodeProps) {
   const isApprovalGate = () => props.subtask.subtaskKind === 'approval_gate';
   const isAwaiting = () => Boolean(props.subtask.awaitingApprovalSince);
   const isLoop = () => props.subtask.loopMaxIterations != null;
-  const statusLabel = () => props.subtask.status.replace('_', ' ');
+  const isRunning = () =>
+    props.subtask.status === 'in_progress' && !isApprovalGate();
+  const isRejected = () =>
+    isApprovalGate() && props.subtask.approvalDecision === 'rejected';
+  const statusLabel = () =>
+    isRejected() ? 'rejected' : props.subtask.status.replace('_', ' ');
   const kindLabel = () => (isApprovalGate() ? 'approval gate' : 'subtask');
 
   return (
@@ -106,6 +114,28 @@ export function WorkflowNode(props: WorkflowNodeProps) {
           <span class="truncate">
             {agentName(props.agents, props.subtask.assignedAgentId)}
           </span>
+        </div>
+      </Show>
+
+      <Show when={isRunning()}>
+        <div
+          role="status"
+          class="mt-1 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300"
+        >
+          <Loader2 class="w-2.5 h-2.5 animate-spin" />
+          Running
+        </div>
+      </Show>
+
+      <Show when={props.subtask.status === 'failed' || isRejected()}>
+        <div class="mt-1 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+          {isRejected() ? 'Rejected' : 'Failed'}
+        </div>
+      </Show>
+
+      <Show when={props.subtask.status === 'skipped'}>
+        <div class="mt-1 inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+          Skipped
         </div>
       </Show>
 

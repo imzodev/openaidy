@@ -27,6 +27,7 @@ import { readWorkspaceFile } from '../../lib/api';
 import { AgentSelector, type Agent, type SelectedAgent } from './AgentSelector';
 import { SubtaskList } from './SubtaskList';
 import { WorkflowEditor } from './workflow/WorkflowEditor';
+import { onWorkflowUpdated } from '../../lib/workflow-live';
 import { Tabs } from '../ui/Tabs';
 import { ScheduleDisplay } from '../common/ScheduleDisplay';
 import type { TaskSchedule } from '../../lib/api-tasks';
@@ -123,6 +124,14 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   }>({ isOpen: false, content: '', path: '', isText: true });
 
   // Load task data when taskId changes
+  // Refresh the flow view (and the task) when the server reports a change.
+  const [workflowVersion, setWorkflowVersion] = createSignal(0);
+  onWorkflowUpdated((taskId) => {
+    if (taskId !== null && taskId !== props.taskId) return;
+    setWorkflowVersion((v) => v + 1);
+    void loadTaskData();
+  });
+
   createEffect(() => {
     if (props.taskId) {
       loadTaskData();
@@ -734,7 +743,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
                   <WorkflowEditor
                     taskId={props.taskId}
                     agents={props.agents}
-                    isTaskRunning={task()?.status === 'in_progress'}
+                    refreshKey={workflowVersion()}
                   />
                 </div>
               </Show>

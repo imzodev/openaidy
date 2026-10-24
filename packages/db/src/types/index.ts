@@ -22,6 +22,8 @@ import type { MemoriesRepository } from '../repositories/memories';
 import type { DeliverablesRepository } from '../repositories/deliverables';
 import type { TaskSchedulesRepository } from '../repositories/task-schedules';
 import type { TaskExecutionHistoryRepository } from '../repositories/task-execution-history';
+import type { WorkflowRunsRepository } from '../repositories/workflow-runs';
+import type { WorkflowTriggersRepository } from '../repositories/workflow-triggers';
 import { z } from 'zod';
 
 /**
@@ -248,6 +250,8 @@ export type TaskAgentsStore = TaskAgentsRepository;
  */
 export type TaskSchedulesStore = TaskSchedulesRepository;
 export type TaskExecutionHistoryStore = TaskExecutionHistoryRepository;
+export type WorkflowRunsStore = WorkflowRunsRepository;
+export type WorkflowTriggersStore = WorkflowTriggersRepository;
 export type AddonsStore = AddonsRepository;
 export type MemoriesStore = MemoriesRepository;
 export type DeliverablesStore = DeliverablesRepository;
@@ -267,6 +271,8 @@ export type DatabaseRepositories = {
   taskAgents: TaskAgentsStore;
   taskSchedules: TaskSchedulesStore;
   taskExecutionHistory: TaskExecutionHistoryStore;
+  workflowRuns: WorkflowRunsStore;
+  workflowTriggers: WorkflowTriggersStore;
   addons: AddonsStore;
   memories: MemoriesStore;
   deliverables: DeliverablesStore;

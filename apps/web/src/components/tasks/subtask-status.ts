@@ -10,6 +10,7 @@ export const STATUS_ICONS: Record<string, string> = {
   in_progress: '▶',
   completed: '✓',
   failed: '✗',
+  skipped: '⤼',
 };
 
 export const STATUS_COLORS: Record<string, string> = {
@@ -18,6 +19,7 @@ export const STATUS_COLORS: Record<string, string> = {
   in_progress: 'text-yellow-500',
   completed: 'text-green-500',
   failed: 'text-red-500',
+  skipped: 'text-gray-400',
 };
 
 /** Tinted circular-badge background for a status icon (workflow canvas node
@@ -32,4 +34,5 @@ export const STATUS_BADGE_BG: Record<string, string> = {
   completed:
     'bg-green-200 text-green-700 dark:bg-green-800 dark:text-green-300',
   failed: 'bg-red-200 text-red-700 dark:bg-red-800 dark:text-red-300',
+  skipped: 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
 };

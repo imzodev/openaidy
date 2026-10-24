@@ -26,6 +26,8 @@ interface MockSubtasksRepository {
   setResult: ReturnType<typeof vi.fn>;
   getCountsByStatus: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
+  listEdgesByTask: ReturnType<typeof vi.fn>;
+  listEdgesByTaskFull: ReturnType<typeof vi.fn>;
 }
 
 interface MockTaskAgentsRepository {
@@ -37,6 +39,7 @@ interface MockTaskAgentsRepository {
 
 interface MockAgentRegistry {
   getAgent: ReturnType<typeof vi.fn>;
+  listAgents: ReturnType<typeof vi.fn>;
 }
 
 // Mock factory functions
@@ -54,7 +57,7 @@ const createMockTasksRepo = (): MockTasksRepository => ({
 const createMockSubtasksRepo = (): MockSubtasksRepository => ({
   create: vi.fn(),
   findById: vi.fn(),
-  listByTask: vi.fn(),
+  listByTask: vi.fn().mockResolvedValue([]),
   listByStatus: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
@@ -62,6 +65,8 @@ const createMockSubtasksRepo = (): MockSubtasksRepository => ({
   setResult: vi.fn(),
   getCountsByStatus: vi.fn(),
   delete: vi.fn(),
+  listEdgesByTask: vi.fn().mockResolvedValue([]),
+  listEdgesByTaskFull: vi.fn().mockResolvedValue([]),
 });
 
 const createMockTaskAgentsRepo = (): MockTaskAgentsRepository => ({
@@ -73,6 +78,7 @@ const createMockTaskAgentsRepo = (): MockTaskAgentsRepository => ({
 
 const createMockAgentRegistry = (): MockAgentRegistry => ({
   getAgent: vi.fn(),
+  listAgents: vi.fn().mockReturnValue([]),
 });
 
 describe('TaskService', () => {

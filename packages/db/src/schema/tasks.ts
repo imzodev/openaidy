@@ -103,6 +103,9 @@ export const subtaskStatusEnum = pgEnum('subtask_status', [
   'in_progress',
   'completed',
   'failed',
+  // Never ran in this run: its branch was not taken, or an upstream
+  // step failed. Terminal, like completed/failed.
+  'skipped',
 ]);
 
 /**
@@ -155,6 +158,9 @@ export const subtasks = pgTable(
     approvalDecision: text('approval_decision'),
     approvalNote: text('approval_note'),
     approvedBy: text('approved_by'),
+    // Where the node sits on the workflow canvas (null = auto-layout).
+    positionX: integer('position_x'),
+    positionY: integer('position_y'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -277,6 +283,9 @@ export type NewTaskSchedule = typeof taskSchedules.$inferInsert;
 export type TaskExecutionHistoryRow = typeof taskExecutionHistory.$inferSelect;
 export type NewTaskExecutionHistoryRow =
   typeof taskExecutionHistory.$inferInsert;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type WorkflowRunStatus = WorkflowRun['status'];
+export type WorkflowRunTrigger = WorkflowRun['trigger'];
 
 // Enum type exports
 export type TaskStatus = (typeof taskStatusEnum.enumValues)[number];
@@ -454,3 +463,100 @@ export const taskExecutionHistory = pgTable(
     ),
   }),
 );
+
+/**
+ * Workflow runs table
+ *
+ * One row per execution of a task's subtask graph, whatever started it
+ * (the Run button, an agent tool, or a schedule). Subtask rows hold the
+ * live state of the current run; when a run finishes, `summary` keeps a
+ * JSON snapshot (ExecutionSubtaskSummary) of how each step ended, since
+ * the next run resets the subtasks. Scheduled runs also link their
+ * `task_execution_history` row so it can be finalised with the run.
+ */
+export const workflowRuns = pgTable(
+  'workflow_runs',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    trigger: text('trigger', {
+      enum: ['manual', 'schedule', 'agent', 'webhook', 'channel'],
+    })
+      .notNull()
+      .default('manual'),
+    status: text('status', {
+      enum: ['running', 'completed', 'failed', 'cancelled'],
+    })
+      .notNull()
+      .default('running'),
+    sessionId: text('session_id').references(() => sessions.id, {
+      onDelete: 'set null',
+    }),
+    // The scheduled run's task_execution_history row, if any. Not a
+    // foreign key: that table is not created on every Postgres install.
+    historyId: text('history_id'),
+    error: text('error'),
+    summary: text('summary'),
+    // What started the run (webhook body, channel message, text from the
+    // agent or person who ran it); every step's prompt includes it.
+    input: text('input'),
+    // JSON {channelId, target}: the chat to send the result to, for runs
+    // started by a channel message.
+    replyTarget: text('reply_target'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (table) => ({
+    taskIdIdx: index('workflow_runs_task_id_idx').on(
+      table.taskId,
+      table.startedAt,
+    ),
+    statusIdx: index('workflow_runs_status_idx').on(table.status),
+  }),
+);
+
+/**
+ * Workflow triggers table
+ *
+ * Something outside OpenAidy that starts a workflow run: an HTTP request
+ * to the trigger's webhook URL, or a matching message on a channel
+ * (WhatsApp, Discord). `config` holds the kind-specific settings as JSON
+ * (see WorkflowTriggerConfig in shared-types); webhooks keep only a
+ * SHA-256 hash of their token.
+ */
+export const workflowTriggers = pgTable(
+  'workflow_triggers',
+  {
+    id: text('id')
+      .primaryKey()
+      .$defaultFn(() => nanoid()),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['webhook', 'channel_message'] }).notNull(),
+    name: text('name').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    config: text('config').notNull().default('{}'),
+    secretHash: text('secret_hash'),
+    lastFiredAt: timestamp('last_fired_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    taskIdIdx: index('workflow_triggers_task_id_idx').on(table.taskId),
+    kindIdx: index('workflow_triggers_kind_idx').on(table.kind),
+  }),
+);
+
+export type WorkflowTrigger = typeof workflowTriggers.$inferSelect;
+export type WorkflowTriggerKind = WorkflowTrigger['kind'];

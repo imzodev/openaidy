@@ -137,6 +137,10 @@ Sessions are keyed by channel and sender. A message from `15551234567` on your W
 
 This means each sender has a continuous conversation history even if the server restarts between messages.
 
+## Starting workflows from messages
+
+A message can also start a [workflow](./tasks.md#triggers-starting-a-workflow-by-itself) instead of going to the chat agent — for example "any message starting with _quote_ runs the Quotes workflow". Add a **message trigger** from the workflow's Triggers panel. The allowlist above still applies first. The sender gets an immediate reply, and the workflow's result is sent back to the same chat when it finishes.
+
 ## Multiple channels
 
 You can run multiple channel instances at the same time. Each instance is independent — it has its own auth state, configuration, and session routing. You could connect two different WhatsApp numbers, or combine WhatsApp and Discord on the same server.

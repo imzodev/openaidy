@@ -12,11 +12,9 @@ import { assertWorkflow } from './assert-workflow.js';
  * a fixed set of nodes and edges with placeholder text — the caller
  * provides the placeholder values via `templateInputs`.
  *
- * The underlying `WorkflowTemplateOperations.applyTemplate` builds the
- * subtask graph without consulting existing nodes, so we honour the
- * `clearExisting` opt-in by deleting existing subtasks/edges before
- * applying the template. Cascading the delete removes the edges too
- * (subtask_edges has `ON DELETE CASCADE` against subtasks.id).
+ * With `clearExisting` the template replaces the current graph; the old
+ * nodes are only removed once the template's are in place, so a failure
+ * leaves the workflow unchanged (see TaskService.applyWorkflowTemplate).
  */
 export function createWorkflowApplyTemplateTool(
   getTaskService: () => TaskService | undefined,
@@ -47,9 +45,9 @@ export function createWorkflowApplyTemplateTool(
         clearExisting: {
           type: 'boolean',
           description:
-            'If true, delete all existing subtasks and edges before ' +
-            'applying the template. Default false — the template graph ' +
-            'is added on top of whatever is there.',
+            'If true, the template replaces all existing nodes and edges. ' +
+            'Default false — the template graph is added next to whatever ' +
+            'is there.',
         },
       },
       required: ['workflowId', 'templateId'],
@@ -104,19 +102,13 @@ export function createWorkflowApplyTemplateTool(
         const workflowCheck = assertWorkflow(existing);
         if (!workflowCheck.ok) return workflowCheck;
 
-        if (clearExisting) {
-          const existingSubtasks = await taskService.getSubtasks(workflowId);
-          for (const subtask of existingSubtasks) {
-            await taskService.deleteSubtask(subtask.id);
-          }
-        }
-
         const inputs =
           (templateInputs as Record<string, string> | undefined) ?? {};
         const result = await taskService.applyWorkflowTemplate(
           workflowId,
           templateId,
           inputs,
+          { clearExisting },
         );
         if (!result.ok) {
           return { ok: false, error: result.error.message };

@@ -212,6 +212,8 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
             stripThinking: this.config.stripThinking,
             sessionService: this.deps.sessionService,
             logger: this.deps.logger,
+            workflowTriggers: this.deps.getWorkflowTriggers?.(),
+            replyTarget: msg.key.remoteJid!,
           });
 
           if (reply && this.socket) {
@@ -229,6 +231,22 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
         }
       }
     });
+  }
+
+  async send(target: string, text: string): Promise<boolean> {
+    if (!this.socket || this.status !== 'connected') return false;
+    try {
+      const sent = await this.socket.sendMessage(target, { text });
+      // Remember the id so the echo of this message isn't handled as input.
+      if (sent?.key?.id) this.sentMessageIds.add(sent.key.id);
+      return true;
+    } catch (err) {
+      this.deps.logger.error(
+        { err, channelId: this.id },
+        'whatsapp: failed to send message',
+      );
+      return false;
+    }
   }
 
   async disconnect(): Promise<void> {

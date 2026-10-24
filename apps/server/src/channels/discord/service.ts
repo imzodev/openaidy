@@ -232,6 +232,8 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         stripThinking: this.config.stripThinking,
         sessionService: this.deps.sessionService,
         logger: this.deps.logger,
+        workflowTriggers: this.deps.getWorkflowTriggers?.(),
+        replyTarget: message.channelId,
       });
 
       if (reply) {
@@ -244,6 +246,24 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         { err, channelId: this.id },
         'discord: unhandled error processing inbound message',
       );
+    }
+  }
+
+  async send(target: string, text: string): Promise<boolean> {
+    if (!this.client || this.status !== 'connected') return false;
+    try {
+      const channel = await this.client.channels.fetch(target);
+      if (!channel || !('send' in channel) || !channel.isTextBased()) {
+        return false;
+      }
+      for (const part of splitForDiscord(text)) await channel.send(part);
+      return true;
+    } catch (err) {
+      this.deps.logger.error(
+        { err, channelId: this.id },
+        'discord: failed to send message',
+      );
+      return false;
     }
   }
 

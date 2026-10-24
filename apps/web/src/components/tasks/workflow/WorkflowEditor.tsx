@@ -1,14 +1,17 @@
 /**
  * Top-level container for the subtask workflow canvas: loads
  * subtasks + dependency-graph edges, computes node positions
- * (auto-layout merged with any positions the user dragged and saved
- * to localStorage), and renders the canvas + property panel side by
- * side. Owns all editing actions (add/delete subtask, drag-to-connect
- * edge creation, edge/node property edits, approval resolution) and
- * polls for status updates while the task is running.
+ * (positions saved on the server, else auto-layout), and renders the
+ * canvas + property panel side by side. Owns all editing actions
+ * (add/delete subtask, drag-to-connect edge creation, edge/node property
+ * edits, approval resolution, retrying a step). The parent bumps
+ * `refreshKey` when the server reports a change, only asks for polling
+ * while live updates are unavailable, and sets `locked` while a run is
+ * going (the server refuses graph edits then).
  */
 
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
+import { ConfirmDialog } from '../../ui/ConfirmDialog';
 import {
   listSubtasks,
   listSubtaskEdges,
@@ -20,6 +23,8 @@ import {
   deleteSubtaskEdge,
   assignSubtaskAgent,
   resolveApproval,
+  retrySubtask,
+  saveWorkflowLayout,
   type Subtask,
   type SubtaskEdgeDto,
   type SubtaskKind,
@@ -38,37 +43,33 @@ import { wouldCreateCycle } from '../../../lib/workflow-graph';
 export type WorkflowEditorProps = {
   taskId: string;
   agents: Agent[];
-  isTaskRunning: boolean;
+  /** Changes whenever the workflow changed on the server; triggers a reload. */
+  refreshKey?: number;
+  /** Poll for changes (live updates are down while a run is going). */
+  pollForChanges?: boolean;
+  /** Called after an action here changed the run (approve, retry). */
+  onRunChanged?: () => void;
+  /** A run is going: show the graph read-only. */
+  locked?: boolean;
 };
 
 const POLL_INTERVAL_MS = 3000;
 
+// Positions used to live in this browser's localStorage. They're read once
+// to carry an existing layout over to the server, then dropped.
 function positionsStorageKey(taskId: string) {
   return `workflow-positions:${taskId}`;
 }
 
-function loadStoredPositions(
+function takeLegacyPositions(
   taskId: string,
 ): Record<string, { x: number; y: number }> {
   try {
     const raw = localStorage.getItem(positionsStorageKey(taskId));
+    localStorage.removeItem(positionsStorageKey(taskId));
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
-  }
-}
-
-function saveStoredPositions(
-  taskId: string,
-  positions: Record<string, { x: number; y: number }>,
-) {
-  try {
-    localStorage.setItem(
-      positionsStorageKey(taskId),
-      JSON.stringify(positions),
-    );
-  } catch {
-    // best-effort only
   }
 }
 
@@ -82,6 +83,11 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [actionError, setActionError] = createSignal<string | null>(null);
+  const [pendingDelete, setPendingDelete] = createSignal<Subtask | null>(null);
+  // The node being dragged keeps its in-memory position over whatever a
+  // reload brings in, so a refresh mid-drag doesn't snap it back.
+  let draggingId: string | null = null;
+  let legacyPositions: Record<string, { x: number; y: number }> | null = null;
 
   async function load() {
     try {
@@ -94,16 +100,22 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       setSubtasks(nextSubtasks);
       setEdges(nextEdges);
 
-      const stored = loadStoredPositions(props.taskId);
-      // Positions already known in the live signal — e.g. a node mid-drag
-      // (only in memory, not yet in localStorage), or one just placed by
-      // handleAddSubtask before this reload — take priority over
-      // stored/auto-layout. Without this, a poll firing mid-drag (or the
-      // reload after adding a node) would revert it to a stale/recomputed
-      // position.
+      legacyPositions ??= takeLegacyPositions(props.taskId);
+      const legacy = legacyPositions;
+      const saved: Record<string, { x: number; y: number }> = {};
+      for (const s of nextSubtasks) {
+        if (s.positionX != null && s.positionY != null) {
+          saved[s.id] = { x: s.positionX, y: s.positionY };
+        }
+      }
+      // Priority: the node being dragged, then positions saved on the
+      // server, then ones only known here (a node just placed by
+      // handleAddSubtask, or the old localStorage layout), then auto-layout.
       const current = positions();
       const nodeIds = nextSubtasks.map((s) => s.id);
-      const missingIds = nodeIds.filter((id) => !stored[id] && !current[id]);
+      const missingIds = nodeIds.filter(
+        (id) => !saved[id] && !current[id] && !legacy[id],
+      );
       const autoPositions =
         missingIds.length > 0
           ? computeAutoLayout(
@@ -116,11 +128,17 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
           : {};
       const merged: Record<string, { x: number; y: number }> = {};
       for (const id of nodeIds) {
-        merged[id] = current[id] ??
-          stored[id] ??
+        merged[id] = (id === draggingId ? current[id] : undefined) ??
+          saved[id] ??
+          current[id] ??
+          legacy[id] ??
           autoPositions[id] ?? { x: 0, y: 0 };
       }
       setPositions(merged);
+      if (Object.keys(legacy).some((id) => !saved[id] && merged[id])) {
+        legacyPositions = {};
+        void persistLayout();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load workflow');
     } finally {
@@ -132,8 +150,16 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     if (props.taskId) void load();
   });
 
+  let lastRefreshKey = props.refreshKey;
   createEffect(() => {
-    if (!props.isTaskRunning) return;
+    const key = props.refreshKey;
+    if (key === lastRefreshKey) return;
+    lastRefreshKey = key;
+    void load();
+  });
+
+  createEffect(() => {
+    if (!props.pollForChanges) return;
     const interval = window.setInterval(() => void load(), POLL_INTERVAL_MS);
     onCleanup(() => window.clearInterval(interval));
   });
@@ -156,11 +182,21 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   // ── Node position editing ────────────────────────────────────────────────
 
   function handleNodeMove(id: string, x: number, y: number) {
+    draggingId = id;
     setPositions((prev) => ({ ...prev, [id]: { x, y } }));
   }
 
+  /** Saves every node's position, so the layout is the same everywhere. */
+  async function persistLayout() {
+    const result = await saveWorkflowLayout(props.taskId, positions());
+    if (!result.ok) setActionError(result.error.message);
+  }
+
   function handleNodeMoveEnd() {
-    saveStoredPositions(props.taskId, positions());
+    // A click without movement also ends a "move"; nothing to save then.
+    if (draggingId === null) return;
+    draggingId = null;
+    void persistLayout();
   }
 
   // ── Node CRUD ─────────────────────────────────────────────────────────────
@@ -194,6 +230,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     selectNode(result.data.id);
   }
 
+  /** Resolves true once the server has saved the change. */
   async function handleUpdateSubtask(
     id: string,
     updates: {
@@ -202,19 +239,28 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       subtaskKind?: SubtaskKind;
       loop?: LoopConfig | null;
     },
-  ) {
+  ): Promise<boolean> {
     setActionError(null);
     const result = await updateSubtask(id, updates);
     if (!result.ok) {
       setActionError(result.error.message);
-      return;
+      return false;
     }
     await load();
+    return true;
   }
 
-  async function handleDeleteSubtask(id: string) {
+  function handleDeleteSubtask(id: string) {
+    const subtask = subtasks().find((s) => s.id === id);
+    if (subtask) setPendingDelete(subtask);
+  }
+
+  async function confirmDeleteSubtask() {
+    const subtask = pendingDelete();
+    setPendingDelete(null);
+    if (!subtask) return;
     setActionError(null);
-    const result = await deleteSubtask(id);
+    const result = await deleteSubtask(subtask.id);
     if (!result.ok) {
       setActionError(result.error.message);
       return;
@@ -227,6 +273,12 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
 
   async function handleConnect(sourceId: string, targetId: string) {
     setActionError(null);
+    if (props.locked) {
+      setActionError(
+        "The workflow is running, so its steps can't be changed. Stop the run to edit them.",
+      );
+      return;
+    }
     if (sourceId === targetId) {
       setActionError(
         'A node can\'t connect to itself. To repeat a step, select it and turn on "Repeat until condition" in the panel instead.',
@@ -259,20 +311,22 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     selectEdge(result.data.id);
   }
 
+  /** Resolves true once the server has saved the change. */
   async function handleUpdateEdge(
     id: string,
     updates: {
       edgeKind?: 'dependency' | 'conditional';
       condition?: EdgeCondition | null;
     },
-  ) {
+  ): Promise<boolean> {
     setActionError(null);
     const result = await updateSubtaskEdge(id, updates);
     if (!result.ok) {
       setActionError(result.error.message);
-      return;
+      return false;
     }
     await load();
+    return true;
   }
 
   async function handleDeleteEdge(id: string) {
@@ -300,9 +354,21 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       return;
     }
     await load();
+    props.onRunChanged?.();
   }
 
-  async function handleAssignAgent(id: string, agentId: string) {
+  async function handleRetryStep(id: string) {
+    setActionError(null);
+    const result = await retrySubtask(id);
+    if (!result.ok) {
+      setActionError(result.error.message);
+      return;
+    }
+    await load();
+    props.onRunChanged?.();
+  }
+
+  async function handleAssignAgent(id: string, agentId: string | null) {
     setActionError(null);
     const result = await assignSubtaskAgent(id, agentId);
     if (!result.ok) {
@@ -328,6 +394,15 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
           >
             ✕
           </button>
+        </div>
+      </Show>
+      <Show when={props.locked}>
+        <div
+          role="status"
+          class="px-3 py-1.5 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-b border-amber-200 dark:border-amber-800"
+        >
+          The workflow is running, so its steps can't be changed. Stop the run
+          to edit them.
         </div>
       </Show>
       <div class="flex-1 flex flex-col sm:flex-row min-h-0">
@@ -373,11 +448,22 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
               onUpdateEdge={handleUpdateEdge}
               onDeleteEdge={handleDeleteEdge}
               onResolveApproval={handleResolveApproval}
+              onRetryStep={handleRetryStep}
               onAssignAgent={handleAssignAgent}
+              locked={props.locked ?? false}
             />
           </div>
         </Show>
       </div>
+      <ConfirmDialog
+        isOpen={pendingDelete() !== null}
+        title="Delete step?"
+        body={`"${pendingDelete()?.title ?? ''}" and its connections will be removed. This can't be undone.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={() => void confirmDeleteSubtask()}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

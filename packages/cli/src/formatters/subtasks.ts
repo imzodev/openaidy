@@ -4,18 +4,23 @@
  * Formats subtask data for CLI output.
  */
 
-import type { SubtaskStatus, SubtaskSummary, SubtaskWithDetails } from '@openaidy/shared-types';
+import type {
+  SubtaskStatus,
+  SubtaskSummary,
+  SubtaskWithDetails,
+} from '@openaidy/shared-types';
 
 /**
  * Map subtask status to a readable label
  */
 export function formatSubtaskStatus(status: SubtaskStatus): string {
   const labels: Record<SubtaskStatus, string> = {
-    pending:    'Pending',
-    assigned:    'Assigned',
-    in_progress:'In Progress',
-    completed:  'Completed',
-    failed:     'Failed',
+    pending: 'Pending',
+    assigned: 'Assigned',
+    in_progress: 'In Progress',
+    completed: 'Completed',
+    failed: 'Failed',
+    skipped: 'Skipped',
   };
   return labels[status] ?? status;
 }
@@ -26,8 +31,11 @@ export function formatSubtaskStatus(status: SubtaskStatus): string {
 export function formatFullDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -84,7 +92,8 @@ export function formatSubtaskList(subtasks: SubtaskSummary[]): string {
     lines.push(`  ID:        ${s.id}`);
     lines.push(`  Task:      ${s.taskId}`);
     if (s.assignedAgentId) lines.push(`  Assigned:  ${s.assignedAgentId}`);
-    if (s.result) lines.push(`  Result:    ${truncate(s.result, RESULT_PREVIEW_MAX)}`);
+    if (s.result)
+      lines.push(`  Result:    ${truncate(s.result, RESULT_PREVIEW_MAX)}`);
     if (s.retryCount > 0) lines.push(`  Retries:   ${s.retryCount}`);
     lines.push(`  Created:   ${formatFullDate(s.createdAt)}`);
     lines.push('');

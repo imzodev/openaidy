@@ -100,6 +100,8 @@ export type ExecutionSubtaskSummaryItem = {
   title: string;
   status: string;
   sessionId: string | null;
+  /** Result text (or failure/skip reason), truncated. Absent on older rows. */
+  result?: string | null;
 };
 
 /**
@@ -114,6 +116,8 @@ export type ExecutionSubtaskSummary = {
   failed: number;
   inProgress: number;
   pending: number;
+  /** Steps that never ran (branch not taken or upstream failed). */
+  skipped?: number;
   items: ExecutionSubtaskSummaryItem[];
 };
 

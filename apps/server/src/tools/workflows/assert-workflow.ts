@@ -20,6 +20,11 @@ type WorkflowLike = {
   planningEnabled?: boolean | number | null;
 };
 
+/** True for a workflow task, whichever way the DB returns the flag. */
+export function isWorkflowTask(task: WorkflowLike): boolean {
+  return task.planningEnabled === true || task.planningEnabled === 1;
+}
+
 export type AssertWorkflowResult = { ok: true } | { ok: false; error: string };
 
 /**
@@ -34,7 +39,7 @@ export function assertWorkflow(
   if (!task) {
     return { ok: false, error: 'Workflow not found' };
   }
-  if (task.planningEnabled !== true && task.planningEnabled !== 1) {
+  if (!isWorkflowTask(task)) {
     return {
       ok: false,
       error: `Task "${task.id}" is not a workflow (planningEnabled must be true). Use tasks_* tools for regular tasks, or set planningEnabled to convert it.`,

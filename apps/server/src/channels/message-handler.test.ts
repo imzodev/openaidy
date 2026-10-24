@@ -180,3 +180,62 @@ describe('handleInboundChannelMessage', () => {
     });
   });
 });
+
+describe('workflow triggers', () => {
+  it('lets a matching trigger answer instead of the agent', async () => {
+    const workflowTriggers = {
+      handleChannelMessage: vi.fn(async () => 'On it — running "Quotes".'),
+    };
+    const reply = await handleInboundChannelMessage({
+      ...baseParams,
+      text: 'quote 3 chairs',
+      candidateIds: ['user-1', 'alt-1'],
+      workflowTriggers,
+      replyTarget: 'chat-9',
+    });
+    expect(reply).toBe('On it — running "Quotes".');
+    expect(workflowTriggers.handleChannelMessage).toHaveBeenCalledWith({
+      channelId: 'server',
+      senderIds: ['user-1', 'alt-1'],
+      text: 'quote 3 chairs',
+      replyTarget: 'chat-9',
+    });
+    expect(mockSessionService.submitMessageNonStreaming).not.toHaveBeenCalled();
+  });
+
+  it('chats as usual when no trigger matches or the check fails', async () => {
+    const none = { handleChannelMessage: vi.fn(async () => null) };
+    expect(
+      await handleInboundChannelMessage({
+        ...baseParams,
+        workflowTriggers: none,
+        replyTarget: 'chat-9',
+      }),
+    ).toBe('Hello human!');
+
+    const broken = {
+      handleChannelMessage: vi.fn(async () => {
+        throw new Error('db down');
+      }),
+    };
+    expect(
+      await handleInboundChannelMessage({
+        ...baseParams,
+        workflowTriggers: broken,
+        replyTarget: 'chat-9',
+      }),
+    ).toBe('Hello human!');
+  });
+
+  it('does not check triggers for a sender the allowlist rejects', async () => {
+    const workflowTriggers = { handleChannelMessage: vi.fn(async () => 'x') };
+    const reply = await handleInboundChannelMessage({
+      ...baseParams,
+      allowlist: ['someone-else'],
+      workflowTriggers,
+      replyTarget: 'chat-9',
+    });
+    expect(reply).toBeNull();
+    expect(workflowTriggers.handleChannelMessage).not.toHaveBeenCalled();
+  });
+});

@@ -334,6 +334,40 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS task_execution_history_session_id_idx ON task_execution_history(session_id);
     CREATE INDEX IF NOT EXISTS task_execution_history_started_at_idx ON task_execution_history(started_at);
 
+    CREATE TABLE IF NOT EXISTS workflow_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      trigger TEXT NOT NULL DEFAULT 'manual',
+      status TEXT NOT NULL DEFAULT 'running',
+      session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+      history_id TEXT,
+      error TEXT,
+      summary TEXT,
+      input TEXT,
+      reply_target TEXT,
+      started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_runs_task_id_idx ON workflow_runs(task_id, started_at);
+    CREATE INDEX IF NOT EXISTS workflow_runs_status_idx ON workflow_runs(status);
+
+    CREATE TABLE IF NOT EXISTS workflow_triggers (
+      id TEXT PRIMARY KEY NOT NULL,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      secret_hash TEXT,
+      last_fired_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS workflow_triggers_task_id_idx ON workflow_triggers(task_id);
+    CREATE INDEX IF NOT EXISTS workflow_triggers_kind_idx ON workflow_triggers(kind);
+
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
@@ -762,6 +796,9 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     ['approval_decision', 'TEXT'],
     ['approval_note', 'TEXT'],
     ['approved_by', 'TEXT'],
+    // 0019_subtask_positions
+    ['position_x', 'INTEGER'],
+    ['position_y', 'INTEGER'],
   ];
   for (const [column, ddl] of subtaskColumnDefaults) {
     if (!tableInfo.some((col) => col.name === column)) {
@@ -792,6 +829,17 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
   }
   if (!edgeInfo.some((col) => col.name === 'condition_value')) {
     sqlite.exec(`ALTER TABLE subtask_edges ADD COLUMN condition_value TEXT`);
+  }
+
+  // Migration: run input and reply target (0020_workflow_triggers). The
+  // workflow_triggers table itself is created by initializeSqliteSchema.
+  const runInfo = sqlite.pragma('table_info(workflow_runs)') as Array<{
+    name: string;
+  }>;
+  for (const column of ['input', 'reply_target']) {
+    if (!runInfo.some((col) => col.name === column)) {
+      sqlite.exec(`ALTER TABLE workflow_runs ADD COLUMN ${column} TEXT`);
+    }
   }
 }
 
@@ -861,6 +909,18 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0016_workflow_conditions_loops_approval.sql'),
     'utf-8',
   );
+  const workflowRunsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0018_workflow_runs.sql'),
+    'utf-8',
+  );
+  const subtaskPositionsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0019_subtask_positions.sql'),
+    'utf-8',
+  );
+  const workflowTriggersMigrationSql = readFileSync(
+    resolve(drizzleDir, '0020_workflow_triggers.sql'),
+    'utf-8',
+  );
   const mcpOAuthCredentialsMigrationSql = readFileSync(
     resolve(drizzleDir, '0017_mcp_oauth_credentials.sql'),
     'utf-8',
@@ -874,6 +934,9 @@ export async function createDatabaseClient(
     await client.query(sessionFavoritesMigrationSql);
     await client.query(subtaskEdgesMigrationSql);
     await client.query(workflowMigrationSql);
+    await client.query(workflowRunsMigrationSql);
+    await client.query(subtaskPositionsMigrationSql);
+    await client.query(workflowTriggersMigrationSql);
     await client.query(mcpOAuthCredentialsMigrationSql);
   } finally {
     client.release();

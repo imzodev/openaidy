@@ -25,6 +25,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { SessionList } from './SessionList';
 import type { Session, AddonRecord } from '../lib/api';
 import { updateBadgeVisible } from '../stores/update-notice';
+import { usePendingApprovals } from '../lib/workflow-live';
 import { viewToRouteMap, RoutePaths } from '../lib/router';
 
 // A plain left-click (no modifier keys) is handled as an in-SPA
@@ -126,6 +127,8 @@ const navSections: NavSection[] = [
 ];
 
 export function Sidebar(props: SidebarProps) {
+  // Approval steps waiting on the user, shown as a badge on Workflows.
+  const pendingApprovals = usePendingApprovals();
   const [isCreating, setIsCreating] = createSignal(false);
 
   const isMobileViewport = () =>
@@ -300,9 +303,33 @@ export function Sidebar(props: SidebarProps) {
                         }`}
                         title={item.label}
                       >
-                        <Icon class="w-5 h-5 flex-shrink-0" />
+                        <span class="relative flex-shrink-0">
+                          <Icon class="w-5 h-5" />
+                          <Show
+                            when={
+                              item.id === 'workflows' &&
+                              props.isCollapsed &&
+                              pendingApprovals().length > 0
+                            }
+                          >
+                            <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500" />
+                          </Show>
+                        </span>
                         <Show when={!props.isCollapsed}>
-                          <span class="text-sm">{item.label}</span>
+                          <span class="text-sm flex-1">{item.label}</span>
+                          <Show
+                            when={
+                              item.id === 'workflows' &&
+                              pendingApprovals().length > 0
+                            }
+                          >
+                            <span
+                              class="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-semibold flex items-center justify-center"
+                              title={`${pendingApprovals().length} approval(s) waiting`}
+                            >
+                              {pendingApprovals().length}
+                            </span>
+                          </Show>
                         </Show>
                       </a>
                     );

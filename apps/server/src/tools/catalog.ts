@@ -406,11 +406,12 @@ export const workflowGetMeta: ToolMeta = {
   name: 'workflow_get',
   category: 'Workflows',
   description:
-    'Read the full state of a workflow: task metadata, all subtask nodes, ' +
-    'and every edge connecting them (including conditional, loop, and ' +
-    'dependency edges). Returns a JSON object whose shape is round-trippable: ' +
-    'workflow_create accepts the same `nodes`/`edges` arrays back, so this ' +
-    'is the canonical "fetch → mutate → save" pattern. ' +
+    'Read the full state of a workflow: task metadata, every node (step) ' +
+    'with its status, loop and assigned agent, every edge, and `problems` — ' +
+    'the errors that would stop it from running and warnings about things ' +
+    'that look unintended. The `nodes`/`edges` arrays can be edited and sent ' +
+    'back to workflow_set_graph as is (node ids act as keys), which is the ' +
+    'easiest way to make several changes at once. ' +
     'Pass includeNodes=false or includeEdges=false to slim the response when ' +
     'you only need one part.',
 };
@@ -419,21 +420,17 @@ export const workflowCreateMeta: ToolMeta = {
   name: 'workflow_create',
   category: 'Workflows',
   description:
-    'Create a new workflow (a Task with planningEnabled=true). The workflow ' +
-    'is immediately visible in the Workflows page. ' +
-    'REQUIRED: description (full prose of what the workflow achieves). ' +
-    'Optional: title (derived from description if absent), priority, ' +
-    'templateId (apply a built-in template atomically — see ' +
-    'workflow_apply_template for the template id list), and ' +
-    'templateInputs (a record of placeholder values for the template). ' +
-    'Workflows cannot be created without planning: planningEnabled is forced ' +
-    'to true regardless of what is passed. The auto-planner is suppressed ' +
-    '(skipAutoPlan=true): workflows are hand-authored graphs from the agent, ' +
-    'not AI-planned checklists. Build the graph yourself with ' +
-    'workflow_apply_template / workflow_node_create / workflow_edge_create; ' +
-    'do NOT chain this into tasks_create and expect the planner to fill it in. ' +
-    'Returns the new workflow ID and a summary of created nodes/edges if a ' +
-    'template was applied.',
+    'Create a new workflow, shown on the Workflows page. ' +
+    'REQUIRED: description (what the workflow achieves). ' +
+    'Best practice: pass the whole graph in the same call with `nodes` and ' +
+    '`edges` (same format as workflow_set_graph). It is validated first and ' +
+    'nothing is created if it has problems, so the workflow is runnable ' +
+    'the moment this returns. Alternatively pass templateId (+ ' +
+    'templateInputs) to start from a built-in template. Optional: title ' +
+    '(derived from description if absent), priority. ' +
+    'The graph is never filled in for you: without nodes or a template the ' +
+    'workflow starts empty. ' +
+    'Returns the workflow ID, each node key with its new id, and any warnings.',
 };
 
 export const workflowUpdateMeta: ToolMeta = {
@@ -442,9 +439,10 @@ export const workflowUpdateMeta: ToolMeta = {
   description:
     'Update an existing workflow — change its title, description, priority, ' +
     'or status. Pass only the fields you want to change; omitted fields are ' +
-    'left as-is. To edit the subtask graph (nodes/edges), use the dedicated ' +
-    'node/edge tools. Rejects any task whose planningEnabled is false (use ' +
-    'tasks_update for regular tasks). Returns the updated workflow summary.',
+    'left as-is. To change the steps, use workflow_set_graph (whole graph) ' +
+    'or the node/edge tools (one change at a time). Rejects any task whose ' +
+    'planningEnabled is false (use tasks_update for regular tasks). Returns ' +
+    'the updated workflow summary.',
 };
 
 export const workflowDeleteMeta: ToolMeta = {
@@ -458,31 +456,85 @@ export const workflowDeleteMeta: ToolMeta = {
     'If you only want to remove a single node, use the node tools instead.',
 };
 
+export const workflowApprovalListMeta: ToolMeta = {
+  name: 'workflow_approval_list',
+  category: 'Workflows',
+  description:
+    'List approval steps that are waiting for a person to approve or ' +
+    'reject them, across all workflows (oldest first). Use this to tell ' +
+    'the user what is waiting on them, then pass their decision to ' +
+    'workflow_approval_resolve.',
+};
+
+export const workflowApprovalResolveMeta: ToolMeta = {
+  name: 'workflow_approval_resolve',
+  category: 'Workflows',
+  description:
+    "Approve or reject a waiting approval step on the user's behalf. Only " +
+    'call this with a decision the user actually gave you — never decide ' +
+    'yourself. The workflow then continues: approved follows the normal ' +
+    'path, rejected follows any branch whose condition is "rejected".',
+};
+
 export const workflowExecuteMeta: ToolMeta = {
   name: 'workflow_execute',
   category: 'Workflows',
   description:
-    'Run a workflow. By default this starts the workflow from its first ' +
-    'ready-to-execute nodes (the workflow entry points — nodes with no unmet ' +
-    'dependencies). Pass subtaskId to execute a single node in isolation ' +
-    '(useful for retries or for running one branch independently). ' +
-    'Returns the session id(s) that were started; the runs are async, so ' +
-    'follow up with sessions_read to track progress. ' +
+    'Run a workflow. By default this starts a new run of the whole ' +
+    'workflow: every node is reset, then the entry nodes start and the ' +
+    'rest follow as their dependencies finish. Fails if a run is already ' +
+    'going, or if the graph has problems (they are listed; fix them with ' +
+    'workflow_set_graph). Pass subtaskId to start one ready node of the ' +
+    'current run instead (a run is started without resetting if none is ' +
+    'going). Returns immediately with the run id; nodes run in the ' +
+    'background, so check progress with workflow_get. ' +
     'Rejects any task whose planningEnabled is false.',
+};
+
+export const workflowTriggerCreateMeta: ToolMeta = {
+  name: 'workflow_trigger_create',
+  category: 'Workflows',
+  description:
+    'Make a workflow start by itself. kind "webhook" creates a URL that ' +
+    'other services (forms, Zapier, Stripe…) POST to; the request body ' +
+    'becomes the workflow input, and the token is shown only once. kind ' +
+    '"channel_message" starts the workflow when a message on a channel ' +
+    '(WhatsApp, Discord) matches — e.g. matchType "starts_with", matchValue ' +
+    '"quote" — gives every step the message as input, replies right away, ' +
+    'and sends the result back to the same chat when the run ends. A ' +
+    'matching message goes to the workflow instead of the chat agent. ' +
+    'Optional: senders (limit who can trigger it), ackText, replyWithResult.',
+};
+
+export const workflowTriggerListMeta: ToolMeta = {
+  name: 'workflow_trigger_list',
+  category: 'Workflows',
+  description:
+    'List the triggers (webhooks and message triggers) of one workflow, or ' +
+    'of every workflow when workflowId is omitted, with their ids, rules ' +
+    'and when they last fired.',
+};
+
+export const workflowTriggerDeleteMeta: ToolMeta = {
+  name: 'workflow_trigger_delete',
+  category: 'Workflows',
+  description:
+    'Delete a workflow trigger by id (see workflow_trigger_list). A deleted ' +
+    'webhook URL stops working immediately.',
 };
 
 export const workflowApplyTemplateMeta: ToolMeta = {
   name: 'workflow_apply_template',
   category: 'Workflows',
   description:
-    'Apply a built-in workflow template to an existing workflow, replacing ' +
-    'its current subtask graph with the template nodes and edges. ' +
+    "Add a built-in template's nodes and edges to an existing workflow. " +
     'Available template IDs: "software-development" (a multi-stage software ' +
     'delivery workflow). Pass templateInputs to fill template placeholders ' +
     '(each template declares its own inputs; required ones must be provided). ' +
-    'Pass clearExisting=true to remove all existing nodes/edges before the ' +
-    'template is applied (default false: the template graph is added on top ' +
-    'of whatever is there). ' +
+    'By default the template is added next to the existing nodes; pass ' +
+    'clearExisting=true to replace them instead (the old nodes are only ' +
+    'removed once the template is in place, so a failure changes nothing). ' +
+    'Refused while the workflow is running. ' +
     'Rejects any task whose planningEnabled is false. ' +
     'Returns the count of nodes and edges created.',
 };
@@ -513,7 +565,8 @@ export const workflowNodeCreateMeta: ToolMeta = {
     'iteration cap is hit), assignedAgentId (must reference an existing ' +
     'enabled agent), orderIndex (cosmetic layout hint). ' +
     'Edges are NOT created here — use workflow_edge_create after the node ' +
-    'exists so the graph mutation is explicit and reviewable. ' +
+    'exists. To build several nodes at once, workflow_set_graph is simpler. ' +
+    'Refused while the workflow is running. ' +
     'Returns the new node ID and its initial status.',
 };
 
@@ -525,9 +578,10 @@ export const workflowNodeUpdateMeta: ToolMeta = {
     'change — omitted fields keep their current value. ' +
     'Optional fields: title, description, subtaskKind, loop (set to null ' +
     'explicitly to clear an existing loop; omit to preserve it), orderIndex. ' +
-    "If you change the node's title or description, a node that was already " +
-    "'completed' or 'failed' is automatically reset to 'pending' so the next " +
-    'execution picks up the new instructions — no special-casing required. ' +
+    'Turning a node into an approval_gate drops its loop. ' +
+    "If a 'completed' node changes, it and the nodes after it go back to " +
+    "'pending' so the next run redoes them; a 'failed' node stays failed so " +
+    'it can still be retried. Refused while the workflow is running. ' +
     'Refuses any node whose parent task has planningEnabled=false.',
 };
 
@@ -553,9 +607,32 @@ export const workflowEdgeCreateMeta: ToolMeta = {
     'REQUIRED: workflowId, fromNodeId, toNodeId. ' +
     'Optional edgeKind (default "dependency"; use "conditional" to gate ' +
     'on the upstream result), conditionOperator + conditionValue (required ' +
-    'when edgeKind=conditional). The service rejects self-edges and ' +
-    'cycles, so an edge that would deadlock the graph returns an error ' +
-    'instead of being persisted.',
+    'when edgeKind=conditional). Self-edges, cycles, duplicate edges and ' +
+    'invalid regexes are rejected with an explanation instead of being ' +
+    'saved. Refused while the workflow is running.',
+};
+
+export const workflowSetGraphMeta: ToolMeta = {
+  name: 'workflow_set_graph',
+  category: 'Workflows',
+  description:
+    "Replace a workflow's whole graph in one call — the most reliable way " +
+    'to build or restructure a workflow. Pass every node and edge; anything ' +
+    'not listed is removed. The graph is validated first and nothing is ' +
+    'changed if it has problems: the error lists each one (e.g. ' +
+    '`Edge 3 (code → tests): unknown node "tests"`) so you can fix them ' +
+    'and call again. Pass dryRun=true to only validate. ' +
+    'Nodes: {key, title?, description, kind? ("agent" | "approval_gate"), ' +
+    'agent? (id or name), loop? {maxIterations, conditionOperator, ' +
+    'conditionValue}}. Edges: {from, to, condition?, operator?}: with a ' +
+    'condition the edge is only taken when the OUTCOME of `from` matches it ' +
+    '(operator equals (default) | contains | matches_regex, e.g. ' +
+    'condition "approved"). ' +
+    'An agent step chooses a branch by ending its reply with a line ' +
+    '`OUTCOME: <value>`; an approval step ends as "approved" or "rejected". ' +
+    'A step runs when at least one incoming edge is satisfied; untaken ' +
+    'branches are skipped. Refused while the workflow is running. ' +
+    'Returns each node key with its new id, plus warnings.',
 };
 
 export const workflowEdgeUpdateMeta: ToolMeta = {
@@ -759,7 +836,13 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowUpdateMeta,
   workflowDeleteMeta,
   workflowExecuteMeta,
+  workflowApprovalListMeta,
+  workflowApprovalResolveMeta,
   workflowApplyTemplateMeta,
+  workflowSetGraphMeta,
+  workflowTriggerCreateMeta,
+  workflowTriggerListMeta,
+  workflowTriggerDeleteMeta,
   workflowListMeta,
   workflowNodeCreateMeta,
   workflowNodeUpdateMeta,

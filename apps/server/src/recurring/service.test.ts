@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   RecurringTasksService,
   type RecurringTasksServiceOptions,
 } from './service';
-import type { TaskSchedule, TaskExecutionHistoryRow } from '@openaidy/db';
+import type { TaskSchedule } from '@openaidy/db';
 import type { TaskScheduleExecutor } from '../tasks/execution/task-schedule-executor';
-import type { RunEvent } from '../dispatch/events';
 
 // ============================================================================
 // Fakes
@@ -26,28 +25,6 @@ const makeSchedule = (overrides: Partial<TaskSchedule> = {}): TaskSchedule => ({
   descriptionHash: null,
   createdAt: new Date('2026-06-01T00:00:00Z'),
   updatedAt: new Date('2026-06-01T00:00:00Z'),
-  ...overrides,
-});
-
-const makeHistory = (
-  overrides: Partial<TaskExecutionHistoryRow> = {},
-): TaskExecutionHistoryRow => ({
-  id: 'hist-1',
-  taskId: 'task-1',
-  scheduleId: 'sched-1',
-  status: 'verifying',
-  startedAt: new Date(Date.now() - 1000), // 1 second ago
-  finishedAt: null,
-  durationMs: null,
-  sessionId: 'session-1',
-  taskTitle: 'T',
-  taskDescription: 'D',
-  didReplan: false,
-  errorCode: null,
-  errorMessage: null,
-  attemptNumber: 1,
-  subtaskSummary: null,
-  createdAt: new Date(),
   ...overrides,
 });
 
@@ -192,19 +169,12 @@ function makeHarness(
 
 describe('RecurringTasksService', () => {
   describe('start/stop', () => {
-    it('subscribes to run events on start and unsubscribes on stop', async () => {
-      const h = makeHarness();
-      h.service.start();
-      expect(h.runEvents.subscribeAll).toHaveBeenCalledOnce();
-      await h.service.stop();
-      expect(h.unsubscribe).toHaveBeenCalled();
-    });
-
-    it('start is idempotent', () => {
+    it('start is idempotent', async () => {
       const h = makeHarness();
       h.service.start();
       h.service.start();
-      expect(h.runEvents.subscribeAll).toHaveBeenCalledOnce();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(h.taskSchedulesRepo.recoverStuckSchedules).toHaveBeenCalledOnce();
     });
 
     it('recovers stuck schedules on start', async () => {
@@ -263,182 +233,6 @@ describe('RecurringTasksService', () => {
       // running. We assert the contract here: tick rejects with the
       // executor's error.
       await expect(h.service.tick()).rejects.toThrow('explode');
-    });
-  });
-
-  // --------------------------------------------------------------------------
-  // Run-event subscription (history finalisation)
-  // --------------------------------------------------------------------------
-  describe('run-event subscription', () => {
-    let _capturedHandler: (event: RunEvent) => Promise<void>;
-
-    beforeEach(() => {
-      _capturedHandler = undefined as unknown as (
-        event: RunEvent,
-      ) => Promise<void>;
-    });
-
-    const startAndCaptureHandler = (
-      h: Harness,
-    ): ((event: RunEvent) => Promise<void>) => {
-      h.service.start();
-      // subscribeAll is called with a handler; capture it.
-      const handler = h.runEvents.subscribeAll.mock.calls[0]![0] as (
-        event: RunEvent,
-      ) => Promise<void>;
-      _capturedHandler = handler;
-      return handler;
-    };
-
-    it('marks history completed on run.completed for task sessions', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      const history = makeHistory();
-      h.taskExecutionHistoryRepo.findBySessionId.mockResolvedValue(history);
-      h.getSessionType.mockResolvedValue('task');
-
-      await handler({
-        type: 'run.completed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.spies.findBySessionId).toHaveBeenCalledWith('session-1');
-      expect(h.spies.markCompleted).toHaveBeenCalledWith(
-        'hist-1',
-        expect.any(Number),
-      );
-      expect(h.spies.markFailed).not.toHaveBeenCalled();
-    });
-
-    it('marks history failed on run.failed for task sessions', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      const history = makeHistory();
-      h.taskExecutionHistoryRepo.findBySessionId.mockResolvedValue(history);
-
-      await handler({
-        type: 'run.failed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.spies.markFailed).toHaveBeenCalledWith(
-        'hist-1',
-        expect.any(Number),
-        expect.objectContaining({ code: 'RUN_FAILED' }),
-      );
-    });
-
-    it('ignores run events for non-task sessions', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      h.getSessionType.mockResolvedValue('subtask');
-
-      await handler({
-        type: 'run.completed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.taskExecutionHistoryRepo.findBySessionId).not.toHaveBeenCalled();
-      expect(h.taskExecutionHistoryRepo.markCompleted).not.toHaveBeenCalled();
-    });
-
-    it('ignores run events with no matching history row', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      h.taskExecutionHistoryRepo.findBySessionId.mockResolvedValue(null);
-
-      await handler({
-        type: 'run.completed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.taskExecutionHistoryRepo.markCompleted).not.toHaveBeenCalled();
-    });
-
-    it('is idempotent for terminal history rows', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      h.taskExecutionHistoryRepo.findBySessionId.mockResolvedValue(
-        makeHistory({ status: 'completed' }),
-      );
-
-      await handler({
-        type: 'run.completed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.taskExecutionHistoryRepo.markCompleted).not.toHaveBeenCalled();
-    });
-
-    it('ignores non-terminal run events (run.delta, run.started, etc.)', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-
-      await handler({
-        type: 'run.delta',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: { content: 'a' },
-      });
-
-      expect(h.taskExecutionHistoryRepo.findBySessionId).not.toHaveBeenCalled();
-    });
-
-    it('survives session-type lookup failures (silent skip)', async () => {
-      const h = makeHarness();
-      const handler = startAndCaptureHandler(h);
-      h.getSessionType.mockRejectedValue(new Error('session lookup boom'));
-
-      // Should not throw.
-      await handler({
-        type: 'run.completed',
-        runId: 'r-1',
-        sessionId: 'session-1',
-        agentId: 'a-1',
-        timestamp: new Date().toISOString(),
-        data: {},
-      });
-
-      expect(h.taskExecutionHistoryRepo.findBySessionId).not.toHaveBeenCalled();
-    });
-
-    it('does not subscribe when no runEvents were provided', async () => {
-      const h = makeHarness();
-      // Build a service without runEvents.
-      const service = new RecurringTasksService({
-        taskSchedulesRepo: h.taskSchedulesRepo,
-        taskExecutionHistoryRepo: h.taskExecutionHistoryRepo,
-        executor: h.executor as unknown as TaskScheduleExecutor,
-        logger: h.log,
-        pollIntervalMs: 60_000,
-      } as unknown as RecurringTasksServiceOptions);
-      service.start();
-      // No subscribeAll call
-      expect(h.runEvents.subscribeAll).not.toHaveBeenCalled();
-      await service.stop();
-      // stop() should still work without the unsubscribe
     });
   });
 });
