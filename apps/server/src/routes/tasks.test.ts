@@ -54,6 +54,9 @@ const createMockTaskService = () => ({
   cancelRun: vi.fn(),
   retrySubtask: vi.fn(),
   listPendingApprovals: vi.fn(),
+  checkWorkflow: vi.fn(),
+  setWorkflowGraph: vi.fn(),
+  saveWorkflowLayout: vi.fn(),
 });
 
 type MockTaskService = ReturnType<typeof createMockTaskService>;
@@ -85,6 +88,9 @@ const buildApp = () => {
     }),
     patch: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'PATCH', url, handler });
+    }),
+    put: vi.fn((url: string, handler: RouteHandler) => {
+      routes.push({ method: 'PUT', url, handler });
     }),
     delete: vi.fn((url: string, handler: RouteHandler) => {
       routes.push({ method: 'DELETE', url, handler });
@@ -1361,6 +1367,164 @@ describe('taskRoutes', () => {
       const reply = { code: vi.fn().mockReturnThis() };
       await r.handler({ params: { id: 'sub1' } }, reply);
       expect(reply.code).toHaveBeenCalledWith(409);
+    });
+  });
+
+  describe('workflow graph', () => {
+    async function route(method: string, url: string) {
+      const app = buildApp();
+      await taskRoutes(app, {
+        taskService: mockService as unknown as TaskService,
+        authMiddleware: mockAuthMiddleware,
+      });
+      return app._routes.find((r) => r.method === method && r.url === url)!;
+    }
+
+    it('replaces the graph from a declarative spec', async () => {
+      const r = await route('PUT', '/tasks/:id/graph');
+      mockService.setWorkflowGraph.mockResolvedValue({
+        ok: true,
+        data: { nodes: [], edgeCount: 1, warnings: [] },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler(
+        {
+          params: { id: 'task1' },
+          body: {
+            nodes: [
+              { key: 'draft', description: 'Write it', agent: 'Writer' },
+              { key: 'ok', kind: 'approval_gate' },
+            ],
+            edges: [{ from: 'draft', to: 'ok', condition: 'done' }],
+          },
+        },
+        reply,
+      )) as { ok: boolean };
+      expect(result.ok).toBe(true);
+      expect(mockService.setWorkflowGraph).toHaveBeenCalledWith(
+        'task1',
+        {
+          nodes: [
+            expect.objectContaining({ key: 'draft', agentId: 'Writer' }),
+            expect.objectContaining({ key: 'ok', kind: 'approval_gate' }),
+          ],
+          edges: [
+            {
+              from: 'draft',
+              to: 'ok',
+              edgeKind: 'conditional',
+              conditionOperator: 'equals',
+              conditionValue: 'done',
+            },
+          ],
+        },
+        { dryRun: false },
+      );
+    });
+
+    it('rejects a malformed spec before reaching the service', async () => {
+      const r = await route('PUT', '/tasks/:id/graph');
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler(
+        { params: { id: 'task1' }, body: { nodes: [{ title: 'no key' }] } },
+        reply,
+      )) as { error: { message: string } };
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(result.error.message).toContain('nodes[0] needs a "key"');
+      expect(mockService.setWorkflowGraph).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 with the issues for an invalid graph', async () => {
+      const r = await route('PUT', '/tasks/:id/graph');
+      mockService.setWorkflowGraph.mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'workflow.invalid_graph',
+          message: 'bad',
+          details: { issues: [] },
+        },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler(
+        { params: { id: 'task1' }, body: { nodes: [], edges: [] } },
+        reply,
+      );
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('returns 409 for edits while a run is going', async () => {
+      const r = await route('PATCH', '/subtasks/:id');
+      mockService.updateSubtask.mockResolvedValue({
+        ok: false,
+        error: { code: 'workflow.locked', message: 'running' },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler(
+        { params: { id: 'sub1' }, body: { description: 'new' } },
+        reply,
+      );
+      expect(reply.code).toHaveBeenCalledWith(409);
+    });
+
+    it('validates the loop on PATCH /subtasks/:id', async () => {
+      const r = await route('PATCH', '/subtasks/:id');
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler(
+        {
+          params: { id: 'sub1' },
+          body: { loop: { maxIterations: 0, conditionOperator: 'equals' } },
+        },
+        reply,
+      )) as { error: { code: string } };
+      expect(reply.code).toHaveBeenCalledWith(400);
+      expect(result.error.code).toBe('validation.invalid_request');
+      expect(mockService.updateSubtask).not.toHaveBeenCalled();
+    });
+
+    it('returns the pre-run check', async () => {
+      const r = await route('GET', '/tasks/:id/workflow-check');
+      const check = { ok: true, errors: [], warnings: [] };
+      mockService.checkWorkflow.mockResolvedValue({ ok: true, data: check });
+      const result = (await r.handler(
+        { params: { id: 'task1' } },
+        { code: vi.fn().mockReturnThis() },
+      )) as { data: unknown };
+      expect(result.data).toEqual(check);
+    });
+
+    it('saves the canvas layout', async () => {
+      const r = await route('PUT', '/tasks/:id/layout');
+      mockService.saveWorkflowLayout.mockResolvedValue({
+        ok: true,
+        data: { updated: 1 },
+      });
+      const reply = { code: vi.fn().mockReturnThis() };
+      await r.handler(
+        {
+          params: { id: 'task1' },
+          body: { positions: { sub1: { x: 1, y: 2 } } },
+        },
+        reply,
+      );
+      expect(mockService.saveWorkflowLayout).toHaveBeenCalledWith('task1', {
+        sub1: { x: 1, y: 2 },
+      });
+
+      await r.handler(
+        { params: { id: 'task1' }, body: { positions: { sub1: { x: 'a' } } } },
+        reply,
+      );
+      expect(reply.code).toHaveBeenCalledWith(400);
+    });
+
+    it('unassigns an agent with agentId null', async () => {
+      const r = await route('POST', '/subtasks/:id/assign');
+      mockService.assignSubtaskAgent.mockResolvedValue({ ok: true, data: {} });
+      await r.handler(
+        { params: { id: 'sub1' }, body: { agentId: null } },
+        { code: vi.fn().mockReturnThis() },
+      );
+      expect(mockService.assignSubtaskAgent).toHaveBeenCalledWith('sub1', null);
     });
   });
 });

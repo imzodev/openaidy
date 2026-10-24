@@ -765,6 +765,9 @@ function runSqliteMigrations(sqlite: InstanceType<typeof Database>) {
     ['approval_decision', 'TEXT'],
     ['approval_note', 'TEXT'],
     ['approved_by', 'TEXT'],
+    // 0019_subtask_positions
+    ['position_x', 'INTEGER'],
+    ['position_y', 'INTEGER'],
   ];
   for (const [column, ddl] of subtaskColumnDefaults) {
     if (!tableInfo.some((col) => col.name === column)) {
@@ -868,6 +871,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0018_workflow_runs.sql'),
     'utf-8',
   );
+  const subtaskPositionsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0019_subtask_positions.sql'),
+    'utf-8',
+  );
   const client = await pool.connect();
   try {
     await client.query(migrationSql);
@@ -878,6 +885,7 @@ export async function createDatabaseClient(
     await client.query(subtaskEdgesMigrationSql);
     await client.query(workflowMigrationSql);
     await client.query(workflowRunsMigrationSql);
+    await client.query(subtaskPositionsMigrationSql);
   } finally {
     client.release();
   }

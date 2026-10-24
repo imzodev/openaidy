@@ -149,4 +149,44 @@ describe('SubtasksRepository — workflow graph (sqlite)', () => {
     expect(deleted?.id).toBe(edge.id);
     expect(await subtasksRepo.listEdgesByTaskFull(task.id)).toHaveLength(0);
   });
+
+  it('assigns and clears an agent without changing the status', async () => {
+    const task = await setup();
+    const subtask = await subtasksRepo.create({
+      taskId: task.id,
+      title: 'Write',
+      description: 'Write it',
+    });
+    const assigned = await subtasksRepo.assignAgent(subtask.id, 'writer');
+    expect(assigned?.assignedAgentId).toBe('writer');
+    expect(assigned?.status).toBe('pending');
+    const cleared = await subtasksRepo.assignAgent(subtask.id, null);
+    expect(cleared?.assignedAgentId).toBeNull();
+  });
+
+  it('saves canvas positions for nodes of the task only', async () => {
+    const task = await setup();
+    const other = await tasksRepo.create({ title: 'Other', description: 'x' });
+    const mine = await subtasksRepo.create({
+      taskId: task.id,
+      title: 'Mine',
+      description: 'x',
+    });
+    const theirs = await subtasksRepo.create({
+      taskId: other.id,
+      title: 'Theirs',
+      description: 'x',
+    });
+    expect(mine.positionX).toBeNull();
+
+    const count = await subtasksRepo.setPositions(task.id, {
+      [mine.id]: { x: 10.6, y: -4 },
+      [theirs.id]: { x: 1, y: 1 },
+    });
+    expect(count).toBe(1);
+    const reloaded = await subtasksRepo.findById(mine.id);
+    expect(reloaded?.positionX).toBe(11);
+    expect(reloaded?.positionY).toBe(-4);
+    expect((await subtasksRepo.findById(theirs.id))?.positionX).toBeNull();
+  });
 });

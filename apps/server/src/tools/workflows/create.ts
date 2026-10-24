@@ -2,15 +2,22 @@ import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { formatToolError, requireService, requireString } from '../shared.js';
 import { workflowCreateMeta } from '../catalog.js';
+import { parseGraphSpec } from '../../tasks/graph-spec';
+import {
+  GRAPH_EDGES_PARAM,
+  GRAPH_NODES_PARAM,
+  formatCreatedNodes,
+} from './graph-params.js';
 
 /**
  * workflow_create
  *
  * Creates a workflow (a Task with planningEnabled forced to true) and
- * optionally seeds it from a built-in template in the same call. The
- * two operations run atomically: if template application fails after the
- * task was created, the task is rolled back so the agent never sees a
- * half-built workflow that does not match its intent.
+ * optionally builds its graph in the same call — from declarative
+ * `nodes`/`edges` (validated before anything is created) or from a
+ * built-in template. If building the graph fails after the task was
+ * created, the task is rolled back so the agent never sees a half-built
+ * workflow that does not match its intent.
  */
 export function createWorkflowCreateTool(
   getTaskService: () => TaskService | undefined,
@@ -39,10 +46,13 @@ export function createWorkflowCreateTool(
           enum: ['low', 'medium', 'high', 'urgent'],
           description: 'Priority level of the workflow. Defaults to medium.',
         },
+        nodes: GRAPH_NODES_PARAM,
+        edges: GRAPH_EDGES_PARAM,
         templateId: {
           type: 'string',
           description:
             'Optional ID of a built-in workflow template to apply ' +
+            '(instead of nodes/edges) ' +
             'atomically after the workflow is created. Currently supported: ' +
             '"software-development".',
         },
@@ -101,6 +111,31 @@ export function createWorkflowCreateTool(
         }
       }
 
+      const hasGraph = args['nodes'] !== undefined && args['nodes'] !== null;
+      if (hasGraph && typeof templateId === 'string' && templateId) {
+        return {
+          ok: false,
+          error: 'Pass either nodes/edges or templateId, not both.',
+        };
+      }
+      const spec = hasGraph
+        ? parseGraphSpec(args['nodes'], args['edges'])
+        : null;
+      if (spec && !spec.ok) {
+        return { ok: false, error: `The graph is malformed:\n${spec.error}` };
+      }
+      if (spec?.ok) {
+        // Validate before creating anything, so a bad graph leaves no
+        // empty workflow behind for the agent to clean up.
+        const check = taskService.checkWorkflowGraph(spec.graph);
+        if (!check.ok) {
+          return {
+            ok: false,
+            error: `The workflow graph has problems, so nothing was created:\n${check.errors.map((e) => `- ${e.message}`).join('\n')}`,
+          };
+        }
+      }
+
       const descriptionText = description as string;
       const resolvedTitle =
         (title as string | undefined) ??
@@ -138,6 +173,24 @@ export function createWorkflowCreateTool(
         }
 
         const workflowId = createResult.data.id;
+
+        if (spec?.ok) {
+          const graphResult = await taskService.setWorkflowGraph(
+            workflowId,
+            spec.graph,
+          );
+          if (!graphResult.ok) {
+            await taskService.deleteTask(workflowId);
+            return {
+              ok: false,
+              error: `${graphResult.error.message}\n\nNothing was created.`,
+            };
+          }
+          return {
+            ok: true,
+            content: `Workflow created.\n\nID: ${workflowId}\nTitle: ${createResult.data.title}\n${formatCreatedNodes(graphResult.data)}`,
+          };
+        }
 
         if (typeof templateId === 'string' && templateId) {
           const inputs =

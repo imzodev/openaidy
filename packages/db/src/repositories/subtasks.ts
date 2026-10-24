@@ -338,23 +338,48 @@ export class SubtasksRepository {
   }
 
   /**
-   * Assign an agent to a subtask
+   * Assign an agent to a subtask, or clear the assignment with `null` (the
+   * session's default agent then runs it). Status is left alone: which
+   * agent runs a step is configuration, and moving a step out of
+   * `pending` here would keep the workflow engine from ever claiming it.
    */
   async assignAgent(
     id: string,
-    agentId: string,
+    agentId: string | null,
   ): Promise<schema.Subtask | null> {
     const results = await this.db
       .update(schema.subtasks)
       .set({
         assignedAgentId: agentId,
-        status: 'assigned',
         updatedAt: new Date(),
       })
       .where(eq(schema.subtasks.id, id))
       .returning();
 
     return results[0] ?? null;
+  }
+
+  /**
+   * Save canvas positions for a task's nodes. Ids that aren't nodes of
+   * `taskId` are ignored. Doesn't touch `updatedAt`: moving a node isn't
+   * an edit to the step.
+   */
+  async setPositions(
+    taskId: string,
+    positions: Record<string, { x: number; y: number }>,
+  ): Promise<number> {
+    let updated = 0;
+    for (const [id, { x, y }] of Object.entries(positions)) {
+      const results = await this.db
+        .update(schema.subtasks)
+        .set({ positionX: Math.round(x), positionY: Math.round(y) })
+        .where(
+          and(eq(schema.subtasks.id, id), eq(schema.subtasks.taskId, taskId)),
+        )
+        .returning({ id: schema.subtasks.id });
+      updated += results.length;
+    }
+    return updated;
   }
 
   /**

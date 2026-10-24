@@ -2,6 +2,7 @@
  * API client for task endpoints
  */
 
+import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
 import { API_BASE } from './api';
 import { getStoredToken } from './auth-token';
 import type {
@@ -158,6 +159,9 @@ export type Subtask = {
   awaitingApprovalSince?: string | null;
   approvalDecision?: 'approved' | 'rejected' | null;
   approvalNote?: string | null;
+  /** Saved canvas position; null/absent means auto-layout. */
+  positionX?: number | null;
+  positionY?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -244,6 +248,7 @@ type ApiError = {
   error: {
     code: string;
     message: string;
+    details?: Record<string, unknown>;
   };
 };
 
@@ -588,9 +593,10 @@ export async function deleteSubtaskEdge(
 /**
  * (Re)assign an agent to a subtask.
  */
+/** Assign an agent to a step, or `null` to use the default agent. */
 export async function assignSubtaskAgent(
   id: string,
-  agentId: string,
+  agentId: string | null,
 ): Promise<ApiResult<Subtask>> {
   const response = await apiFetch(`${API_BASE}/api/subtasks/${id}/assign`, {
     method: 'POST',
@@ -645,6 +651,34 @@ export async function cancelWorkflowRun(
     `${API_BASE}/api/tasks/${taskId}/runs/cancel`,
     { method: 'POST' },
   );
+  return response.json();
+}
+
+/**
+ * What would stop the workflow from running (errors) and what looks
+ * unintended (warnings) — the pre-run checklist.
+ */
+export async function checkWorkflow(
+  taskId: string,
+): Promise<ApiResult<WorkflowGraphCheck>> {
+  const response = await apiFetch(
+    `${API_BASE}/api/tasks/${taskId}/workflow-check`,
+  );
+  return response.json();
+}
+
+/**
+ * Save where the workflow's nodes sit on the canvas.
+ */
+export async function saveWorkflowLayout(
+  taskId: string,
+  positions: Record<string, { x: number; y: number }>,
+): Promise<ApiResult<{ updated: number }>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/layout`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ positions }),
+  });
   return response.json();
 }
 

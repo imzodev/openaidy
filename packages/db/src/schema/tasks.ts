@@ -158,6 +158,9 @@ export const subtasks = pgTable(
     approvalDecision: text('approval_decision'),
     approvalNote: text('approval_note'),
     approvedBy: text('approved_by'),
+    // Where the node sits on the workflow canvas (null = auto-layout).
+    positionX: integer('position_x'),
+    positionY: integer('position_y'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

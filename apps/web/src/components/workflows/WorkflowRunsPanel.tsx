@@ -37,6 +37,12 @@ const TRIGGER_LABEL: Record<WorkflowRunDto['trigger'], string> = {
   agent: 'Agent',
 };
 
+/** A rejected approval step completes with `OUTCOME: rejected`. */
+function isRejected(result: string | null | undefined): boolean {
+  const outcomes = result?.match(/^OUTCOME:\s*(.+)$/gim);
+  return /rejected\s*$/i.test(outcomes?.at(-1) ?? '');
+}
+
 /** "12s", "4m 05s", "1h 02m". */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -144,6 +150,11 @@ export function WorkflowRunsPanel(props: WorkflowRunsPanelProps) {
                                       <span class="font-medium text-text-primary truncate flex-1">
                                         {item.title}
                                       </span>
+                                      <Show when={isRejected(item.result)}>
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                                          Rejected
+                                        </span>
+                                      </Show>
                                       <Show when={item.sessionId}>
                                         <a
                                           href={`/chat?sessionId=${item.sessionId}`}

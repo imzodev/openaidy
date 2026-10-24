@@ -114,6 +114,14 @@ export function createWorkflowGetTool(
           }));
         }
 
+        const check = await taskService.checkWorkflow(workflowId);
+        if (check.ok) {
+          payload['problems'] = {
+            errors: check.data.errors.map((e) => e.message),
+            warnings: check.data.warnings.map((w) => w.message),
+          };
+        }
+
         return {
           ok: true,
           content: JSON.stringify(payload, null, 2),

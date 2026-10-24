@@ -5,6 +5,7 @@ import {
   extractOutcome,
   wouldCreateCycle,
   subtaskNeedsOutcomeTag,
+  expectedOutcomes,
   type SubtaskDependencyEdge,
 } from './subtask-graph';
 import type { Subtask } from '@openaidy/db';
@@ -32,6 +33,8 @@ function makeSubtask(overrides: Partial<Subtask> = {}): Subtask {
     approvalDecision: null,
     approvalNote: null,
     approvedBy: null,
+    positionX: null,
+    positionY: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -228,5 +231,47 @@ describe('subtaskNeedsOutcomeTag', () => {
       { subtaskId: 'b', dependsOnSubtaskId: 'a', edgeKind: 'dependency' },
     ];
     expect(subtaskNeedsOutcomeTag(subtask, edges)).toBe(false);
+  });
+});
+
+describe('expectedOutcomes', () => {
+  it('lists the values outgoing branches and the loop wait for', () => {
+    const subtask = makeSubtask({
+      id: 'review',
+      loopMaxIterations: 3,
+      loopConditionOperator: 'equals',
+      loopConditionValue: 'PASS',
+    });
+    const edges = [
+      {
+        subtaskId: 'a',
+        dependsOnSubtaskId: 'review',
+        edgeKind: 'conditional',
+        conditionOperator: 'equals',
+        conditionValue: 'approved',
+      },
+      {
+        subtaskId: 'b',
+        dependsOnSubtaskId: 'review',
+        edgeKind: 'conditional',
+        conditionOperator: 'contains',
+        conditionValue: ' Approved ',
+      },
+      {
+        subtaskId: 'c',
+        dependsOnSubtaskId: 'review',
+        edgeKind: 'conditional',
+        conditionOperator: 'matches_regex',
+        conditionValue: '^fix',
+      },
+      {
+        subtaskId: 'review',
+        dependsOnSubtaskId: 'x',
+        edgeKind: 'conditional',
+        conditionOperator: 'equals',
+        conditionValue: 'upstream',
+      },
+    ];
+    expect(expectedOutcomes(subtask, edges)).toEqual(['approved', 'PASS']);
   });
 });

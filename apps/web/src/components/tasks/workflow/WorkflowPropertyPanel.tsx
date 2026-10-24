@@ -42,22 +42,25 @@ export type WorkflowPropertyPanelProps = {
   agents?: Agent[];
   selection: WorkflowSelection;
   onAddSubtask: (kind: SubtaskKind) => void;
+  /** Resolves true once the server saved the change. */
   onUpdateSubtask: (
     id: string,
     updates: {
       title?: string;
       description?: string;
+      subtaskKind?: SubtaskKind;
       loop?: LoopConfig | null;
     },
-  ) => void;
+  ) => Promise<boolean>;
   onDeleteSubtask: (id: string) => void;
+  /** Resolves true once the server saved the change. */
   onUpdateEdge: (
     id: string,
     updates: {
       edgeKind?: 'dependency' | 'conditional';
       condition?: EdgeCondition | null;
     },
-  ) => void;
+  ) => Promise<boolean>;
   onDeleteEdge: (id: string) => void;
   onResolveApproval: (
     id: string,
@@ -65,7 +68,10 @@ export type WorkflowPropertyPanelProps = {
     note?: string,
   ) => void;
   onRetryStep?: (id: string) => void;
-  onAssignAgent: (id: string, agentId: string) => void;
+  /** `null` unassigns (the default agent runs the step). */
+  onAssignAgent: (id: string, agentId: string | null) => void;
+  /** A run is going: editing controls are disabled. */
+  locked?: boolean;
 };
 
 const CONDITION_OPERATORS: ConditionOperator[] = [
@@ -74,10 +80,10 @@ const CONDITION_OPERATORS: ConditionOperator[] = [
   'matches_regex',
 ];
 
-/** Small "Saved" flash shown after a blur-triggered autosave, so editing a
- * field doesn't feel like it silently did nothing. Optimistic — it fires
- * as soon as the save is dispatched, not once the server confirms it (a
- * real failure still surfaces via the WorkflowEditor's error banner). */
+/** Small "Saved" flash shown once the server has confirmed a
+ * blur-triggered autosave, so editing a field doesn't feel like it
+ * silently did nothing. A failed save shows the WorkflowEditor's error
+ * banner instead. */
 function SaveIndicator(props: { status: () => 'idle' | 'saved' }) {
   return (
     <Show when={props.status() === 'saved'}>
@@ -222,7 +228,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
     'idle',
   );
 
-  function flash(setStatus: (s: 'idle' | 'saved') => void) {
+  async function flashWhenSaved(
+    save: Promise<boolean>,
+    setStatus: (s: 'idle' | 'saved') => void,
+  ) {
+    if (!(await save)) return;
     setStatus('saved');
     setTimeout(() => setStatus('idle'), 1500);
   }
@@ -236,6 +246,13 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
   let lastSubtaskId: string | undefined;
   let lastCommittedTitle = '';
   let lastCommittedDescription = '';
+  let lastCommittedLoop = '';
+
+  /** The loop draft as the server would store it ('' = no loop). */
+  function loopDraftKey(): string {
+    if (!loopEnabled()) return '';
+    return JSON.stringify([loopMax(), loopOperator(), loopValue()]);
+  }
 
   createEffect(() => {
     const subtask = selectedSubtask();
@@ -247,10 +264,18 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         draftTitle() !== lastCommittedTitle ||
         draftDescription() !== lastCommittedDescription;
       if (dirty) {
-        props.onUpdateSubtask(lastSubtaskId, {
+        void props.onUpdateSubtask(lastSubtaskId, {
           title: draftTitle(),
           description: draftDescription(),
         });
+      }
+      // A loop edited without blurring its last field is saved too, as
+      // long as it's complete (the server needs a value to stop on).
+      if (
+        loopDraftKey() !== lastCommittedLoop &&
+        (!loopEnabled() || loopValue().trim() !== '')
+      ) {
+        void props.onUpdateSubtask(lastSubtaskId, { loop: loopDraft() });
       }
     }
     lastSubtaskId = currentId;
@@ -266,6 +291,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
       (subtask.loopConditionOperator as ConditionOperator) ?? 'contains',
     );
     setLoopValue(subtask.loopConditionValue ?? '');
+    lastCommittedLoop = loopDraftKey();
     setApprovalNote('');
   });
 
@@ -298,7 +324,7 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         dirty &&
         !(edgeKind() === 'conditional' && edgeValue().trim() === '')
       ) {
-        props.onUpdateEdge(lastEdgeId, {
+        void props.onUpdateEdge(lastEdgeId, {
           edgeKind: edgeKind(),
           condition:
             edgeKind() === 'conditional'
@@ -330,33 +356,45 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
   });
 
   function saveNodeFields(id: string) {
-    props.onUpdateSubtask(id, {
-      title: draftTitle(),
-      description: draftDescription(),
-    });
+    if (
+      draftTitle() === lastCommittedTitle &&
+      draftDescription() === lastCommittedDescription
+    ) {
+      return;
+    }
     lastCommittedTitle = draftTitle();
     lastCommittedDescription = draftDescription();
-    flash(setFieldsSaveStatus);
+    void flashWhenSaved(
+      props.onUpdateSubtask(id, {
+        title: draftTitle(),
+        description: draftDescription(),
+      }),
+      setFieldsSaveStatus,
+    );
   }
 
-  function saveLoopConfig(id: string) {
-    if (!loopEnabled()) {
-      props.onUpdateSubtask(id, { loop: null });
-    } else {
-      // Same empty-value guard as saveEdgeFields: the server requires a
-      // non-empty condition value, but checking "Repeat until condition"
-      // fires this save before the user has typed one. Skip silently;
-      // the value input's onBlur saves once it's filled in.
-      if (loopValue().trim() === '') return;
-      props.onUpdateSubtask(id, {
-        loop: {
+  function loopDraft(): LoopConfig | null {
+    return loopEnabled()
+      ? {
           maxIterations: loopMax(),
           conditionOperator: loopOperator(),
           conditionValue: loopValue(),
-        },
-      });
-    }
-    flash(setLoopSaveStatus);
+        }
+      : null;
+  }
+
+  function saveLoopConfig(id: string) {
+    // Same empty-value guard as saveEdgeFields: the server requires a
+    // non-empty condition value, but checking "Repeat until condition"
+    // fires this save before the user has typed one. Skip silently;
+    // the value input's onBlur saves once it's filled in.
+    if (loopEnabled() && loopValue().trim() === '') return;
+    if (loopDraftKey() === lastCommittedLoop) return;
+    lastCommittedLoop = loopDraftKey();
+    void flashWhenSaved(
+      props.onUpdateSubtask(id, { loop: loopDraft() }),
+      setLoopSaveStatus,
+    );
   }
 
   function saveEdgeFields(id: string) {
@@ -366,17 +404,19 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
     // guard, that first save always fails with a raw validation error.
     // Skip it silently; the value input's onBlur saves once it's filled in.
     if (edgeKind() === 'conditional' && edgeValue().trim() === '') return;
-    props.onUpdateEdge(id, {
-      edgeKind: edgeKind(),
-      condition:
-        edgeKind() === 'conditional'
-          ? { operator: edgeOperator(), value: edgeValue() }
-          : null,
-    });
     lastCommittedEdgeKind = edgeKind();
     lastCommittedEdgeOperator = edgeOperator();
     lastCommittedEdgeValue = edgeValue();
-    flash(setEdgeSaveStatus);
+    void flashWhenSaved(
+      props.onUpdateEdge(id, {
+        edgeKind: edgeKind(),
+        condition:
+          edgeKind() === 'conditional'
+            ? { operator: edgeOperator(), value: edgeValue() }
+            : null,
+      }),
+      setEdgeSaveStatus,
+    );
   }
 
   return (
@@ -386,7 +426,8 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
         <div class="flex flex-wrap gap-1.5">
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={props.locked}
             onClick={() => props.onAddSubtask('agent')}
           >
             <Plus class="w-3.5 h-3.5" />
@@ -394,7 +435,8 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
           </button>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={props.locked}
             onClick={() => props.onAddSubtask('approval_gate')}
           >
             <Hourglass class="w-3.5 h-3.5" />
@@ -472,8 +514,9 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </div>
                   <button
                     type="button"
-                    class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    title="Delete this subtask"
+                    class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    title="Delete this step"
+                    disabled={props.locked}
                     onClick={() => props.onDeleteSubtask(subtask().id)}
                   >
                     <Trash2 class="w-3.5 h-3.5" />
@@ -485,159 +528,197 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   {...(props.onRetryStep ? { onRetry: props.onRetryStep } : {})}
                 />
 
-                <div>
-                  <div class="flex items-center justify-between mb-0.5">
-                    <label
-                      for="wf-node-description"
-                      class="block text-xs text-gray-500 dark:text-gray-400"
-                    >
-                      Description
-                    </label>
-                    <SaveIndicator status={fieldsSaveStatus} />
-                  </div>
-                  <textarea
-                    id="wf-node-description"
-                    class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                    rows={3}
-                    placeholder="What should this step do?"
-                    value={draftDescription()}
-                    onInput={(e) => setDraftDescription(e.currentTarget.value)}
-                    onBlur={() => saveNodeFields(subtask().id)}
-                  />
-                </div>
-                <div>
-                  <label
-                    for="wf-node-title"
-                    class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
-                  >
-                    Title{' '}
-                    <span class="text-gray-400 dark:text-gray-500">
-                      (optional — auto-generated from the description if left
-                      blank)
-                    </span>
-                  </label>
-                  <input
-                    id="wf-node-title"
-                    class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                    placeholder="Auto-generated from description"
-                    value={draftTitle()}
-                    onInput={(e) => setDraftTitle(e.currentTarget.value)}
-                    onBlur={() => saveNodeFields(subtask().id)}
-                  />
-                </div>
-
-                <div>
-                  <label
-                    for="wf-node-agent"
-                    class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
-                  >
-                    Assigned agent
-                  </label>
-                  <select
-                    id="wf-node-agent"
-                    class="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                    value={subtask().assignedAgentId ?? ''}
-                    onChange={(e) => {
-                      const agentId = e.currentTarget.value;
-                      if (agentId) props.onAssignAgent(subtask().id, agentId);
-                    }}
-                  >
-                    <option value="">Unassigned</option>
-                    <For each={props.agents ?? []}>
-                      {(agent) => (
-                        <option value={agent.id}>{agent.name}</option>
-                      )}
-                    </For>
-                  </select>
-                </div>
-
-                <Show when={subtask().subtaskKind === 'agent'}>
-                  <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-2.5">
-                    <div class="flex items-center justify-between">
-                      <label class="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300">
-                        <input
-                          type="checkbox"
-                          class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
-                          checked={loopEnabled()}
-                          onChange={(e) => {
-                            setLoopEnabled(e.currentTarget.checked);
-                            saveLoopConfig(subtask().id);
-                          }}
-                        />
-                        <Repeat class="w-3.5 h-3.5 text-indigo-500" />
-                        Repeat until condition
+                <fieldset
+                  disabled={props.locked}
+                  class="space-y-3 min-w-0 border-0 p-0 m-0 disabled:opacity-60"
+                >
+                  <div>
+                    <div class="flex items-center justify-between mb-0.5">
+                      <label
+                        for="wf-node-description"
+                        class="block text-xs text-gray-500 dark:text-gray-400"
+                      >
+                        Description
                       </label>
-                      <SaveIndicator status={loopSaveStatus} />
+                      <SaveIndicator status={fieldsSaveStatus} />
                     </div>
-                    <Show when={loopEnabled()}>
-                      <div class="mt-2 space-y-1.5">
-                        <div class="flex items-center gap-1.5">
-                          <label
-                            for="wf-loop-max"
-                            class="text-xs text-gray-500 dark:text-gray-400"
-                          >
-                            Max iterations
-                          </label>
+                    <textarea
+                      id="wf-node-description"
+                      class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                      rows={3}
+                      placeholder="What should this step do?"
+                      value={draftDescription()}
+                      onInput={(e) =>
+                        setDraftDescription(e.currentTarget.value)
+                      }
+                      onBlur={() => saveNodeFields(subtask().id)}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      for="wf-node-title"
+                      class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                    >
+                      Title{' '}
+                      <span class="text-gray-400 dark:text-gray-500">
+                        (optional — auto-generated from the description if left
+                        blank)
+                      </span>
+                    </label>
+                    <input
+                      id="wf-node-title"
+                      class="w-full text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                      placeholder="Auto-generated from description"
+                      value={draftTitle()}
+                      onInput={(e) => setDraftTitle(e.currentTarget.value)}
+                      onBlur={() => saveNodeFields(subtask().id)}
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      for="wf-node-agent"
+                      class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                    >
+                      Assigned agent
+                    </label>
+                    <select
+                      id="wf-node-agent"
+                      class="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                      value={subtask().assignedAgentId ?? ''}
+                      onChange={(e) =>
+                        props.onAssignAgent(
+                          subtask().id,
+                          e.currentTarget.value || null,
+                        )
+                      }
+                    >
+                      <option value="">Default agent</option>
+                      <For each={props.agents ?? []}>
+                        {(agent) => (
+                          <option value={agent.id}>{agent.name}</option>
+                        )}
+                      </For>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      for="wf-node-kind"
+                      class="block text-xs text-gray-500 dark:text-gray-400 mb-0.5"
+                    >
+                      Step type
+                    </label>
+                    <select
+                      id="wf-node-kind"
+                      class="w-full text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                      value={subtask().subtaskKind ?? 'agent'}
+                      onChange={(e) =>
+                        void props.onUpdateSubtask(subtask().id, {
+                          subtaskKind: e.currentTarget.value as SubtaskKind,
+                        })
+                      }
+                    >
+                      <option value="agent">
+                        Agent step — an agent does the work
+                      </option>
+                      <option value="approval_gate">
+                        Approval gate — wait for a person to approve or reject
+                      </option>
+                    </select>
+                  </div>
+
+                  <Show when={subtask().subtaskKind !== 'approval_gate'}>
+                    <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30 p-2.5">
+                      <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300">
                           <input
-                            id="wf-loop-max"
-                            type="number"
-                            min={1}
-                            class="w-16 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                            value={loopMax()}
-                            onInput={(e) =>
-                              setLoopMax(Number(e.currentTarget.value) || 1)
-                            }
-                            onBlur={() => saveLoopConfig(subtask().id)}
-                          />
-                        </div>
-                        <div class="flex items-center gap-1.5">
-                          <label for="wf-loop-operator" class="sr-only">
-                            Loop condition operator
-                          </label>
-                          <select
-                            id="wf-loop-operator"
-                            class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                            value={loopOperator()}
+                            type="checkbox"
+                            class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
+                            checked={loopEnabled()}
                             onChange={(e) => {
-                              setLoopOperator(
-                                e.currentTarget.value as ConditionOperator,
-                              );
+                              setLoopEnabled(e.currentTarget.checked);
                               saveLoopConfig(subtask().id);
                             }}
-                          >
-                            <For each={CONDITION_OPERATORS}>
-                              {(op) => <option value={op}>{op}</option>}
-                            </For>
-                          </select>
-                          <label for="wf-loop-value" class="sr-only">
-                            Loop condition value
-                          </label>
-                          <input
-                            id="wf-loop-value"
-                            class="flex-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                            placeholder="value, e.g. approved"
-                            value={loopValue()}
-                            onInput={(e) => setLoopValue(e.currentTarget.value)}
-                            onBlur={() => saveLoopConfig(subtask().id)}
                           />
-                        </div>
-                        <p class="text-[10px] text-gray-400 dark:text-gray-500">
-                          This node re-runs itself (not a separate node or edge)
-                          up to "Max iterations" times. Ask the agent to end its
-                          message with `OUTCOME: &lt;tag&gt;` — once that
-                          matches the condition above, it stops repeating and
-                          completes.
-                        </p>
-                        <Show when={loopValue().trim() === ''}>
-                          <p class="text-[10px] text-amber-600 dark:text-amber-400">
-                            Enter a value above — the loop isn't saved until it
-                            has one.
-                          </p>
-                        </Show>
+                          <Repeat class="w-3.5 h-3.5 text-indigo-500" />
+                          Repeat until condition
+                        </label>
+                        <SaveIndicator status={loopSaveStatus} />
                       </div>
-                    </Show>
-                  </div>
-                </Show>
+                      <Show when={loopEnabled()}>
+                        <div class="mt-2 space-y-1.5">
+                          <div class="flex items-center gap-1.5">
+                            <label
+                              for="wf-loop-max"
+                              class="text-xs text-gray-500 dark:text-gray-400"
+                            >
+                              Max iterations
+                            </label>
+                            <input
+                              id="wf-loop-max"
+                              type="number"
+                              min={1}
+                              max={50}
+                              class="w-16 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                              value={loopMax()}
+                              onInput={(e) =>
+                                setLoopMax(Number(e.currentTarget.value) || 1)
+                              }
+                              onBlur={() => saveLoopConfig(subtask().id)}
+                            />
+                          </div>
+                          <div class="flex items-center gap-1.5">
+                            <label for="wf-loop-operator" class="sr-only">
+                              Loop condition operator
+                            </label>
+                            <select
+                              id="wf-loop-operator"
+                              class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                              value={loopOperator()}
+                              onChange={(e) => {
+                                setLoopOperator(
+                                  e.currentTarget.value as ConditionOperator,
+                                );
+                                saveLoopConfig(subtask().id);
+                              }}
+                            >
+                              <For each={CONDITION_OPERATORS}>
+                                {(op) => <option value={op}>{op}</option>}
+                              </For>
+                            </select>
+                            <label for="wf-loop-value" class="sr-only">
+                              Loop condition value
+                            </label>
+                            <input
+                              id="wf-loop-value"
+                              class="flex-1 min-w-0 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                              placeholder="value, e.g. approved"
+                              value={loopValue()}
+                              onInput={(e) =>
+                                setLoopValue(e.currentTarget.value)
+                              }
+                              onBlur={() => saveLoopConfig(subtask().id)}
+                            />
+                          </div>
+                          <p class="text-[10px] text-gray-400 dark:text-gray-500">
+                            This node re-runs itself (not a separate node or
+                            edge) up to "Max iterations" times. Ask the agent to
+                            end its message with `OUTCOME: &lt;tag&gt;` — once
+                            that matches the condition above, it stops repeating
+                            and completes.
+                          </p>
+                          <Show when={loopValue().trim() === ''}>
+                            <p class="text-[10px] text-amber-600 dark:text-amber-400">
+                              Enter a value above — the loop isn't saved until
+                              it has one.
+                            </p>
+                          </Show>
+                        </div>
+                      </Show>
+                    </div>
+                  </Show>
+                </fieldset>
 
                 <Show when={subtask().subtaskKind === 'approval_gate'}>
                   <div class="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-2.5 space-y-2">
@@ -760,8 +841,9 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                       <SaveIndicator status={edgeSaveStatus} />
                       <button
                         type="button"
-                        class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        class="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                         title="Delete this edge"
+                        disabled={props.locked}
                         onClick={() => props.onDeleteEdge(edge().id)}
                       >
                         <Trash2 class="w-3.5 h-3.5" />
@@ -772,66 +854,71 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                     {toTitle()} depends on {fromTitle()}
                   </p>
 
-                  <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
-                      checked={edgeKind() === 'conditional'}
-                      onChange={(e) => {
-                        setEdgeKind(
-                          e.currentTarget.checked
-                            ? 'conditional'
-                            : 'dependency',
-                        );
-                        saveEdgeFields(edge().id);
-                      }}
-                    />
-                    Conditional
-                  </label>
-
-                  <Show when={edgeKind() === 'conditional'}>
-                    <div class="flex items-center gap-1.5">
-                      <label for="wf-edge-operator" class="sr-only">
-                        Edge condition operator
-                      </label>
-                      <select
-                        id="wf-edge-operator"
-                        class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                        value={edgeOperator()}
+                  <fieldset
+                    disabled={props.locked}
+                    class="space-y-3 min-w-0 border-0 p-0 m-0 disabled:opacity-60"
+                  >
+                    <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                      <input
+                        type="checkbox"
+                        class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-2 focus:ring-primary/40 dark:bg-gray-900"
+                        checked={edgeKind() === 'conditional'}
                         onChange={(e) => {
-                          setEdgeOperator(
-                            e.currentTarget.value as ConditionOperator,
+                          setEdgeKind(
+                            e.currentTarget.checked
+                              ? 'conditional'
+                              : 'dependency',
                           );
                           saveEdgeFields(edge().id);
                         }}
-                      >
-                        <For each={CONDITION_OPERATORS}>
-                          {(op) => <option value={op}>{op}</option>}
-                        </For>
-                      </select>
-                      <label for="wf-edge-value" class="sr-only">
-                        Edge condition value
-                      </label>
-                      <input
-                        id="wf-edge-value"
-                        class="flex-1 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
-                        placeholder="value, e.g. approved"
-                        value={edgeValue()}
-                        onInput={(e) => setEdgeValue(e.currentTarget.value)}
-                        onBlur={() => saveEdgeFields(edge().id)}
                       />
-                    </div>
-                    <p class="text-[10px] text-gray-400 dark:text-gray-500">
-                      Only satisfied when {fromTitle()}'s result (its `OUTCOME:`
-                      tag, or raw text) matches this condition.
-                    </p>
-                    <Show when={edgeValue().trim() === ''}>
-                      <p class="text-[10px] text-amber-600 dark:text-amber-400">
-                        Enter a value above — a conditional edge isn't saved
-                        until it has one.
+                      Conditional
+                    </label>
+
+                    <Show when={edgeKind() === 'conditional'}>
+                      <div class="flex items-center gap-1.5">
+                        <label for="wf-edge-operator" class="sr-only">
+                          Edge condition operator
+                        </label>
+                        <select
+                          id="wf-edge-operator"
+                          class="text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                          value={edgeOperator()}
+                          onChange={(e) => {
+                            setEdgeOperator(
+                              e.currentTarget.value as ConditionOperator,
+                            );
+                            saveEdgeFields(edge().id);
+                          }}
+                        >
+                          <For each={CONDITION_OPERATORS}>
+                            {(op) => <option value={op}>{op}</option>}
+                          </For>
+                        </select>
+                        <label for="wf-edge-value" class="sr-only">
+                          Edge condition value
+                        </label>
+                        <input
+                          id="wf-edge-value"
+                          class="flex-1 min-w-0 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-shadow"
+                          placeholder="value, e.g. approved"
+                          value={edgeValue()}
+                          onInput={(e) => setEdgeValue(e.currentTarget.value)}
+                          onBlur={() => saveEdgeFields(edge().id)}
+                        />
+                      </div>
+                      <p class="text-[10px] text-gray-400 dark:text-gray-500">
+                        Only satisfied when {fromTitle()}'s result (its
+                        `OUTCOME:` tag, or raw text) matches this condition.
                       </p>
+                      <Show when={edgeValue().trim() === ''}>
+                        <p class="text-[10px] text-amber-600 dark:text-amber-400">
+                          Enter a value above — a conditional edge isn't saved
+                          until it has one.
+                        </p>
+                      </Show>
                     </Show>
-                  </Show>
+                  </fieldset>
 
                   <p class="text-[10px] text-gray-400 dark:text-gray-500 pt-1 border-t border-gray-200 dark:border-gray-700">
                     Tip: press Delete or Backspace while this edge is selected

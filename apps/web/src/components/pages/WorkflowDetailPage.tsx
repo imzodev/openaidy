@@ -21,6 +21,7 @@ import {
   Show,
 } from 'solid-js';
 import {
+  AlertTriangle,
   ArrowLeft,
   Play,
   Square,
@@ -33,13 +34,16 @@ import {
   X,
   Loader2,
 } from 'lucide-solid';
+import type { WorkflowGraphCheck } from '@openaidy/workflow-templates';
 import { WorkflowEditor } from '../tasks/workflow/WorkflowEditor';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {
   getTask,
   updateTask,
   updateTaskStatus,
   deleteTask,
   executeTask,
+  checkWorkflow,
   cancelWorkflowRun,
   listWorkflowRuns,
   resolveApproval,
@@ -105,6 +109,11 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
   const [isEditingTitle, setIsEditingTitle] = createSignal(false);
   const [titleDraft, setTitleDraft] = createSignal('');
   const [isStarting, setIsStarting] = createSignal(false);
+  // Pre-run checklist: shown when the graph has problems (errors block the
+  // run; warnings can be run past).
+  const [checklist, setChecklist] = createSignal<WorkflowGraphCheck | null>(
+    null,
+  );
   const [isStopping, setIsStopping] = createSignal(false);
   const [isDeleting, setIsDeleting] = createSignal(false);
   const [actionError, setActionError] = createSignal<string | null>(null);
@@ -204,12 +213,24 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
     }
   };
 
-  const handleRun = async () => {
+  const startRun = async () => {
+    setChecklist(null);
     setIsStarting(true);
     setActionError(null);
     try {
       const result = await executeTask(props.taskId);
-      if (!result.ok) throw new Error(result.error.message);
+      if (!result.ok) {
+        const issues = result.error.details?.['issues'];
+        if (result.error.code === 'workflow.invalid_graph' && issues) {
+          setChecklist({
+            ok: false,
+            errors: issues as WorkflowGraphCheck['errors'],
+            warnings: [],
+          });
+          return;
+        }
+        throw new Error(result.error.message);
+      }
       refreshAll();
     } catch (err) {
       setActionError(
@@ -218,6 +239,22 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
     } finally {
       setIsStarting(false);
     }
+  };
+
+  /** Run, after showing the checklist if the graph has any problems. */
+  const handleRun = async () => {
+    setIsStarting(true);
+    const check = await checkWorkflow(props.taskId).catch(() => null);
+    setIsStarting(false);
+    // If the check itself fails, the server still validates on start.
+    if (
+      check?.ok &&
+      (check.data.errors.length > 0 || check.data.warnings.length > 0)
+    ) {
+      setChecklist(check.data);
+      return;
+    }
+    await startRun();
   };
 
   const handleStop = async () => {
@@ -472,7 +509,7 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
       </Show>
 
       {/* Graph canvas + property panel — fills the rest of the viewport */}
-      <div class="flex-1 min-h-0 flex">
+      <div class="relative flex-1 min-h-0 flex">
         <div class="flex-1 min-w-0 min-h-0">
           <Show
             when={!isLoading()}
@@ -489,11 +526,13 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
               refreshKey={refreshKey()}
               pollForChanges={pollForChanges()}
               onRunChanged={refreshAll}
+              locked={isRunActive()}
             />
           </Show>
         </div>
         <Show when={showRuns()}>
-          <div class="w-80 max-w-[85vw] flex-shrink-0">
+          {/* Overlays the canvas on narrow screens instead of squeezing it. */}
+          <div class="absolute inset-y-0 right-0 z-20 shadow-xl sm:shadow-none sm:static w-80 max-w-[85vw] flex-shrink-0">
             <WorkflowRunsPanel
               runs={runs()}
               onClose={() => setShowRuns(false)}
@@ -501,6 +540,50 @@ export function WorkflowDetailPage(props: WorkflowDetailPageProps) {
           </div>
         </Show>
       </div>
+      <ConfirmDialog
+        isOpen={checklist() !== null}
+        title={
+          (checklist()?.errors.length ?? 0) > 0
+            ? 'Fix these before running'
+            : 'Run this workflow?'
+        }
+        body={
+          <div class="space-y-3 text-sm">
+            <Show when={(checklist()?.errors.length ?? 0) > 0}>
+              <ul class="space-y-1.5">
+                <For each={checklist()?.errors ?? []}>
+                  {(issue) => (
+                    <li class="flex gap-2 text-red-700 dark:text-red-300">
+                      <X class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>{issue.message}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+            <Show when={(checklist()?.warnings.length ?? 0) > 0}>
+              <ul class="space-y-1.5">
+                <For each={checklist()?.warnings ?? []}>
+                  {(issue) => (
+                    <li class="flex gap-2 text-amber-700 dark:text-amber-300">
+                      <AlertTriangle class="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      <span>{issue.message}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
+        }
+        confirmLabel={
+          (checklist()?.errors.length ?? 0) > 0 ? 'Run' : 'Run anyway'
+        }
+        cancelLabel="Back to editing"
+        confirmDisabled={(checklist()?.errors.length ?? 0) > 0}
+        isPending={isStarting()}
+        onConfirm={() => void startRun()}
+        onCancel={() => setChecklist(null)}
+      />
     </div>
   );
 }

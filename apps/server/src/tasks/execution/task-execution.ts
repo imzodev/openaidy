@@ -38,6 +38,7 @@ import {
   getDownstreamSubtaskIds,
   evaluateCondition,
   subtaskNeedsOutcomeTag,
+  expectedOutcomes,
   isTerminalStatus,
   type SubtaskDependencyEdge,
   type ConditionOperator,
@@ -432,6 +433,11 @@ export class TaskExecution {
    * Run a failed (or skipped) step again, along with everything
    * downstream of it, continuing the task's latest run.
    */
+  /** Whether a run of this task is going right now. */
+  async isRunning(taskId: string): Promise<boolean> {
+    return Boolean(await this.runs.findRunning(taskId));
+  }
+
   async retrySubtask(subtaskId: string): Promise<ServiceResult<Subtask>> {
     const subtask = await this.subtasksRepo.findById(subtaskId);
     if (!subtask) return notFound(subtaskId);
@@ -833,7 +839,12 @@ export class TaskExecution {
     // structured signal rather than free text — ask the agent to end its
     // final message with an OUTCOME line.
     if (subtaskNeedsOutcomeTag(subtask, edges)) {
-      messageContent = `${messageContent}\n\n---\n\nEnd your final message with a line "OUTCOME: <short-tag>" summarizing the outcome in a few words (e.g. "OUTCOME: approved" or "OUTCOME: needs-revision"). This is used to decide what happens next.`;
+      const expected = expectedOutcomes(subtask, edges);
+      const choices =
+        expected.length > 0
+          ? ` Use one of these tags, exactly as written, so the workflow can decide what happens next: ${expected.map((v) => `"OUTCOME: ${v}"`).join(', ')}. If none fits, pick the closest.`
+          : ' This is used to decide what happens next.';
+      messageContent = `${messageContent}\n\n---\n\nEnd your final message with a line "OUTCOME: <short-tag>" summarizing the outcome in a few words (e.g. "OUTCOME: approved" or "OUTCOME: needs-revision").${choices}`;
     }
     return messageContent;
   }

@@ -311,7 +311,7 @@ describe('Tasks Repositories (integration)', () => {
     });
 
     describe('assignAgent()', () => {
-      test('should assign agent and set status to assigned', async () => {
+      test('should assign an agent without changing the status', async () => {
         const subtask = await subtasksRepo!.create({
           taskId,
           title: 'Test',
@@ -324,7 +324,7 @@ describe('Tasks Repositories (integration)', () => {
         );
 
         expect(updated?.assignedAgentId).toBe('agent-456');
-        expect(updated?.status).toBe('assigned');
+        expect(updated?.status).toBe('pending');
       });
     });
 

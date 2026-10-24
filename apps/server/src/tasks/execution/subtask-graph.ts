@@ -259,6 +259,46 @@ export function subtaskNeedsOutcomeTag(
 }
 
 /**
+ * The OUTCOME values `subtask`'s branches and loop are waiting for (from
+ * `equals`/`contains` conditions; regexes can't be listed), so the agent
+ * can be told exactly which tags to choose from instead of inventing one
+ * that no branch matches.
+ */
+export function expectedOutcomes(
+  subtask: Subtask,
+  edges: SubtaskDependencyEdge[],
+): string[] {
+  const values: string[] = [];
+  const add = (operator: string | null | undefined, value: unknown) => {
+    if (operator === 'matches_regex' || typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (
+      trimmed &&
+      !values.some((v) => v.toLowerCase() === trimmed.toLowerCase())
+    ) {
+      values.push(trimmed);
+    }
+  };
+  for (const edge of edges) {
+    if (
+      edge.dependsOnSubtaskId === subtask.id &&
+      edge.edgeKind === 'conditional'
+    ) {
+      add(edge.conditionOperator, edge.conditionValue);
+    }
+  }
+  const loop = subtask as {
+    loopMaxIterations?: number | null;
+    loopConditionOperator?: string | null;
+    loopConditionValue?: string | null;
+  };
+  if (loop.loopMaxIterations != null) {
+    add(loop.loopConditionOperator, loop.loopConditionValue);
+  }
+  return values;
+}
+
+/**
  * The subtasks `subtask` actually depends on, in the order the edges
  * were declared. Used to scope context handoff to real dependencies
  * instead of every completed subtask in the task.

@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
+import type { UpdateSubtaskInput } from '../types';
+import { parseGraphSpec } from '../tasks/graph-spec';
 import type { PlanningService } from '../planning/service';
 import type { DeliverablesRepository, WorkflowRun } from '@openaidy/db';
 import type {
@@ -158,6 +160,22 @@ const resolveApprovalSchema = z.object({
 const applyWorkflowTemplateSchema = z.object({
   templateId: z.string().min(1),
   inputs: z.record(z.string()).optional(),
+  /** Replace the current steps instead of adding to them. */
+  clearExisting: z.boolean().optional(),
+});
+
+const updateSubtaskSchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  orderIndex: z.number().int().optional(),
+  subtaskKind: z.enum(['agent', 'approval_gate']).optional(),
+  loop: loopSchema.nullable().optional(),
+});
+
+const layoutSchema = z.object({
+  positions: z.record(
+    z.object({ x: z.number().finite(), y: z.number().finite() }),
+  ),
 });
 
 /**
@@ -170,23 +188,40 @@ export type TaskRoutesOptions = {
   authMiddleware: AuthMiddleware;
 };
 
-/** HTTP status for workflow-run error codes. */
-function runErrorStatus(code: string): number {
+/** HTTP status for task, workflow-graph and workflow-run error codes. */
+function errorStatus(code: string): number {
   switch (code) {
     case 'task.not_found':
     case 'subtask.not_found':
+    case 'edge.not_found':
+    case 'template.not_found':
       return 404;
     case 'session.not_configured':
       return 503;
     case 'workflow.already_running':
     case 'workflow.not_running':
+    case 'workflow.locked':
     case 'subtask.already_executed':
     case 'subtask.dependency_not_met':
     case 'subtask.not_retryable':
       return 409;
+    case 'workflow.invalid_graph':
+    case 'agent.not_found':
+    case 'edge.self_edge':
+    case 'edge.condition_required':
+    case 'edge.would_create_cycle':
+    case 'template.missing_input':
+      return 400;
     default:
       return 500;
   }
+}
+
+function invalidRequest(message: string) {
+  return {
+    ok: false as const,
+    error: { code: 'validation.invalid_request', message },
+  };
 }
 
 function toWorkflowRunDto(run: WorkflowRun): WorkflowRunDto {
@@ -558,7 +593,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      reply.code(runErrorStatus(result.error.code));
+      reply.code(errorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
   });
@@ -610,7 +645,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: toWorkflowRunDto(result.data) };
     }
-    reply.code(runErrorStatus(result.error.code));
+    reply.code(errorStatus(result.error.code));
     return { ok: false, error: result.error };
   });
 
@@ -625,7 +660,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     }
-    reply.code(runErrorStatus(result.error.code));
+    reply.code(errorStatus(result.error.code));
     return { ok: false, error: result.error };
   });
 
@@ -662,7 +697,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      reply.code(runErrorStatus(result.error.code));
+      reply.code(errorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
   });
@@ -751,16 +786,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       reply.code(201);
       return { ok: true, data: result.data };
-    } else {
-      if (result.error.code === 'task.not_found') {
-        reply.code(404);
-      } else if (result.error.code === 'agent.not_found') {
-        reply.code(400);
-      } else {
-        reply.code(500);
-      }
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -825,24 +853,15 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       id,
       parsed.templateId,
       parsed.inputs ?? {},
+      { clearExisting: parsed.clearExisting ?? false },
     );
 
     if (result.ok) {
       reply.code(201);
       return { ok: true, data: result.data };
-    } else {
-      if (
-        result.error.code === 'task.not_found' ||
-        result.error.code === 'template.not_found'
-      ) {
-        reply.code(404);
-      } else if (result.error.code === 'template.missing_input') {
-        reply.code(400);
-      } else {
-        reply.code(500);
-      }
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -857,7 +876,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       return { ok: true, data: result.data };
     } else {
-      reply.code(runErrorStatus(result.error.code));
+      reply.code(errorStatus(result.error.code));
       return { ok: false, error: result.error };
     }
   });
@@ -946,40 +965,23 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
    * updated and the updated record is returned. Used by the web UI's
    * SubtaskList inline edit affordance.
    */
-  app.patch<{
-    Params: { id: string };
-    Body: {
-      title?: string;
-      description?: string;
-      orderIndex?: number;
-      subtaskKind?: 'agent' | 'approval_gate';
-      loop?: {
-        maxIterations: number;
-        conditionOperator: 'equals' | 'contains' | 'matches_regex';
-        conditionValue: string;
-      } | null;
-    };
-  }>('/subtasks/:id', async (request, reply) => {
-    const { id } = request.params;
-    const body = request.body ?? {};
-    const input: {
-      title?: string;
-      description?: string;
-      orderIndex?: number;
-      subtaskKind?: 'agent' | 'approval_gate';
-      loop?: {
-        maxIterations: number;
-        conditionOperator: 'equals' | 'contains' | 'matches_regex';
-        conditionValue: string;
-      } | null;
-    } = {};
-    if (typeof body.title === 'string') input.title = body.title;
-    if (typeof body.description === 'string')
-      input.description = body.description;
-    if (typeof body.orderIndex === 'number') input.orderIndex = body.orderIndex;
-    if (body.subtaskKind === 'agent' || body.subtaskKind === 'approval_gate') {
-      input.subtaskKind = body.subtaskKind;
+  app.patch('/subtasks/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = updateSubtaskSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      reply.code(400);
+      return invalidRequest(
+        parsed.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join('; '),
+      );
     }
+    const body = parsed.data;
+    const input: UpdateSubtaskInput = {};
+    if (body.title !== undefined) input.title = body.title;
+    if (body.description !== undefined) input.description = body.description;
+    if (body.orderIndex !== undefined) input.orderIndex = body.orderIndex;
+    if (body.subtaskKind !== undefined) input.subtaskKind = body.subtaskKind;
     if (body.loop !== undefined) input.loop = body.loop;
 
     if (
@@ -1033,14 +1035,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
     if (result.ok) {
       return { ok: true, data: result.data };
-    } else {
-      if (result.error.code === 'subtask.not_found') {
-        reply.code(404);
-      } else {
-        reply.code(500);
-      }
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -1054,10 +1051,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
     if (result.ok) {
       return { ok: true };
-    } else {
-      reply.code(404);
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -1155,20 +1151,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     if (result.ok) {
       reply.code(201);
       return { ok: true, data: result.data };
-    } else {
-      if (result.error.code === 'subtask.not_found') {
-        reply.code(404);
-      } else if (
-        result.error.code === 'edge.self_edge' ||
-        result.error.code === 'edge.condition_required' ||
-        result.error.code === 'edge.would_create_cycle'
-      ) {
-        reply.code(400);
-      } else {
-        reply.code(500);
-      }
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -1198,16 +1183,9 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
     if (result.ok) {
       return { ok: true, data: result.data };
-    } else {
-      if (result.error.code === 'edge.not_found') {
-        reply.code(404);
-      } else if (result.error.code === 'edge.condition_required') {
-        reply.code(400);
-      } else {
-        reply.code(500);
-      }
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
@@ -1220,22 +1198,28 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
     if (result.ok) {
       return { ok: true };
-    } else {
-      reply.code(404);
-      return { ok: false, error: result.error };
     }
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
   });
 
   /**
    * POST /subtasks/:id/assign
-   * (Re)assign an agent to a subtask. Used by the web UI's SubtaskList
-   * agent-picker dropdown. Body: `{ agentId: string }`.
+   * (Re)assign an agent to a subtask. Used by the web UI's agent pickers.
+   * Body: `{ agentId: string }`, or `{ agentId: null }` to unassign (the
+   * session's default agent then runs the step).
    */
-  app.post<{ Params: { id: string }; Body: { agentId?: string } }>(
+  app.post<{ Params: { id: string }; Body: { agentId?: string | null } }>(
     '/subtasks/:id/assign',
     async (request, reply) => {
       const { id } = request.params;
       const agentId = request.body?.agentId;
+      if (agentId === null) {
+        const result = await taskService.assignSubtaskAgent(id, null);
+        if (result.ok) return { ok: true, data: result.data };
+        reply.code(errorStatus(result.error.code));
+        return { ok: false, error: result.error };
+      }
       if (typeof agentId !== 'string' || agentId.trim() === '') {
         reply.code(400);
         return {
@@ -1251,18 +1235,71 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
 
       if (result.ok) {
         return { ok: true, data: result.data };
-      } else {
-        if (result.error.code === 'subtask.not_found') {
-          reply.code(404);
-        } else if (result.error.code === 'agent.not_found') {
-          reply.code(400);
-        } else {
-          reply.code(500);
-        }
-        return { ok: false, error: result.error };
       }
+      reply.code(errorStatus(result.error.code));
+      return { ok: false, error: result.error };
     },
   );
+
+  // ── Whole workflow graph ────────────────────────────────────────────────────
+
+  /**
+   * GET /tasks/:id/workflow-check
+   * What would stop the workflow from running as built (errors) and what
+   * looks unintended (warnings). Used by the editor's pre-run checklist.
+   */
+  app.get('/tasks/:id/workflow-check', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await taskService.checkWorkflow(id);
+    if (result.ok) return { ok: true, data: result.data };
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
+  });
+
+  /**
+   * PUT /tasks/:id/graph
+   * Replace the whole graph in one validated write. Body:
+   * `{ nodes: [{key, title?, description, kind?, agent?, loop?}],
+   *    edges: [{from, to, condition?}], dryRun? }` — see parseGraphSpec.
+   * Nothing is written when the graph has errors (400, with
+   * `error.details.issues`).
+   */
+  app.put('/tasks/:id/graph', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const spec = parseGraphSpec(body['nodes'], body['edges']);
+    if (!spec.ok) {
+      reply.code(400);
+      return invalidRequest(spec.error);
+    }
+    const result = await taskService.setWorkflowGraph(id, spec.graph, {
+      dryRun: body['dryRun'] === true,
+    });
+    if (result.ok) return { ok: true, data: result.data };
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
+  });
+
+  /**
+   * PUT /tasks/:id/layout
+   * Save where nodes sit on the canvas: `{ positions: {[subtaskId]: {x, y}} }`.
+   * Allowed while a run is going — it doesn't change what the workflow does.
+   */
+  app.put('/tasks/:id/layout', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = layoutSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return invalidRequest('positions must map node ids to {x, y} numbers');
+    }
+    const result = await taskService.saveWorkflowLayout(
+      id,
+      parsed.data.positions,
+    );
+    if (result.ok) return { ok: true, data: result.data };
+    reply.code(errorStatus(result.error.code));
+    return { ok: false, error: result.error };
+  });
 
   // ── Deliverables ────────────────────────────────────────────────────────────
 

@@ -14,6 +14,14 @@ import { TaskOperations } from './operations/task-operations';
 import { SubtaskOperations } from './operations/subtask-operations';
 import { WorkflowTemplateOperations } from './operations/workflow-template-operations';
 import {
+  WorkflowGraphOperations,
+  type SetGraphResult,
+} from './operations/workflow-graph-operations';
+import type {
+  WorkflowGraph,
+  WorkflowGraphCheck,
+} from '@openaidy/workflow-templates';
+import {
   TaskExecution,
   type StartRunOptions,
 } from './execution/task-execution';
@@ -51,6 +59,7 @@ export class TaskService {
   private readonly ops: TaskOperations;
   private readonly subtaskOps: SubtaskOperations;
   private readonly templateOps: WorkflowTemplateOperations;
+  private readonly graphOps: WorkflowGraphOperations;
   private readonly execution: TaskExecution;
 
   constructor(
@@ -67,11 +76,19 @@ export class TaskService {
       taskSchedulesService,
       logger,
     );
+    this.graphOps = new WorkflowGraphOperations(
+      options.tasksRepo,
+      options.subtasksRepo,
+      options.agents,
+      logger,
+    );
     this.subtaskOps = new SubtaskOperations(
       options.tasksRepo,
       options.subtasksRepo,
       options.agents,
       logger,
+      this.graphOps,
+      (taskId) => this.execution.isRunning(taskId),
     );
     this.templateOps = new WorkflowTemplateOperations(
       options.tasksRepo,
@@ -258,7 +275,7 @@ export class TaskService {
 
   async assignSubtaskAgent(
     id: string,
-    agentId: string,
+    agentId: string | null,
   ): Promise<ServiceResult<Subtask>> {
     return this.subtaskOps.assignSubtaskAgent(id, agentId);
   }
@@ -306,12 +323,106 @@ export class TaskService {
   // Workflow Templates
   // ========================================
 
+  /**
+   * Adds a template's steps to the task. With `clearExisting` the template
+   * replaces the current graph: the old steps are only removed once the
+   * template's are in place, so a failure leaves the workflow unchanged.
+   */
   async applyWorkflowTemplate(
     taskId: string,
     templateId: string,
     inputs: Record<string, string>,
+    options: { clearExisting?: boolean } = {},
   ): ReturnType<WorkflowTemplateOperations['applyTemplate']> {
-    return this.templateOps.applyTemplate(taskId, templateId, inputs);
+    const locked = await this.refuseWhileRunning(taskId);
+    if (locked) return locked;
+    if (!options.clearExisting) {
+      return this.templateOps.applyTemplate(taskId, templateId, inputs);
+    }
+    return this.graphOps.replaceGraph(taskId, () =>
+      this.templateOps.applyTemplate(taskId, templateId, inputs),
+    );
+  }
+
+  // ========================================
+  // Workflow graph
+  // ========================================
+
+  /** Problems that would stop the workflow from running as built. */
+  async checkWorkflow(
+    taskId: string,
+  ): Promise<ServiceResult<WorkflowGraphCheck>> {
+    return this.graphOps.checkTask(taskId);
+  }
+
+  /** Validates a graph before any workflow exists for it. */
+  checkWorkflowGraph(graph: WorkflowGraph): WorkflowGraphCheck {
+    return this.graphOps.checkGraph(graph);
+  }
+
+  /**
+   * Replaces the workflow's whole graph in one validated write (or, with
+   * `dryRun`, only validates it). Node `agentId`s may be agent names.
+   */
+  async setWorkflowGraph(
+    taskId: string,
+    graph: WorkflowGraph,
+    options: { dryRun?: boolean } = {},
+  ): Promise<ServiceResult<SetGraphResult>> {
+    if (!options.dryRun) {
+      const locked = await this.refuseWhileRunning(taskId);
+      if (locked) return locked;
+    }
+    return this.graphOps.setGraph(taskId, graph, options);
+  }
+
+  /** Saves where nodes sit on the canvas (allowed during a run). */
+  async saveWorkflowLayout(
+    taskId: string,
+    positions: Record<string, { x: number; y: number }>,
+  ): Promise<ServiceResult<{ updated: number }>> {
+    return this.graphOps.savePositions(taskId, positions);
+  }
+
+  private async refuseWhileRunning(
+    taskId: string,
+  ): Promise<ServiceResult<never> | null> {
+    if (!(await this.execution.isRunning(taskId))) return null;
+    return {
+      ok: false,
+      error: {
+        code: 'workflow.locked',
+        message:
+          'This workflow is running. Stop the run (or wait for it to finish) before changing its steps.',
+      },
+    };
+  }
+
+  /** Refuses to start a workflow whose graph can't run as built. */
+  private async refuseInvalidGraph(
+    taskId: string,
+  ): Promise<ServiceResult<never> | null> {
+    const task = await this.ops.getTask(taskId);
+    if (!task) {
+      return {
+        ok: false,
+        error: {
+          code: 'task.not_found',
+          message: `Task "${taskId}" not found`,
+        },
+      };
+    }
+    if (!task.planningEnabled) return null;
+    const check = await this.graphOps.checkTask(taskId);
+    if (!check.ok || check.data.ok) return null;
+    return {
+      ok: false,
+      error: {
+        code: 'workflow.invalid_graph',
+        message: `Fix these before running the workflow:\n${check.data.errors.map((e) => `- ${e.message}`).join('\n')}`,
+        details: { issues: check.data.errors },
+      },
+    };
   }
 
   // ========================================
@@ -322,6 +433,8 @@ export class TaskService {
     taskId: string,
     options: { sessionId?: string } = {},
   ): Promise<ServiceResult<{ sessionId: string; runId: string }>> {
+    const invalid = await this.refuseInvalidGraph(taskId);
+    if (invalid) return invalid;
     return this.execution.executeTask(taskId, options);
   }
 
@@ -329,6 +442,8 @@ export class TaskService {
     taskId: string,
     options: StartRunOptions = {},
   ): Promise<ServiceResult<{ runId: string; sessionId: string }>> {
+    const invalid = await this.refuseInvalidGraph(taskId);
+    if (invalid) return invalid;
     return this.execution.startRun(taskId, options);
   }
 

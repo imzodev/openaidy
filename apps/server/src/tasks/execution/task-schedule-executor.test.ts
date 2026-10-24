@@ -75,6 +75,8 @@ const makeSubtask = (overrides: Partial<Subtask> = {}): Subtask => ({
   approvalDecision: null,
   approvalNote: null,
   approvedBy: null,
+  positionX: null,
+  positionY: null,
   createdAt: new Date('2026-06-01T00:00:00Z'),
   updatedAt: new Date('2026-06-01T00:00:00Z'),
   ...overrides,

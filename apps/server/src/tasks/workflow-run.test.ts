@@ -24,115 +24,7 @@ import {
   createWorkflowApprovalResolveTool,
 } from '../tools/workflows/approvals';
 
-type Turn = {
-  sessionId: string;
-  content: string;
-  agentId?: string;
-  runId?: string;
-};
-type Reply = string | { fail: string };
-
-const VERIFY_PREFIX = 'Evaluate whether this subtask';
-const COMPLETED = '{"verdict": "COMPLETED", "reason": "done"}';
-
-/** Scripted stand-in for SessionMessageService. */
-class FakeSessions {
-  readonly turns: Turn[] = [];
-  readonly cancelled: string[] = [];
-  private readonly messages = new Map<
-    string,
-    Array<{ role: string; content: string }>
-  >();
-  private readonly aborters = new Map<string, () => void>();
-
-  /** Agent reply for a step turn (verification turns use `verdict`). */
-  reply: (turn: Turn) => Reply | Promise<Reply> = () => 'Done.';
-  verdict: (turn: Turn) => Reply | Promise<Reply> = () => COMPLETED;
-
-  constructor(private readonly db: DatabaseAdapter) {}
-
-  async createSession(title: string, type?: 'chat' | 'task' | 'subtask') {
-    return this.db.repositories.sessions.create({
-      title,
-      ...(type ? { type } : {}),
-    });
-  }
-
-  async listMessages(sessionId: string) {
-    return this.messages.get(sessionId) ?? [];
-  }
-
-  cancelRun(key: string): boolean {
-    this.cancelled.push(key);
-    const abort = this.aborters.get(key);
-    abort?.();
-    return Boolean(abort);
-  }
-
-  stepTurns(): Turn[] {
-    return this.turns.filter((t) => !t.content.startsWith(VERIFY_PREFIX));
-  }
-
-  async submitMessageStreaming(input: {
-    sessionId: string;
-    content: string;
-    agentId?: string;
-    runId?: string;
-  }) {
-    const turn: Turn = {
-      sessionId: input.sessionId,
-      content: input.content,
-      ...(input.agentId ? { agentId: input.agentId } : {}),
-      ...(input.runId ? { runId: input.runId } : {}),
-    };
-    this.turns.push(turn);
-    const log = this.messages.get(input.sessionId) ?? [];
-    this.messages.set(input.sessionId, log);
-    log.push({ role: 'user', content: input.content });
-
-    let aborted = false;
-    const abort = new Promise<'aborted'>((resolve) => {
-      if (input.runId) {
-        this.aborters.set(input.runId, () => {
-          aborted = true;
-          resolve('aborted');
-        });
-      }
-    });
-    const replyFn = input.content.startsWith(VERIFY_PREFIX)
-      ? this.verdict
-      : this.reply;
-    const result = await Promise.race([Promise.resolve(replyFn(turn)), abort]);
-    if (input.runId) this.aborters.delete(input.runId);
-
-    if (aborted || result === 'aborted') {
-      return {
-        ok: false as const,
-        error: { code: 'cancelled', message: 'Run cancelled by user' },
-      };
-    }
-    if (typeof result === 'object') {
-      return {
-        ok: false as const,
-        error: { code: 'provider_error', message: result.fail },
-      };
-    }
-    const assistantMessage = { role: 'assistant', content: result };
-    log.push(assistantMessage);
-    return {
-      ok: true as const,
-      userMessage: { role: 'user', content: input.content },
-      assistantMessage,
-      run: {},
-    };
-  }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => (resolve = r));
-  return { promise, resolve };
-}
+import { FakeSessions, deferred, type Reply } from './testing/fake-sessions';
 
 describe('workflow runs', { timeout: 20000 }, () => {
   let dir: string;
@@ -623,13 +515,31 @@ describe('workflow runs', { timeout: 20000 }, () => {
     );
   });
 
+  it('refuses to start a run of a graph with a cycle', async () => {
+    const a = await step('A');
+    const b = await step('B');
+    await edge(a, b);
+    await edge(b, a);
+
+    const started = await service.startRun(task.id);
+    expect(started.ok).toBe(false);
+    if (!started.ok) {
+      expect(started.error.code).toBe('workflow.invalid_graph');
+      expect(started.error.message).toContain('cycle');
+    }
+    expect(await latestRun()).toBeNull();
+  });
+
   it('fails the run when steps wait on each other', async () => {
     const a = await step('A');
     const b = await step('B');
     await edge(a, b);
     await edge(b, a);
 
-    await service.startRun(task.id);
+    // executeSubtasks starts a run without the pre-run graph check, which
+    // is how a graph broken behind the editor's back would reach the
+    // engine.
+    await service.executeSubtasks(task.id);
     await service.whenIdle();
 
     expect(await statuses()).toEqual({ A: 'skipped', B: 'skipped' });

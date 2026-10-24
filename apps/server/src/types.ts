@@ -117,7 +117,15 @@ export type TaskScheduleRoutesOptions = {
 
 export type ServiceResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { code: string; message: string } };
+  | {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        /** Structured extras, e.g. the issues of an invalid workflow graph. */
+        details?: Record<string, unknown>;
+      };
+    };
 
 export type CreateTaskInput = {
   title: string;
@@ -163,6 +171,9 @@ export type UpdateSubtaskInput = {
   subtaskKind?: SubtaskKind;
   loop?: LoopConfig | null;
 };
+
+/** Whether a task's graph may be edited right now (no run is going). */
+export type GraphEditGuard = (taskId: string) => Promise<boolean>;
 
 export type TaskWithDetails = Task & {
   agents: TaskAgent[];

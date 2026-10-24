@@ -54,6 +54,12 @@ function makeTaskServiceMock(): {
   const getSubtasks = vi.fn(notImplemented);
   const deleteSubtask = vi.fn(notImplemented);
   const listTasks = vi.fn(notImplemented);
+  const checkWorkflow = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      data: { ok: true, errors: [], warnings: [] },
+    }),
+  );
 
   const service = {
     getTask,
@@ -71,6 +77,7 @@ function makeTaskServiceMock(): {
     getSubtasks,
     deleteSubtask,
     listTasks,
+    checkWorkflow,
   } as unknown as TaskService;
 
   return {
@@ -110,7 +117,7 @@ function workflowTask(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createWorkflowTools', () => {
-  it('returns the fifteen workflow tools (workflow + approvals + nodes + edges)', () => {
+  it('returns the sixteen workflow tools (workflow + approvals + graph + nodes + edges)', () => {
     const tools = createWorkflowTools(() => undefined);
     const names = tools.map((t) => t.name);
     expect(names).toEqual([
@@ -122,6 +129,7 @@ describe('createWorkflowTools', () => {
       'workflow_execute',
       'workflow_approval_list',
       'workflow_approval_resolve',
+      'workflow_set_graph',
       'workflow_apply_template',
       'workflow_node_create',
       'workflow_node_update',
@@ -540,6 +548,7 @@ describe('workflow_apply_template', () => {
       'wf-1',
       'software-development',
       { projectName: 'Foo' },
+      { clearExisting: false },
     );
     if (result.ok) {
       expect(result.content).toContain('Nodes created: 4');
@@ -547,24 +556,9 @@ describe('workflow_apply_template', () => {
     }
   });
 
-  it('clears existing subtasks first when clearExisting=true', async () => {
+  it('asks the service to replace the graph when clearExisting=true', async () => {
     const mocks = makeTaskServiceMock();
     mocks.getTask.mockResolvedValue(workflowTask());
-    mocks.getSubtasks.mockResolvedValue([
-      {
-        id: 'sub-old',
-        title: 'old',
-        description: 'x',
-        dependsOnSubtaskIds: [],
-      },
-      {
-        id: 'sub-old-2',
-        title: 'old2',
-        description: 'y',
-        dependsOnSubtaskIds: [],
-      },
-    ]);
-    mocks.deleteSubtask.mockResolvedValue({ ok: true, data: true });
     mocks.applyWorkflowTemplate.mockResolvedValue({
       ok: true,
       data: { nodeCount: 2, edgeCount: 1 },
@@ -581,9 +575,15 @@ describe('workflow_apply_template', () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(mocks.deleteSubtask).toHaveBeenCalledTimes(2);
-    expect(mocks.deleteSubtask).toHaveBeenCalledWith('sub-old');
-    expect(mocks.deleteSubtask).toHaveBeenCalledWith('sub-old-2');
+    expect(mocks.applyWorkflowTemplate).toHaveBeenCalledWith(
+      'wf-1',
+      'software-development',
+      {},
+      { clearExisting: true },
+    );
+    // The service swaps the graph itself (transactionally); the tool must
+    // not delete nodes one by one first.
+    expect(mocks.deleteSubtask).not.toHaveBeenCalled();
     if (result.ok) {
       expect(result.content).toMatch(/Existing nodes\/edges were cleared/);
     }
