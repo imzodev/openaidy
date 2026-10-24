@@ -99,6 +99,22 @@ export type ChannelConfig = z.infer<typeof channelConfigSchema>;
 export const mcpServerTransportSchema = z.enum(['stdio', 'http']);
 
 /**
+ * OAuth sign-in for a remote (http) MCP server, per the MCP authorization
+ * spec. Without `clientId` the client registers itself dynamically (RFC 7591)
+ * — the "one-click" path most hosted servers support. Servers that don't
+ * allow dynamic registration (e.g. Google, Microsoft, GitHub) need a
+ * pre-registered `clientId` (and usually `clientSecret`).
+ */
+export const mcpServerAuthSchema = z.object({
+  type: z.literal('oauth'),
+  clientId: z.string().min(1).optional(),
+  clientSecret: mcpSecretValueSchema.optional(),
+  scopes: z.array(z.string().min(1)).optional(),
+});
+
+export type McpServerAuthConfig = z.infer<typeof mcpServerAuthSchema>;
+
+/**
  * MCP server configuration schema
  *
  * Supports two transport types:
@@ -117,11 +133,12 @@ export const mcpServerConfigSchema = z
     // http transport fields
     url: z.string().url().optional(),
     headers: z.record(mcpSecretValueSchema).optional(),
+    auth: mcpServerAuthSchema.optional(),
   })
   .refine(
     (data) => {
       if (data.transport === 'stdio') {
-        return !!data.command;
+        return !!data.command && !data.auth;
       }
       if (data.transport === 'http') {
         return !!data.url;
@@ -129,7 +146,8 @@ export const mcpServerConfigSchema = z
       return false;
     },
     {
-      message: 'stdio transport requires command, http transport requires url',
+      message:
+        'stdio transport requires command (and no auth), http transport requires url',
     },
   );
 

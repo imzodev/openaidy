@@ -76,6 +76,8 @@ import {
 } from './recurring';
 import { createMcpClientService } from './mcp/client';
 import { EnvPlaceholderResolver } from './mcp/placeholder-resolver';
+import { DbMcpOAuthStore, McpOAuthService, usesOAuth } from './mcp/oauth';
+import { DbOAuthStateStore } from './providers/oauth/state-store';
 import { createProviderServices } from './providers';
 import { SessionMessageService } from './sessions/service';
 import { createAgentRegistry } from './agents';
@@ -291,11 +293,26 @@ export async function buildApp() {
   }
 
   // Create MCP client service (before sessionService so it can be injected)
+  const mcpResolver = new EnvPlaceholderResolver(process.env, () =>
+    configService.getMcpSecrets(),
+  );
+  // OAuth sign-in for remote MCP servers persists tokens in the DB, so it's
+  // only available when one is configured.
+  const mcpOAuth = dbAdapter
+    ? new McpOAuthService({
+        store: new DbMcpOAuthStore(
+          dbAdapter.client as import('@openaidy/db').DatabaseClient,
+        ),
+        flowStates: new DbOAuthStateStore(
+          dbAdapter.client as import('@openaidy/db').DatabaseClient,
+        ),
+        resolver: mcpResolver,
+      })
+    : undefined;
   const mcpService = createMcpClientService({
     logger: pinoLog,
-    resolver: new EnvPlaceholderResolver(process.env, () =>
-      configService.getMcpSecrets(),
-    ),
+    resolver: mcpResolver,
+    oauth: mcpOAuth,
   });
 
   // Create workspace service before sessionService so it can be injected into builtin tools
@@ -956,7 +973,12 @@ export async function buildApp() {
 
       // Register MCP routes (config CRUD + runtime connect/disconnect)
       await api.register(
-        createMcpRoutesPlugin({ mcpService, configService, authMiddleware }),
+        createMcpRoutesPlugin({
+          mcpService,
+          configService,
+          authMiddleware,
+          oauth: mcpOAuth,
+        }),
       );
 
       // Register channel routes
@@ -1196,6 +1218,16 @@ export async function buildApp() {
       }
       void (async () => {
         try {
+          // Same idea for an OAuth server nobody has signed in to yet.
+          if (
+            usesOAuth(serverConfig) &&
+            (await mcpService.authStatus(serverConfig)) === 'needs_sign_in'
+          ) {
+            log.info('MCP server awaiting sign-in — not auto-connecting', {
+              serverId: serverConfig.id,
+            });
+            return;
+          }
           await mcpService.connect(serverConfig);
           log.info('MCP server connected', { serverId: serverConfig.id });
         } catch (err) {

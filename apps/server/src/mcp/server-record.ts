@@ -22,6 +22,7 @@
 
 import type { McpServerConfig } from '@openaidy/config';
 import type {
+  McpAuthStatus,
   McpSecretField,
   McpSecretValue,
   McpServerRecord,
@@ -76,6 +77,8 @@ export type McpRuntimeStatus = {
    * the environment. Omitted → treated as none (fully configured).
    */
   missingSecrets?: string[];
+  /** OAuth sign-in state. Omitted → `none`. */
+  authStatus?: McpAuthStatus;
 };
 
 /** Normalize a single `env`/`headers` value into its redacted API shape. */
@@ -239,5 +242,18 @@ export function toMcpServerRecord(
     toolCount: runtime.tools.length,
     tools: runtime.tools,
     missingSecrets: runtime.missingSecrets ?? [],
+    ...(config.auth
+      ? {
+          auth: {
+            type: config.auth.type,
+            clientId: config.auth.clientId,
+            scopes: config.auth.scopes,
+            ...(config.auth.clientSecret !== undefined
+              ? { clientSecret: redactValue(config.auth.clientSecret) }
+              : {}),
+          },
+        }
+      : {}),
+    authStatus: runtime.authStatus ?? 'none',
   };
 }

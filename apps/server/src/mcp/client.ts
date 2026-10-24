@@ -10,9 +10,17 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { FastifyBaseLogger } from 'fastify';
 import type { McpServerConfig } from '@openaidy/config';
+import type { McpAuthStatus } from '@openaidy/shared-types';
+import {
+  McpAuthRequiredError,
+  usesOAuth,
+  type McpOAuthClientProvider,
+  type McpOAuthService,
+} from './oauth';
 import { EnvPlaceholderResolver } from './placeholder-resolver';
 import {
   createProcessRunner,
@@ -87,6 +95,11 @@ export type McpClientServiceOptions = {
    * repair entirely.
    */
   uvxRepairer?: UvxEnvironmentRepairer | null | undefined;
+  /**
+   * OAuth sign-in for http servers configured with `auth: { type: 'oauth' }`.
+   * Without it, such servers cannot connect.
+   */
+  oauth?: McpOAuthService | undefined;
 };
 
 /**
@@ -99,6 +112,12 @@ export class McpClientService {
   private logger: FastifyBaseLogger | undefined;
   private resolver: EnvPlaceholderResolver;
   private repairUvxEnvironment: UvxEnvironmentRepairer | undefined;
+  private oauth: McpOAuthService | undefined;
+  /**
+   * OAuth servers whose last connect or tool call was rejected for lack of
+   * valid tokens — they stay in "needs sign-in" until a connect succeeds.
+   */
+  private authRejected = new Set<string>();
   private shutdownHandlersRegistered = false;
   /**
    * `--exclude-newer` bounds discovered by {@link repairUvxEnvironment}, keyed
@@ -113,6 +132,7 @@ export class McpClientService {
   constructor(options?: McpClientServiceOptions) {
     this.logger = options?.logger;
     this.resolver = options?.resolver ?? new EnvPlaceholderResolver();
+    this.oauth = options?.oauth;
     this.repairUvxEnvironment =
       options?.uvxRepairer === null
         ? undefined
@@ -158,6 +178,18 @@ export class McpClientService {
         ? serverConfig.headers
         : serverConfig.env;
     return this.resolver.findMissingVars(record);
+  }
+
+  /**
+   * OAuth sign-in state for a server. `needs_sign_in` covers both "never
+   * signed in" and "stored tokens were rejected" — either way the user has
+   * to go through the browser flow before the server can connect.
+   */
+  async authStatus(serverConfig: McpServerConfig): Promise<McpAuthStatus> {
+    if (!usesOAuth(serverConfig)) return 'none';
+    if (this.authRejected.has(serverConfig.id)) return 'needs_sign_in';
+    const signedIn = (await this.oauth?.hasTokens(serverConfig.id)) ?? false;
+    return signedIn ? 'signed_in' : 'needs_sign_in';
   }
 
   /**
@@ -339,13 +371,30 @@ export class McpClientService {
       'Connecting to MCP server via HTTP',
     );
 
+    // OAuth servers attach (and refresh) their access token through the
+    // SDK's authProvider. With no tokens stored there's nothing to try — the
+    // user has to sign in first, which only the browser flow can do.
+    let authProvider: McpOAuthClientProvider | undefined;
+    if (usesOAuth(serverConfig)) {
+      if (!this.oauth || !(await this.oauth.hasTokens(id))) {
+        throw new McpAuthRequiredError(id);
+      }
+      authProvider = await this.oauth.createProvider(serverConfig);
+    }
+
     try {
       // Create Streamable HTTP transport with optional headers via requestInit
-      const httpTransportOptions: { requestInit?: RequestInit } = {};
+      const httpTransportOptions: {
+        requestInit?: RequestInit;
+        authProvider?: McpOAuthClientProvider;
+      } = {};
       if (resolvedHeaders && Object.keys(resolvedHeaders).length > 0) {
         httpTransportOptions.requestInit = {
           headers: resolvedHeaders,
         };
+      }
+      if (authProvider) {
+        httpTransportOptions.authProvider = authProvider;
       }
       const transport = new StreamableHTTPClientTransport(
         new URL(url),
@@ -381,9 +430,18 @@ export class McpClientService {
 
       // Discover tools
       await this.discoverTools(id);
+      this.authRejected.delete(id);
 
       this.logger?.info({ serverId: id }, 'Connected to MCP server via HTTP');
     } catch (error) {
+      if (authProvider && error instanceof UnauthorizedError) {
+        this.authRejected.add(id);
+        this.logger?.info(
+          { serverId: id },
+          'MCP server rejected stored OAuth credentials — sign-in required',
+        );
+        throw new McpAuthRequiredError(id);
+      }
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       this.logger?.error(
@@ -490,6 +548,11 @@ export class McpClientService {
 
       return response as McpToolResult;
     } catch (error) {
+      // A refresh that fails mid-session leaves the server unusable until
+      // the user signs in again; flag it so the UI says so.
+      if (error instanceof UnauthorizedError) {
+        this.authRejected.add(serverId);
+      }
       this.logger?.error(
         {
           serverId,
@@ -602,6 +665,14 @@ export class McpClientService {
 
     this.connections.delete(serverId);
     this.uvxExcludeNewer.delete(serverId);
+  }
+
+  /**
+   * Clear a server's "sign-in rejected" flag — call after a fresh sign-in
+   * or a sign-out, so status reflects the new stored credentials.
+   */
+  resetAuthState(serverId: string): void {
+    this.authRejected.delete(serverId);
   }
 
   /**

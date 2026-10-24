@@ -29,6 +29,8 @@ export * from './repositories/memories';
 export * from './repositories/marketplace';
 export * from './repositories/provider-credentials';
 export * from './repositories/oauth-flow-state';
+export * from './repositories/mcp-oauth-credentials';
 export * from './schema/provider-credentials';
 export * from './schema/oauth-flow-state';
+export * from './schema/mcp-oauth-credentials';
 export * from './schema/marketplace';
