@@ -197,6 +197,7 @@ export class TaskExecution {
   private readonly cancelKeys = new Map<string, string>();
   /** Background work started by this executor (awaited by whenIdle). */
   private readonly background = new Set<Promise<unknown>>();
+  private readonly changeListeners = new Set<(taskId: string) => void>();
 
   constructor(
     private readonly tasksRepo: TasksRepository,
@@ -242,10 +243,37 @@ export class TaskExecution {
     void tracked.finally(() => this.background.delete(tracked));
   }
 
-  /** Serialise state transitions per task. */
+  /**
+   * Called with the task id after any change to a run or its steps, so
+   * clients can refresh instead of polling.
+   */
+  onWorkflowChange(listener: (taskId: string) => void): () => void {
+    this.changeListeners.add(listener);
+    return () => this.changeListeners.delete(listener);
+  }
+
+  private notifyChange(taskId: string): void {
+    for (const listener of this.changeListeners) {
+      try {
+        listener(taskId);
+      } catch (err) {
+        this.logger.warn('Workflow change listener failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  /**
+   * Serialise state transitions per task. Every transition runs under
+   * this lock, so it is also where changes are announced.
+   */
   private withLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
     const prev = this.locks.get(taskId) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(fn);
+    const next = prev
+      .catch(() => undefined)
+      .then(fn)
+      .finally(() => this.notifyChange(taskId));
     this.locks.set(taskId, next);
     void next
       .catch(() => undefined)
@@ -274,6 +302,14 @@ export class TaskExecution {
 
   async getRun(runId: string): Promise<WorkflowRun | null> {
     return this.runs.findById(runId);
+  }
+
+  /** Gates waiting for a decision whose step is still in progress. */
+  async listPendingApprovals(): Promise<
+    Array<Subtask & { taskTitle: string }>
+  > {
+    const rows = await this.subtasksRepo.listAwaitingApproval();
+    return rows.filter((s) => s.status === 'in_progress');
   }
 
   /**

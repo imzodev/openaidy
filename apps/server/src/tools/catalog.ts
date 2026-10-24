@@ -458,6 +458,26 @@ export const workflowDeleteMeta: ToolMeta = {
     'If you only want to remove a single node, use the node tools instead.',
 };
 
+export const workflowApprovalListMeta: ToolMeta = {
+  name: 'workflow_approval_list',
+  category: 'Workflows',
+  description:
+    'List approval steps that are waiting for a person to approve or ' +
+    'reject them, across all workflows (oldest first). Use this to tell ' +
+    'the user what is waiting on them, then pass their decision to ' +
+    'workflow_approval_resolve.',
+};
+
+export const workflowApprovalResolveMeta: ToolMeta = {
+  name: 'workflow_approval_resolve',
+  category: 'Workflows',
+  description:
+    "Approve or reject a waiting approval step on the user's behalf. Only " +
+    'call this with a decision the user actually gave you — never decide ' +
+    'yourself. The workflow then continues: approved follows the normal ' +
+    'path, rejected follows any branch whose condition is "rejected".',
+};
+
 export const workflowExecuteMeta: ToolMeta = {
   name: 'workflow_execute',
   category: 'Workflows',
@@ -760,6 +780,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowUpdateMeta,
   workflowDeleteMeta,
   workflowExecuteMeta,
+  workflowApprovalListMeta,
+  workflowApprovalResolveMeta,
   workflowApplyTemplateMeta,
   workflowListMeta,
   workflowNodeCreateMeta,

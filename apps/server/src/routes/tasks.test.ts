@@ -53,6 +53,7 @@ const createMockTaskService = () => ({
   listRuns: vi.fn(),
   cancelRun: vi.fn(),
   retrySubtask: vi.fn(),
+  listPendingApprovals: vi.fn(),
 });
 
 type MockTaskService = ReturnType<typeof createMockTaskService>;
@@ -1320,6 +1321,35 @@ describe('taskRoutes', () => {
       };
       expect(result.ok).toBe(true);
       expect(result.data.status).toBe('cancelled');
+    });
+
+    it('lists waiting approvals across workflows', async () => {
+      const r = await route('GET', '/approvals/pending');
+      mockService.listPendingApprovals.mockResolvedValue([
+        {
+          id: 'gate1',
+          title: 'Approve post',
+          description: 'Check the draft',
+          taskId: 'task1',
+          taskTitle: 'Social',
+          awaitingApprovalSince: new Date('2026-10-23T10:00:00Z'),
+          updatedAt: new Date('2026-10-23T10:00:00Z'),
+        },
+      ]);
+      const reply = { code: vi.fn().mockReturnThis() };
+      const result = (await r.handler({}, reply)) as {
+        data: Array<Record<string, unknown>>;
+      };
+      expect(result.data).toEqual([
+        {
+          subtaskId: 'gate1',
+          title: 'Approve post',
+          description: 'Check the draft',
+          taskId: 'task1',
+          taskTitle: 'Social',
+          since: '2026-10-23T10:00:00.000Z',
+        },
+      ]);
     });
 
     it('returns 409 when retrying a step that did not fail', async () => {

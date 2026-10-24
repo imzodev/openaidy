@@ -385,6 +385,27 @@ export class ConnectionManager {
   }
 
   /**
+   * Broadcast a message to every authenticated connection.
+   */
+  broadcastAuthenticated(message: unknown): number {
+    const data =
+      typeof message === 'string' ? message : JSON.stringify(message);
+    let sent = 0;
+    for (const ctx of this.connections.values()) {
+      if (!ctx.authenticated || !ctx.socket || ctx.status !== 'connected') {
+        continue;
+      }
+      try {
+        ctx.socket.send(data);
+        sent++;
+      } catch {
+        // Ignore send errors
+      }
+    }
+    return sent;
+  }
+
+  /**
    * Broadcast a message to all connections
    */
   broadcast(message: unknown, exclude: string[] = []): number {

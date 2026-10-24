@@ -10,7 +10,14 @@
  */
 
 import { createSignal, createMemo, Show, For, onMount } from 'solid-js';
-import { Workflow, Plus, ArrowRight, AlertCircle } from 'lucide-solid';
+import {
+  Workflow,
+  Plus,
+  ArrowRight,
+  AlertCircle,
+  Hourglass,
+} from 'lucide-solid';
+import { usePendingApprovals } from '../../lib/workflow-live';
 import { Layout } from './Layout';
 import {
   CreateWorkflowModal,
@@ -71,6 +78,9 @@ function formatRelativeTime(iso: string): string {
 }
 
 export function WorkflowsPage(props: WorkflowsPageProps) {
+  const pendingApprovals = usePendingApprovals();
+  const waitingCount = (taskId: string) =>
+    pendingApprovals().filter((a) => a.taskId === taskId).length;
   const [workflows, setWorkflows] = createSignal<Task[]>([]);
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
@@ -221,6 +231,14 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
                   </h3>
                   <ArrowRight class="w-4 h-4 text-primary flex-shrink-0 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </div>
+                <Show when={waitingCount(task.id) > 0}>
+                  <span class="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                    <Hourglass class="w-3 h-3" />
+                    {waitingCount(task.id) === 1
+                      ? 'Waiting for your approval'
+                      : `${waitingCount(task.id)} approvals waiting`}
+                  </span>
+                </Show>
                 <Show when={task.description}>
                   <p class="text-xs text-text-secondary mt-1 line-clamp-2 min-h-[2rem]">
                     {task.description}

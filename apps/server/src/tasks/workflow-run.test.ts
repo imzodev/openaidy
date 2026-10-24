@@ -19,6 +19,10 @@ import {
 import { DEFAULT_EXECUTION_CONFIG } from '@openaidy/config';
 import { getWorkflowTemplate } from '@openaidy/workflow-templates';
 import { TaskService, type TaskServiceOptions } from './service';
+import {
+  createWorkflowApprovalListTool,
+  createWorkflowApprovalResolveTool,
+} from '../tools/workflows/approvals';
 
 type Turn = {
   sessionId: string;
@@ -662,5 +666,58 @@ describe('workflow runs', { timeout: 20000 }, () => {
     expect(final.every((s) => s.status === 'completed')).toBe(true);
     expect(testRuns).toBe(2);
     expect((await latestRun())?.status).toBe('completed');
+  });
+
+  it('lists waiting approvals and resolves one relayed by an agent', async () => {
+    const gate = await step('Approve', { subtaskKind: 'approval_gate' });
+    const after = await step('After');
+    await edge(gate, after);
+    await service.startRun(task.id);
+    await service.whenIdle();
+
+    const pending = await service.listPendingApprovals();
+    expect(pending.map((p) => [p.id, p.taskTitle])).toEqual([
+      [gate.id, 'Workflow'],
+    ]);
+
+    const ctx = { agentId: 'concierge', sessionId: 's' } as never;
+    const list = await createWorkflowApprovalListTool(() => service).execute(
+      {},
+      ctx,
+    );
+    expect(list.ok && list.content).toContain(gate.id);
+
+    const resolve = createWorkflowApprovalResolveTool(() => service);
+    const result = await resolve.execute(
+      { nodeId: gate.id, decision: 'approved', note: 'go ahead' },
+      ctx,
+    );
+    expect(result.ok).toBe(true);
+    await service.whenIdle();
+
+    const row = (await db.repositories.subtasks.findById(gate.id))!;
+    expect(row.approvedBy).toBe('agent:concierge');
+    expect(await service.listPendingApprovals()).toEqual([]);
+    expect((await statuses())['After']).toBe('completed');
+
+    const again = await resolve.execute(
+      { nodeId: gate.id, decision: 'rejected' },
+      ctx,
+    );
+    expect(again.ok).toBe(false);
+  });
+
+  it('announces changes so clients can refresh', async () => {
+    const changed: string[] = [];
+    const unsubscribe = service.onWorkflowChange((id) => changed.push(id));
+    await step('A');
+
+    await service.startRun(task.id);
+    await service.whenIdle();
+    unsubscribe();
+
+    // Start, step completion and run finish each announce the workflow.
+    expect(changed.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(changed)).toEqual(new Set([task.id]));
   });
 });

@@ -1,6 +1,10 @@
 import type { BuiltinTool } from '@openaidy/runtime';
 import type { TaskService } from '../../tasks/service';
 import { createWorkflowApplyTemplateTool } from './apply-template.js';
+import {
+  createWorkflowApprovalListTool,
+  createWorkflowApprovalResolveTool,
+} from './approvals.js';
 import { createWorkflowCreateTool } from './create.js';
 import { createWorkflowDeleteTool } from './delete.js';
 import { createWorkflowExecuteTool } from './execute.js';
@@ -11,6 +15,10 @@ import { createWorkflowNodeTools } from './nodes/index.js';
 import { createWorkflowUpdateTool } from './update.js';
 
 export { createWorkflowApplyTemplateTool } from './apply-template.js';
+export {
+  createWorkflowApprovalListTool,
+  createWorkflowApprovalResolveTool,
+} from './approvals.js';
 export { createWorkflowCreateTool } from './create.js';
 export { createWorkflowDeleteTool } from './delete.js';
 export { createWorkflowExecuteTool } from './execute.js';
@@ -39,6 +47,8 @@ export function createWorkflowTools(
     createWorkflowUpdateTool(getTaskService),
     createWorkflowDeleteTool(getTaskService),
     createWorkflowExecuteTool(getTaskService),
+    createWorkflowApprovalListTool(getTaskService),
+    createWorkflowApprovalResolveTool(getTaskService),
     createWorkflowApplyTemplateTool(getTaskService),
     ...createWorkflowNodeTools(getTaskService),
     ...createWorkflowEdgeTools(getTaskService),

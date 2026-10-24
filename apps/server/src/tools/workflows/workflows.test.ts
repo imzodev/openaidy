@@ -110,7 +110,7 @@ function workflowTask(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createWorkflowTools', () => {
-  it('returns the thirteen workflow tools (workflow + nodes + edges)', () => {
+  it('returns the fifteen workflow tools (workflow + approvals + nodes + edges)', () => {
     const tools = createWorkflowTools(() => undefined);
     const names = tools.map((t) => t.name);
     expect(names).toEqual([
@@ -120,6 +120,8 @@ describe('createWorkflowTools', () => {
       'workflow_update',
       'workflow_delete',
       'workflow_execute',
+      'workflow_approval_list',
+      'workflow_approval_resolve',
       'workflow_apply_template',
       'workflow_node_create',
       'workflow_node_update',

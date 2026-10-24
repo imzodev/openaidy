@@ -130,6 +130,7 @@ const EPHEMERAL_UNSAFE_TOOLS = new Set([
   'workflow_update',
   'workflow_delete',
   'workflow_execute',
+  'workflow_approval_resolve',
   'workflow_apply_template',
   'workflow_node_create',
   'workflow_node_update',

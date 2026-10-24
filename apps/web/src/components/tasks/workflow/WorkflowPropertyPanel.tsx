@@ -16,6 +16,9 @@ import {
   CircleCheck,
   Repeat,
   MousePointerClick,
+  RotateCcw,
+  MessageSquare,
+  Loader2,
 } from 'lucide-solid';
 import type {
   Subtask,
@@ -61,6 +64,7 @@ export type WorkflowPropertyPanelProps = {
     decision: 'approved' | 'rejected',
     note?: string,
   ) => void;
+  onRetryStep?: (id: string) => void;
   onAssignAgent: (id: string, agentId: string) => void;
 };
 
@@ -81,6 +85,96 @@ function SaveIndicator(props: { status: () => 'idle' | 'saved' }) {
         <CircleCheck class="w-3 h-3" />
         Saved
       </span>
+    </Show>
+  );
+}
+
+/**
+ * What happened to a step in the current run: its result, why it failed
+ * (with Retry) or why it was skipped, plus a link to the agent's
+ * conversation.
+ */
+function StepOutcome(props: {
+  subtask: Subtask;
+  onRetry?: (id: string) => void;
+}) {
+  const isGate = () => props.subtask.subtaskKind === 'approval_gate';
+  const running = () =>
+    props.subtask.status === 'in_progress' &&
+    !isGate() &&
+    !props.subtask.awaitingApprovalSince;
+  const box = () => {
+    switch (props.subtask.status) {
+      case 'failed':
+        return {
+          label: 'Why it failed',
+          tone: 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300',
+        };
+      case 'skipped':
+        return {
+          label: 'Why it was skipped',
+          tone: 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-600 dark:text-gray-400',
+        };
+      case 'completed':
+        return isGate()
+          ? null
+          : {
+              label: 'Result',
+              tone: 'border-green-200 dark:border-green-800 bg-green-50/60 dark:bg-green-900/10 text-gray-700 dark:text-gray-300',
+            };
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Show when={box() || running() || props.subtask.sessionId}>
+      <div class="space-y-1.5">
+        <Show when={running()}>
+          <div class="flex items-center gap-1.5 text-xs text-yellow-700 dark:text-yellow-300">
+            <Loader2 class="w-3.5 h-3.5 animate-spin" />
+            Running
+            <Show when={(props.subtask.loopIterationCount ?? 0) > 0}>
+              {' '}
+              (iteration {(props.subtask.loopIterationCount ?? 0) + 1} of{' '}
+              {props.subtask.loopMaxIterations})
+            </Show>
+          </div>
+        </Show>
+        <Show when={box()}>
+          {(b) => (
+            <div class={`rounded-lg border p-2 ${b().tone}`}>
+              <div class="text-[11px] font-semibold uppercase tracking-wide mb-1 opacity-80">
+                {b().label}
+              </div>
+              <div class="text-xs whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {props.subtask.result || 'No details were recorded.'}
+              </div>
+            </div>
+          )}
+        </Show>
+        <div class="flex items-center gap-2">
+          <Show when={props.subtask.status === 'failed' && props.onRetry}>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-lg bg-primary hover:bg-primary-hover text-white shadow-sm transition-colors"
+              onClick={() => props.onRetry?.(props.subtask.id)}
+            >
+              <RotateCcw class="w-3.5 h-3.5" />
+              Retry step
+            </button>
+          </Show>
+          <Show when={props.subtask.sessionId}>
+            <a
+              href={`/chat?sessionId=${props.subtask.sessionId}`}
+              class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <MessageSquare class="w-3.5 h-3.5" />
+              Open conversation
+            </a>
+          </Show>
+        </div>
+      </div>
     </Show>
   );
 }
@@ -386,6 +480,11 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                   </button>
                 </div>
 
+                <StepOutcome
+                  subtask={subtask()}
+                  {...(props.onRetryStep ? { onRetry: props.onRetryStep } : {})}
+                />
+
                 <div>
                   <div class="flex items-center justify-between mb-0.5">
                     <label
@@ -637,17 +736,6 @@ export function WorkflowPropertyPanel(props: WorkflowPropertyPanelProps) {
                         )}
                       </For>
                     </ul>
-                  </div>
-                </Show>
-
-                <Show when={subtask().result}>
-                  <div>
-                    <h4 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">
-                      Result
-                    </h4>
-                    <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 max-h-40 overflow-y-auto">
-                      {subtask().result}
-                    </pre>
                   </div>
                 </Show>
               </div>

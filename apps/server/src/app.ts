@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import type { FastifyBaseLogger } from 'fastify';
 import cors from '@fastify/cors';
@@ -81,7 +82,11 @@ import {
   createPulseRunnableAdapter,
 } from './scheduler';
 import { createAppConfigService } from './config/service';
-import { websocketGatewayPlugin } from './websocket';
+import { websocketGatewayPlugin, type WebSocketGateway } from './websocket';
+import {
+  WORKFLOW_UPDATED_EVENT,
+  type WorkflowUpdatedPayload,
+} from '@openaidy/shared-types';
 import { BootstrapAdminManager } from './bootstrap-admin';
 import { AuthMiddleware } from './websocket/middleware/auth';
 import { createWorkspaceService } from './workspace';
@@ -565,10 +570,14 @@ export async function buildApp() {
   registerHttpLogger(app);
 
   // Register WebSocket gateway
+  let wsGateway: WebSocketGateway | undefined;
   await app.register(websocketGatewayPlugin, {
     enabled: env.WS_ENABLED,
     wsConfig,
     pairingConfig,
+    onGateway: (gateway) => {
+      wsGateway = gateway;
+    },
   });
 
   const authMiddleware = new AuthMiddleware(wsConfig);
@@ -775,6 +784,17 @@ export async function buildApp() {
           runEvents: services.runEvents,
           workspaceBaseDir: env.WORKSPACE_BASE_DIR,
           getExecutionConfig: () => configService.getConfig().execution,
+        });
+        // Tell connected clients when a workflow run or step changes, so
+        // the workflow pages refresh instead of polling.
+        taskService.onWorkflowChange((taskId) => {
+          const payload: WorkflowUpdatedPayload = { taskId };
+          wsGateway?.connectionManager.broadcastAuthenticated({
+            id: randomUUID(),
+            type: WORKFLOW_UPDATED_EVENT,
+            timestamp: new Date().toISOString(),
+            payload,
+          });
         });
         await api.register(taskRoutes, {
           taskService,

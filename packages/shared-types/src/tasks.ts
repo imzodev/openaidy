@@ -289,6 +289,25 @@ export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUS_VALUES)[number];
 export type WorkflowRunTrigger = (typeof WORKFLOW_RUN_TRIGGER_VALUES)[number];
 
 /**
+ * WebSocket event sent to authenticated clients whenever a workflow run
+ * or one of its steps changes. Clients refetch the workflow's steps and
+ * runs; the payload only says which workflow changed.
+ */
+export const WORKFLOW_UPDATED_EVENT = 'workflow.updated';
+
+/** An approval gate waiting for a person's decision. */
+export type PendingApprovalDto = {
+  subtaskId: string;
+  title: string;
+  description: string;
+  taskId: string;
+  taskTitle: string;
+  /** ISO time the gate started waiting. */
+  since: string;
+};
+export type WorkflowUpdatedPayload = { taskId: string };
+
+/**
  * One execution of a workflow (a task's subtask graph).
  */
 export type WorkflowRunDto = {

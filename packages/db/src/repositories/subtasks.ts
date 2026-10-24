@@ -622,6 +622,25 @@ export class SubtasksRepository {
   }
 
   /**
+   * Every approval gate currently waiting for a decision, oldest first,
+   * with the title of the workflow it belongs to.
+   */
+  async listAwaitingApproval(): Promise<
+    Array<schema.Subtask & { taskTitle: string }>
+  > {
+    const rows = await this.db
+      .select({ subtask: schema.subtasks, taskTitle: schema.tasks.title })
+      .from(schema.subtasks)
+      .innerJoin(schema.tasks, eq(schema.subtasks.taskId, schema.tasks.id))
+      .where(isNotNull(schema.subtasks.awaitingApprovalSince))
+      .orderBy(asc(schema.subtasks.awaitingApprovalSince));
+    return rows.map((r: { subtask: schema.Subtask; taskTitle: string }) => ({
+      ...r.subtask,
+      taskTitle: r.taskTitle,
+    }));
+  }
+
+  /**
    * Atomically move a `pending` subtask to `in_progress`. Returns the row
    * only for the caller that won the transition, so two concurrent
    * dispatch passes can never start the same subtask twice.

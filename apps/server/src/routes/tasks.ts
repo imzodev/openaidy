@@ -3,7 +3,10 @@ import { z } from 'zod';
 import type { TaskService } from '../tasks/service';
 import type { PlanningService } from '../planning/service';
 import type { DeliverablesRepository, WorkflowRun } from '@openaidy/db';
-import type { WorkflowRunDto } from '@openaidy/shared-types';
+import type {
+  PendingApprovalDto,
+  WorkflowRunDto,
+} from '@openaidy/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { deriveTitleFromDescription } from '../tasks/derive-title';
@@ -578,6 +581,23 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
     const limit = Math.min(Math.max(Number(query.limit) || 20, 1), 100);
     const runs = await taskService.listRuns(id, limit);
     return { ok: true, data: runs.map(toWorkflowRunDto) };
+  });
+
+  /**
+   * GET /approvals/pending
+   * Approval gates waiting for a decision, across all workflows.
+   */
+  app.get('/approvals/pending', async () => {
+    const rows = await taskService.listPendingApprovals();
+    const data: PendingApprovalDto[] = rows.map((s) => ({
+      subtaskId: s.id,
+      title: s.title,
+      description: s.description,
+      taskId: s.taskId,
+      taskTitle: s.taskTitle,
+      since: new Date(s.awaitingApprovalSince ?? s.updatedAt).toISOString(),
+    }));
+    return { ok: true, data };
   });
 
   /**

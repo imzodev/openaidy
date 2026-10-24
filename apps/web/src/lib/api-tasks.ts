@@ -11,6 +11,7 @@ import type {
   TaskExecutionHistoryDto,
   CreateTaskScheduleInput,
   WorkflowRunDto,
+  PendingApprovalDto,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -621,6 +622,16 @@ export async function listWorkflowRuns(
   const response = await apiFetch(
     `${API_BASE}/api/tasks/${taskId}/runs?limit=${limit}`,
   );
+  return response.json();
+}
+
+/**
+ * Approval steps waiting for a decision, across all workflows.
+ */
+export async function listPendingApprovals(): Promise<
+  ApiResult<PendingApprovalDto[]>
+> {
+  const response = await apiFetch(`${API_BASE}/api/approvals/pending`);
   return response.json();
 }
 

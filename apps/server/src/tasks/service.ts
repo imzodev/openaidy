@@ -348,6 +348,18 @@ export class TaskService {
     return this.execution.getRun(runId);
   }
 
+  /** Approval gates waiting for a decision, across all workflows. */
+  async listPendingApprovals(): Promise<
+    Array<Subtask & { taskTitle: string }>
+  > {
+    return this.execution.listPendingApprovals();
+  }
+
+  /** Subscribe to run/step changes (task id per change). */
+  onWorkflowChange(listener: (taskId: string) => void): () => void {
+    return this.execution.onWorkflowChange(listener);
+  }
+
   async recoverInterruptedRuns(): Promise<void> {
     return this.execution.recoverInterruptedRuns();
   }

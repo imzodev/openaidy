@@ -4,8 +4,9 @@
  * (auto-layout merged with any positions the user dragged and saved
  * to localStorage), and renders the canvas + property panel side by
  * side. Owns all editing actions (add/delete subtask, drag-to-connect
- * edge creation, edge/node property edits, approval resolution) and
- * polls for status updates while the task is running.
+ * edge creation, edge/node property edits, approval resolution, retrying
+ * a step). The parent bumps `refreshKey` when the server reports a change,
+ * and only asks for polling while live updates are unavailable.
  */
 
 import { createSignal, createEffect, onCleanup, Show } from 'solid-js';
@@ -20,6 +21,7 @@ import {
   deleteSubtaskEdge,
   assignSubtaskAgent,
   resolveApproval,
+  retrySubtask,
   type Subtask,
   type SubtaskEdgeDto,
   type SubtaskKind,
@@ -38,7 +40,12 @@ import { wouldCreateCycle } from '../../../lib/workflow-graph';
 export type WorkflowEditorProps = {
   taskId: string;
   agents: Agent[];
-  isTaskRunning: boolean;
+  /** Changes whenever the workflow changed on the server; triggers a reload. */
+  refreshKey?: number;
+  /** Poll for changes (live updates are down while a run is going). */
+  pollForChanges?: boolean;
+  /** Called after an action here changed the run (approve, retry). */
+  onRunChanged?: () => void;
 };
 
 const POLL_INTERVAL_MS = 3000;
@@ -132,8 +139,16 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
     if (props.taskId) void load();
   });
 
+  let lastRefreshKey = props.refreshKey;
   createEffect(() => {
-    if (!props.isTaskRunning) return;
+    const key = props.refreshKey;
+    if (key === lastRefreshKey) return;
+    lastRefreshKey = key;
+    void load();
+  });
+
+  createEffect(() => {
+    if (!props.pollForChanges) return;
     const interval = window.setInterval(() => void load(), POLL_INTERVAL_MS);
     onCleanup(() => window.clearInterval(interval));
   });
@@ -300,6 +315,18 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
       return;
     }
     await load();
+    props.onRunChanged?.();
+  }
+
+  async function handleRetryStep(id: string) {
+    setActionError(null);
+    const result = await retrySubtask(id);
+    if (!result.ok) {
+      setActionError(result.error.message);
+      return;
+    }
+    await load();
+    props.onRunChanged?.();
   }
 
   async function handleAssignAgent(id: string, agentId: string) {
@@ -373,6 +400,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
               onUpdateEdge={handleUpdateEdge}
               onDeleteEdge={handleDeleteEdge}
               onResolveApproval={handleResolveApproval}
+              onRetryStep={handleRetryStep}
               onAssignAgent={handleAssignAgent}
             />
           </div>
