@@ -919,6 +919,8 @@ export async function createDatabaseClient(
   );
   const workflowTriggersMigrationSql = readFileSync(
     resolve(drizzleDir, '0020_workflow_triggers.sql'),
+    'utf-8',
+  );
   const mcpOAuthCredentialsMigrationSql = readFileSync(
     resolve(drizzleDir, '0017_mcp_oauth_credentials.sql'),
     'utf-8',
