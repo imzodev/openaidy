@@ -8,6 +8,7 @@ import {
   ProvidersTab,
   AgentsTab,
   ExecutionTab,
+  AssistantTab,
   RawJsonTab,
   AboutTab,
 } from './tabs';
@@ -17,6 +18,7 @@ const tabs: { id: ConfigTab; label: string }[] = [
   { id: 'defaults', label: 'Defaults' },
   { id: 'providers', label: 'Providers' },
   { id: 'agents', label: 'Agents' },
+  { id: 'assistant', label: 'Assistant' },
   { id: 'execution', label: 'Execution' },
   { id: 'raw', label: 'Raw JSON' },
   { id: 'about', label: 'About' },
@@ -97,6 +99,26 @@ export function SettingsView() {
           },
         }) as AppConfig,
     );
+    setHasChanges(true);
+  };
+
+  // Handle assistant tab change (owner + timezone) - local state only
+  const handleAssistantChange = (patch: {
+    owner?: AppConfig['owner'];
+    timezone?: string;
+  }) => {
+    setLocalConfig((prev) => {
+      if (!prev) return prev;
+      const next: AppConfig = { ...prev };
+      if ('owner' in patch) next.owner = patch.owner;
+      if ('timezone' in patch) {
+        const { timezone: _old, ...defaults } = prev.defaults;
+        next.defaults = patch.timezone
+          ? { ...defaults, timezone: patch.timezone }
+          : defaults;
+      }
+      return next;
+    });
     setHasChanges(true);
   };
 
@@ -341,6 +363,15 @@ export function SettingsView() {
               <ExecutionTab
                 config={localConfig}
                 onChange={handleExecutionChange}
+              />
+            </Show>
+
+            {/* Assistant Tab */}
+            <Show when={activeTab() === 'assistant'}>
+              <AssistantTab
+                config={localConfig}
+                onChange={handleAssistantChange}
+                hasChanges={hasChanges()}
               />
             </Show>
 

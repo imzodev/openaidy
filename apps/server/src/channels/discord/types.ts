@@ -1,5 +1,8 @@
 import type { FastifyBaseLogger } from 'fastify';
-import type { ChannelWorkflowTriggers } from '../message-handler.js';
+import type {
+  ChannelWorkflowTriggers,
+  SessionRoute,
+} from '../message-handler.js';
 import type { SessionMessageService } from '../../sessions/service.js';
 
 /**
@@ -13,4 +16,6 @@ export type DiscordChannelDeps = {
   logger: FastifyBaseLogger;
   /** Workflow triggers checked before a message goes to the agent. */
   getWorkflowTriggers?: () => ChannelWorkflowTriggers | undefined;
+  /** Remember which chat a session replies to. */
+  recordSessionRoute?: (route: SessionRoute) => Promise<void>;
 };

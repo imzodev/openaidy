@@ -299,6 +299,28 @@ describe('PulseRunnableAdapter', () => {
     });
   });
 
+  it('completes a one-shot created with a run time (schedule) set', async () => {
+    // createPulse stores the `at` time in `schedule` too; returning that
+    // past date kept the job due forever.
+    const { deps, jobsRepo } = makeDeps();
+    const job = makeJob({
+      type: 'one-shot',
+      cronExpression: null,
+      schedule: new Date(Date.now() - 1000),
+    });
+    const runnable = createPulseRunnableAdapter(deps);
+    const next = await runnable.reschedule(
+      'job-1',
+      { job },
+      { ok: true, durationMs: 1 },
+    );
+    expect(next).toBeNull();
+    expect(jobsRepo.update).toHaveBeenCalledWith(
+      'job-1',
+      expect.objectContaining({ status: 'completed' }),
+    );
+  });
+
   describe('reschedule (failure path)', () => {
     it('retries with exponential backoff when retries remain', async () => {
       const { deps, jobsRepo, log } = makeDeps();

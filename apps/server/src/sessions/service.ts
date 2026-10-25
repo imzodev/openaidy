@@ -93,6 +93,29 @@ import type { RunEventEmitter } from '../dispatch/events';
  * When adding a new builtin tool that writes to a DB table other than the
  * current session's own messages/runs, add its name here.
  */
+/** Built-in tools every agent has, whatever its tool list says. */
+export const ALWAYS_ON_TOOLS = [
+  'reminder_create',
+  'reminder_list',
+  'reminder_cancel',
+  'notify_owner',
+];
+
+/**
+ * The built-in tools an agent may use: its own list plus the always-on
+ * ones, minus the ones a private chat can't use. The one rule for both
+ * what the model is offered and what may run.
+ */
+export function enabledBuiltinTools(
+  agentTools: string[] | undefined,
+  ephemeral: boolean,
+): string[] {
+  const tools = [...new Set([...(agentTools ?? []), ...ALWAYS_ON_TOOLS])];
+  return ephemeral
+    ? tools.filter((name) => !EPHEMERAL_UNSAFE_TOOLS.has(name))
+    : tools;
+}
+
 const EPHEMERAL_UNSAFE_TOOLS = new Set([
   'memory_save',
   'memory_delete',
@@ -135,6 +158,9 @@ const EPHEMERAL_UNSAFE_TOOLS = new Set([
   'workflow_set_graph',
   'workflow_trigger_create',
   'channel_send',
+  'notify_owner',
+  'reminder_create',
+  'reminder_cancel',
   'workflow_trigger_delete',
   'workflow_node_create',
   'workflow_node_update',
@@ -176,6 +202,9 @@ export class SessionMessageService {
     | (() => Promise<AddonPromptSummary[]>)
     | undefined;
   private readonly attachments: AttachmentService | undefined;
+  private readonly getPromptContext:
+    | SessionMessageServiceOptions['getPromptContext']
+    | undefined;
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
@@ -208,6 +237,7 @@ export class SessionMessageService {
     this.workspaceBaseDir = options.workspaceBaseDir;
     this.listAddons = options.listAddons;
     this.attachments = options.attachments;
+    this.getPromptContext = options.getPromptContext;
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
@@ -218,6 +248,18 @@ export class SessionMessageService {
       this.sessionsRepo = options.repositories.sessions;
       this.messagesRepo = options.repositories.messages;
       this.runsRepo = options.repositories.runs;
+    }
+  }
+
+  private async resolvePromptContext(
+    sessionId: string,
+  ): Promise<import('../prompts/build-system-prompt').PromptContext> {
+    if (!this.getPromptContext) return { timezone: 'UTC' };
+    try {
+      return await this.getPromptContext(sessionId);
+    } catch (err) {
+      this.logger?.warn({ err }, 'Could not resolve the prompt context');
+      return { timezone: 'UTC' };
     }
   }
 
@@ -920,6 +962,7 @@ export class SessionMessageService {
     });
 
     // Build system prompt with personality files and skill bodies injected
+    const promptContext = await this.resolvePromptContext(input.sessionId);
     const systemPrompt = await buildSystemPrompt({
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
@@ -933,6 +976,7 @@ export class SessionMessageService {
       sessionType: (session as { type?: string }).type as
         | SessionType
         | undefined,
+      context: promptContext,
     });
     const messages: Message[] = systemPrompt
       ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
@@ -1473,7 +1517,9 @@ export class SessionMessageService {
       }
     }
 
+    const promptContext = await this.resolvePromptContext(input.sessionId);
     const systemPrompt = await buildSystemPrompt({
+      context: promptContext,
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
       ...(agent?.skills && { skillIds: agent.skills }),
@@ -1868,15 +1914,12 @@ export class SessionMessageService {
             // AND — for a private chat — isn't one of the tools that writes
             // outside this session's own (ephemeral) history (backstop; these
             // are already withheld from the model's tool definitions above).
-            const enabledTools = this.agents?.getAgent(agentId)?.tools ?? [];
-            const builtinTool =
-              enabledTools.includes(tc.name) &&
-              !(
-                this.isEphemeral(input.sessionId) &&
-                EPHEMERAL_UNSAFE_TOOLS.has(tc.name)
-              )
-                ? this.builtinTools?.get(tc.name)
-                : undefined;
+            const builtinTool = enabledBuiltinTools(
+              this.agents?.getAgent(agentId)?.tools,
+              this.isEphemeral(input.sessionId),
+            ).includes(tc.name)
+              ? this.builtinTools?.get(tc.name)
+              : undefined;
             if (builtinTool) {
               // Register an AbortController so the user can cancel this tool
               // (issue #375). Keyed by (runId, toolCallId); cleaned up when the
@@ -2522,11 +2565,11 @@ export class SessionMessageService {
   ): ToolDefinition[] {
     if (!this.builtinTools || !this.agents) return [];
     const agent = this.agents.getAgent(agentId);
-    if (!agent?.tools?.length) return [];
-    const enabledTools = this.isEphemeral(sessionId)
-      ? agent.tools.filter((name) => !EPHEMERAL_UNSAFE_TOOLS.has(name))
-      : agent.tools;
-    return this.builtinTools.getDefinitions(enabledTools);
+    // Reminders and reaching the owner are part of every agent, like
+    // remembering what was said; they don't need to be picked per agent.
+    return this.builtinTools.getDefinitions(
+      enabledBuiltinTools(agent?.tools, this.isEphemeral(sessionId)),
+    );
   }
 
   /**

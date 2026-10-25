@@ -149,6 +149,34 @@ export function PulseHistoryDrawer(props: PulseHistoryDrawerProps) {
                             {run.errorCode}: {run.errorMessage}
                           </p>
                         </Show>
+                        <Show when={run.resultData}>
+                          {(result) => (
+                            <div class="mt-2 space-y-1">
+                              <p class="text-xs text-text-tertiary">
+                                {result().suppressed
+                                  ? 'Nothing to report — nothing was sent.'
+                                  : result().deliveredTo?.length
+                                    ? `Sent to ${result()
+                                        .deliveredTo!.map((d) =>
+                                          d === 'owner' ? 'you' : 'the chat',
+                                        )
+                                        .join(
+                                          ' and ',
+                                        )}${result().queued ? ' (after quiet hours)' : ''}.`
+                                    : result().error
+                                      ? `Not sent: ${result().error}`
+                                      : null}
+                              </p>
+                              <Show
+                                when={result().reply && !result().suppressed}
+                              >
+                                <p class="text-xs text-text-secondary whitespace-pre-wrap line-clamp-6 bg-gray-50 dark:bg-gray-800 rounded p-2">
+                                  {result().reply}
+                                </p>
+                              </Show>
+                            </div>
+                          )}
+                        </Show>
                       </div>
                     );
                   }}

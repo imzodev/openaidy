@@ -145,6 +145,10 @@ A message can also start a [workflow](./tasks.md#triggers-starting-a-workflow-by
 
 The built-in `channel_send` tool lets an agent message someone outside the current conversation — for example a workflow sending you a daily summary, or reminding a customer of an appointment. It takes a channel id, who to send to (a WhatsApp phone number with country code, or a Discord channel id) and the text. Enable it on the agents that should be allowed to send.
 
+## Follow-ups and messages to you
+
+Each WhatsApp/Discord conversation remembers which chat it came from, so an agent can schedule a follow-up ("I'll check tomorrow whether it arrived") that is sent back to that chat later. Set your own number in Settings → Assistant and agents also know when they're talking to you rather than a customer, and can send you briefings and alerts. See [Assistant](./assistant.md).
+
 ## Multiple channels
 
 You can run multiple channel instances at the same time. Each instance is independent — it has its own auth state, configuration, and session routing. You could connect two different WhatsApp numbers, or combine WhatsApp and Discord on the same server.

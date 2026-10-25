@@ -29,7 +29,12 @@
  * `ok` to decide whether to reschedule and how to record the result.
  */
 export type ExecutionResult =
-  | { ok: true; durationMs: number }
+  | {
+      ok: true;
+      durationMs: number;
+      /** What the run produced, kept with its audit row (e.g. the reply). */
+      output?: Record<string, unknown>;
+    }
   | { ok: false; error: Error; durationMs: number };
 
 /**

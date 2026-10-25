@@ -29,12 +29,18 @@ export const pulseScheduleSchema = z.union([
   }),
 ]);
 
+export const pulseDeliverySchema = z.object({
+  toOwner: z.boolean().optional(),
+  onlyIfNeeded: z.boolean().optional(),
+});
+
 export const createPulseSchema = z.object({
   name: z.string().min(1),
   prompt: z.string().min(1),
   schedule: pulseScheduleSchema,
   agentId: z.string().optional(),
   sessionId: z.string().uuid().optional(),
+  delivery: pulseDeliverySchema.optional(),
 });
 
 export const updatePulseSchema = z.object({
@@ -44,6 +50,7 @@ export const updatePulseSchema = z.object({
   status: z.enum(['active', 'paused']).optional(),
   agentId: z.string().optional(),
   sessionId: z.string().uuid().optional(),
+  delivery: pulseDeliverySchema.optional(),
 });
 
 export const listPulsesSchema = z.object({

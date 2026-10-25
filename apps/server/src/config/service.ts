@@ -43,6 +43,9 @@ export class AppConfigService {
   private readonly credentialProvider: CredentialProvider | undefined;
   private currentConfig: OpenAidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
+  private readonly savedListeners = new Set<
+    (config: OpenAidyAppConfig) => void
+  >();
   private channelReconciler:
     | ((channels: ChannelConfig[] | undefined) => void | Promise<void>)
     | undefined;
@@ -67,6 +70,16 @@ export class AppConfigService {
     reconcile: (channels: ChannelConfig[] | undefined) => void | Promise<void>,
   ): void {
     this.channelReconciler = reconcile;
+  }
+
+  /**
+   * Called with the new config after every {@link save}, for runtime
+   * settings that live outside agents/providers (e.g. the schedule
+   * timezone). Returns an unsubscribe function.
+   */
+  onSaved(listener: (config: OpenAidyAppConfig) => void): () => void {
+    this.savedListeners.add(listener);
+    return () => this.savedListeners.delete(listener);
   }
 
   getConfig(): OpenAidyAppConfig {
@@ -212,6 +225,13 @@ export class AppConfigService {
     // from channel internals.
     if (this.channelReconciler) {
       await this.channelReconciler(parsed.channels);
+    }
+    for (const listener of this.savedListeners) {
+      try {
+        listener(parsed);
+      } catch {
+        // A listener's failure must not fail the save that already happened.
+      }
     }
     return parsed;
   }

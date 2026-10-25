@@ -370,6 +370,28 @@ describe('Phase 0 dispatch — ScheduledRunnable registry', () => {
     await scheduler.stop();
   });
 
+  it('does not start a tick while the previous one is still running', async () => {
+    const { scheduler } = makeScheduler();
+    scheduler.start();
+    let release!: () => void;
+    const slow = makeRunnable('slow', {
+      execute: () =>
+        new Promise<ExecutionResult>((resolve) => {
+          release = () => resolve({ ok: true, durationMs: 1 });
+        }),
+    });
+    scheduler.registerRunnable(slow);
+
+    const first = scheduler.tick();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await scheduler.tick()).toBe(false);
+    expect(slow.claimNextDue).toHaveBeenCalledTimes(1);
+
+    release();
+    expect(await first).toBe(true);
+    await scheduler.stop();
+  });
+
   it('returns false when no runnable claims', async () => {
     const { scheduler } = makeScheduler();
     scheduler.start();

@@ -71,6 +71,16 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
           type: 'string',
           description: 'Session ID to pin the pulse to (optional).',
         },
+        sendToOwner: {
+          type: 'boolean',
+          description:
+            'Send the answer to the owner on WhatsApp (Settings → You), e.g. for alerts and summaries.',
+        },
+        onlyIfNeeded: {
+          type: 'boolean',
+          description:
+            'Only send when there is something to say; on a quiet run the agent answers NO_UPDATE and nothing is sent. Makes the pulse a watcher ("tell me if…").',
+        },
       },
       required: ['name', 'prompt', 'schedule'],
     },
@@ -133,6 +143,12 @@ export function createPulsesCreateTool(deps: PulseToolDeps): BuiltinTool {
         };
         if (agentId !== undefined) input.agentId = agentId;
         if (sessionId !== undefined) input.sessionId = sessionId;
+        if (args['sendToOwner'] === true || args['onlyIfNeeded'] === true) {
+          input.delivery = {
+            ...(args['sendToOwner'] === true ? { toOwner: true } : {}),
+            ...(args['onlyIfNeeded'] === true ? { onlyIfNeeded: true } : {}),
+          };
+        }
 
         const pulse = await service.createPulse(input);
 

@@ -67,9 +67,10 @@ export function parseScheduleInput(schedule: ScheduleInput): ParsedSchedule {
 
   // Handle 'cron' schedules
   if ('cron' in schedule) {
-    const { cron: cronExpression, tz: _tz } = schedule;
-    // Note: timezone handling would require a timezone-aware cron parser
-    // For now, we validate and use UTC
+    // Read in the install's timezone (see setScheduleTimezone). A per-
+    // schedule `tz` isn't stored, so it can't be honoured on later runs;
+    // the install-wide setting is what users configure.
+    const { cron: cronExpression } = schedule;
     validateCronExpression(cronExpression);
     return {
       type: 'cron',
@@ -140,7 +141,10 @@ export function jobToPulse(job: ScheduledJob): PulseRecord {
     status: job.status,
     nextRunAt: job.nextRunAt,
     createdAt: job.createdAt,
+    kind: (metadata?.kind as PulseRecord['kind'] | undefined) ?? 'pulse',
   };
+  const delivery = metadata?.delivery as PulseRecord['delivery'] | undefined;
+  if (delivery) record.delivery = delivery;
   const agentId = job.payload.agentId as string | undefined;
   if (agentId !== undefined) record.agentId = agentId;
   const sessionId = job.targetSessionId ?? undefined;

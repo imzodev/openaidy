@@ -342,6 +342,27 @@ export const appDefaultsSchema = z.object({
   providerId: z.string().min(1).optional(),
   modelId: z.string().min(1).optional(),
   agentId: z.string().min(1),
+  /**
+   * IANA timezone (e.g. "America/Mexico_City") that schedules ("every day
+   * at 9:00"), reminders and the agents' sense of "now" use. UTC if unset.
+   */
+  timezone: z
+    .string()
+    .min(1)
+    .refine(
+      (tz) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      {
+        message: 'Unknown timezone (use an IANA name like America/Mexico_City)',
+      },
+    )
+    .optional(),
 });
 
 /**
@@ -403,6 +424,41 @@ export const modelPricingSchema = z.object({
   cacheCreationPer1k: z.number().nonnegative().optional(),
 });
 
+const timeOfDaySchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour HH:MM, e.g. 08:30');
+
+/**
+ * Who OpenAidy works for and how to reach them: proactive messages
+ * (briefings, alerts, reminders, workflow approvals) go to this chat.
+ */
+export const ownerConfigSchema = z.object({
+  name: z.string().optional(),
+  /** Channel id (from `channels`) to reach the owner on. */
+  channelId: z.string().optional(),
+  /** Who to message on that channel: WhatsApp number, Discord channel id. */
+  contact: z.string().optional(),
+  /** No non-urgent messages between these times (owner timezone). */
+  quietHours: z
+    .object({ from: timeOfDaySchema, to: timeOfDaySchema })
+    .optional(),
+  /** Tell the owner when a workflow waits for approval or fails. */
+  notifyWorkflowEvents: z.boolean().default(true),
+  /** A daily summary sent to the owner. */
+  briefing: z
+    .object({
+      enabled: z.boolean().default(false),
+      time: timeOfDaySchema.default('08:00'),
+      /** What to cover, in the owner's words. */
+      instructions: z.string().optional(),
+      /** Agent that writes it (needs the integrations to look things up). */
+      agentId: z.string().optional(),
+    })
+    .optional(),
+});
+
+export type OwnerConfig = z.infer<typeof ownerConfigSchema>;
+
 export const appConfigSchema = z
   .object({
     version: z.number().int().positive().default(1),
@@ -423,6 +479,8 @@ export const appConfigSchema = z
     modelPricing: z.record(z.string(), modelPricingSchema).optional(),
     /** Task/subtask execution tuning (retries, dependency-context limits) */
     execution: executionConfigSchema.optional().default({}),
+    /** Who OpenAidy works for and where to reach them. */
+    owner: ownerConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {
     const providerIds = new Set<string>();

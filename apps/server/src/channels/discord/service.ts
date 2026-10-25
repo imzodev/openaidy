@@ -234,6 +234,7 @@ export class DiscordChannel extends EventEmitter implements IChannel {
         logger: this.deps.logger,
         workflowTriggers: this.deps.getWorkflowTriggers?.(),
         replyTarget: message.channelId,
+        recordRoute: this.deps.recordSessionRoute,
       });
 
       if (reply) {

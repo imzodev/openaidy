@@ -71,7 +71,67 @@ export type BuildSystemPromptOptions = {
    * Default is 0 (no onboarding).
    */
   onboardingMessagesRemaining?: number | undefined;
+  /** "Now" and who the agent is talking to ([NOW] / [CONVERSATION]). */
+  context?: PromptContext | undefined;
 };
+
+/** Where and when a conversation is happening. */
+export type PromptContext = {
+  /** IANA timezone the owner lives in (UTC if unset). */
+  timezone: string;
+  /** Set when the session is a WhatsApp/Discord conversation. */
+  conversation?:
+    | {
+        channelType: string;
+        channelId: string;
+        senderId: string;
+        /** The sender is the owner (OpenAidy's user), not a customer. */
+        isOwner: boolean;
+      }
+    | undefined;
+  /** For tests. */
+  now?: Date | undefined;
+};
+
+/**
+ * The current date and time in the owner's timezone, so "tomorrow at 9",
+ * "this Friday" and reminders resolve correctly — models don't know the
+ * date otherwise.
+ */
+export function buildNowBlock(context: PromptContext): string {
+  const now = context.now ?? new Date();
+  const timeZone = context.timezone;
+  const local = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+  const offset =
+    new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+      .formatToParts(now)
+      .find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
+  return `\n\n[NOW]\nIt is ${local} (${timeZone}, ${offset.replace('GMT', 'UTC') || 'UTC'}). Use this for anything about dates or times; when you schedule something, give the time with this UTC offset.\n[/NOW]`;
+}
+
+export function buildConversationBlock(
+  conversation: NonNullable<PromptContext['conversation']>,
+): string {
+  const where =
+    conversation.channelType === 'whatsapp'
+      ? 'WhatsApp'
+      : conversation.channelType === 'discord'
+        ? 'Discord'
+        : conversation.channelType;
+  const who = conversation.isOwner
+    ? 'the owner — the person you work for'
+    : `${conversation.senderId}, a contact of the business (not the owner). Be helpful and professional, and don't share the owner's private information`;
+  return `\n\n[CONVERSATION]\nThis conversation is on ${where} (channel "${conversation.channelId}") with ${who}. Your replies are sent to that chat. Keep them short and chat-friendly (no tables or long markdown).\n[/CONVERSATION]`;
+}
 
 /**
  * Load skill definitions from an agent's workspace skills directory.
@@ -212,6 +272,12 @@ export async function buildSystemPrompt(
   // idioms (head, sed, awk, xargs, jq) and fail on Windows hosts with
   // "is not recognized as an internal or external command".
   prompt += buildRuntimeOsBlock(platform());
+  if (options.context) {
+    prompt += buildNowBlock(options.context);
+    if (options.context.conversation) {
+      prompt += buildConversationBlock(options.context.conversation);
+    }
+  }
 
   if (personalityService) {
     const blocks = await personalityService.readAllForInjection(agentId);

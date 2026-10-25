@@ -235,3 +235,25 @@ export type NewMessageAttachment = typeof messageAttachments.$inferInsert;
 export type AttachmentKind = 'image' | 'audio' | 'video';
 /** How the attachment entered the system */
 export type AttachmentSource = 'user_upload' | 'tool_output';
+
+/**
+ * Where a channel conversation's replies go. Written each time a message
+ * arrives on WhatsApp/Discord, so something that happens later in that
+ * session (a reminder firing, a follow-up) can be sent to the same chat.
+ */
+export const sessionChannels = pgTable('session_channels', {
+  sessionId: text('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  channelId: text('channel_id').notNull(),
+  channelType: text('channel_type').notNull(),
+  /** The chat to send to (WhatsApp chat JID, Discord channel id). */
+  target: text('target').notNull(),
+  /** Who wrote (WhatsApp number/LID, Discord user id). */
+  senderId: text('sender_id').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type SessionChannel = typeof sessionChannels.$inferSelect;

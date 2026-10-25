@@ -56,6 +56,7 @@ import type {
 import type { SessionMessageService } from '../sessions/service';
 import type { GenericLogger } from './service';
 import { calculateNextRun } from './cron-utils';
+import { stripThinking } from '../lib/message';
 
 /**
  * The kind string used to register this runnable with the
@@ -97,6 +98,16 @@ export type PulseRunnableDeps = {
    * identical to the legacy path.
    */
   maxBackoffMs?: number;
+  /**
+   * The message a job runs with (adds reminder/briefing framing and
+   * delivery rules). Defaults to the job's stored message.
+   */
+  prepareMessage?: (job: ScheduledJob) => Promise<string>;
+  /** Called with the answer after a successful run (send it on). */
+  deliver?: (
+    job: ScheduledJob,
+    result: { sessionId: string; reply: string },
+  ) => Promise<Record<string, unknown>>;
 };
 
 /**
@@ -127,12 +138,33 @@ export function createPulseRunnableAdapter(
       const { job } = payload;
       const startedAt = Date.now();
       try {
-        await executePulseJob(
+        const content = deps.prepareMessage
+          ? await deps.prepareMessage(job)
+          : undefined;
+        const ran = await executePulseJob(
           job,
           deps.sessionsStore,
           deps.sessionMessageService,
+          content,
         );
-        return { ok: true, durationMs: Date.now() - startedAt };
+        let delivery: Record<string, unknown> = {};
+        if (deps.deliver) {
+          // A delivery failure is reported with the run, but the run
+          // itself succeeded and must not be retried (it would re-run
+          // the agent and could send twice).
+          delivery = await deps.deliver(job, ran).catch((err: unknown) => ({
+            error: err instanceof Error ? err.message : String(err),
+          }));
+        }
+        return {
+          ok: true,
+          durationMs: Date.now() - startedAt,
+          output: {
+            sessionId: ran.sessionId,
+            reply: stripThinking(ran.reply).trim().slice(0, 4000),
+            ...delivery,
+          },
+        };
       } catch (err) {
         // Surface the error via the result so the scheduler's
         // `runRunnable` wrapper can update the JobRun row and
@@ -177,7 +209,12 @@ async function executePulseJob(
   job: ScheduledJob,
   sessionsStore: SessionsStore,
   sessionMessageService: PulseSessionService,
-): Promise<void> {
+  preparedContent?: string,
+): Promise<{ sessionId: string; reply: string }> {
+  const content =
+    preparedContent ||
+    (job.payload.message as string) ||
+    'Scheduled job execution';
   if (job.targetType === 'session') {
     if (!job.targetSessionId) {
       throw new Error('Session job missing targetSessionId');
@@ -193,7 +230,7 @@ async function executePulseJob(
     } = {
       sessionId: job.targetSessionId,
       role: 'user',
-      content: (job.payload.message as string) || 'Scheduled job execution',
+      content,
     };
 
     const agentId = job.payload.agentId as string | undefined;
@@ -212,7 +249,10 @@ async function executePulseJob(
         `Job execution failed: ${result.error.code} - ${result.error.message}`,
       );
     }
-    return;
+    return {
+      sessionId: job.targetSessionId,
+      reply: result.assistantMessage?.content ?? '',
+    };
   }
 
   // Isolated target type — create a fresh session per run.
@@ -228,7 +268,7 @@ async function executePulseJob(
   >[0] = {
     sessionId: newSession.id,
     role: 'user',
-    content: (job.payload.message as string) || 'Scheduled job execution',
+    content,
     onStreamEvent: () => {},
   };
   const agentId = job.payload.agentId as string | undefined;
@@ -241,6 +281,10 @@ async function executePulseJob(
       `Isolated job execution failed: ${result.error.code} - ${result.error.message}`,
     );
   }
+  return {
+    sessionId: newSession.id,
+    reply: result.assistantMessage?.content ?? '',
+  };
 }
 
 /**
@@ -250,14 +294,17 @@ async function executePulseJob(
  * one-shot jobs (terminal after first execution).
  */
 function nextRunForSuccess(job: ScheduledJob): Date | null {
+  // One-shot first: a one-shot job also has `schedule` (its run time),
+  // and returning that already-past date would keep the job due, so it
+  // ran again on every tick.
+  if (job.type === 'one-shot') {
+    return null;
+  }
   if (job.cronExpression) {
     return calculateNextRun(job.cronExpression, new Date());
   }
   if (job.schedule) {
     return job.schedule;
-  }
-  if (job.type === 'one-shot') {
-    return null;
   }
   // Fallback: keep the existing nextRunAt.
   return job.nextRunAt;
@@ -395,10 +442,28 @@ export async function triggerPulseNow(
   });
 
   try {
-    await executePulseJob(job, deps.sessionsStore, deps.sessionMessageService);
+    const content = deps.prepareMessage
+      ? await deps.prepareMessage(job)
+      : undefined;
+    const ran = await executePulseJob(
+      job,
+      deps.sessionsStore,
+      deps.sessionMessageService,
+      content,
+    );
+    const delivery = deps.deliver
+      ? await deps.deliver(job, ran).catch((err: unknown) => ({
+          error: err instanceof Error ? err.message : String(err),
+        }))
+      : {};
     await deps.jobRunsRepo.updateStatus(run.id, {
       status: 'succeeded',
       finishedAt: new Date(),
+      resultData: {
+        sessionId: ran.sessionId,
+        reply: stripThinking(ran.reply).trim().slice(0, 4000),
+        ...delivery,
+      },
     });
     deps.logger.info(
       { jobId: job.id, runId: run.id },
