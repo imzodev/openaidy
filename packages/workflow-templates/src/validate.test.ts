@@ -98,4 +98,52 @@ describe('validateWorkflowTemplate', () => {
       errors.some((e) => e.includes('undeclared input "{{branch}}"')),
     ).toBe(true);
   });
+
+  it('requires agent placeholders to name an agent input', () => {
+    const errors = validateWorkflowTemplate({
+      ...base,
+      inputs: [{ key: 'who', label: 'Who', type: 'string' }],
+      nodes: [{ ...base.nodes[0]!, agent: '{{who}}' }, base.nodes[1]!],
+    });
+    expect(errors.some((e) => e.includes('input of type "agent"'))).toBe(true);
+  });
+
+  it('checks the suggested trigger', () => {
+    const errors = validateWorkflowTemplate({
+      ...base,
+      inputs: [{ key: 'ch', label: 'Channel', type: 'string' }],
+      trigger: {
+        kind: 'channel_message',
+        channel: '{{ch}}',
+        match: { type: 'contains' },
+        replyWithResult: true,
+        ackText: '{{missing}}',
+      },
+    });
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        'trigger: channel must be a "{{inputKey}}" placeholder for an input of type "channel"',
+        'trigger: the message match needs a value',
+        'trigger: references undeclared input "{{missing}}"',
+      ]),
+    );
+  });
+
+  it('checks a select default is one of its options', () => {
+    const errors = validateWorkflowTemplate({
+      ...base,
+      inputs: [
+        {
+          key: 'lang',
+          label: 'Language',
+          type: 'select',
+          default: 'French',
+          options: [{ value: 'Spanish', label: 'Español' }],
+        },
+      ],
+    });
+    expect(errors).toContain(
+      'input "lang": default "French" is not one of its options',
+    );
+  });
 });

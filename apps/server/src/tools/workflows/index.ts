@@ -12,6 +12,8 @@ import { createWorkflowGetTool } from './get.js';
 import { createWorkflowListTool } from './list.js';
 import { createWorkflowSetGraphTool } from './set-graph.js';
 import { createWorkflowTriggerTools } from './triggers.js';
+import { createWorkflowTemplateListTool } from './template-list-tool.js';
+import type { TaskScheduleService } from '../../tasks/schedule-service';
 import type { WorkflowTriggerService } from '../../tasks/triggers/service';
 import { createWorkflowEdgeTools } from './edges/index.js';
 import { createWorkflowNodeTools } from './nodes/index.js';
@@ -45,18 +47,21 @@ export { createWorkflowUpdateTool } from './update.js';
 export function createWorkflowTools(
   getTaskService: () => TaskService | undefined,
   getTriggerService?: () => WorkflowTriggerService | undefined,
+  getScheduleService?: () => TaskScheduleService | undefined,
 ): BuiltinTool[] {
+  const triggerDeps = { getTriggerService, getScheduleService };
   return [
     createWorkflowGetTool(getTaskService),
     createWorkflowListTool(getTaskService),
-    createWorkflowCreateTool(getTaskService),
+    createWorkflowCreateTool(getTaskService, triggerDeps),
     createWorkflowUpdateTool(getTaskService),
     createWorkflowDeleteTool(getTaskService),
     createWorkflowExecuteTool(getTaskService),
     createWorkflowApprovalListTool(getTaskService),
     createWorkflowApprovalResolveTool(getTaskService),
     createWorkflowSetGraphTool(getTaskService),
-    createWorkflowApplyTemplateTool(getTaskService),
+    createWorkflowTemplateListTool(),
+    createWorkflowApplyTemplateTool(getTaskService, triggerDeps),
     ...createWorkflowNodeTools(getTaskService),
     ...createWorkflowEdgeTools(getTaskService),
     ...(getTriggerService

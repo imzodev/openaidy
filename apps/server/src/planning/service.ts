@@ -80,26 +80,11 @@ export class PlanningService {
   private resolveModelConfig():
     | { providerId: string; modelId: string }
     | undefined {
-    // 1. Try the default agent's model
-    const defaultAgentId = this.getDefaultAgentId?.();
-    const defaultAgent = defaultAgentId
-      ? this.agents?.getAgent(defaultAgentId)
-      : undefined;
-    if (defaultAgent?.model) {
-      const parsed = parseModelString(defaultAgent.model);
-      if (parsed) return parsed;
-    }
-
-    // 2. Fallback to the globally configured default provider
-    const defaultConfig = this.providers.registry.getDefault();
-    if (defaultConfig) {
-      return {
-        providerId: defaultConfig.providerId,
-        modelId: defaultConfig.modelId,
-      };
-    }
-
-    return undefined;
+    return resolveDefaultModel(
+      this.providers,
+      this.agents,
+      this.getDefaultAgentId,
+    );
   }
 
   /**
@@ -434,4 +419,31 @@ export function createPlanningService(
   options: PlanningServiceOptions,
 ): PlanningService {
   return new PlanningService(options);
+}
+
+/**
+ * The model for one-off completions (planning, drafting workflows): the
+ * default agent's model, else the default provider's.
+ */
+export function resolveDefaultModel(
+  providers: ProviderServices,
+  agents: AgentRegistry | undefined,
+  getDefaultAgentId: (() => string | undefined) | undefined,
+): { providerId: string; modelId: string } | undefined {
+  const defaultAgentId = getDefaultAgentId?.();
+  const defaultAgent = defaultAgentId
+    ? agents?.getAgent(defaultAgentId)
+    : undefined;
+  if (defaultAgent?.model) {
+    const parsed = parseModelString(defaultAgent.model);
+    if (parsed) return parsed;
+  }
+  const defaultConfig = providers.registry.getDefault();
+  if (defaultConfig) {
+    return {
+      providerId: defaultConfig.providerId,
+      modelId: defaultConfig.modelId,
+    };
+  }
+  return undefined;
 }

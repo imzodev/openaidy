@@ -141,6 +141,10 @@ This means each sender has a continuous conversation history even if the server 
 
 A message can also start a [workflow](./tasks.md#triggers-starting-a-workflow-by-itself) instead of going to the chat agent — for example "any message starting with _quote_ runs the Quotes workflow". Add a **message trigger** from the workflow's Triggers panel. The allowlist above still applies first. The sender gets an immediate reply, and the workflow's result is sent back to the same chat when it finishes.
 
+## Sending messages from agents and workflows
+
+The built-in `channel_send` tool lets an agent message someone outside the current conversation — for example a workflow sending you a daily summary, or reminding a customer of an appointment. It takes a channel id, who to send to (a WhatsApp phone number with country code, or a Discord channel id) and the text. Enable it on the agents that should be allowed to send.
+
 ## Multiple channels
 
 You can run multiple channel instances at the same time. Each instance is independent — it has its own auth state, configuration, and session routing. You could connect two different WhatsApp numbers, or combine WhatsApp and Discord on the same server.

@@ -1,4 +1,10 @@
-import type { ConditionOperator, LoopConfig, SubtaskKind } from './tasks.js';
+import type {
+  ConditionOperator,
+  LoopConfig,
+  MessageMatchType,
+  SubtaskKind,
+} from './tasks.js';
+import type { ScheduleInput } from './pulses.js';
 
 // ========================================
 // Workflow Template Types
@@ -16,6 +22,12 @@ export const TEMPLATE_INPUT_TYPE_VALUES = [
   'number',
   'boolean',
   'select',
+  // An agent id, picked from the configured agents.
+  'agent',
+  // A channel id (WhatsApp, Discord…), picked from the configured channels.
+  'channel',
+  // Longer free text (e.g. business details, FAQ answers).
+  'text',
 ] as const;
 
 export type TemplateInputType = (typeof TEMPLATE_INPUT_TYPE_VALUES)[number];
@@ -29,6 +41,8 @@ export type TemplateInput = {
   key: string;
   label: string;
   type: TemplateInputType;
+  /** One line under the field explaining what to enter. */
+  help?: string;
   required?: boolean;
   default?: string;
   /** Only meaningful when `type: 'select'`. */
@@ -48,6 +62,13 @@ export type TemplateRequirement = {
   check: {
     /** At least one agent must have a non-empty `mcpServers` list. */
     mcpServerConfigured?: boolean;
+    /**
+     * At least one agent must use one of these MCP servers (ids from the
+     * integrations catalog, e.g. `google-calendar`, `stripe`).
+     */
+    mcpServerIds?: string[];
+    /** At least one agent must have every one of these built-in tools. */
+    tools?: string[];
   };
 };
 
@@ -64,7 +85,29 @@ export type TemplateNode = {
   kind: SubtaskKind;
   /** Only meaningful when `kind: 'agent'`. */
   loop?: LoopConfig | null;
+  /**
+   * Agent that runs the step: an agent id, or a `{{inputKey}}` placeholder
+   * for an `agent` input. Unknown or empty → the default agent.
+   */
+  agent?: string;
 };
+
+/**
+ * How a template's workflow is meant to start. Applying a template doesn't
+ * create it by itself; the creator offers to set it up. String fields may
+ * contain `{{inputKey}}` placeholders.
+ */
+export type TemplateTrigger =
+  | {
+      kind: 'channel_message';
+      /** Placeholder for the `channel` input the trigger listens on. */
+      channel: string;
+      match: { type: MessageMatchType; value?: string };
+      replyWithResult: boolean;
+      ackText?: string;
+    }
+  | { kind: 'webhook' }
+  | { kind: 'schedule'; schedule: ScheduleInput };
 
 /**
  * One dependency edge in a template's subtask graph. The arrow points
@@ -81,11 +124,33 @@ export type TemplateEdge = {
   conditionValue?: string;
 };
 
+/** A template's suggested trigger with its placeholders filled in. */
+export type ResolvedTemplateTrigger =
+  | {
+      kind: 'channel_message';
+      channelId: string;
+      match: { type: MessageMatchType; value?: string };
+      replyWithResult: boolean;
+      ackText?: string;
+    }
+  | { kind: 'webhook' }
+  | { kind: 'schedule'; schedule: ScheduleInput };
+
+/** What applying a template created, and how it suggests starting. */
+export type ApplyTemplateResult = {
+  nodeCount: number;
+  edgeCount: number;
+  trigger?: ResolvedTemplateTrigger;
+};
+
 export const TEMPLATE_CATEGORY_VALUES = [
-  'engineering',
-  'content',
-  'ops',
+  'sales',
   'support',
+  'finance',
+  'marketing',
+  'ops',
+  'content',
+  'engineering',
 ] as const;
 
 export type TemplateCategory = (typeof TEMPLATE_CATEGORY_VALUES)[number];
@@ -105,6 +170,8 @@ export type WorkflowTemplate = {
   requirements: TemplateRequirement[];
   nodes: TemplateNode[];
   edges: TemplateEdge[];
+  /** The suggested way the workflow starts (offered at creation). */
+  trigger?: TemplateTrigger;
 };
 
 /**
@@ -115,5 +182,44 @@ export type WorkflowTemplate = {
  */
 export type CreateWorkflowSubmitInput<TCreateTaskInput = unknown> = {
   task: TCreateTaskInput;
-  template?: { templateId: string; inputs: Record<string, string> };
+  /** Seed the graph from a template; `setupTrigger` also sets up its
+   * suggested trigger or schedule. */
+  template?: {
+    templateId: string;
+    inputs: Record<string, string>;
+    setupTrigger?: boolean;
+  };
+  /** A whole graph (e.g. a draft from a description), sent to
+   * PUT /tasks/:id/graph. */
+  graph?: { nodes: unknown[]; edges: unknown[] };
+  /** A trigger or schedule to set up once the workflow exists. */
+  trigger?: ResolvedTemplateTrigger;
+};
+
+/** A workflow drafted from a description (POST /workflows/draft). */
+export type WorkflowDraftDto = {
+  title: string;
+  graph: {
+    nodes: Array<{
+      key: string;
+      title?: string | null;
+      description?: string | null;
+      kind?: string | null;
+      agentId?: string | null;
+      loop?: {
+        maxIterations: number;
+        conditionOperator: string;
+        conditionValue: string;
+      } | null;
+    }>;
+    edges: Array<{
+      from: string;
+      to: string;
+      edgeKind?: string | null;
+      conditionOperator?: string | null;
+      conditionValue?: string | null;
+    }>;
+  };
+  trigger: ResolvedTemplateTrigger | null;
+  warnings: string[];
 };

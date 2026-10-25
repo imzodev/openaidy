@@ -62,6 +62,9 @@ export type {
   WebhookTokenDto,
   ChannelMessageTriggerConfig,
   MessageMatchType,
+  ResolvedTemplateTrigger,
+  ApplyTemplateResult,
+  WorkflowDraftDto,
   // Agent memory types from shared-types — single source of truth.
   Memory,
   CreateMemoryInput,
