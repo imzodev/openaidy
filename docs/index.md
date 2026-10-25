@@ -25,6 +25,7 @@ New here? Start with [Getting Started](./getting-started.md).
 - [Tasks](./tasks.md) — multi-step work with a kanban board and a visual workflow graph (conditional branches, loops, approval gates)
 - [Task Schedules](./task-schedules.md) — run a task automatically, recurring or one-shot
 - [Pulses](./pulses.md) — a lighter-weight scheduled prompt, for when a full task is overkill
+- [Assistant](./assistant.md) — a daily briefing, alerts, and reminders agents schedule from any conversation, sent to your WhatsApp
 
 ## Connecting the outside world
 

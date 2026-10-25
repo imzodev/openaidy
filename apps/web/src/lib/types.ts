@@ -374,6 +374,26 @@ export type AppDefaults = {
   providerId?: string;
   modelId?: string;
   agentId: string;
+  /** IANA timezone schedules, reminders and "now" use (UTC if unset). */
+  timezone?: string;
+};
+
+/**
+ * Who OpenAidy works for and how to reach them. Mirrors
+ * `ownerConfigSchema` in packages/config/src/app-config.ts.
+ */
+export type OwnerConfig = {
+  name?: string;
+  channelId?: string;
+  contact?: string;
+  quietHours?: { from: string; to: string };
+  notifyWorkflowEvents?: boolean;
+  briefing?: {
+    enabled: boolean;
+    time: string;
+    instructions?: string;
+    agentId?: string;
+  };
 };
 
 /**
@@ -545,6 +565,7 @@ export type AppConfig = {
   providers: ProviderConfig[];
   agents: AgentConfig[];
   channels?: ChannelConfig[];
+  owner?: OwnerConfig;
   // Non-optional: executionConfigSchema.optional().default({}) guarantees
   // this is always present on a parsed config (unlike `channels`/`mcpServers`,
   // which genuinely round-trip as absent).
@@ -662,6 +683,8 @@ export type Pulse = {
   lastRunAt: string | null;
   nextRunAt: string | null;
   createdAt: string;
+  kind?: 'pulse' | 'reminder' | 'briefing';
+  delivery?: { toOwner?: boolean; onlyIfNeeded?: boolean };
 };
 
 export type PulseRun = {
@@ -672,6 +695,14 @@ export type PulseRun = {
   finishedAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  /** What the run said and where it went (reply, deliveredTo, suppressed). */
+  resultData?: {
+    reply?: string;
+    deliveredTo?: string[];
+    suppressed?: boolean;
+    queued?: boolean;
+    error?: string;
+  } | null;
 };
 
 export type {

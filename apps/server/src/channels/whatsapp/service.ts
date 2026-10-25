@@ -214,6 +214,7 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
             logger: this.deps.logger,
             workflowTriggers: this.deps.getWorkflowTriggers?.(),
             replyTarget: msg.key.remoteJid!,
+            recordRoute: this.deps.recordSessionRoute,
           });
 
           if (reply && this.socket) {

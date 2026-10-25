@@ -53,6 +53,11 @@ export type WorkflowTriggerServiceDeps = {
     text: string,
   ) => Promise<boolean>;
   logger: ReturnType<typeof createLogger>;
+  /**
+   * True when approvals are sent to the owner directly; the chat that
+   * started the run (often a customer) is then not told about them.
+   */
+  ownerGetsApprovals?: () => boolean;
 };
 
 const hashToken = (token: string) =>
@@ -378,6 +383,9 @@ export class WorkflowTriggerService {
   private async onRunEvent(event: WorkflowRunEvent): Promise<void> {
     const target = parseReplyTarget(event.run);
     if (!target) return;
+    if (event.type === 'approval.waiting' && this.deps.ownerGetsApprovals?.()) {
+      return;
+    }
     const task = await this.deps.taskService.getTask(event.run.taskId);
     const title = task?.title ?? 'The workflow';
 

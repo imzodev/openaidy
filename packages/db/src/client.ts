@@ -352,6 +352,15 @@ function initializeSqliteSchema(sqlite: InstanceType<typeof Database>) {
     CREATE INDEX IF NOT EXISTS workflow_runs_task_id_idx ON workflow_runs(task_id, started_at);
     CREATE INDEX IF NOT EXISTS workflow_runs_status_idx ON workflow_runs(status);
 
+    CREATE TABLE IF NOT EXISTS session_channels (
+      session_id TEXT PRIMARY KEY NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      channel_id TEXT NOT NULL,
+      channel_type TEXT NOT NULL,
+      target TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS workflow_triggers (
       id TEXT PRIMARY KEY NOT NULL,
       task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -921,6 +930,10 @@ export async function createDatabaseClient(
     resolve(drizzleDir, '0020_workflow_triggers.sql'),
     'utf-8',
   );
+  const sessionChannelsMigrationSql = readFileSync(
+    resolve(drizzleDir, '0021_session_channels.sql'),
+    'utf-8',
+  );
   const mcpOAuthCredentialsMigrationSql = readFileSync(
     resolve(drizzleDir, '0017_mcp_oauth_credentials.sql'),
     'utf-8',
@@ -937,6 +950,7 @@ export async function createDatabaseClient(
     await client.query(workflowRunsMigrationSql);
     await client.query(subtaskPositionsMigrationSql);
     await client.query(workflowTriggersMigrationSql);
+    await client.query(sessionChannelsMigrationSql);
     await client.query(mcpOAuthCredentialsMigrationSql);
   } finally {
     client.release();

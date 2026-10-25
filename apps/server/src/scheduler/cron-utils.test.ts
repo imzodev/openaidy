@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   validateCronExpression,
   calculateNextRun,
   calculateNextRuns,
   describeCronExpression,
   matchesCronExpression,
+  setScheduleTimezone,
+  getScheduleTimezone,
+  isValidTimezone,
 } from './cron-utils';
 
 describe('cron-utils', () => {
@@ -243,5 +246,29 @@ describe('cron-utils', () => {
       const next = calculateNextRun('* * * * *', now);
       expect(next.getUTCFullYear()).toBe(2027);
     });
+  });
+});
+
+describe('schedule timezone', () => {
+  afterEach(() => setScheduleTimezone(undefined));
+
+  it('reads daily times in the configured timezone', () => {
+    const from = new Date('2026-10-25T00:00:00Z');
+    expect(calculateNextRun('0 9 * * *', from).toISOString()).toBe(
+      '2026-10-25T09:00:00.000Z',
+    );
+    setScheduleTimezone('America/Mexico_City');
+    expect(getScheduleTimezone()).toBe('America/Mexico_City');
+    // 09:00 in Mexico City (UTC-6) is 15:00 UTC.
+    expect(calculateNextRun('0 9 * * *', from).toISOString()).toBe(
+      '2026-10-25T15:00:00.000Z',
+    );
+  });
+
+  it('falls back to UTC for an unknown timezone', () => {
+    setScheduleTimezone('Mars/Olympus');
+    expect(getScheduleTimezone()).toBe('UTC');
+    expect(isValidTimezone('Europe/Madrid')).toBe(true);
+    expect(isValidTimezone('Mars/Olympus')).toBe(false);
   });
 });

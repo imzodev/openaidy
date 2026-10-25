@@ -38,12 +38,30 @@ export type PulseStatus = 'active' | 'paused' | 'completed' | 'failed';
 /**
  * Input for creating a new pulse.
  */
+/**
+ * What a scheduled prompt is: a pulse the user set up, a reminder an agent
+ * scheduled from a conversation, or the owner's daily briefing.
+ */
+export type PulseKind = 'pulse' | 'reminder' | 'briefing';
+
+/** Where a pulse's answer goes, besides its session. */
+export type PulseDelivery = {
+  /** Send the answer to the owner (WhatsApp etc., see `owner` config). */
+  toOwner?: boolean;
+  /** Only deliver when there's something to say (the agent can answer
+   * NO_UPDATE to stay quiet). */
+  onlyIfNeeded?: boolean;
+};
+
 export type CreatePulseInput = {
   name: string;
   prompt: string;
   schedule: ScheduleInput;
   agentId?: string;
   sessionId?: string;
+  delivery?: PulseDelivery;
+  /** Defaults to 'pulse'. */
+  kind?: PulseKind;
 };
 
 /**
@@ -56,6 +74,7 @@ export type UpdatePulseInput = {
   status?: 'active' | 'paused';
   agentId?: string | undefined;
   sessionId?: string | undefined;
+  delivery?: PulseDelivery | undefined;
 };
 
 /**
@@ -82,6 +101,8 @@ export type PulseRecord = {
   lastRunAt?: Date;
   nextRunAt: Date;
   createdAt: Date;
+  kind: PulseKind;
+  delivery?: PulseDelivery;
 };
 
 /**

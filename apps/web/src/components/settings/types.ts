@@ -11,6 +11,7 @@ export type ConfigTab =
   | 'providers'
   | 'agents'
   | 'execution'
+  | 'assistant'
   | 'raw'
   | 'about';
 

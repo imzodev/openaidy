@@ -90,6 +90,15 @@ export type ChannelWorkflowTriggers = {
   }): Promise<string | null>;
 };
 
+/** Where a channel conversation's replies go (see `session_channels`). */
+export type SessionRoute = {
+  sessionId: string;
+  channelId: string;
+  channelType: string;
+  target: string;
+  senderId: string;
+};
+
 /**
  * Handle an inbound message from any channel.
  *
@@ -128,6 +137,8 @@ export async function handleInboundChannelMessage(params: {
   workflowTriggers?: ChannelWorkflowTriggers | undefined;
   /** The chat a reply goes to; needed for workflow triggers. */
   replyTarget?: string;
+  /** Remember which chat this session replies to (for later messages). */
+  recordRoute?: ((route: SessionRoute) => Promise<void>) | undefined;
 }): Promise<string | null> {
   const {
     channelType,
@@ -192,6 +203,24 @@ export async function handleInboundChannelMessage(params: {
   // 3. Build session key and find or create session
   const sessionKey = buildChannelSessionKey(channelType, channelId, senderId);
   const sessionId = await findOrCreateSession(sessionKey, sessionService);
+  if (params.recordRoute && params.replyTarget) {
+    // Best-effort: a reminder later in this conversation needs it, but a
+    // failure here must not stop the reply.
+    await params
+      .recordRoute({
+        sessionId,
+        channelId,
+        channelType,
+        target: params.replyTarget,
+        senderId,
+      })
+      .catch((err: unknown) =>
+        logger.warn(
+          { err, channelId },
+          `${channelType}: couldn't record chat route`,
+        ),
+      );
+  }
 
   // 4. Submit message (non-streaming — channel needs full reply text)
   const result = await sessionService.submitMessageNonStreaming({

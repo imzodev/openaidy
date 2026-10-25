@@ -16,6 +16,7 @@ import {
   updatePulse,
   deletePulse,
   triggerPulse,
+  listScheduled,
   type Pulse,
   type CreatePulseBody,
   type UpdatePulseBody,
@@ -36,13 +37,19 @@ export function PulsesPage() {
   );
 
   const token = () => resolveToken() ?? '';
+  // Reminders agents set in conversations ("remind me Friday…").
+  const [reminders, setReminders] = createSignal<Pulse[]>([]);
 
   const load = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await listPulses(token());
+      const [data, scheduled] = await Promise.all([
+        listPulses(token()),
+        listScheduled(token(), 'reminder').catch(() => ({ items: [] })),
+      ]);
       setPulses(data.pulses);
+      setReminders(scheduled.items.filter((r) => r.status === 'active'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load pulses');
     } finally {
@@ -112,6 +119,19 @@ export function PulsesPage() {
       setPulses((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
       console.error('Failed to delete pulse:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleCancelReminder = async (id: string) => {
+    if (!confirm('Cancel this reminder?')) return;
+    setActionLoadingId(id);
+    try {
+      await deletePulse(token(), id);
+      setReminders((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.error('Failed to cancel reminder:', err);
     } finally {
       setActionLoadingId(null);
     }
@@ -204,6 +224,53 @@ export function PulsesPage() {
             )}
           </For>
         </div>
+      </Show>
+
+      <Show when={!isLoading() && reminders().length > 0}>
+        <section class="mt-8">
+          <h2 class="text-sm font-semibold text-text-primary mb-1">
+            Reminders
+          </h2>
+          <p class="text-xs text-text-tertiary mb-3">
+            Set by agents from conversations. Each one runs once, back in the
+            conversation it came from.
+          </p>
+          <ul class="divide-y divide-gray-200 dark:divide-gray-700 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <For each={reminders()}>
+              {(reminder) => (
+                <li class="p-3 flex items-start gap-3 text-sm">
+                  <div class="flex-1 min-w-0">
+                    <div class="font-medium text-text-primary truncate">
+                      {reminder.name}
+                    </div>
+                    <div class="text-xs text-text-tertiary">
+                      {reminder.nextRunAt
+                        ? new Date(reminder.nextRunAt).toLocaleString()
+                        : ''}
+                      <Show when={reminder.sessionId}>
+                        {' · '}
+                        <a
+                          href={`/chat?sessionId=${reminder.sessionId}`}
+                          class="text-primary hover:underline"
+                        >
+                          conversation
+                        </a>
+                      </Show>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="text-xs text-red-600 hover:underline disabled:opacity-50"
+                    disabled={actionLoadingId() === reminder.id}
+                    onClick={() => void handleCancelReminder(reminder.id)}
+                  >
+                    Cancel
+                  </button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </section>
       </Show>
 
       <CreateEditPulseModal

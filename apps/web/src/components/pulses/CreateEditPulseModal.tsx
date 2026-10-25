@@ -45,6 +45,8 @@ export function CreateEditPulseModal(props: CreateEditPulseModalProps) {
   const [dailyMinute, setDailyMinute] = createSignal(0);
   const [cronExpression, setCronExpression] = createSignal('0 * * * *');
   const [atDate, setAtDate] = createSignal('');
+  const [toOwner, setToOwner] = createSignal(false);
+  const [onlyIfNeeded, setOnlyIfNeeded] = createSignal(false);
   const [errors, setErrors] = createSignal<Record<string, string>>({});
   const [submitting, setSubmitting] = createSignal(false);
 
@@ -58,6 +60,8 @@ export function CreateEditPulseModal(props: CreateEditPulseModalProps) {
             // Edit mode - parse existing pulse
             setName(props.pulse.name);
             setPrompt(props.pulse.prompt);
+            setToOwner(Boolean(props.pulse.delivery?.toOwner));
+            setOnlyIfNeeded(Boolean(props.pulse.delivery?.onlyIfNeeded));
             // Try to detect schedule type from scheduleHuman or pulse data
             // Default to interval for now
             setScheduleType('interval');
@@ -72,6 +76,8 @@ export function CreateEditPulseModal(props: CreateEditPulseModalProps) {
             setDailyMinute(0);
             setCronExpression('0 * * * *');
             setAtDate('');
+            setToOwner(false);
+            setOnlyIfNeeded(false);
           }
           setErrors({});
         }
@@ -118,17 +124,20 @@ export function CreateEditPulseModal(props: CreateEditPulseModalProps) {
     setSubmitting(true);
     try {
       const body = buildScheduleInput();
+      const delivery = { toOwner: toOwner(), onlyIfNeeded: onlyIfNeeded() };
       if (props.pulse) {
         await props.onSubmit({
           name: name(),
           prompt: prompt(),
           schedule: body,
+          delivery,
         } as UpdatePulseBody);
       } else {
         await props.onSubmit({
           name: name(),
           prompt: prompt(),
           schedule: body,
+          delivery,
         } as CreatePulseBody);
       }
     } catch (err) {
@@ -282,6 +291,41 @@ export function CreateEditPulseModal(props: CreateEditPulseModalProps) {
             </Show>
           </Show>
         </div>
+
+        <fieldset class="space-y-2">
+          <legend class="block text-sm font-medium text-text-primary mb-1">
+            Answer
+          </legend>
+          <label class="flex items-start gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              class="mt-1"
+              checked={toOwner()}
+              onChange={(e) => setToOwner(e.currentTarget.checked)}
+            />
+            <span>
+              Send it to me
+              <span class="block text-xs text-text-tertiary">
+                On WhatsApp (set where in Settings → Assistant).
+              </span>
+            </span>
+          </label>
+          <label class="flex items-start gap-2 text-sm text-text-secondary">
+            <input
+              type="checkbox"
+              class="mt-1"
+              checked={onlyIfNeeded()}
+              onChange={(e) => setOnlyIfNeeded(e.currentTarget.checked)}
+            />
+            <span>
+              Only when there's something to say
+              <span class="block text-xs text-text-tertiary">
+                Turns it into a watcher: "every 30 minutes, check for orders
+                over $500" stays quiet until there is one.
+              </span>
+            </span>
+          </label>
+        </fieldset>
 
         <Show when={errors().submit}>
           <p class="text-sm text-red-500">{errors().submit}</p>

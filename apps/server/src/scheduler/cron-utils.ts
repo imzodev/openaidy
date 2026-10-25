@@ -1,6 +1,32 @@
 import { Cron } from 'croner';
 
 /**
+ * The timezone cron and daily schedules are read in ("every day at 9:00"
+ * means 9:00 here). One setting for the whole install —
+ * `defaults.timezone` in the config — applied with `setScheduleTimezone`
+ * at startup and whenever the config changes. UTC until it's set, which
+ * is how schedules always behaved.
+ */
+let scheduleTimezone = 'UTC';
+
+export function setScheduleTimezone(timezone: string | undefined): void {
+  scheduleTimezone = timezone && isValidTimezone(timezone) ? timezone : 'UTC';
+}
+
+export function getScheduleTimezone(): string {
+  return scheduleTimezone;
+}
+
+export function isValidTimezone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Validates a cron expression
  * @param expression - Cron expression to validate (5 or 6 fields)
  * @returns true if valid
@@ -32,9 +58,10 @@ export function validateCronExpression(expression: string): boolean {
 export function calculateNextRun(
   expression: string,
   fromDate: Date = new Date(),
+  timezone: string = scheduleTimezone,
 ): Date {
   try {
-    const cron = new Cron(expression, { timezone: 'UTC' });
+    const cron = new Cron(expression, { timezone });
     const next = cron.nextRun(fromDate);
     if (!next) {
       throw new Error('No next run time available');

@@ -3,6 +3,7 @@ import type { SessionMessageService } from '../../sessions/service.js';
 import {
   handleInboundChannelMessage,
   type ChannelWorkflowTriggers,
+  type SessionRoute,
 } from '../message-handler.js';
 
 // Re-export so existing WhatsApp callers/tests keep importing from here.
@@ -39,6 +40,7 @@ export async function handleInboundWhatsAppMessage(params: {
   workflowTriggers?: ChannelWorkflowTriggers | undefined;
   /** Chat JID replies go to. */
   replyTarget?: string;
+  recordRoute?: ((route: SessionRoute) => Promise<void>) | undefined;
 }): Promise<string | null> {
   return handleInboundChannelMessage({
     channelType: 'whatsapp',
@@ -58,6 +60,7 @@ export async function handleInboundWhatsAppMessage(params: {
     sessionService: params.sessionService,
     logger: params.logger,
     workflowTriggers: params.workflowTriggers,
+    recordRoute: params.recordRoute,
     ...(params.replyTarget ? { replyTarget: params.replyTarget } : {}),
   });
 }

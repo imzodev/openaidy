@@ -57,7 +57,36 @@ export class PulseService {
 
   isPulse(job: ScheduledJob): boolean {
     const metadata = job.metadata as Record<string, unknown> | null;
-    return metadata?.kind === 'pulse';
+    // Any scheduled prompt: a pulse, a reminder or the briefing. Lists of
+    // pulses filter to kind 'pulse' themselves.
+    return (
+      metadata?.kind === 'pulse' ||
+      metadata?.kind === 'reminder' ||
+      metadata?.kind === 'briefing'
+    );
+  }
+
+  private kindOf(job: ScheduledJob): string | undefined {
+    return (job.metadata as Record<string, unknown> | null)?.kind as
+      | string
+      | undefined;
+  }
+
+  /** Active and finished scheduled prompts of one kind, soonest first. */
+  async listByKind(
+    kind: 'reminder' | 'briefing',
+    options: { sessionId?: string; status?: PulseRecord['status'] } = {},
+  ): Promise<PulseRecord[]> {
+    const jobs = await this.jobsRepo.list({ limit: 1000 });
+    return jobs
+      .filter((job) => this.kindOf(job) === kind)
+      .filter(
+        (job) =>
+          !options.sessionId || job.targetSessionId === options.sessionId,
+      )
+      .filter((job) => !options.status || job.status === options.status)
+      .map(jobToPulse)
+      .sort((a, b) => a.nextRunAt.getTime() - b.nextRunAt.getTime());
   }
 
   private metadataOf(job: ScheduledJob): Record<string, unknown> | null {
@@ -70,6 +99,7 @@ export class PulseService {
 
   async createPulse(input: CreatePulseInput): Promise<PulseRecord> {
     const { name, prompt, schedule, agentId, sessionId } = input;
+    const kind = input.kind ?? 'pulse';
 
     if (sessionId) {
       const session = await this.sessionsRepo.findById(sessionId);
@@ -89,9 +119,10 @@ export class PulseService {
       },
       status: 'active',
       metadata: {
-        kind: 'pulse',
+        kind,
         name: name.trim(),
         prompt,
+        ...(input.delivery ? { delivery: input.delivery } : {}),
       },
       nextRunAt: parsedSchedule.nextRunAt,
     };
@@ -127,7 +158,9 @@ export class PulseService {
     }
     const allJobs = await this.jobsRepo.list(listFilters);
 
-    const pulses = allJobs.filter((job) => this.isPulse(job)).map(jobToPulse);
+    const pulses = allJobs
+      .filter((job) => this.kindOf(job) === 'pulse')
+      .map(jobToPulse);
 
     const total = pulses.length;
     const items = pulses.slice(offset, offset + limit);
@@ -184,13 +217,20 @@ export class PulseService {
       updates.nextRunAt = parsedSchedule.nextRunAt;
     }
 
-    if (input.name !== undefined || input.prompt !== undefined) {
+    if (
+      input.name !== undefined ||
+      input.prompt !== undefined ||
+      input.delivery !== undefined
+    ) {
       const newMetadata = { ...existingMetadata };
       if (input.name !== undefined) {
         newMetadata.name = input.name;
       }
       if (input.prompt !== undefined) {
         newMetadata.prompt = input.prompt;
+      }
+      if (input.delivery !== undefined) {
+        newMetadata.delivery = input.delivery;
       }
       updates.metadata = newMetadata;
     }

@@ -18,6 +18,7 @@ import { createTaskSchedulesRepository } from './repositories/task-schedules';
 import { createTaskExecutionHistoryRepository } from './repositories/task-execution-history';
 import { createWorkflowRunsRepository } from './repositories/workflow-runs';
 import { createWorkflowTriggersRepository } from './repositories/workflow-triggers';
+import { createSessionChannelsRepository } from './repositories/session-channels';
 import { createAddonsRepository } from './repositories/addons';
 import { createMemoriesRepository } from './repositories/memories';
 import { createDeliverablesRepository } from './repositories/deliverables';
@@ -47,6 +48,7 @@ export async function createDatabaseAdapter(
     taskExecutionHistory: createTaskExecutionHistoryRepository(client),
     workflowRuns: createWorkflowRunsRepository(client),
     workflowTriggers: createWorkflowTriggersRepository(client),
+    sessionChannels: createSessionChannelsRepository(client),
     addons: createAddonsRepository(client),
     memories: createMemoriesRepository(client),
     deliverables: createDeliverablesRepository(client),

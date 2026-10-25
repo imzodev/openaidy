@@ -682,6 +682,44 @@ export const channelSendMeta: ToolMeta = {
     'customers when in doubt.',
 };
 
+// ── Assistant (owner + reminders) ─────────────────────────────────────────────
+
+export const notifyOwnerMeta: ToolMeta = {
+  name: 'notify_owner',
+  category: 'Assistant',
+  description:
+    'Send a short message to the owner (the person you work for) on their ' +
+    'WhatsApp or other channel set in Settings → You. Use it when something ' +
+    'needs their attention and they are not the one you are talking to. ' +
+    'Respects their quiet hours unless urgent=true.',
+};
+
+export const reminderCreateMeta: ToolMeta = {
+  name: 'reminder_create',
+  category: 'Assistant',
+  description:
+    'Schedule something for later in THIS conversation: a reminder ' +
+    '("remind me Friday at 9 to call Ana") or a follow-up you will do ' +
+    'yourself ("check tomorrow whether they paid"). At that time you get ' +
+    'the instructions back here and act on them; on WhatsApp your reply goes ' +
+    'to that chat. Use the date and time in [NOW]. Set onlyIfNeeded when it ' +
+    'should stay quiet if nothing needs saying then. Confirm the time to the ' +
+    'person after creating it.',
+};
+
+export const reminderListMeta: ToolMeta = {
+  name: 'reminder_list',
+  category: 'Assistant',
+  description:
+    'List upcoming reminders and follow-ups in this conversation (or all with all=true), with their ids.',
+};
+
+export const reminderCancelMeta: ToolMeta = {
+  name: 'reminder_cancel',
+  category: 'Assistant',
+  description: 'Cancel a reminder by id (see reminder_list).',
+};
+
 // ── Pulses ────────────────────────────────────────────────────────────────────
 
 export const jobsListMeta: ToolMeta = {
@@ -867,6 +905,10 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowSetGraphMeta,
   workflowTemplateListMeta,
   channelSendMeta,
+  notifyOwnerMeta,
+  reminderCreateMeta,
+  reminderListMeta,
+  reminderCancelMeta,
   workflowTriggerCreateMeta,
   workflowTriggerListMeta,
   workflowTriggerDeleteMeta,

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
 import type { SessionMessageService } from '../sessions/service';
 import { triggerPulseNow } from '../scheduler';
+import type { PulseRunnableDeps } from '../scheduler/pulse-runnable-adapter';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { PulseService } from '../pulses/service.js';
@@ -26,6 +27,8 @@ export type PulseRoutesOptions = {
   sessionsRepo: SessionsStore;
   sessionMessageService: SessionMessageService;
   authMiddleware: AuthMiddleware;
+  /** Prepare/deliver hooks for "Run now" (same as scheduled runs). */
+  pulseHooks?: Pick<PulseRunnableDeps, 'prepareMessage' | 'deliver'>;
 };
 
 // ========================================
@@ -71,6 +74,8 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
       };
       if (parsed.agentId != null) input.agentId = parsed.agentId;
       if (parsed.sessionId != null) input.sessionId = parsed.sessionId;
+      if (parsed.delivery != null)
+        input.delivery = stripUndefined(parsed.delivery);
       const pulse = await service.createPulse(input);
       reply.code(201);
       return { pulse };
@@ -119,6 +124,21 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
     };
   });
 
+  // GET /api/scheduled?kind=reminder|briefing — reminders agents set up
+  // in conversations, and the daily briefing (not listed as pulses).
+  app.get('/scheduled', async (request, reply) => {
+    const kind = (request.query as { kind?: string }).kind;
+    if (kind !== 'reminder' && kind !== 'briefing') {
+      reply.code(400);
+      return {
+        error: 'validation.invalid_request',
+        message: 'kind must be "reminder" or "briefing"',
+      };
+    }
+    const items = await service.listByKind(kind);
+    return { items };
+  });
+
   // GET /api/pulses/:id
   app.get('/pulses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
@@ -159,6 +179,9 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
       if (parsed.status !== undefined) input.status = parsed.status;
       if (parsed.agentId !== undefined) input.agentId = parsed.agentId;
       if (parsed.sessionId !== undefined) input.sessionId = parsed.sessionId;
+      if (parsed.delivery !== undefined) {
+        input.delivery = stripUndefined(parsed.delivery);
+      }
       const pulse = await service.updatePulse(id, input);
       return { pulse };
     } catch (error) {
@@ -195,6 +218,7 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
           sessionsStore: options.sessionsRepo,
           sessionMessageService: options.sessionMessageService,
           logger: app.log,
+          ...options.pulseHooks,
         }),
       );
       const updatedRun = await options.jobRunsRepo.findById(run.id);
@@ -244,3 +268,16 @@ export const pulseRoutes: FastifyPluginAsync<PulseRoutesOptions> = async (
 };
 
 export default pulseRoutes;
+
+/** `{toOwner: true, onlyIfNeeded: undefined}` → `{toOwner: true}`. */
+function stripUndefined(value: {
+  toOwner?: boolean | undefined;
+  onlyIfNeeded?: boolean | undefined;
+}): import('@openaidy/shared-types').PulseDelivery {
+  return {
+    ...(value.toOwner !== undefined ? { toOwner: value.toOwner } : {}),
+    ...(value.onlyIfNeeded !== undefined
+      ? { onlyIfNeeded: value.onlyIfNeeded }
+      : {}),
+  };
+}

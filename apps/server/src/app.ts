@@ -62,6 +62,11 @@ import {
   workflowTriggerRoutes,
 } from './routes/workflow-triggers';
 import { WorkflowTriggerService } from './tasks/triggers/service';
+import { AssistantService } from './assistant/service';
+import { collectBriefingFacts } from './assistant/briefing';
+import { syncBriefing } from './assistant/briefing-sync';
+import type { OwnerConfig } from '@openaidy/config';
+import type { ScheduledJob } from '@openaidy/db';
 import { WorkflowDraftService } from './tasks/drafting/service';
 import { workflowDraftRoutes } from './routes/workflow-drafts';
 import { taskScheduleRoutes } from './routes/task-schedules';
@@ -88,6 +93,7 @@ import {
   SchedulerService,
   createSchedulerService,
   calculateNextRun,
+  setScheduleTimezone,
   createPulseRunnableAdapter,
 } from './scheduler';
 import { createAppConfigService } from './config/service';
@@ -397,6 +403,17 @@ export async function buildApp() {
                 dbAdapter!.repositories.sessions,
               ),
           },
+          assistant: {
+            getAssistant: () => assistantRef.current,
+            getPulseService: () =>
+              new PulseService(
+                dbAdapter!.repositories.jobs,
+                dbAdapter!.repositories.jobRuns,
+                dbAdapter!.repositories.sessions,
+              ),
+            getTimezone: () =>
+              configService.getConfig().defaults.timezone ?? 'UTC',
+          },
         }
       : {}),
     getTaskService: () => taskService,
@@ -430,7 +447,17 @@ export async function buildApp() {
     | Record<string, import('@openaidy/shared-types').ModelPricing>
     | undefined;
 
+  // Owner, "now", and where scheduled prompts' answers go. Created once
+  // the channel registry exists (below); used lazily before that.
+  const assistantRef: { current: AssistantService | undefined } = {
+    current: undefined,
+  };
+
   sessionService = new SessionMessageService({
+    getPromptContext: async (sessionId) =>
+      assistantRef.current?.promptContext(sessionId) ?? {
+        timezone: configService.getConfig().defaults.timezone ?? 'UTC',
+      },
     providers: providerServices,
     logger: pinoLog,
     agents: agentRegistry,
@@ -481,17 +508,62 @@ export async function buildApp() {
       : undefined,
   });
 
+  // Schedules ("every day at 9:00") are read in the owner's timezone.
+  setScheduleTimezone(configService.getConfig().defaults.timezone);
+  configService.onSaved((config) =>
+    setScheduleTimezone(config.defaults.timezone),
+  );
+
   // Create and wire channel registry
   const channelDeps = {
     sessionService,
     authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
     logger: pinoLog,
     getWorkflowTriggers: () => workflowTriggerService,
+    ...(dbAdapter
+      ? {
+          recordSessionRoute: (
+            route: import('./channels/message-handler').SessionRoute,
+          ) => dbAdapter.repositories.sessionChannels.record(route),
+        }
+      : {}),
   };
   const channelRegistry = createChannelRegistry(
     configService.getConfig().channels,
     channelDeps,
   );
+
+  const briefingFacts = () =>
+    collectBriefingFacts({
+      taskService,
+      workflowRuns: dbAdapter?.repositories.workflowRuns,
+      tasks: dbAdapter?.repositories.tasks,
+      jobs: dbAdapter?.repositories.jobs,
+      timezone: configService.getConfig().defaults.timezone ?? 'UTC',
+    });
+  const assistant = new AssistantService({
+    getOwner: () => configService.getConfig().owner,
+    getTimezone: () => configService.getConfig().defaults.timezone ?? 'UTC',
+    sessionChannels: dbAdapter?.repositories.sessionChannels,
+    jobsRepo: dbAdapter?.repositories.jobs,
+    sendToChannel: async (channelId, target, text) =>
+      (await channelRegistry.get(channelId)?.send?.(target, text)) ?? false,
+    getBriefingFacts: () => briefingFacts(),
+    logger: createLogger('Assistant'),
+  });
+  assistantRef.current = assistant;
+  assistant.start();
+  const pulseHooks = {
+    prepareMessage: (job: ScheduledJob) => assistant.preparePulseMessage(job),
+    deliver: async (
+      job: ScheduledJob,
+      result: { sessionId: string; reply: string },
+    ) =>
+      (await assistant.deliverPulseResult(job, result)) as unknown as Record<
+        string,
+        unknown
+      >,
+  };
 
   // Keep the live registry in sync when the config is saved (e.g. a WhatsApp
   // channel added/removed from the UI), so it works without a restart.
@@ -553,6 +625,7 @@ export async function buildApp() {
         sessionsStore: sessionsRepo,
         sessionMessageService: sessionService,
         logger: pinoLog,
+        ...pulseHooks,
       }),
     );
   }
@@ -775,6 +848,7 @@ export async function buildApp() {
           sessionsRepo: services.sessionsRepo,
           sessionMessageService: services.sessions,
           authMiddleware,
+          pulseHooks,
         });
       }
 
@@ -817,6 +891,26 @@ export async function buildApp() {
         });
         // Tell connected clients when a workflow run or step changes, so
         // the workflow pages refresh instead of polling.
+        // Approvals waiting and failed runs reach the owner on WhatsApp.
+        taskService.onRunEvent(async (event) => {
+          if (event.type === 'run.finished' && event.run.status !== 'failed') {
+            return;
+          }
+          const task = await taskService!.getTask(event.run.taskId);
+          await assistant.onWorkflowEvent(event, task?.title ?? 'A workflow');
+        });
+        // The daily briefing follows `owner.briefing` in the config.
+        const briefingPulses = new PulseService(
+          dbAdapter.repositories.jobs,
+          dbAdapter.repositories.jobRuns,
+          dbAdapter.repositories.sessions,
+        );
+        const syncBriefingJob = (owner: OwnerConfig | undefined) =>
+          void syncBriefing(briefingPulses, owner).catch((err: unknown) =>
+            log.warn('Could not update the daily briefing schedule', { err }),
+          );
+        syncBriefingJob(configService.getConfig().owner);
+        configService.onSaved((config) => syncBriefingJob(config.owner));
         taskService.onWorkflowChange((taskId) => {
           const payload: WorkflowUpdatedPayload = { taskId };
           wsGateway?.connectionManager.broadcastAuthenticated({
@@ -843,6 +937,11 @@ export async function buildApp() {
             (await channelRegistry.get(channelId)?.send?.(target, text)) ??
             false,
           logger: createLogger('WorkflowTriggers'),
+          ownerGetsApprovals: () =>
+            Boolean(
+              assistant.ownerReachable() &&
+              configService.getConfig().owner?.notifyWorkflowEvents !== false,
+            ),
         });
         await api.register(workflowTriggerRoutes, {
           triggerService: workflowTriggerService,

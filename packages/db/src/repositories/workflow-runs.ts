@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { DatabaseClient } from '../client';
 import * as schema from '../schema/tasks';
@@ -83,6 +83,15 @@ export class WorkflowRunsRepository {
       .where(eq(schema.workflowRuns.taskId, taskId))
       .orderBy(desc(schema.workflowRuns.startedAt))
       .limit(limit);
+  }
+
+  /** Runs that finished at or after `since`, newest first. */
+  async listFinishedSince(since: Date): Promise<schema.WorkflowRun[]> {
+    return this.db
+      .select()
+      .from(schema.workflowRuns)
+      .where(gte(schema.workflowRuns.finishedAt, since))
+      .orderBy(desc(schema.workflowRuns.finishedAt));
   }
 
   async listRunning(): Promise<schema.WorkflowRun[]> {

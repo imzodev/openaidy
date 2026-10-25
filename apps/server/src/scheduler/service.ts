@@ -173,6 +173,12 @@ export class SchedulerService {
     if (!this.isRunning) {
       return false;
     }
+    // The poll interval fires every few seconds whether or not the last
+    // tick finished; a pulse's agent run can take far longer. Without this
+    // the next tick would claim the same (still due) job and run it twice.
+    if (this.tickInProgress) {
+      return false;
+    }
 
     this.tickInProgress = true;
 
@@ -268,10 +274,12 @@ export class SchedulerService {
           finishedAt: Date;
           errorCode?: string;
           errorMessage?: string;
+          resultData?: Record<string, unknown>;
         } = {
           status: result.ok ? 'succeeded' : 'failed',
           finishedAt: new Date(),
         };
+        if (result.ok && result.output) update.resultData = result.output;
         if (!result.ok) {
           update.errorCode = result.error.name ?? 'EXECUTION_ERROR';
           update.errorMessage = result.error.message;

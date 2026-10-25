@@ -130,6 +130,14 @@ export type SessionMessageServiceOptions = {
   listAddons?: () => Promise<
     import('../prompts/build-system-prompt').AddonPromptSummary[]
   >;
+  /**
+   * When and with whom a session's conversation happens (owner timezone,
+   * the WhatsApp/Discord chat), for the [NOW] / [CONVERSATION] prompt
+   * blocks. Errors fall back to "now" in UTC.
+   */
+  getPromptContext?: (
+    sessionId: string,
+  ) => Promise<import('../prompts/build-system-prompt').PromptContext>;
   /** Attachment storage for image/audio chat media (requires DB) */
   attachments?: import('../attachments/service').AttachmentService;
   /**

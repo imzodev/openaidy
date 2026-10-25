@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SessionMessageService } from './service';
+import {
+  SessionMessageService,
+  ALWAYS_ON_TOOLS,
+  enabledBuiltinTools,
+} from './service';
 import { BuiltinToolRegistry } from '../tools/registry';
 import { AgentRegistry } from '../agents/registry';
 import type { BuiltinTool } from '@openaidy/runtime';
@@ -1200,5 +1204,23 @@ describe('SessionMessageService — context observability', () => {
       (c) => c[1] === 'Agentic loop request nearing the context token budget',
     );
     expect(nearWarnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('enabledBuiltinTools', () => {
+  it('adds the always-on tools to every agent, even one with no tools', () => {
+    expect(enabledBuiltinTools(undefined, false)).toEqual(ALWAYS_ON_TOOLS);
+    expect(enabledBuiltinTools(['workspace_read'], false)).toEqual([
+      'workspace_read',
+      ...ALWAYS_ON_TOOLS,
+    ]);
+  });
+
+  it('keeps tools that write outside a private chat out of it', () => {
+    const tools = enabledBuiltinTools(['workspace_read', 'memory_save'], true);
+    expect(tools).toContain('workspace_read');
+    expect(tools).not.toContain('memory_save');
+    expect(tools).not.toContain('reminder_create');
+    expect(tools).toContain('reminder_list');
   });
 });

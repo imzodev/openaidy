@@ -23,6 +23,7 @@ A named, scheduled prompt. Stored as a `scheduled_job` record with `metadata.kin
 - A **schedule** — when and how often to fire
 - An optional **agent** — defaults to the configured default agent
 - An optional **session** — pin to an existing session, or create an isolated one per run
+- Optional **delivery** — send the answer to you (WhatsApp, see [Assistant](./assistant.md)), and/or only when there's something to say (the agent answers `NO_UPDATE` on quiet runs, and nothing is sent)
 
 ### Schedule types
 
@@ -33,6 +34,8 @@ A named, scheduled prompt. Stored as a `scheduled_job` record with `metadata.kin
 | Cron     | `0 9 * * 1-5`          | Advanced scheduling |
 | One-shot | at a specific datetime | One-time reminders  |
 
+Daily and cron times are read in the timezone set in Settings → Assistant (UTC until it's set).
+
 ### Execution modes
 
 | Mode                 | Behaviour                                                                        |
@@ -42,7 +45,9 @@ A named, scheduled prompt. Stored as a `scheduled_job` record with `metadata.kin
 
 ### Run history
 
-Every execution is recorded as a `job_run`. You can inspect status (`succeeded`, `failed`), timestamps, and error messages for any past run.
+Every execution is recorded as a `job_run`. You can inspect status (`succeeded`, `failed`), timestamps, error messages, and what the agent answered and where it was sent, for any past run.
+
+Reminders that agents schedule from conversations, and the daily briefing, are scheduled prompts too; see [Assistant](./assistant.md).
 
 ## Quick mental model
 

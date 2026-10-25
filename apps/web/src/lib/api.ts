@@ -1473,6 +1473,22 @@ export async function triggerPulse(
 }
 
 /**
+ * Reminders agents scheduled in conversations, or the daily briefing.
+ */
+export async function listScheduled(
+  token: string,
+  kind: 'reminder' | 'briefing',
+): Promise<{ items: Pulse[] }> {
+  const response = await apiFetch(`${API_BASE}/api/scheduled?kind=${kind}`, {
+    headers: authHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to list ${kind}s: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
  * Get pulse execution history
  */
 export async function getPulseHistory(
