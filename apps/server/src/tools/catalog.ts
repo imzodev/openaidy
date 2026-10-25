@@ -426,7 +426,8 @@ export const workflowCreateMeta: ToolMeta = {
     '`edges` (same format as workflow_set_graph). It is validated first and ' +
     'nothing is created if it has problems, so the workflow is runnable ' +
     'the moment this returns. Alternatively pass templateId (+ ' +
-    'templateInputs) to start from a built-in template. Optional: title ' +
+    'templateInputs, setupTrigger) to start from a built-in template — ' +
+    'see workflow_template_list. Optional: title ' +
     '(derived from description if absent), priority. ' +
     'The graph is never filled in for you: without nodes or a template the ' +
     'workflow starts empty. ' +
@@ -523,14 +524,24 @@ export const workflowTriggerDeleteMeta: ToolMeta = {
     'webhook URL stops working immediately.',
 };
 
+export const workflowTemplateListMeta: ToolMeta = {
+  name: 'workflow_template_list',
+  category: 'Workflows',
+  description:
+    'List the built-in workflow templates (WhatsApp leads, customer ' +
+    'questions, appointment reminders, invoice chasing, sales summaries, ' +
+    'inbox triage, social posts…) with their inputs, the integrations they ' +
+    'need and how they start. Use it before workflow_create with templateId.',
+};
+
 export const workflowApplyTemplateMeta: ToolMeta = {
   name: 'workflow_apply_template',
   category: 'Workflows',
   description:
-    "Add a built-in template's nodes and edges to an existing workflow. " +
-    'Available template IDs: "software-development" (a multi-stage software ' +
-    'delivery workflow). Pass templateInputs to fill template placeholders ' +
-    '(each template declares its own inputs; required ones must be provided). ' +
+    "Add a built-in template's nodes and edges to an existing workflow " +
+    '(workflow_template_list shows the templates and their inputs). Pass ' +
+    'templateInputs to fill template placeholders (required ones must be ' +
+    'provided), and setupTrigger=true to also set up how it starts. ' +
     'By default the template is added next to the existing nodes; pass ' +
     'clearExisting=true to replace them instead (the old nodes are only ' +
     'removed once the template is in place, so a failure changes nothing). ' +
@@ -655,6 +666,20 @@ export const workflowEdgeDeleteMeta: ToolMeta = {
     'preserved so the agent can re-wire the graph afterwards. Requires ' +
     'confirm=true to prevent accidental severance. Refuses any edge whose ' +
     'source subtask belongs to a non-workflow task.',
+};
+
+// ── Channels ──────────────────────────────────────────────────────────────────
+
+export const channelSendMeta: ToolMeta = {
+  name: 'channel_send',
+  category: 'Channels',
+  description:
+    'Send a message on a connected channel (WhatsApp, Discord) to a person ' +
+    'or chat, outside the current conversation — e.g. send the owner a ' +
+    'daily summary, or remind a customer of an appointment. WhatsApp ' +
+    'takes a phone number with country code. Only message people who ' +
+    'expect it; in a workflow, put an approval step before messages to ' +
+    'customers when in doubt.',
 };
 
 // ── Pulses ────────────────────────────────────────────────────────────────────
@@ -840,6 +865,8 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   workflowApprovalResolveMeta,
   workflowApplyTemplateMeta,
   workflowSetGraphMeta,
+  workflowTemplateListMeta,
+  channelSendMeta,
   workflowTriggerCreateMeta,
   workflowTriggerListMeta,
   workflowTriggerDeleteMeta,

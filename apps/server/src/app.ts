@@ -62,6 +62,8 @@ import {
   workflowTriggerRoutes,
 } from './routes/workflow-triggers';
 import { WorkflowTriggerService } from './tasks/triggers/service';
+import { WorkflowDraftService } from './tasks/drafting/service';
+import { workflowDraftRoutes } from './routes/workflow-drafts';
 import { taskScheduleRoutes } from './routes/task-schedules';
 import { createTaskService } from './tasks';
 import { createPlanningService } from './planning';
@@ -399,6 +401,7 @@ export async function buildApp() {
       : {}),
     getTaskService: () => taskService,
     getWorkflowTriggerService: () => workflowTriggerService,
+    getChannels: () => channelRegistry,
     getPlanningService: () => planningService,
     // The schedule service is constructed later (when dbAdapter +
     // RECURRING_TASKS_ENABLED are both available), so this getter
@@ -847,6 +850,21 @@ export async function buildApp() {
         });
         await api.register(webhookRoutes, {
           triggerService: workflowTriggerService,
+        });
+        await api.register(workflowDraftRoutes, {
+          draftService: new WorkflowDraftService({
+            providers: providerServices,
+            agents: services.agents,
+            getDefaultAgentId: () => configService.getConfig().defaults.agentId,
+            listChannels: () =>
+              (configService.getConfig().channels ?? []).map((c) => ({
+                id: c.id,
+                type: c.type,
+              })),
+            taskService,
+            logger: createLogger('WorkflowDrafts'),
+          }),
+          authMiddleware,
         });
 
         // Memory management routes (browse/search/create/edit/delete).

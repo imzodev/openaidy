@@ -94,6 +94,7 @@ export class TaskService {
       options.tasksRepo,
       options.subtasksRepo,
       logger,
+      options.agents,
     );
     this.execution = new TaskExecution(
       options.tasksRepo,

@@ -235,8 +235,12 @@ export class WhatsAppChannel extends EventEmitter implements IQrChannel {
 
   async send(target: string, text: string): Promise<boolean> {
     if (!this.socket || this.status !== 'connected') return false;
+    // A bare phone number ("+52 155 1234 5678") → its chat id.
+    const jid = target.includes('@')
+      ? target
+      : `${target.replace(/\D/g, '')}@s.whatsapp.net`;
     try {
-      const sent = await this.socket.sendMessage(target, { text });
+      const sent = await this.socket.sendMessage(jid, { text });
       // Remember the id so the echo of this message isn't handled as input.
       if (sent?.key?.id) this.sentMessageIds.add(sent.key.id);
       return true;

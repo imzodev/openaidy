@@ -68,6 +68,52 @@ export function validateWorkflowTemplate(template: WorkflowTemplate): string[] {
       }
     }
   }
+  const inputType = new Map(template.inputs.map((i) => [i.key, i.type]));
+  for (const node of template.nodes) {
+    for (const placeholder of extractPlaceholders(node.agent)) {
+      if (inputType.get(placeholder) !== 'agent') {
+        errors.push(
+          `node "${node.key}": agent "{{${placeholder}}}" must name an input of type "agent"`,
+        );
+      }
+    }
+  }
+
+  for (const input of template.inputs) {
+    if (
+      input.type === 'select' &&
+      input.default !== undefined &&
+      !(input.options ?? []).some((o) => o.value === input.default)
+    ) {
+      errors.push(
+        `input "${input.key}": default "${input.default}" is not one of its options`,
+      );
+    }
+  }
+
+  const trigger = template.trigger;
+  if (trigger?.kind === 'channel_message') {
+    const [channelKey] = extractPlaceholders(trigger.channel);
+    if (!channelKey || inputType.get(channelKey) !== 'channel') {
+      errors.push(
+        'trigger: channel must be a "{{inputKey}}" placeholder for an input of type "channel"',
+      );
+    }
+    if (trigger.match.type !== 'any' && !trigger.match.value?.trim()) {
+      errors.push('trigger: the message match needs a value');
+    }
+    for (const placeholder of [
+      ...extractPlaceholders(trigger.match.value),
+      ...extractPlaceholders(trigger.ackText),
+    ]) {
+      if (!inputKeySet.has(placeholder)) {
+        errors.push(
+          `trigger: references undeclared input "{{${placeholder}}}"`,
+        );
+      }
+    }
+  }
+
   for (const edge of template.edges) {
     for (const placeholder of extractPlaceholders(edge.conditionValue)) {
       if (!inputKeySet.has(placeholder)) {

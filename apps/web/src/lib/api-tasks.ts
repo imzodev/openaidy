@@ -16,6 +16,8 @@ import type {
   WorkflowTriggerDto,
   WebhookTokenDto,
   ChannelMessageTriggerConfig,
+  ApplyTemplateResult,
+  WorkflowDraftDto,
 } from './types';
 
 type TaskSchedule = TaskScheduleDto;
@@ -326,7 +328,7 @@ export async function applyWorkflowTemplate(
   taskId: string,
   templateId: string,
   inputs: Record<string, string>,
-): Promise<ApiResult<{ nodeCount: number; edgeCount: number }>> {
+): Promise<ApiResult<ApplyTemplateResult>> {
   const response = await apiFetch(
     `${API_BASE}/api/tasks/${taskId}/apply-template`,
     {
@@ -624,6 +626,36 @@ export async function executeTask(
           body: JSON.stringify({ input }),
         }
       : {}),
+  });
+  return response.json();
+}
+
+/**
+ * Draft a workflow graph from a description (nothing is saved).
+ */
+export async function draftWorkflow(
+  description: string,
+): Promise<ApiResult<WorkflowDraftDto>> {
+  const response = await apiFetch(`${API_BASE}/api/workflows/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description }),
+  });
+  return response.json();
+}
+
+/**
+ * Replace a workflow's whole graph (validated server-side; nothing is
+ * written when it has problems).
+ */
+export async function setWorkflowGraph(
+  taskId: string,
+  graph: { nodes: unknown[]; edges: unknown[] },
+): Promise<ApiResult<{ edgeCount: number }>> {
+  const response = await apiFetch(`${API_BASE}/api/tasks/${taskId}/graph`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(graph),
   });
   return response.json();
 }

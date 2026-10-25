@@ -3,6 +3,12 @@ import type { TaskService } from '../../tasks/service';
 import { formatToolError, requireService, requireString } from '../shared.js';
 import { workflowApplyTemplateMeta } from '../catalog.js';
 import { assertWorkflow } from './assert-workflow.js';
+import {
+  describeTemplateTrigger,
+  setUpTemplateTrigger,
+  type TemplateTriggerDeps,
+} from './template-trigger.js';
+import { TEMPLATE_ID_LIST } from './template-list.js';
 
 /**
  * workflow_apply_template
@@ -18,6 +24,7 @@ import { assertWorkflow } from './assert-workflow.js';
  */
 export function createWorkflowApplyTemplateTool(
   getTaskService: () => TaskService | undefined,
+  triggerDeps: TemplateTriggerDeps = {},
 ): BuiltinTool {
   return {
     name: workflowApplyTemplateMeta.name,
@@ -31,9 +38,7 @@ export function createWorkflowApplyTemplateTool(
         },
         templateId: {
           type: 'string',
-          description:
-            'ID of the template to apply. Currently supported: ' +
-            '"software-development".',
+          description: `ID of the template to apply: ${TEMPLATE_ID_LIST}.`,
         },
         templateInputs: {
           type: 'object',
@@ -48,6 +53,12 @@ export function createWorkflowApplyTemplateTool(
             'If true, the template replaces all existing nodes and edges. ' +
             'Default false — the template graph is added next to whatever ' +
             'is there.',
+        },
+        setupTrigger: {
+          type: 'boolean',
+          description:
+            "Also set up the template's suggested trigger (a message " +
+            'trigger, webhook or schedule). Default false.',
         },
       },
       required: ['workflowId', 'templateId'],
@@ -114,9 +125,15 @@ export function createWorkflowApplyTemplateTool(
           return { ok: false, error: result.error.message };
         }
 
+        const trigger = result.data.trigger;
+        const triggerLine = !trigger
+          ? ''
+          : args['setupTrigger'] === true
+            ? `\n${await setUpTemplateTrigger(workflowId, trigger, triggerDeps)}`
+            : `\nSuggested start: ${describeTemplateTrigger(trigger)} (pass setupTrigger=true to set it up).`;
         return {
           ok: true,
-          content: `Template "${templateId}" applied to workflow "${workflowId}".\n\nNodes created: ${result.data.nodeCount}\nEdges created: ${result.data.edgeCount}${clearExisting ? '\n(Existing nodes/edges were cleared first.)' : ''}`,
+          content: `Template "${templateId}" applied to workflow "${workflowId}".\n\nNodes created: ${result.data.nodeCount}\nEdges created: ${result.data.edgeCount}${clearExisting ? '\n(Existing nodes/edges were cleared first.)' : ''}${triggerLine}`,
         };
       } catch (err) {
         return formatToolError('Unexpected error applying template', err);

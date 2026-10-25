@@ -29,10 +29,43 @@ import {
   createTask,
   deleteTask,
   applyWorkflowTemplate,
+  setWorkflowGraph,
+  createChannelTrigger,
+  createOrUpdateTaskSchedule,
   type Task,
   type TaskStatus,
   type TaskPriority,
 } from '../../lib/api-tasks';
+import type { ResolvedTemplateTrigger } from '../../lib/types';
+
+/**
+ * Creates the trigger or schedule a new workflow should start with.
+ * Returns why it couldn't, or null. Webhooks aren't created here: their
+ * token is shown once, on the workflow's Triggers panel.
+ */
+async function setUpStart(
+  taskId: string,
+  trigger: ResolvedTemplateTrigger,
+): Promise<string | null> {
+  try {
+    if (trigger.kind === 'schedule') {
+      await createOrUpdateTaskSchedule(taskId, { schedule: trigger.schedule });
+      return null;
+    }
+    if (trigger.kind === 'channel_message') {
+      const result = await createChannelTrigger(taskId, {
+        channelId: trigger.channelId,
+        match: trigger.match,
+        replyWithResult: trigger.replyWithResult,
+        ...(trigger.ackText ? { ackText: trigger.ackText } : {}),
+      });
+      return result.ok ? null : result.error.message;
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
 
 export type WorkflowsPageProps = {
   onOpenWorkflow: (taskId: string) => void;
@@ -85,6 +118,8 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
   const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [isModalOpen, setIsModalOpen] = createSignal(false);
+  // Something to tell the user that isn't a load failure.
+  const [notice, setNotice] = createSignal<string | null>(null);
 
   const load = async () => {
     setIsLoading(true);
@@ -111,29 +146,51 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
   const handleSubmit = async ({
     task,
     template,
+    graph,
+    trigger,
   }: CreateWorkflowSubmitInput) => {
     const result = await createTask(task);
     if (!result.ok) {
       throw new Error(result.error.message);
     }
+    const taskId = result.data.id;
+    // A half-built workflow is worse than none: if its graph can't be
+    // written, remove the task again (best-effort) and show why.
+    const rollBack = async (message: string): Promise<never> => {
+      await deleteTask(taskId).catch(() => {});
+      throw new Error(message);
+    };
+
+    let startWith = trigger;
     if (template) {
       const templateResult = await applyWorkflowTemplate(
-        result.data.id,
+        taskId,
         template.templateId,
         template.inputs,
       );
-      if (!templateResult.ok) {
-        // Roll back the just-created task rather than leaving a
-        // permanently-empty orphan behind — there's no UI path to attach
-        // a template to an existing task, so a half-created workflow is
-        // otherwise unrecoverable. Best-effort: if the delete itself
-        // fails, still surface the original template error.
-        await deleteTask(result.data.id).catch(() => {});
-        throw new Error(templateResult.error.message);
+      if (!templateResult.ok) await rollBack(templateResult.error.message);
+      else if (template.setupTrigger) startWith = templateResult.data.trigger;
+    }
+    if (graph) {
+      const graphResult = await setWorkflowGraph(taskId, graph);
+      if (!graphResult.ok) await rollBack(graphResult.error.message);
+    }
+
+    if (startWith) {
+      const problem = await setUpStart(taskId, startWith);
+      if (problem) {
+        // The workflow itself is fine; stay here and say what went wrong,
+        // so it can be fixed from the workflow's Triggers panel.
+        setIsModalOpen(false);
+        await load();
+        setNotice(
+          `The workflow was created, but how it starts couldn't be set up: ${problem}. Open it and use its Triggers panel.`,
+        );
+        return;
       }
     }
     setIsModalOpen(false);
-    props.onOpenWorkflow(result.data.id);
+    props.onOpenWorkflow(taskId);
   };
 
   return (
@@ -151,6 +208,22 @@ export function WorkflowsPage(props: WorkflowsPageProps) {
         </button>
       }
     >
+      <Show when={notice()}>
+        <div
+          role="status"
+          class="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+        >
+          <span class="flex-1">{notice()}</span>
+          <button
+            type="button"
+            class="text-amber-600 hover:text-amber-800"
+            aria-label="Dismiss"
+            onClick={() => setNotice(null)}
+          >
+            ✕
+          </button>
+        </div>
+      </Show>
       <Show when={!isLoading() && !error() && workflows().length > 0}>
         <div class="flex items-center gap-2 text-xs text-text-tertiary mb-4">
           <span>

@@ -1,5 +1,12 @@
 import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
-import type { GraphEdgeInput, GraphNodeInput } from '@openaidy/shared-types';
+import type {
+  ApplyTemplateResult,
+  GraphEdgeInput,
+  GraphNodeInput,
+  ResolvedTemplateTrigger,
+  TemplateTrigger,
+} from '@openaidy/shared-types';
+import type { AgentRegistry } from '../../agents';
 import {
   getWorkflowTemplate,
   substitutePlaceholders,
@@ -14,13 +21,14 @@ export class WorkflowTemplateOperations {
     private readonly tasksRepo: TasksRepository,
     private readonly subtasksRepo: SubtasksRepository,
     private readonly logger: ReturnType<typeof createLogger>,
+    private readonly agents?: AgentRegistry,
   ) {}
 
   async applyTemplate(
     taskId: string,
     templateId: string,
     inputs: Record<string, string>,
-  ): Promise<ServiceResult<{ nodeCount: number; edgeCount: number }>> {
+  ): Promise<ServiceResult<ApplyTemplateResult>> {
     const task = await this.tasksRepo.findById(taskId);
     if (!task) {
       return {
@@ -68,6 +76,7 @@ export class WorkflowTemplateOperations {
 
     const nodes: GraphNodeInput[] = template.nodes.map((node) => {
       const description = substitute(node.description);
+      const agentId = this.resolveAgent(node.agent, substitute);
       return {
         key: node.key,
         title: node.title
@@ -76,6 +85,7 @@ export class WorkflowTemplateOperations {
         description,
         subtaskKind: node.kind,
         ...(node.loop !== undefined && { loop: node.loop }),
+        ...(agentId && { assignedAgentId: agentId }),
       };
     });
 
@@ -99,9 +109,56 @@ export class WorkflowTemplateOperations {
       this.logger,
     );
 
+    const trigger = template.trigger
+      ? resolveTrigger(template.trigger, substitute)
+      : undefined;
     return {
       ok: true,
-      data: { nodeCount: nodes.length, edgeCount: edges.length },
+      data: {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        ...(trigger ? { trigger } : {}),
+      },
     };
   }
+
+  /**
+   * The step's agent: a literal id or a filled-in `{{agent}}` input. An
+   * empty or unknown one leaves the step to the default agent rather than
+   * failing the whole template.
+   */
+  private resolveAgent(
+    agent: string | undefined,
+    substitute: (text: string) => string,
+  ): string | undefined {
+    const id = agent ? substitute(agent).trim() : '';
+    if (!id || id.includes('{{')) return undefined;
+    if (this.agents && !this.agents.getAgent(id)) {
+      this.logger.warn('Template step agent not found; using the default', {
+        agentId: id,
+      });
+      return undefined;
+    }
+    return id;
+  }
+}
+
+function resolveTrigger(
+  trigger: TemplateTrigger,
+  substitute: (text: string) => string,
+): ResolvedTemplateTrigger | undefined {
+  if (trigger.kind !== 'channel_message') return trigger;
+  const channelId = substitute(trigger.channel).trim();
+  if (!channelId || channelId.includes('{{')) return undefined;
+  const value = trigger.match.value
+    ? substitute(trigger.match.value).trim()
+    : undefined;
+  const ackText = trigger.ackText ? substitute(trigger.ackText) : undefined;
+  return {
+    kind: 'channel_message',
+    channelId,
+    match: { type: trigger.match.type, ...(value ? { value } : {}) },
+    replyWithResult: trigger.replyWithResult,
+    ...(ackText ? { ackText } : {}),
+  };
 }

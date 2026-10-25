@@ -38,6 +38,7 @@ import { createTaskTools } from './tasks';
 import type { PulseToolDeps } from './pulses';
 import { createPulseTools } from './pulses';
 import { createTaskScheduleTools } from './task-schedules';
+import { createChannelSendTool } from './channels/send.js';
 import { createWorkflowTools } from './workflows';
 import type { WorkspaceService } from '../workspace/service';
 import type { ExecService } from '../exec/service';
@@ -91,6 +92,8 @@ export type BuiltinToolRegistryDeps = {
    * the database is not configured.
    */
   getTaskScheduleService?: () => TaskScheduleService | undefined;
+  /** Connected channels, for channel_send. */
+  getChannels?: () => import('../channels').ChannelRegistry | undefined;
 };
 
 /**
@@ -177,9 +180,14 @@ export function createBuiltinToolRegistry(
     for (const tool of createWorkflowTools(
       deps.getTaskService,
       deps.getWorkflowTriggerService,
+      deps.getTaskScheduleService,
     )) {
       registry.register(tool);
     }
+  }
+
+  if (deps.getChannels) {
+    registry.register(createChannelSendTool(deps.getChannels));
   }
 
   if (deps.pulses) {

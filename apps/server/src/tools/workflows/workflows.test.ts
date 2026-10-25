@@ -117,7 +117,7 @@ function workflowTask(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createWorkflowTools', () => {
-  it('returns the sixteen workflow tools (workflow + approvals + graph + nodes + edges)', () => {
+  it('returns the seventeen workflow tools (workflow + approvals + graph + templates + nodes + edges)', () => {
     const tools = createWorkflowTools(() => undefined);
     const names = tools.map((t) => t.name);
     expect(names).toEqual([
@@ -130,6 +130,7 @@ describe('createWorkflowTools', () => {
       'workflow_approval_list',
       'workflow_approval_resolve',
       'workflow_set_graph',
+      'workflow_template_list',
       'workflow_apply_template',
       'workflow_node_create',
       'workflow_node_update',

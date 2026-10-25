@@ -90,9 +90,30 @@ Edits are saved as you make them; "Saved" appears once the server has confirmed 
 - Deleting a step asks for confirmation and removes its connections too.
 - Node positions are saved with the workflow, so the layout is the same on every device.
 
+### Three ways to create one
+
+**New Workflow** offers three starting points:
+
+- **Describe it** — write what should happen in a sentence or two ("When a customer sends _cita_ on WhatsApp, check my calendar and offer two times; ask me before confirming"). The default agent's model drafts the steps, branches, approval steps and how it starts; you see the draft before anything is created, and can re-draft or adjust it in the editor afterwards. The draft is checked by the same validator as everything else (and repaired once if it isn't valid).
+- **From a template** — a ready-made workflow with a short form (see below).
+- **Build it yourself** — an empty canvas, optionally on a schedule.
+
 ### Templates
 
-Instead of starting empty, a workflow can start from a built-in template (for example _Software development_: plan → implement → test, repeating until the tests pass → code review approval → merge and deploy). Templates ask for a few inputs, such as a repository name, and are checked by the same validator as everything else. Applying a template adds its steps; with `clearExisting` it replaces the current steps, and the old ones are only removed once the template's are in place, so a failure changes nothing.
+| Template                             | Starts                                                      | What it does                                                                                                                                 | Needs                                                  |
+| ------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| WhatsApp lead → offer an appointment | A WhatsApp message starting with a keyword (default _cita_) | Qualifies the lead, then offers two free slots from your calendar, asks what they need, or closes politely — the reply goes back to the chat | Google Calendar                                        |
+| Customer questions on WhatsApp       | A WhatsApp message containing a keyword (default `?`)       | Answers from what you wrote about your business; otherwise tells you and lets the customer know a person will follow up                      | `channel_send`                                         |
+| Appointment reminders                | Every day at 18:00                                          | Reminds tomorrow's clients on WhatsApp (numbers from your calendar events) and sends you the list                                            | Google Calendar, `channel_send`                        |
+| Chase overdue invoices               | Every day at 9:00                                           | Finds unpaid invoices, drafts reminders, waits for your approval, sends them                                                                 | Stripe, Mercado Pago, PayPal or Square; `channel_send` |
+| Daily sales summary                  | Every day at 8:00                                           | Yesterday's sales, compared with last week, on WhatsApp                                                                                      | A payments integration, `channel_send`                 |
+| Inbox triage + reply drafts          | Every hour                                                  | Sorts new email and leaves reply drafts in Gmail (never sends), then tells you                                                               | Gmail, `channel_send`                                  |
+| Social post from a WhatsApp idea     | A WhatsApp message starting with _post_                     | Drafts the post, waits for your approval, queues it in Buffer (or tells you it wasn't posted)                                                | Buffer                                                 |
+| Software development                 | By hand                                                     | Plan → implement → test (repeats until the tests pass) → code review approval → merge and deploy                                             | GitHub                                                 |
+
+Each template asks for a few inputs — the WhatsApp channel, your number for updates, a few lines about your business, the language its messages are written in (Spanish by default), and which agent does the work. Integrations come from the [MCP servers](./mcp-servers.md) catalog, and `channel_send` is a built-in tool to enable on the agent; the form shows which ones no agent has yet, but doesn't stop you. With **Set up how it starts** checked, the template's message trigger or schedule is created with the workflow.
+
+Applying a template adds its steps; with `clearExisting` (API and agent tools) it replaces the current steps, and the old ones are only removed once the template's are in place, so a failure changes nothing.
 
 ## Building workflows with an agent
 
@@ -123,6 +144,7 @@ Agents manage workflows with the `workflow_*` tools. The most reliable way for a
 - `workflow_set_graph` replaces an existing workflow's whole graph the same way (`dryRun: true` only validates). `workflow_get` returns the graph in a shape `workflow_set_graph` accepts back, plus a `problems` list.
 - Node fields: `key`, `title`, `description`, `kind` (`agent` or `approval_gate`), `agent` (an agent id or name), `loop` (`{maxIterations, conditionOperator, conditionValue}`). Edge fields: `from`, `to`, and optionally `condition` (the outcome value) with `operator` (`equals` by default, `contains` or `matches_regex`).
 - For small changes there are `workflow_node_*` and `workflow_edge_*` tools, and `workflow_apply_template` for templates.
+- `workflow_template_list` lists the templates with their inputs; `workflow_create` (or `workflow_apply_template`) with `templateId`, `templateInputs` and `setupTrigger: true` sets one up, including how it starts.
 - `workflow_trigger_create`, `workflow_trigger_list` and `workflow_trigger_delete` add and manage webhooks and message triggers (for example "when someone sends a WhatsApp message starting with _quote_, run this workflow").
 - `workflow_execute` starts a run (optionally with `input`) and returns immediately; `workflow_approval_list` and `workflow_approval_resolve` let an agent relay approval decisions. An agent should only resolve an approval with a decision the user actually gave.
 
@@ -134,6 +156,7 @@ The web UI uses these routes (all under `/api`, authenticated):
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /tasks/:id/workflow-check`                | Errors and warnings for the current graph (the pre-run checklist)                                                                                                       |
 | `PUT /tasks/:id/graph`                         | Replace the whole graph (`{nodes, edges, dryRun?}`, same format as the agent tools)                                                                                     |
+| `POST /workflows/draft`                        | Draft a workflow from `{description}`: returns `{title, graph, trigger, warnings}` without saving                                                                       |
 | `PUT /tasks/:id/layout`                        | Save node positions (`{positions: {[stepId]: {x, y}}}`)                                                                                                                 |
 | `POST /tasks/:id/apply-template`               | Apply a template (`{templateId, inputs?, clearExisting?}`)                                                                                                              |
 | `POST /tasks/:id/execute`                      | Start a run (`{input?}`)                                                                                                                                                |

@@ -32,7 +32,7 @@ export const softwareDevelopmentWorkflowTemplate: WorkflowTemplate = {
     {
       key: 'github',
       label: 'GitHub MCP access',
-      check: { mcpServerConfigured: true },
+      check: { mcpServerIds: ['github'] },
     },
   ],
   nodes: [

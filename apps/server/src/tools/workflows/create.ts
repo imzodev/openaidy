@@ -4,6 +4,12 @@ import { formatToolError, requireService, requireString } from '../shared.js';
 import { workflowCreateMeta } from '../catalog.js';
 import { parseGraphSpec } from '../../tasks/graph-spec';
 import {
+  describeTemplateTrigger,
+  setUpTemplateTrigger,
+  type TemplateTriggerDeps,
+} from './template-trigger.js';
+import { TEMPLATE_ID_LIST } from './template-list.js';
+import {
   GRAPH_EDGES_PARAM,
   GRAPH_NODES_PARAM,
   formatCreatedNodes,
@@ -21,6 +27,7 @@ import {
  */
 export function createWorkflowCreateTool(
   getTaskService: () => TaskService | undefined,
+  triggerDeps: TemplateTriggerDeps = {},
 ): BuiltinTool {
   return {
     name: workflowCreateMeta.name,
@@ -53,8 +60,14 @@ export function createWorkflowCreateTool(
           description:
             'Optional ID of a built-in workflow template to apply ' +
             '(instead of nodes/edges) ' +
-            'atomically after the workflow is created. Currently supported: ' +
-            '"software-development".',
+            'atomically after the workflow is created (see ' +
+            `workflow_template_list for their inputs): ${TEMPLATE_ID_LIST}.`,
+        },
+        setupTrigger: {
+          type: 'boolean',
+          description:
+            "With templateId: also set up the template's suggested trigger " +
+            '(message trigger, webhook or schedule). Default false.',
         },
         templateInputs: {
           type: 'object',
@@ -210,9 +223,15 @@ export function createWorkflowCreateTool(
               error: `Workflow was created but template "${templateId}" failed to apply: ${applyResult.error.message}. Rolled back the workflow.`,
             };
           }
+          const trigger = applyResult.data.trigger;
+          const triggerLine = !trigger
+            ? ''
+            : args['setupTrigger'] === true
+              ? `\n${await setUpTemplateTrigger(workflowId, trigger, triggerDeps)}`
+              : `\nSuggested start: ${describeTemplateTrigger(trigger)} (pass setupTrigger=true to set it up).`;
           return {
             ok: true,
-            content: `Workflow created and seeded from template "${templateId}".\n\nID: ${workflowId}\nTitle: ${createResult.data.title}\nNodes created: ${applyResult.data.nodeCount}\nEdges created: ${applyResult.data.edgeCount}`,
+            content: `Workflow created and seeded from template "${templateId}".\n\nID: ${workflowId}\nTitle: ${createResult.data.title}\nNodes created: ${applyResult.data.nodeCount}\nEdges created: ${applyResult.data.edgeCount}${triggerLine}`,
           };
         }
 
