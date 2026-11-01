@@ -9,7 +9,10 @@
 import type { McpServerConfig } from '@openaidy/config';
 import type { AgentRegistry } from '../agents';
 import type { ProviderServices } from '../providers';
-import type { CredentialProvider } from '@openaidy/shared-types';
+import type {
+  AuthMethodProvider,
+  CredentialProvider,
+} from '@openaidy/shared-types';
 
 export type AppConfigIssue = {
   scope: 'provider';
@@ -33,6 +36,14 @@ export type AppConfigServiceOptions = {
    * service so OAuth-stored tokens reach upstream APIs.
    */
   credentialProvider?: CredentialProvider;
+  /**
+   * Optional callback that resolves which auth method a provider's
+   * stored credential was connected with. Forwarded alongside
+   * `credentialProvider` so adapters that need different request
+   * shapes per auth method (Anthropic's OAuth vs API-key headers)
+   * can tell them apart.
+   */
+  authMethodProvider?: AuthMethodProvider;
 };
 
 /**

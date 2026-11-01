@@ -1778,6 +1778,51 @@ export async function startProviderOAuth(
   return res.json();
 }
 
+/** Result of {@link startAnthropicOAuth}. */
+export type AnthropicOAuthStartResponse = {
+  success: boolean;
+  /** URL to open in a popup so the user can sign in with Claude. */
+  authorizationUrl?: string;
+  /** Must be sent back, unchanged, to {@link completeAnthropicOAuth}. */
+  state?: string;
+  error?: string;
+};
+
+/**
+ * Begin "Sign in with Claude" — Anthropic's own OAuth client, not
+ * the generic `startProviderOAuth` path (Anthropic's registered
+ * redirect is a page it owns, so there's no server callback; the
+ * user pastes the resulting code back in, see
+ * {@link completeAnthropicOAuth}).
+ */
+export async function startAnthropicOAuth(): Promise<AnthropicOAuthStartResponse> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/anthropic/connect/oauth/start`,
+    { method: 'POST' },
+  );
+  return res.json();
+}
+
+/**
+ * Complete "Sign in with Claude" with the code the user pasted back
+ * from Anthropic's authorization page (shown as `code#state` —
+ * split that apart before calling this).
+ */
+export async function completeAnthropicOAuth(
+  code: string,
+  state: string,
+): Promise<{ success: boolean; error?: string }> {
+  const res = await apiFetch(
+    `${API_BASE}/api/providers/anthropic/connect/oauth/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, state }),
+    },
+  );
+  return res.json();
+}
+
 /**
  * Disconnect a provider.
  *

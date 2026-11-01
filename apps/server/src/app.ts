@@ -26,6 +26,7 @@ import {
   buildCredentialResolver,
   noopInvalidator,
 } from './lib/credential-provider';
+import { refreshAnthropicToken } from './providers/oauth/anthropic';
 import { healthRoutes } from './routes/health';
 import { infoRoutes } from './routes/info';
 import { OPEN_AIDY_VERSION } from './lib/version';
@@ -260,6 +261,11 @@ export async function buildApp() {
 
   const credentialResolver = buildCredentialResolver(
     dbAdapter ? (dbAdapter.client as never) : undefined,
+    {
+      refreshers: {
+        anthropic: (refreshToken) => refreshAnthropicToken({ refreshToken }),
+      },
+    },
   );
   const invalidateCredential = credentialResolver
     ? credentialResolver.invalidate
@@ -271,6 +277,9 @@ export async function buildApp() {
     providers: providerServices,
     agents: agentRegistry,
     ...(credentialResolver ? { credentialProvider: credentialResolver } : {}),
+    ...(credentialResolver
+      ? { authMethodProvider: credentialResolver.resolveAuthMethod }
+      : {}),
   });
   await configService.load();
 

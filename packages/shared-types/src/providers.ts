@@ -288,3 +288,29 @@ export type CredentialProvider = (providerId: string) => Promise<string | null>;
  * disconnect) so in-memory caches stay in sync with the DB.
  */
 export type CredentialInvalidator = (providerId: string) => void;
+
+/**
+ * Resolves which auth method a provider's stored credential was
+ * connected with. Used by adapters (e.g. Anthropic) that must send
+ * a different request shape depending on whether the live token
+ * came from an API key or an OAuth login — `CredentialProvider`
+ * alone only returns the token value, not how it was obtained.
+ */
+export type AuthMethodProvider = (
+  providerId: string,
+) => Promise<AuthMethodType | null>;
+
+/**
+ * Tokens persisted for an Anthropic "Sign in with Claude" (Pro/Max
+ * subscription) OAuth connection. Stored as the encrypted JSON blob
+ * in `provider_credentials.encryptedCredentials` for
+ * `authMethod: 'oauth'` rows, read back by `credential-provider.ts`
+ * and refreshed by `providers/oauth/anthropic.ts`.
+ */
+export type AnthropicOAuthTokens = {
+  accessToken: string;
+  refreshToken: string;
+  /** Epoch ms when `accessToken` expires. */
+  expiresAt: number;
+  scope?: string;
+};

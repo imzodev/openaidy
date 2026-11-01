@@ -25,7 +25,10 @@ import {
   createDefaultSecretProvider,
   isSecretReference,
 } from '@openaidy/config';
-import type { CredentialProvider } from '@openaidy/shared-types';
+import type {
+  AuthMethodProvider,
+  CredentialProvider,
+} from '@openaidy/shared-types';
 import { createOpenAICompatibleProvider } from './infrastructure/openai-compatible';
 import { createAnthropicProvider } from './infrastructure/anthropic';
 import { createGeminiProvider } from './infrastructure/gemini';
@@ -47,6 +50,7 @@ import type {
 export class ProviderConfigService {
   private readonly secretProvider: SecretProvider;
   private readonly credentialProvider: CredentialProvider | undefined;
+  private readonly authMethodProvider: AuthMethodProvider | undefined;
   private readonly resolvedConfigs = new Map<string, ResolvedProviderConfig>();
   private readonly providers = new Map<string, ModelProvider>();
 
@@ -54,6 +58,7 @@ export class ProviderConfigService {
     this.secretProvider =
       options?.secretProvider ?? createDefaultSecretProvider();
     this.credentialProvider = options?.credentialProvider;
+    this.authMethodProvider = options?.authMethodProvider;
   }
 
   /**
@@ -310,6 +315,8 @@ export class ProviderConfigService {
       timeoutMs?: number;
       providerId: string;
       providerName: string;
+      credentialProvider?: CredentialProvider;
+      authMethodProvider?: AuthMethodProvider;
     } = {
       apiKey: config.apiKey ?? '',
       providerId: config.id,
@@ -328,6 +335,12 @@ export class ProviderConfigService {
     }
     if (config.timeout?.requestMs !== undefined) {
       adapterConfig.timeoutMs = config.timeout.requestMs;
+    }
+    if (this.credentialProvider) {
+      adapterConfig.credentialProvider = this.credentialProvider;
+    }
+    if (this.authMethodProvider) {
+      adapterConfig.authMethodProvider = this.authMethodProvider;
     }
 
     return createAnthropicProvider(adapterConfig);

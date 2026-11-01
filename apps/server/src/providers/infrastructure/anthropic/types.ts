@@ -4,6 +4,11 @@
  * Type definitions for the Anthropic provider adapter.
  */
 
+import type {
+  AuthMethodProvider,
+  CredentialProvider,
+} from '@openaidy/shared-types';
+
 // =====================
 // Anthropic API Types
 // =====================
@@ -199,4 +204,20 @@ export type AnthropicAdapterConfig = {
   betas?: string[];
   /** Custom headers */
   headers?: Record<string, string>;
+  /**
+   * Resolves the live credential for this provider at request
+   * time, so a token connected via "Sign in with Claude" (or
+   * refreshed after the server started) actually reaches the API
+   * without a restart. Falls back to `apiKey` when absent or when
+   * it returns `null`.
+   */
+  credentialProvider?: CredentialProvider;
+  /**
+   * Resolves which auth method the live credential was connected
+   * with. Anthropic sends an OAuth bearer token (`Authorization` +
+   * `anthropic-beta`) differently from an API key (`x-api-key`), so
+   * the adapter needs this alongside `credentialProvider` to know
+   * which headers to build. Defaults to `'api_key'` when absent.
+   */
+  authMethodProvider?: AuthMethodProvider;
 };
