@@ -71,6 +71,11 @@ describe('startAnthropicOAuth', () => {
     expect(stored!.providerId).toBe('anthropic');
     expect(stored!.codeVerifier).toBeTruthy();
     expect(stored!.codeChallenge).toBe(url.searchParams.get('code_challenge'));
+
+    // Anthropic's authorize endpoint rejects the request as
+    // malformed unless `state` is exactly the PKCE verifier —
+    // regression check for that gotcha.
+    expect(result.state).toBe(stored!.codeVerifier);
   });
 
   it('generates a unique state and verifier on each call', async () => {

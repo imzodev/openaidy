@@ -4,7 +4,7 @@ import type {
   AnthropicOAuthTokens,
   CredentialInvalidator,
 } from '@openaidy/shared-types';
-import { generatePkce, generateState } from './pkce.js';
+import { generatePkce } from './pkce.js';
 import type { OAuthStateStore } from './state-store.js';
 import { getEncryptionService } from '../../lib/encryption.js';
 import { createLogger } from '../../lib/logger.js';
@@ -68,7 +68,13 @@ export async function startAnthropicOAuth(
   input: StartAnthropicOAuthInput,
 ): Promise<StartAnthropicOAuthResult> {
   const { verifier, challenge } = generatePkce();
-  const state = generateState();
+  // Anthropic's authorize endpoint expects `state` to be the PKCE
+  // verifier itself, not an independently generated value — every
+  // reference implementation sets them equal, and sending an
+  // unrelated `state` gets the whole request rejected as malformed
+  // ("Invalid request format") before the user even sees a login
+  // screen.
+  const state = verifier;
 
   await input.stateStore.put(state, {
     providerId: PROVIDER_ID,
