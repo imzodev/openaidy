@@ -9,7 +9,10 @@
 import type { ProviderError, ModelProvider } from '@openaidy/runtime';
 import type { SecretProvider } from '@openaidy/config';
 import type { ResolvedProviderConfig } from '@openaidy/config';
-import type { CredentialProvider } from '@openaidy/shared-types';
+import type {
+  AuthMethodProvider,
+  CredentialProvider,
+} from '@openaidy/shared-types';
 
 /**
  * Result of loading and resolving a provider configuration
@@ -36,4 +39,12 @@ export type ProviderConfigServiceOptions = {
    * reach the upstream provider.
    */
   credentialProvider?: CredentialProvider;
+  /**
+   * Optional callback that resolves which auth method a provider's
+   * stored credential was connected with. Only consumed by the
+   * Anthropic adapter today — it needs to send OAuth bearer tokens
+   * and API keys with different headers, which `credentialProvider`
+   * alone can't distinguish.
+   */
+  authMethodProvider?: AuthMethodProvider;
 };

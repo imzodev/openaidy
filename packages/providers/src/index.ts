@@ -25,7 +25,10 @@ export { ProviderRegistry, registry } from './registry';
 
 // Built-in provider profiles — re-exported so callers can extend or
 // instantiate them directly (e.g. for tests or custom add-ons).
-export { AnthropicProfile } from './anthropic/index';
+export {
+  AnthropicProfile,
+  ANTHROPIC_OAUTH_BETA_HEADER,
+} from './anthropic/index';
 export { DeepSeekProfile } from './deepseek/index';
 export { GoogleProfile } from './google/index';
 export { GroqProfile } from './groq/index';

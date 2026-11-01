@@ -19,6 +19,7 @@ import {
   type ProviderResult,
   type FinishReason,
 } from '@openaidy/runtime';
+import { ANTHROPIC_OAUTH_BETA_HEADER } from '@openaidy/providers';
 import { mapRequest } from './request-mapper';
 import {
   mapResponse,
@@ -262,7 +263,7 @@ export class AnthropicProvider implements ModelProvider {
 
       const response = await this.fetch(`${this.config.baseUrl}/messages`, {
         method: 'POST',
-        headers: this.getHeaders(),
+        headers: await this.getHeaders(),
         body: JSON.stringify(anthropicRequest),
         signal: this.createAbortSignal(request.signal),
       });
@@ -351,7 +352,7 @@ export class AnthropicProvider implements ModelProvider {
 
       const response = await this.fetch(`${this.config.baseUrl}/messages`, {
         method: 'POST',
-        headers: { ...this.getHeaders(), Accept: 'text/event-stream' },
+        headers: { ...(await this.getHeaders()), Accept: 'text/event-stream' },
         body: JSON.stringify(anthropicRequest),
         signal: this.createAbortSignal(request.signal),
       });
@@ -501,16 +502,63 @@ export class AnthropicProvider implements ModelProvider {
   // Private Helpers
   // =====================
 
-  private getHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-api-key': this.config.apiKey,
-      'anthropic-version': this.config.apiVersion,
-    };
+  /**
+   * Resolve the live credential and auth method (falling back to
+   * the static `apiKey`/`'api_key'` when no resolver is configured,
+   * or when a resolver call fails/returns nothing), then build the
+   * headers Anthropic expects for that auth method.
+   *
+   * OAuth-connected sessions ("Sign in with Claude") authenticate
+   * with `Authorization: Bearer <token>` plus the OAuth beta flag,
+   * and must NOT also send `x-api-key` — Anthropic's API rejects
+   * the mix of both auth schemes on one request.
+   */
+  private async getHeaders(): Promise<Record<string, string>> {
+    const providerId = this.config.providerId ?? PROVIDER_ID;
 
-    // Add beta headers if configured
+    let token = this.config.apiKey;
+    if (this.config.credentialProvider) {
+      try {
+        const resolved = await this.config.credentialProvider(providerId);
+        if (resolved) {
+          token = resolved;
+        }
+      } catch {
+        // Fall back to the static apiKey — already assigned above.
+      }
+    }
+
+    let authMethod: 'api_key' | 'oauth' | 'device_code' = 'api_key';
+    if (this.config.authMethodProvider) {
+      try {
+        authMethod =
+          (await this.config.authMethodProvider(providerId)) ?? 'api_key';
+      } catch {
+        // Fall back to 'api_key' — already assigned above.
+      }
+    }
+
+    const headers: Record<string, string> =
+      authMethod === 'oauth' || authMethod === 'device_code'
+        ? {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'anthropic-version': this.config.apiVersion,
+            'anthropic-beta': ANTHROPIC_OAUTH_BETA_HEADER,
+          }
+        : {
+            'Content-Type': 'application/json',
+            'x-api-key': token,
+            'anthropic-version': this.config.apiVersion,
+          };
+
+    // Add beta headers if configured, appending to the OAuth flag
+    // above rather than overwriting it.
     if (this.config.betas && this.config.betas.length > 0) {
-      headers['anthropic-beta'] = this.config.betas.join(',');
+      const extra = this.config.betas.join(',');
+      headers['anthropic-beta'] = headers['anthropic-beta']
+        ? `${headers['anthropic-beta']},${extra}`
+        : extra;
     }
 
     // Add custom headers
