@@ -253,6 +253,14 @@ export const skillUpdateMeta: ToolMeta = {
     '(the loader will not pick up changes made outside this tool).',
 };
 
+export const skillReadMeta: ToolMeta = {
+  name: 'skill_read',
+  category: 'Skills',
+  description:
+    'Load the full instructions of one of your assigned skills (listed in [SKILLS_AVAILABLE]). ' +
+    'Read a skill only when the current task matches its description; pass file to open one of its companion files.',
+};
+
 // ── Web ───────────────────────────────────────────────────────────────────────
 
 export const webFetchMeta: ToolMeta = {
@@ -843,7 +851,8 @@ export const taskSchedulesListExecutionsMeta: ToolMeta = {
 };
 
 // ── Master catalog ────────────────────────────────────────────────────────────
-// build-system-prompt.ts reads this list to show all tools (enabled + not enabled).
+// Source of TOOL_CATEGORY_MAP. Not sent to the model: each tool's schema
+// already carries its description.
 // NOTE: When adding a new tool, declare its ToolMeta above and append it here.
 
 export const ALL_TOOL_METAS: ToolMeta[] = [
@@ -867,6 +876,7 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
   execRunMeta,
   skillCreateMeta,
   skillUpdateMeta,
+  skillReadMeta,
   webFetchMeta,
   addonCreateMeta,
   addonReadMeta,

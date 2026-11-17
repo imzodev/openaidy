@@ -4,9 +4,11 @@ import type { AgentRegistry } from '../../agents/registry.js';
 import type { WorkspaceService } from '../../workspace/service.js';
 import { createSkillCreateTool } from './create.js';
 import { createSkillUpdateTool } from './update.js';
+import { createSkillReadTool } from './read.js';
 
 export { createSkillCreateTool } from './create.js';
 export { createSkillUpdateTool } from './update.js';
+export { createSkillReadTool } from './read.js';
 
 export function createSkillTools(
   skillRegistry: SkillRegistry,
@@ -16,5 +18,6 @@ export function createSkillTools(
   return [
     createSkillCreateTool(skillRegistry, agentRegistry, workspace),
     createSkillUpdateTool(skillRegistry, workspace),
+    createSkillReadTool(skillRegistry, agentRegistry, workspace),
   ];
 }

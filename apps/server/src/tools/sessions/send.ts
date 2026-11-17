@@ -22,8 +22,7 @@ export function createSessionsSendTool(deps: SessionsToolDeps): BuiltinTool {
           description:
             'The agent ID that should respond to this message. ' +
             'If omitted, the default agent is used. ' +
-            'Use agents_list to discover available agent IDs. ' +
-            'You may specify your own agent ID to invoke yourself in a different session.',
+            'Use agents_list to discover available agent IDs.',
         },
       },
       required: ['sessionId', 'content'],

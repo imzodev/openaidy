@@ -128,6 +128,11 @@ export class SkillRegistry {
     }));
   }
 
+  /** Directory that holds the global skills, one folder per skill id. */
+  getSkillsDir(): string {
+    return this.skillsDir;
+  }
+
   /** Return full definition for a skill by ID, or undefined */
   getSkill(id: string): SkillDefinition | undefined {
     this.ensureLoaded();

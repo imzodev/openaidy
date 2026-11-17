@@ -6,7 +6,6 @@ import { autoFillPersonalityFiles } from './auto-fill-personality';
 import type { ToolDefinition } from '@openaidy/runtime';
 import type { WorkspacePermissionsInfo } from '../types';
 import type { SessionType } from '@openaidy/shared-types';
-import { ALL_TOOL_METAS } from '../tools/catalog';
 import { formatSessionSearchResultDocs } from '@openaidy/db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -229,7 +228,8 @@ You are running on ${label}. ${advice}
  * 1. Base system prompt
  * 2. Runtime-OS block (always-on, tells the agent what shell it's in)
  * 3. Personality markdown files (AGENT_IDENTITY, USER_CONTEXT, MISSION_CONTEXT, RULES)
- * 4. Skill bodies wrapped in [SKILL_CONTEXTS] delimiters
+ * 4. Skill index; bodies are loaded on demand via skill_read, or wrapped in
+ *    [SKILL_CONTEXTS] delimiters when the caller offers no tools
  *
  * Skill bodies are sanitized and wrapped in structural delimiters to prevent
  * prompt injection — content inside is treated as context data, not instructions.
@@ -402,33 +402,29 @@ Your response will be automatically evaluated. Work is judged complete only if t
       }
     }
 
-    // Add [SKILLS_AVAILABLE] section with folder names
+    // Only the index goes in the prompt when skill_read is available: the
+    // bodies of every assigned skill used to be pasted on every request,
+    // costing context whether or not the task needed them.
+    const canReadSkills = tools?.some((t) => t.name === 'skill_read') ?? false;
+
     if (skillList.length > 0) {
       const skillEntries = skillList
         .map((s) => `- ${s.id}: ${s.name} — ${s.description}`)
         .join('\n');
 
-      prompt += `\n\n[SKILLS_AVAILABLE]\nYou have access to the following skills in your workspace:\n${skillEntries}\n\nTo use a skill, read its files with workspace_read from the skills/{skill-id}/ directory. For example: workspace_read({ path: "skills/${skillList[0]?.id ?? 'example'}/SKILL.md" })\nReading a skill loads its guidelines into your context for that task.\n[/SKILLS_AVAILABLE]`;
+      const howToUse = canReadSkills
+        ? `When the current task matches a skill's description, load it first with skill_read({ skill_id: "${skillList[0]?.id ?? 'example'}" }) and follow it. Don't load skills the task doesn't need.`
+        : 'The full text of each skill is included below in [SKILL_CONTEXTS].';
+      prompt += `\n\n[SKILLS_AVAILABLE]\nYou have the following skills:\n${skillEntries}\n\n${howToUse}\n[/SKILLS_AVAILABLE]`;
     }
 
-    // Also inject full skill content as context
-    const bodies = globalSkills
-      .map((s) => sanitizeSkillBody(s.body))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-
-    const workspaceSkillBodies = skillIds
-      .map((id) => agentWorkspaceSkills.get(id))
-      .filter((s): s is NonNullable<typeof s> => s !== undefined)
-      .map((s) => sanitizeSkillBody(s.body))
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-
-    const allBodies = [bodies, workspaceSkillBodies]
-      .filter(Boolean)
-      .join('\n\n---\n\n');
-    if (allBodies) {
-      prompt += '\n\n[SKILL_CONTEXTS]\n' + allBodies + '\n[/SKILL_CONTEXTS]';
+    if (!canReadSkills) {
+      prompt += buildSkillContextsBlock(
+        globalSkills.map((s) => s.body),
+        skillIds
+          .map((id) => agentWorkspaceSkills.get(id)?.body)
+          .filter((b): b is string => b !== undefined),
+      );
     }
   }
 
@@ -480,22 +476,50 @@ When the user tells you something that should be saved to any of these files, AL
 }
 
 /**
- * Build the TOOL_GUIDELINES block with honest information about available tools.
- * This helps agents understand which tools they have access to and when to use each.
+ * Full skill bodies, for callers that can't offer skill_read (paths that send
+ * no tools). Sanitized and delimited so their content reads as data.
+ */
+function buildSkillContextsBlock(
+  globalBodies: string[],
+  workspaceBodies: string[],
+): string {
+  const allBodies = [...globalBodies, ...workspaceBodies]
+    .map((b) => sanitizeSkillBody(b))
+    .filter(Boolean)
+    .join('\n\n---\n\n');
+  return allBodies
+    ? `\n\n[SKILL_CONTEXTS]\n${allBodies}\n[/SKILL_CONTEXTS]`
+    : '';
+}
+
+/**
+ * How to spend tool calls. The harness pays for every round trip (latency,
+ * tokens, a growing context), and models left to their defaults tend to
+ * over-call: re-reading, listing everything, or checking what they already
+ * know.
+ */
+export const TOOL_USE_BLOCK = `
+
+[TOOL_USE]
+- If you can answer from the conversation or from what you already know, answer directly without calling tools.
+- When several calls don't depend on each other, make them all in the same turn instead of one per turn.
+- Never repeat a call with the same arguments; reuse the result you already have.
+- Prefer one targeted call (a search, a specific file or record) over listing or reading everything.
+- Stop calling tools as soon as you have enough to answer, then reply with what you found or did.
+- If a tool fails twice the same way, change approach or tell the user, instead of retrying again.
+[/TOOL_USE]`;
+
+/**
+ * Build the TOOL_GUIDELINES block: efficiency rules plus per-capability
+ * guidance for the tools this agent actually holds. The tools' own
+ * descriptions travel in the request's tool schemas, so they are not
+ * repeated here.
  */
 function buildToolGuidelinesBlock(
   tools: ToolDefinition[],
   workspacePermissions?: WorkspacePermissionsInfo | undefined,
 ): string {
-  // Build map of available tools for quick lookup
   const availableTools = new Map(tools.map((t) => [t.name, t]));
-
-  // Build the tools list showing available vs unavailable
-  const toolsList = ALL_TOOL_METAS.map((tool) => {
-    const isAvailable = availableTools.has(tool.name);
-    const status = isAvailable ? '[ENABLED]' : '[NOT ENABLED]';
-    return `  ${status} ${tool.name} (${tool.category}): ${tool.description}`;
-  }).join('\n');
 
   // Check for specific capabilities
   const hasAgentsInvoke = availableTools.has('agents_invoke');
@@ -516,17 +540,12 @@ function buildToolGuidelinesBlock(
   const hasWorkspaceDelete =
     workspacePermissions?.delete ?? availableTools.has('workspace_delete');
 
-  let guidelines = `
+  let guidelines = `${TOOL_USE_BLOCK}
 
 [TOOL_GUIDELINES]
-## All Tools in This System
+You can call only the ${tools.length} tool(s) provided with this request; there are no others.
 
-${toolsList}
-
-## Your Current Access
-You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked [NOT ENABLED] exist in the system but are NOT configured for you.
-
-## CRITICAL RULES FOR TOOL SELECTION
+## Rules for specific tools
 `;
 
   // Agent tools guidance
@@ -554,8 +573,7 @@ You have ${tools.length} tool(s) ENABLED (marked [ENABLED] above). Tools marked 
 ### Memory Tools
 `;
     if (hasMemorySave) {
-      guidelines += `- memory_save: USE THIS when you learn facts, decisions, user preferences, or important information that should be remembered for future conversations
-  - SAVE TO MEMORY when: user mentions a preference, you make a decision for the project, you learn something specific about the user's stack or goals, or you want to "bookmark" something for later
+      guidelines += `- memory_save: save durable facts the user would expect you to remember next time (a stated preference, a decision, a lasting fact about their work). Don't save routine details of the current task, and save each fact once.
 `;
     }
     if (hasMemorySearch) {
@@ -617,9 +635,9 @@ A path from workspace_read/workspace_list (e.g. "tickets/receipt.jpg") only work
   guidelines += `
 ## HONESTY REQUIREMENTS (VIOLATING THESE IS A BUG)
 
-1. ONLY use tools marked [ENABLED] above. Do not pretend to have access to disabled tools.
+1. ONLY use the tools provided with this request. Do not pretend to have access to any other tool.
 
-2. If a user asks you to perform an action requiring a disabled tool:
+2. If a user asks you to perform an action requiring a tool you don't have:
    - NEVER pretend you did it
    - ALWAYS explain honestly: "I don't have access to [action]. My [tool_name] is not enabled."
    - SUGGEST alternatives if possible

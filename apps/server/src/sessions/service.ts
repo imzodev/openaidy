@@ -105,12 +105,22 @@ export const ALWAYS_ON_TOOLS = [
  * The built-in tools an agent may use: its own list plus the always-on
  * ones, minus the ones a private chat can't use. The one rule for both
  * what the model is offered and what may run.
+ *
+ * `skill_read` rides along with assigned skills: skill bodies are no longer
+ * pasted into the system prompt, so it is the only way to reach them.
  */
 export function enabledBuiltinTools(
   agentTools: string[] | undefined,
   ephemeral: boolean,
+  hasSkills = false,
 ): string[] {
-  const tools = [...new Set([...(agentTools ?? []), ...ALWAYS_ON_TOOLS])];
+  const tools = [
+    ...new Set([
+      ...(agentTools ?? []),
+      ...ALWAYS_ON_TOOLS,
+      ...(hasSkills ? ['skill_read'] : []),
+    ]),
+  ];
   return ephemeral
     ? tools.filter((name) => !EPHEMERAL_UNSAFE_TOOLS.has(name))
     : tools;
@@ -1914,9 +1924,11 @@ export class SessionMessageService {
             // AND — for a private chat — isn't one of the tools that writes
             // outside this session's own (ephemeral) history (backstop; these
             // are already withheld from the model's tool definitions above).
+            const currentAgent = this.agents?.getAgent(agentId);
             const builtinTool = enabledBuiltinTools(
-              this.agents?.getAgent(agentId)?.tools,
+              currentAgent?.tools,
               this.isEphemeral(input.sessionId),
+              (currentAgent?.skills?.length ?? 0) > 0,
             ).includes(tc.name)
               ? this.builtinTools?.get(tc.name)
               : undefined;
@@ -2568,7 +2580,11 @@ export class SessionMessageService {
     // Reminders and reaching the owner are part of every agent, like
     // remembering what was said; they don't need to be picked per agent.
     return this.builtinTools.getDefinitions(
-      enabledBuiltinTools(agent?.tools, this.isEphemeral(sessionId)),
+      enabledBuiltinTools(
+        agent?.tools,
+        this.isEphemeral(sessionId),
+        (agent?.skills?.length ?? 0) > 0,
+      ),
     );
   }
 

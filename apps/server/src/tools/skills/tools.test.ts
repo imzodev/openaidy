@@ -53,12 +53,13 @@ describe('skill tools', () => {
   // ─── createSkillTools factory ──────────────────────────────────────────────
 
   describe('createSkillTools', () => {
-    it('returns skill_create and skill_update tools', () => {
+    it('returns skill_create, skill_update and skill_read tools', () => {
       const tools = createSkillTools(registry, agentRegistry, workspace);
       const names = tools.map((t) => t.name);
       expect(names).toContain('skill_create');
       expect(names).toContain('skill_update');
-      expect(tools).toHaveLength(2);
+      expect(names).toContain('skill_read');
+      expect(tools).toHaveLength(3);
     });
   });
 

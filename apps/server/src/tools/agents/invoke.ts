@@ -13,7 +13,7 @@ export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
           type: 'string',
           description:
             'The agent ID to invoke. Use agents_list to discover available agents. ' +
-            'You may invoke yourself if you want to run in a different session.',
+            'Delegate only work another agent is better placed to do; do not invoke yourself.',
         },
         content: {
           type: 'string',
