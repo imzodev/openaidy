@@ -105,6 +105,13 @@ export class AnthropicProvider implements ModelProvider {
 
   readonly descriptor: ProviderDescriptor;
 
+  private get promptCaching(): boolean {
+    return (
+      this.config.enablePromptCaching ??
+      this.config.baseUrl.includes('api.anthropic.com')
+    );
+  }
+
   constructor(config: AnthropicAdapterConfig) {
     this.config = {
       baseUrl: DEFAULT_BASE_URL,
@@ -249,7 +256,8 @@ export class AnthropicProvider implements ModelProvider {
       const mapperOptions: {
         defaultMaxTokens?: number;
         defaultTemperature?: number;
-      } = {};
+        promptCaching?: boolean;
+      } = { promptCaching: this.promptCaching };
       mapperOptions.defaultMaxTokens =
         this.config.defaultMaxTokens ??
         anthropicDefaultMaxTokens(request.model);
@@ -335,7 +343,8 @@ export class AnthropicProvider implements ModelProvider {
       const mapperOptions: {
         defaultMaxTokens?: number;
         defaultTemperature?: number;
-      } = {};
+        promptCaching?: boolean;
+      } = { promptCaching: this.promptCaching };
       mapperOptions.defaultMaxTokens =
         this.config.defaultMaxTokens ??
         anthropicDefaultMaxTokens(request.model);

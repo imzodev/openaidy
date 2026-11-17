@@ -187,6 +187,12 @@ export type SessionMessageServiceOptions = {
    * further invocations are refused. Defaults to 3.
    */
   maxDelegationDepth?: number;
+  /**
+   * When an agent has more MCP tools than this, their schemas are loaded on
+   * demand through tool_search instead of sent on every request.
+   * Defaults to 25.
+   */
+  deferMcpToolsAbove?: number;
   repositories?:
     | {
         sessions: SessionsStore;

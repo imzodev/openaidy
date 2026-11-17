@@ -110,7 +110,27 @@ export function mapMessage(message: Message): OpenAIMessage {
  * Maps all messages to OpenAI format
  */
 export function mapMessages(messages: readonly Message[]): OpenAIMessage[] {
-  return messages.map(mapMessage);
+  return mergeLeadingSystemMessages(messages).map(mapMessage);
+}
+
+/**
+ * The agent loop sends its stable prompt and per-request context as two
+ * leading system messages (so Anthropic can cache the first). Some
+ * OpenAI-compatible servers accept only one system message, so they are
+ * joined here; the stable part stays first, which keeps automatic prefix
+ * caching effective.
+ */
+export function mergeLeadingSystemMessages(
+  messages: readonly Message[],
+): readonly Message[] {
+  let count = 0;
+  while (messages[count]?.role === 'system') count++;
+  if (count < 2) return messages;
+  const content = messages
+    .slice(0, count)
+    .map((m) => m.content)
+    .join('\n\n');
+  return [{ role: 'system', content }, ...messages.slice(count)];
 }
 
 // =====================

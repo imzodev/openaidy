@@ -117,6 +117,19 @@ export function buildNowBlock(context: PromptContext): string {
   return `\n\n[NOW]\nIt is ${local} (${timeZone}, ${offset.replace('GMT', 'UTC') || 'UTC'}). Use this for anything about dates or times; when you schedule something, give the time with this UTC offset.\n[/NOW]`;
 }
 
+/**
+ * The per-request part of the prompt: the current time and who the
+ * conversation is with. Kept out of the stable prompt by the agent loop,
+ * because a value that changes every minute would invalidate any cached
+ * prefix that comes after it.
+ */
+export function buildDynamicContextBlock(context: PromptContext): string {
+  return (
+    buildNowBlock(context) +
+    (context.conversation ? buildConversationBlock(context.conversation) : '')
+  );
+}
+
 export function buildConversationBlock(
   conversation: NonNullable<PromptContext['conversation']>,
 ): string {
@@ -273,10 +286,7 @@ export async function buildSystemPrompt(
   // "is not recognized as an internal or external command".
   prompt += buildRuntimeOsBlock(platform());
   if (options.context) {
-    prompt += buildNowBlock(options.context);
-    if (options.context.conversation) {
-      prompt += buildConversationBlock(options.context.conversation);
-    }
+    prompt += buildDynamicContextBlock(options.context);
   }
 
   if (personalityService) {
@@ -540,10 +550,13 @@ function buildToolGuidelinesBlock(
   const hasWorkspaceDelete =
     workspacePermissions?.delete ?? availableTools.has('workspace_delete');
 
+  const deferredNote = availableTools.has('tool_search')
+    ? ', plus the tools in [DEFERRED_TOOLS] once loaded with tool_search'
+    : '';
   let guidelines = `${TOOL_USE_BLOCK}
 
 [TOOL_GUIDELINES]
-You can call only the ${tools.length} tool(s) provided with this request; there are no others.
+You can call only the ${tools.length} tool(s) provided with this request${deferredNote}; there are no others.
 
 ## Rules for specific tools
 `;

@@ -49,6 +49,15 @@ import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
 import { ToolCallGuard } from './tool-call-guard.js';
 import { findPresetModel } from '../providers/model-limits.js';
 import {
+  DEFER_MCP_TOOLS_ABOVE,
+  TOOL_SEARCH_DEFINITION,
+  TOOL_SEARCH_NAME,
+  buildDeferredToolsBlock,
+  formatToolSearchResult,
+  loadedToolNamesFromHistory,
+  searchTools,
+} from './deferred-tools.js';
+import {
   COMPACTION_INSTRUCTIONS,
   COMPACTION_TRIGGER_FRACTION,
   applyLatestSummary,
@@ -86,7 +95,10 @@ import type {
   SubmitMessageResult,
   SessionMessageServiceOptions,
 } from './types';
-import { buildSystemPrompt } from '../prompts/build-system-prompt';
+import {
+  buildDynamicContextBlock,
+  buildSystemPrompt,
+} from '../prompts/build-system-prompt';
 import type { AddonPromptSummary } from '../prompts/build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type {
@@ -241,6 +253,7 @@ export class SessionMessageService {
   private readonly historyToolResultsKept: number;
   private readonly maxToolCallsPerRound: number;
   private readonly maxDelegationDepth: number;
+  private readonly deferMcpToolsAbove: number;
   // How many agent-to-agent hops led to each live session. Only sessions
   // started by dispatchAgent are tracked; a missing entry means depth 0.
   private readonly delegationDepth = new Map<string, number>();
@@ -279,6 +292,8 @@ export class SessionMessageService {
     this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
     this.maxToolCallsPerRound = options.maxToolCallsPerRound ?? 12;
     this.maxDelegationDepth = options.maxDelegationDepth ?? 3;
+    this.deferMcpToolsAbove =
+      options.deferMcpToolsAbove ?? DEFER_MCP_TOOLS_ABOVE;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -1679,8 +1694,22 @@ export class SessionMessageService {
       agentId,
       input.sessionId,
     );
-    // All tool definitions sent to the model (MCP + builtin, merged)
-    const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
+    // With many MCP tools, send only the ones this session has already used
+    // and let the model load others on demand through tool_search.
+    const deferMcpTools = mcpTools.length > this.deferMcpToolsAbove;
+    const loadedMcpTools = deferMcpTools
+      ? loadedToolNamesFromHistory(history)
+      : undefined;
+    const initialMcpTools = loadedMcpTools
+      ? mcpTools.filter((t) => loadedMcpTools.has(t.name))
+      : mcpTools;
+    // All tool definitions sent to the model (MCP + builtin, merged). Tools
+    // loaded by tool_search are appended mid-run.
+    const allTools: ToolDefinition[] = [
+      ...initialMcpTools,
+      ...nativeToolDefs,
+      ...(deferMcpTools ? [TOOL_SEARCH_DEFINITION] : []),
+    ];
 
     // Extract workspace permissions from agent config for honest reporting
     const workspacePermissions: WorkspacePermissionsInfo | undefined = agent
@@ -1729,8 +1758,10 @@ export class SessionMessageService {
     }
 
     const promptContext = await this.resolvePromptContext(input.sessionId);
+    // [NOW]/[CONVERSATION] go in their own trailing system message, not in
+    // the prompt, so the prompt stays byte-identical across requests and
+    // can be served from the provider's prompt cache.
     const systemPrompt = await buildSystemPrompt({
-      context: promptContext,
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
       ...(agent?.skills && { skillIds: agent.skills }),
@@ -1749,15 +1780,22 @@ export class SessionMessageService {
       onboardingMessagesRemaining,
     });
 
-    const fullSystemPrompt =
+    // The deferred index lists every MCP tool, loaded or not, so it stays
+    // identical across runs and keeps the prompt cacheable.
+    const stablePrompt =
       systemPrompt +
+      (deferMcpTools ? buildDeferredToolsBlock(mcpTools) : '') +
       (conversationSummary ? buildSummaryBlock(conversationSummary) : '');
-    const messages: Message[] = fullSystemPrompt
-      ? [
-          { role: 'system' as const, content: fullSystemPrompt },
-          ...historyMessages,
-        ]
-      : historyMessages;
+    const dynamicContext = buildDynamicContextBlock(promptContext).trim();
+    const messages: Message[] = [
+      ...(stablePrompt
+        ? [{ role: 'system' as const, content: stablePrompt }]
+        : []),
+      ...(dynamicContext
+        ? [{ role: 'system' as const, content: dynamicContext }]
+        : []),
+      ...historyMessages,
+    ];
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
     // Build invocation options: client overrides take priority, then agent-resolved values
@@ -2139,6 +2177,32 @@ export class SessionMessageService {
             // Inline images a tool returned and we persisted to disk —
             // registered as attachments on the tool result message below.
             let persistedImages: PersistedImage[] = [];
+
+            if (deferMcpTools && tc.name === TOOL_SEARCH_NAME) {
+              const maxResults = Number(tc.arguments['max_results']);
+              const found = searchTools(
+                mcpTools,
+                String(tc.arguments['query'] ?? ''),
+                Number.isFinite(maxResults) && maxResults > 0
+                  ? maxResults
+                  : undefined,
+              );
+              for (const tool of found) {
+                if (!allTools.some((t) => t.name === tool.name)) {
+                  allTools.push(tool);
+                }
+              }
+              return {
+                interrupt: undefined,
+                toolContent: formatToolSearchResult(found) as
+                  | string
+                  | undefined,
+                toolIsError: false,
+                absolutePathFromTool,
+                mediaShareFromTool,
+                persistedImages,
+              };
+            }
 
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session)
@@ -2874,7 +2938,9 @@ export class SessionMessageService {
    * declares `readOnlyHint`; unknown tools are assumed to write.
    */
   private isReadOnlyTool(name: string): boolean {
-    if (READ_ONLY_BUILTIN_TOOLS.has(name)) return true;
+    if (READ_ONLY_BUILTIN_TOOLS.has(name) || name === TOOL_SEARCH_NAME) {
+      return true;
+    }
     const [serverId, toolName] = name.split('::');
     if (!serverId || !toolName || !this.mcp) return false;
     return (
