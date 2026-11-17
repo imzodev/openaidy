@@ -39,10 +39,27 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import type { SessionType, ModelPricing } from '@openaidy/shared-types';
-import { estimateCost } from '@openaidy/shared-types';
+import type {
+  SessionType,
+  ModelPricing,
+  CompactionSummaryMetadata,
+} from '@openaidy/shared-types';
+import { estimateCost, COMPACTION_SUMMARY_KIND } from '@openaidy/shared-types';
 import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
 import { ToolCallGuard } from './tool-call-guard.js';
+import { findPresetModel } from '../providers/model-limits.js';
+import {
+  COMPACTION_INSTRUCTIONS,
+  COMPACTION_TRIGGER_FRACTION,
+  applyLatestSummary,
+  buildSummaryBlock,
+  buildSummaryRequest,
+  findCompactionCut,
+  renderTranscript,
+} from './compaction.js';
+
+/** Context budget when neither config nor the model says otherwise. */
+const DEFAULT_CONTEXT_BUDGET_TOKENS = 100_000;
 import {
   findSessionRecord,
   createSessionRecord,
@@ -220,7 +237,7 @@ export class SessionMessageService {
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
-  private readonly maxContextTokens: number;
+  private readonly maxContextTokensOverride: number | undefined;
   private readonly historyToolResultsKept: number;
   private readonly maxToolCallsPerRound: number;
   private readonly maxDelegationDepth: number;
@@ -258,7 +275,7 @@ export class SessionMessageService {
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
-    this.maxContextTokens = options.maxContextTokens ?? 100_000;
+    this.maxContextTokensOverride = options.maxContextTokens;
     this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
     this.maxToolCallsPerRound = options.maxToolCallsPerRound ?? 12;
     this.maxDelegationDepth = options.maxDelegationDepth ?? 3;
@@ -371,17 +388,117 @@ export class SessionMessageService {
   }
 
   /**
-   * Keep the loop history within `maxContextTokens` by eliding the *bodies* of
-   * the oldest tool results (issue #437). Recent tool results — the model's
-   * working set — are preserved; only prior, already-consumed outputs are
-   * collapsed to a short notice. Assistant/user/system turns and the
-   * tool_call↔tool_result pairing are never touched (only a tool message's
-   * `content` shrinks), so the request stays provider-valid. Mutates in place
-   * so the elision persists across subsequent rounds. Returns the count elided.
-   *
-   * The full results remain in the persisted transcript; this only shapes what
-   * is re-sent to the model.
+   * Input-token budget for one request. An explicit `maxContextTokens`
+   * option wins; otherwise it is sized from the model's context window,
+   * leaving room for the reply, with a fixed fallback for unknown models.
    */
+  private resolveContextBudget(
+    model: { contextWindow?: number; maxOutputTokens?: number } | undefined,
+  ): number {
+    if (this.maxContextTokensOverride !== undefined) {
+      return this.maxContextTokensOverride;
+    }
+    if (!model?.contextWindow) return DEFAULT_CONTEXT_BUDGET_TOKENS;
+    const reservedForOutput = Math.min(model.maxOutputTokens ?? 8_192, 32_000);
+    return Math.max(
+      8_000,
+      Math.floor((model.contextWindow - reservedForOutput) * 0.8),
+    );
+  }
+
+  /**
+   * Summarize every turn before the last few with one model call, persist
+   * the summary, and return where the kept history starts. Returns
+   * undefined (and leaves history untouched) when there is too little to
+   * summarize or the call fails — the per-round elision still applies.
+   */
+  private async summarizeOlderTurns(params: {
+    sessionId: string;
+    runId: string;
+    rows: ReadonlyArray<SessionMessageRecord | SessionMessage>;
+    previousSummary: string | undefined;
+    modelId: string;
+    providerId: string | undefined;
+    budget: number;
+    tokensBefore: number;
+  }): Promise<{ cut: number; summary: string } | undefined> {
+    const cut = findCompactionCut(params.rows);
+    const lastCovered = params.rows[cut - 1];
+    if (cut === 0 || !lastCovered) return undefined;
+
+    // Leave the summarizer half the budget for its input (~4 chars/token).
+    const transcript = renderTranscript(
+      params.rows.slice(0, cut),
+      params.budget * 2,
+    );
+    let summary = '';
+    let failure = 'empty summary';
+    try {
+      const result = await this.providers.invocation.invoke(
+        {
+          model: params.modelId,
+          messages: [
+            { role: 'system', content: COMPACTION_INSTRUCTIONS },
+            {
+              role: 'user',
+              content: buildSummaryRequest(params.previousSummary, transcript),
+            },
+          ],
+          maxTokens: 2_048,
+        },
+        {
+          modelId: params.modelId,
+          ...(params.providerId !== undefined && {
+            providerId: params.providerId,
+          }),
+        },
+      );
+      if (result.ok) summary = result.value.content.trim();
+      else failure = result.error.message;
+    } catch (err) {
+      failure = err instanceof Error ? err.message : String(err);
+    }
+    if (!summary) {
+      // A failed summary must never fail the user's run.
+      this.logger?.warn(
+        { sessionId: params.sessionId, runId: params.runId, error: failure },
+        'Conversation compaction failed — keeping full history',
+      );
+      return undefined;
+    }
+
+    const replacedChars = params.rows
+      .slice(0, cut)
+      .reduce((sum, r) => sum + r.content.length, 0);
+    const metadata: CompactionSummaryMetadata = {
+      kind: COMPACTION_SUMMARY_KIND,
+      coversThroughSequence: lastCovered.sequence,
+      tokensBefore: params.tokensBefore,
+      tokensAfter: Math.max(
+        0,
+        params.tokensBefore - Math.ceil((replacedChars - summary.length) / 4),
+      ),
+    };
+    await this.appendMessage({
+      sessionId: params.sessionId,
+      runId: params.runId,
+      role: 'system',
+      content: summary,
+      metadata,
+    });
+    this.logger?.info(
+      {
+        sessionId: params.sessionId,
+        runId: params.runId,
+        summarizedMessages: cut,
+        tokensBefore: metadata.tokensBefore,
+        tokensAfter: metadata.tokensAfter,
+      },
+      'Compacted conversation — older turns replaced by a summary',
+    );
+    return { cut, summary };
+  }
+
   /**
    * When rebuilding a session's history for a new run, summarize the bodies of
    * older tool results so a long multi-run session doesn't re-send every large
@@ -422,8 +539,17 @@ export class SessionMessageService {
     return trimmed;
   }
 
-  private compactContextInPlace(messages: Message[]): number {
-    const budget = this.maxContextTokens;
+  /**
+   * Keep the loop history within the context budget by eliding the *bodies*
+   * of the oldest tool results (issue #437). Recent tool results — the
+   * model's working set — are preserved; only prior, already-consumed outputs
+   * are collapsed to a short notice. Assistant/user/system turns and the
+   * tool_call↔tool_result pairing are never touched (only a tool message's
+   * `content` shrinks), so the request stays provider-valid. Mutates in place
+   * so the elision persists across subsequent rounds. Returns the count
+   * elided. The full results remain in the persisted transcript.
+   */
+  private compactContextInPlace(messages: Message[], budget: number): number {
     if (this.estimateTokens(messages) <= budget) return 0;
 
     const ELISION_PREFIX = '[Earlier tool output elided to fit context:';
@@ -1381,21 +1507,33 @@ export class SessionMessageService {
     // file-path note (so the model can reach for a vision-capable tool).
     // Unknown capabilities are treated as capable (optimistic): a provider
     // that can't handle the block will surface its own error.
+    // The same lookup also sizes the context budget from the model's window.
     let modelSupportsVision = true;
     let modelSupportsAudio = true;
-    if (this.attachments && providerEntry) {
-      const modelResult = await providerEntry.provider
-        .getModel(modelId)
-        .catch(() => null);
-      if (modelResult?.ok && modelResult.value.capabilities.length > 0) {
-        modelSupportsVision = modelResult.value.capabilities.includes('vision');
-        modelSupportsAudio =
-          modelResult.value.capabilities.includes('audio_input');
-      }
+    const modelResult = providerEntry
+      ? await providerEntry.provider.getModel(modelId).catch(() => null)
+      : null;
+    const modelDescriptor = modelResult?.ok ? modelResult.value : undefined;
+    if (this.attachments && modelDescriptor?.capabilities.length) {
+      modelSupportsVision = modelDescriptor.capabilities.includes('vision');
+      modelSupportsAudio = modelDescriptor.capabilities.includes('audio_input');
     }
+    const presetLimits = findPresetModel(modelId);
+    const contextBudget = this.resolveContextBudget({
+      ...presetLimits,
+      ...(modelDescriptor?.contextWindow !== undefined && {
+        contextWindow: modelDescriptor.contextWindow,
+      }),
+      ...(modelDescriptor?.maxOutputTokens !== undefined && {
+        maxOutputTokens: modelDescriptor.maxOutputTokens,
+      }),
+    });
 
-    // 5. Build request from session history + new message
-    const history = await this.listMessages(input.sessionId);
+    // 5. Build request from session history + new message. Messages already
+    // folded into a compaction summary are replaced by that summary.
+    const { messages: history, summary: priorSummary } = applyLatestSummary<
+      SessionMessageRecord | SessionMessage
+    >(await this.listMessages(input.sessionId));
     const historyMessages: Message[] = [];
     for (const m of history) {
       const msgRole = (m as { role: string }).role;
@@ -1511,6 +1649,30 @@ export class SessionMessageService {
       );
     }
 
+    // Long conversations: replace older turns with a model-written summary
+    // instead of re-sending them forever. Each history row maps to exactly
+    // one entry of historyMessages, so the cut index applies to both.
+    let conversationSummary = priorSummary;
+    let summarized = false;
+    const historyTokens = this.estimateTokens(historyMessages);
+    if (historyTokens > contextBudget * COMPACTION_TRIGGER_FRACTION) {
+      const compacted = await this.summarizeOlderTurns({
+        sessionId: input.sessionId,
+        runId: run.id,
+        rows: history,
+        previousSummary: priorSummary,
+        modelId,
+        providerId: input.providerId ?? providerId,
+        budget: contextBudget,
+        tokensBefore: historyTokens,
+      });
+      if (compacted) {
+        historyMessages.splice(0, compacted.cut);
+        conversationSummary = compacted.summary;
+        summarized = true;
+      }
+    }
+
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
     const nativeToolDefs = this.buildNativeToolDefinitions(
@@ -1587,8 +1749,14 @@ export class SessionMessageService {
       onboardingMessagesRemaining,
     });
 
-    const messages: Message[] = systemPrompt
-      ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
+    const fullSystemPrompt =
+      systemPrompt +
+      (conversationSummary ? buildSummaryBlock(conversationSummary) : '');
+    const messages: Message[] = fullSystemPrompt
+      ? [
+          { role: 'system' as const, content: fullSystemPrompt },
+          ...historyMessages,
+        ]
       : historyMessages;
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
@@ -1688,7 +1856,7 @@ export class SessionMessageService {
         // tool-result bodies before sending (issue #437). Unbounded history is
         // the root cause behind the round-exhaustion/stall symptom — a single
         // run here reached ~1M prompt tokens on MiniMax-M3 and degraded.
-        const elided = this.compactContextInPlace(loopMessages);
+        const elided = this.compactContextInPlace(loopMessages, contextBudget);
         if (elided > 0) {
           compactionFired = true;
           this.logger?.warn(
@@ -1697,7 +1865,7 @@ export class SessionMessageService {
               runId: run.id,
               round,
               elided,
-              budgetTokens: this.maxContextTokens,
+              budgetTokens: contextBudget,
               estTokens: this.estimateTokens(loopMessages),
             },
             'Compacted context — elided oldest tool outputs to fit the token budget',
@@ -1725,18 +1893,18 @@ export class SessionMessageService {
             estTokens: roundEstTokens,
             messageCount: loopMessages.length,
             largestToolResultChars,
-            budgetTokens: this.maxContextTokens,
+            budgetTokens: contextBudget,
           },
           'Agentic loop round context size',
         );
-        if (roundEstTokens > this.maxContextTokens * SOFT_BUDGET_FRACTION) {
+        if (roundEstTokens > contextBudget * SOFT_BUDGET_FRACTION) {
           this.logger?.warn(
             {
               sessionId: input.sessionId,
               runId: run.id,
               round,
               estTokens: roundEstTokens,
-              budgetTokens: this.maxContextTokens,
+              budgetTokens: contextBudget,
             },
             'Agentic loop request nearing the context token budget',
           );
@@ -2645,8 +2813,9 @@ export class SessionMessageService {
           maxRounds: this.maxToolRounds,
           peakEstTokens,
           peakPromptTokens,
-          budgetTokens: this.maxContextTokens,
+          budgetTokens: contextBudget,
           compactionFired,
+          summarized,
         },
         'Agentic run context summary',
       );

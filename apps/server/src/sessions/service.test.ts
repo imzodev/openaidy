@@ -608,6 +608,8 @@ function makeStreamingService(opts: {
   historyToolResultsKept?: number;
   /** Custom executor for the 'echo' tool (e.g. to return an oversized result). */
   echoExecute?: () => Promise<{ ok: true; content: string }>;
+  /** Non-streaming invoke (used by conversation compaction). */
+  invoke?: (...args: unknown[]) => Promise<unknown>;
   invokeStream: (request: {
     tools?: unknown[];
   }) => AsyncGenerator<unknown, void, unknown>;
@@ -634,7 +636,7 @@ function makeStreamingService(opts: {
       } as unknown as ProviderRegistryService,
       selection: {} as unknown as ProviderSelectionService,
       invocation: {
-        invoke: vi.fn(),
+        invoke: vi.fn(opts.invoke ?? (async () => undefined)),
         invokeStream,
       } as unknown as ModelInvocationService,
     },
@@ -1222,6 +1224,84 @@ describe('enabledBuiltinTools', () => {
     expect(tools).not.toContain('memory_save');
     expect(tools).not.toContain('reminder_create');
     expect(tools).toContain('reminder_list');
+  });
+});
+
+// ============================================================================
+// Conversation compaction — older turns replaced by a summary
+// ============================================================================
+
+describe('SessionMessageService — conversation compaction', () => {
+  type Msg = { role: string; content: string };
+  const recordingStream = (requests: Msg[][]) =>
+    async function* (request: { tools?: unknown[] }) {
+      requests.push((request as { messages?: Msg[] }).messages ?? []);
+      yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+      yield ok({ type: 'stream.content_delta', delta: 'ok' });
+      yield ok({ type: 'stream.finished', finishReason: 'stop' });
+    };
+
+  it('summarizes older turns past the budget and replays the summary instead', async () => {
+    const requests: Msg[][] = [];
+    const invoke = vi.fn(async () => ({
+      ok: true,
+      value: { content: 'SUMMARY: user is planning a trip to Lisbon.' },
+    }));
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      maxContextTokens: 400,
+      invoke,
+      invokeStream: recordingStream(requests),
+    });
+
+    const session = await service.createSession('Long chat');
+    const sessionId = (session as { id: string }).id;
+    for (let i = 0; i < 6; i++) {
+      await submit(service, sessionId, `turn-${i} ${'x'.repeat(300)}`);
+    }
+
+    expect(invoke).toHaveBeenCalled();
+    const last = requests.at(-1) ?? [];
+    expect(last[0]?.role).toBe('system');
+    expect(last[0]?.content).toContain('[CONVERSATION_SUMMARY]');
+    expect(last[0]?.content).toContain('trip to Lisbon');
+    // The first turn is no longer replayed verbatim; the latest one is.
+    expect(last.some((m) => m.content.startsWith('turn-0 '))).toBe(false);
+    expect(last.some((m) => m.content.startsWith('turn-5 '))).toBe(true);
+
+    // The transcript keeps everything, plus the summary row.
+    const persisted = (await service.listMessages(sessionId)) as Array<
+      Msg & { metadata?: Record<string, unknown> }
+    >;
+    expect(persisted.some((m) => m.content.startsWith('turn-0 '))).toBe(true);
+    expect(
+      persisted.some((m) => m.metadata?.['kind'] === 'compaction_summary'),
+    ).toBe(true);
+  });
+
+  it('keeps the full history when the summary call fails', async () => {
+    const requests: Msg[][] = [];
+    const { service } = makeStreamingService({
+      maxToolRounds: 3,
+      maxContextTokens: 400,
+      invoke: async () => {
+        throw new Error('provider down');
+      },
+      invokeStream: recordingStream(requests),
+    });
+
+    const session = await service.createSession('Long chat');
+    const sessionId = (session as { id: string }).id;
+    for (let i = 0; i < 6; i++) {
+      const result = await submit(
+        service,
+        sessionId,
+        `turn-${i} ${'x'.repeat(300)}`,
+      );
+      expect(result.ok).toBe(true);
+    }
+    const last = requests.at(-1) ?? [];
+    expect(last.some((m) => m.content.startsWith('turn-0 '))).toBe(true);
   });
 });
 

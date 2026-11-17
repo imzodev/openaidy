@@ -33,6 +33,14 @@ export type ToolCallGuardOptions = {
   readonly isReadOnly: (toolName: string) => boolean;
 };
 
+/** The parts of a persisted session message that compaction reads. */
+export type CompactionSourceMessage = {
+  readonly role: string;
+  readonly content: string;
+  readonly sequence: number;
+  readonly metadata?: Record<string, unknown> | null | undefined;
+};
+
 /** Marks a persisted message as the summary of older turns. */
 export const COMPACTION_SUMMARY_KIND = 'compaction_summary';
 

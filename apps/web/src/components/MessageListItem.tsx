@@ -1,5 +1,6 @@
 import { Show } from 'solid-js';
 import { User, Bot, AlertCircle, Wrench, Server } from 'lucide-solid';
+import { COMPACTION_SUMMARY_KIND } from '@openaidy/shared-types';
 import type { SessionMessage } from '../lib/api';
 import { MessageContent } from './MessageContent';
 import { ThinkingBlock } from './ThinkingBlock';
@@ -82,7 +83,10 @@ function getBubbleClass(message: SessionMessage): string {
  */
 export function MessageListItem(props: MessageListItemProps) {
   return (
-    <>
+    <Show
+      when={props.message.metadata?.kind !== COMPACTION_SUMMARY_KIND}
+      fallback={<CompactionDivider content={props.message.content} />}
+    >
       <MessageDateSeparator current={props.message} previous={props.previous} />
       <div
         class={`rounded-lg p-4 ${getBubbleClass(props.message)}`}
@@ -129,6 +133,25 @@ export function MessageListItem(props: MessageListItemProps) {
           </div>
         </div>
       </div>
-    </>
+    </Show>
+  );
+}
+
+/**
+ * The agent condensed the turns above into a summary to save context. Shown
+ * as a quiet divider; the summary itself is one click away.
+ */
+function CompactionDivider(props: { content: string }) {
+  return (
+    <details class="group my-2 text-xs text-text-tertiary">
+      <summary class="flex items-center gap-3 cursor-pointer list-none select-none">
+        <span class="flex-1 border-t border-gray-200 dark:border-gray-700" />
+        <span>Earlier conversation summarized</span>
+        <span class="flex-1 border-t border-gray-200 dark:border-gray-700" />
+      </summary>
+      <div class="mt-2 rounded-lg p-3 bg-gray-50 dark:bg-gray-800 text-sm text-text-secondary">
+        <MessageContent content={props.content} />
+      </div>
+    </details>
   );
 }

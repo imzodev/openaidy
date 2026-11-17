@@ -20,6 +20,7 @@ import {
   type FinishReason,
 } from '@openaidy/runtime';
 import { mapRequest } from './request-mapper';
+import { anthropicDefaultMaxTokens } from '../../model-limits.js';
 import {
   mapResponse,
   mapStreamEvent,
@@ -43,7 +44,6 @@ const DEFAULT_BASE_URL = 'https://api.anthropic.com/v1';
 const DEFAULT_API_VERSION = '2023-06-01';
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_TIMEOUT_MS = 120000; // Anthropic can be slower
-const DEFAULT_MAX_TOKENS = 4096;
 const PROVIDER_ID = 'anthropic';
 const PROVIDER_NAME = 'Anthropic';
 
@@ -116,7 +116,6 @@ export class AnthropicProvider implements ModelProvider {
       enableVision: true,
       providerId: PROVIDER_ID,
       providerName: PROVIDER_NAME,
-      defaultMaxTokens: DEFAULT_MAX_TOKENS,
       defaultTemperature: 0.7,
       ...config,
     };
@@ -251,9 +250,9 @@ export class AnthropicProvider implements ModelProvider {
         defaultMaxTokens?: number;
         defaultTemperature?: number;
       } = {};
-      if (this.config.defaultMaxTokens !== undefined) {
-        mapperOptions.defaultMaxTokens = this.config.defaultMaxTokens;
-      }
+      mapperOptions.defaultMaxTokens =
+        this.config.defaultMaxTokens ??
+        anthropicDefaultMaxTokens(request.model);
       if (this.config.defaultTemperature !== undefined) {
         mapperOptions.defaultTemperature = this.config.defaultTemperature;
       }
@@ -337,9 +336,9 @@ export class AnthropicProvider implements ModelProvider {
         defaultMaxTokens?: number;
         defaultTemperature?: number;
       } = {};
-      if (this.config.defaultMaxTokens !== undefined) {
-        mapperOptions.defaultMaxTokens = this.config.defaultMaxTokens;
-      }
+      mapperOptions.defaultMaxTokens =
+        this.config.defaultMaxTokens ??
+        anthropicDefaultMaxTokens(request.model);
       if (this.config.defaultTemperature !== undefined) {
         mapperOptions.defaultTemperature = this.config.defaultTemperature;
       }
