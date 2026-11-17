@@ -41,6 +41,8 @@ import {
 } from '@openaidy/db';
 import type { SessionType, ModelPricing } from '@openaidy/shared-types';
 import { estimateCost } from '@openaidy/shared-types';
+import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
+import { ToolCallGuard } from './tool-call-guard.js';
 import {
   findSessionRecord,
   createSessionRecord,
@@ -220,6 +222,11 @@ export class SessionMessageService {
   private readonly maxToolOutputChars: number;
   private readonly maxContextTokens: number;
   private readonly historyToolResultsKept: number;
+  private readonly maxToolCallsPerRound: number;
+  private readonly maxDelegationDepth: number;
+  // How many agent-to-agent hops led to each live session. Only sessions
+  // started by dispatchAgent are tracked; a missing entry means depth 0.
+  private readonly delegationDepth = new Map<string, number>();
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -253,6 +260,8 @@ export class SessionMessageService {
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
     this.maxContextTokens = options.maxContextTokens ?? 100_000;
     this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
+    this.maxToolCallsPerRound = options.maxToolCallsPerRound ?? 12;
+    this.maxDelegationDepth = options.maxDelegationDepth ?? 3;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -1096,6 +1105,8 @@ export class SessionMessageService {
     content: string;
     sessionId?: string;
     sessionTitle?: string;
+    /** The session whose agent is delegating, to bound invocation chains. */
+    parentSessionId?: string;
   }): Promise<
     | {
         ok: true;
@@ -1112,6 +1123,22 @@ export class SessionMessageService {
     }
     if (!content) {
       return { ok: false, error: 'content is required' };
+    }
+
+    const depth = params.parentSessionId
+      ? (this.delegationDepth.get(params.parentSessionId) ?? 0) + 1
+      : 0;
+    if (depth > this.maxDelegationDepth) {
+      return {
+        ok: false,
+        error: `Not invoked: this request is already ${depth - 1} agent hops deep (limit ${this.maxDelegationDepth}). Finish the work yourself or report back instead of delegating further.`,
+      };
+    }
+    if (params.parentSessionId && params.sessionId === params.parentSessionId) {
+      return {
+        ok: false,
+        error: 'Not invoked: an agent cannot send work to its own session.',
+      };
     }
 
     if (this.agents) {
@@ -1150,6 +1177,7 @@ export class SessionMessageService {
         sessionId = session.id;
       }
 
+      if (depth > 0) this.delegationDepth.set(sessionId, depth);
       const done = this.submitMessageStreaming({
         sessionId,
         role: 'user',
@@ -1157,6 +1185,17 @@ export class SessionMessageService {
         agentId,
         onStreamEvent: () => {},
       });
+      if (depth > 0) {
+        void (async () => {
+          try {
+            await done;
+          } catch (_err) {
+            // Reported to whoever awaits `done`; here we only clean up.
+          } finally {
+            this.delegationDepth.delete(sessionId);
+          }
+        })();
+      }
 
       return { ok: true, sessionId, done };
     } catch (err) {
@@ -1609,6 +1648,11 @@ export class SessionMessageService {
       let peakEstTokens = 0;
       let peakPromptTokens = 0;
       let compactionFired = false;
+      const toolGuard = new ToolCallGuard({
+        maxCallsPerRound: this.maxToolCallsPerRound,
+        maxRefusals: 3,
+        isReadOnly: (name) => this.isReadOnlyTool(name),
+      });
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         // On the final permitted round, stop offering tools so the model is
         // forced to turn what it has gathered into a text answer. Without this,
@@ -1620,7 +1664,10 @@ export class SessionMessageService {
         // "continue" (which starts a fresh run that then finishes). Reserving
         // the final round for a forced text response guarantees the run always
         // ends with a real, non-empty answer instead. (See run Ozpbnm8Y…)
-        const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+        // The guard also ends the loop early when the model keeps repeating
+        // calls it was already told not to repeat.
+        const stuckRepeating = toolGuard.shouldForceFinalAnswer;
+        const isFinalRound = round === MAX_TOOL_ROUNDS - 1 || stuckRepeating;
         const offerTools = allTools.length > 0 && !isFinalRound;
         if (isFinalRound && allTools.length > 0) {
           this.logger?.warn(
@@ -1628,8 +1675,12 @@ export class SessionMessageService {
               sessionId: input.sessionId,
               runId: run.id,
               maxRounds: MAX_TOOL_ROUNDS,
+              round,
+              stuckRepeating,
             },
-            'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
+            stuckRepeating
+              ? 'Agent kept repeating refused tool calls — forcing a final text response without tools'
+              : 'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
           );
         }
 
@@ -1908,7 +1959,9 @@ export class SessionMessageService {
               : {}),
           } as Message);
 
-          for (const tc of toolCalls) {
+          // Runs one call and returns what to persist; persisting happens
+          // below, in call order, so a turn's calls can execute concurrently.
+          const executeToolCall = async (tc: LocalToolCall) => {
             let toolContent: string | undefined;
             let toolIsError = false;
             let absolutePathFromTool: string | undefined;
@@ -2055,10 +2108,17 @@ export class SessionMessageService {
                       );
                     });
                     return {
-                      ok: true,
-                      userMessage,
-                      assistantMessage: undefined as unknown as never,
-                      run,
+                      interrupt: {
+                        ok: true as const,
+                        userMessage,
+                        assistantMessage: undefined as unknown as never,
+                        run,
+                      },
+                      toolContent,
+                      toolIsError,
+                      absolutePathFromTool,
+                      mediaShareFromTool,
+                      persistedImages,
                     };
                   }
                 } catch {
@@ -2273,6 +2333,80 @@ export class SessionMessageService {
                 }
               }
             }
+            return {
+              interrupt: undefined,
+              toolContent,
+              toolIsError,
+              absolutePathFromTool,
+              mediaShareFromTool,
+              persistedImages,
+            };
+          };
+
+          const verdicts = toolGuard.review(toolCalls);
+          const runToolCall = async (tc: LocalToolCall, index: number) => {
+            const verdict = verdicts[index];
+            if (verdict?.action === 'skip') {
+              return {
+                interrupt: undefined,
+                toolContent: verdict.content as string | undefined,
+                toolIsError: verdict.reason !== 'repeat',
+                absolutePathFromTool: undefined,
+                mediaShareFromTool: undefined,
+                persistedImages: [] as PersistedImage[],
+              };
+            }
+            const execution = await executeToolCall(tc).catch((e: unknown) => ({
+              interrupt: undefined,
+              toolContent:
+                `Error: ${e instanceof Error ? e.message : String(e)}` as
+                  | string
+                  | undefined,
+              toolIsError: true,
+              absolutePathFromTool: undefined,
+              mediaShareFromTool: undefined,
+              persistedImages: [] as PersistedImage[],
+            }));
+            if (execution.toolContent !== undefined && !execution.interrupt) {
+              toolGuard.record(tc, round, {
+                ok: !execution.toolIsError,
+                content: execution.toolContent,
+              });
+            }
+            return execution;
+          };
+
+          // Independent reads gain nothing from running one at a time; any
+          // call that may write keeps the whole turn sequential so ordering
+          // between dependent side effects is preserved.
+          const runConcurrently =
+            toolCalls.length > 1 &&
+            toolCalls.every(
+              (tc, index) =>
+                verdicts[index]?.action === 'skip' ||
+                this.isReadOnlyTool(tc.name),
+            );
+          const pending = runConcurrently
+            ? toolCalls.map((tc, index) => runToolCall(tc, index))
+            : undefined;
+          if (runConcurrently) {
+            this.logger?.debug(
+              { runId: run.id, round, calls: toolCalls.length },
+              'Running read-only tool calls concurrently',
+            );
+          }
+
+          for (const [index, tc] of toolCalls.entries()) {
+            const execution = await (pending?.[index] ??
+              runToolCall(tc, index));
+            if (execution.interrupt) return execution.interrupt;
+            const {
+              toolContent,
+              toolIsError,
+              absolutePathFromTool,
+              mediaShareFromTool,
+              persistedImages,
+            } = execution;
 
             // Only persist tool result if we have content
             if (toolContent !== undefined) {
@@ -2564,6 +2698,20 @@ export class SessionMessageService {
       }
     }
     return tools;
+  }
+
+  /**
+   * Whether a tool only reads state. MCP tools count only when their server
+   * declares `readOnlyHint`; unknown tools are assumed to write.
+   */
+  private isReadOnlyTool(name: string): boolean {
+    if (READ_ONLY_BUILTIN_TOOLS.has(name)) return true;
+    const [serverId, toolName] = name.split('::');
+    if (!serverId || !toolName || !this.mcp) return false;
+    return (
+      this.mcp.getTools(serverId).find((t) => t.name === toolName)?.readOnly ===
+      true
+    );
   }
 
   /**

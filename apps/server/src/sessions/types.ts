@@ -177,6 +177,16 @@ export type SessionMessageServiceOptions = {
    * The full results remain in the persisted transcript. Defaults to 10.
    */
   historyToolResultsKept?: number;
+  /**
+   * Tool calls beyond this many in one model turn are not run; the model is
+   * told to make the important ones first. Defaults to 12.
+   */
+  maxToolCallsPerRound?: number;
+  /**
+   * How many agent-to-agent hops (agents_invoke chains) may stack before
+   * further invocations are refused. Defaults to 3.
+   */
+  maxDelegationDepth?: number;
   repositories?:
     | {
         sessions: SessionsStore;

@@ -935,3 +935,38 @@ export const ALL_TOOL_METAS: ToolMeta[] = [
 export const TOOL_CATEGORY_MAP: Record<string, string> = Object.fromEntries(
   ALL_TOOL_METAS.map((m) => [m.name, m.category]),
 );
+
+/**
+ * Built-in tools that only read state. The agent loop runs a turn's calls
+ * concurrently when all of them are in this set, and a successful call to
+ * any tool outside it resets repeat detection (it may have changed what the
+ * reads would return). When in doubt, leave a tool out: the cost is only
+ * sequential execution.
+ */
+export const READ_ONLY_BUILTIN_TOOLS: ReadonlySet<string> = new Set([
+  'agents_list',
+  'sessions_list',
+  'sessions_read',
+  'sessions_inspect',
+  'sessions_search',
+  'workspace_read',
+  'workspace_list',
+  'code_read',
+  'code_search',
+  'code_glob',
+  'skill_read',
+  'web_fetch',
+  'addon_read',
+  'addon_list_queries',
+  'memory_search',
+  'tasks_list',
+  'pulses_list',
+  'reminder_list',
+  'task_schedules_list',
+  'task_schedules_list_executions',
+  'workflow_get',
+  'workflow_list',
+  'workflow_approval_list',
+  'workflow_trigger_list',
+  'workflow_template_list',
+]);

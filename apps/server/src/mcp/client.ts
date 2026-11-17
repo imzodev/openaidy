@@ -42,6 +42,8 @@ export type McpToolDefinition = {
   name: string;
   description: string | undefined;
   inputSchema: Record<string, unknown>;
+  /** The server's `annotations.readOnlyHint`; absent means unknown. */
+  readOnly?: boolean;
 };
 
 /**
@@ -470,6 +472,7 @@ export class McpClientService {
         name: tool.name,
         description: tool.description ?? undefined,
         inputSchema: tool.inputSchema ?? {},
+        ...(tool.annotations?.readOnlyHint === true && { readOnly: true }),
       }));
 
       connection.tools = tools;

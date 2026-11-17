@@ -926,7 +926,7 @@ describe('SessionMessageService — context-window compaction', () => {
             toolCall: {
               id: `tc_${Math.random()}`,
               name: 'echo',
-              arguments: {},
+              arguments: { n: Math.random() },
             },
           });
           yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
@@ -1035,7 +1035,7 @@ describe('SessionMessageService — stale history tool-output trimming', () => {
             toolCall: {
               id: `tc_${Math.random()}`,
               name: 'echo',
-              arguments: {},
+              arguments: { n: Math.random() },
             },
           });
           yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
@@ -1222,5 +1222,47 @@ describe('enabledBuiltinTools', () => {
     expect(tools).not.toContain('memory_save');
     expect(tools).not.toContain('reminder_create');
     expect(tools).toContain('reminder_list');
+  });
+});
+
+// ============================================================================
+// Agentic tool-call loop — repeat guard
+// ============================================================================
+
+describe('SessionMessageService — repeated tool calls', () => {
+  it('runs an identical call once, then forces a final answer instead of looping', async () => {
+    const echoExecute = vi.fn(async () => ({
+      ok: true as const,
+      content: 'same result',
+    }));
+    const { service, invokeStream } = makeStreamingService({
+      maxToolRounds: 25,
+      echoExecute,
+      invokeStream: async function* (request) {
+        yield ok({ type: 'stream.started', providerId: 'mock', model: 'mock' });
+        if (request.tools && request.tools.length > 0) {
+          yield ok({
+            type: 'stream.tool_call',
+            toolCall: {
+              id: `tc_${Math.random()}`,
+              name: 'echo',
+              arguments: { q: 'same' },
+            },
+          });
+          yield ok({ type: 'stream.finished', finishReason: 'tool_calls' });
+        } else {
+          yield ok({ type: 'stream.content_delta', delta: 'done' });
+          yield ok({ type: 'stream.finished', finishReason: 'stop' });
+        }
+      },
+    });
+
+    const session = await service.createSession('Repeat');
+    const result = await submit(service, (session as { id: string }).id);
+
+    expect(result.ok).toBe(true);
+    expect(echoExecute).toHaveBeenCalledTimes(1);
+    // 1 executed round + 3 refused rounds + 1 forced final round.
+    expect(invokeStream).toHaveBeenCalledTimes(5);
   });
 });
