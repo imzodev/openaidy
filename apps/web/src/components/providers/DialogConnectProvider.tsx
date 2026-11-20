@@ -12,6 +12,8 @@ import {
   connectProviderWithApiKey,
   getOAuthStatus,
   startProviderOAuth,
+  startAnthropicOAuth,
+  completeAnthropicOAuth,
   type ConnectProviderResponse,
   type OAuthStartResponse,
 } from '../../lib/api';
@@ -31,6 +33,14 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
   const [isConnecting, setIsConnecting] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
+  // Anthropic "Sign in with Claude" is a manual-paste flow (Anthropic's
+  // registered redirect is a page it owns, not a URL we control), so it
+  // needs its own two-step state: start → show a "paste the code" input.
+  const [anthropicOAuthState, setAnthropicOAuthState] = createSignal<
+    string | null
+  >(null);
+  const [anthropicPastedCode, setAnthropicPastedCode] = createSignal('');
+
   // Reset state when provider changes
   createEffect(() => {
     if (props.provider) {
@@ -38,6 +48,8 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
       setRegion('global');
       setApiKey('');
       setError(null);
+      setAnthropicOAuthState(null);
+      setAnthropicPastedCode('');
     }
   });
 
@@ -88,6 +100,62 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Connection failed');
+      } finally {
+        setIsConnecting(false);
+      }
+    } else if (authMethod() === 'oauth' && preset.id === 'anthropic') {
+      setError(null);
+
+      // Step 2: the popup is open and the user has pasted the code
+      // shown on Anthropic's own callback page back into the dialog.
+      const state = anthropicOAuthState();
+      if (state) {
+        const pasted = anthropicPastedCode().trim();
+        if (!pasted) {
+          setError('Paste the code shown in the Claude sign-in tab.');
+          return;
+        }
+        // Anthropic's callback page shows "code#state" — the state
+        // half just echoes what we already have, so only the code
+        // before the "#" (if any) is sent to the token exchange.
+        const code = pasted.includes('#') ? pasted.split('#')[0] : pasted;
+
+        setIsConnecting(true);
+        try {
+          const result = await completeAnthropicOAuth(code, state);
+          if (result.success) {
+            props.onConnected?.(preset.id, 'oauth');
+            props.onClose();
+          } else {
+            setError(result.error || 'Failed to connect');
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Connection failed');
+        } finally {
+          setIsConnecting(false);
+        }
+        return;
+      }
+
+      // Step 1: start the flow and open the sign-in popup.
+      setIsConnecting(true);
+      try {
+        const result = await startAnthropicOAuth();
+        if (!result.success || !result.authorizationUrl || !result.state) {
+          setError(result.error || 'Failed to start sign-in');
+          setIsConnecting(false);
+          return;
+        }
+        window.open(
+          result.authorizationUrl,
+          'openaidy-anthropic-oauth',
+          'width=520,height=720',
+        );
+        setAnthropicOAuthState(result.state);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Failed to start sign-in',
+        );
       } finally {
         setIsConnecting(false);
       }
@@ -275,10 +343,14 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                     />
                     <div>
                       <div class="font-medium text-gray-900 dark:text-gray-100">
-                        OAuth 2.0
+                        {props.provider!.id === 'anthropic'
+                          ? 'Sign in with Claude'
+                          : 'OAuth 2.0'}
                       </div>
                       <div class="text-xs text-gray-500 dark:text-gray-400">
-                        Authorize with your provider's OAuth flow
+                        {props.provider!.id === 'anthropic'
+                          ? 'Use your Claude Pro/Max subscription instead of an API key'
+                          : "Authorize with your provider's OAuth flow"}
                       </div>
                     </div>
                   </label>
@@ -366,8 +438,13 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
               </div>
             </Show>
 
-            {/* OAuth Info */}
-            <Show when={authMethod() === 'oauth'}>
+            {/* OAuth Info — Anthropic gets its own copy because the
+                flow is a popup + manual paste, not a redirect back. */}
+            <Show
+              when={
+                authMethod() === 'oauth' && props.provider!.id !== 'anthropic'
+              }
+            >
               <div class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">
                 <p class="text-sm mb-3">
                   You will be redirected to {props.provider!.name}'s
@@ -388,6 +465,45 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
               </div>
             </Show>
 
+            <Show
+              when={
+                authMethod() === 'oauth' && props.provider!.id === 'anthropic'
+              }
+            >
+              <Show
+                when={!anthropicOAuthState()}
+                fallback={
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Authorization code <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={anthropicPastedCode()}
+                      onInput={(e) =>
+                        setAnthropicPastedCode(e.currentTarget.value)
+                      }
+                      placeholder="Paste the code from the Claude sign-in tab"
+                      class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400"
+                    />
+                    <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Sign in in the tab that opened, then copy the code it
+                      shows you and paste it here.
+                    </p>
+                  </div>
+                }
+              >
+                <div class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">
+                  <p class="text-sm">
+                    You'll be asked to sign in with your Claude account in a new
+                    tab, then copy a code back here to finish connecting. This
+                    isn't an Anthropic-supported integration — it uses the same
+                    sign-in Claude Code's own CLI uses.
+                  </p>
+                </div>
+              </Show>
+            </Show>
+
             <Show when={error()}>
               <div class="p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
                 {error()}
@@ -404,7 +520,12 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
               <button
                 onClick={handleConnect}
                 disabled={
-                  isConnecting() || (authMethod() === 'api_key' && !apiKey())
+                  isConnecting() ||
+                  (authMethod() === 'api_key' && !apiKey()) ||
+                  (authMethod() === 'oauth' &&
+                    props.provider!.id === 'anthropic' &&
+                    !!anthropicOAuthState() &&
+                    !anthropicPastedCode().trim())
                 }
                 class="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
               >
@@ -413,9 +534,13 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
                 </Show>
                 {isConnecting()
                   ? 'Connecting...'
-                  : authMethod() === 'oauth'
-                    ? 'Continue to OAuth'
-                    : 'Connect'}
+                  : authMethod() === 'oauth' &&
+                      props.provider!.id === 'anthropic' &&
+                      anthropicOAuthState()
+                    ? 'Connect'
+                    : authMethod() === 'oauth'
+                      ? 'Continue to OAuth'
+                      : 'Connect'}
               </button>
             </div>
           </div>
