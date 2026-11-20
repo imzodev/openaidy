@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildSystemPrompt } from './build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type { ToolDefinition } from '@openaidy/runtime';
+import type { SkillRegistry } from '../skills';
 
 function mockPersonality(blank: string[]): AgentPersonalityService {
   return {
@@ -291,5 +292,58 @@ describe('buildSystemPrompt — workspace:// external-tool guidance', () => {
       tools: [OTHER_TOOL],
     });
     expect(prompt).not.toContain('workspace://<relative-path>');
+  });
+});
+
+describe('buildSystemPrompt — tool use and skills', () => {
+  const tool = (name: string): ToolDefinition => ({
+    name,
+    description: `${name} description`,
+    parameters: { type: 'object', properties: {} },
+  });
+  const skillRegistry = {
+    getSkillsForAgent: () => [
+      {
+        id: 'brand-voice',
+        name: 'Brand voice',
+        description: 'How we write',
+        body: 'SECRET_BODY_TEXT',
+      },
+    ],
+  } as unknown as SkillRegistry;
+
+  it('adds the tool-use rules and omits tools the agent does not hold', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      tools: [tool('workspace_read')],
+    });
+    expect(prompt).toContain('[TOOL_USE]');
+    expect(prompt).not.toContain('[NOT ENABLED]');
+    expect(prompt).not.toContain('exec_run');
+  });
+
+  it('lists skills without their bodies when skill_read is available', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      skillIds: ['brand-voice'],
+      skillRegistry,
+      tools: [tool('skill_read')],
+    });
+    expect(prompt).toContain('brand-voice: Brand voice');
+    expect(prompt).toContain('skill_read');
+    expect(prompt).not.toContain('SECRET_BODY_TEXT');
+  });
+
+  it('falls back to inlining skill bodies when no tools are offered', async () => {
+    const prompt = await buildSystemPrompt({
+      agentId: 'a1',
+      basePrompt: 'BASE',
+      skillIds: ['brand-voice'],
+      skillRegistry,
+    });
+    expect(prompt).toContain('[SKILL_CONTEXTS]');
+    expect(prompt).toContain('SECRET_BODY_TEXT');
   });
 });

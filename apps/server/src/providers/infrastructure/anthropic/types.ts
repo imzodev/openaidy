@@ -21,9 +21,13 @@ export type AnthropicMessageRole = 'user' | 'assistant';
 /**
  * Anthropic content block types
  */
+/** Prompt-caching breakpoint: everything up to and including this block. */
+export type AnthropicCacheControl = { type: 'ephemeral' };
+
 export type AnthropicTextBlock = {
   type: 'text';
   text: string;
+  cache_control?: AnthropicCacheControl;
 };
 
 export type AnthropicImageBlock = {
@@ -33,6 +37,7 @@ export type AnthropicImageBlock = {
     media_type: string;
     data: string;
   };
+  cache_control?: AnthropicCacheControl;
 };
 
 export type AnthropicToolUseBlock = {
@@ -40,6 +45,7 @@ export type AnthropicToolUseBlock = {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  cache_control?: AnthropicCacheControl;
 };
 
 export type AnthropicToolResultBlock = {
@@ -47,6 +53,7 @@ export type AnthropicToolResultBlock = {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  cache_control?: AnthropicCacheControl;
 };
 
 /**
@@ -73,6 +80,7 @@ export type AnthropicToolDefinition = {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
+  cache_control?: AnthropicCacheControl;
 };
 
 /**
@@ -81,7 +89,7 @@ export type AnthropicToolDefinition = {
 export type AnthropicMessagesRequest = {
   model: string;
   messages: AnthropicMessage[];
-  system?: string;
+  system?: string | AnthropicTextBlock[];
   max_tokens: number;
   temperature?: number;
   top_p?: number;
@@ -200,6 +208,12 @@ export type AnthropicAdapterConfig = {
   defaultMaxTokens?: number;
   /** Default temperature */
   defaultTemperature?: number;
+  /**
+   * Mark cache breakpoints (tools, system prompt, latest message). Defaults
+   * to on for api.anthropic.com only: Anthropic-compatible proxies may not
+   * accept `cache_control`.
+   */
+  enablePromptCaching?: boolean;
   /** Beta features to enable */
   betas?: string[];
   /** Custom headers */

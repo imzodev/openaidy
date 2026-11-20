@@ -13,7 +13,7 @@ export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
           type: 'string',
           description:
             'The agent ID to invoke. Use agents_list to discover available agents. ' +
-            'You may invoke yourself if you want to run in a different session.',
+            'Delegate only work another agent is better placed to do; do not invoke yourself.',
         },
         content: {
           type: 'string',
@@ -30,7 +30,7 @@ export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
       required: ['agentId', 'content'],
     },
 
-    async execute(args, _ctx) {
+    async execute(args, ctx) {
       const agentId = args['agentId'];
       const content = args['content'];
       const sessionId =
@@ -63,6 +63,7 @@ export function createAgentsInvokeTool(deps: AgentToolsDeps): BuiltinTool {
         agentId: agentId.trim(),
         content: content.trim(),
         ...(sessionId ? { sessionId } : {}),
+        ...(ctx.sessionId ? { parentSessionId: ctx.sessionId } : {}),
       });
 
       if (!result.ok) {
@@ -171,6 +172,7 @@ export function createAgentsInvokeAndWaitTool(
         agentId: agentId.trim(),
         content: content.trim(),
         ...(sessionId ? { sessionId } : {}),
+        ...(ctx?.sessionId ? { parentSessionId: ctx.sessionId } : {}),
       });
 
       if (!dispatchResult.ok) {

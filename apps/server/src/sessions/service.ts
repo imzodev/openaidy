@@ -39,8 +39,36 @@ import {
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
 } from '@openaidy/db';
-import type { SessionType, ModelPricing } from '@openaidy/shared-types';
-import { estimateCost } from '@openaidy/shared-types';
+import type {
+  SessionType,
+  ModelPricing,
+  CompactionSummaryMetadata,
+} from '@openaidy/shared-types';
+import { estimateCost, COMPACTION_SUMMARY_KIND } from '@openaidy/shared-types';
+import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
+import { ToolCallGuard } from './tool-call-guard.js';
+import { findPresetModel } from '../providers/model-limits.js';
+import {
+  DEFER_MCP_TOOLS_ABOVE,
+  TOOL_SEARCH_DEFINITION,
+  TOOL_SEARCH_NAME,
+  buildDeferredToolsBlock,
+  formatToolSearchResult,
+  loadedToolNamesFromHistory,
+  searchTools,
+} from './deferred-tools.js';
+import {
+  COMPACTION_INSTRUCTIONS,
+  COMPACTION_TRIGGER_FRACTION,
+  applyLatestSummary,
+  buildSummaryBlock,
+  buildSummaryRequest,
+  findCompactionCut,
+  renderTranscript,
+} from './compaction.js';
+
+/** Context budget when neither config nor the model says otherwise. */
+const DEFAULT_CONTEXT_BUDGET_TOKENS = 100_000;
 import {
   findSessionRecord,
   createSessionRecord,
@@ -67,7 +95,10 @@ import type {
   SubmitMessageResult,
   SessionMessageServiceOptions,
 } from './types';
-import { buildSystemPrompt } from '../prompts/build-system-prompt';
+import {
+  buildDynamicContextBlock,
+  buildSystemPrompt,
+} from '../prompts/build-system-prompt';
 import type { AddonPromptSummary } from '../prompts/build-system-prompt';
 import type { AgentPersonalityService } from '../agents/personality-service';
 import type {
@@ -105,12 +136,22 @@ export const ALWAYS_ON_TOOLS = [
  * The built-in tools an agent may use: its own list plus the always-on
  * ones, minus the ones a private chat can't use. The one rule for both
  * what the model is offered and what may run.
+ *
+ * `skill_read` rides along with assigned skills: skill bodies are no longer
+ * pasted into the system prompt, so it is the only way to reach them.
  */
 export function enabledBuiltinTools(
   agentTools: string[] | undefined,
   ephemeral: boolean,
+  hasSkills = false,
 ): string[] {
-  const tools = [...new Set([...(agentTools ?? []), ...ALWAYS_ON_TOOLS])];
+  const tools = [
+    ...new Set([
+      ...(agentTools ?? []),
+      ...ALWAYS_ON_TOOLS,
+      ...(hasSkills ? ['skill_read'] : []),
+    ]),
+  ];
   return ephemeral
     ? tools.filter((name) => !EPHEMERAL_UNSAFE_TOOLS.has(name))
     : tools;
@@ -208,8 +249,14 @@ export class SessionMessageService {
   private readonly modelPricing: Record<string, ModelPricing> | undefined;
   private readonly maxToolRounds: number;
   private readonly maxToolOutputChars: number;
-  private readonly maxContextTokens: number;
+  private readonly maxContextTokensOverride: number | undefined;
   private readonly historyToolResultsKept: number;
+  private readonly maxToolCallsPerRound: number;
+  private readonly maxDelegationDepth: number;
+  private readonly deferMcpToolsAbove: number;
+  // How many agent-to-agent hops led to each live session. Only sessions
+  // started by dispatchAgent are tracked; a missing entry means depth 0.
+  private readonly delegationDepth = new Map<string, number>();
   // In-memory counter for ONBOARDING messages per session
   // Key: sessionId, Value: remaining count (2 = first message + first response)
   private readonly onboardingCounter = new Map<string, number>();
@@ -241,8 +288,12 @@ export class SessionMessageService {
     this.modelPricing = options.modelPricing;
     this.maxToolRounds = options.maxToolRounds ?? 25;
     this.maxToolOutputChars = options.maxToolOutputChars ?? 24_000;
-    this.maxContextTokens = options.maxContextTokens ?? 100_000;
+    this.maxContextTokensOverride = options.maxContextTokens;
     this.historyToolResultsKept = options.historyToolResultsKept ?? 10;
+    this.maxToolCallsPerRound = options.maxToolCallsPerRound ?? 12;
+    this.maxDelegationDepth = options.maxDelegationDepth ?? 3;
+    this.deferMcpToolsAbove =
+      options.deferMcpToolsAbove ?? DEFER_MCP_TOOLS_ABOVE;
 
     if (options.repositories) {
       this.sessionsRepo = options.repositories.sessions;
@@ -352,17 +403,117 @@ export class SessionMessageService {
   }
 
   /**
-   * Keep the loop history within `maxContextTokens` by eliding the *bodies* of
-   * the oldest tool results (issue #437). Recent tool results — the model's
-   * working set — are preserved; only prior, already-consumed outputs are
-   * collapsed to a short notice. Assistant/user/system turns and the
-   * tool_call↔tool_result pairing are never touched (only a tool message's
-   * `content` shrinks), so the request stays provider-valid. Mutates in place
-   * so the elision persists across subsequent rounds. Returns the count elided.
-   *
-   * The full results remain in the persisted transcript; this only shapes what
-   * is re-sent to the model.
+   * Input-token budget for one request. An explicit `maxContextTokens`
+   * option wins; otherwise it is sized from the model's context window,
+   * leaving room for the reply, with a fixed fallback for unknown models.
    */
+  private resolveContextBudget(
+    model: { contextWindow?: number; maxOutputTokens?: number } | undefined,
+  ): number {
+    if (this.maxContextTokensOverride !== undefined) {
+      return this.maxContextTokensOverride;
+    }
+    if (!model?.contextWindow) return DEFAULT_CONTEXT_BUDGET_TOKENS;
+    const reservedForOutput = Math.min(model.maxOutputTokens ?? 8_192, 32_000);
+    return Math.max(
+      8_000,
+      Math.floor((model.contextWindow - reservedForOutput) * 0.8),
+    );
+  }
+
+  /**
+   * Summarize every turn before the last few with one model call, persist
+   * the summary, and return where the kept history starts. Returns
+   * undefined (and leaves history untouched) when there is too little to
+   * summarize or the call fails — the per-round elision still applies.
+   */
+  private async summarizeOlderTurns(params: {
+    sessionId: string;
+    runId: string;
+    rows: ReadonlyArray<SessionMessageRecord | SessionMessage>;
+    previousSummary: string | undefined;
+    modelId: string;
+    providerId: string | undefined;
+    budget: number;
+    tokensBefore: number;
+  }): Promise<{ cut: number; summary: string } | undefined> {
+    const cut = findCompactionCut(params.rows);
+    const lastCovered = params.rows[cut - 1];
+    if (cut === 0 || !lastCovered) return undefined;
+
+    // Leave the summarizer half the budget for its input (~4 chars/token).
+    const transcript = renderTranscript(
+      params.rows.slice(0, cut),
+      params.budget * 2,
+    );
+    let summary = '';
+    let failure = 'empty summary';
+    try {
+      const result = await this.providers.invocation.invoke(
+        {
+          model: params.modelId,
+          messages: [
+            { role: 'system', content: COMPACTION_INSTRUCTIONS },
+            {
+              role: 'user',
+              content: buildSummaryRequest(params.previousSummary, transcript),
+            },
+          ],
+          maxTokens: 2_048,
+        },
+        {
+          modelId: params.modelId,
+          ...(params.providerId !== undefined && {
+            providerId: params.providerId,
+          }),
+        },
+      );
+      if (result.ok) summary = result.value.content.trim();
+      else failure = result.error.message;
+    } catch (err) {
+      failure = err instanceof Error ? err.message : String(err);
+    }
+    if (!summary) {
+      // A failed summary must never fail the user's run.
+      this.logger?.warn(
+        { sessionId: params.sessionId, runId: params.runId, error: failure },
+        'Conversation compaction failed — keeping full history',
+      );
+      return undefined;
+    }
+
+    const replacedChars = params.rows
+      .slice(0, cut)
+      .reduce((sum, r) => sum + r.content.length, 0);
+    const metadata: CompactionSummaryMetadata = {
+      kind: COMPACTION_SUMMARY_KIND,
+      coversThroughSequence: lastCovered.sequence,
+      tokensBefore: params.tokensBefore,
+      tokensAfter: Math.max(
+        0,
+        params.tokensBefore - Math.ceil((replacedChars - summary.length) / 4),
+      ),
+    };
+    await this.appendMessage({
+      sessionId: params.sessionId,
+      runId: params.runId,
+      role: 'system',
+      content: summary,
+      metadata,
+    });
+    this.logger?.info(
+      {
+        sessionId: params.sessionId,
+        runId: params.runId,
+        summarizedMessages: cut,
+        tokensBefore: metadata.tokensBefore,
+        tokensAfter: metadata.tokensAfter,
+      },
+      'Compacted conversation — older turns replaced by a summary',
+    );
+    return { cut, summary };
+  }
+
   /**
    * When rebuilding a session's history for a new run, summarize the bodies of
    * older tool results so a long multi-run session doesn't re-send every large
@@ -403,8 +554,17 @@ export class SessionMessageService {
     return trimmed;
   }
 
-  private compactContextInPlace(messages: Message[]): number {
-    const budget = this.maxContextTokens;
+  /**
+   * Keep the loop history within the context budget by eliding the *bodies*
+   * of the oldest tool results (issue #437). Recent tool results — the
+   * model's working set — are preserved; only prior, already-consumed outputs
+   * are collapsed to a short notice. Assistant/user/system turns and the
+   * tool_call↔tool_result pairing are never touched (only a tool message's
+   * `content` shrinks), so the request stays provider-valid. Mutates in place
+   * so the elision persists across subsequent rounds. Returns the count
+   * elided. The full results remain in the persisted transcript.
+   */
+  private compactContextInPlace(messages: Message[], budget: number): number {
     if (this.estimateTokens(messages) <= budget) return 0;
 
     const ELISION_PREFIX = '[Earlier tool output elided to fit context:';
@@ -1086,6 +1246,8 @@ export class SessionMessageService {
     content: string;
     sessionId?: string;
     sessionTitle?: string;
+    /** The session whose agent is delegating, to bound invocation chains. */
+    parentSessionId?: string;
   }): Promise<
     | {
         ok: true;
@@ -1102,6 +1264,22 @@ export class SessionMessageService {
     }
     if (!content) {
       return { ok: false, error: 'content is required' };
+    }
+
+    const depth = params.parentSessionId
+      ? (this.delegationDepth.get(params.parentSessionId) ?? 0) + 1
+      : 0;
+    if (depth > this.maxDelegationDepth) {
+      return {
+        ok: false,
+        error: `Not invoked: this request is already ${depth - 1} agent hops deep (limit ${this.maxDelegationDepth}). Finish the work yourself or report back instead of delegating further.`,
+      };
+    }
+    if (params.parentSessionId && params.sessionId === params.parentSessionId) {
+      return {
+        ok: false,
+        error: 'Not invoked: an agent cannot send work to its own session.',
+      };
     }
 
     if (this.agents) {
@@ -1140,6 +1318,7 @@ export class SessionMessageService {
         sessionId = session.id;
       }
 
+      if (depth > 0) this.delegationDepth.set(sessionId, depth);
       const done = this.submitMessageStreaming({
         sessionId,
         role: 'user',
@@ -1147,6 +1326,17 @@ export class SessionMessageService {
         agentId,
         onStreamEvent: () => {},
       });
+      if (depth > 0) {
+        void (async () => {
+          try {
+            await done;
+          } catch (_err) {
+            // Reported to whoever awaits `done`; here we only clean up.
+          } finally {
+            this.delegationDepth.delete(sessionId);
+          }
+        })();
+      }
 
       return { ok: true, sessionId, done };
     } catch (err) {
@@ -1332,21 +1522,33 @@ export class SessionMessageService {
     // file-path note (so the model can reach for a vision-capable tool).
     // Unknown capabilities are treated as capable (optimistic): a provider
     // that can't handle the block will surface its own error.
+    // The same lookup also sizes the context budget from the model's window.
     let modelSupportsVision = true;
     let modelSupportsAudio = true;
-    if (this.attachments && providerEntry) {
-      const modelResult = await providerEntry.provider
-        .getModel(modelId)
-        .catch(() => null);
-      if (modelResult?.ok && modelResult.value.capabilities.length > 0) {
-        modelSupportsVision = modelResult.value.capabilities.includes('vision');
-        modelSupportsAudio =
-          modelResult.value.capabilities.includes('audio_input');
-      }
+    const modelResult = providerEntry
+      ? await providerEntry.provider.getModel(modelId).catch(() => null)
+      : null;
+    const modelDescriptor = modelResult?.ok ? modelResult.value : undefined;
+    if (this.attachments && modelDescriptor?.capabilities.length) {
+      modelSupportsVision = modelDescriptor.capabilities.includes('vision');
+      modelSupportsAudio = modelDescriptor.capabilities.includes('audio_input');
     }
+    const presetLimits = findPresetModel(modelId);
+    const contextBudget = this.resolveContextBudget({
+      ...presetLimits,
+      ...(modelDescriptor?.contextWindow !== undefined && {
+        contextWindow: modelDescriptor.contextWindow,
+      }),
+      ...(modelDescriptor?.maxOutputTokens !== undefined && {
+        maxOutputTokens: modelDescriptor.maxOutputTokens,
+      }),
+    });
 
-    // 5. Build request from session history + new message
-    const history = await this.listMessages(input.sessionId);
+    // 5. Build request from session history + new message. Messages already
+    // folded into a compaction summary are replaced by that summary.
+    const { messages: history, summary: priorSummary } = applyLatestSummary<
+      SessionMessageRecord | SessionMessage
+    >(await this.listMessages(input.sessionId));
     const historyMessages: Message[] = [];
     for (const m of history) {
       const msgRole = (m as { role: string }).role;
@@ -1462,14 +1664,52 @@ export class SessionMessageService {
       );
     }
 
+    // Long conversations: replace older turns with a model-written summary
+    // instead of re-sending them forever. Each history row maps to exactly
+    // one entry of historyMessages, so the cut index applies to both.
+    let conversationSummary = priorSummary;
+    let summarized = false;
+    const historyTokens = this.estimateTokens(historyMessages);
+    if (historyTokens > contextBudget * COMPACTION_TRIGGER_FRACTION) {
+      const compacted = await this.summarizeOlderTurns({
+        sessionId: input.sessionId,
+        runId: run.id,
+        rows: history,
+        previousSummary: priorSummary,
+        modelId,
+        providerId: input.providerId ?? providerId,
+        budget: contextBudget,
+        tokensBefore: historyTokens,
+      });
+      if (compacted) {
+        historyMessages.splice(0, compacted.cut);
+        conversationSummary = compacted.summary;
+        summarized = true;
+      }
+    }
+
     // 5. Build tool definitions (needed for system prompt and invocation)
     const mcpTools = this.buildMcpTools(agentId);
     const nativeToolDefs = this.buildNativeToolDefinitions(
       agentId,
       input.sessionId,
     );
-    // All tool definitions sent to the model (MCP + builtin, merged)
-    const allTools: ToolDefinition[] = [...mcpTools, ...nativeToolDefs];
+    // With many MCP tools, send only the ones this session has already used
+    // and let the model load others on demand through tool_search.
+    const deferMcpTools = mcpTools.length > this.deferMcpToolsAbove;
+    const loadedMcpTools = deferMcpTools
+      ? loadedToolNamesFromHistory(history)
+      : undefined;
+    const initialMcpTools = loadedMcpTools
+      ? mcpTools.filter((t) => loadedMcpTools.has(t.name))
+      : mcpTools;
+    // All tool definitions sent to the model (MCP + builtin, merged). Tools
+    // loaded by tool_search are appended mid-run.
+    const allTools: ToolDefinition[] = [
+      ...initialMcpTools,
+      ...nativeToolDefs,
+      ...(deferMcpTools ? [TOOL_SEARCH_DEFINITION] : []),
+    ];
 
     // Extract workspace permissions from agent config for honest reporting
     const workspacePermissions: WorkspacePermissionsInfo | undefined = agent
@@ -1518,8 +1758,10 @@ export class SessionMessageService {
     }
 
     const promptContext = await this.resolvePromptContext(input.sessionId);
+    // [NOW]/[CONVERSATION] go in their own trailing system message, not in
+    // the prompt, so the prompt stays byte-identical across requests and
+    // can be served from the provider's prompt cache.
     const systemPrompt = await buildSystemPrompt({
-      context: promptContext,
       agentId,
       basePrompt: agent?.systemPrompt ?? '',
       ...(agent?.skills && { skillIds: agent.skills }),
@@ -1538,9 +1780,22 @@ export class SessionMessageService {
       onboardingMessagesRemaining,
     });
 
-    const messages: Message[] = systemPrompt
-      ? [{ role: 'system' as const, content: systemPrompt }, ...historyMessages]
-      : historyMessages;
+    // The deferred index lists every MCP tool, loaded or not, so it stays
+    // identical across runs and keeps the prompt cacheable.
+    const stablePrompt =
+      systemPrompt +
+      (deferMcpTools ? buildDeferredToolsBlock(mcpTools) : '') +
+      (conversationSummary ? buildSummaryBlock(conversationSummary) : '');
+    const dynamicContext = buildDynamicContextBlock(promptContext).trim();
+    const messages: Message[] = [
+      ...(stablePrompt
+        ? [{ role: 'system' as const, content: stablePrompt }]
+        : []),
+      ...(dynamicContext
+        ? [{ role: 'system' as const, content: dynamicContext }]
+        : []),
+      ...historyMessages,
+    ];
 
     // 6. Invoke provider with streaming (agentic tool-call loop)
     // Build invocation options: client overrides take priority, then agent-resolved values
@@ -1599,6 +1854,11 @@ export class SessionMessageService {
       let peakEstTokens = 0;
       let peakPromptTokens = 0;
       let compactionFired = false;
+      const toolGuard = new ToolCallGuard({
+        maxCallsPerRound: this.maxToolCallsPerRound,
+        maxRefusals: 3,
+        isReadOnly: (name) => this.isReadOnlyTool(name),
+      });
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         // On the final permitted round, stop offering tools so the model is
         // forced to turn what it has gathered into a text answer. Without this,
@@ -1610,7 +1870,10 @@ export class SessionMessageService {
         // "continue" (which starts a fresh run that then finishes). Reserving
         // the final round for a forced text response guarantees the run always
         // ends with a real, non-empty answer instead. (See run Ozpbnm8Y…)
-        const isFinalRound = round === MAX_TOOL_ROUNDS - 1;
+        // The guard also ends the loop early when the model keeps repeating
+        // calls it was already told not to repeat.
+        const stuckRepeating = toolGuard.shouldForceFinalAnswer;
+        const isFinalRound = round === MAX_TOOL_ROUNDS - 1 || stuckRepeating;
         const offerTools = allTools.length > 0 && !isFinalRound;
         if (isFinalRound && allTools.length > 0) {
           this.logger?.warn(
@@ -1618,8 +1881,12 @@ export class SessionMessageService {
               sessionId: input.sessionId,
               runId: run.id,
               maxRounds: MAX_TOOL_ROUNDS,
+              round,
+              stuckRepeating,
             },
-            'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
+            stuckRepeating
+              ? 'Agent kept repeating refused tool calls — forcing a final text response without tools'
+              : 'Agentic loop hit MAX_TOOL_ROUNDS — forcing a final text response without tools',
           );
         }
 
@@ -1627,7 +1894,7 @@ export class SessionMessageService {
         // tool-result bodies before sending (issue #437). Unbounded history is
         // the root cause behind the round-exhaustion/stall symptom — a single
         // run here reached ~1M prompt tokens on MiniMax-M3 and degraded.
-        const elided = this.compactContextInPlace(loopMessages);
+        const elided = this.compactContextInPlace(loopMessages, contextBudget);
         if (elided > 0) {
           compactionFired = true;
           this.logger?.warn(
@@ -1636,7 +1903,7 @@ export class SessionMessageService {
               runId: run.id,
               round,
               elided,
-              budgetTokens: this.maxContextTokens,
+              budgetTokens: contextBudget,
               estTokens: this.estimateTokens(loopMessages),
             },
             'Compacted context — elided oldest tool outputs to fit the token budget',
@@ -1664,18 +1931,18 @@ export class SessionMessageService {
             estTokens: roundEstTokens,
             messageCount: loopMessages.length,
             largestToolResultChars,
-            budgetTokens: this.maxContextTokens,
+            budgetTokens: contextBudget,
           },
           'Agentic loop round context size',
         );
-        if (roundEstTokens > this.maxContextTokens * SOFT_BUDGET_FRACTION) {
+        if (roundEstTokens > contextBudget * SOFT_BUDGET_FRACTION) {
           this.logger?.warn(
             {
               sessionId: input.sessionId,
               runId: run.id,
               round,
               estTokens: roundEstTokens,
-              budgetTokens: this.maxContextTokens,
+              budgetTokens: contextBudget,
             },
             'Agentic loop request nearing the context token budget',
           );
@@ -1898,7 +2165,9 @@ export class SessionMessageService {
               : {}),
           } as Message);
 
-          for (const tc of toolCalls) {
+          // Runs one call and returns what to persist; persisting happens
+          // below, in call order, so a turn's calls can execute concurrently.
+          const executeToolCall = async (tc: LocalToolCall) => {
             let toolContent: string | undefined;
             let toolIsError = false;
             let absolutePathFromTool: string | undefined;
@@ -1909,14 +2178,42 @@ export class SessionMessageService {
             // registered as attachments on the tool result message below.
             let persistedImages: PersistedImage[] = [];
 
+            if (deferMcpTools && tc.name === TOOL_SEARCH_NAME) {
+              const maxResults = Number(tc.arguments['max_results']);
+              const found = searchTools(
+                mcpTools,
+                String(tc.arguments['query'] ?? ''),
+                Number.isFinite(maxResults) && maxResults > 0
+                  ? maxResults
+                  : undefined,
+              );
+              for (const tool of found) {
+                if (!allTools.some((t) => t.name === tool.name)) {
+                  allTools.push(tool);
+                }
+              }
+              return {
+                interrupt: undefined,
+                toolContent: formatToolSearchResult(found) as
+                  | string
+                  | undefined,
+                toolIsError: false,
+                absolutePathFromTool,
+                mediaShareFromTool,
+                persistedImages,
+              };
+            }
+
             // Route to builtin (native) tool only if it exists in the registry
             // AND is still enabled for this agent (tools list may have changed mid-session)
             // AND — for a private chat — isn't one of the tools that writes
             // outside this session's own (ephemeral) history (backstop; these
             // are already withheld from the model's tool definitions above).
+            const currentAgent = this.agents?.getAgent(agentId);
             const builtinTool = enabledBuiltinTools(
-              this.agents?.getAgent(agentId)?.tools,
+              currentAgent?.tools,
               this.isEphemeral(input.sessionId),
+              (currentAgent?.skills?.length ?? 0) > 0,
             ).includes(tc.name)
               ? this.builtinTools?.get(tc.name)
               : undefined;
@@ -2043,10 +2340,17 @@ export class SessionMessageService {
                       );
                     });
                     return {
-                      ok: true,
-                      userMessage,
-                      assistantMessage: undefined as unknown as never,
-                      run,
+                      interrupt: {
+                        ok: true as const,
+                        userMessage,
+                        assistantMessage: undefined as unknown as never,
+                        run,
+                      },
+                      toolContent,
+                      toolIsError,
+                      absolutePathFromTool,
+                      mediaShareFromTool,
+                      persistedImages,
                     };
                   }
                 } catch {
@@ -2261,6 +2565,80 @@ export class SessionMessageService {
                 }
               }
             }
+            return {
+              interrupt: undefined,
+              toolContent,
+              toolIsError,
+              absolutePathFromTool,
+              mediaShareFromTool,
+              persistedImages,
+            };
+          };
+
+          const verdicts = toolGuard.review(toolCalls);
+          const runToolCall = async (tc: LocalToolCall, index: number) => {
+            const verdict = verdicts[index];
+            if (verdict?.action === 'skip') {
+              return {
+                interrupt: undefined,
+                toolContent: verdict.content as string | undefined,
+                toolIsError: verdict.reason !== 'repeat',
+                absolutePathFromTool: undefined,
+                mediaShareFromTool: undefined,
+                persistedImages: [] as PersistedImage[],
+              };
+            }
+            const execution = await executeToolCall(tc).catch((e: unknown) => ({
+              interrupt: undefined,
+              toolContent:
+                `Error: ${e instanceof Error ? e.message : String(e)}` as
+                  | string
+                  | undefined,
+              toolIsError: true,
+              absolutePathFromTool: undefined,
+              mediaShareFromTool: undefined,
+              persistedImages: [] as PersistedImage[],
+            }));
+            if (execution.toolContent !== undefined && !execution.interrupt) {
+              toolGuard.record(tc, round, {
+                ok: !execution.toolIsError,
+                content: execution.toolContent,
+              });
+            }
+            return execution;
+          };
+
+          // Independent reads gain nothing from running one at a time; any
+          // call that may write keeps the whole turn sequential so ordering
+          // between dependent side effects is preserved.
+          const runConcurrently =
+            toolCalls.length > 1 &&
+            toolCalls.every(
+              (tc, index) =>
+                verdicts[index]?.action === 'skip' ||
+                this.isReadOnlyTool(tc.name),
+            );
+          const pending = runConcurrently
+            ? toolCalls.map((tc, index) => runToolCall(tc, index))
+            : undefined;
+          if (runConcurrently) {
+            this.logger?.debug(
+              { runId: run.id, round, calls: toolCalls.length },
+              'Running read-only tool calls concurrently',
+            );
+          }
+
+          for (const [index, tc] of toolCalls.entries()) {
+            const execution = await (pending?.[index] ??
+              runToolCall(tc, index));
+            if (execution.interrupt) return execution.interrupt;
+            const {
+              toolContent,
+              toolIsError,
+              absolutePathFromTool,
+              mediaShareFromTool,
+              persistedImages,
+            } = execution;
 
             // Only persist tool result if we have content
             if (toolContent !== undefined) {
@@ -2499,8 +2877,9 @@ export class SessionMessageService {
           maxRounds: this.maxToolRounds,
           peakEstTokens,
           peakPromptTokens,
-          budgetTokens: this.maxContextTokens,
+          budgetTokens: contextBudget,
           compactionFired,
+          summarized,
         },
         'Agentic run context summary',
       );
@@ -2555,6 +2934,22 @@ export class SessionMessageService {
   }
 
   /**
+   * Whether a tool only reads state. MCP tools count only when their server
+   * declares `readOnlyHint`; unknown tools are assumed to write.
+   */
+  private isReadOnlyTool(name: string): boolean {
+    if (READ_ONLY_BUILTIN_TOOLS.has(name) || name === TOOL_SEARCH_NAME) {
+      return true;
+    }
+    const [serverId, toolName] = name.split('::');
+    if (!serverId || !toolName || !this.mcp) return false;
+    return (
+      this.mcp.getTools(serverId).find((t) => t.name === toolName)?.readOnly ===
+      true
+    );
+  }
+
+  /**
    * Build ToolDefinition[] (schema only, no executor) from the agent's
    * nativeTools list against the BuiltinToolRegistry.
    * These are completely separate from MCP tools.
@@ -2568,7 +2963,11 @@ export class SessionMessageService {
     // Reminders and reaching the owner are part of every agent, like
     // remembering what was said; they don't need to be picked per agent.
     return this.builtinTools.getDefinitions(
-      enabledBuiltinTools(agent?.tools, this.isEphemeral(sessionId)),
+      enabledBuiltinTools(
+        agent?.tools,
+        this.isEphemeral(sessionId),
+        (agent?.skills?.length ?? 0) > 0,
+      ),
     );
   }
 

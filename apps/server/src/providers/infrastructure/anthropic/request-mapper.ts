@@ -8,9 +8,12 @@ import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
 import type {
   AnthropicMessage,
   AnthropicContentBlock,
+  AnthropicTextBlock,
   AnthropicToolDefinition,
   AnthropicMessagesRequest,
 } from './types';
+
+const EPHEMERAL = { type: 'ephemeral' } as const;
 
 // =====================
 // Message Mapping
@@ -182,6 +185,30 @@ export function mapToolChoice(
   }
 }
 
+/**
+ * Rolling breakpoint on the newest message, so each tool round reads the
+ * whole conversation so far from cache and only pays for what is new.
+ * Empty text blocks can't carry `cache_control`, so those are skipped.
+ */
+function markLastMessageForCaching(messages: AnthropicMessage[]): void {
+  const last = messages.at(-1);
+  if (!last) return;
+  if (typeof last.content === 'string') {
+    if (last.content) {
+      last.content = [
+        { type: 'text', text: last.content, cache_control: EPHEMERAL },
+      ];
+    }
+    return;
+  }
+  const block = last.content.at(-1);
+  if (!block || (block.type === 'text' && !block.text)) return;
+  last.content[last.content.length - 1] = {
+    ...block,
+    cache_control: EPHEMERAL,
+  };
+}
+
 // =====================
 // Request Mapping
 // =====================
@@ -195,21 +222,38 @@ export function mapRequest(
     defaultMaxTokens?: number;
     defaultTemperature?: number;
     systemInstruction?: string;
+    /** Add cache breakpoints on tools, the first system block and the last message. */
+    promptCaching?: boolean;
   },
 ): AnthropicMessagesRequest {
-  // Extract system instruction from messages or use provided one
-  const systemFromMessages = extractSystemInstruction(request.messages);
-  const systemInstruction = options?.systemInstruction ?? systemFromMessages;
-
+  const promptCaching = options?.promptCaching ?? false;
   const anthropicRequest: AnthropicMessagesRequest = {
     model: request.model,
     messages: mapMessages(request.messages),
     max_tokens: request.maxTokens ?? options?.defaultMaxTokens ?? 4096,
   };
 
-  // Add system instruction if present
-  if (systemInstruction) {
-    anthropicRequest.system = systemInstruction;
+  if (promptCaching && !options?.systemInstruction) {
+    // One block per system message so the stable prompt (first) can be
+    // cached apart from per-request context that follows it.
+    const blocks: AnthropicTextBlock[] = request.messages
+      .filter((msg) => msg.role === 'system' && msg.content)
+      .map((msg) => ({ type: 'text', text: msg.content }));
+    const first = blocks[0];
+    if (first) {
+      blocks[0] = { ...first, cache_control: EPHEMERAL };
+      anthropicRequest.system = blocks;
+    }
+  } else {
+    const systemInstruction =
+      options?.systemInstruction ?? extractSystemInstruction(request.messages);
+    if (systemInstruction) {
+      anthropicRequest.system = systemInstruction;
+    }
+  }
+
+  if (promptCaching) {
+    markLastMessageForCaching(anthropicRequest.messages);
   }
 
   // Add optional fields
@@ -233,7 +277,12 @@ export function mapRequest(
 
   // Map tools if present
   if (request.tools && request.tools.length > 0) {
-    anthropicRequest.tools = mapTools(request.tools);
+    const tools = mapTools(request.tools);
+    const lastTool = tools.at(-1);
+    if (promptCaching && lastTool) {
+      tools[tools.length - 1] = { ...lastTool, cache_control: EPHEMERAL };
+    }
+    anthropicRequest.tools = tools;
 
     const toolChoice = mapToolChoice(request.toolChoice);
     if (toolChoice) {

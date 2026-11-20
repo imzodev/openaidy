@@ -21,6 +21,7 @@ import {
 } from '@openaidy/runtime';
 import type { OpenAICompatibleAdapterConfig } from './types';
 import { createLogger } from '../../../lib/logger';
+import { mergeLeadingSystemMessages } from './request-mapper';
 import {
   IdentityAdapterCodec,
   DeepSeekAdapterCodec,
@@ -604,7 +605,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
   private mapMessages(
     messages: ModelRequest['messages'],
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
-    return messages.map((msg) => {
+    return mergeLeadingSystemMessages(messages).map((msg) => {
       if (msg.role === 'system') {
         return { role: 'system', content: msg.content };
       }
