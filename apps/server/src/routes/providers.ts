@@ -12,6 +12,10 @@ import {
   startMiniMaxOAuth,
   getMiniMaxOAuthStatus,
 } from '../providers/oauth/minimax';
+import {
+  startAnthropicOAuth,
+  completeAnthropicOAuth,
+} from '../providers/oauth/anthropic';
 import { DbOAuthStateStore } from '../providers/oauth/state-store';
 import { env } from '../lib/env.js';
 import type { Message, ModelRequest } from '@openaidy/runtime';
@@ -719,6 +723,80 @@ export const providerRoutes: FastifyPluginAsync<ProviderRoutesOptions> = async (
         if (!result.ok) {
           reply.code(result.error === 'expired' ? 410 : 404);
           return { error: result.error };
+        }
+        return result;
+      },
+    );
+
+    /**
+     * POST /providers/anthropic/connect/oauth/start
+     *
+     * Begins "Sign in with Claude" — a direct PKCE authorization-code
+     * flow against Anthropic's own OAuth client (not a route we can
+     * generalize to every provider; see `providers/oauth/anthropic.ts`
+     * for why). Returns the authorization URL for a popup and the
+     * `state` the frontend must send back with the pasted code.
+     */
+    app.post(
+      '/providers/anthropic/connect/oauth/start',
+      async (_request, reply) => {
+        try {
+          const result = await startAnthropicOAuth({
+            stateStore: oauthStateStore,
+          });
+          return { success: true, ...result };
+        } catch (err) {
+          reply.code(500);
+          return {
+            success: false,
+            error:
+              err instanceof Error
+                ? err.message
+                : 'Failed to start Anthropic OAuth flow',
+          };
+        }
+      },
+    );
+
+    /**
+     * POST /providers/anthropic/connect/oauth/complete
+     *
+     * Anthropic's registered redirect URI is a page it owns
+     * (console.anthropic.com), not one we control, so there's no
+     * server-to-server callback — the user copies the code shown
+     * there and pastes it into the connect dialog, which calls this.
+     */
+    app.post(
+      '/providers/anthropic/connect/oauth/complete',
+      async (request, reply) => {
+        const bodySchema = z.object({
+          code: z.string().min(1, 'Authorization code is required'),
+          state: z.string().min(1, 'state is required'),
+        });
+
+        const parseResult = bodySchema.safeParse(request.body);
+        if (!parseResult.success) {
+          reply.code(400);
+          return {
+            success: false,
+            error: parseResult.error.issues
+              .map((i) => `${i.path.join('.')}: ${i.message}`)
+              .join('; '),
+          };
+        }
+
+        const result = await completeAnthropicOAuth({
+          stateStore: oauthStateStore,
+          db: db as DatabaseClient,
+          code: parseResult.data.code,
+          state: parseResult.data.state,
+          ...(invalidateCredential
+            ? { onCredentialPersisted: invalidateCredential }
+            : {}),
+        });
+
+        if (!result.success) {
+          reply.code(400);
         }
         return result;
       },

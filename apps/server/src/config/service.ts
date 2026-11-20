@@ -26,7 +26,10 @@ import type {
   AppConfigServiceOptions,
   AppConfigStatus,
 } from './types';
-import type { CredentialProvider } from '@openaidy/shared-types';
+import type {
+  AuthMethodProvider,
+  CredentialProvider,
+} from '@openaidy/shared-types';
 import {
   MCP_SEED_MANIFEST_FILE,
   reconcilePreinstalledMcpServers,
@@ -41,6 +44,7 @@ export class AppConfigService {
   private readonly providers: ProviderServices;
   private readonly agents: AgentRegistry;
   private readonly credentialProvider: CredentialProvider | undefined;
+  private readonly authMethodProvider: AuthMethodProvider | undefined;
   private currentConfig: OpenAidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
   private readonly savedListeners = new Set<
@@ -56,6 +60,7 @@ export class AppConfigService {
     this.providers = options.providers;
     this.agents = options.agents;
     this.credentialProvider = options.credentialProvider;
+    this.authMethodProvider = options.authMethodProvider;
   }
 
   /**
@@ -316,11 +321,14 @@ export class AppConfigService {
     this.providers.registry.clear();
     this.issues = [];
 
-    const configService = createProviderConfigService(
-      this.credentialProvider
+    const configService = createProviderConfigService({
+      ...(this.credentialProvider
         ? { credentialProvider: this.credentialProvider }
-        : {},
-    );
+        : {}),
+      ...(this.authMethodProvider
+        ? { authMethodProvider: this.authMethodProvider }
+        : {}),
+    });
 
     for (const provider of config.providers) {
       if (!provider.enabled) {
