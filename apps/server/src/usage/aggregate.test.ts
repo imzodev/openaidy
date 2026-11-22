@@ -140,9 +140,7 @@ describe('aggregateUsage', () => {
       expect(report.byDayByModel).toHaveLength(3);
 
       const find = (day: string, modelId: string) =>
-        report.byDayByModel.find(
-          (e) => e.day === day && e.modelId === modelId,
-        );
+        report.byDayByModel.find((e) => e.day === day && e.modelId === modelId);
 
       const gptDay1 = find('2026-01-01', 'gpt-4o');
       expect(gptDay1?.totalTokens).toBe(150);

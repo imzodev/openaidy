@@ -59,7 +59,7 @@ macOS and Linux don't have a working in-app updater yet:
 
 - **macOS**: the updater code path is in place, but the release build
   (a universal Intel + Apple Silicon binary via `--target
-  universal-apple-darwin`) doesn't currently produce the signed
+universal-apple-darwin`) doesn't currently produce the signed
   `.app.tar.gz` artifact the updater needs — only the `.dmg` installer.
   Not yet root-caused; tracked as follow-up (see
   `docs/desktop/DEPENDENCIES.md`).

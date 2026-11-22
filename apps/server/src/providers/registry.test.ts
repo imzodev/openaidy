@@ -7,10 +7,7 @@ import {
   type ProviderDescriptor,
   type ModelRequest,
 } from '@openaidy/runtime';
-import {
-  ProviderRegistryService,
-  createProviderRegistry,
-} from './registry';
+import { ProviderRegistryService, createProviderRegistry } from './registry';
 
 /**
  * Helper to create a mock provider
@@ -44,7 +41,9 @@ function createMockProvider(overrides?: Partial<ModelProvider>): ModelProvider {
           capabilities: ['text_generation'],
         });
       }
-      return err(createProviderError('provider.model_not_found', 'Model not found'));
+      return err(
+        createProviderError('provider.model_not_found', 'Model not found'),
+      );
     },
     hasCapability: (cap) => descriptor.capabilities.includes(cap),
     invoke: async (req: ModelRequest) =>
@@ -105,7 +104,7 @@ describe('ProviderRegistryService', () => {
       registry.register(provider);
 
       expect(() => registry.register(provider)).toThrow(
-        'Provider "test-provider" is already registered'
+        'Provider "test-provider" is already registered',
       );
     });
 
@@ -298,7 +297,10 @@ describe('ProviderRegistryService', () => {
     it('should get default provider', () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       expect(registry.getDefaultProvider()).toBe(provider);
     });
@@ -308,7 +310,10 @@ describe('ProviderRegistryService', () => {
     it('should clear all providers', () => {
       const provider = createMockProvider();
       registry.register(provider);
-      registry.setDefault({ providerId: 'test-provider', modelId: 'test-model' });
+      registry.setDefault({
+        providerId: 'test-provider',
+        modelId: 'test-model',
+      });
 
       registry.clear();
 

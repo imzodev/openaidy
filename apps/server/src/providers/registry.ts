@@ -7,7 +7,7 @@ import type {
 
 /**
  * Provider Registry Service
- * 
+ *
  * Manages provider registration, resolution, and state.
  * All provider adapters must be registered here before use.
  */
@@ -21,10 +21,10 @@ export class ProviderRegistryService {
    */
   register(
     provider: ModelProvider,
-    options?: ProviderRegistrationOptions
+    options?: ProviderRegistrationOptions,
   ): void {
     const id = provider.descriptor.id;
-    
+
     if (this.providers.has(id)) {
       throw new Error(`Provider "${id}" is already registered`);
     }
@@ -34,7 +34,9 @@ export class ProviderRegistryService {
       enabled: options?.enabled ?? true,
       priority: options?.priority ?? 0,
       registeredAt: new Date(),
-      ...(options?.defaultModel !== undefined && { defaultModel: options.defaultModel }),
+      ...(options?.defaultModel !== undefined && {
+        defaultModel: options.defaultModel,
+      }),
       ...(options?.config !== undefined && { config: options.config }),
     };
 
@@ -96,7 +98,7 @@ export class ProviderRegistryService {
    */
   listAllDescriptors(): ProviderDescriptor[] {
     return Array.from(this.providers.values()).map(
-      (entry) => entry.provider.descriptor
+      (entry) => entry.provider.descriptor,
     );
   }
 

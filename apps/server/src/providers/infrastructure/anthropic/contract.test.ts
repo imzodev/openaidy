@@ -62,7 +62,12 @@ describe('Anthropic Adapter Contract', () => {
         providerId: 'test-anthropic',
         providerName: 'Test Anthropic',
       }),
-    supportedCapabilities: ['text_generation', 'streaming', 'tool_calls', 'vision'],
+    supportedCapabilities: [
+      'text_generation',
+      'streaming',
+      'tool_calls',
+      'vision',
+    ],
     defaultModelId: 'claude-sonnet-4-20250514',
     skipTests: [
       // Skip streaming tests that require actual SSE handling

@@ -168,7 +168,9 @@ export function createRouter() {
     view: TaskDetailView = 'detail',
   ) => {
     const newPath =
-      view === 'executions' ? `/tasks/${taskId}/executions` : `/tasks/${taskId}`;
+      view === 'executions'
+        ? `/tasks/${taskId}/executions`
+        : `/tasks/${taskId}`;
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', newPath);
       setCurrentPath(newPath);

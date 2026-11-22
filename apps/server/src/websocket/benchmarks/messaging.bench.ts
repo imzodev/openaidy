@@ -13,17 +13,18 @@ import type { FastifyBaseLogger } from 'fastify';
 // Mock Factories
 // ============================================================================
 
-const createMockLogger = (): FastifyBaseLogger => ({
-  info: () => {},
-  error: () => {},
-  warn: () => {},
-  debug: () => {},
-  fatal: () => {},
-  trace: () => {},
-  child: () => createMockLogger(),
-  level: 'info',
-  silent: false,
-} as unknown as FastifyBaseLogger);
+const createMockLogger = (): FastifyBaseLogger =>
+  ({
+    info: () => {},
+    error: () => {},
+    warn: () => {},
+    debug: () => {},
+    fatal: () => {},
+    trace: () => {},
+    child: () => createMockLogger(),
+    level: 'info',
+    silent: false,
+  }) as unknown as FastifyBaseLogger;
 
 // ============================================================================
 // Benchmarks
@@ -43,10 +44,15 @@ describe('Messaging Benchmarks', () => {
   });
 
   bench('register handler', () => {
-    router.registerHandler('test.bench', async (_connectionId, _message, _context) => {
-      // Note: This is a benchmark test - use unknown cast for testing purposes
-      return createWSMessage('test.response', { ok: true }) as unknown as import('@openaidy/shared-types').WSResponse;
-    });
+    router.registerHandler(
+      'test.bench',
+      async (_connectionId, _message, _context) => {
+        // Note: This is a benchmark test - use unknown cast for testing purposes
+        return createWSMessage('test.response', {
+          ok: true,
+        }) as unknown as import('@openaidy/shared-types').WSResponse;
+      },
+    );
   });
 
   bench('hasHandler check', () => {

@@ -21,7 +21,7 @@ import { createFakeProvider } from '@openaidy/runtime/testing';
  * Helper to create a mock secret provider
  */
 function createMockSecretProvider(
-  resolutions: Map<string, string | Error>
+  resolutions: Map<string, string | Error>,
 ): SecretProvider {
   return {
     canResolve: (ref: SecretReference) => {
@@ -37,7 +37,10 @@ function createMockSecretProvider(
       if (ref.type === 'env') {
         const value = resolutions.get(ref.name);
         if (value === undefined) {
-          return secretErr('secret.not_found', `Environment variable "${ref.name}" is not set`);
+          return secretErr(
+            'secret.not_found',
+            `Environment variable "${ref.name}" is not set`,
+          );
         }
         if (value instanceof Error) {
           return secretErr('secret.access_denied', value.message);
@@ -47,7 +50,10 @@ function createMockSecretProvider(
       if (ref.type === 'inline') {
         return secretOk(ref.value);
       }
-      return secretErr('secret.invalid_reference', `Cannot resolve secret type: ${ref.type}`);
+      return secretErr(
+        'secret.invalid_reference',
+        `Cannot resolve secret type: ${ref.type}`,
+      );
     },
   };
 }
@@ -58,7 +64,9 @@ describe('IntegratedInvocationService', () => {
   describe('configuration management', () => {
     beforeEach(() => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
     });
 
     it('should register a provider configuration', () => {
@@ -96,7 +104,9 @@ describe('IntegratedInvocationService', () => {
 
     it('should load a provider from configuration', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'loaded-provider',
@@ -120,9 +130,13 @@ describe('IntegratedInvocationService', () => {
 
   describe('secret resolution', () => {
     it('should successfully resolve provider config and secret references before invocation', async () => {
-      const resolutions = new Map([['OPENAI_API_KEY', 'sk-resolved-key-12345']]);
+      const resolutions = new Map([
+        ['OPENAI_API_KEY', 'sk-resolved-key-12345'],
+      ]);
       const mockSecretProvider = createMockSecretProvider(resolutions);
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'env-provider',
@@ -141,7 +155,9 @@ describe('IntegratedInvocationService', () => {
 
     it('should fail when required secret references cannot be resolved', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'missing-secret-provider',
@@ -161,7 +177,9 @@ describe('IntegratedInvocationService', () => {
 
     it('should fail when config is invalid or incomplete', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const result = await service.loadProvider({
         id: '', // Invalid: empty ID
@@ -173,13 +191,17 @@ describe('IntegratedInvocationService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('provider.config_invalid');
-        expect(result.error.message).toContain('Invalid provider configuration');
+        expect(result.error.message).toContain(
+          'Invalid provider configuration',
+        );
       }
     });
 
     it('should fail when provider is disabled', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'disabled-provider',
@@ -202,10 +224,13 @@ describe('IntegratedInvocationService', () => {
     it('should map secret timeout error to provider timeout error', async () => {
       const timeoutSecretProvider: SecretProvider = {
         canResolve: () => true,
-        resolve: async () => secretErr('secret.timeout', 'Secret resolution timed out'),
+        resolve: async () =>
+          secretErr('secret.timeout', 'Secret resolution timed out'),
       };
 
-      service = createIntegratedInvocation({ secretProvider: timeoutSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: timeoutSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'timeout-provider',
@@ -224,10 +249,13 @@ describe('IntegratedInvocationService', () => {
     it('should map access denied error to config invalid error', async () => {
       const accessDeniedProvider: SecretProvider = {
         canResolve: () => true,
-        resolve: async () => secretErr('secret.access_denied', 'Access denied to secret'),
+        resolve: async () =>
+          secretErr('secret.access_denied', 'Access denied to secret'),
       };
 
-      service = createIntegratedInvocation({ secretProvider: accessDeniedProvider });
+      service = createIntegratedInvocation({
+        secretProvider: accessDeniedProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'access-denied-provider',
@@ -246,7 +274,9 @@ describe('IntegratedInvocationService', () => {
 
     it('should map provider unavailable error for missing provider', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const result = await service.getOrLoadProvider('non-existent-provider');
 
@@ -262,7 +292,9 @@ describe('IntegratedInvocationService', () => {
   describe('provider resolution', () => {
     beforeEach(() => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
     });
 
     it('should get or load a provider by ID', async () => {
@@ -389,7 +421,9 @@ describe('IntegratedInvocationService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('provider.config_invalid');
-        expect(result.error.message).toContain('No default provider configured');
+        expect(result.error.message).toContain(
+          'No default provider configured',
+        );
       }
     });
 
@@ -412,7 +446,9 @@ describe('IntegratedInvocationService', () => {
       });
 
       // Provider should not be loaded yet
-      expect(service.getRegistry().has('on-demand-invoke-provider')).toBe(false);
+      expect(service.getRegistry().has('on-demand-invoke-provider')).toBe(
+        false,
+      );
 
       // Invocation should trigger loading
       await service.invokeWithConfig({
@@ -492,7 +528,9 @@ describe('IntegratedInvocationService', () => {
   describe('multiple vendor families', () => {
     it('should load OpenAI-compatible provider through full config-to-invocation path', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'openai-via-config',
@@ -506,13 +544,17 @@ describe('IntegratedInvocationService', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.config.vendorFamily).toBe('openai-compatible');
-        expect(result.provider.descriptor.vendorFamily).toBe('openai-compatible');
+        expect(result.provider.descriptor.vendorFamily).toBe(
+          'openai-compatible',
+        );
       }
     });
 
     it('should load Anthropic provider through full config-to-invocation path', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createAnthropicConfig({
         id: 'anthropic-via-config',
@@ -532,7 +574,9 @@ describe('IntegratedInvocationService', () => {
 
     it('should load Gemini provider through full config-to-invocation path', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      service = createIntegratedInvocation({ secretProvider: mockSecretProvider });
+      service = createIntegratedInvocation({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createGeminiConfig({
         id: 'gemini-via-config',
@@ -574,12 +618,16 @@ describe('IntegratedInvocationService', () => {
       await service.loadProvider(config);
 
       expect(service.getRegistry().has('clear-test')).toBe(true);
-      expect(service.getConfigService().getResolvedConfig('clear-test')).toBeDefined();
+      expect(
+        service.getConfigService().getResolvedConfig('clear-test'),
+      ).toBeDefined();
 
       service.clear();
 
       expect(service.getRegistry().size).toBe(0);
-      expect(service.getConfigService().getResolvedConfig('clear-test')).toBeUndefined();
+      expect(
+        service.getConfigService().getResolvedConfig('clear-test'),
+      ).toBeUndefined();
     });
   });
 });

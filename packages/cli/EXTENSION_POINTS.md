@@ -5,6 +5,7 @@ This document describes the extension points for future CLI growth without requi
 ## JSON Output Support
 
 ### Current Architecture
+
 The CLI separates rendering from workflow logic:
 
 ```
@@ -12,6 +13,7 @@ Command Handler → Workflow (control-plane) → Formatter → Output
 ```
 
 ### Extension Point
+
 To add JSON output support:
 
 1. Add `--json` flag parsing in command handlers
@@ -27,12 +29,13 @@ To add JSON output support:
    ```
 3. Add output mode selection in command handler:
    ```typescript
-   const output = options.json 
+   const output = options.json
      ? formatRequestJSON(request)
      : formatRequest(request);
    ```
 
 ### Why It Works
+
 - Formatters are pure functions (no side effects)
 - Workflow results are serializable objects
 - No terminal-specific code in workflows
@@ -40,6 +43,7 @@ To add JSON output support:
 ## Command Scalability
 
 ### Current Structure
+
 ```
 src/commands/
 ├── index.ts          # Registry and routing
@@ -56,6 +60,7 @@ src/commands/
 
 1. Create handler file in appropriate domain folder
 2. Register in `commands/index.ts`:
+
    ```typescript
    registerCommand(
      'devices show',
@@ -63,13 +68,14 @@ src/commands/
        const { devicesShowHandler } = await import('./devices/show.js');
        return devicesShowHandler(args);
      },
-     { description: 'Show device details', usage: '...' }
+     { description: 'Show device details', usage: '...' },
    );
    ```
 
 3. Add tests in corresponding test file
 
 ### Command Groups
+
 - `admin` - Bootstrap admin and system management
 - `devices` - Device pairing and management
 - Future groups can be added without restructuring
@@ -77,6 +83,7 @@ src/commands/
 ## Package Distribution
 
 ### Ready for Publishing
+
 The package is configured for npm publishing:
 
 ```json
@@ -93,13 +100,16 @@ The package is configured for npm publishing:
 ```
 
 ### Future Steps
+
 1. Build step: Compile TypeScript to JavaScript
 2. Update bin path to point to compiled output
 3. Add pre-publish checks
 4. Publish to npm registry
 
 ### Global Installation
+
 After publishing:
+
 ```bash
 npm install -g @openaidy/cli
 openaidy --help
@@ -108,13 +118,14 @@ openaidy --help
 ## Workflow Reuse
 
 ### Control-Plane Package
+
 The `@openaidy/control-plane` package is designed for reuse:
 
 ```typescript
 // Non-CLI consumer
-import { 
-  PairingWorkflow, 
-  createPairingWorkflow 
+import {
+  PairingWorkflow,
+  createPairingWorkflow,
 } from '@openaidy/control-plane';
 
 const workflow = createPairingWorkflow({
@@ -126,6 +137,7 @@ const result = workflow.listRequests({ status: 'pending' });
 ```
 
 ### Key Design Decisions
+
 - Workflows return structured results (not formatted strings)
 - Logger interface is platform-agnostic
 - No direct process/exit behavior in workflows
@@ -134,19 +146,21 @@ const result = workflow.listRequests({ status: 'pending' });
 ## Output Abstraction
 
 ### Current Pattern
+
 ```typescript
 interface CommandResult {
   exitCode: number;
-  output?: string;  // Human-readable
-  error?: string;   // Human-readable error
+  output?: string; // Human-readable
+  error?: string; // Human-readable error
 }
 ```
 
 ### Future JSON Mode
+
 ```typescript
 interface CommandResult {
   exitCode: number;
-  output?: string | object;  // string for human, object for JSON
+  output?: string | object; // string for human, object for JSON
   error?: string | object;
   meta?: {
     format: 'text' | 'json';
@@ -156,7 +170,9 @@ interface CommandResult {
 ```
 
 ### Formatters
+
 Each formatter exports both text and JSON versions:
+
 ```typescript
 // formatters/devices.ts
 export function formatRequest(req: PairingRequestData): string;
@@ -177,18 +193,22 @@ Before adding new features, verify:
 ## Future Commands (Examples)
 
 ### `devices show <request-id>`
+
 ```typescript
 // commands/devices/show.ts
 export const devicesShowHandler = createDevicesShowHandler(getContext);
 ```
 
 ### `admin token status`
+
 ```typescript
 // commands/admin/token/status.ts
-export const adminTokenStatusHandler = createAdminTokenStatusHandler(getContext);
+export const adminTokenStatusHandler =
+  createAdminTokenStatusHandler(getContext);
 ```
 
 ### `config show`
+
 ```typescript
 // commands/config/show.ts
 export const configShowHandler = createConfigShowHandler(getContext);
@@ -197,6 +217,7 @@ export const configShowHandler = createConfigShowHandler(getContext);
 ## Testing Extensions
 
 All new commands should have:
+
 - Unit tests for command handler
 - Unit tests for formatters
 - Integration tests for workflows

@@ -39,12 +39,10 @@ const createMockConnectionManager = () => ({
   updateHeartbeat: vi.fn(),
   checkStaleConnections: vi.fn().mockReturnValue([]),
   getLastHeartbeat: vi.fn(),
-  checkRateLimit: vi
-    .fn()
-    .mockReturnValue({
-      allowed: true,
-      info: { remaining: 10, reset: Date.now(), limit: 100 },
-    }),
+  checkRateLimit: vi.fn().mockReturnValue({
+    allowed: true,
+    info: { remaining: 10, reset: Date.now(), limit: 100 },
+  }),
   recordRequest: vi.fn(),
   resetRateLimit: vi.fn(),
   broadcast: vi.fn().mockReturnValue(0),

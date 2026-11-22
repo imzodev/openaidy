@@ -46,7 +46,11 @@ export type ProviderSelectionRequest = {
  * Provider selection result
  */
 export type ProviderSelectionResult =
-  | { readonly ok: true; readonly provider: ModelProvider; readonly modelId: string }
+  | {
+      readonly ok: true;
+      readonly provider: ModelProvider;
+      readonly modelId: string;
+    }
   | { readonly ok: false; readonly error: ProviderError };
 
 /**

@@ -20,7 +20,7 @@ import {
  * Helper to create a mock secret provider
  */
 function createMockSecretProvider(
-  resolutions: Map<string, string | Error>
+  resolutions: Map<string, string | Error>,
 ): SecretProvider {
   return {
     canResolve: (ref: SecretReference) => {
@@ -36,7 +36,10 @@ function createMockSecretProvider(
       if (ref.type === 'env') {
         const value = resolutions.get(ref.name);
         if (value === undefined) {
-          return secretErr('secret.not_found', `Environment variable "${ref.name}" is not set`);
+          return secretErr(
+            'secret.not_found',
+            `Environment variable "${ref.name}" is not set`,
+          );
         }
         if (value instanceof Error) {
           return secretErr('secret.access_denied', value.message);
@@ -46,7 +49,10 @@ function createMockSecretProvider(
       if (ref.type === 'inline') {
         return secretOk(ref.value);
       }
-      return secretErr('secret.invalid_reference', `Cannot resolve secret type: ${ref.type}`);
+      return secretErr(
+        'secret.invalid_reference',
+        `Cannot resolve secret type: ${ref.type}`,
+      );
     },
   };
 }
@@ -57,7 +63,9 @@ describe('ProviderConfigService', () => {
   describe('loadProvider', () => {
     it('should load a provider with inline API key successfully', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'test-openai',
@@ -81,7 +89,9 @@ describe('ProviderConfigService', () => {
     it('should resolve environment variable secret reference', async () => {
       const resolutions = new Map([['OPENAI_API_KEY', 'sk-test-key-12345']]);
       const mockSecretProvider = createMockSecretProvider(resolutions);
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'env-openai',
@@ -99,7 +109,9 @@ describe('ProviderConfigService', () => {
 
     it('should fail when secret cannot be resolved', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'missing-secret',
@@ -119,7 +131,9 @@ describe('ProviderConfigService', () => {
 
     it('should fail when config is invalid', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const result = await configService.loadProvider({
         id: '', // Invalid: empty ID
@@ -131,13 +145,17 @@ describe('ProviderConfigService', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('provider.config_invalid');
-        expect(result.error.message).toContain('Invalid provider configuration');
+        expect(result.error.message).toContain(
+          'Invalid provider configuration',
+        );
       }
     });
 
     it('should fail when provider is disabled', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'disabled-provider',
@@ -157,7 +175,9 @@ describe('ProviderConfigService', () => {
 
     it('should load Anthropic provider successfully', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createAnthropicConfig({
         id: 'test-anthropic',
@@ -178,7 +198,9 @@ describe('ProviderConfigService', () => {
 
     it('should load Gemini provider successfully', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createGeminiConfig({
         id: 'test-gemini',
@@ -199,7 +221,9 @@ describe('ProviderConfigService', () => {
 
     it('should pass configuration options to adapter', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'configured-openai',
@@ -226,7 +250,9 @@ describe('ProviderConfigService', () => {
   describe('getProvider', () => {
     it('should return cached provider after loading', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'cached-provider',
@@ -252,7 +278,9 @@ describe('ProviderConfigService', () => {
   describe('getResolvedConfig', () => {
     it('should return cached resolved config after loading', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'cached-config',
@@ -280,7 +308,10 @@ describe('ProviderConfigService', () => {
     it('should return string API key as-is', async () => {
       configService = createProviderConfigService();
 
-      const result = await configService.resolveApiKey('plain-api-key', 'test-provider');
+      const result = await configService.resolveApiKey(
+        'plain-api-key',
+        'test-provider',
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -291,9 +322,14 @@ describe('ProviderConfigService', () => {
     it('should resolve secret reference', async () => {
       const resolutions = new Map([['API_KEY', 'resolved-key']]);
       const mockSecretProvider = createMockSecretProvider(resolutions);
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
-      const result = await configService.resolveApiKey(envSecret('API_KEY'), 'test-provider');
+      const result = await configService.resolveApiKey(
+        envSecret('API_KEY'),
+        'test-provider',
+      );
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -303,9 +339,14 @@ describe('ProviderConfigService', () => {
 
     it('should fail for unresolved secret reference', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
-      const result = await configService.resolveApiKey(envSecret('MISSING_KEY'), 'test-provider');
+      const result = await configService.resolveApiKey(
+        envSecret('MISSING_KEY'),
+        'test-provider',
+      );
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -318,7 +359,9 @@ describe('ProviderConfigService', () => {
   describe('clear', () => {
     it('should clear all cached providers and configs', async () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'clear-test',
@@ -341,7 +384,9 @@ describe('ProviderConfigService', () => {
   describe('getSecretProvider', () => {
     it('should return the secret provider', () => {
       const mockSecretProvider = createMockSecretProvider(new Map());
-      configService = createProviderConfigService({ secretProvider: mockSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: mockSecretProvider,
+      });
 
       expect(configService.getSecretProvider()).toBe(mockSecretProvider);
     });
@@ -360,10 +405,13 @@ describe('ProviderConfigService', () => {
     it('should map secret timeout error to provider timeout error', async () => {
       const timeoutSecretProvider: SecretProvider = {
         canResolve: () => true,
-        resolve: async () => secretErr('secret.timeout', 'Secret resolution timed out'),
+        resolve: async () =>
+          secretErr('secret.timeout', 'Secret resolution timed out'),
       };
 
-      configService = createProviderConfigService({ secretProvider: timeoutSecretProvider });
+      configService = createProviderConfigService({
+        secretProvider: timeoutSecretProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'timeout-test',
@@ -382,10 +430,13 @@ describe('ProviderConfigService', () => {
     it('should handle access denied errors', async () => {
       const accessDeniedProvider: SecretProvider = {
         canResolve: () => true,
-        resolve: async () => secretErr('secret.access_denied', 'Access denied to secret'),
+        resolve: async () =>
+          secretErr('secret.access_denied', 'Access denied to secret'),
       };
 
-      configService = createProviderConfigService({ secretProvider: accessDeniedProvider });
+      configService = createProviderConfigService({
+        secretProvider: accessDeniedProvider,
+      });
 
       const config = createOpenAIConfig({
         id: 'access-denied-test',
