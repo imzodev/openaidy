@@ -34,7 +34,7 @@ import {
   persistBootstrapAdminRecord,
   inspectBootstrapAdminRecord,
 } from '../lib/bootstrap-admin-record.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 // Re-export types for consumers
 export type {

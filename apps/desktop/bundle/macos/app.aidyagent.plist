@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>dev.openaidy</string>
+  <string>app.aidyagent</string>
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/openaidy-service</string>
+    <string>/usr/local/bin/aidy-service</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
-    <key>OPENAIDY_HOME</key>
-    <string>~/.config/openaidy</string>
+    <key>AIDY_HOME</key>
+    <string>~/.config/aidy</string>
     <key>DB_KIND</key>
     <string>sqlite</string>
   </dict>
@@ -25,10 +25,10 @@
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/openaidy.log</string>
+  <string>/tmp/aidy.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/tmp/openaidy.err</string>
+  <string>/tmp/aidy.err</string>
 
   <key>ProcessType</key>
   <string>Background</string>

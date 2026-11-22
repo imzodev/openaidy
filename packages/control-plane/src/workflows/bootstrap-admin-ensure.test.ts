@@ -21,7 +21,7 @@ import {
   type BootstrapAdminContext,
   type WorkflowLogger,
 } from './bootstrap-admin.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 const DEFAULT_UNSAFE_SECRET = 'change-me-in-production';
 const TEST_CLIENT_ID = 'bootstrap-admin';
@@ -39,7 +39,7 @@ describe('BootstrapAdminWorkflow — JWT helpers (ensureToken path)', () => {
   beforeEach(async () => {
     tempDir = join(
       tmpdir(),
-      `openaidy-ensure-token-${Date.now()}-${Math.random()}`,
+      `aidy-ensure-token-${Date.now()}-${Math.random()}`,
     );
     await mkdir(tempDir, { recursive: true });
     tokenPath = join(tempDir, 'bootstrap-admin.json');

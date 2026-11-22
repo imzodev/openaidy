@@ -9,7 +9,7 @@ const log = createLogger('task-schedule-routes');
 // ========================================
 // Schemas (API input validation only)
 //
-// These mirror the public DTOs in `@openaidy/shared-types` but use the
+// These mirror the public DTOs in `@aidyagent/shared-types` but use the
 // slightly stricter shape the API accepts on the wire. We re-validate
 // here so the public types can evolve without breaking the API surface.
 // ========================================
@@ -86,11 +86,11 @@ const listExecutionsSchema = z.object({
 
 function toScheduleInput(
   schedule: z.infer<typeof scheduleInputSchema>,
-): import('@openaidy/shared-types').ScheduleInput {
+): import('@aidyagent/shared-types').ScheduleInput {
   if ('every' in schedule) return { every: schedule.every };
   if ('daily' in schedule) return { daily: schedule.daily };
   if ('cron' in schedule) {
-    const result: import('@openaidy/shared-types').ScheduleInput = {
+    const result: import('@aidyagent/shared-types').ScheduleInput = {
       cron: schedule.cron.expression,
     };
     if (schedule.cron.tz !== undefined) {
@@ -168,7 +168,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
       };
     }
 
-    const input: import('@openaidy/shared-types').CreateTaskScheduleInput = {
+    const input: import('@aidyagent/shared-types').CreateTaskScheduleInput = {
       schedule: toScheduleInput(parsed.schedule),
     };
     if (parsed.replanPolicy !== undefined) {
@@ -230,7 +230,7 @@ export const taskScheduleRoutes: FastifyPluginAsync<
       };
     }
 
-    const input: import('@openaidy/shared-types').UpdateTaskScheduleInput = {};
+    const input: import('@aidyagent/shared-types').UpdateTaskScheduleInput = {};
     if (parsed.schedule !== undefined) {
       input.schedule = toScheduleInput(parsed.schedule);
     }

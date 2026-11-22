@@ -33,7 +33,7 @@ export function createMockAddon(overrides: Partial<MockAddon> = {}): MockAddon {
       name: overrides.name || 'Test Addon',
       version: overrides.version || '1.0.0',
       description: 'Test addon for unit testing',
-      openaidy: {
+      aidy: {
         minVersion: '1.0.0',
         maxVersion: '2.0.0',
       },
@@ -65,7 +65,7 @@ export function createMockAddon(overrides: Partial<MockAddon> = {}): MockAddon {
  * Create a temporary test project
  */
 export async function createTestProject(addon: MockAddon): Promise<string> {
-  const projectPath = path.join('/tmp', `openaidy-test-${Date.now()}`);
+  const projectPath = path.join('/tmp', `aidy-test-${Date.now()}`);
 
   // Create project structure
   fs.mkdirSync(path.join(projectPath, 'src'), { recursive: true });
@@ -83,7 +83,7 @@ export async function createTestProject(addon: MockAddon): Promise<string> {
     path.join(projectPath, 'package.json'),
     JSON.stringify(
       {
-        name: `@openaidy/addon-${addon.id}`,
+        name: `@aidyagent/addon-${addon.id}`,
         version: addon.version,
         scripts: {
           test: 'vitest',

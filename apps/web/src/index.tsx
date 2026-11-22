@@ -114,7 +114,7 @@ function StartupScreen(props: { error?: string }): JSX.Element {
               class="text-red-500"
               style={{ 'font-weight': 500, 'margin-bottom': '0.5rem' }}
             >
-              OpenAidy couldn't start
+              Aidy couldn't start
             </p>
             <p style={{ 'font-size': '0.875rem', opacity: 0.8 }}>
               {props.error}
@@ -122,9 +122,7 @@ function StartupScreen(props: { error?: string }): JSX.Element {
           </div>
         }
       >
-        <p style={{ 'font-size': '0.875rem', opacity: 0.8 }}>
-          Starting OpenAidy…
-        </p>
+        <p style={{ 'font-size': '0.875rem', opacity: 0.8 }}>Starting Aidy…</p>
       </Show>
     </div>
   );

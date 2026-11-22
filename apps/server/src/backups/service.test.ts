@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ZipArchive } from 'archiver';
 import yauzl from 'yauzl';
-import type { BackupSection } from '@openaidy/shared-types';
+import type { BackupSection } from '@aidyagent/shared-types';
 import { BackupService, type BackupPaths } from './service';
 
 let home: string;
@@ -20,8 +20,8 @@ function write(p: string, content: string | Buffer) {
 
 function homePaths(root: string): BackupPaths {
   return {
-    dbPath: path.join(root, 'data', 'openaidy.db'),
-    configPath: path.join(root, 'openaidy.json'),
+    dbPath: path.join(root, 'data', 'aidy.db'),
+    configPath: path.join(root, 'aidy.json'),
     workspacesDir: path.join(root, 'workspaces'),
     skillsDir: path.join(root, 'skills'),
     addonsDir: path.join(root, 'addons'),
@@ -107,17 +107,17 @@ async function craftZip(
 
 const MANIFEST = JSON.stringify({
   version: 1,
-  kind: 'openaidy-backup',
+  kind: 'aidy-backup',
   createdAt: '2026-01-01T00:00:00.000Z',
-  openaidyVersion: '0.3.8',
+  aidyVersion: '0.3.8',
   sections: {},
 });
 
 let liveDb: DatabaseSync;
 
 beforeEach(() => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-backup-'));
-  work = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-backup-work-'));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-backup-'));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-backup-work-'));
   paths = homePaths(home);
   liveDb = makeWalDb(paths.dbPath, [1, 2, 3]);
   write(paths.configPath, '{"providers":[]}');
@@ -146,9 +146,9 @@ afterEach(() => {
 describe('BackupService.buildManifest', () => {
   it('returns a valid manifest with per-section counts and sizes', async () => {
     const m = await service.buildManifest();
-    expect(m.kind).toBe('openaidy-backup');
+    expect(m.kind).toBe('aidy-backup');
     expect(m.version).toBe(1);
-    expect(m.openaidyVersion).toBe('0.3.8');
+    expect(m.aidyVersion).toBe('0.3.8');
     expect(m.sections.workspaces.itemCount).toBe(2);
     expect(m.sections.skills.itemCount).toBe(1);
     expect(m.sections.addons.itemCount).toBe(1);
@@ -175,8 +175,8 @@ describe('BackupService.writeArchive', () => {
   it('produces a zip with manifest.json and all sections when none specified', async () => {
     const names = await entryNames(await archive(service));
     expect(names).toContain('manifest.json');
-    expect(names).toContain('db/openaidy.db');
-    expect(names).toContain('config/openaidy.json');
+    expect(names).toContain('db/aidy.db');
+    expect(names).toContain('config/aidy.json');
     expect(names).toContain('workspaces/default/AGENT.md');
     expect(names).toContain('skills/my-skill/SKILL.md');
     expect(names).toContain('addons/my-addon/addon.json');
@@ -184,7 +184,7 @@ describe('BackupService.writeArchive', () => {
 
   it('includes only the selected sections', async () => {
     const names = await entryNames(await archive(service, ['config']));
-    expect(names).toContain('config/openaidy.json');
+    expect(names).toContain('config/aidy.json');
     expect(names.some((n) => n.startsWith('skills/'))).toBe(false);
     expect(names.some((n) => n.startsWith('db/'))).toBe(false);
   });
@@ -209,10 +209,10 @@ describe('BackupService.writeArchive', () => {
   });
 
   it('snapshots the db consistently, including rows only in the WAL', async () => {
-    // Rows 1-3 were never checkpointed: a plain copy of openaidy.db alone
+    // Rows 1-3 were never checkpointed: a plain copy of aidy.db alone
     // would miss them.
     const zip = await archive(service, ['db']);
-    const restoreHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-snap-'));
+    const restoreHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-snap-'));
     try {
       const dest = new BackupService(homePaths(restoreHome), '0.3.8');
       const [r] = await dest.applyArchive(zip, ['db']);
@@ -262,7 +262,7 @@ describe('BackupService.writeArchive', () => {
 describe('BackupService.inspectArchive', () => {
   it('reads the manifest and per-section sizes from a valid backup', async () => {
     const info = await service.inspectArchive(await archive(service));
-    expect(info.manifest.kind).toBe('openaidy-backup');
+    expect(info.manifest.kind).toBe('aidy-backup');
     expect(info.sectionBytes.config).toBe('{"providers":[]}'.length);
     expect(info.sectionBytes.db).toBeGreaterThan(0);
   });
@@ -297,7 +297,7 @@ describe('BackupService.applyArchive', () => {
 
   beforeEach(async () => {
     sourceZip = await archive(service);
-    destHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-restore-'));
+    destHome = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-restore-'));
     destPaths = homePaths(destHome);
     dest = new BackupService(destPaths, '0.3.8');
   });
@@ -369,7 +369,7 @@ describe('BackupService.applyArchive', () => {
     let closed = false;
     const zip = await craftZip({
       'manifest.json': MANIFEST,
-      'db/openaidy.db': 'not sqlite',
+      'db/aidy.db': 'not sqlite',
     });
     const guarded = new BackupService(destPaths, '0.3.8', {
       closeDatabase: async () => {
@@ -386,20 +386,13 @@ describe('BackupService.applyArchive', () => {
 
   it('restores legacy backups that carry the db plus -wal/-shm sidecars', async () => {
     // Pre-snapshot exports zipped the live files: db + wal (+ shm).
-    const legacySrc = makeWalDb(
-      path.join(work, 'legacy', 'openaidy.db'),
-      [7, 8],
-    );
+    const legacySrc = makeWalDb(path.join(work, 'legacy', 'aidy.db'), [7, 8]);
     const legacyDir = path.join(work, 'legacy');
     const zip = await craftZip({
       'manifest.json': MANIFEST,
-      'db/openaidy.db': fs.readFileSync(path.join(legacyDir, 'openaidy.db')),
-      'db/openaidy.db-wal': fs.readFileSync(
-        path.join(legacyDir, 'openaidy.db-wal'),
-      ),
-      'db/openaidy.db-shm': fs.readFileSync(
-        path.join(legacyDir, 'openaidy.db-shm'),
-      ),
+      'db/aidy.db': fs.readFileSync(path.join(legacyDir, 'aidy.db')),
+      'db/aidy.db-wal': fs.readFileSync(path.join(legacyDir, 'aidy.db-wal')),
+      'db/aidy.db-shm': fs.readFileSync(path.join(legacyDir, 'aidy.db-shm')),
     });
     legacySrc.close();
     const [r] = await dest.applyArchive(zip, ['db']);

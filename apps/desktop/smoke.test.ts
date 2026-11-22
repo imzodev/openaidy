@@ -1,5 +1,5 @@
 // Task 10: Verification & Testing
-// Smoke tests for the OpenAidy desktop app
+// Smoke tests for the Aidy desktop app
 
 import { describe, it, expect } from 'vitest';
 
@@ -12,7 +12,7 @@ const mockTauri = {
         port: 3001,
         restart_attempts: 0,
         pid: 1234,
-        openaidy_home: '/tmp/.openaidy',
+        aidy_home: '/tmp/.aidy',
       };
     }
     if (_cmd === 'store_credential') {
@@ -35,7 +35,7 @@ interface ServiceStatus {
   port: number | null;
   restart_attempts: number;
   pid: number | null;
-  openaidy_home: string;
+  aidy_home: string;
 }
 
 describe('Desktop app smoke tests', () => {
@@ -49,7 +49,7 @@ describe('Desktop app smoke tests', () => {
       expect(status).toHaveProperty('port');
       expect(status).toHaveProperty('restart_attempts');
       expect(status).toHaveProperty('pid');
-      expect(status).toHaveProperty('openaidy_home');
+      expect(status).toHaveProperty('aidy_home');
     });
 
     it('should report running state with valid port', async () => {
@@ -103,7 +103,7 @@ describe('ServiceState enum values', () => {
       port: 3001,
       restart_attempts: 0,
       pid: 1234,
-      openaidy_home: '/tmp/.openaidy',
+      aidy_home: '/tmp/.aidy',
     };
     expect(validStates.some((s) => runningState.state.includes(s))).toBe(true);
 
@@ -113,7 +113,7 @@ describe('ServiceState enum values', () => {
       port: null,
       restart_attempts: 3,
       pid: null,
-      openaidy_home: '/tmp/.openaidy',
+      aidy_home: '/tmp/.aidy',
     };
     expect(validStates.some((s) => crashedState.state.includes(s))).toBe(true);
   });

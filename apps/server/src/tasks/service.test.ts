@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TaskService, createTaskService } from './service';
-import type { Task, Subtask, TaskAgent } from '@openaidy/db';
+import type { Task, Subtask, TaskAgent } from '@aidyagent/db';
 import type { PlanningService } from '../planning/service';
 
 // Mock repository types - use interface-like types for mocking
@@ -132,11 +132,12 @@ describe('TaskService', () => {
     agentRegistry = createMockAgentRegistry();
 
     service = createTaskService({
-      tasksRepo: tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+      tasksRepo:
+        tasksRepo as unknown as import('@aidyagent/db').TasksRepository,
       subtasksRepo:
-        subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+        subtasksRepo as unknown as import('@aidyagent/db').SubtasksRepository,
       taskAgentsRepo:
-        taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+        taskAgentsRepo as unknown as import('@aidyagent/db').TaskAgentsRepository,
       agents: agentRegistry as unknown as import('../agents').AgentRegistry,
     });
   });
@@ -247,11 +248,11 @@ describe('TaskService', () => {
       const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
       const serviceWithPlanning = createTaskService({
         tasksRepo:
-          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+          tasksRepo as unknown as import('@aidyagent/db').TasksRepository,
         subtasksRepo:
-          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+          subtasksRepo as unknown as import('@aidyagent/db').SubtasksRepository,
         taskAgentsRepo:
-          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+          taskAgentsRepo as unknown as import('@aidyagent/db').TaskAgentsRepository,
         planningService: { planTask } as unknown as PlanningService,
       });
 
@@ -272,11 +273,11 @@ describe('TaskService', () => {
       const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
       const serviceWithPlanning = createTaskService({
         tasksRepo:
-          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+          tasksRepo as unknown as import('@aidyagent/db').TasksRepository,
         subtasksRepo:
-          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+          subtasksRepo as unknown as import('@aidyagent/db').SubtasksRepository,
         taskAgentsRepo:
-          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+          taskAgentsRepo as unknown as import('@aidyagent/db').TaskAgentsRepository,
         planningService: { planTask } as unknown as PlanningService,
       });
 
@@ -297,11 +298,11 @@ describe('TaskService', () => {
       const planTask = vi.fn().mockResolvedValue({ ok: true, subtasks: [] });
       const serviceWithPlanning = createTaskService({
         tasksRepo:
-          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+          tasksRepo as unknown as import('@aidyagent/db').TasksRepository,
         subtasksRepo:
-          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+          subtasksRepo as unknown as import('@aidyagent/db').SubtasksRepository,
         taskAgentsRepo:
-          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+          taskAgentsRepo as unknown as import('@aidyagent/db').TaskAgentsRepository,
         planningService: { planTask } as unknown as PlanningService,
       });
 
@@ -332,11 +333,11 @@ describe('TaskService', () => {
       const planTask = vi.fn().mockRejectedValue(new Error('unexpected error'));
       const serviceWithPlanning = createTaskService({
         tasksRepo:
-          tasksRepo as unknown as import('@openaidy/db').TasksRepository,
+          tasksRepo as unknown as import('@aidyagent/db').TasksRepository,
         subtasksRepo:
-          subtasksRepo as unknown as import('@openaidy/db').SubtasksRepository,
+          subtasksRepo as unknown as import('@aidyagent/db').SubtasksRepository,
         taskAgentsRepo:
-          taskAgentsRepo as unknown as import('@openaidy/db').TaskAgentsRepository,
+          taskAgentsRepo as unknown as import('@aidyagent/db').TaskAgentsRepository,
         planningService: { planTask } as unknown as PlanningService,
       });
 

@@ -1,9 +1,9 @@
-import type { DatabaseClient } from '@openaidy/db';
-import { ProviderCredentialsRepository } from '@openaidy/db';
+import type { DatabaseClient } from '@aidyagent/db';
+import { ProviderCredentialsRepository } from '@aidyagent/db';
 import type {
   AnthropicOAuthTokens,
   CredentialInvalidator,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { generatePkce } from './pkce.js';
 import type { OAuthStateStore } from './state-store.js';
 import { getEncryptionService } from '../../lib/encryption.js';

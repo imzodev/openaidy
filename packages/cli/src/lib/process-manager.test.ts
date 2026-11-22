@@ -20,7 +20,7 @@ import {
 } from './process-manager.js';
 
 function tmpPath(): string {
-  return join(tmpdir(), `openaidy-pm-test-${randomUUID()}`);
+  return join(tmpdir(), `aidy-pm-test-${randomUUID()}`);
 }
 
 describe('process-manager', () => {
@@ -51,7 +51,7 @@ describe('process-manager', () => {
         pid: 12345,
         startedAt: '2026-06-21T00:00:00.000Z',
         port: 3001,
-        logFile: '/tmp/openaidy/server.log',
+        logFile: '/tmp/aidy/server.log',
       };
 
       await writePidFile(path, rec);
@@ -61,7 +61,7 @@ describe('process-manager', () => {
       expect(read!.pid).toBe(12345);
       expect(read!.port).toBe(3001);
       expect(read!.startedAt).toBe('2026-06-21T00:00:00.000Z');
-      expect(read!.logFile).toBe('/tmp/openaidy/server.log');
+      expect(read!.logFile).toBe('/tmp/aidy/server.log');
 
       // Cleanup
       await unlink(path).catch(() => {});
@@ -70,7 +70,7 @@ describe('process-manager', () => {
     it('writePidFile creates parent directories on demand', async () => {
       const deep = join(
         tmpdir(),
-        `openaidy-deep-${randomUUID()}`,
+        `aidy-deep-${randomUUID()}`,
         'sub',
         'server.pid',
       );

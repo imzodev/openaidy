@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { ExecService } from '../../exec/service';
 import type { WorkspaceService } from '../../workspace/service';
 import { createExecRunTool } from './run';

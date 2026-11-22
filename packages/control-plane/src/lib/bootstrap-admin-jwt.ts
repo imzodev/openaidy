@@ -9,7 +9,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { BootstrapAdminJwtPayload } from '@openaidy/shared-types';
+import type { BootstrapAdminJwtPayload } from '@aidyagent/shared-types';
 
 export type { BootstrapAdminJwtPayload };
 

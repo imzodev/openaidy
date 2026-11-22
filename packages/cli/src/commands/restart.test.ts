@@ -1,5 +1,5 @@
 /**
- * restart.test.ts — vitest suite for openaidy restart.
+ * restart.test.ts — vitest suite for aidy restart.
  *
  * The handler delegates to `stopHandler` then `startHandler`. To exercise the
  * restart wiring without spawning real server processes, we drive scenarios
@@ -40,22 +40,22 @@ const mockedStop = vi.mocked(stopHandler);
 const mockedStart = vi.mocked(startHandler);
 
 async function setupHome(): Promise<string> {
-  const home = join(tmpdir(), `openaidy-restart-test-${randomUUID()}`);
+  const home = join(tmpdir(), `aidy-restart-test-${randomUUID()}`);
   await mkdir(join(home, 'state'), { recursive: true });
   return home;
 }
 
-describe('openaidy restart', () => {
+describe('aidy restart', () => {
   let testHome: string;
 
   beforeEach(async () => {
     testHome = await setupHome();
-    process.env.OPENAIDY_HOME = testHome;
+    process.env.AIDY_HOME = testHome;
     vi.resetAllMocks();
   });
 
   afterEach(() => {
-    delete process.env.OPENAIDY_HOME;
+    delete process.env.AIDY_HOME;
   });
 
   it('shows help with --help flag', async () => {

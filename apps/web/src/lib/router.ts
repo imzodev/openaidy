@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import type { ViewType } from '../components/Sidebar';
-import type { TaskDetailView } from '@openaidy/shared-types';
+import type { TaskDetailView } from '@aidyagent/shared-types';
 
 // Route path constants - single source of truth
 export const RoutePaths = {

@@ -112,7 +112,7 @@ export type MmxLoginHandle = CliOAuthHandle;
 type MmxInvocation = { binary: string; prefixArgs: string[] };
 
 /**
- * OpenAidy is plug-and-play: `mmx-cli` is declared as a normal
+ * Aidy is plug-and-play: `mmx-cli` is declared as a normal
  * dependency of `apps/server` (see package.json) so `pnpm install`
  * pulls it in automatically. Resolve its bundled entry script here
  * instead of requiring a global `pnpm add -g mmx-cli` — the OAuth
@@ -167,7 +167,7 @@ const mmxDescriptor: CliOAuthDescriptor = {
     ...(extraArgs ?? []),
   ],
   buildVerificationUrl: (userCode) =>
-    `https://platform.minimax.io/oauth-authorize?user_code=${userCode}&client=OpenAidy`,
+    `https://platform.minimax.io/oauth-authorize?user_code=${userCode}&client=Aidy`,
   envVarsToStrip: [
     'MINIMAX_API_KEY',
     'MMX_API_KEY',
@@ -204,7 +204,7 @@ export function spawnMmxLogin(options: MmxLoginOptions): MmxLoginHandle {
   // didn't have a MiniMax API key.
   const extraEnv: Record<string, string> = {
     MMX_CONFIG_DIR: MMX_CONFIG_DIR,
-    OPENAIDY_HAD_MINIMAX_API_KEY: process.env['MINIMAX_API_KEY'] ? 'yes' : 'no',
+    AIDY_HAD_MINIMAX_API_KEY: process.env['MINIMAX_API_KEY'] ? 'yes' : 'no',
   };
 
   // Map the public MmxLoginOptions to the generic SpawnCliOAuthOptions.

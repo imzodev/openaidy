@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { OPEN_AIDY_VERSION } from '../lib/version';
+import { AIDY_VERSION } from '../lib/version';
 
 /**
  * Build / runtime info exposed to the web client.
@@ -26,7 +26,7 @@ export const infoRoutes: FastifyPluginAsync = async (app) => {
   app.get(
     '/info',
     async (): Promise<AppInfo> => ({
-      version: OPEN_AIDY_VERSION,
+      version: AIDY_VERSION,
       nodeVersion: process.version,
       platform: process.platform,
       arch: process.arch,

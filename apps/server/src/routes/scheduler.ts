@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@aidyagent/db';
 import {
   validateCronExpression,
   calculateNextRun,

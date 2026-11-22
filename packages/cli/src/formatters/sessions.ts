@@ -5,7 +5,7 @@
  * Reusable across all sessions commands (list, get, messages, runs).
  */
 
-import type { SessionSummary, SessionDetail } from '@openaidy/shared-types';
+import type { SessionSummary, SessionDetail } from '@aidyagent/shared-types';
 import type { SessionRun } from '../types.js';
 
 /**
@@ -27,7 +27,7 @@ export type SessionMessageSummary = {
  */
 export function formatSessionList(sessions: SessionSummary[]): string {
   if (sessions.length === 0) {
-    return 'No sessions found.\n\nCreate one with: openaidy sessions create';
+    return 'No sessions found.\n\nCreate one with: aidy sessions create';
   }
 
   const lines: string[] = [];
@@ -126,7 +126,7 @@ export function formatRunList(
  * Format an empty state for sessions
  */
 export function formatEmptyState(): string {
-  return 'No sessions found.\n\nCreate one with: openaidy sessions create';
+  return 'No sessions found.\n\nCreate one with: aidy sessions create';
 }
 
 // ---------------------------------------------------------------------------

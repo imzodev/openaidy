@@ -2,7 +2,7 @@ import type {
   GuardedToolCall,
   ToolCallGuardOptions,
   ToolCallVerdict,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const PREVIOUS_RESULT_PREVIEW_CHARS = 2_000;
 const MAX_IDENTICAL_FAILURES = 2;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AuthVerifyResponse } from '@openaidy/shared-types';
+import type { AuthVerifyResponse } from '@aidyagent/shared-types';
 
 vi.mock('./api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api')>();

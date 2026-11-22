@@ -1,6 +1,6 @@
 /**
- * "How do I get an API key for this?" metadata for OpenAidy's preinstalled
- * MCP servers (config/openaidy.template.json), keyed by server `id`.
+ * "How do I get an API key for this?" metadata for Aidy's preinstalled
+ * MCP servers (config/aidy.template.json), keyed by server `id`.
  *
  * This is intentionally frontend-only, static data — not part of
  * McpServerConfig/McpServerRecord. The backend has no notion of "builtin vs.
@@ -11,7 +11,7 @@
  * API key" copy in McpsPage.tsx already covers that case.
  *
  * To add instructions for a new preinstalled server: add one entry here with
- * the same `id` used in config/openaidy.template.json. No other code needs
+ * the same `id` used in config/aidy.template.json. No other code needs
  * to change — McpsPage.tsx looks servers up by id and renders nothing extra
  * for ids that aren't present.
  */

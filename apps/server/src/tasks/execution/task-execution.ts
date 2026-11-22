@@ -9,7 +9,7 @@ import type {
   WorkflowRun,
   Subtask,
   SessionMessage,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { AgentRegistry } from '../../agents';
 import type { SessionMessageService } from '../../sessions/service';
 import type {
@@ -20,11 +20,11 @@ import type { RunEventEmitter } from '../../dispatch/events';
 import type {
   ExecutionSubtaskSummary,
   WorkflowRunTrigger,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import {
   DEFAULT_EXECUTION_CONFIG,
   type ExecutionConfig,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import { createLogger } from '../../lib/logger';
 import { stripThinking } from '../../lib/message.js';
 import {

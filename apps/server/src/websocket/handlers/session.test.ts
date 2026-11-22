@@ -9,7 +9,7 @@ import {
   type Session,
   type SessionMessage,
   type SessionRun,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import {
   createWSMessage,
   WS_ERROR_CODES,
@@ -18,7 +18,7 @@ import {
   type SessionListRequest,
   type SessionDeleteRequest,
   type SessionMessageRequest,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { HandlerContext } from '../message-router';
 
 // Mock logger

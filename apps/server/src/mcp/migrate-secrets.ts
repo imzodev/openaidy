@@ -3,7 +3,7 @@
  * encrypted-at-rest form (issue #401).
  *
  * Existing installs may have stored inline secrets as plain strings in
- * `~/.openaidy/openaidy.json` — e.g. an `Authorization: Bearer ghp_xxx`
+ * `~/.aidy/aidy.json` — e.g. an `Authorization: Bearer ghp_xxx`
  * pasted directly into the headers field, the exact scenario the issue
  * describes. After this commit, new writes route every value through
  * {@link unmaskRecord}, which encrypts inline secrets before they reach
@@ -28,7 +28,7 @@
 
 import { createLogger } from '../lib/logger';
 import type { AppConfigService } from '../config/service';
-import type { McpServerConfig, McpSecretValue } from '@openaidy/config';
+import type { McpServerConfig, McpSecretValue } from '@aidyagent/config';
 import { migrateInlineSecrets } from './server-record';
 import { isEncryptedSecret } from './secret-crypto';
 

@@ -34,23 +34,26 @@ export default function Blog() {
   return (
     <div className="page-wrapper">
       <Helmet>
-        <title>Blog — OpenAidy</title>
+        <title>Blog — Aidy</title>
         <meta
           name="description"
-          content="Product news, tutorials, engineering deep dives, and roadmap updates from the OpenAidy team."
+          content="Product news, tutorials, engineering deep dives, and roadmap updates from the Aidy team."
         />
-        <meta property="og:title" content="Blog — OpenAidy" />
+        <meta property="og:title" content="Blog — Aidy" />
         <meta
           property="og:description"
-          content="Product news, tutorials, engineering deep dives, and roadmap updates from the OpenAidy team."
+          content="Product news, tutorials, engineering deep dives, and roadmap updates from the Aidy team."
         />
-        <meta property="og:image" content="https://openaidy.com/og-blog.png" />
-        <meta name="twitter:title" content="Blog — OpenAidy" />
+        <meta property="og:image" content="https://aidyagent.app/og-blog.png" />
+        <meta name="twitter:title" content="Blog — Aidy" />
         <meta
           name="twitter:description"
           content="Product news, tutorials, engineering deep dives, and roadmap updates."
         />
-        <meta name="twitter:image" content="https://openaidy.com/og-blog.png" />
+        <meta
+          name="twitter:image"
+          content="https://aidyagent.app/og-blog.png"
+        />
       </Helmet>
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
@@ -78,8 +81,8 @@ export default function Blog() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
           >
-            Stay up to date with OpenAidy — product announcements, engineering
-            deep dives, step-by-step guides, and the roadmap ahead.
+            Stay up to date with Aidy — product announcements, engineering deep
+            dives, step-by-step guides, and the roadmap ahead.
           </motion.p>
         </div>
       </section>

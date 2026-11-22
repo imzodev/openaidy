@@ -1,5 +1,5 @@
 ---
-summary: 'How conversations, context, and run history work in OpenAidy'
+summary: 'How conversations, context, and run history work in Aidy'
 read_when:
   - You want to understand the session/conversation model
   - You are building against the sessions API

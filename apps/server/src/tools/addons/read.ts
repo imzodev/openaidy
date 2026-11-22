@@ -17,7 +17,7 @@
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { addonReadMeta } from '../catalog.js';
 import type { AddonToolDeps } from './create.js';
 import { isValidId, relativePathError } from './shared.js';
@@ -79,11 +79,11 @@ export function createAddonReadTool(deps: AddonToolDeps): BuiltinTool {
     name: addonReadMeta.name,
 
     description: [
-      'Read an EXISTING OpenAidy addon — its manifest and its files.',
+      'Read an EXISTING Aidy addon — its manifest and its files.',
       '',
       'WHY THIS EXISTS',
       '───────────────',
-      'Addons live in a directory managed by OpenAidy, SEPARATE from your agent',
+      'Addons live in a directory managed by Aidy, SEPARATE from your agent',
       'workspace. workspace_read and code_read cannot see them. This is the only',
       'way to read an addon.',
       '',

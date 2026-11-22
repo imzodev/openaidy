@@ -77,12 +77,12 @@ describe('CLI Error Model', () => {
 
     it('includes hint for argument missing with usage', () => {
       const error = createCLIError('ARGUMENT_MISSING', 'Missing request-id', {
-        usage: 'openaidy devices approve <request-id>',
+        usage: 'aidy devices approve <request-id>',
       });
       const formatted = formatCLIError(error);
 
       expect(formatted).toContain('Usage:');
-      expect(formatted).toContain('openaidy devices approve');
+      expect(formatted).toContain('aidy devices approve');
     });
 
     it('includes hint for unknown command with suggestion', () => {
@@ -102,7 +102,7 @@ describe('CLI Error Model', () => {
       const formatted = formatCLIError(error);
 
       expect(formatted).toContain('Run:');
-      expect(formatted).toContain('openaidy admin token create');
+      expect(formatted).toContain('aidy admin token create');
     });
   });
 
@@ -134,7 +134,7 @@ describe('CLI Error Model', () => {
       it('creates argument missing error', () => {
         const result = argMissing(
           'request-id',
-          'openaidy devices approve <request-id>',
+          'aidy devices approve <request-id>',
         );
 
         expect(result.exitCode).toBe(2);

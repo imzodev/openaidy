@@ -6,7 +6,7 @@ import type {
   TaskExecutionHistoryStatus,
   ReplanPolicy,
   TaskScheduleStatus,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ---------------------------------------------------------------------------
 // Mock TaskScheduleService

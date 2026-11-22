@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 import type {
   TaskSchedule,
   TaskAgent,
@@ -8,7 +8,7 @@ import type {
   TaskAgentsStore,
   TaskSchedulesStore,
   TaskExecutionHistoryStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 /**
  * TaskScheduleExecutor
@@ -34,7 +34,7 @@ import type {
  * on the next run. The same agents are reused across all runs of a
  * recurring task — that's the whole point of recurring tasks.
  *
- * Concurrency: the executor assumes single-server trust (the OpenAidy
+ * Concurrency: the executor assumes single-server trust (the Aidy
  * server runs as one process per instance). `claimNextDue` uses a simple
  * `SELECT ... WHERE nextRunAt <= now AND status = 'active' ORDER BY
  * nextRunAt LIMIT 1` — no `FOR UPDATE SKIP LOCKED` yet. Multi-server

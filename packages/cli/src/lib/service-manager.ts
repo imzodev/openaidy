@@ -1,10 +1,10 @@
 /**
- * systemd integration for `openaidy service` and the lifecycle commands.
+ * systemd integration for `aidy service` and the lifecycle commands.
  *
- * `openaidy start` on its own spawns a detached server and nothing watches
+ * `aidy start` on its own spawns a detached server and nothing watches
  * it — if the process dies (e.g. OOM-killed) it stays down until someone
  * notices. Installing the service hands supervision to systemd: the unit runs
- * `openaidy start --foreground`, which exits when the server does, and
+ * `aidy start --foreground`, which exits when the server does, and
  * `Restart=always` brings it back. Once installed, `start`/`stop`/`restart`
  * delegate to systemctl so there is only ever one server.
  *
@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export const SERVICE_NAME = 'openaidy';
+export const SERVICE_NAME = 'aidy';
 
 export type ServiceScope = 'system' | 'user';
 
@@ -34,7 +34,7 @@ export type UnitOptions = {
   nodeArgs?: string[] | undefined;
   /** Absolute path of the CLI entry (cli.mjs). */
   cliPath: string;
-  openaidyHome: string;
+  aidyHome: string;
   /** PATH for the service, so MCP servers find npx/uvx/git. */
   pathEnv: string;
   workingDirectory: string;
@@ -69,7 +69,7 @@ export function systemdAvailable(): boolean {
  */
 export function detectInstalledService(): InstalledService | undefined {
   // Escape hatch (and test isolation): ignore any installed unit.
-  if (process.env.OPENAIDY_NO_SERVICE === '1') return undefined;
+  if (process.env.AIDY_NO_SERVICE === '1') return undefined;
   if (process.platform !== 'linux') return undefined;
   for (const scope of [defaultScope(), 'system'] as const) {
     const path = unitPath(scope);
@@ -93,9 +93,9 @@ export function renderUnit(opts: UnitOptions): string {
   ];
   if (opts.port !== undefined) exec.push('--port', String(opts.port));
   return [
-    '# Managed by `openaidy service install` — reinstall rather than editing.',
+    '# Managed by `aidy service install` — reinstall rather than editing.',
     '[Unit]',
-    'Description=OpenAidy server',
+    'Description=Aidy server',
     'After=network-online.target',
     'Wants=network-online.target',
     '',
@@ -103,7 +103,7 @@ export function renderUnit(opts: UnitOptions): string {
     'Type=simple',
     `ExecStart=${exec.map(q).join(' ')}`,
     `WorkingDirectory=${q(opts.workingDirectory)}`,
-    `Environment=${q(`OPENAIDY_HOME=${opts.openaidyHome}`)}`,
+    `Environment=${q(`AIDY_HOME=${opts.aidyHome}`)}`,
     `Environment=${q(`PATH=${opts.pathEnv}`)}`,
     'Restart=always',
     'RestartSec=5',

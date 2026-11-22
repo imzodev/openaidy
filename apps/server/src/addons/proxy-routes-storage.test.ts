@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { addonProxyRoutes } from './proxy-routes';
 import { AddonService } from './service';
 import { AddonStorageEngine, DEFAULT_QUOTAS } from './storage/engine';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 const JWT_SECRET = 'test-secret-at-least-32-chars-long!!';
 const MIGRATIONS = [
@@ -47,7 +47,7 @@ async function buildApp(opts: {
     repository: null as never,
     validator: null as never,
     jwtSecret: JWT_SECRET,
-    openAidyVersion: '0.0.0',
+    aidyVersion: '0.0.0',
   });
   const token = (
     addonSvc as unknown as {

@@ -2,7 +2,7 @@
  * Bootstrap Admin Token Reader
  *
  * Reads and validates the bootstrap-admin token file so CLI commands
- * can authenticate against the OpenAidy HTTP API.
+ * can authenticate against the Aidy HTTP API.
  *
  * All CLI commands must use this instead of duplicating readAdminToken logic.
  */

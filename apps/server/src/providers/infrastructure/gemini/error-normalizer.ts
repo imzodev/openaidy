@@ -9,7 +9,7 @@ import {
   type ProviderError,
   type ProviderErrorCode,
   type ProviderErrorOptions,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { GeminiErrorResponse } from './types';
 
 // =====================

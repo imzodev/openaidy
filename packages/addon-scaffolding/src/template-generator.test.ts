@@ -15,7 +15,7 @@ describe('generateFromTemplate — shared theme tokens', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'openaidy-scaffolding-'));
+    dir = await mkdtemp(join(tmpdir(), 'aidy-scaffolding-'));
   });
 
   afterEach(async () => {
@@ -53,19 +53,19 @@ describe('generateFromTemplate — shared theme tokens', () => {
     expect(js).toContain('function applyTheme');
     expect(js).toContain('root.style.setProperty');
     // The fallback token map must mirror the host's dark palette so an
-    // addon that paints before OPENAIDY_INIT still looks reasonable.
+    // addon that paints before AIDY_INIT still looks reasonable.
     expect(js).toMatch(/'--bg-primary':\s*'#111827'/);
     expect(js).toMatch(/'--text-primary':\s*'#f3f4f6'/);
   });
 
-  it('gates init on an initialised flag so a duplicate OPENAIDY_INIT is a no-op but the listener stays alive', async () => {
+  it('gates init on an initialised flag so a duplicate AIDY_INIT is a no-op but the listener stays alive', async () => {
     const { js } = await generate();
     // No removeEventListener — the message listener must remain registered
-    // for the addon's lifetime so a subsequent OPENAIDY_THEME_CHANGED can
+    // for the addon's lifetime so a subsequent AIDY_THEME_CHANGED can
     // reach applyTheme().
     expect(js).not.toMatch(/removeEventListener\(['"]message['"]/);
     // The init branch is guarded by the flag.
-    expect(js).toMatch(/OPENAIDY_INIT['"]\s*&&\s*!initialised/);
+    expect(js).toMatch(/AIDY_INIT['"]\s*&&\s*!initialised/);
   });
 
   it('applies the .dark class so Tailwind dark: variants inside the addon still resolve', async () => {
@@ -86,7 +86,7 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
   let originalSetTimeout: typeof setTimeout;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'openaidy-scaffolding-bootstrap-'));
+    dir = await mkdtemp(join(tmpdir(), 'aidy-scaffolding-bootstrap-'));
     // The basic template registers a 5-second "SDK never connected" timer.
     // Stub setTimeout so the timer doesn't keep the test process alive.
     originalSetTimeout = globalThis.setTimeout;
@@ -98,14 +98,14 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
     globalThis.setTimeout = originalSetTimeout;
   });
 
-  it('applies OPENAIDY_THEME_CHANGED after init — the listener survives the first init', async () => {
+  it('applies AIDY_THEME_CHANGED after init — the listener survives the first init', async () => {
     const result = await generateFromTemplate('basic', dir, SAMPLE_OPTS);
     expect(result.success).toBe(true);
     const js = await readFile(join(dir, 'app/index.js'), 'utf-8');
 
     // Track every property written to :root.style and every event listener
     // registered/unregistered on window. The test feeds the bootstrap
-    // OPENAIDY_INIT, then OPENAIDY_THEME_CHANGED, and asserts the second
+    // AIDY_INIT, then AIDY_THEME_CHANGED, and asserts the second
     // message actually wrote new tokens — which is only possible if the
     // listener survived the first init.
     const tokensApplied: Array<{ key: string; value: string }> = [];
@@ -165,7 +165,7 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
     tokensApplied.length = 0;
     handler({
       data: {
-        type: 'OPENAIDY_INIT',
+        type: 'AIDY_INIT',
         apiBase: 'http://host.test',
         theme: { mode: 'light', tokens: { '--bg-primary': '#fafafa' } },
       },
@@ -184,7 +184,7 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
     tokensApplied.length = 0;
     handler({
       data: {
-        type: 'OPENAIDY_THEME_CHANGED',
+        type: 'AIDY_THEME_CHANGED',
         theme: { mode: 'dark', tokens: { '--bg-primary': '#0a0a0a' } },
       },
     });
@@ -198,7 +198,7 @@ describe('generateFromTemplate — bootstrap behaviour', () => {
     tokensApplied.length = 0;
     handler({
       data: {
-        type: 'OPENAIDY_INIT',
+        type: 'AIDY_INIT',
         apiBase: 'http://host.test',
         theme: { mode: 'light', tokens: { '--bg-primary': '#ffffff' } },
       },

@@ -19,7 +19,7 @@ import {
   type ChannelSubscribedResponse,
   type ChannelUnsubscribedResponse,
   type ErrorResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Channel Handler Class

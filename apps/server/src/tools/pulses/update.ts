@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { jobsUpdateMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
-import type { UpdatePulseInput } from '@openaidy/shared-types';
+import type { UpdatePulseInput } from '@aidyagent/shared-types';
 
 export function createPulsesUpdateTool(deps: PulseToolDeps): BuiltinTool {
   return {
@@ -89,7 +89,7 @@ export function createPulsesUpdateTool(deps: PulseToolDeps): BuiltinTool {
 
       // Build UpdatePulseInput from args
       let scheduleInput:
-        | import('@openaidy/shared-types').ScheduleInput
+        | import('@aidyagent/shared-types').ScheduleInput
         | undefined;
       const schedule = args['schedule'] as Record<string, unknown> | undefined;
       if (schedule) {

@@ -19,7 +19,7 @@ import {
   WS_ERROR_CODES,
   type SessionMessageRequest,
   type SessionDeleteRequest,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // Mock logger
 const mockLogger = {

@@ -6,13 +6,13 @@
  * only from type files and imported wherever they're needed.
  */
 
-import type { ProviderError, ModelProvider } from '@openaidy/runtime';
-import type { SecretProvider } from '@openaidy/config';
-import type { ResolvedProviderConfig } from '@openaidy/config';
+import type { ProviderError, ModelProvider } from '@aidyagent/runtime';
+import type { SecretProvider } from '@aidyagent/config';
+import type { ResolvedProviderConfig } from '@aidyagent/config';
 import type {
   AuthMethodProvider,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Result of loading and resolving a provider configuration

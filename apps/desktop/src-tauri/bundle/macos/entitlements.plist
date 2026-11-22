@@ -10,7 +10,7 @@
   <true/>
   <key>keychain-access-groups</key>
   <array>
-    <string>$(AppIdentifierPrefix)dev.openaidy</string>
+    <string>$(AppIdentifierPrefix)app.aidyagent</string>
   </array>
 </dict>
 </plist>

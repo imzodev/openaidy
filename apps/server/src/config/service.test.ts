@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { OpenAidyAppConfig } from '@openaidy/config';
+import type { AidyAppConfig } from '@aidyagent/config';
 import { AppConfigService } from './service.js';
 import type { ProviderServices } from '../providers';
 import type { AgentRegistry } from '../agents';
@@ -21,7 +21,7 @@ vi.mock('../mcp/secret-crypto', () => ({
  * block from doing any real work, so we can focus on the channel-reconciler
  * wiring in save().
  */
-function baseConfig(): OpenAidyAppConfig {
+function baseConfig(): AidyAppConfig {
   return {
     version: 1,
     defaults: { agentId: 'default' },
@@ -34,7 +34,7 @@ function baseConfig(): OpenAidyAppConfig {
         enabled: true,
       },
     ],
-  } as unknown as OpenAidyAppConfig;
+  } as unknown as AidyAppConfig;
 }
 
 // Providers/agents are no-op stubs — applyConfig only calls registry.clear()
@@ -60,7 +60,7 @@ describe('AppConfigService channel reconciler', () => {
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oa-config-test-'));
-    configPath = path.join(dir, 'openaidy.json');
+    configPath = path.join(dir, 'aidy.json');
     fs.writeFileSync(configPath, JSON.stringify(baseConfig()), 'utf-8');
   });
 

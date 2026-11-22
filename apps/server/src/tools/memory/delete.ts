@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { MemoryToolDeps } from './index.js';
 import { memoryDeleteMeta } from '../catalog.js';
 

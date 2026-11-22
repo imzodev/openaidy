@@ -1,7 +1,7 @@
 import type {
   ChannelMessageTriggerConfig,
   MessageMatchType,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Whether a channel message starts a workflow, per the trigger's match

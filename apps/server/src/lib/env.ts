@@ -1,30 +1,28 @@
 import { z } from 'zod';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_SERVER_PORT, resolveJwtSecret } from '@openaidy/config';
+import { DEFAULT_SERVER_PORT, resolveJwtSecret } from '@aidyagent/config';
 
 const workspaceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../../',
 );
-const defaultOpenAidyHome = resolve(workspaceRoot, '.openaidy');
+const defaultAidyHome = resolve(workspaceRoot, '.aidy');
 const defaultAppConfigTemplatePath = resolve(
   workspaceRoot,
-  'config/openaidy.template.json',
+  'config/aidy.template.json',
 );
 // Source of bundled pre-installed skills. In dev the source is the repo's
-// `config/skills/`; the packaged `openaidy` CLI injects
+// `config/skills/`; the packaged `aidy` CLI injects
 // `<pkgRoot>/assets/skills` so the same code path serves both. The server
 // reads from here on every start and seeds `SKILLS_DIR` from it — without
 // this override a packaged install used to look at
-// `dirname(OPENAIDY_HOME)/config/skills`, which resolves to
+// `dirname(AIDY_HOME)/config/skills`, which resolves to
 // `$HOME/config/skills` for normal installs and silently produced an empty
 // Skills page.
 const defaultBundledSkillsDir = resolve(workspaceRoot, 'config/skills');
-const resolveOpenAidyPath = (
-  openAidyHome: string,
-  relativePath: string,
-): string => resolve(openAidyHome, relativePath);
+const resolveAidyPath = (aidyHome: string, relativePath: string): string =>
+  resolve(aidyHome, relativePath);
 
 const envSchema = z
   .object({
@@ -34,19 +32,15 @@ const envSchema = z
     HOST: z.string().default('0.0.0.0'),
     // Default port the HTTP server binds to. Same-origin architecture:
     // the WebSocket gateway rides on this same port (see WS_PORT alias
-    // below). Override via OPENAIDY_PORT to use a different port.
-    OPENAIDY_PORT: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(DEFAULT_SERVER_PORT),
+    // below). Override via AIDY_PORT to use a different port.
+    AIDY_PORT: z.coerce.number().int().positive().default(DEFAULT_SERVER_PORT),
     // Default CORS origin permits the local Vite dev server (apps/web).
     // Override for production or remote dev.
-    OPENAIDY_CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+    AIDY_CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     DB_KIND: z.enum(['sqlite', 'postgres']).default('sqlite'),
     DATABASE_URL: z.string().optional(),
     SQLITE_PATH: z.string().optional(),
-    OPENAIDY_HOME: z.string().default(defaultOpenAidyHome),
+    AIDY_HOME: z.string().default(defaultAidyHome),
     APP_CONFIG_PATH: z.string().optional(),
     APP_CONFIG_TEMPLATE_PATH: z.string().default(defaultAppConfigTemplatePath),
     LOG_LEVEL: z.string().default('info'),
@@ -116,7 +110,7 @@ const envSchema = z
      * Source directory of the bundled pre-installed skills. Defaults to
      * `<repo>/config/skills` in development (where the source files
      * actually live); the packaged CLI overrides this with
-     * `<pkgRoot>/assets/skills` so a fresh `npm install -g openaidy` finds
+     * `<pkgRoot>/assets/skills` so a fresh `npm install -g @aidyagent/app` finds
      * the bundled skills next to the bundled server. See env.ts top
      * comment for the full rationale.
      */
@@ -161,16 +155,16 @@ const envSchema = z
     }
   })
   .transform((value) => {
-    const openAidyHome = value.OPENAIDY_HOME;
+    const aidyHome = value.AIDY_HOME;
 
     // Resolve WS_TOKEN_SECRET via the shared helper. The install script
-    // persists the secret to $OPENAIDY_HOME/state/install.json so manual
+    // persists the secret to $AIDY_HOME/state/install.json so manual
     // restarts (without the install script's env) still sign JWTs with
     // the same secret — otherwise BootstrapAdminManager.ensureToken()
     // would silently regenerate the admin JWT on every restart because
     // signature validation would fail against the env-default unsafe
     // secret, logging the user out of the UI.
-    const wsTokenSecret = resolveJwtSecret(value.WS_TOKEN_SECRET, openAidyHome);
+    const wsTokenSecret = resolveJwtSecret(value.WS_TOKEN_SECRET, aidyHome);
 
     return {
       ...value,
@@ -178,21 +172,18 @@ const envSchema = z
       // Internal aliases — `PORT`, `CORS_ORIGIN`, and `WS_PORT` are kept as
       // names consumers (app.ts, websocket gateway, tests) can read without
       // caring which source-of-truth env var produced them. `WS_PORT` rides
-      // on `OPENAIDY_PORT` because the WS gateway shares the same listener.
-      PORT: value.OPENAIDY_PORT,
-      CORS_ORIGIN: value.OPENAIDY_CORS_ORIGIN,
-      WS_PORT: value.OPENAIDY_PORT,
+      // on `AIDY_PORT` because the WS gateway shares the same listener.
+      PORT: value.AIDY_PORT,
+      CORS_ORIGIN: value.AIDY_CORS_ORIGIN,
+      WS_PORT: value.AIDY_PORT,
       APP_CONFIG_PATH:
-        value.APP_CONFIG_PATH ??
-        resolveOpenAidyPath(openAidyHome, 'openaidy.json'),
+        value.APP_CONFIG_PATH ?? resolveAidyPath(aidyHome, 'aidy.json'),
       BOOTSTRAP_ADMIN_TOKEN_PATH:
         value.BOOTSTRAP_ADMIN_TOKEN_PATH ??
-        resolveOpenAidyPath(openAidyHome, 'credentials/bootstrap-admin.json'),
+        resolveAidyPath(aidyHome, 'credentials/bootstrap-admin.json'),
       WORKSPACE_BASE_DIR:
-        value.WORKSPACE_BASE_DIR ??
-        resolveOpenAidyPath(openAidyHome, 'workspaces'),
-      SKILLS_DIR:
-        value.SKILLS_DIR ?? resolveOpenAidyPath(openAidyHome, 'skills'),
+        value.WORKSPACE_BASE_DIR ?? resolveAidyPath(aidyHome, 'workspaces'),
+      SKILLS_DIR: value.SKILLS_DIR ?? resolveAidyPath(aidyHome, 'skills'),
     };
   });
 
@@ -204,10 +195,7 @@ export function parseEnv(source: NodeJS.ProcessEnv): AppEnv {
   if (parsed.DB_KIND === 'sqlite' && !parsed.SQLITE_PATH) {
     return {
       ...parsed,
-      SQLITE_PATH: resolveOpenAidyPath(
-        parsed.OPENAIDY_HOME,
-        'data/openaidy.db',
-      ),
+      SQLITE_PATH: resolveAidyPath(parsed.AIDY_HOME, 'data/aidy.db'),
     };
   }
 

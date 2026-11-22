@@ -1,5 +1,5 @@
 /**
- * `openaidy mcp migrate-secrets` — one-shot migration of plaintext MCP
+ * `aidy mcp migrate-secrets` — one-shot migration of plaintext MCP
  * secrets to encrypted-at-rest form (issue #401).
  *
  * Delegates to the server's `POST /api/mcp/servers/migrate-secrets`
@@ -27,12 +27,12 @@ export async function mcpMigrateSecretsHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy mcp migrate-secrets [--dry-run]
+      `Usage: aidy mcp migrate-secrets [--dry-run]
 
 Walk every persisted MCP server's env/headers and encrypt plaintext inline
 secrets in-place. Existing installs may have stored an inlined credential
 (e.g. an Authorization header pasted with a real token) as a plain string
-in ~/.openaidy/openaidy.json — this command rewrites those values as
+in ~/.aidy/aidy.json — this command rewrites those values as
 encrypted-at-rest ciphertext (enc:v1:...) so a copy of the config file
 no longer exposes the raw secret.
 

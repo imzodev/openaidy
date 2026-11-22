@@ -2,12 +2,12 @@
 
 ## Objective
 
-Register OpenAidy as a persistent background service that starts on system boot and keeps the core service running even when the desktop window is closed. This gives a "always-on" experience similar to Docker Desktop.
+Register Aidy as a persistent background service that starts on system boot and keeps the core service running even when the desktop window is closed. This gives a "always-on" experience similar to Docker Desktop.
 
 ## Success Criteria
 
-1. Linux: systemd user service is installed at `~/.config/systemd/user/openaidy.service`
-2. macOS: LaunchAgent plist is installed at `~/Library/LaunchAgents/dev.openaidy.plist`
+1. Linux: systemd user service is installed at `~/.config/systemd/user/aidy.service`
+2. macOS: LaunchAgent plist is installed at `~/Library/LaunchAgents/app.aidyagent.plist`
 3. Windows: NSIS installer registers a Windows Service during install
 4. Each service starts the core service (`apps/server`) as a daemonized subprocess
 5. Services can be enabled/disabled via app settings
@@ -24,8 +24,8 @@ We implement **Model 2** as an optional install-time/setting choice.
 ## Files to Create/Modify
 
 ```
-apps/desktop/bundle/linux/openaidy.service    ← NEW: systemd unit file
-apps/desktop/bundle/macos/dev.openaidy.plist  ← NEW: LaunchAgent plist
+apps/desktop/bundle/linux/aidy.service    ← NEW: systemd unit file
+apps/desktop/bundle/macos/app.aidyagent.plist  ← NEW: LaunchAgent plist
 apps/desktop/bundle/windows/service.nsi       ← NEW: NSIS service registration
 apps/desktop/src-tauri/src/service_install.rs ← NEW: Service installation logic
 ```
@@ -34,31 +34,31 @@ apps/desktop/src-tauri/src/service_install.rs ← NEW: Service installation logi
 
 ### Step 8.1: Linux — systemd User Service
 
-Create `apps/desktop/bundle/linux/openaidy.service`:
+Create `apps/desktop/bundle/linux/aidy.service`:
 
 ```ini
 [Unit]
-Description=OpenAidy AI Assistant Background Service
+Description=Aidy AI Assistant Background Service
 After=network.target
 Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/openaidy-service
+ExecStart=/usr/local/bin/aidy-service
 Restart=on-failure
 RestartSec=5
-Environment=OPENAIDY_HOME=%h/.config/openaidy
+Environment=AIDY_HOME=%h/.config/aidy
 Environment=DB_KIND=sqlite
-Environment=SQLITE_PATH=%h/.config/openaidy/openaidy.db
-WorkingDirectory=%h/.config/openaidy
+Environment=SQLITE_PATH=%h/.config/aidy/aidy.db
+WorkingDirectory=%h/.config/aidy
 
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
-# Allow reading config in ~/.config/openaidy
-ReadWritePaths=%h/.config/openaidy
+# Allow reading config in ~/.config/aidy
+ReadWritePaths=%h/.config/aidy
 
 # Hardening for a Node.js server
 ProtectKernelTunables=true
@@ -70,14 +70,14 @@ RestrictNamespaces=true
 WantedBy=default.target
 ```
 
-The `openaidy-service` binary is a simple wrapper that:
+The `aidy-service` binary is a simple wrapper that:
 
-1. Reads env from `$OPENAIDY_HOME/.env` or environment
+1. Reads env from `$AIDY_HOME/.env` or environment
 2. Launches the Node.js server via `tsx` (dev) or `node` (prod)
 
 ### Step 8.2: macOS — LaunchAgent Plist
 
-Create `apps/desktop/bundle/macos/dev.openaidy.plist`:
+Create `apps/desktop/bundle/macos/app.aidyagent.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -85,17 +85,17 @@ Create `apps/desktop/bundle/macos/dev.openaidy.plist`:
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>dev.openaidy</string>
+  <string>app.aidyagent</string>
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/openaidy-service</string>
+    <string>/usr/local/bin/aidy-service</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
-    <key>OPENAIDY_HOME</key>
-    <string>~/.config/openaidy</string>
+    <key>AIDY_HOME</key>
+    <string>~/.config/aidy</string>
     <key>DB_KIND</key>
     <string>sqlite</string>
   </dict>
@@ -107,10 +107,10 @@ Create `apps/desktop/bundle/macos/dev.openaidy.plist`:
   <true/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/openaidy.log</string>
+  <string>/tmp/aidy.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/tmp/openaidy.err</string>
+  <string>/tmp/aidy.err</string>
 
   <key>ProcessType</key>
   <string>Background</string>
@@ -121,19 +121,19 @@ Create `apps/desktop/bundle/macos/dev.openaidy.plist`:
 </plist>
 ```
 
-**Install location:** `~/Library/LaunchAgents/dev.openaidy.plist`
+**Install location:** `~/Library/LaunchAgents/app.aidyagent.plist`
 
 **Commands to manage:**
 
 ```bash
 # Load (start) the service
-launchctl load ~/Library/LaunchAgents/dev.openaidy.plist
+launchctl load ~/Library/LaunchAgents/app.aidyagent.plist
 
 # Unload (stop) the service
-launchctl unload ~/Library/LaunchAgents/dev.openaidy.plist
+launchctl unload ~/Library/LaunchAgents/app.aidyagent.plist
 
 # Check status
-launchctl list | grep openaidy
+launchctl list | grep aidy
 ```
 
 ### Step 8.3: Windows — NSIS Service Registration
@@ -142,7 +142,7 @@ Windows doesn't have a native user-level service concept like systemd. We use a 
 
 The simplest approach for Windows is a **scheduled task with "At logon" trigger**, which achieves the same effect without needing a full Windows Service:
 
-Create `apps/desktop/bundle/windows/openaidy-task.xml`:
+Create `apps/desktop/bundle/windows/aidy-task.xml`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-16"?>
@@ -155,8 +155,8 @@ Create `apps/desktop/bundle/windows/openaidy-task.xml`:
   </Triggers>
   <Actions>
     <Exec>
-      <Command>openaidy-service.bat</Command>
-      <WorkingDirectory>%USERPROFILE%\.config\openaidy</WorkingDirectory>
+      <Command>aidy-service.bat</Command>
+      <WorkingDirectory>%USERPROFILE%\.config\aidy</WorkingDirectory>
     </Exec>
   </Actions>
   <Settings>
@@ -170,25 +170,25 @@ Create `apps/desktop/bundle/windows/openaidy-task.xml`:
 
 Alternatively, use the `win32-service` crate for a proper Windows Service managed by `sc`.
 
-### Step 8.4: Create openaidy-service Wrapper Script
+### Step 8.4: Create aidy-service Wrapper Script
 
-The service needs a thin wrapper binary/script that starts the Node.js server. Create `apps/desktop/scripts/openaidy-service.sh`:
+The service needs a thin wrapper binary/script that starts the Node.js server. Create `apps/desktop/scripts/aidy-service.sh`:
 
 ```bash
 #!/usr/bin/env bash
 #
-# openaidy-service — Wrapper script for the OpenAidy background service
+# aidy-service — Wrapper script for the Aidy background service
 #
 # This is installed as the ExecStart for the systemd service or LaunchAgent.
 # It sets up the environment and launches the server.
 
 set -e
 
-OPENAIDY_HOME="${OPENAIDY_HOME:-$HOME/.config/openaidy}"
-export OPENAIDY_HOME
+AIDY_HOME="${AIDY_HOME:-$HOME/.config/aidy}"
+export AIDY_HOME
 
 # Load env file if present
-ENV_FILE="$OPENAIDY_HOME/.env"
+ENV_FILE="$AIDY_HOME/.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
   source "$ENV_FILE"
@@ -196,9 +196,9 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # Determine if we should use tsx (dev) or node (prod)
-SERVER_ENTRY="$OPENAIDY_HOME/../../../apps/server/dist/index.js"
+SERVER_ENTRY="$AIDY_HOME/../../../apps/server/dist/index.js"
 if [ ! -f "$SERVER_ENTRY" ]; then
-  SERVER_ENTRY="$OPENAIDY_HOME/../../../apps/server/src/server.ts"
+  SERVER_ENTRY="$AIDY_HOME/../../../apps/server/src/server.ts"
   RUNNER="tsx"
 else
   RUNNER="node"
@@ -211,13 +211,13 @@ cd "$(dirname "$SERVER_ENTRY")/../../../../"
 exec $RUNNER "$SERVER_ENTRY"
 ```
 
-For Windows, create `openaidy-service.bat`:
+For Windows, create `aidy-service.bat`:
 
 ```batch
 @echo off
-set OPENAIDY_HOME=%USERPROFILE%\.config\openaidy
-if exist "%OPENAIDY_HOME%\.env" call "%OPENAIDY_HOME%\.env"
-start /B "" node "%USERPROFILE%\.config\openaidy\..\..\apps\server\dist\index.js"
+set AIDY_HOME=%USERPROFILE%\.config\aidy
+if exist "%AIDY_HOME%\.env" call "%AIDY_HOME%\.env"
+start /B "" node "%USERPROFILE%\.config\aidy\..\..\apps\server\dist\index.js"
 ```
 
 ### Step 8.5: Service Installation/Uninstallation via Tauri Commands
@@ -277,7 +277,7 @@ impl ServiceManager {
         match self {
             ServiceManager::Systemd => {
                 std::process::Command::new("systemctl")
-                    .args(["--user", "is-active", "openaidy"])
+                    .args(["--user", "is-active", "aidy"])
                     .output()
                     .map(|o| o.status.success())
                     .unwrap_or(false)
@@ -285,12 +285,12 @@ impl ServiceManager {
             ServiceManager::LaunchAgent => {
                 std::path::Path::new("/Users")
                     .join(std::env::var("USER").unwrap_or_default())
-                    .join("Library/LaunchAgents/dev.openaidy.plist")
+                    .join("Library/LaunchAgents/app.aidyagent.plist")
                     .exists()
             }
             ServiceManager::WindowsTask => {
                 std::process::Command::new("schtasks")
-                    .args(["/Query", "/TN", "OpenAidy"])
+                    .args(["/Query", "/TN", "Aidy"])
                     .output()
                     .map(|o| o.status.success())
                     .unwrap_or(false)
@@ -302,15 +302,15 @@ impl ServiceManager {
 
     fn install_systemd(&self, wrapper_path: &PathBuf) -> Result<(), String> {
         let unit_content = format!(r#"[Unit]
-Description=OpenAidy AI Assistant Background Service
+Description=Aidy AI Assistant Background Service
 
 [Service]
 Type=simple
 ExecStart={wrapper_path}
 Restart=on-failure
 RestartSec=5
-Environment=OPENAIDY_HOME=$HOME/.config/openaidy
-WorkingDirectory=$HOME/.config/openaidy
+Environment=AIDY_HOME=$HOME/.config/aidy
+WorkingDirectory=$HOME/.config/aidy
 
 [Install]
 WantedBy=default.target
@@ -323,7 +323,7 @@ WantedBy=default.target
             .join("systemd/user");
         std::fs::create_dir_all(&unit_dir).map_err(|e| e.to_string())?;
 
-        let unit_path = unit_dir.join("openaidy.service");
+        let unit_path = unit_dir.join("aidy.service");
         std::fs::write(&unit_path, unit_content).map_err(|e| e.to_string())?;
 
         let output = Command::new("systemctl")
@@ -336,7 +336,7 @@ WantedBy=default.target
         }
 
         let output = Command::new("systemctl")
-            .args(["--user", "enable", "openaidy"])
+            .args(["--user", "enable", "aidy"])
             .output()
             .map_err(|e| e.to_string())?;
 
@@ -345,7 +345,7 @@ WantedBy=default.target
         }
 
         let output = Command::new("systemctl")
-            .args(["--user", "start", "openaidy"])
+            .args(["--user", "start", "aidy"])
             .output()
             .map_err(|e| e.to_string())?;
 
@@ -359,16 +359,16 @@ WantedBy=default.target
 
     fn uninstall_systemd(&self) -> Result<(), String> {
         let _ = Command::new("systemctl")
-            .args(["--user", "stop", "openaidy"])
+            .args(["--user", "stop", "aidy"])
             .output();
 
         let _ = Command::new("systemctl")
-            .args(["--user", "disable", "openaidy"])
+            .args(["--user", "disable", "aidy"])
             .output();
 
         let unit_path = dirs::config_dir()
             .unwrap_or_default()
-            .join("systemd/user/openaidy.service");
+            .join("systemd/user/aidy.service");
         let _ = std::fs::remove_file(&unit_path);
 
         info!("systemd service uninstalled");
@@ -383,7 +383,7 @@ WantedBy=default.target
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>dev.openaidy</string>
+  <string>app.aidyagent</string>
   <key>ProgramArguments</key>
   <array>
     <string>{wrapper_path}</string>
@@ -394,8 +394,8 @@ WantedBy=default.target
   <true/>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>OPENAIDY_HOME</key>
-    <string>$HOME/.config/openaidy</string>
+    <key>AIDY_HOME</key>
+    <string>$HOME/.config/aidy</string>
   </dict>
 </dict>
 </plist>
@@ -408,7 +408,7 @@ WantedBy=default.target
             .join("Library/LaunchAgents");
         std::fs::create_dir_all(&plist_dir).map_err(|e| e.to_string())?;
 
-        let plist_path = plist_dir.join("dev.openaidy.plist");
+        let plist_path = plist_dir.join("app.aidyagent.plist");
         std::fs::write(&pl, plist_content).map_err(|e| e.to_string())?;
 
         let output = Command::new("launchctl")
@@ -427,7 +427,7 @@ WantedBy=default.target
     fn uninstall_launchagent(&self) -> Result<(), String> {
         let plist_path = dirs::home_dir()
             .unwrap_or_default()
-            .join("Library/LaunchAgents/dev.openaidy.plist");
+            .join("Library/LaunchAgents/app.aidyagent.plist");
 
         let _ = Command::new("launchctl")
             .args(["unload", plist_path.to_str().unwrap()])
@@ -445,7 +445,7 @@ WantedBy=default.target
         let output = Command::new("schtasks")
             .args([
                 "/Create",
-                "/TN", "OpenAidy",
+                "/TN", "Aidy",
                 "/TR", &format!("\"{}\"", wrapper_path.display()),
                 "/SC", "ONLOGON",
                 "/F",  // Force overwrite
@@ -463,7 +463,7 @@ WantedBy=default.target
 
     fn uninstall_windows_task(&self) -> Result<(), String> {
         let _ = Command::new("schtasks")
-            .args(["/Delete", "/TN", "OpenAidy", "/F"])
+            .args(["/Delete", "/TN", "Aidy", "/F"])
             .output();
 
         info!("Windows scheduled task uninstalled");
@@ -487,15 +487,15 @@ The user should be able to choose via a setting: "Run in background on startup" 
 
 ```bash
 # Linux
-systemctl --user status openaidy
-systemctl --user enable openaidy
+systemctl --user status aidy
+systemctl --user enable aidy
 
 # macOS
-launchctl list | grep openaidy
-launchctl load ~/Library/LaunchAgents/dev.openaidy.plist
+launchctl list | grep aidy
+launchctl load ~/Library/LaunchAgents/app.aidyagent.plist
 
 # Windows
-schtasks /Query /TN OpenAidy
+schtasks /Query /TN Aidy
 ```
 
 ## Risks & Mitigations
@@ -504,7 +504,7 @@ schtasks /Query /TN OpenAidy
 | ---------------------------------------- | ------------------------------------------------- |
 | systemd not available on some distros    | Check for systemd before offering service install |
 | libsecret not installed (Linux keychain) | Document dependency in install instructions       |
-| Service fails silently                   | Check logs via `journalctl --user -u openaidy`    |
+| Service fails silently                   | Check logs via `journalctl --user -u aidy`        |
 | macOS Gatekeeper blocks unsigned binary  | Sign the binary or document how to allow          |
 | Windows Defender flags binary            | Submit for signing or document warning            |
 | Multiple install attempts                | Check `is_installed()` before re-installing       |

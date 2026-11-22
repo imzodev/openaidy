@@ -20,7 +20,7 @@ import {
   type ErrorResponse,
   createWSMessage,
   WS_ERROR_CODES,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../../agents/registry';
 import type { ProviderServices } from '../../providers';
 

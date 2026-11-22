@@ -2,13 +2,13 @@
  * MiniMax Provider Profile
  *
  * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * `PROVIDER_PRESETS` (in `@aidyagent/shared-types`) — the single
  * source of truth. MiniMax is OpenAI-compatible with thinking
  * block streaming. Uses the same stripThinkingBlocks utility as
  * DeepSeek.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 import { type HookContext, type StreamChunk } from '../hooks';
 import { stripThinkingBlocks } from '../deepseek/index';

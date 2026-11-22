@@ -1,10 +1,10 @@
-import type { SubtasksRepository } from '@openaidy/db';
+import type { SubtasksRepository } from '@aidyagent/db';
 import type {
   GraphEdgeInput,
   GraphNodeInput,
   LoopConfig,
   SubtaskKind,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { createLogger } from '../lib/logger';
 
 /**

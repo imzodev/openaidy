@@ -6,7 +6,7 @@ import type {
   AppendMessageInput,
   FinishReason,
 } from '../types.js';
-import type { SessionType, SessionStatus } from '@openaidy/shared-types';
+import type { SessionType, SessionStatus } from '@aidyagent/shared-types';
 export type { SessionRecord, SessionMessageRecord, SessionRunRecord };
 
 // In-memory storage (will be replaced with database)

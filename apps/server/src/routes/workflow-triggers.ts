@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { MESSAGE_MATCH_TYPE_VALUES } from '@openaidy/shared-types';
+import { MESSAGE_MATCH_TYPE_VALUES } from '@aidyagent/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import type { WorkflowTriggerService } from '../tasks/triggers/service';

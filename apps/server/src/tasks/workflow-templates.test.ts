@@ -12,10 +12,10 @@ import {
   createDatabaseAdapter,
   type DatabaseAdapter,
   type Task,
-} from '@openaidy/db';
-import { DEFAULT_EXECUTION_CONFIG } from '@openaidy/config';
-import type { TemplateInput } from '@openaidy/shared-types';
-import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
+} from '@aidyagent/db';
+import { DEFAULT_EXECUTION_CONFIG } from '@aidyagent/config';
+import type { TemplateInput } from '@aidyagent/shared-types';
+import { WORKFLOW_TEMPLATES } from '@aidyagent/workflow-templates';
 import type { AgentRegistry } from '../agents';
 import type { ChannelRegistry } from '../channels';
 import { createLogger } from '../lib/logger';
@@ -54,10 +54,10 @@ describe('built-in workflow templates', { timeout: 20000 }, () => {
   let task: Task;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-templates-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-templates-'));
     db = await createDatabaseAdapter({
       kind: 'sqlite',
-      sqlitePath: join(dir, 'openaidy.db'),
+      sqlitePath: join(dir, 'aidy.db'),
     });
     service = new TaskService({
       tasksRepo: db.repositories.tasks,

@@ -50,7 +50,7 @@ function run(command, args) {
 function deployServerBundle() {
   const deployArgs = [
     '--filter',
-    '@openaidy/server',
+    '@aidyagent/server',
     'deploy',
     '--prod',
     '--legacy',

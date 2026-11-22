@@ -1,7 +1,7 @@
 /**
  * Subtasks Complete Command Handler
  *
- * Implements `openaidy subtasks complete <subtaskId>` command.
+ * Implements `aidy subtasks complete <subtaskId>` command.
  */
 
 import * as p from '@clack/prompts';
@@ -14,7 +14,7 @@ export async function subtasksCompleteHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy subtasks complete <subtaskId> [--result <result>]
+      `Usage: aidy subtasks complete <subtaskId> [--result <result>]
 
 Mark a subtask as completed.
 
@@ -25,8 +25,8 @@ Options:
   --result <r>   Completion result / summary (optional)
 
 Examples:
-  pnpm openaidy subtasks complete abc123
-  pnpm openaidy subtasks complete abc123 --result "API endpoint implemented and tested"
+  pnpm aidy subtasks complete abc123
+  pnpm aidy subtasks complete abc123 --result "API endpoint implemented and tested"
 
 Exit Codes:
   0  Success
@@ -56,7 +56,7 @@ Exit Codes:
 
   if (positional.length === 0) {
     const msg =
-      'Subtask ID is required.\nUsage: openaidy subtasks complete <subtaskId>';
+      'Subtask ID is required.\nUsage: aidy subtasks complete <subtaskId>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

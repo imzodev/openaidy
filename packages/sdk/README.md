@@ -1,11 +1,11 @@
-# OpenAidy SDK
+# Aidy SDK
 
-Multi-client WebSocket SDK for the OpenAidy platform.
+Multi-client WebSocket SDK for the Aidy platform.
 
 ## Installation
 
 ```bash
-pnpm add @openaidy/sdk
+pnpm add @aidyagent/sdk
 ```
 
 ## Client Adapters
@@ -17,7 +17,7 @@ The SDK provides client adapters for different client types:
 For browser-based web applications:
 
 ```typescript
-import { createWebUIAdapter } from '@openaidy/sdk';
+import { createWebUIAdapter } from '@aidyagent/sdk';
 
 const adapter = createWebUIAdapter();
 const client = adapter.createClient({
@@ -33,7 +33,7 @@ await client.connect();
 For CLI applications:
 
 ```typescript
-import { createCLIAdapter } from '@openaidy/sdk';
+import { createCLIAdapter } from '@aidyagent/sdk';
 
 const adapter = createCLIAdapter();
 const client = adapter.createClient({
@@ -47,7 +47,7 @@ const client = adapter.createClient({
 For mobile applications:
 
 ```typescript
-import { createMobileAdapter } from '@openaidy/sdk';
+import { createMobileAdapter } from '@aidyagent/sdk';
 
 const adapter = createMobileAdapter();
 const client = adapter.createClient({
@@ -60,7 +60,7 @@ const client = adapter.createClient({
 For channel/plugin integrations:
 
 ```typescript
-import { createChannelAdapter } from '@openaidy/sdk';
+import { createChannelAdapter } from '@aidyagent/sdk';
 
 const adapter = createChannelAdapter();
 const client = adapter.createClient({

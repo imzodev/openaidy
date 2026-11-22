@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 /**
- * Builds the publishable `openaidy` npm package into build/npm/.
+ * Builds the publishable `@aidyagent/app` npm package into build/npm/.
  *
  * Distribution model: instead of cloning + building from source on the user's
  * machine (fragile — pnpm/corepack/native-toolchain issues), we ship a
- * prebuilt package. `npm install -g openaidy` then `openaidy start` runs with
+ * prebuilt package. `npm install -g @aidyagent/app` then `aidy start` runs with
  * zero build step.
  *
  * Layout produced:
  *   build/npm/
- *     package.json        name "openaidy", bin, deps (third-party)
- *     dist/server.mjs     esbuild bundle of apps/server (@openaidy/* inlined)
+ *     package.json        name "@aidyagent/app", bin, deps (third-party)
+ *     dist/server.mjs     esbuild bundle of apps/server (@aidyagent/* inlined)
  *     dist/cli.mjs        esbuild bundle of the CLI (bin, shebang)
  *     web/                apps/web/dist (the built SPA)
- *     assets/openaidy.template.json
- *     assets/openaidy-sdk.js
+ *     assets/aidy.template.json
+ *     assets/aidy-sdk.js
  *     assets/drizzle/*.sql
  *     assets/skills/      pre-installed skill definitions (browser-automation,
  *                          code-review, conventional-commits, …) — see
  *                          config/skills/. The packaged CLI points the server
  *                          at this directory via BUNDLED_SKILLS_DIR so a fresh
- *                          install seeds the user's ~/.openaidy/skills/ from
+ *                          install seeds the user's ~/.aidy/skills/ from
  *                          here, with the existing per-file manifest handling
  *                          version updates and user-edit preservation.
  *
- * First-party @openaidy/* code is bundled in; third-party deps stay external
+ * First-party @aidyagent/* code is bundled in; third-party deps stay external
  * and are declared as `dependencies` so npm installs them. There are no native
  * addons — the SQLite layer uses Node's built-in `node:sqlite` — so nothing
  * needs a compiler or a postinstall script (safe under npm v12's script
@@ -52,7 +52,7 @@ const readPkg = (p) => JSON.parse(readFileSync(resolve(root, p), 'utf-8'));
 const rootPkg = readPkg('package.json');
 
 // ── Dependency set: union of third-party deps across the packages we bundle,
-// minus first-party @openaidy/* (those are inlined by esbuild).
+// minus first-party @aidyagent/* (those are inlined by esbuild).
 const depSources = [
   'apps/server/package.json',
   'packages/db/package.json',
@@ -62,7 +62,7 @@ const deps = {};
 for (const src of depSources) {
   const d = readPkg(src).dependencies ?? {};
   for (const [name, range] of Object.entries(d)) {
-    if (!name.startsWith('@openaidy/')) deps[name] = range;
+    if (!name.startsWith('@aidyagent/')) deps[name] = range;
   }
 }
 const external = Object.keys(deps);
@@ -92,7 +92,7 @@ await esbuild.build({
 // to itself, so keep both in dist/.
 console.log('[build-npm] bundling CLI…');
 await esbuild.build({
-  entryPoints: [resolve(root, 'packages/cli/bin/openaidy.ts')],
+  entryPoints: [resolve(root, 'packages/cli/bin/aidy.ts')],
   outfile: resolve(out, 'dist/cli.mjs'),
   bundle: true,
   platform: 'node',
@@ -111,21 +111,21 @@ await esbuild.build({
 console.log('[build-npm] copying assets…');
 mkdirSync(resolve(out, 'assets'), { recursive: true });
 cpSync(
-  resolve(root, 'config/openaidy.template.json'),
-  resolve(out, 'assets/openaidy.template.json'),
+  resolve(root, 'config/aidy.template.json'),
+  resolve(out, 'assets/aidy.template.json'),
 );
 cpSync(
-  resolve(root, 'apps/server/src/sdk/openaidy-sdk.js'),
-  resolve(out, 'assets/openaidy-sdk.js'),
+  resolve(root, 'apps/server/src/sdk/aidy-sdk.js'),
+  resolve(out, 'assets/aidy-sdk.js'),
 );
 cpSync(resolve(root, 'packages/db/drizzle'), resolve(out, 'assets/drizzle'), {
   recursive: true,
 });
 // Bundled pre-installed skills (config/skills/). The packaged CLI passes
 // `<pkgRoot>/assets/skills` to the server via BUNDLED_SKILLS_DIR; the server
-// seeds ~/.openaidy/skills/ from there on every start, so skill updates
+// seeds ~/.aidy/skills/ from there on every start, so skill updates
 // ship with the next npm upgrade (the existing per-file manifest at
-// ~/.openaidy/skills/.seed-manifest.json handles new / version-bumped /
+// ~/.aidy/skills/.seed-manifest.json handles new / version-bumped /
 // user-modified files correctly).
 const skillsSource = resolve(root, 'config/skills');
 if (!existsSync(skillsSource)) {
@@ -150,21 +150,21 @@ try {
 
 // ── package.json for the published package.
 const pkg = {
-  // Scoped under the @openaidy org: npm's typosquat filter blocks the unscoped
-  // `openaidy` (too close to `openai`). The `bin` name stays `openaidy`, so
-  // users still run `openaidy` regardless of the (scoped) install name.
-  name: '@openaidy/app',
+  // Scoped under the @aidyagent org: the unscoped `aidy` name is taken on npm.
+  // The `bin` name is `aidy`, so users run `aidy` regardless of the (scoped)
+  // install name.
+  name: '@aidyagent/app',
   version: rootPkg.version,
-  description: 'OpenAidy — self-hosted AI agent platform (prebuilt).',
+  description: 'Aidy — self-hosted AI agent platform (prebuilt).',
   type: 'module',
-  bin: { openaidy: './dist/cli.mjs' },
+  bin: { aidy: './dist/cli.mjs' },
   files: ['dist', 'web', 'assets', 'README.md'],
   engines: { node: '>=22.13.0' },
   // Required for npm provenance (OIDC trusted publishing): must match the repo
   // that builds/publishes the package.
   repository: {
     type: 'git',
-    url: 'git+https://github.com/imzodev/openaidy.git',
+    url: 'git+https://github.com/imzodev/aidy.git',
   },
   dependencies: deps,
   // Scoped packages default to restricted; make it public.
@@ -174,7 +174,7 @@ const pkg = {
 writeFileSync(resolve(out, 'package.json'), JSON.stringify(pkg, null, 2));
 writeFileSync(
   resolve(out, 'README.md'),
-  `# @openaidy/app\n\nPrebuilt OpenAidy. Install and run:\n\n\`\`\`\nnpm install -g @openaidy/app\nopenaidy start\n\`\`\`\n`,
+  `# @aidyagent/app\n\nPrebuilt Aidy. Install and run:\n\n\`\`\`\nnpm install -g @aidyagent/app\naidy start\n\`\`\`\n`,
 );
 
 console.log(

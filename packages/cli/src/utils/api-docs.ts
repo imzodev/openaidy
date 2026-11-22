@@ -186,7 +186,7 @@ export function generateExamples(addonId: string): string {
 ### Basic Usage
 
 \`\`\`javascript
-import { init } from '@openaidy/addon-${addonId}';
+import { init } from '@aidyagent/addon-${addonId}';
 
 const addon = init({
   // configuration
@@ -198,7 +198,7 @@ await addon.start();
 ### Advanced Usage
 
 \`\`\`javascript
-import { init } from '@openaidy/addon-${addonId}';
+import { init } from '@aidyagent/addon-${addonId}';
 
 const addon = init({
   debug: true,

@@ -9,8 +9,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { OpenAidyAppConfig } from '@openaidy/config';
-import type { McpServerConfig } from '@openaidy/config';
+import type { AidyAppConfig } from '@aidyagent/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type { AppConfigService } from '../config/service';
 import {
   migrateAllInlineSecrets,
@@ -19,18 +19,18 @@ import {
 import { decryptSecret, isEncryptedSecret } from './secret-crypto';
 
 type MockConfigService = {
-  getConfig(): OpenAidyAppConfig;
+  getConfig(): AidyAppConfig;
   getMcpServers(): McpServerConfig[];
-  save(input: unknown): Promise<OpenAidyAppConfig>;
+  save(input: unknown): Promise<AidyAppConfig>;
 };
 
 function makeConfigService(servers: McpServerConfig[]): MockConfigService & {
   writeCount: () => number;
   lastSaved: () => unknown;
 } {
-  const config: OpenAidyAppConfig = {
+  const config: AidyAppConfig = {
     mcpServers: servers,
-  } as OpenAidyAppConfig;
+  } as AidyAppConfig;
   let writes = 0;
   let last: unknown = null;
   return {

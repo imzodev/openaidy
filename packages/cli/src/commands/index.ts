@@ -108,18 +108,18 @@ registerGroup({
   commands: {
     'admin token show': {
       description: 'Show the current bootstrap-admin token information',
-      usage: 'openaidy admin token show',
-      examples: ['pnpm openaidy admin token show'],
+      usage: 'aidy admin token show',
+      examples: ['pnpm aidy admin token show'],
     },
     'admin token validate': {
       description: 'Validate the bootstrap-admin token',
-      usage: 'openaidy admin token validate',
-      examples: ['pnpm openaidy admin token validate'],
+      usage: 'aidy admin token validate',
+      examples: ['pnpm aidy admin token validate'],
     },
     'admin token path': {
       description: 'Show the path to the bootstrap-admin token file',
-      usage: 'openaidy admin token path',
-      examples: ['pnpm openaidy admin token path'],
+      usage: 'aidy admin token path',
+      examples: ['pnpm aidy admin token path'],
     },
   },
 });
@@ -130,21 +130,21 @@ registerGroup({
   commands: {
     'tokens list': {
       description: 'List all access tokens',
-      usage: 'openaidy tokens list',
-      examples: ['pnpm openaidy tokens list'],
+      usage: 'aidy tokens list',
+      examples: ['pnpm aidy tokens list'],
     },
     'tokens create': {
       description: 'Create a new access token',
-      usage: 'openaidy tokens create --name <name> --scopes <scopes>',
+      usage: 'aidy tokens create --name <name> --scopes <scopes>',
       examples: [
-        'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
-        'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
+        'pnpm aidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
+        'pnpm aidy tokens create --name "Admin Key" --scopes "*"',
       ],
     },
     'tokens revoke': {
       description: 'Revoke an access token by ID',
-      usage: 'openaidy tokens revoke <id>',
-      examples: ['pnpm openaidy tokens revoke abc123'],
+      usage: 'aidy tokens revoke <id>',
+      examples: ['pnpm aidy tokens revoke abc123'],
     },
   },
 });
@@ -155,18 +155,18 @@ registerGroup({
   commands: {
     'devices list': {
       description: 'List pending device pairing requests',
-      usage: 'openaidy devices list',
-      examples: ['pnpm openaidy devices list'],
+      usage: 'aidy devices list',
+      examples: ['pnpm aidy devices list'],
     },
     'devices approve': {
       description: 'Approve a pending device pairing request',
-      usage: 'openaidy devices approve <request-id>',
-      examples: ['pnpm openaidy devices approve abc123'],
+      usage: 'aidy devices approve <request-id>',
+      examples: ['pnpm aidy devices approve abc123'],
     },
     'devices deny': {
       description: 'Deny a pending device pairing request',
-      usage: 'openaidy devices deny <request-id>',
-      examples: ['pnpm openaidy devices deny abc123'],
+      usage: 'aidy devices deny <request-id>',
+      examples: ['pnpm aidy devices deny abc123'],
     },
   },
 });
@@ -183,7 +183,7 @@ registerCommand(
       return {
         exitCode: 0,
         output: `
-Usage: openaidy admin token show
+Usage: aidy admin token show
 
 Show the current bootstrap-admin token information.
 
@@ -194,7 +194,7 @@ This command displays:
   - Metadata (client ID, created, expires, scopes)
 
 Examples:
-  pnpm openaidy admin token show
+  pnpm aidy admin token show
 
 Exit Codes:
   0  Token is valid
@@ -212,8 +212,8 @@ Exit Codes:
   },
   {
     description: 'Show the current bootstrap-admin token information',
-    usage: 'openaidy admin token show',
-    examples: ['pnpm openaidy admin token show'],
+    usage: 'aidy admin token show',
+    examples: ['pnpm aidy admin token show'],
   },
 );
 
@@ -224,7 +224,7 @@ registerCommand(
       return {
         exitCode: 0,
         output: `
-Usage: openaidy admin token validate
+Usage: aidy admin token validate
 
 Validate the bootstrap-admin token.
 
@@ -235,7 +235,7 @@ This command checks:
   - Token is not expired
 
 Examples:
-  pnpm openaidy admin token validate
+  pnpm aidy admin token validate
 
 Exit Codes:
   0  Token is valid
@@ -261,7 +261,7 @@ Exit Codes:
   },
   {
     description: 'Validate the bootstrap-admin token',
-    usage: 'openaidy admin token validate',
+    usage: 'aidy admin token validate',
   },
 );
 
@@ -272,12 +272,12 @@ registerCommand(
       return {
         exitCode: 0,
         output: `
-Usage: openaidy admin token path
+Usage: aidy admin token path
 
 Show the path to the bootstrap-admin token file.
 
 Examples:
-  pnpm openaidy admin token path
+  pnpm aidy admin token path
 `,
       };
     }
@@ -286,7 +286,7 @@ Examples:
   },
   {
     description: 'Show the path to the bootstrap-admin token file',
-    usage: 'openaidy admin token path',
+    usage: 'aidy admin token path',
   },
 );
 
@@ -299,8 +299,8 @@ registerCommand(
   },
   {
     description: 'List all access tokens',
-    usage: 'openaidy tokens list',
-    examples: ['pnpm openaidy tokens list'],
+    usage: 'aidy tokens list',
+    examples: ['pnpm aidy tokens list'],
   },
 );
 
@@ -316,10 +316,10 @@ registerCommand(
   },
   {
     description: 'Generate or refresh the bootstrap-admin token',
-    usage: 'openaidy init',
+    usage: 'aidy init',
     examples: [
-      'WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init',
-      'openaidy init',
+      'WS_TOKEN_SECRET=$(openssl rand -hex 32) aidy init',
+      'aidy init',
     ],
   },
 );
@@ -333,10 +333,10 @@ registerCommand(
   {
     description: 'Create a new access token',
     usage:
-      'openaidy tokens create --name <name> --scopes <scopes> [--expires <date>]',
+      'aidy tokens create --name <name> --scopes <scopes> [--expires <date>]',
     examples: [
-      'pnpm openaidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
-      'pnpm openaidy tokens create --name "Admin Key" --scopes "*"',
+      'pnpm aidy tokens create --name "CI Pipeline" --scopes "sessions.list,sessions.stream"',
+      'pnpm aidy tokens create --name "Admin Key" --scopes "*"',
     ],
   },
 );
@@ -349,8 +349,8 @@ registerCommand(
   },
   {
     description: 'Revoke an access token by ID',
-    usage: 'openaidy tokens revoke <id>',
-    examples: ['pnpm openaidy tokens revoke abc123'],
+    usage: 'aidy tokens revoke <id>',
+    examples: ['pnpm aidy tokens revoke abc123'],
   },
 );
 
@@ -365,9 +365,9 @@ registerCommand(
     return startHandler(args);
   },
   {
-    description: 'Start the OpenAidy server as a background process',
-    usage: 'openaidy start [--port <N>] [--foreground]',
-    examples: ['openaidy start', 'openaidy start --foreground'],
+    description: 'Start the Aidy server as a background process',
+    usage: 'aidy start [--port <N>] [--foreground]',
+    examples: ['aidy start', 'aidy start --foreground'],
   },
 );
 
@@ -378,9 +378,9 @@ registerCommand(
     return stopHandler(args);
   },
   {
-    description: 'Stop the OpenAidy server',
-    usage: 'openaidy stop',
-    examples: ['openaidy stop'],
+    description: 'Stop the Aidy server',
+    usage: 'aidy stop',
+    examples: ['aidy stop'],
   },
 );
 
@@ -391,12 +391,12 @@ registerCommand(
     return restartHandler(args);
   },
   {
-    description: 'Restart the OpenAidy server (stop + start, port preserved)',
-    usage: 'openaidy restart [--port <N>] [--server-only] [--integrated]',
+    description: 'Restart the Aidy server (stop + start, port preserved)',
+    usage: 'aidy restart [--port <N>] [--server-only] [--integrated]',
     examples: [
-      'openaidy restart',
-      'openaidy restart --port 3001',
-      'openaidy restart --integrated',
+      'aidy restart',
+      'aidy restart --port 3001',
+      'aidy restart --integrated',
     ],
   },
 );
@@ -409,8 +409,8 @@ registerCommand(
   },
   {
     description: 'Show the current server status',
-    usage: 'openaidy status',
-    examples: ['openaidy status'],
+    usage: 'aidy status',
+    examples: ['aidy status'],
   },
 );
 
@@ -420,23 +420,23 @@ registerCommand(
 
 registerGroup({
   name: 'service',
-  description: 'Run OpenAidy under systemd so it restarts automatically',
+  description: 'Run Aidy under systemd so it restarts automatically',
   commands: {
     'service install': {
       description:
         'Install + start the systemd service (auto-restart, starts at boot)',
-      usage: 'openaidy service install [--port <N>]',
-      examples: ['openaidy service install'],
+      usage: 'aidy service install [--port <N>]',
+      examples: ['aidy service install'],
     },
     'service uninstall': {
       description: 'Stop and remove the systemd service',
-      usage: 'openaidy service uninstall',
-      examples: ['openaidy service uninstall'],
+      usage: 'aidy service uninstall',
+      examples: ['aidy service uninstall'],
     },
     'service status': {
       description: 'Show the systemd service status',
-      usage: 'openaidy service status',
-      examples: ['openaidy service status'],
+      usage: 'aidy service status',
+      examples: ['aidy service status'],
     },
   },
 });
@@ -450,8 +450,8 @@ registerCommand(
   {
     description:
       'Install + start the systemd service (auto-restart, starts at boot)',
-    usage: 'openaidy service install [--port <N>]',
-    examples: ['openaidy service install'],
+    usage: 'aidy service install [--port <N>]',
+    examples: ['aidy service install'],
   },
 );
 
@@ -463,8 +463,8 @@ registerCommand(
   },
   {
     description: 'Stop and remove the systemd service',
-    usage: 'openaidy service uninstall',
-    examples: ['openaidy service uninstall'],
+    usage: 'aidy service uninstall',
+    examples: ['aidy service uninstall'],
   },
 );
 
@@ -476,8 +476,8 @@ registerCommand(
   },
   {
     description: 'Show the systemd service status',
-    usage: 'openaidy service status',
-    examples: ['openaidy service status'],
+    usage: 'aidy service status',
+    examples: ['aidy service status'],
   },
 );
 
@@ -490,62 +490,56 @@ registerGroup({
   description: 'Addon development tools (create, build, test, publish)',
   commands: {
     'addon install': {
-      description: 'Register a built addon with the local OpenAidy server',
-      usage: 'openaidy addon install [--server-url <url>] [--token <token>]',
+      description: 'Register a built addon with the local Aidy server',
+      usage: 'aidy addon install [--server-url <url>] [--token <token>]',
       examples: [
-        'pnpm openaidy addon install',
-        'pnpm openaidy addon install --server-url http://localhost:3001',
+        'pnpm aidy addon install',
+        'pnpm aidy addon install --server-url http://localhost:3001',
       ],
     },
     'addon create': {
       description: 'Create a new addon project from a template',
-      usage: 'openaidy addon create <name> [--template <template>]',
+      usage: 'aidy addon create <name> [--template <template>]',
       examples: [
-        'pnpm openaidy addon create my-addon',
-        'pnpm openaidy addon create my-addon --template agent',
+        'pnpm aidy addon create my-addon',
+        'pnpm aidy addon create my-addon --template agent',
       ],
     },
     'addon init': {
       description: 'Initialize an existing project as an addon',
-      usage: 'openaidy addon init [--force]',
-      examples: ['pnpm openaidy addon init'],
+      usage: 'aidy addon init [--force]',
+      examples: ['pnpm aidy addon init'],
     },
     'addon build': {
       description: 'Build addon for production',
-      usage: 'openaidy addon build [--watch] [--minify] [--sourcemap]',
-      examples: [
-        'pnpm openaidy addon build',
-        'pnpm openaidy addon build --minify',
-      ],
+      usage: 'aidy addon build [--watch] [--minify] [--sourcemap]',
+      examples: ['pnpm aidy addon build', 'pnpm aidy addon build --minify'],
     },
     'addon validate': {
       description: 'Validate addon package and manifest',
-      usage: 'openaidy addon validate [--verbose] [--strict]',
+      usage: 'aidy addon validate [--verbose] [--strict]',
       examples: [
-        'pnpm openaidy addon validate',
-        'pnpm openaidy addon validate --verbose',
+        'pnpm aidy addon validate',
+        'pnpm aidy addon validate --verbose',
       ],
     },
     'addon dev': {
       description: 'Start development server with hot-reloading',
-      usage: 'openaidy addon dev [--port <port>] [--openaidy-url <url>]',
-      examples: [
-        'pnpm openaidy addon dev',
-        'pnpm openaidy addon dev --port 3001',
-      ],
+      usage: 'aidy addon dev [--port <port>] [--aidy-url <url>]',
+      examples: ['pnpm aidy addon dev', 'pnpm aidy addon dev --port 3001'],
     },
     'addon publish': {
       description: 'Publish addon to the registry',
-      usage: 'openaidy addon publish [--tag <tag>] [--registry <url>]',
+      usage: 'aidy addon publish [--tag <tag>] [--registry <url>]',
       examples: [
-        'pnpm openaidy addon publish',
-        'pnpm openaidy addon publish --tag beta',
+        'pnpm aidy addon publish',
+        'pnpm aidy addon publish --tag beta',
       ],
     },
     'addon templates': {
       description: 'List available addon templates',
-      usage: 'openaidy addon templates',
-      examples: ['pnpm openaidy addon templates'],
+      usage: 'aidy addon templates',
+      examples: ['pnpm aidy addon templates'],
     },
   },
 });
@@ -557,9 +551,9 @@ registerCommand(
     return addonInstallHandler(args);
   },
   {
-    description: 'Register a built addon with the local OpenAidy server',
+    description: 'Register a built addon with the local Aidy server',
     usage:
-      'openaidy addon install [<addon-name>] [--server-url <url>] [--token <token>]',
+      'aidy addon install [<addon-name>] [--server-url <url>] [--token <token>]',
   },
 );
 
@@ -571,7 +565,7 @@ registerCommand(
   },
   {
     description: 'Create a new addon project from a template',
-    usage: 'openaidy addon create <name> [--template <template>]',
+    usage: 'aidy addon create <name> [--template <template>]',
   },
 );
 
@@ -583,7 +577,7 @@ registerCommand(
   },
   {
     description: 'Validate addon package and manifest',
-    usage: 'openaidy addon validate [--verbose] [--strict]',
+    usage: 'aidy addon validate [--verbose] [--strict]',
   },
 );
 
@@ -595,7 +589,7 @@ registerCommand(
   },
   {
     description: 'List available addon templates',
-    usage: 'openaidy addon templates',
+    usage: 'aidy addon templates',
   },
 );
 
@@ -609,25 +603,21 @@ registerGroup({
   commands: {
     'agents list': {
       description: 'List all configured agents',
-      usage: 'openaidy agents list',
-      examples: ['pnpm openaidy agents list'],
+      usage: 'aidy agents list',
+      examples: ['pnpm aidy agents list'],
     },
     'agents create': {
       description: 'Create a new agent with its own workspace',
-      usage:
-        'openaidy agents create [<name>] [--id <id>] [--description <desc>]',
+      usage: 'aidy agents create [<name>] [--id <id>] [--description <desc>]',
       examples: [
-        'pnpm openaidy agents create',
-        'pnpm openaidy agents create "Research Assistant"',
+        'pnpm aidy agents create',
+        'pnpm aidy agents create "Research Assistant"',
       ],
     },
     'agents delete': {
       description: 'Delete an agent (requires typing the agent ID to confirm)',
-      usage: 'openaidy agents delete [<id>]',
-      examples: [
-        'pnpm openaidy agents delete',
-        'pnpm openaidy agents delete my-agent',
-      ],
+      usage: 'aidy agents delete [<id>]',
+      examples: ['pnpm aidy agents delete', 'pnpm aidy agents delete my-agent'],
     },
   },
 });
@@ -640,8 +630,8 @@ registerCommand(
   },
   {
     description: 'List all configured agents',
-    usage: 'openaidy agents list',
-    examples: ['pnpm openaidy agents list'],
+    usage: 'aidy agents list',
+    examples: ['pnpm aidy agents list'],
   },
 );
 
@@ -653,10 +643,10 @@ registerCommand(
   },
   {
     description: 'Create a new agent with its own workspace',
-    usage: 'openaidy agents create [<name>] [--id <id>] [--description <desc>]',
+    usage: 'aidy agents create [<name>] [--id <id>] [--description <desc>]',
     examples: [
-      'pnpm openaidy agents create',
-      'pnpm openaidy agents create "Research Assistant"',
+      'pnpm aidy agents create',
+      'pnpm aidy agents create "Research Assistant"',
     ],
   },
 );
@@ -669,11 +659,8 @@ registerCommand(
   },
   {
     description: 'Delete an agent (requires typing the agent ID to confirm)',
-    usage: 'openaidy agents delete [<id>]',
-    examples: [
-      'pnpm openaidy agents delete',
-      'pnpm openaidy agents delete my-agent',
-    ],
+    usage: 'aidy agents delete [<id>]',
+    examples: ['pnpm aidy agents delete', 'pnpm aidy agents delete my-agent'],
   },
 );
 
@@ -687,65 +674,65 @@ registerGroup({
   commands: {
     'tasks list': {
       description: 'List all tasks, optionally filtered by status',
-      usage: 'openaidy tasks list [--status <status>] [--limit <n>]',
+      usage: 'aidy tasks list [--status <status>] [--limit <n>]',
       examples: [
-        'pnpm openaidy tasks list',
-        'pnpm openaidy tasks list --status in_progress',
-        'pnpm openaidy tasks list --limit 10',
+        'pnpm aidy tasks list',
+        'pnpm aidy tasks list --status in_progress',
+        'pnpm aidy tasks list --limit 10',
       ],
     },
     'tasks get': {
       description: 'Get full details for a specific task',
-      usage: 'openaidy tasks get <id>',
-      examples: ['pnpm openaidy tasks get abc123'],
+      usage: 'aidy tasks get <id>',
+      examples: ['pnpm aidy tasks get abc123'],
     },
     'tasks create': {
       description: 'Create a new task',
       usage:
-        'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+        'aidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
       examples: [
-        'pnpm openaidy tasks create "Fix login bug" --priority high',
-        'pnpm openaidy tasks create --description "Implement the new API"',
+        'pnpm aidy tasks create "Fix login bug" --priority high',
+        'pnpm aidy tasks create --description "Implement the new API"',
       ],
     },
     'tasks update': {
       description: 'Update a task (title, description, priority, status)',
       usage:
-        'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+        'aidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
       examples: [
-        'pnpm openaidy tasks update abc123 --priority high',
-        'pnpm openaidy tasks update abc123 --status done',
+        'pnpm aidy tasks update abc123 --priority high',
+        'pnpm aidy tasks update abc123 --status done',
       ],
     },
     'tasks delete': {
       description: 'Delete a task permanently',
-      usage: 'openaidy tasks delete <id>',
-      examples: ['pnpm openaidy tasks delete abc123'],
+      usage: 'aidy tasks delete <id>',
+      examples: ['pnpm aidy tasks delete abc123'],
     },
     'tasks kanban': {
       description: 'Display tasks grouped by status in Kanban board layout',
-      usage: 'openaidy tasks kanban',
-      examples: ['pnpm openaidy tasks kanban'],
+      usage: 'aidy tasks kanban',
+      examples: ['pnpm aidy tasks kanban'],
     },
     'subtasks list': {
       description: 'List all subtasks for a specific task',
-      usage: 'openaidy subtasks list <taskId>',
-      examples: ['pnpm openaidy subtasks list abc123'],
+      usage: 'aidy subtasks list <taskId>',
+      examples: ['pnpm aidy subtasks list abc123'],
     },
     'subtasks complete': {
       description: 'Mark a subtask as completed',
-      usage: 'openaidy subtasks complete <subtaskId> [--result <result>]',
+      usage: 'aidy subtasks complete <subtaskId> [--result <result>]',
       examples: [
-        'pnpm openaidy subtasks complete abc123',
-        'pnpm openaidy subtasks complete abc123 --result "Done"',
+        'pnpm aidy subtasks complete abc123',
+        'pnpm aidy subtasks complete abc123 --result "Done"',
       ],
     },
     'subtasks fail': {
       description: 'Mark a subtask as failed',
-      usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+      usage: 'aidy subtasks fail <subtaskId> [--reason <reason>]',
       examples: [
-        'pnpm openaidy subtasks fail abc123',
-        'pnpm openaidy subtasks fail abc123 --reason "Rate limited"',
+        'pnpm aidy subtasks fail abc123',
+        'pnpm aidy subtasks fail abc123 --reason "Rate limited"',
       ],
     },
   },
@@ -760,7 +747,7 @@ registerCommand(
   },
   {
     description: 'List all tasks, optionally filtered by status',
-    usage: 'openaidy tasks list [--status <status>] [--limit <n>]',
+    usage: 'aidy tasks list [--status <status>] [--limit <n>]',
   },
 );
 
@@ -773,7 +760,7 @@ registerCommand(
   },
   {
     description: 'Get full details for a specific task',
-    usage: 'openaidy tasks get <id>',
+    usage: 'aidy tasks get <id>',
   },
 );
 
@@ -787,7 +774,7 @@ registerCommand(
   {
     description: 'Create a new task',
     usage:
-      'openaidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
+      'aidy tasks create [title] [--description <desc>] [--priority <p>] [--planning]',
   },
 );
 
@@ -801,7 +788,7 @@ registerCommand(
   {
     description: 'Update a task (title, description, priority, status)',
     usage:
-      'openaidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
+      'aidy tasks update <id> [--title <t>] [--description <d>] [--priority <p>] [--status <s>]',
   },
 );
 
@@ -814,7 +801,7 @@ registerCommand(
   },
   {
     description: 'Delete a task permanently',
-    usage: 'openaidy tasks delete <id>',
+    usage: 'aidy tasks delete <id>',
   },
 );
 
@@ -827,7 +814,7 @@ registerCommand(
   },
   {
     description: 'Display tasks grouped by status in Kanban board layout',
-    usage: 'openaidy tasks kanban',
+    usage: 'aidy tasks kanban',
   },
 );
 
@@ -840,7 +827,7 @@ registerCommand(
   },
   {
     description: 'List all subtasks for a specific task',
-    usage: 'openaidy subtasks list <taskId>',
+    usage: 'aidy subtasks list <taskId>',
   },
 );
 
@@ -854,7 +841,7 @@ registerCommand(
   },
   {
     description: 'Mark a subtask as completed',
-    usage: 'openaidy subtasks complete <subtaskId> [--result <result>]',
+    usage: 'aidy subtasks complete <subtaskId> [--result <result>]',
   },
 );
 
@@ -867,7 +854,7 @@ registerCommand(
   },
   {
     description: 'Mark a subtask as failed',
-    usage: 'openaidy subtasks fail <subtaskId> [--reason <reason>]',
+    usage: 'aidy subtasks fail <subtaskId> [--reason <reason>]',
   },
 );
 
@@ -881,34 +868,34 @@ registerGroup({
   commands: {
     'sessions list': {
       description: 'List all sessions',
-      usage: 'openaidy sessions list [--limit <n>]',
+      usage: 'aidy sessions list [--limit <n>]',
       examples: [
-        'pnpm openaidy sessions list',
-        'pnpm openaidy sessions list --limit 20',
+        'pnpm aidy sessions list',
+        'pnpm aidy sessions list --limit 20',
       ],
     },
     'sessions create': {
       description: 'Create a new session',
-      usage: 'openaidy sessions create [title]',
+      usage: 'aidy sessions create [title]',
       examples: [
-        'pnpm openaidy sessions create',
-        'pnpm openaidy sessions create "My Chat"',
+        'pnpm aidy sessions create',
+        'pnpm aidy sessions create "My Chat"',
       ],
     },
     'sessions get': {
       description: 'Get session details by ID',
-      usage: 'openaidy sessions get <sessionId>',
-      examples: ['pnpm openaidy sessions get sess_abc123'],
+      usage: 'aidy sessions get <sessionId>',
+      examples: ['pnpm aidy sessions get sess_abc123'],
     },
     'sessions messages': {
       description: 'List all messages in a session',
-      usage: 'openaidy sessions messages <sessionId>',
-      examples: ['pnpm openaidy sessions messages sess_abc123'],
+      usage: 'aidy sessions messages <sessionId>',
+      examples: ['pnpm aidy sessions messages sess_abc123'],
     },
     'sessions runs': {
       description: 'List all runs for a session',
-      usage: 'openaidy sessions runs <sessionId>',
-      examples: ['pnpm openaidy sessions runs sess_abc123'],
+      usage: 'aidy sessions runs <sessionId>',
+      examples: ['pnpm aidy sessions runs sess_abc123'],
     },
   },
 });
@@ -921,11 +908,8 @@ registerCommand(
   },
   {
     description: 'List all sessions',
-    usage: 'openaidy sessions list [--limit <n>]',
-    examples: [
-      'pnpm openaidy sessions list',
-      'pnpm openaidy sessions list --limit 20',
-    ],
+    usage: 'aidy sessions list [--limit <n>]',
+    examples: ['pnpm aidy sessions list', 'pnpm aidy sessions list --limit 20'],
   },
 );
 
@@ -937,10 +921,10 @@ registerCommand(
   },
   {
     description: 'Create a new session',
-    usage: 'openaidy sessions create [title]',
+    usage: 'aidy sessions create [title]',
     examples: [
-      'pnpm openaidy sessions create',
-      'pnpm openaidy sessions create "My Chat"',
+      'pnpm aidy sessions create',
+      'pnpm aidy sessions create "My Chat"',
     ],
   },
 );
@@ -953,8 +937,8 @@ registerCommand(
   },
   {
     description: 'Get session details by ID',
-    usage: 'openaidy sessions get <sessionId>',
-    examples: ['pnpm openaidy sessions get sess_abc123'],
+    usage: 'aidy sessions get <sessionId>',
+    examples: ['pnpm aidy sessions get sess_abc123'],
   },
 );
 
@@ -966,8 +950,8 @@ registerCommand(
   },
   {
     description: 'List all messages in a session',
-    usage: 'openaidy sessions messages <sessionId>',
-    examples: ['pnpm openaidy sessions messages sess_abc123'],
+    usage: 'aidy sessions messages <sessionId>',
+    examples: ['pnpm aidy sessions messages sess_abc123'],
   },
 );
 
@@ -979,8 +963,8 @@ registerCommand(
   },
   {
     description: 'List all runs for a session',
-    usage: 'openaidy sessions runs <sessionId>',
-    examples: ['pnpm openaidy sessions runs sess_abc123'],
+    usage: 'aidy sessions runs <sessionId>',
+    examples: ['pnpm aidy sessions runs sess_abc123'],
   },
 );
 
@@ -994,11 +978,11 @@ registerCommand(
   },
   {
     description: 'List pending device pairing requests',
-    usage: 'openaidy devices list [--status <status>] [--limit <n>]',
+    usage: 'aidy devices list [--status <status>] [--limit <n>]',
     examples: [
-      'pnpm openaidy devices list',
-      'pnpm openaidy devices list --status all',
-      'pnpm openaidy devices list --status approved --limit 10',
+      'pnpm aidy devices list',
+      'pnpm aidy devices list --status all',
+      'pnpm aidy devices list --status approved --limit 10',
     ],
   },
 );
@@ -1012,10 +996,10 @@ registerCommand(
   },
   {
     description: 'Approve a pending device pairing request',
-    usage: 'openaidy devices approve <request-id> [--scopes <scopes>]',
+    usage: 'aidy devices approve <request-id> [--scopes <scopes>]',
     examples: [
-      'pnpm openaidy devices approve abc123',
-      'pnpm openaidy devices approve abc123 --scopes chat,files',
+      'pnpm aidy devices approve abc123',
+      'pnpm aidy devices approve abc123 --scopes chat,files',
     ],
   },
 );
@@ -1029,8 +1013,8 @@ registerCommand(
   },
   {
     description: 'Deny a pending device pairing request',
-    usage: 'openaidy devices deny <request-id>',
-    examples: ['pnpm openaidy devices deny abc123'],
+    usage: 'aidy devices deny <request-id>',
+    examples: ['pnpm aidy devices deny abc123'],
   },
 );
 
@@ -1043,8 +1027,8 @@ registerCommand(
   },
   {
     description: 'List all available providers',
-    usage: 'openaidy providers list',
-    examples: ['pnpm openaidy providers list'],
+    usage: 'aidy providers list',
+    examples: ['pnpm aidy providers list'],
   },
 );
 
@@ -1056,8 +1040,8 @@ registerCommand(
   },
   {
     description: 'Connect to a provider',
-    usage: 'openaidy providers connect <provider-id> [--api-key <key>]',
-    examples: ['pnpm openaidy providers connect openai --api-key sk-...'],
+    usage: 'aidy providers connect <provider-id> [--api-key <key>]',
+    examples: ['pnpm aidy providers connect openai --api-key sk-...'],
   },
 );
 
@@ -1070,8 +1054,8 @@ registerCommand(
   },
   {
     description: 'Disconnect from a provider',
-    usage: 'openaidy providers disconnect <provider-id>',
-    examples: ['pnpm openaidy providers disconnect openai'],
+    usage: 'aidy providers disconnect <provider-id>',
+    examples: ['pnpm aidy providers disconnect openai'],
   },
 );
 
@@ -1082,10 +1066,10 @@ registerGroup({
   commands: {
     'mcp import': {
       description: 'Import MCP servers from a standard config file or stdin',
-      usage: 'openaidy mcp import [file]',
+      usage: 'aidy mcp import [file]',
       examples: [
-        'openaidy mcp import ./mcp.json',
-        'cat ~/.config/mcp.json | openaidy mcp import',
+        'aidy mcp import ./mcp.json',
+        'cat ~/.config/mcp.json | aidy mcp import',
       ],
     },
   },
@@ -1099,8 +1083,8 @@ registerCommand(
   },
   {
     description: 'Import MCP servers from a standard config file or stdin',
-    usage: 'openaidy mcp import [file]',
-    examples: ['openaidy mcp import ./mcp.json'],
+    usage: 'aidy mcp import [file]',
+    examples: ['aidy mcp import ./mcp.json'],
   },
 );
 
@@ -1113,10 +1097,10 @@ registerCommand(
   },
   {
     description: 'Encrypt plaintext MCP inline secrets at rest (issue #401)',
-    usage: 'openaidy mcp migrate-secrets [--dry-run]',
+    usage: 'aidy mcp migrate-secrets [--dry-run]',
     examples: [
-      'openaidy mcp migrate-secrets --dry-run',
-      'openaidy mcp migrate-secrets',
+      'aidy mcp migrate-secrets --dry-run',
+      'aidy mcp migrate-secrets',
     ],
   },
 );

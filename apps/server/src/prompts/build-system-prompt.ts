@@ -3,10 +3,10 @@ import type { SkillRegistry } from '../skills';
 import { sanitizeSkillBody } from '../skills/sanitize';
 import type { ProviderServices } from '../providers';
 import { autoFillPersonalityFiles } from './auto-fill-personality';
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 import type { WorkspacePermissionsInfo } from '../types';
-import type { SessionType } from '@openaidy/shared-types';
-import { formatSessionSearchResultDocs } from '@openaidy/db';
+import type { SessionType } from '@aidyagent/shared-types';
+import { formatSessionSearchResultDocs } from '@aidyagent/db';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { platform } from 'node:os';
@@ -84,7 +84,7 @@ export type PromptContext = {
         channelType: string;
         channelId: string;
         senderId: string;
-        /** The sender is the owner (OpenAidy's user), not a customer. */
+        /** The sender is the owner (Aidy's user), not a customer. */
         isOwner: boolean;
       }
     | undefined;
@@ -199,7 +199,7 @@ function loadAgentWorkspaceSkills(
  * from the first message regardless of which tools the agent holds.
  * `os.platform()` returns 'win32' | 'darwin' | 'linux' | 'aix' |
  * 'freebsd' | 'openbsd' | 'sunos' | 'cygwin' | 'netbsd' — we map the
- * three the OpenAidy server actually runs on (the rest fall through
+ * three the Aidy server actually runs on (the rest fall through
  * to the Linux guidance as a sensible default).
  *
  * Tests assert on this function by mocking `process.platform`
@@ -458,7 +458,7 @@ Your response will be automatically evaluated. Work is judged complete only if t
 The following addons are installed on this instance:
 ${entries}
 
-Addons live in a directory managed by OpenAidy, OUTSIDE your workspace — no workspace_* or code_* tool can see or change them.
+Addons live in a directory managed by Aidy, OUTSIDE your workspace — no workspace_* or code_* tool can see or change them.
 To inspect one before changing it, call addon_read({ addon_id: "<id>" }) for its file list, then addon_read({ addon_id: "<id>", paths: ["app/index.js"] }) for contents.
 Never rewrite a file from memory: addon_update OVERWRITES whole files, so read first or you will silently drop code you did not author.
 [/ADDONS_AVAILABLE]`;

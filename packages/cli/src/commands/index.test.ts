@@ -1,5 +1,5 @@
 /**
- * openaidy init - Command registration tests
+ * aidy init - Command registration tests
  *
  * Verifies PR1 T1.5:
  *  - `init` is registered and routes to the new initHandler

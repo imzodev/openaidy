@@ -5,7 +5,7 @@
  */
 
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 import {
   type AddonServiceOptions,
   type InstallAddonRequest,
@@ -35,13 +35,13 @@ export class AddonService {
   private readonly repository: AddonServiceOptions['repository'];
   private readonly validator: AddonServiceOptions['validator'];
   private readonly jwtSecret: string;
-  private readonly openAidyVersion: string;
+  private readonly aidyVersion: string;
 
   constructor(options: AddonServiceOptions) {
     this.repository = options.repository;
     this.validator = options.validator;
     this.jwtSecret = options.jwtSecret;
-    this.openAidyVersion = options.openAidyVersion;
+    this.aidyVersion = options.aidyVersion;
   }
 
   /**

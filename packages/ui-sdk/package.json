@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/ui-sdk",
+  "name": "@aidyagent/ui-sdk",
   "private": true,
   "type": "module",
   "exports": {

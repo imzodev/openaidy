@@ -22,7 +22,7 @@ Phase 3 strengthens the addon system with comprehensive security measures, fine-
 **File: `apps/server/src/addons/permission-validator.ts`**
 
 ```typescript
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 export interface PermissionContext {
   addonId: string;
@@ -211,7 +211,7 @@ export class PermissionValidator {
 ```typescript
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 import {
   PermissionValidator,
   type PermissionContext,
@@ -342,7 +342,7 @@ declare module 'fastify' {
 **File: `apps/server/src/addons/rate-limiter.ts`**
 
 ```typescript
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 
 export interface RateLimitConfig {
   requests: number;
@@ -589,7 +589,7 @@ function extractEndpoint(request: FastifyRequest): string {
 **File: `apps/server/src/addons/audit-logger.ts`**
 
 ```typescript
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 
 export interface AuditEvent {
   id: string;
@@ -1344,7 +1344,7 @@ export class AddonCodeValidator {
 ```typescript
 import type { FastifyPluginAsync } from 'fastify';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { AddonsStore } from '@openaidy/db';
+import type { AddonsStore } from '@aidyagent/db';
 import {
   createPermissionMiddleware,
   requirePermission,
@@ -1654,7 +1654,7 @@ const codeValidator = new AddonCodeValidator();
 const addonService = createAddonService({
   addonsStore: addonsRepository,
   authMiddleware,
-  openaidyVersion: '1.0.0',
+  aidyVersion: '1.0.0',
   auditLogger,
   codeValidator,
 });

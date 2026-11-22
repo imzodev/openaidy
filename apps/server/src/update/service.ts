@@ -5,8 +5,8 @@
  *  - `check()`   — ask the npm registry for the latest published version and
  *                  compare it with the running version.
  *  - `startUpdate()` — for a packaged global install only: run
- *                  `npm install -g @openaidy/app@latest`, then hand off to a
- *                  detached `openaidy restart` so the new bytes are loaded by a
+ *                  `npm install -g @aidyagent/app@latest`, then hand off to a
+ *                  detached `aidy restart` so the new bytes are loaded by a
  *                  fresh process. Progress is tracked in-memory and surfaced
  *                  via `getState()`.
  *
@@ -20,15 +20,15 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import semver from 'semver';
-import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
+import type { UpdateCheckResult, UpdateState } from '@aidyagent/shared-types';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('update');
 
 /** Published package name (see scripts/build-npm-package.mjs). */
-export const DEFAULT_PACKAGE_NAME = '@openaidy/app';
+export const DEFAULT_PACKAGE_NAME = '@aidyagent/app';
 const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
-const DEFAULT_GITHUB_REPO = 'imzodev/openaidy';
+const DEFAULT_GITHUB_REPO = 'imzodev/aidy';
 /** Cap release notes so a huge changelog can't bloat the check response. */
 const RELEASE_NOTES_MAX = 1000;
 
@@ -47,7 +47,7 @@ export interface UpdateServiceOptions {
   githubRepo?: string;
   /**
    * Whether this deployment can self-update. Defaults to auto-detection
-   * (true only for a packaged `@openaidy/app` global install).
+   * (true only for a packaged `@aidyagent/app` global install).
    */
   canSelfUpdate?: boolean;
   fetchFn?: FetchFn;
@@ -57,8 +57,8 @@ export interface UpdateServiceOptions {
 
 /**
  * Walk up from a starting directory to the nearest package.json and report
- * whether it is the published `@openaidy/app` package. A from-source / dev run
- * resolves to the monorepo root (name `openaidy`), which cannot self-update.
+ * whether it is the published `@aidyagent/app` package. A from-source / dev run
+ * resolves to the monorepo root (name `aidy`), which cannot self-update.
  */
 export function detectSelfUpdatable(
   packageName: string,
@@ -96,14 +96,14 @@ export const defaultInstall: InstallFn = (packageName, version) =>
     });
   });
 
-/** Default restart: detached `openaidy restart` that outlives this process. */
+/** Default restart: detached `aidy restart` that outlives this process. */
 export const defaultRestart: RestartFn = () => {
-  const child = spawn('openaidy', ['restart'], {
+  const child = spawn('aidy', ['restart'], {
     detached: true,
     stdio: 'ignore',
     shell: process.platform === 'win32',
   });
-  // spawn() errors (e.g. ENOENT if `openaidy` isn't on PATH) arrive as an async
+  // spawn() errors (e.g. ENOENT if `aidy` isn't on PATH) arrive as an async
   // 'error' event; without a listener Node throws an uncaught exception that
   // would crash this process right after it committed to restarting.
   child.on('error', (err) => {

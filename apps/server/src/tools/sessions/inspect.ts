@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { SessionsToolDeps } from './index.js';
 import { sessionsInspectMeta } from '../catalog.js';
 

@@ -23,18 +23,18 @@ import {
   startBackupImport,
   formatBytes,
 } from '../../lib/api-backups';
-import { BACKUP_SECTIONS } from '@openaidy/shared-types';
+import { BACKUP_SECTIONS } from '@aidyagent/shared-types';
 import type {
   BackupJob,
   BackupManifest,
   BackupSection,
   BackupUpload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 type BackupTab = 'export' | 'import';
 
 /** Remembers the running/finished export so leaving the page doesn't lose it. */
-const EXPORT_JOB_KEY = 'openaidy:backups:export-job';
+const EXPORT_JOB_KEY = 'aidy:backups:export-job';
 
 function rememberExportJob(id: string | undefined) {
   try {
@@ -62,7 +62,7 @@ export function BackupsPage() {
   const [tab, setTab] = createSignal<BackupTab>('export');
 
   return (
-    <Layout title="Backups" description="Export and restore your OpenAidy data">
+    <Layout title="Backups" description="Export and restore your Aidy data">
       <Tabs<BackupTab>
         tabs={[
           { id: 'export', label: 'Export' },

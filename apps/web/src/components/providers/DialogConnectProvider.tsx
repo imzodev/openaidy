@@ -7,7 +7,7 @@
 
 import { createSignal, createEffect, Show } from 'solid-js';
 import { X, Loader, ExternalLink } from 'lucide-solid';
-import type { ProviderPreset } from '@openaidy/shared-types';
+import type { ProviderPreset } from '@aidyagent/shared-types';
 import {
   connectProviderWithApiKey,
   getOAuthStatus,
@@ -148,7 +148,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
         }
         window.open(
           result.authorizationUrl,
-          'openaidy-anthropic-oauth',
+          'aidy-anthropic-oauth',
           'width=520,height=720',
         );
         setAnthropicOAuthState(result.state);
@@ -185,7 +185,7 @@ export function DialogConnectProvider(props: DialogConnectProviderProps) {
         // by the server inside a PTY) opens its own browser tab
         // using `client=MiniMax+CLI` (the only client id MiniMax
         // recognises for device-code OAuth). If we opened our own
-        // popup with `client=OpenAidy`, MiniMax would reject it
+        // popup with `client=Aidy`, MiniMax would reject it
         // ("Missing required parameter: user_code") because that
         // client id is not registered with MiniMax.
         //

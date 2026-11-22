@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { taskSchedulesListMeta } from '../catalog.js';
 import type { TaskScheduleToolDeps } from './types.js';
-import type { TaskScheduleDto } from '@openaidy/shared-types';
+import type { TaskScheduleDto } from '@aidyagent/shared-types';
 
 /**
  * List task schedules.

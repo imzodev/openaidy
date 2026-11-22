@@ -14,8 +14,8 @@ import type {
   ModelRequest,
   ProviderResult,
   ModelResponse,
-} from '@openaidy/runtime';
-import { ok, err, createProviderError } from '@openaidy/runtime';
+} from '@aidyagent/runtime';
+import { ok, err, createProviderError } from '@aidyagent/runtime';
 
 /**
  * Helper to create a mock provider for testing
@@ -559,7 +559,7 @@ describe('DispatchService streaming', () => {
     beforeEach(async () => {
       // Create temp directory
       tempDir = await fs.promises.mkdtemp(
-        path.join(os.tmpdir(), 'openaidy-dispatch-mcp-test-'),
+        path.join(os.tmpdir(), 'aidy-dispatch-mcp-test-'),
       );
 
       // Create mock MCP service

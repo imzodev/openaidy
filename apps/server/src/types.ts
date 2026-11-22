@@ -15,14 +15,14 @@ import type {
   TasksRepository,
   TaskSchedulesRepository,
   TaskExecutionHistoryRepository,
-} from '@openaidy/db';
-export type { CreateAgentInput } from '@openaidy/shared-types';
+} from '@aidyagent/db';
+export type { CreateAgentInput } from '@aidyagent/shared-types';
 import type {
   MessageRole,
   FinishReason,
   SubtaskKind,
   LoopConfig,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 export type { MessageRole, FinishReason };
 
 /**
@@ -31,8 +31,8 @@ export type { MessageRole, FinishReason };
 export type SessionRecord = {
   id: string;
   title: string;
-  type?: import('@openaidy/shared-types').SessionType;
-  status?: import('@openaidy/shared-types').SessionStatus;
+  type?: import('@aidyagent/shared-types').SessionType;
+  status?: import('@aidyagent/shared-types').SessionStatus;
   createdAt: string;
   updatedAt?: string;
   archivedAt?: string;
@@ -65,7 +65,7 @@ export type SessionRunRecord = {
   agentId: string;
   providerId: string;
   modelId: string;
-  status: import('@openaidy/shared-types').RunStatus;
+  status: import('@aidyagent/shared-types').RunStatus;
   finishReason?: FinishReason;
   errorCode?: string;
   errorMessage?: string;
@@ -141,7 +141,7 @@ export type CreateTaskInput = {
    */
   skipAutoPlan?: boolean;
   agents?: Array<{ agentId: string; role?: AgentRole }>;
-  schedule?: import('@openaidy/shared-types').CreateTaskScheduleInput;
+  schedule?: import('@aidyagent/shared-types').CreateTaskScheduleInput;
 };
 
 export type UpdateTaskInput = {
@@ -184,18 +184,18 @@ export type TaskWithDetails = Task & {
     inProgress: number;
     failed: number;
   };
-  schedule?: import('@openaidy/shared-types').TaskScheduleDto;
+  schedule?: import('@aidyagent/shared-types').TaskScheduleDto;
 };
 
 export type KanbanBoard = { [K in TaskStatus]: Task[] };
 
 export type TaskServiceOptions = {
-  tasksRepo: import('@openaidy/db').TasksRepository;
-  subtasksRepo: import('@openaidy/db').SubtasksRepository;
-  taskAgentsRepo: import('@openaidy/db').TaskAgentsRepository;
-  deliverablesRepo?: import('@openaidy/db').DeliverablesRepository;
-  taskExecutionHistoryRepo?: import('@openaidy/db').TaskExecutionHistoryRepository;
-  workflowRunsRepo?: import('@openaidy/db').WorkflowRunsRepository;
+  tasksRepo: import('@aidyagent/db').TasksRepository;
+  subtasksRepo: import('@aidyagent/db').SubtasksRepository;
+  taskAgentsRepo: import('@aidyagent/db').TaskAgentsRepository;
+  deliverablesRepo?: import('@aidyagent/db').DeliverablesRepository;
+  taskExecutionHistoryRepo?: import('@aidyagent/db').TaskExecutionHistoryRepository;
+  workflowRunsRepo?: import('@aidyagent/db').WorkflowRunsRepository;
   agents?: AgentRegistry;
   sessionService?: SessionMessageService;
   planningService?: import('./planning').PlanningService;
@@ -206,7 +206,7 @@ export type TaskServiceOptions = {
    * app config on each use so changes saved via the Settings UI take effect
    * without a restart. Falls back to hardcoded defaults when omitted.
    */
-  getExecutionConfig?: () => import('@openaidy/config').ExecutionConfig;
+  getExecutionConfig?: () => import('@aidyagent/config').ExecutionConfig;
 };
 
 export type SkillSource = 'preinstalled' | 'modified' | 'user-global' | 'agent';

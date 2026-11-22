@@ -1,7 +1,7 @@
 import type {
   TaskSchedulesStore,
   TaskExecutionHistoryStore,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { TaskScheduleExecutor } from '../tasks/execution/task-schedule-executor';
 import type { GenericLogger } from '../scheduler/service';
 import { createLogger } from '../lib/logger';

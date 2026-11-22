@@ -10,10 +10,10 @@ import {
 } from './provider';
 import { type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
-import { createWSMessage, WS_ERROR_CODES } from '@openaidy/shared-types';
+import { createWSMessage, WS_ERROR_CODES } from '@aidyagent/shared-types';
 import type { ProviderServices } from '../../providers';
 import type { ProviderRegistryService } from '../../providers/registry';
-import type { ModelProvider } from '@openaidy/runtime';
+import type { ModelProvider } from '@aidyagent/runtime';
 
 // ============================================================================
 // Mock Factories

@@ -26,7 +26,7 @@
  * behaviour is testable without mutating `process.env`.
  */
 
-import type { McpSecretValue } from '@openaidy/shared-types';
+import type { McpSecretValue } from '@aidyagent/shared-types';
 import { decryptSecret, isEncryptedSecret } from './secret-crypto';
 
 /**

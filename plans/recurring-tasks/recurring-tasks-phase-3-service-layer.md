@@ -39,12 +39,12 @@ This phase is where the executor and the rest of the app meet. The wiring in `ap
 This module converts DB rows + schedule input into the public DTO shape.
 
 ```ts
-import type { TaskSchedule, TaskExecutionHistory } from '@openaidy/db';
+import type { TaskSchedule, TaskExecutionHistory } from '@aidyagent/db';
 import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   ScheduleInput,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { describeCronExpression } from '../scheduler/cron-utils';
 import { parseScheduleInput } from '../scheduler/schedule-input';
 
@@ -148,11 +148,11 @@ import type {
   TasksRepository,
   TaskSchedulesRepository,
   TaskExecutionHistoryRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type {
   CreateTaskScheduleInput,
   UpdateTaskScheduleInput,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { TaskScheduleExecutor } from './execution/task-schedule-executor';
 import { parseScheduleInput } from '../scheduler/schedule-input';
 import { taskScheduleToDto, taskExecutionHistoryToDto } from './schedule-dto';

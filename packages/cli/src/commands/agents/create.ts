@@ -1,7 +1,7 @@
 /**
  * Agents Create Command Handler
  *
- * Implements `openaidy agents create` command.
+ * Implements `aidy agents create` command.
  * Creates a new agent config file and its workspace directory.
  * Optionally copies model/provider settings from an existing agent.
  */
@@ -9,11 +9,11 @@
 import * as p from '@clack/prompts';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { isAgentIdentityHexColor } from '@openaidy/shared-types';
+import { isAgentIdentityHexColor } from '@aidyagent/shared-types';
 import type {
   CommandResult,
   AgentConfig,
-  OpenAidyConfig,
+  AidyConfig,
   SkillSummary,
   CreateAgentInput,
   AgentIdentity,
@@ -29,15 +29,15 @@ const ACCENT_COLOR_PALETTE: Array<{ label: string; value: string }> = [
 ];
 
 function resolveConfigPath(): string {
-  return resolve(process.env.APP_CONFIG_PATH ?? '.openaidy/openaidy.json');
+  return resolve(process.env.APP_CONFIG_PATH ?? '.aidy/aidy.json');
 }
 
 function resolveWorkspaceBaseDir(): string {
-  return resolve(process.env.WORKSPACE_BASE_DIR ?? '.openaidy/workspaces');
+  return resolve(process.env.WORKSPACE_BASE_DIR ?? '.aidy/workspaces');
 }
 
 function resolveSkillsDir(): string {
-  return resolve(process.env.SKILLS_DIR ?? '.openaidy/skills');
+  return resolve(process.env.SKILLS_DIR ?? '.aidy/skills');
 }
 
 async function readGlobalSkills(): Promise<SkillSummary[]> {
@@ -74,7 +74,7 @@ function slugify(name: string): string {
 async function readAgentConfigs(): Promise<AgentConfig[]> {
   try {
     const raw = await readFile(resolveConfigPath(), 'utf-8');
-    const config = JSON.parse(raw) as OpenAidyConfig;
+    const config = JSON.parse(raw) as AidyConfig;
     return config.agents ?? [];
   } catch {
     return [];
@@ -86,7 +86,7 @@ export async function agentsCreateHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy agents create [<name>]
+      `Usage: aidy agents create [<name>]
 
 Create a new agent with its own workspace directory.
 
@@ -99,11 +99,11 @@ Options:
   --no-identity          Skip the identity (emoji + accent color) prompts entirely
 
 Examples:
-  pnpm openaidy agents create
-  pnpm openaidy agents create "Research Assistant"
-  pnpm openaidy agents create --name "Research Assistant" --description "Helps with research"
-  pnpm openaidy agents create --name "Research Assistant" --emoji "🔬" --color "#2563EB"
-  pnpm openaidy agents create --name "Research Assistant" --no-identity
+  pnpm aidy agents create
+  pnpm aidy agents create "Research Assistant"
+  pnpm aidy agents create --name "Research Assistant" --description "Helps with research"
+  pnpm aidy agents create --name "Research Assistant" --emoji "🔬" --color "#2563EB"
+  pnpm aidy agents create --name "Research Assistant" --no-identity
 
 Exit Codes:
   0  Agent created successfully
@@ -359,7 +359,7 @@ Exit Codes:
     identity,
   };
 
-  // Construct the full AgentConfig for openaidy.json (mirrors what registry.createAgent() produces)
+  // Construct the full AgentConfig for aidy.json (mirrors what registry.createAgent() produces)
   const newAgent: AgentConfig = {
     ...input,
     enabled: true,
@@ -382,7 +382,7 @@ Exit Codes:
     },
   };
 
-  // Write to openaidy.json
+  // Write to aidy.json
   const s = p.spinner();
   s.start('Saving agent config…');
   let liveConfig: Record<string, unknown> & { agents?: AgentConfig[] };

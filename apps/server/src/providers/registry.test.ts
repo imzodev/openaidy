@@ -6,7 +6,7 @@ import {
   type ModelProvider,
   type ProviderDescriptor,
   type ModelRequest,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 
 /**

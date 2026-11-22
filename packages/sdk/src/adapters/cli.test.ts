@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WS_CAPABILITIES } from '@openaidy/shared-types';
+import { WS_CAPABILITIES } from '@aidyagent/shared-types';
 import { WebSocketClient } from '../websocket-client.js';
 import { CLIAdapter, createCLIAdapter } from './cli.js';
 

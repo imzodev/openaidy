@@ -96,7 +96,7 @@ describe('AboutTab', () => {
     );
     const link = screen.getByRole('link', { name: /view release on github/i });
     expect(link.getAttribute('href')).toBe(
-      'https://github.com/imzodev/openaidy/releases/tag/v0.3.0',
+      'https://github.com/imzodev/aidy/releases/tag/v0.3.0',
     );
   });
 
@@ -113,7 +113,7 @@ describe('AboutTab', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     const payload = writeText.mock.calls[0]?.[0] as string;
-    expect(payload).toContain('OpenAidy v0.3.0');
+    expect(payload).toContain('Aidy v0.3.0');
     expect(payload).toContain('Node v22.13.0');
     expect(payload).toContain('linux/x64');
     expect(payload).toContain('PID 4242');
@@ -260,7 +260,7 @@ describe('AboutTab', () => {
       screen.queryByRole('button', { name: /update to v0\.4\.0/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/npm install -g @openaidy\/app@latest/i),
+      screen.getByText(/npm install -g @aidy\/app@latest/i),
     ).toBeInTheDocument();
   });
 });

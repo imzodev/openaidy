@@ -4,13 +4,13 @@
  *
  *   GET  /update/check   — current vs. latest npm version + whether self-update is possible
  *   GET  /update/status  — in-memory state of any in-flight update
- *   POST /update         — trigger `npm install -g @openaidy/app@latest` + restart
+ *   POST /update         — trigger `npm install -g @aidyagent/app@latest` + restart
  */
 
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import semver from 'semver';
-import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
+import type { UpdateCheckResult, UpdateState } from '@aidyagent/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import type { UpdateService } from '../update/service';
@@ -110,7 +110,7 @@ export const updateRoutes: FastifyPluginAsync<UpdateRoutesOptions> = async (
           error: 'UPDATE_NOT_SUPPORTED',
           message:
             'This deployment cannot update itself. Update manually with: ' +
-            'npm install -g @openaidy/app@latest && openaidy restart',
+            'npm install -g @aidyagent/app@latest && aidy restart',
         });
       }
       return reply.code(409).send({

@@ -1,25 +1,25 @@
 # WebSocket Client SDK Documentation
 
-This document provides complete API reference and usage examples for the OpenAidy WebSocket Client SDK.
+This document provides complete API reference and usage examples for the Aidy WebSocket Client SDK.
 
 ## Installation
 
 ```bash
-npm install @openaidy/sdk
+npm install @aidyagent/sdk
 # or
-pnpm add @openaidy/sdk
+pnpm add @aidyagent/sdk
 # or
-yarn add @openaidy/sdk
+yarn add @aidyagent/sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 // Create client
 const client = createWebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   token: 'your-jwt-token',
 });
 
@@ -45,7 +45,7 @@ console.log(response.payload.content);
 Creates a new WebSocket client instance.
 
 ```typescript
-import { createWebSocketClient, WebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient, WebSocketClient } from '@aidyagent/sdk';
 
 const client = createWebSocketClient({
   url: string;              // WebSocket server URL
@@ -670,7 +670,7 @@ import {
   PendingRequest,
   defaultWebSocketClientOptions,
   noopLogger,
-} from '@openaidy/sdk';
+} from '@aidyagent/sdk';
 ```
 
 ## Examples
@@ -678,12 +678,12 @@ import {
 ### Basic Chat Application
 
 ```typescript
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 async function main() {
   const client = createWebSocketClient({
-    url: 'wss://api.openaidy.com/ws',
-    token: process.env.OPENAIDY_TOKEN!,
+    url: 'wss://api.aidyagent.app/ws',
+    token: process.env.AIDY_TOKEN!,
   });
 
   await client.connect();

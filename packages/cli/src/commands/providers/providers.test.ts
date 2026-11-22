@@ -72,7 +72,7 @@ describe('providers list', () => {
     expect(result.exitCode).toBe(0);
     expect(mockClack.note).toHaveBeenCalled();
     const output = noteOutput();
-    expect(output).toContain('Usage: openaidy providers list');
+    expect(output).toContain('Usage: aidy providers list');
   });
 
   it('shows help with -h flag', async () => {
@@ -176,7 +176,7 @@ describe('providers connect', () => {
     expect(result.exitCode).toBe(0);
     expect(mockClack.note).toHaveBeenCalled();
     const output = noteOutput();
-    expect(output).toContain('Usage: openaidy providers connect');
+    expect(output).toContain('Usage: aidy providers connect');
   });
 
   it('requires provider ID', async () => {
@@ -312,7 +312,7 @@ describe('providers disconnect', () => {
     expect(result.exitCode).toBe(0);
     expect(mockClack.note).toHaveBeenCalled();
     const output = noteOutput();
-    expect(output).toContain('Usage: openaidy providers disconnect');
+    expect(output).toContain('Usage: aidy providers disconnect');
   });
 
   it('requires provider ID', async () => {

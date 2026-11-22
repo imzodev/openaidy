@@ -88,8 +88,8 @@ The package is configured for npm publishing:
 
 ```json
 {
-  "name": "@openaidy/cli",
-  "bin": { "openaidy": "./bin/openaidy.ts" },
+  "name": "@aidyagent/cli",
+  "bin": { "aidy": "./bin/aidy.ts" },
   "exports": {
     ".": "./src/index.ts",
     "./commands": "./src/commands/index.ts",
@@ -111,22 +111,22 @@ The package is configured for npm publishing:
 After publishing:
 
 ```bash
-npm install -g @openaidy/cli
-openaidy --help
+npm install -g @aidyagent/cli
+aidy --help
 ```
 
 ## Workflow Reuse
 
 ### Control-Plane Package
 
-The `@openaidy/control-plane` package is designed for reuse:
+The `@aidyagent/control-plane` package is designed for reuse:
 
 ```typescript
 // Non-CLI consumer
 import {
   PairingWorkflow,
   createPairingWorkflow,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 const workflow = createPairingWorkflow({
   pairingService: myService,

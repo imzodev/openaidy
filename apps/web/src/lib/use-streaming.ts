@@ -13,8 +13,8 @@ import type {
   SessionStreamUsage,
   SessionStreamError,
   SessionStreamEvent,
-} from '@openaidy/shared-types';
-import type { WebSocketClient } from '@openaidy/sdk';
+} from '@aidyagent/shared-types';
+import type { WebSocketClient } from '@aidyagent/sdk';
 
 export type StreamingState =
   | 'idle'

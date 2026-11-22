@@ -15,7 +15,7 @@ import { WorkflowRunsRepository } from './workflow-runs';
 import { WorkflowTriggersRepository } from './workflow-triggers';
 
 describe('WorkflowTriggersRepository (sqlite)', () => {
-  const dbPath = join(tmpdir(), `openaidy-workflow-triggers-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `aidy-workflow-triggers-${Date.now()}.db`);
   let conn: DatabaseConnection;
   let tasksRepo: TasksRepository;
   let triggersRepo: WorkflowTriggersRepository;

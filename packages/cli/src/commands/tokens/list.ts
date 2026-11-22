@@ -1,14 +1,14 @@
 /**
  * Tokens List Command Handler
  *
- * Implements `openaidy tokens list` command.
+ * Implements `aidy tokens list` command.
  */
 
 import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 type TokenRecord = {
   id: string;
@@ -50,7 +50,7 @@ function formatTokenList(tokens: TokenRecord[]): string {
     lines.push('No access tokens found.');
     lines.push('');
     lines.push(
-      'Create one with: pnpm openaidy tokens create --name "My Token" --scopes "*"',
+      'Create one with: pnpm aidy tokens create --name "My Token" --scopes "*"',
     );
     return lines.join('\n');
   }
@@ -89,12 +89,12 @@ export async function tokensListHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tokens list
+      `Usage: aidy tokens list
 
 List all access tokens.
 
 Examples:
-  pnpm openaidy tokens list
+  pnpm aidy tokens list
 
 Exit Codes:
   0  Success

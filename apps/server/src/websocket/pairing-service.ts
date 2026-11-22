@@ -5,7 +5,7 @@
  */
 
 import type { FastifyBaseLogger } from 'fastify';
-import type { DevicesStore, PairingRequestsStore } from '@openaidy/db';
+import type { DevicesStore, PairingRequestsStore } from '@aidyagent/db';
 import type { NodeType } from './node-registry';
 import { AuthMiddleware, type JWTPayload } from './middleware/auth';
 

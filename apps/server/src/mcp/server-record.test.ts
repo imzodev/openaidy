@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import {
   MASKED_VALUE,
   redactSecrets,

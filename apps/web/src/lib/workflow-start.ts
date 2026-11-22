@@ -7,8 +7,8 @@ import type {
   ResolvedTemplateTrigger,
   ScheduleInput,
   WorkflowTemplate,
-} from '@openaidy/shared-types';
-import { substitutePlaceholders } from '@openaidy/workflow-templates';
+} from '@aidyagent/shared-types';
+import { substitutePlaceholders } from '@aidyagent/workflow-templates';
 
 const EVERY_LABEL: Record<string, string> = {
   '15m': 'Every 15 minutes',

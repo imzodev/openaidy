@@ -1,6 +1,6 @@
 # Creating Skills
 
-A guide for writing and installing custom skills in OpenAidy.
+A guide for writing and installing custom skills in Aidy.
 
 ---
 
@@ -8,10 +8,10 @@ A guide for writing and installing custom skills in OpenAidy.
 
 ```bash
 # 1. Create a directory for your skill (directory name = skill ID)
-mkdir -p .openaidy/skills/my-skill
+mkdir -p .aidy/skills/my-skill
 
 # 2. Write the SKILL.md file
-cat > .openaidy/skills/my-skill/SKILL.md << 'EOF'
+cat > .aidy/skills/my-skill/SKILL.md << 'EOF'
 ---
 name: My Skill
 description: A brief description of what this skill does
@@ -90,7 +90,7 @@ One skill = one domain of expertise. If you find yourself writing multiple unrel
 A skill directory can contain additional files alongside `SKILL.md`:
 
 ```
-.openaidy/skills/sql-expert/
+.aidy/skills/sql-expert/
 ├── SKILL.md                 ← required
 ├── DIALECT-REFERENCE.md     ← optional: the agent can read this when needed
 └── examples/
@@ -105,7 +105,7 @@ Supporting files are **not** automatically injected into the prompt. They exist 
 
 ---
 
-## Bundling Skills With OpenAidy
+## Bundling Skills With Aidy
 
 To ship a skill as a built-in default (auto-installed on first boot):
 
@@ -115,10 +115,10 @@ To ship a skill as a built-in default (auto-installed on first boot):
    config/skills/my-skill/SKILL.md
    ```
 
-2. On server boot, this is automatically copied to `.openaidy/skills/my-skill/SKILL.md`.
+2. On server boot, this is automatically copied to `.aidy/skills/my-skill/SKILL.md`.
    Existing files at the destination are **never overwritten**.
 
-3. Submit a pull request to the OpenAidy repository.
+3. Submit a pull request to the Aidy repository.
 
 ---
 
@@ -126,7 +126,7 @@ To ship a skill as a built-in default (auto-installed on first boot):
 
 ### Option A: In the agent JSON config
 
-Edit `config/agents/<agent-id>.json` (or the agent JSON in `openaidy.json`):
+Edit `config/agents/<agent-id>.json` (or the agent JSON in `aidy.json`):
 
 ```json
 {
@@ -241,7 +241,7 @@ If your skill does not appear:
 No. Skills are pure text injected into the system prompt. They cannot execute code or make API calls. For that, use an agent's assigned tools or [MCP servers](./mcp-servers.md).
 
 **Can I edit a bundled default skill?**
-Yes. Default skills are copied to `.openaidy/skills/` on first boot and never overwritten. Edit the copy in `.openaidy/skills/<id>/SKILL.md` freely.
+Yes. Default skills are copied to `.aidy/skills/` on first boot and never overwritten. Edit the copy in `.aidy/skills/<id>/SKILL.md` freely.
 
 **What happens if I delete a skill that an agent references?**
 The missing skill ID is silently skipped. The agent continues to work using only the skills that exist. No error is thrown.

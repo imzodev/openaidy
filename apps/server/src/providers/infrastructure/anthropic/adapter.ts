@@ -18,8 +18,8 @@ import {
   type ModelStreamEvent,
   type ProviderResult,
   type FinishReason,
-} from '@openaidy/runtime';
-import { ANTHROPIC_OAUTH_BETA_HEADER } from '@openaidy/providers';
+} from '@aidyagent/runtime';
+import { ANTHROPIC_OAUTH_BETA_HEADER } from '@aidyagent/providers';
 import { mapRequest } from './request-mapper';
 import { anthropicDefaultMaxTokens } from '../../model-limits.js';
 import {

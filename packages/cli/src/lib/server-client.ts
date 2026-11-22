@@ -2,11 +2,11 @@
  * Server Connection Helper
  *
  * Provides a shared utility for CLI commands that need to communicate
- * with the OpenAidy server via WebSocket. Handles token reading,
+ * with the Aidy server via WebSocket. Handles token reading,
  * connection setup, and graceful error handling.
  */
 
-import { WebSocketClient } from '@openaidy/sdk';
+import { WebSocketClient } from '@aidyagent/sdk';
 import { readAdminToken } from './admin-token.js';
 import { resolveCLIConfig, type CLIConfig } from './config.js';
 
@@ -35,7 +35,7 @@ export type FailedServerClient = {
 export type ServerClientResult = ConnectedServerClient | FailedServerClient;
 
 /**
- * Connect to the OpenAidy WebSocket server using the bootstrap-admin token.
+ * Connect to the Aidy WebSocket server using the bootstrap-admin token.
  *
  * This helper:
  * 1. Resolves CLI config (WS URL, token path, etc.)
@@ -77,7 +77,7 @@ export async function connectToServer(
 
     return {
       ok: false,
-      error: `Cannot connect to server at ${config.wsUrl}.\n${message}\n\nMake sure the server is running: pnpm --filter @openaidy/server dev`,
+      error: `Cannot connect to server at ${config.wsUrl}.\n${message}\n\nMake sure the server is running: pnpm --filter @aidyagent/server dev`,
       exitCode: 1,
     };
   }

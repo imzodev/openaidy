@@ -1,14 +1,14 @@
 ---
-summary: 'Suggested monorepo structure for OpenAidy'
+summary: 'Suggested monorepo structure for Aidy'
 read_when:
-  - You are setting up the repository layout for OpenAidy
+  - You are setting up the repository layout for Aidy
   - You want to define package boundaries before implementation
-title: 'OpenAidy Monorepo Structure'
+title: 'Aidy Monorepo Structure'
 ---
 
-# OpenAidy Monorepo Structure
+# Aidy Monorepo Structure
 
-This document proposes a pnpm workspace layout for OpenAidy. The goal is to keep the core small, share types cleanly, and let plugins depend on public SDK packages instead of internal files.
+This document proposes a pnpm workspace layout for Aidy. The goal is to keep the core small, share types cleanly, and let plugins depend on public SDK packages instead of internal files.
 
 ## Recommended tools
 
@@ -19,7 +19,7 @@ This document proposes a pnpm workspace layout for OpenAidy. The goal is to keep
 ## Top-level layout
 
 ```text
-openaidy/
+aidy/
   apps/
     server/
     web/
@@ -271,11 +271,11 @@ When plugin ecosystem grows:
 
 Potential publish targets:
 
-- `@openaidy/sdk`
-- `@openaidy/plugin-sdk`
-- `@openaidy/channel-sdk`
-- `@openaidy/ui-sdk`
-- `@openaidy/mcp`
+- `@aidyagent/sdk`
+- `@aidyagent/plugin-sdk`
+- `@aidyagent/channel-sdk`
+- `@aidyagent/ui-sdk`
+- `@aidyagent/mcp`
 
 This makes third-party plugin development easier and reduces coupling to the main repo.
 

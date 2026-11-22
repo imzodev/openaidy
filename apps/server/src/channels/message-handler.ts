@@ -124,7 +124,7 @@ export async function handleInboundChannelMessage(params: {
   /**
    * Strip `<think>...</think>`-style reasoning blocks from the reply before
    * returning it. Defaults to `true` (see `stripThinkingSchema` in
-   * `@openaidy/config`, whose default this mirrors for callers that omit it,
+   * `@aidyagent/config`, whose default this mirrors for callers that omit it,
    * e.g. tests).
    */
   stripThinking?: boolean;

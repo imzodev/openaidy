@@ -4,7 +4,7 @@ import {
   createSubscriptionManager,
 } from './subscriptions';
 import type { ConnectionManager } from './connection-manager';
-import { createWSMessage } from '@openaidy/shared-types';
+import { createWSMessage } from '@aidyagent/shared-types';
 import type { FastifyBaseLogger } from 'fastify';
 
 // Mock logger

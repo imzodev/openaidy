@@ -22,7 +22,7 @@ import {
   type ErrorResponse,
   createWSMessage,
   WS_ERROR_CODES,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mock Factories

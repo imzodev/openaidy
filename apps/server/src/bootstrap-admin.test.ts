@@ -28,7 +28,7 @@ describe('BootstrapAdminManager', () => {
   let authMiddleware: AuthMiddleware;
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'openaidy-bootstrap-admin-'));
+    tempDir = await mkdtemp(join(tmpdir(), 'aidy-bootstrap-admin-'));
     tokenPath = join(tempDir, 'bootstrap-admin.json');
     logger = createMockLogger();
     authMiddleware = new AuthMiddleware({

@@ -17,7 +17,7 @@ import type {
   BackupManifest,
   BackupSection,
   BackupUpload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 function authHeader(): Record<string, string> {
   const token = getStoredToken();

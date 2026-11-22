@@ -19,7 +19,7 @@ import { createDevicesDenyHandler } from './deny.js';
 import type {
   PairingContext,
   PairingRequestData,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 describe('Devices Deny Command', () => {
   const createRequest = (

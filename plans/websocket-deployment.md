@@ -1,6 +1,6 @@
 # WebSocket Deployment Guide
 
-This guide covers deploying the OpenAidy WebSocket gateway in production environments.
+This guide covers deploying the Aidy WebSocket gateway in production environments.
 
 ## Deployment Options
 
@@ -18,8 +18,8 @@ The simplest deployment option is running the Fastify server directly with Node.
 
 ```bash
 # Clone and checkout
-git clone https://github.com/imzodev/openaidy.git
-cd openaidy
+git clone https://github.com/imzodev/aidy.git
+cd aidy
 git checkout feat/ws
 
 # Install dependencies
@@ -66,7 +66,7 @@ EOF
 npm install -g pm2
 
 # Start with PM2
-pm2 start apps/server/dist/index.js --name openaidy
+pm2 start apps/server/dist/index.js --name aidy
 
 # Save PM2 configuration
 pm2 save
@@ -76,24 +76,24 @@ pm2 startup
 **4. Configure Reverse Proxy (nginx)**
 
 ```nginx
-# /etc/nginx/sites-available/openaidy
-upstream openaidy {
+# /etc/nginx/sites-available/aidy
+upstream aidy {
     server 127.0.0.1:3000;
     keepalive 64;
 }
 
 server {
     listen 80;
-    server_name api.openaidy.com;
+    server_name api.aidyagent.app;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name api.openaidy.com;
+    server_name api.aidyagent.app;
 
-    ssl_certificate /etc/letsencrypt/live/api.openaidy.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/api.openaidy.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/api.aidyagent.app/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.aidyagent.app/privkey.pem;
 
     # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -104,7 +104,7 @@ server {
 
     # WebSocket upgrade
     location /ws {
-        proxy_pass http://openaidy;
+        proxy_pass http://aidy;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -121,7 +121,7 @@ server {
 
     # HTTP API
     location / {
-        proxy_pass http://openaidy;
+        proxy_pass http://aidy;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -134,12 +134,12 @@ server {
 
 ```bash
 # Enable site
-sudo ln -s /etc/nginx/sites-available/openaidy /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/aidy /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 
 # Test WebSocket connection
-wscat -c wss://api.openaidy.com/ws?token=YOUR_TOKEN
+wscat -c wss://api.aidyagent.app/ws?token=YOUR_TOKEN
 ```
 
 ### Container Deployment
@@ -204,17 +204,17 @@ CMD ["node", "apps/server/dist/index.js"]
 
 ```bash
 # Build image
-docker build -t openaidy:latest .
+docker build -t aidy:latest .
 
 # Run container
 docker run -d \
-  --name openaidy \
+  --name aidy \
   -p 3000:3000 \
   -e NODE_ENV=production \
   -e JWT_SECRET=your-secret \
   -e WS_MAX_CONNECTIONS=10000 \
   --restart unless-stopped \
-  openaidy:latest
+  aidy:latest
 ```
 
 **3. Docker Compose**
@@ -224,7 +224,7 @@ docker run -d \
 version: '3.8'
 
 services:
-  openaidy:
+  aidy:
     build: .
     ports:
       - '3000:3000'
@@ -265,13 +265,13 @@ docker-compose up -d
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: openaidy
+  name: aidy
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: openaidy-config
-  namespace: openaidy
+  name: aidy-config
+  namespace: aidy
 data:
   NODE_ENV: 'production'
   PORT: '3000'
@@ -290,8 +290,8 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: openaidy-secrets
-  namespace: openaidy
+  name: aidy-secrets
+  namespace: aidy
 type: Opaque
 stringData:
   JWT_SECRET: 'your-secure-secret-here'
@@ -305,32 +305,32 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: openaidy
-  namespace: openaidy
+  name: aidy
+  namespace: aidy
   labels:
-    app: openaidy
+    app: aidy
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: openaidy
+      app: aidy
   template:
     metadata:
       labels:
-        app: openaidy
+        app: aidy
     spec:
       containers:
-        - name: openaidy
-          image: openaidy:latest
+        - name: aidy
+          image: aidy:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
               name: http
           envFrom:
             - configMapRef:
-                name: openaidy-config
+                name: aidy-config
             - secretRef:
-                name: openaidy-secrets
+                name: aidy-secrets
           resources:
             requests:
               cpu: 500m
@@ -364,8 +364,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: openaidy
-  namespace: openaidy
+  name: aidy
+  namespace: aidy
 spec:
   type: ClusterIP
   ports:
@@ -374,7 +374,7 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: openaidy
+    app: aidy
 ```
 
 **5. Ingress**
@@ -384,8 +384,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: openaidy-ingress
-  namespace: openaidy
+  name: aidy-ingress
+  namespace: aidy
   annotations:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
@@ -395,17 +395,17 @@ metadata:
 spec:
   tls:
     - hosts:
-        - api.openaidy.com
-      secretName: openaidy-tls
+        - api.aidyagent.app
+      secretName: aidy-tls
   rules:
-    - host: api.openaidy.com
+    - host: api.aidyagent.app
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: openaidy
+                name: aidy
                 port:
                   number: 80
 ```
@@ -417,13 +417,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: openaidy-hpa
-  namespace: openaidy
+  name: aidy-hpa
+  namespace: aidy
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: openaidy
+    name: aidy
   minReplicas: 3
   maxReplicas: 20
   metrics:
@@ -448,12 +448,12 @@ spec:
 kubectl apply -f k8s/
 
 # Check deployment
-kubectl get pods -n openaidy
-kubectl get services -n openaidy
-kubectl get ingress -n openaidy
+kubectl get pods -n aidy
+kubectl get services -n aidy
+kubectl get ingress -n aidy
 
 # Check logs
-kubectl logs -f deployment/openaidy -n openaidy
+kubectl logs -f deployment/aidy -n aidy
 ```
 
 ### Load Balancing
@@ -472,7 +472,7 @@ upstream websocket {
 
 server {
     listen 443 ssl;
-    server_name api.openaidy.com;
+    server_name api.aidyagent.app;
 
     # SSL config...
 
@@ -558,8 +558,8 @@ JWT_SECRET=$(cat /run/secrets/jwt_secret)
 ```typescript
 // Verify token structure
 const validateTokenConfig = {
-  issuer: 'openaidy',
-  audience: 'api.openaidy.com',
+  issuer: 'aidy',
+  audience: 'api.aidyagent.app',
   algorithms: ['HS256'],
   clockTolerance: 10,
 };
@@ -695,13 +695,13 @@ filebeat.inputs:
   - type: log
     enabled: true
     paths:
-      - /var/log/openaidy/*.log
+      - /var/log/aidy/*.log
     json.keys_under_root: true
     json.add_error_key: true
 
 output.elasticsearch:
   hosts: ['elasticsearch:9200']
-  index: 'openaidy-%{+yyyy.MM.dd}'
+  index: 'aidy-%{+yyyy.MM.dd}'
 ```
 
 ### Alerting Setup
@@ -905,7 +905,7 @@ const rateLimitTiers = {
 
 ```bash
 # Using Let's Encrypt
-certbot certonly --nginx -d api.openaidy.com
+certbot certonly --nginx -d api.aidyagent.app
 
 # Auto-renewal
 certbot renew --dry-run
@@ -985,8 +985,8 @@ function generateToken(userId: string, capabilities: string[]): string {
     process.env.JWT_SECRET,
     {
       expiresIn: '24h',
-      issuer: 'openaidy',
-      audience: 'api.openaidy.com',
+      issuer: 'aidy',
+      audience: 'api.aidyagent.app',
     },
   );
 }
@@ -1061,7 +1061,7 @@ sudo ufw status
 sudo iptables -L -n
 
 # Check logs
-pm2 logs openaidy
+pm2 logs aidy
 ```
 
 **2. Authentication Failed**
@@ -1086,7 +1086,7 @@ echo "YOUR_TOKEN" | cut -d. -f2 | base64 -d | jq .exp
 echo $JWT_SECRET
 
 # Check token format
-wscat -c wss://api.openaidy.com/ws?token=YOUR_TOKEN
+wscat -c wss://api.aidyagent.app/ws?token=YOUR_TOKEN
 ```
 
 **3. Rate Limit Exceeded**
@@ -1109,7 +1109,7 @@ RATE_LIMIT_MAX = 200;
 
 // Or implement backoff in client
 const client = new WebSocketClient({
-  url: 'wss://api.openaidy.com/ws',
+  url: 'wss://api.aidyagent.app/ws',
   retry: {
     baseInterval: 1000,
     maxInterval: 30000,
@@ -1150,30 +1150,30 @@ WS_HEARTBEAT_INTERVAL=60000
 LOG_LEVEL=debug
 
 # Check logs
-pm2 logs openaidy --lines 100
+pm2 logs aidy --lines 100
 ```
 
 **WebSocket Inspection:**
 
 ```bash
 # Using wscat
-wscat -c wss://api.openaidy.com/ws?token=YOUR_TOKEN -d
+wscat -c wss://api.aidyagent.app/ws?token=YOUR_TOKEN -d
 
 # Using websocat
-websocat -v wss://api.openaidy.com/ws?token=YOUR_TOKEN
+websocat -v wss://api.aidyagent.app/ws?token=YOUR_TOKEN
 ```
 
 **Network Debugging:**
 
 ```bash
 # Check connectivity
-curl -v https://api.openaidy.com/health
+curl -v https://api.aidyagent.app/health
 
 # Check WebSocket upgrade
 curl -v -H "Upgrade: websocket" -H "Connection: Upgrade" \
   -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
   -H "Sec-WebSocket-Version: 13" \
-  https://api.openaidy.com/ws
+  https://api.aidyagent.app/ws
 ```
 
 ### Performance Issues
@@ -1205,13 +1205,13 @@ node --prof-process isolate-*.log > profile.txt
 
 ```bash
 # Check latency
-ping api.openaidy.com
+ping api.aidyagent.app
 
 # Check DNS
-nslookup api.openaidy.com
+nslookup api.aidyagent.app
 
 # Check SSL handshake
-openssl s_client -connect api.openaidy.com:443 -servername api.openaidy.com
+openssl s_client -connect api.aidyagent.app:443 -servername api.aidyagent.app
 ```
 
 ## Checklist

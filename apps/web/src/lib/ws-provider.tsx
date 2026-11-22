@@ -13,7 +13,7 @@ import {
   type PresenceStatus,
   type WebSocketClient,
   type WebSocketClientState,
-} from '@openaidy/sdk';
+} from '@aidyagent/sdk';
 import { setWebSocketApiClient } from './ws-api';
 import { resolveToken } from './auth-token';
 import { API_BASE } from './api';
@@ -43,7 +43,7 @@ function resolveBaseUrl(): string {
   // same-origin in dev mode (Vite proxies /ws) or --integrated mode
   // (server serves the built bundle same-origin). The browser requires
   // an absolute WebSocket URL, so we construct one from window.location.
-  const wsUrl = import.meta.env.OPENAIDY_VITE_WS_URL;
+  const wsUrl = import.meta.env.AIDY_VITE_WS_URL;
   if (wsUrl) return wsUrl;
   // Desktop (Tauri): API_BASE gets resolved at runtime to the core
   // service's actual http(s)://127.0.0.1:<port> origin, which is never

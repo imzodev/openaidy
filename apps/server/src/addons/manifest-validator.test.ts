@@ -4,7 +4,7 @@ import {
   createManifestValidator,
   validateAddonManifest,
 } from './manifest-validator.js';
-import { AddonManifestSchema, ValidationError } from '@openaidy/shared-types';
+import { AddonManifestSchema, ValidationError } from '@aidyagent/shared-types';
 
 describe('ManifestValidator', () => {
   let validator: ManifestValidator;
@@ -14,7 +14,7 @@ describe('ManifestValidator', () => {
     name: 'Price Analyzer',
     version: '1.0.0',
     description: 'Analyze prices across multiple sources',
-    openaidy: {
+    aidy: {
       minVersion: '0.1.0',
       maxVersion: '2.0.0',
     },
@@ -23,7 +23,7 @@ describe('ManifestValidator', () => {
   };
 
   beforeEach(() => {
-    validator = createManifestValidator({ openAidyVersion: '1.0.0' });
+    validator = createManifestValidator({ aidyVersion: '1.0.0' });
   });
 
   describe('validateSchema', () => {
@@ -72,10 +72,10 @@ describe('ManifestValidator', () => {
       }
     });
 
-    it('should reject invalid openaidy version format', () => {
+    it('should reject invalid aidy version format', () => {
       const result = validator.validateSchema({
         ...validManifest,
-        openaidy: { minVersion: 'invalid' },
+        aidy: { minVersion: 'invalid' },
       });
       expect(result.valid).toBe(false);
     });
@@ -126,7 +126,7 @@ describe('ManifestValidator', () => {
   describe('version compatibility', () => {
     it('should reject when minVersion is higher than current', () => {
       const result = validator.validate(
-        { ...validManifest, openaidy: { minVersion: '2.0.0' } },
+        { ...validManifest, aidy: { minVersion: '2.0.0' } },
         [],
       );
       expect(result.valid).toBe(false);
@@ -143,7 +143,7 @@ describe('ManifestValidator', () => {
       const result = validator.validate(
         {
           ...validManifest,
-          openaidy: { minVersion: '0.1.0', maxVersion: '0.5.0' },
+          aidy: { minVersion: '0.1.0', maxVersion: '0.5.0' },
         },
         [],
       );
@@ -161,7 +161,7 @@ describe('ManifestValidator', () => {
       const result = validator.validate(
         {
           ...validManifest,
-          openaidy: { minVersion: '2.0.0', maxVersion: '1.0.0' },
+          aidy: { minVersion: '2.0.0', maxVersion: '1.0.0' },
         },
         [],
       );
@@ -242,7 +242,7 @@ describe('ManifestValidator', () => {
         id: 'test-addon',
         name: 'Test',
         version: '1.0.0',
-        openaidy: { minVersion: '0.1.0' },
+        aidy: { minVersion: '0.1.0' },
         entry: 'dist/index.js',
         permissions: [],
       };
@@ -260,7 +260,7 @@ describe('AddonManifestSchema', () => {
       name: 'Test Addon',
       version: '1.0.0',
       description: 'A test addon',
-      openaidy: { minVersion: '1.0.0' },
+      aidy: { minVersion: '1.0.0' },
       entry: 'dist/index.js',
       permissions: ['sessions.read'],
       author: {
@@ -278,7 +278,7 @@ describe('AddonManifestSchema', () => {
       id: 'test-addon',
       name: 'Test',
       version: '1.0.0',
-      openaidy: { minVersion: '1.0.0' },
+      aidy: { minVersion: '1.0.0' },
       entry: 'dist/index.js',
       permissions: [],
     };
@@ -288,19 +288,19 @@ describe('AddonManifestSchema', () => {
     if (result.success) {
       expect(result.data.license).toBe('MIT');
       expect(result.data.$schema).toBe(
-        'https://openaidy.dev/schemas/addon-v1.json',
+        'https://aidyagent.app/schemas/addon-v1.json',
       );
     }
   });
 
   describe('storage validation', () => {
-    const v = createManifestValidator({ openAidyVersion: '1.0.0' });
+    const v = createManifestValidator({ aidyVersion: '1.0.0' });
     const base = {
       id: 'store-addon',
       name: 'Store',
       version: '1.0.0',
       description: 'x',
-      openaidy: { minVersion: '0.1.0' },
+      aidy: { minVersion: '0.1.0' },
       entry: 'app/index.html',
       permissions: [] as string[],
     };

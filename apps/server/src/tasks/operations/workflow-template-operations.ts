@@ -1,16 +1,16 @@
-import type { TasksRepository, SubtasksRepository } from '@openaidy/db';
+import type { TasksRepository, SubtasksRepository } from '@aidyagent/db';
 import type {
   ApplyTemplateResult,
   GraphEdgeInput,
   GraphNodeInput,
   ResolvedTemplateTrigger,
   TemplateTrigger,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { AgentRegistry } from '../../agents';
 import {
   getWorkflowTemplate,
   substitutePlaceholders,
-} from '@openaidy/workflow-templates';
+} from '@aidyagent/workflow-templates';
 import type { createLogger } from '../../lib/logger';
 import type { ServiceResult } from '../../types';
 import { deriveTitleFromDescription } from '../derive-title';

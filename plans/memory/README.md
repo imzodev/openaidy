@@ -1,12 +1,12 @@
 # Agent Memory System
 
-This document describes the design, database schema, tool API, and extension path for the OpenAidy agent memory system.
+This document describes the design, database schema, tool API, and extension path for the Aidy agent memory system.
 
 ---
 
 ## Overview
 
-Agents in OpenAidy are stateless by default — each conversation starts fresh. The memory system adds two complementary capabilities:
+Agents in Aidy are stateless by default — each conversation starts fresh. The memory system adds two complementary capabilities:
 
 1. **Explicit memory** — agents call `memory_save` to persist a discrete fact, decision, or note. Later they call `memory_search` to retrieve relevant memories by keyword.
 2. **Session recall** — agents call `sessions_search` to locate past conversations by topic. Combined with `sessions_read`, this lets an agent load the full history of a prior session and resume where the user left off.
@@ -409,7 +409,7 @@ Searches past sessions by title using FTS5. Use this to find a prior conversatio
 
 ### How the default agent is identified
 
-The tool factory receives `defaultAgentId: string` from the calling context (sourced from `config.defaults.agentId` in `openaidy.json`). Inside each tool's `execute(args, ctx)` handler:
+The tool factory receives `defaultAgentId: string` from the calling context (sourced from `config.defaults.agentId` in `aidy.json`). Inside each tool's `execute(args, ctx)` handler:
 
 ```ts
 const isDefault = ctx.agentId === deps.defaultAgentId;

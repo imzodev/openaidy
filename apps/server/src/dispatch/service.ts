@@ -4,7 +4,7 @@ import type {
   ModelRequest,
   ModelResponse,
   ModelStreamEvent,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { AgentRegistry } from '../agents';
 import type { RunEvent, RunEventEmitter } from './events';
 import type { McpClientService } from '../mcp';
@@ -28,7 +28,7 @@ import {
   type SessionRun,
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import {
   findSessionRecord,
   appendMessageRecord,

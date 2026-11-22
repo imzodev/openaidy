@@ -1,6 +1,6 @@
-import type { BuiltinTool } from '@openaidy/runtime';
-import { MESSAGE_MATCH_TYPE_VALUES } from '@openaidy/shared-types';
-import type { WorkflowTriggerDto } from '@openaidy/shared-types';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import { MESSAGE_MATCH_TYPE_VALUES } from '@aidyagent/shared-types';
+import type { WorkflowTriggerDto } from '@aidyagent/shared-types';
 import type { TaskService } from '../../tasks/service';
 import type { WorkflowTriggerService } from '../../tasks/triggers/service';
 import {

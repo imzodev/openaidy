@@ -9,7 +9,7 @@ import {
   BootstrapAdminWorkflow,
   type BootstrapAdminContext,
   type BootstrapAdminInspectResult,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 import { resolveCLIConfig } from './config.js';
 
 /**
@@ -63,11 +63,11 @@ export function formatTokenInspection(
 
   if (status === 'missing') {
     output += `\nNo token file found. Start the server to generate one:\n`;
-    output += `  pnpm --filter @openaidy/server dev\n`;
+    output += `  pnpm --filter @aidyagent/server dev\n`;
   } else if (status === 'expired') {
     output += `\nThe token has expired. Delete the token file and restart the server:\n`;
     output += `  rm ${tokenPath}\n`;
-    output += `  pnpm --filter @openaidy/server dev\n`;
+    output += `  pnpm --filter @aidyagent/server dev\n`;
   } else if (status === 'disabled') {
     output += `\nBootstrap admin is disabled. Set BOOTSTRAP_ADMIN_ENABLED=true to enable.\n`;
   }

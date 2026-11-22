@@ -336,7 +336,7 @@ function StatusBadge(props: {
 
 /**
  * Paste-a-key control for one named `${VAR}` secret (e.g. `NOTION_TOKEN`).
- * The only choice the user makes is what to paste — OpenAidy stores it
+ * The only choice the user makes is what to paste — Aidy stores it
  * encrypted and resolves it into every server's template that references
  * this name, without ever touching that template's literal value. Used both
  * in the "Awaiting configuration" banner (unset) and the server detail
@@ -672,7 +672,7 @@ function ServerFormModal(props: {
               rows={envRows.rows}
               keyPlaceholder="KEY"
               envPlaceholder="e.g. ${GITHUB_PERSONAL_ACCESS_TOKEN}"
-              helpText="Paste the value — OpenAidy encrypts it before storing, never shown again."
+              helpText="Paste the value — Aidy encrypts it before storing, never shown again."
               onAdd={() => envRows.addRow()}
               onKeyChange={envRows.setKey}
               onValueChange={envRows.setValue}
@@ -768,7 +768,7 @@ function ServerFormModal(props: {
               rows={headerRows.rows}
               keyPlaceholder="Authorization"
               envPlaceholder="e.g. Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
-              helpText="Paste the value — OpenAidy encrypts it before storing, never shown again."
+              helpText="Paste the value — Aidy encrypts it before storing, never shown again."
               onAdd={() => headerRows.addRow()}
               onKeyChange={headerRows.setKey}
               onValueChange={headerRows.setValue}
@@ -1120,7 +1120,7 @@ export function McpsPage() {
   };
 
   const openSignInPopup = () =>
-    window.open('about:blank', 'openaidy-mcp-oauth', 'width=520,height=720');
+    window.open('about:blank', 'aidy-mcp-oauth', 'width=520,height=720');
 
   /**
    * `popup` defaults to one opened right now — callers that await something
@@ -1204,7 +1204,7 @@ export function McpsPage() {
       success?: boolean;
       error?: string;
     } | null;
-    if (data?.type !== 'openaidy:mcp-oauth') return;
+    if (data?.type !== 'aidy:mcp-oauth') return;
     stopWatchingPopup();
     setActionId(null);
     if (!data.success) {
@@ -1549,7 +1549,7 @@ export function McpsPage() {
                   <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300">
                     <p class="text-sm font-medium">Awaiting configuration</p>
                     <p class="mt-1 text-xs">
-                      Paste the key below — OpenAidy stores it encrypted and
+                      Paste the key below — Aidy stores it encrypted and
                       connects automatically once it's set.
                     </p>
                     <Show when={MCP_SERVER_SETUP_CATALOG[selected()!.id]}>
@@ -1609,8 +1609,8 @@ export function McpsPage() {
                       <p class="text-sm font-medium">Sign-in required</p>
                       <p class="mt-1 text-xs">
                         Click <strong>Sign in</strong> and approve access in the
-                        window that opens. OpenAidy stores the tokens encrypted
-                        and refreshes them automatically.
+                        window that opens. Aidy stores the tokens encrypted and
+                        refreshes them automatically.
                       </p>
                     </div>
                   </Show>

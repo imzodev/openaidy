@@ -8,7 +8,7 @@ import type {
   ToolCallRequest,
   UsageInfo,
   FinishReason,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type {
   GeminiGenerateContentResponse,
   GeminiCandidate,

@@ -10,7 +10,7 @@ import {
   mapToolChoice,
   mapRequest,
 } from './request-mapper';
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 
 describe('mapMessage', () => {
   it('should map system message', () => {

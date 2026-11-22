@@ -1,14 +1,14 @@
 /**
  * Tokens Revoke Command Handler
  *
- * Implements `openaidy tokens revoke` command.
+ * Implements `aidy tokens revoke` command.
  */
 
 import * as p from '@clack/prompts';
 import { readFile } from 'node:fs/promises';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 async function readAdminToken(tokenPath: string): Promise<string | null> {
   try {
@@ -25,7 +25,7 @@ export async function tokensRevokeHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tokens revoke <id>
+      `Usage: aidy tokens revoke <id>
 
 Revoke an access token by its ID. This is irreversible.
 
@@ -33,7 +33,7 @@ Arguments:
   <id>   The token ID (from "tokens list")
 
 Examples:
-  pnpm openaidy tokens revoke abc123xyz
+  pnpm aidy tokens revoke abc123xyz
 
 Exit Codes:
   0  Token revoked

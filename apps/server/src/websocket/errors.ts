@@ -12,7 +12,7 @@ import {
   WS_ERROR_CODES,
   type WSErrorCode,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Error Code Mappings

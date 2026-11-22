@@ -1,5 +1,5 @@
 /**
- * status.test.ts — vitest suite for openaidy status (PR2 T2.4)
+ * status.test.ts — vitest suite for aidy status (PR2 T2.4)
  *
  * Tests all 4 acceptance criteria:
  *  1. Running server → state=running, URL, PID, log, masked token
@@ -17,13 +17,13 @@ import { statusHandler, maskToken } from './status.js';
 import { writePidFile } from '../lib/process-manager.js';
 
 async function setupEnv(): Promise<string> {
-  const home = join(tmpdir(), `openaidy-status-test-${randomUUID()}`);
+  const home = join(tmpdir(), `aidy-status-test-${randomUUID()}`);
   await mkdir(join(home, 'state'), { recursive: true });
   await mkdir(join(home, 'credentials'), { recursive: true });
   return home;
 }
 
-describe('openaidy status', () => {
+describe('aidy status', () => {
   describe('maskToken', () => {
     it('shows last 4 chars with **** prefix', () => {
       expect(maskToken('abcdefgh')).toBe('****efgh');
@@ -55,7 +55,7 @@ describe('openaidy status', () => {
         }),
       );
 
-      const result = await statusHandler([], { OPENAIDY_HOME: home });
+      const result = await statusHandler([], { AIDY_HOME: home });
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('stopped');
     });
@@ -69,7 +69,7 @@ describe('openaidy status', () => {
         logFile: '/dev/null',
       });
 
-      const result = await statusHandler([], { OPENAIDY_HOME: home });
+      const result = await statusHandler([], { AIDY_HOME: home });
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain('stopped');
     });
@@ -84,7 +84,7 @@ describe('openaidy status', () => {
         }),
       );
 
-      const result = await statusHandler([], { OPENAIDY_HOME: home });
+      const result = await statusHandler([], { AIDY_HOME: home });
       expect(result.output).toContain('****1234');
     });
   });

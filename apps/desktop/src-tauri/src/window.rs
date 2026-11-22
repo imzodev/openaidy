@@ -17,28 +17,28 @@ pub struct WindowState {
 }
 
 impl WindowState {
-    /// Load window state from the openaidy config directory.
-    pub fn load(openaidy_home: &std::path::Path) -> Option<WindowState> {
-        let path = openaidy_home.join("window-state.json");
+    /// Load window state from the aidy config directory.
+    pub fn load(aidy_home: &std::path::Path) -> Option<WindowState> {
+        let path = aidy_home.join("window-state.json");
         let content = fs::read_to_string(path).ok()?;
         serde_json::from_str(&content).ok()
     }
 
-    /// Save window state to the openaidy config directory.
-    pub fn save(&self, openaidy_home: &std::path::Path) -> std::io::Result<()> {
-        fs::create_dir_all(openaidy_home)?;
-        let path = openaidy_home.join("window-state.json");
+    /// Save window state to the aidy config directory.
+    pub fn save(&self, aidy_home: &std::path::Path) -> std::io::Result<()> {
+        fs::create_dir_all(aidy_home)?;
+        let path = aidy_home.join("window-state.json");
         let content = serde_json::to_string_pretty(self)?;
         fs::write(path, content)
     }
 }
 
-/// Global openaidy home path for window state saving.
-static OPENAIDY_HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+/// Global aidy home path for window state saving.
+static AIDY_HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-/// Set the global openaidy home path.
-pub fn set_openaidy_home(home: PathBuf) {
-    OPENAIDY_HOME.set(home).ok();
+/// Set the global aidy home path.
+pub fn set_aidy_home(home: PathBuf) {
+    AIDY_HOME.set(home).ok();
 }
 
 /// Configure close-to-tray behavior for the main window.
@@ -58,7 +58,7 @@ pub fn setup_close_to_tray<R: Runtime>(
             api.prevent_close();
 
             // Save window state before hiding
-            if let Some(home) = OPENAIDY_HOME.get() {
+            if let Some(home) = AIDY_HOME.get() {
                 if let Ok(pos) = window_clone.outer_position() {
                     if let Ok(size) = window_clone.outer_size() {
                         let is_max = window_clone.is_maximized().unwrap_or(false);

@@ -40,7 +40,7 @@ describe('Testing Utilities', () => {
       expect(addon.manifest).toHaveProperty('id');
       expect(addon.manifest).toHaveProperty('name');
       expect(addon.manifest).toHaveProperty('version');
-      expect(addon.manifest).toHaveProperty('openaidy');
+      expect(addon.manifest).toHaveProperty('aidy');
       expect(addon.manifest).toHaveProperty('ui');
     });
   });

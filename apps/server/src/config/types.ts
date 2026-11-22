@@ -6,13 +6,13 @@
  * from type files and imported wherever they're needed.
  */
 
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type { AgentRegistry } from '../agents';
 import type { ProviderServices } from '../providers';
 import type {
   AuthMethodProvider,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 export type AppConfigIssue = {
   scope: 'provider';
@@ -48,6 +48,6 @@ export type AppConfigServiceOptions = {
 
 /**
  * Re-export for `McpServerConfig` so consumers of this module don't
- * need to reach into `@openaidy/config` separately.
+ * need to reach into `@aidyagent/config` separately.
  */
 export type { McpServerConfig };

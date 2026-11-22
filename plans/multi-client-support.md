@@ -206,7 +206,7 @@ Export the new `ClientType` and updated types.
 **File:** `packages/sdk/src/adapters/types.ts` (new)
 
 ```typescript
-import type { ClientType } from '@openaidy/shared-types';
+import type { ClientType } from '@aidyagent/shared-types';
 import type { WebSocketClient } from '../websocket-client.js';
 
 /**
@@ -610,10 +610,10 @@ flowchart LR
 
 #### CLI
 
-| Variable              | Required | Description                                 |
-| --------------------- | -------- | ------------------------------------------- |
-| `OPENAI_API_KEY`      | Yes      | OpenAI API key                              |
-| `OPENAIDY_SERVER_URL` | No       | Server URL (default: http://localhost:3001) |
+| Variable          | Required | Description                                 |
+| ----------------- | -------- | ------------------------------------------- |
+| `OPENAI_API_KEY`  | Yes      | OpenAI API key                              |
+| `AIDY_SERVER_URL` | No       | Server URL (default: http://localhost:3001) |
 
 ### Local Development Setup
 

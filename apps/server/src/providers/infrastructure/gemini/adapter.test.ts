@@ -8,7 +8,7 @@ import {
   createGeminiStudioProvider,
   createVertexAIGeminiProvider,
 } from './adapter';
-import type { ModelRequest } from '@openaidy/runtime';
+import type { ModelRequest } from '@aidyagent/runtime';
 
 // Mock fetch
 const originalFetch = global.fetch;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import {
   reconcilePreinstalledMcpServers,
   hashMcpServer,
@@ -100,7 +100,7 @@ const notion: McpServerConfig = {
   },
 };
 
-/** The full preinstalled set shipped in `config/openaidy.template.json`. */
+/** The full preinstalled set shipped in `config/aidy.template.json`. */
 const allPreinstalled: McpServerConfig[] = [
   github,
   sequentialThinking,

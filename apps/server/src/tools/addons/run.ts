@@ -7,7 +7,7 @@
  * (`addon_run`). See packages/shared-types AddonAgentQuerySchema and
  * ../../addons/storage/agent-queries.ts.
  */
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AddonToolDeps } from './create.js';
 import {
   AddonAgentQueryService,

@@ -4,7 +4,7 @@
  * Formats task data for CLI output.
  */
 
-import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
+import type { TaskStatus, TaskPriority } from '@aidyagent/shared-types';
 
 /**
  * Map status to a readable label

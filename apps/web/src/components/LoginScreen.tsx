@@ -59,7 +59,7 @@ export function LoginScreen(props: LoginScreenProps) {
         <div class="text-center mb-8">
           <img
             src="/logo.webp"
-            alt="OpenAidy"
+            alt="Aidy"
             class="h-32 md:h-56 w-auto mx-auto mb-8"
           />
           <p class="mt-2 text-sm text-text-secondary">
@@ -106,7 +106,7 @@ export function LoginScreen(props: LoginScreenProps) {
 
         <p class="mt-4 text-center text-xs text-text-tertiary">
           Get your token from the server administrator or via{' '}
-          <code class="font-mono">pnpm openaidy admin token show</code>
+          <code class="font-mono">pnpm aidy admin token show</code>
         </p>
       </div>
     </div>

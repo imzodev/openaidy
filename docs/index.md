@@ -1,13 +1,13 @@
 ---
-summary: 'OpenAidy documentation index'
+summary: 'Aidy documentation index'
 read_when:
-  - You are new to OpenAidy or looking for a specific topic
-title: 'OpenAidy Docs'
+  - You are new to Aidy or looking for a specific topic
+title: 'Aidy Docs'
 ---
 
-# OpenAidy Docs
+# Aidy Docs
 
-OpenAidy is a self-hosted AI agent platform — persistent sessions with streaming responses, structured multi-step tasks, scheduled automation, real messaging channels, and a plugin system, all running on one server you control.
+Aidy is a self-hosted AI agent platform — persistent sessions with streaming responses, structured multi-step tasks, scheduled automation, real messaging channels, and a plugin system, all running on one server you control.
 
 New here? Start with [Getting Started](./getting-started.md).
 
@@ -31,12 +31,12 @@ New here? Start with [Getting Started](./getting-started.md).
 
 - [Channels](./channels.md) — WhatsApp and Discord, so agents can handle real conversations
 - [MCP Servers](./mcp-servers.md) — give agents tools from external MCP servers
-- [Addons](./addons/README.md) — build or install a mini-app inside OpenAidy, with its own [permission model](./addons/addon-permissions.md)
+- [Addons](./addons/README.md) — build or install a mini-app inside Aidy, with its own [permission model](./addons/addon-permissions.md)
 
-## Operating OpenAidy
+## Operating Aidy
 
-- [Configuration](./config.md) — `openaidy.json`, the Settings UI, execution tuning
+- [Configuration](./config.md) — `aidy.json`, the Settings UI, execution tuning
 - [Access Tokens & Device Pairing](./access-tokens.md) — API credentials and approving new devices
 - [Usage](./usage.md) — token and cost tracking
 - [Backups](./backups.md) — export and restore your data, or move to another server
-- [CLI Reference](./cli/README.md) — every `openaidy` command, install and bootstrap-admin guides
+- [CLI Reference](./cli/README.md) — every `aidy` command, install and bootstrap-admin guides

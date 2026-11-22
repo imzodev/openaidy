@@ -12,8 +12,8 @@ import {
   createDatabaseAdapter,
   type DatabaseAdapter,
   type Task,
-} from '@openaidy/db';
-import { DEFAULT_EXECUTION_CONFIG } from '@openaidy/config';
+} from '@aidyagent/db';
+import { DEFAULT_EXECUTION_CONFIG } from '@aidyagent/config';
 import type { AgentRegistry } from '../agents';
 import { TaskService, type TaskServiceOptions } from './service';
 import { FakeSessions, deferred } from './testing/fake-sessions';
@@ -41,10 +41,10 @@ describe('workflow authoring', { timeout: 20000 }, () => {
   let task: Task;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-workflow-authoring-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-workflow-authoring-'));
     db = await createDatabaseAdapter({
       kind: 'sqlite',
-      sqlitePath: join(dir, 'openaidy.db'),
+      sqlitePath: join(dir, 'aidy.db'),
     });
     sessions = new FakeSessions(db);
     service = new TaskService({

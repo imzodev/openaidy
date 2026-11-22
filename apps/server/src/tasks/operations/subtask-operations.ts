@@ -4,7 +4,7 @@ import type {
   Subtask,
   SubtaskEdge,
   SubtaskStatus,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { AgentRegistry } from '../../agents';
 import { createLogger } from '../../lib/logger';
 import type {
@@ -17,7 +17,7 @@ import {
   isSubtaskExecutable,
   wouldCreateCycle,
 } from '../execution/subtask-graph';
-import type { WorkflowGraph } from '@openaidy/workflow-templates';
+import type { WorkflowGraph } from '@aidyagent/workflow-templates';
 import type { WorkflowGraphOperations } from './workflow-graph-operations';
 
 /** Key used for a node that doesn't exist yet when checking an edit. */

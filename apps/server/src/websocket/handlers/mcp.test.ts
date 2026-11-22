@@ -3,8 +3,8 @@ import { McpHandler, createMcpHandler, registerMcpHandlers } from './mcp';
 import type { McpClientService } from '../../mcp/client';
 import type { FastifyBaseLogger } from 'fastify';
 import type { HandlerContext } from '../index';
-import { createWSMessage } from '@openaidy/shared-types';
-import type { McpServerConfig } from '@openaidy/config';
+import { createWSMessage } from '@aidyagent/shared-types';
+import type { McpServerConfig } from '@aidyagent/config';
 
 describe('McpHandler', () => {
   let handler: McpHandler;

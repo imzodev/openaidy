@@ -17,7 +17,7 @@ import {
   createWSMessage,
   WS_ERROR_CODES,
   WS_CAPABILITIES,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Mock Factories

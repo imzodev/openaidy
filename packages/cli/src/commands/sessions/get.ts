@@ -1,7 +1,7 @@
 /**
  * Sessions Get Command Handler
  *
- * Implements `openaidy sessions get <sessionId>` command.
+ * Implements `aidy sessions get <sessionId>` command.
  * Calls GET /sessions/:sessionId via the HTTP REST API.
  */
 
@@ -16,12 +16,12 @@ export async function sessionsGetHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy sessions get <sessionId>
+      `Usage: aidy sessions get <sessionId>
 
 Get details of a specific session.
 
 Examples:
-  pnpm openaidy sessions get sess_abc123
+  pnpm aidy sessions get sess_abc123
 
 Exit Codes:
   0  Success
@@ -34,7 +34,7 @@ Exit Codes:
   const sessionId = args[0];
   if (!sessionId) {
     p.log.error(
-      'Session ID is required.\n\nUsage: openaidy sessions get <sessionId>',
+      'Session ID is required.\n\nUsage: aidy sessions get <sessionId>',
     );
     return { exitCode: 2, error: 'Missing Session ID' };
   }

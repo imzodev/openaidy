@@ -1,7 +1,7 @@
 /**
- * OpenAidy CLI
+ * Aidy CLI
  *
- * Local administration tool for OpenAidy.
+ * Local administration tool for Aidy.
  */
 
 import {
@@ -20,12 +20,12 @@ import { defaultCLIConfig, ExitCodes } from './types.js';
 // ============================================================================
 
 const BANNER = `
-  ___                          _     _     _       
- / _ \\ _ __   ___ _ __   / \\ (_) __| |_   _
-| | | | '_ \\ / _ \\ '_ \\ / _ \\| |/ _\` | | | |
-| |_| | |_) |  __/ | | / ___ \\ | (_| | |_| |
- \\___/| .__/ \\___|_| |_/_/   \\_\\_|\\__,_|\\__, |
-      |_|                                |___/ 
+    _    _     _
+   / \\  (_) __| |_   _
+  / _ \\ | |/ _\` | | | |
+ / ___ \\| | (_| | |_| |
+/_/   \\_\\_|\\__,_|\\__, |
+                 |___/
 `;
 
 // ============================================================================
@@ -221,7 +221,7 @@ export async function runCli(argv: string[]): Promise<number> {
     return ExitCodes.SUCCESS;
   }
 
-  // Check for group-level help: `openaidy admin --help`
+  // Check for group-level help: `aidy admin --help`
   if (argv.length === 2 && (argv[1] === '-h' || argv[1] === '--help')) {
     const groupName = argv[0];
     if (printGroupHelp(groupName)) {

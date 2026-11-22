@@ -1,10 +1,10 @@
 {
-  "name": "@openaidy/cli",
+  "name": "@aidyagent/cli",
   "version": "0.0.1",
   "type": "module",
-  "description": "OpenAidy command-line interface for local administration",
+  "description": "Aidy command-line interface for local administration",
   "bin": {
-    "openaidy": "./bin/openaidy.ts"
+    "aidy": "./bin/aidy.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
@@ -14,12 +14,12 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.3.0",
-    "@openaidy/addon-scaffolding": "workspace:*",
-    "@openaidy/config": "workspace:*",
-    "@openaidy/control-plane": "workspace:*",
-    "@openaidy/sdk": "workspace:*",
-    "@openaidy/server": "workspace:*",
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/addon-scaffolding": "workspace:*",
+    "@aidyagent/config": "workspace:*",
+    "@aidyagent/control-plane": "workspace:*",
+    "@aidyagent/sdk": "workspace:*",
+    "@aidyagent/server": "workspace:*",
+    "@aidyagent/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
@@ -36,18 +36,18 @@
     "src"
   ],
   "keywords": [
-    "openaidy",
+    "aidy",
     "cli",
     "admin",
     "websocket"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/imzodev/openaidy.git"
+    "url": "https://github.com/imzodev/aidy.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/imzodev/openaidy/issues"
+    "url": "https://github.com/imzodev/aidy/issues"
   },
-  "homepage": "https://github.com/imzodev/openaidy#readme"
+  "homepage": "https://github.com/imzodev/aidy#readme"
 }

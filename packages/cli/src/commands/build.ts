@@ -30,7 +30,7 @@ export async function buildAddon(
     return {
       success: false,
       message:
-        'addon.json not found. Run "openaidy init" to initialize the project.',
+        'addon.json not found. Run "aidy init" to initialize the project.',
     };
   }
 

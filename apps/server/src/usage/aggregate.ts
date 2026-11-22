@@ -7,7 +7,7 @@
  * and Postgres.
  */
 
-import type { UsageRunRow } from '@openaidy/db';
+import type { UsageRunRow } from '@aidyagent/db';
 
 export type UsageTotals = {
   runCount: number;

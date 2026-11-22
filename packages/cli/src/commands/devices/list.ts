@@ -1,7 +1,7 @@
 /**
  * Devices List Command Handler
  *
- * Implements `openaidy devices list` command.
+ * Implements `aidy devices list` command.
  * Uses the control-plane pairing workflow for request retrieval.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import {
   createPairingWorkflow,
   type PairingContext,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 import {
   formatRequestList,
   formatEmptyState,
@@ -31,7 +31,7 @@ export function createDevicesListHandler(
     if (args.includes('-h') || args.includes('--help')) {
       p.note(
         [
-          'Usage: openaidy devices list [options]',
+          'Usage: aidy devices list [options]',
           '',
           'Options:',
           '  --status <status>  Filter by status: pending, approved, denied, expired, all',
@@ -39,9 +39,9 @@ export function createDevicesListHandler(
           '  --limit <n>        Maximum number of results (default: 50)',
           '',
           'Examples:',
-          '  pnpm openaidy devices list',
-          '  pnpm openaidy devices list --status all',
-          '  pnpm openaidy devices list --status approved --limit 10',
+          '  pnpm aidy devices list',
+          '  pnpm aidy devices list --status all',
+          '  pnpm aidy devices list --status approved --limit 10',
         ].join('\n'),
         'devices list',
       );

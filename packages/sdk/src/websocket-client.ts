@@ -1,7 +1,7 @@
 /**
  * WebSocket Client SDK
  *
- * A TypeScript client SDK for connecting to the OpenAidy WebSocket gateway.
+ * A TypeScript client SDK for connecting to the Aidy WebSocket gateway.
  * Provides easy-to-use API for all WebSocket operations.
  */
 
@@ -24,7 +24,7 @@ import {
   type WSMessage,
   type WSResponse,
   type AuthAuthenticatedResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 type ConnectionEstablishedMessage = {
   id: string;
@@ -213,7 +213,7 @@ class ReconnectionManager {
 // ============================================================================
 
 /**
- * WebSocket client for OpenAidy gateway
+ * WebSocket client for Aidy gateway
  */
 export class WebSocketClient {
   private options: WebSocketClientOptions & { logger: Logger };

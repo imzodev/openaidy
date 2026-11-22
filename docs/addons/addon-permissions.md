@@ -1,6 +1,6 @@
 # Addon Permissions
 
-Addons declare the permissions they need in the `permissions` array of `addon.json`. OpenAidy validates these at install time and uses them to control what the addon can access through the SDK.
+Addons declare the permissions they need in the `permissions` array of `addon.json`. Aidy validates these at install time and uses them to control what the addon can access through the SDK.
 
 ## Permission Format
 
@@ -232,7 +232,7 @@ Addon API access is restricted at four levels:
   "name": "My Addon",
   "version": "1.0.0",
   "description": "An addon that analyzes sessions using an AI agent",
-  "openaidy": {
+  "aidy": {
     "minVersion": "0.1.0"
   },
   "entry": "dist/index.js",

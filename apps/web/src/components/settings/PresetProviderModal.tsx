@@ -3,7 +3,7 @@ import { X, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-solid';
 import {
   type ModelPreset,
   OPENCODE_GO_ANTHROPIC_MODEL_IDS,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { discoverProviderModels, type ProviderConfig } from '../../lib/api';
 import { ModelMultiSelect } from './ModelMultiSelect';
 import type { PresetProviderModalProps } from './PresetProviderModal.types';

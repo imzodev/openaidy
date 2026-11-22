@@ -122,7 +122,7 @@ describe('Validation Utilities', () => {
         name: 'My Addon',
         version: '1.0.0',
         description: 'A test addon',
-        openaidy: {
+        aidy: {
           minVersion: '1.0.0',
         },
       };
@@ -146,19 +146,19 @@ describe('Validation Utilities', () => {
         name: 'My Addon',
         version: 'invalid',
         description: 'Test',
-        openaidy: {},
+        aidy: {},
       };
       const result = validateManifest(manifest);
       expect(result.valid).toBe(false);
     });
 
-    it('should warn about missing openaidy.minVersion', () => {
+    it('should warn about missing aidy.minVersion', () => {
       const manifest = {
         id: 'my-addon',
         name: 'My Addon',
         version: '1.0.0',
         description: 'Test',
-        openaidy: {},
+        aidy: {},
       };
       const result = validateManifest(manifest);
       expect(result.warnings.some((w) => w.includes('minVersion'))).toBe(true);

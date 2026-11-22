@@ -4,8 +4,8 @@
  * Type definitions for the addon service layer.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
-import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { AddonManifest } from '@aidyagent/shared-types';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@aidyagent/db';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import type { SessionMessageService } from '../sessions/service';
 import type { AgentRegistry } from '../agents/registry';
@@ -102,8 +102,8 @@ export interface AddonServiceOptions {
   validator: import('./manifest-validator').ManifestValidator;
   /** JWT secret for token generation */
   jwtSecret: string;
-  /** Current OpenAidy version */
-  openAidyVersion: string;
+  /** Current Aidy version */
+  aidyVersion: string;
 }
 
 /**
@@ -118,7 +118,7 @@ export interface InstallAddonRequest {
  * Addon installation result
  */
 export interface InstallAddonResult {
-  addon: import('@openaidy/db').Addon;
+  addon: import('@aidyagent/db').Addon;
   permissions: string[];
   requiresApproval: boolean;
 }
@@ -136,7 +136,7 @@ export interface EnableAddonRequest {
  * Enable addon result
  */
 export interface EnableAddonResult {
-  addon: import('@openaidy/db').Addon;
+  addon: import('@aidyagent/db').Addon;
   accessToken: string;
 }
 
@@ -173,7 +173,7 @@ export interface UpdateAddonRequest {
  * List addons filters
  */
 export interface ListAddonsFilters {
-  status?: import('@openaidy/db').AddonStatus;
+  status?: import('@aidyagent/db').AddonStatus;
   search?: string;
   limit?: number;
   offset?: number;
@@ -235,7 +235,7 @@ export function createDuplicateAddonError(addonId: string): AddonServiceError {
  * Create an invalid manifest error
  */
 export function createInvalidManifestError(
-  errors: import('@openaidy/shared-types').ValidationError[],
+  errors: import('@aidyagent/shared-types').ValidationError[],
 ): AddonServiceError {
   return new AddonServiceError(
     'Invalid addon manifest',

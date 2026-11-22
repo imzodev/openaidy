@@ -12,7 +12,7 @@ import {
   getTimeUntilExpiration,
   formatRequestWithExpiry,
 } from './devices.js';
-import type { PairingRequestData } from '@openaidy/control-plane';
+import type { PairingRequestData } from '@aidyagent/control-plane';
 
 describe('Device Formatters', () => {
   const createRequest = (

@@ -6,7 +6,7 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import type { ConnectionManager } from './connection-manager';
-import type { WSMessage } from '@openaidy/shared-types';
+import type { WSMessage } from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types

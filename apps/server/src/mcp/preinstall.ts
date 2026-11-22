@@ -1,7 +1,7 @@
 /**
  * Preinstalled MCP server seeding.
  *
- * The config template (`config/openaidy.template.json`) ships a set of
+ * The config template (`config/aidy.template.json`) ships a set of
  * preinstalled MCP servers. The template is only copied into a user's config
  * on first run, so servers added to the template later never reached existing
  * installs. This reconciles the template's servers into an existing config on
@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 
 /** Per-server manifest entry — the hash of the template definition we seeded. */
 export type McpSeedManifestEntry = { hash: string };

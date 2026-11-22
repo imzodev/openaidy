@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a summary of the WebSocket control plane implementation plan for OpenAidy, inspired by OpenClaw's Gateway architecture. The implementation is divided into 6 phases, each with detailed tasks, expected results, files to create/modify, and comprehensive test requirements.
+This document provides a summary of the WebSocket control plane implementation plan for Aidy, inspired by OpenClaw's Gateway architecture. The implementation is divided into 6 phases, each with detailed tasks, expected results, files to create/modify, and comprehensive test requirements.
 
 ## Design Documents
 

@@ -1,24 +1,24 @@
 <p align="center">
-  <img src="./docs/assets/banner.png" alt="OpenAidy — Open Source AI Agent Platform" width="892" />
+  <img src="./docs/assets/banner.png" alt="Aidy — Open Source AI Agent Platform" width="892" />
 </p>
 
-# OpenAidy — OpenAI Do-it Yourself
+# Aidy — OpenAI Do-it Yourself
 
 > **The open source AI agent platform for self-hosting, automating, and extending your own AI operations.**
 > Plugin-first. Real-time. MCP-native. MIT licensed.
 
 <p align="center">
-  <a href="https://github.com/imzodev/openaidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/openaidy?style=flat-square&color=blue" alt="License: MIT" /></a>
-  <a href="https://github.com/imzodev/openaidy/stargazers"><img src="https://img.shields.io/github/stars/imzodev/openaidy?style=flat-square" alt="GitHub stars" /></a>
-  <a href="https://github.com/imzodev/openaidy/issues"><img src="https://img.shields.io/github/issues/imzodev/openaidy?style=flat-square" alt="Open issues" /></a>
-  <a href="https://github.com/imzodev/openaidy/network/members"><img src="https://img.shields.io/github/forks/imzodev/openaidy?style=flat-square" alt="Forks" /></a>
-  <a href="https://github.com/imzodev/openaidy/commits/main"><img src="https://img.shields.io/github/last-commit/imzodev/openaidy?style=flat-square" alt="Last commit" /></a>
-  <a href="https://www.npmjs.com/package/@openaidy/app"><img src="https://img.shields.io/npm/v/@openaidy/app?style=flat-square&color=red" alt="npm: @openaidy/app" /></a>
+  <a href="https://github.com/imzodev/aidy/blob/main/LICENSE"><img src="https://img.shields.io/github/license/imzodev/aidy?style=flat-square&color=blue" alt="License: MIT" /></a>
+  <a href="https://github.com/imzodev/aidy/stargazers"><img src="https://img.shields.io/github/stars/imzodev/aidy?style=flat-square" alt="GitHub stars" /></a>
+  <a href="https://github.com/imzodev/aidy/issues"><img src="https://img.shields.io/github/issues/imzodev/aidy?style=flat-square" alt="Open issues" /></a>
+  <a href="https://github.com/imzodev/aidy/network/members"><img src="https://img.shields.io/github/forks/imzodev/aidy?style=flat-square" alt="Forks" /></a>
+  <a href="https://github.com/imzodev/aidy/commits/main"><img src="https://img.shields.io/github/last-commit/imzodev/aidy?style=flat-square" alt="Last commit" /></a>
+  <a href="https://www.npmjs.com/package/@aidyagent/app"><img src="https://img.shields.io/npm/v/@aidyagent/app?style=flat-square&color=red" alt="npm: @aidyagent/app" /></a>
 </p>
 
 ---
 
-## Why OpenAidy?
+## Why Aidy?
 
 Most agent tooling today falls into one of three traps:
 
@@ -26,39 +26,39 @@ Most agent tooling today falls into one of three traps:
 - **Workflow engines** (n8n, Zapier-style) that automate anything but treat the LLM as just another node — no first-class agent runtime, no real-time streaming.
 - **Multi-agent frameworks** (CrewAI, AutoGen-style) that ship great orchestration primitives but ship no platform — no UI, no persistence, no auth, no channels, no scheduler.
 
-**OpenAidy is the fourth option**: an open source, self-hostable AI agent platform that combines all three.
+**Aidy is the fourth option**: an open source, self-hostable AI agent platform that combines all three.
 
 You get persistent sessions with token-by-token streaming, a real cron and event scheduler, plugin-based channels (WhatsApp today; Telegram, Discord, Slack next), MCP as a first-class interoperability layer, and a SolidJS operator UI — all from one command.
 
 ## Quick start
 
-The fastest way to run OpenAidy — no git clone, no build step. The installer provisions a managed Node.js 22 runtime (only if your system Node is too old for `node:sqlite`), installs ripgrep, pulls the prebuilt `@openaidy/app` from npm, generates a bootstrap admin token, and opens your browser to the login screen with the token pre-filled.
+The fastest way to run Aidy — no git clone, no build step. The installer provisions a managed Node.js 22 runtime (only if your system Node is too old for `node:sqlite`), installs ripgrep, pulls the prebuilt `@aidyagent/app` from npm, generates a bootstrap admin token, and opens your browser to the login screen with the token pre-filled.
 
 **macOS / Linux / WSL:**
 
 ```bash
-curl -fsSL https://openaidy.com/install.sh | bash
+curl -fsSL https://aidyagent.app/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-iex (irm https://openaidy.com/install.ps1)
+iex (irm https://aidyagent.app/install.ps1)
 ```
 
 Then you have a clean, tiny CLI:
 
 ```bash
-openaidy start    # boot the server + UI on http://localhost:3001
-openaidy stop     # shut it down
-openaidy status   # check whether it's running
-openaidy init     # regenerate the bootstrap admin token if needed
+aidy start    # boot the server + UI on http://localhost:3001
+aidy stop     # shut it down
+aidy status   # check whether it's running
+aidy init     # regenerate the bootstrap admin token if needed
 ```
 
 **Running on a Linux server?** Let systemd keep it up: it starts at boot and restarts within seconds after a crash. `start`/`stop`/`restart` keep working and go through systemd.
 
 ```bash
-openaidy service install
+aidy service install
 ```
 
 **Moving servers?** **System → Backups** in the UI exports your database, config, workspaces, skills and addons to one zip and restores it on the new machine. It streams to disk, so multi-GB backups work even on a 1 GB droplet. See [docs/backups.md](docs/backups.md).
@@ -66,7 +66,7 @@ openaidy service install
 **For contributors** — building from source:
 
 ```bash
-git clone https://github.com/imzodev/openaidy.git && cd openaidy
+git clone https://github.com/imzodev/aidy.git && cd aidy
 pnpm install && pnpm dev
 # → API at http://localhost:3001, UI at http://localhost:5173
 ```
@@ -74,7 +74,7 @@ pnpm install && pnpm dev
 The dev mode runs the API server and Vite UI separately with hot reload.
 
 **Prefer a native app?** Download a Windows/macOS/Linux installer from the
-[Releases page](https://github.com/imzodev/openaidy/releases/latest) — see
+[Releases page](https://github.com/imzodev/aidy/releases/latest) — see
 [docs/desktop/INSTALL.md](docs/desktop/INSTALL.md) for setup notes.
 
 ## Who is this for?
@@ -87,28 +87,28 @@ The dev mode runs the API server and Vite UI separately with hot reload.
 - Extend a small, stable core with your own tools, channels, providers, and UI panels — without forking.
 - Plug into the MCP ecosystem on either side (consume MCP servers **and** expose your platform as one).
 
-❌ **OpenAidy is probably not for you if you:**
+❌ **Aidy is probably not for you if you:**
 
 - Just want a chat UI to talk to one model — use OpenAI's playground, Claude.ai, or ChatGPT.
 - Need a no-code visual workflow builder with hundreds of pre-built integrations — use n8n or Zapier.
 - Are building a research-only multi-agent experiment and don't care about persistence, auth, or a UI — CrewAI or AutoGen may be lighter.
-- Want a managed cloud product — OpenAidy is self-hosted by design.
+- Want a managed cloud product — Aidy is self-hosted by design.
 
-## How OpenAidy compares
+## How Aidy compares
 
-| Capability                                            | OpenAidy | n8n | CrewAI | AutoGen |
-| ----------------------------------------------------- | :------: | :-: | :----: | :-----: |
-| **Self-hostable**                                     |    ✅    | ✅  |   ❌   |   ❌    |
-| **Built-in operator UI**                              |    ✅    | ✅  |   ❌   |   ❌    |
-| **Real-time token streaming**                         |    ✅    | 🟡  |   ❌   |   ❌    |
-| **Persistent agent sessions**                         |    ✅    | 🟡  |   ❌   |   ❌    |
-| **Cron + one-shot scheduler**                         |    ✅    | ✅  |   ❌   |   ❌    |
-| **First-class MCP support**                           |    ✅    | 🟡  |   ❌   |   ✅    |
-| **Plugin SDK (tools, channels, UI)**                  |    ✅    | ✅  |   ❌   |   ❌    |
-| **Messaging channels (WhatsApp, etc.)**               |    ✅    | ✅  |   ❌   |   ❌    |
-| **Multi-agent orchestration**                         |    ✅    | 🟡  |   ✅   |   ✅    |
-| **Provider-agnostic (OpenAI/Anthropic/Gemini/local)** |    ✅    | ✅  |   ✅   |   ✅    |
-| **License**                                           |   MIT    | ⚖️  |  MIT   |   MIT   |
+| Capability                                            | Aidy | n8n | CrewAI | AutoGen |
+| ----------------------------------------------------- | :--: | :-: | :----: | :-----: |
+| **Self-hostable**                                     |  ✅  | ✅  |   ❌   |   ❌    |
+| **Built-in operator UI**                              |  ✅  | ✅  |   ❌   |   ❌    |
+| **Real-time token streaming**                         |  ✅  | 🟡  |   ❌   |   ❌    |
+| **Persistent agent sessions**                         |  ✅  | 🟡  |   ❌   |   ❌    |
+| **Cron + one-shot scheduler**                         |  ✅  | ✅  |   ❌   |   ❌    |
+| **First-class MCP support**                           |  ✅  | 🟡  |   ❌   |   ✅    |
+| **Plugin SDK (tools, channels, UI)**                  |  ✅  | ✅  |   ❌   |   ❌    |
+| **Messaging channels (WhatsApp, etc.)**               |  ✅  | ✅  |   ❌   |   ❌    |
+| **Multi-agent orchestration**                         |  ✅  | 🟡  |   ✅   |   ✅    |
+| **Provider-agnostic (OpenAI/Anthropic/Gemini/local)** |  ✅  | ✅  |   ✅   |   ✅    |
+| **License**                                           | MIT  | ⚖️  |  MIT   |   MIT   |
 
 Legend: ✅ yes &nbsp;&nbsp; 🟡 partial &nbsp;&nbsp; ❌ no &nbsp;&nbsp; ⚖️ "Sustainable Use" (not OSI-open)
 
@@ -127,7 +127,7 @@ This is an honest comparison, not a sales pitch. Choose the tool that fits the j
 ## Repository layout
 
 ```
-openaidy/
+aidy/
   apps/
     server/       # Fastify REST + WebSocket API
     web/          # SolidJS operator UI
@@ -162,8 +162,8 @@ The installer takes care of Node.js and ripgrep for you. If you want to develop 
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/imzodev/openaidy.git
-   cd openaidy
+   git clone https://github.com/imzodev/aidy.git
+   cd aidy
    ```
 
 2. **Install dependencies**
@@ -188,8 +188,8 @@ The installer takes care of Node.js and ripgrep for you. If you want to develop 
    | `CORS_ORIGIN`     | `http://localhost:5173`   | Allowed CORS origin                      |
    | `DB_KIND`         | `sqlite`                  | Database backend: `sqlite` or `postgres` |
    | `DATABASE_URL`    | —                         | Required when `DB_KIND=postgres`         |
-   | `SQLITE_PATH`     | `./data/openaidy.db`      | SQLite file path                         |
-   | `OPENAIDY_HOME`   | `.openaidy/`              | Base directory for user data             |
+   | `SQLITE_PATH`     | `./data/aidy.db`          | SQLite file path                         |
+   | `AIDY_HOME`       | `.aidy/`                  | Base directory for user data             |
    | `WS_TOKEN_SECRET` | `change-me-in-production` | **Change this in production**            |
 
 4. **Run the development server**
@@ -221,7 +221,7 @@ The installer takes care of Node.js and ripgrep for you. If you want to develop 
 
 ## Providers
 
-OpenAidy talks to LLMs through a pluggable `Provider` abstraction. Configure providers through the UI (Settings → Providers) or via the config file. Presets ship in `packages/shared-types/src/providers-preset.ts`:
+Aidy talks to LLMs through a pluggable `Provider` abstraction. Configure providers through the UI (Settings → Providers) or via the config file. Presets ship in `packages/shared-types/src/providers-preset.ts`:
 
 | Provider      | Type               | Auth                                    |
 | ------------- | ------------------ | --------------------------------------- |
@@ -237,7 +237,7 @@ OpenAidy talks to LLMs through a pluggable `Provider` abstraction. Configure pro
 
 ### Local providers (Ollama, LM Studio)
 
-Local providers expose an OpenAI-compatible endpoint on `localhost` and ignore the `Authorization` header. OpenAidy's UI:
+Local providers expose an OpenAI-compatible endpoint on `localhost` and ignore the `Authorization` header. Aidy's UI:
 
 - Skips the credential dialog when you pick a local preset card.
 - Auto-discovers installed/loaded models by probing `{baseUrl}/models` (click **Discover models** in the provider modal).
@@ -254,7 +254,7 @@ ollama pull llama3.2        # pull a model into the local store
 # Start the local server from the LM Studio "Developer" tab (default port 1234).
 ```
 
-Then in OpenAidy: **Settings → Providers → Ollama (or LM Studio) → Discover models → Save**.
+Then in Aidy: **Settings → Providers → Ollama (or LM Studio) → Discover models → Save**.
 
 If you run a local server on a non-default port or behind a tunnel, use **Add Custom** with `vendorFamily: openai-compatible` and your full base URL (e.g. `http://localhost:11435/v1`).
 
@@ -264,17 +264,17 @@ Any OpenAI-compatible, Anthropic, or Gemini endpoint can be added through the **
 
 ## Skills
 
-Skills are reusable system-prompt instructions attached to agents. Bundled skills from `config/skills/` are automatically seeded to `OPENAIDY_HOME/skills/` on server startup.
+Skills are reusable system-prompt instructions attached to agents. Bundled skills from `config/skills/` are automatically seeded to `AIDY_HOME/skills/` on server startup.
 
 **Update policy:**
 
 - If you have not modified a skill, app updates will propagate automatically when a newer version ships.
 - If you have modified a skill locally, your changes are always preserved regardless of app updates.
 
-To create a custom skill, add a directory under `OPENAIDY_HOME/skills/` with a `SKILL.md` file:
+To create a custom skill, add a directory under `AIDY_HOME/skills/` with a `SKILL.md` file:
 
 ```
-.openaidy/skills/my-skill/SKILL.md
+.aidy/skills/my-skill/SKILL.md
 ```
 
 ```markdown
@@ -289,11 +289,11 @@ Your skill instructions here.
 
 ## MCP integration
 
-OpenAidy connects to external MCP servers via stdio or HTTP transport. Configure servers through the UI or the REST API at `POST /api/mcp/servers`.
+Aidy connects to external MCP servers via stdio or HTTP transport. Configure servers through the UI or the REST API at `POST /api/mcp/servers`.
 
 ### Preinstalled servers
 
-The following MCP servers ship preinstalled (reconciled into every install on startup from `config/openaidy.template.json`):
+The following MCP servers ship preinstalled (reconciled into every install on startup from `config/aidy.template.json`):
 
 | Server              | Transport | Auth                              | Notes                                                                                                                                   |
 | ------------------- | --------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -316,15 +316,15 @@ Servers that require a secret reference it as `${VAR_NAME}` in `headers` (http) 
    ```bash
    export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
    export BRAVE_API_KEY=…
-   openaidy start
+   aidy start
    ```
-2. **Edit the server via the UI** (`MCP` page → Edit) and replace `${VAR}` with the literal key. This persists the key in `~/.openaidy/config.json` — convenient but less secure.
+2. **Edit the server via the UI** (`MCP` page → Edit) and replace `${VAR}` with the literal key. This persists the key in `~/.aidy/config.json` — convenient but less secure.
 
 A server whose `${VAR}` is unset sits in "Awaiting configuration" instead of trying (and failing) to connect — set the env var or paste the key to activate it.
 
 #### Adding or removing preinstalled servers
 
-Edit `config/openaidy.template.json` and add/remove entries. On the next server start, `apps/server/src/mcp/preinstall.ts` reconciles: new entries are added, updated entries replace pristine ones, and servers the user has deleted are not resurrected. User-edited entries are never clobbered.
+Edit `config/aidy.template.json` and add/remove entries. On the next server start, `apps/server/src/mcp/preinstall.ts` reconciles: new entries are added, updated entries replace pristine ones, and servers the user has deleted are not resurrected. User-edited entries are never clobbered.
 
 ## Documentation
 

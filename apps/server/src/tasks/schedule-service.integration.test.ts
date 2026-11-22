@@ -20,10 +20,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createDatabaseAdapter, type DatabaseAdapter } from '@openaidy/db';
+import { createDatabaseAdapter, type DatabaseAdapter } from '@aidyagent/db';
 import { TaskScheduleService } from './schedule-service';
 import type { TaskScheduleExecutor } from './execution/task-schedule-executor';
-import type { Task } from '@openaidy/db';
+import type { Task } from '@aidyagent/db';
 
 describe('TaskScheduleService integration tests', { timeout: 15000 }, () => {
   let sqliteDir: string | undefined;
@@ -33,8 +33,8 @@ describe('TaskScheduleService integration tests', { timeout: 15000 }, () => {
   let stubExecutor: TaskScheduleExecutor;
 
   beforeEach(async () => {
-    sqliteDir = mkdtempSync(join(tmpdir(), 'openaidy-sched-svc-int-'));
-    const sqlitePath = join(sqliteDir, 'openaidy.db');
+    sqliteDir = mkdtempSync(join(tmpdir(), 'aidy-sched-svc-int-'));
+    const sqlitePath = join(sqliteDir, 'aidy.db');
 
     dbAdapter = await createDatabaseAdapter({
       kind: 'sqlite',

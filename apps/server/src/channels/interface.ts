@@ -1,4 +1,4 @@
-import type { ChannelStatus } from '@openaidy/shared-types';
+import type { ChannelStatus } from '@aidyagent/shared-types';
 
 /**
  * Base channel interface - all channels must implement this.
@@ -11,7 +11,7 @@ import type { ChannelStatus } from '@openaidy/shared-types';
  * without knowing the channel type.
  */
 export interface IChannel {
-  /** Unique id matching the id field in openaidy.json channels[] */
+  /** Unique id matching the id field in aidy.json channels[] */
   readonly id: string;
   /** Channel type string e.g. 'whatsapp', 'telegram' */
   readonly type: string;

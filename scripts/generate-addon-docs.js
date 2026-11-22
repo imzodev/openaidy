@@ -48,10 +48,8 @@ function generateMarkdown(manifest) {
   lines.push('## Requirements');
   lines.push('');
   lines.push(
-    `- OpenAidy ${manifest.openaidy.minVersion}` +
-      (manifest.openaidy.maxVersion
-        ? ` - ${manifest.openaidy.maxVersion}`
-        : '+'),
+    `- Aidy ${manifest.aidy.minVersion}` +
+      (manifest.aidy.maxVersion ? ` - ${manifest.aidy.maxVersion}` : '+'),
   );
   lines.push('');
 

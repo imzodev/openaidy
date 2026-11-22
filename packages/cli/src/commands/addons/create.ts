@@ -126,7 +126,7 @@ export async function addonCreateHandler(
 ): Promise<CommandResult> {
   const name = args[0];
   if (!name || name.startsWith('-')) {
-    p.log.error('Addon name is required\nUsage: openaidy addon create <name>');
+    p.log.error('Addon name is required\nUsage: aidy addon create <name>');
     return { exitCode: 1, error: 'Addon name is required' };
   }
 

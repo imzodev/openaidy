@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BuiltinToolRegistry } from './registry';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 
 function makeTool(name: string): BuiltinTool {
   return {

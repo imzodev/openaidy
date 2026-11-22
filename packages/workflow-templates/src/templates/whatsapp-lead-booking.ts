@@ -1,4 +1,4 @@
-import type { WorkflowTemplate } from '@openaidy/shared-types';
+import type { WorkflowTemplate } from '@aidyagent/shared-types';
 import {
   agentInput,
   businessInput,

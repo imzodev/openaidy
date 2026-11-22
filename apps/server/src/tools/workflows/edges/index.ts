@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { TaskService } from '../../../tasks/service';
 import { createWorkflowEdgeCreateTool } from './create.js';
 import { createWorkflowEdgeDeleteTool } from './delete.js';

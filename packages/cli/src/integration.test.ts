@@ -128,7 +128,7 @@ describe('CLI Command Registry', () => {
   it('should handle unknown commands gracefully', async () => {
     // Test that unknown command returns proper error
     const result = await runCLICommand(
-      'openaidy unknown-command 2>&1 || true',
+      'aidy unknown-command 2>&1 || true',
       '/tmp',
     );
     // Should not crash

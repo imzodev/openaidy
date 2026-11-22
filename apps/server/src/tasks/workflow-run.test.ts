@@ -15,9 +15,9 @@ import {
   type DatabaseAdapter,
   type Subtask,
   type Task,
-} from '@openaidy/db';
-import { DEFAULT_EXECUTION_CONFIG } from '@openaidy/config';
-import { getWorkflowTemplate } from '@openaidy/workflow-templates';
+} from '@aidyagent/db';
+import { DEFAULT_EXECUTION_CONFIG } from '@aidyagent/config';
+import { getWorkflowTemplate } from '@aidyagent/workflow-templates';
 import { TaskService, type TaskServiceOptions } from './service';
 import {
   createWorkflowApprovalListTool,
@@ -53,10 +53,10 @@ describe('workflow runs', { timeout: 20000 }, () => {
     });
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-workflow-run-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-workflow-run-'));
     db = await createDatabaseAdapter({
       kind: 'sqlite',
-      sqlitePath: join(dir, 'openaidy.db'),
+      sqlitePath: join(dir, 'aidy.db'),
     });
     sessions = new FakeSessions(db);
     maxRetries = DEFAULT_EXECUTION_CONFIG.maxRetries;

@@ -1,25 +1,25 @@
 [Unit]
-Description=OpenAidy AI Assistant Background Service
+Description=Aidy AI Assistant Background Service
 After=network.target
 Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/openaidy-service
+ExecStart=/usr/local/bin/aidy-service
 Restart=on-failure
 RestartSec=5
-Environment=OPENAIDY_HOME=%h/.config/openaidy
+Environment=AIDY_HOME=%h/.config/aidy
 Environment=DB_KIND=sqlite
-Environment=SQLITE_PATH=%h/.config/openaidy/openaidy.db
-WorkingDirectory=%h/.config/openaidy
+Environment=SQLITE_PATH=%h/.config/aidy/aidy.db
+WorkingDirectory=%h/.config/aidy
 
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
-# Allow reading config in ~/.config/openaidy
-ReadWritePaths=%h/.config/openaidy
+# Allow reading config in ~/.config/aidy
+ReadWritePaths=%h/.config/aidy
 
 # Hardening for a Node.js server
 ProtectKernelTunables=true

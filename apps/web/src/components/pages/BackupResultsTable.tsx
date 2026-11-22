@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
 import { CheckCircle, XCircle } from 'lucide-solid';
-import type { BackupSection, ImportedSection } from '@openaidy/shared-types';
+import type { BackupSection, ImportedSection } from '@aidyagent/shared-types';
 
 const SECTION_LABELS: Record<BackupSection, string> = {
   db: 'Database',

@@ -1,12 +1,12 @@
-# Releasing OpenAidy
+# Releasing Aidy
 
-OpenAidy ships as a source install: the installer clones a git ref, builds it,
+Aidy ships as a source install: the installer clones a git ref, builds it,
 and runs it. A "release" is therefore a **git tag** plus a **GitHub Release**,
 not an npm publish. The one-liner installer resolves the newest release tag by
 default, so cutting a release is what end users get from:
 
 ```
-curl -fsSL https://openaidy.com/install.sh | bash
+curl -fsSL https://aidyagent.app/install.sh | bash
 ```
 
 ## Versioning

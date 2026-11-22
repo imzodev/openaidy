@@ -1,6 +1,6 @@
-# OpenAidy Server
+# Aidy Server
 
-WebSocket-enabled backend server for the OpenAidy platform.
+WebSocket-enabled backend server for the Aidy platform.
 
 ## Quick Start
 
@@ -51,12 +51,12 @@ Capability presets are enforced per client type in [`src/websocket/capability-pr
 
 ## Environment Variables
 
-| Variable       | Description                | Default              |
-| -------------- | -------------------------- | -------------------- |
-| `PORT`         | Server port                | `3001`               |
-| `DATABASE_URL` | SQLite database path       | `./data/openaidy.db` |
-| `JWT_SECRET`   | JWT signing secret         | -                    |
-| `WS_TOKEN`     | WebSocket token (optional) | -                    |
+| Variable       | Description                | Default          |
+| -------------- | -------------------------- | ---------------- |
+| `PORT`         | Server port                | `3001`           |
+| `DATABASE_URL` | SQLite database path       | `./data/aidy.db` |
+| `JWT_SECRET`   | JWT signing secret         | -                |
+| `WS_TOKEN`     | WebSocket token (optional) | -                |
 
 ## Subscription Manager
 

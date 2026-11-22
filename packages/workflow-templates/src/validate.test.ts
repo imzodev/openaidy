@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { WorkflowTemplate } from '@openaidy/shared-types';
+import type { WorkflowTemplate } from '@aidyagent/shared-types';
 import { WORKFLOW_TEMPLATES } from './templates/index.js';
 import { validateWorkflowTemplate } from './validate.js';
 

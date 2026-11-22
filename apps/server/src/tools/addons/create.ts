@@ -1,10 +1,10 @@
 /**
  * addon_create
  *
- * Lets an agent scaffold a new addon in the OpenAidy addons directory,
- * then registers and enables it — exactly what `openaidy addon create` does.
+ * Lets an agent scaffold a new addon in the Aidy addons directory,
+ * then registers and enables it — exactly what `aidy addon create` does.
  *
- * File scaffolding:  @openaidy/addon-scaffolding (shared with the CLI)
+ * File scaffolding:  @aidyagent/addon-scaffolding (shared with the CLI)
  * DB registration:   AddonService.installAddon + AddonService.enableAddon
  *                    (direct in-process call — no HTTP round-trip)
  *
@@ -17,10 +17,10 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BuiltinTool } from '@openaidy/runtime';
-import { generateFromTemplate } from '@openaidy/addon-scaffolding';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import { generateFromTemplate } from '@aidyagent/addon-scaffolding';
 import type { AddonService } from '../../addons/service.js';
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 import { AddonServiceError } from '../../addons/types.js';
 import {
   renderSdkReference,
@@ -37,7 +37,7 @@ import {
 } from './shared.js';
 
 export type AddonToolDeps = {
-  /** Absolute path to the root addons directory (e.g. .openaidy/addons) */
+  /** Absolute path to the root addons directory (e.g. .aidy/addons) */
   addonsDir: string;
   /**
    * AddonService instance for registering and enabling the addon in the DB.
@@ -55,10 +55,10 @@ export type AddonToolDeps = {
 // ── SDK snippet helpers (derived from sdk-reference — no hardcoding) ──────────
 
 function sdkBootstrapSnippet(): string {
-  return `// Bootstrap: signal ready to the parent, then call your logic inside OpenAidy.ready().
-// The SDK is loaded statically via <script src="/sdk/openaidy-sdk.js"> in index.html.
+  return `// Bootstrap: signal ready to the parent, then call your logic inside Aidy.ready().
+// The SDK is loaded statically via <script src="/sdk/aidy-sdk.js"> in index.html.
 window.parent.postMessage({ type: 'ADDON_READY' }, '*');
-OpenAidy.ready(function(sdk) {
+Aidy.ready(function(sdk) {
   // your addon logic here — sdk is fully initialized
 });`;
 }
@@ -85,12 +85,12 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
     name: addonCreateMeta.name,
 
     description: [
-      'Scaffold a new OpenAidy addon, register it in the database, and enable it.',
+      'Scaffold a new Aidy addon, register it in the database, and enable it.',
       'The addon appears in the sidebar immediately — no restart needed.',
       '',
       'WHERE ADDONS LIVE',
       '─────────────────',
-      'Addons live in a dedicated directory managed by OpenAidy (its addons dir),',
+      'Addons live in a dedicated directory managed by Aidy (its addons dir),',
       'which is SEPARATE from your agent workspace. Your workspace_read /',
       'workspace_write / code_edit / code_read / exec_run tools operate on the',
       'workspace and CANNOT create or change an addon in a way the addon loader',
@@ -104,8 +104,8 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'the loader will not see them and the addon will silently never appear.',
       'To modify an existing addon, use addon_update (never generic file tools).',
       '',
-      'An addon is a sandboxed HTML/JS UI loaded in an iframe inside the OpenAidy app.',
-      'It communicates with the backend exclusively via the OpenAidy SDK (openaidy-sdk.js),',
+      'An addon is a sandboxed HTML/JS UI loaded in an iframe inside the Aidy app.',
+      'It communicates with the backend exclusively via the Aidy SDK (aidy-sdk.js),',
       'which is loaded as a static <script> tag — you never hardcode the server URL.',
       '',
       'ADDON STRUCTURE',
@@ -128,7 +128,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '────────────────────────────────────────',
       'app/index.html MUST load the SDK as a static script BEFORE index.js:',
       '',
-      '  <script src="/sdk/openaidy-sdk.js"></script>',
+      '  <script src="/sdk/aidy-sdk.js"></script>',
       '  <script src="index.js"></script>',
       '</body>',
       '</html>',
@@ -167,7 +167,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '',
       'EXTERNAL DOMAINS (required when using fetch())',
       '───────────────────────────────────────────────',
-      'If your addon calls fetch() on any external URL (anything that is not the OpenAidy',
+      'If your addon calls fetch() on any external URL (anything that is not the Aidy',
       'server), you MUST declare those hostnames in `externalDomains`. Without this the',
       'browser will block the request with a CSP error and the addon will silently fail.',
       '',
@@ -183,7 +183,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       'Example — addon that plays a remotely-hosted audio file (e.g. a TTS URL):',
       '  externalMediaDomains: ["oss.minimax.io"]',
       '',
-      'The OpenAidy server itself (localhost / the SDK proxy) is always allowed.',
+      'The Aidy server itself (localhost / the SDK proxy) is always allowed.',
       'Do NOT list it in externalDomains.',
       '',
       'PERMISSIONS',
@@ -218,7 +218,7 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
       '  "app/index.js"   — the bootstrap + addon logic',
       '',
       'app/index.html must end with (SDK MUST come before index.js):',
-      '  <script src="/sdk/openaidy-sdk.js"></script>',
+      '  <script src="/sdk/aidy-sdk.js"></script>',
       '  <script src="index.js"></script>',
       '</body>',
       '</html>',
@@ -272,11 +272,11 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
           type: 'array',
           items: { type: 'string' },
           description:
-            'REQUIRED whenever the addon calls fetch() on a URL that is not the OpenAidy server. ' +
+            'REQUIRED whenever the addon calls fetch() on a URL that is not the Aidy server. ' +
             'List every external hostname (bare, no protocol) the addon fetches from. ' +
             'Without this the browser blocks the request via CSP and the addon silently fails. ' +
             'Example: ["api.open-meteo.com"]. ' +
-            'The OpenAidy server and SDK proxy are always allowed — do not list them here.',
+            'The Aidy server and SDK proxy are always allowed — do not list them here.',
         },
         externalImageDomains: {
           type: 'array',
@@ -563,13 +563,13 @@ export function createAddonCreateTool(deps: AddonToolDeps): BuiltinTool {
                 : String(err);
           registrationNote.push(
             `Warning: files written but DB registration failed: ${msg}`,
-            'Run `openaidy addon install ' + id + '` to register it manually.',
+            'Run `aidy addon install ' + id + '` to register it manually.',
           );
         }
       } else {
         registrationNote.push(
           'DB not configured — files written but addon is not registered.',
-          'Run `openaidy addon install ' + id + '` to register it manually.',
+          'Run `aidy addon install ' + id + '` to register it manually.',
         );
       }
 

@@ -30,7 +30,7 @@ export const DEFAULT_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
  * Repository for short-lived OAuth flow state.
  *
  * Backed by the `oauth_flow_state` table — same DB the rest of the app uses
- * (SQLite at `apps/server/data/openaidy.db` in dev, Postgres in prod).
+ * (SQLite at `apps/server/data/aidy.db` in dev, Postgres in prod).
  *
  * State is keyed by the OAuth `state` parameter (a random, single-use value
  * we generated at /start and that the provider echoes back at /callback).

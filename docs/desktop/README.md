@@ -1,8 +1,8 @@
-# OpenAidy Desktop App — Implementation Plan
+# Aidy Desktop App — Implementation Plan
 
 ## Context
 
-OpenAidy currently ships as a CLI + web frontend. The goal is to produce native desktop installers (`.deb`, `.dmg`, `.exe`) that reuse the existing `apps/server` core and `apps/web` frontend without modification.
+Aidy currently ships as a CLI + web frontend. The goal is to produce native desktop installers (`.deb`, `.dmg`, `.exe`) that reuse the existing `apps/server` core and `apps/web` frontend without modification.
 
 **Architectural principle:** The core is a Node.js HTTP server. CLI, desktop shell, and web are different clients that invoke it. Desktop is a Tauri WebView wrapping the existing Solid.js SPA.
 
@@ -108,8 +108,8 @@ docs/desktop/
 | Frontend SPA      | `apps/web/`                           | Solid.js + Vite SPA. No code changes. Built via `vite build`. |
 | Addon loader      | `apps/web/src/lib/addon-loader.ts`    | `AddonLoader` class, dynamic `import()` — same in WebView     |
 | DB adapter        | `packages/db/src/adapter.ts`          | `createDatabaseAdapter()` supports sqlite + postgres          |
-| Config service    | `apps/server/src/config/service.ts`   | `createAppConfigService()` reads `openaidy.yaml`              |
-| Env schema        | `apps/server/src/lib/env.ts`          | `PORT`, `OPENAIDY_HOME`, `DB_KIND`, etc. — all respected      |
+| Config service    | `apps/server/src/config/service.ts`   | `createAppConfigService()` reads `aidy.yaml`                  |
+| Env schema        | `apps/server/src/lib/env.ts`          | `PORT`, `AIDY_HOME`, `DB_KIND`, etc. — all respected          |
 
 ---
 
@@ -166,9 +166,9 @@ pnpm tauri build
 
 # Output (example)
 apps/desktop/src-tauri/target/release/bundle/
-├── deb/   openaidy_0.1.0_amd64.deb
-├── rpm/   openaidy_0.1.0_x86_64.rpm
-└── dmg/   openaidy_0.1.0.dmg
+├── deb/   aidy_0.1.0_amd64.deb
+├── rpm/   aidy_0.1.0_x86_64.rpm
+└── dmg/   aidy_0.1.0.dmg
 ```
 
 MSI and AppImage are deliberately not built (see `bundle.targets` in
@@ -186,19 +186,19 @@ and deb/rpm already cover Linux.
 > that file's doc comments for the current source of truth. The names below
 > (`PORT`/`WS_PORT`/`CORS_ORIGIN`) don't match what
 > `apps/server/src/lib/env.ts`'s zod schema actually reads and were corrected
-> during implementation to `OPENAIDY_PORT`/`OPENAIDY_CORS_ORIGIN` (`WS_PORT`
+> during implementation to `AIDY_PORT`/`AIDY_CORS_ORIGIN` (`WS_PORT`
 > isn't a real input — it's derived internally from the port).
 
 The Tauri backend starts `apps/server` with these env vars set:
 
-| Variable               | Source                               | Description                           |
-| ---------------------- | ------------------------------------ | ------------------------------------- |
-| `OPENAIDY_PORT`        | Allocates free port dynamically      | Core service HTTP port                |
-| `OPENAIDY_HOME`        | OS per-user app-data dir             | All data/config lives here            |
-| `DB_KIND`              | Existing config or default `sqlite`  | Database type                         |
-| `SQLITE_PATH`          | `$OPENAIDY_HOME/openaidy.db`         | SQLite file path                      |
-| `DATABASE_URL`         | Existing config                      | Postgres connection (if used)         |
-| `OPENAIDY_CORS_ORIGIN` | The real per-OS Tauri WebView origin | CORS allowed origin                   |
-| API keys               | OS Keychain → env                    | Set via `keychain.rs` before spawning |
+| Variable           | Source                               | Description                           |
+| ------------------ | ------------------------------------ | ------------------------------------- |
+| `AIDY_PORT`        | Allocates free port dynamically      | Core service HTTP port                |
+| `AIDY_HOME`        | OS per-user app-data dir             | All data/config lives here            |
+| `DB_KIND`          | Existing config or default `sqlite`  | Database type                         |
+| `SQLITE_PATH`      | `$AIDY_HOME/aidy.db`                 | SQLite file path                      |
+| `DATABASE_URL`     | Existing config                      | Postgres connection (if used)         |
+| `AIDY_CORS_ORIGIN` | The real per-OS Tauri WebView origin | CORS allowed origin                   |
+| API keys           | OS Keychain → env                    | Set via `keychain.rs` before spawning |
 
 The core service (`apps/server`) reads all of these via `env.ts` — no code changes needed.

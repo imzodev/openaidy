@@ -4,7 +4,7 @@
  * Core validation and security scanning logic for addon packages.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types
@@ -521,7 +521,7 @@ export function getDefaultValidationRules(): ValidationRule[] {
       description: 'Prohibit direct file system access',
       severity: 'critical',
       check: (content) => /require\s*\(\s*['"]fs['"]\s*\)/.test(content),
-      recommendation: 'Use OpenAidy storage API instead',
+      recommendation: 'Use Aidy storage API instead',
     },
     {
       id: 'no-innerHTML',

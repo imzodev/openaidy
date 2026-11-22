@@ -1,11 +1,11 @@
-import type { ScheduledJob, JobRun } from '@openaidy/db';
-import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { ScheduledJob, JobRun } from '@aidyagent/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@aidyagent/db';
 import type {
   CreatePulseInput,
   UpdatePulseInput,
   ListPulsesFilters,
   PulseRecord,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { parseScheduleInput, jobToPulse } from './utils.js';
 
 /**

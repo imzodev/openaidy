@@ -65,7 +65,7 @@ export const SECURITY_RULES: ValidationRule[] = [
       /require\s*\(\s*['"]fs['"]\s*\)|import\s+.*\s+from\s+['"]fs['"]|fs\.(readFile|writeFile|readdir|readFileSync|writeFileSync)/.test(
         content,
       ),
-    recommendation: 'Use the OpenAidy Storage API for file operations.',
+    recommendation: 'Use the Aidy Storage API for file operations.',
   },
   {
     id: 'no-os-module',
@@ -77,7 +77,7 @@ export const SECURITY_RULES: ValidationRule[] = [
         content,
       ),
     recommendation:
-      'Remove OS module usage. System info should come from OpenAidy APIs.',
+      'Remove OS module usage. System info should come from Aidy APIs.',
   },
   {
     id: 'no-net-module',
@@ -127,7 +127,7 @@ export const SECURITY_RULES: ValidationRule[] = [
       /require\s*\(\s*['"]crypto['"]\s*\)|import\s+.*\s+from\s+['"]crypto['"]/.test(
         content,
       ),
-    recommendation: 'Use OpenAidy APIs for cryptographic operations if needed.',
+    recommendation: 'Use Aidy APIs for cryptographic operations if needed.',
   },
 
   // Code quality - XSS
@@ -370,7 +370,7 @@ export const COMPLIANCE_RULES: ValidationRule[] = [
       /localStorage\.setItem\s*\(\s*['"](?:password|secret|key|token|auth)['"]/.test(
         content,
       ),
-    recommendation: 'Use the secure OpenAidy Storage API for sensitive data.',
+    recommendation: 'Use the secure Aidy Storage API for sensitive data.',
   },
   {
     id: 'no-sessionStorage-sensitive',
@@ -381,7 +381,7 @@ export const COMPLIANCE_RULES: ValidationRule[] = [
       /sessionStorage\.setItem\s*\(\s*['"](?:password|secret|key|token|auth)['"]/.test(
         content,
       ),
-    recommendation: 'Use the secure OpenAidy Storage API for sensitive data.',
+    recommendation: 'Use the secure Aidy Storage API for sensitive data.',
   },
   {
     id: 'no-cookie-sensitive',

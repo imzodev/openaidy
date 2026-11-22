@@ -4,7 +4,7 @@ import {
   isDefaultContent,
 } from '../agents/personality-service';
 import type { ProviderServices } from '../providers';
-import type { PersonalityFileId } from '@openaidy/shared-types';
+import type { PersonalityFileId } from '@aidyagent/shared-types';
 
 const FILL_PROMPTS: Record<
   PersonalityFileId,

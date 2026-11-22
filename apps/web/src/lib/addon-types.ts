@@ -2,10 +2,10 @@
  * Frontend Addon Type Definitions
  *
  * TypeScript interfaces for the frontend addon system.
- * These types complement the shared addon types from @openaidy/shared-types.
+ * These types complement the shared addon types from @aidyagent/shared-types.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 // ============================================================================
 // Core Runtime Types
@@ -95,7 +95,7 @@ export interface RouteMetadata {
 
 /**
  * Runtime API provided to addon components
- * This is the interface through which addons interact with OpenAidy
+ * This is the interface through which addons interact with Aidy
  */
 export interface AddonRuntime {
   /** Information about the current addon */

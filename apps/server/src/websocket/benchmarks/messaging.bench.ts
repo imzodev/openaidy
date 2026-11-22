@@ -6,7 +6,7 @@
 
 import { describe, bench, beforeAll } from 'vitest';
 import { MessageRouter } from '../message-router';
-import { createWSMessage } from '@openaidy/shared-types';
+import { createWSMessage } from '@aidyagent/shared-types';
 import type { FastifyBaseLogger } from 'fastify';
 
 // ============================================================================
@@ -50,7 +50,7 @@ describe('Messaging Benchmarks', () => {
         // Note: This is a benchmark test - use unknown cast for testing purposes
         return createWSMessage('test.response', {
           ok: true,
-        }) as unknown as import('@openaidy/shared-types').WSResponse;
+        }) as unknown as import('@aidyagent/shared-types').WSResponse;
       },
     );
   });

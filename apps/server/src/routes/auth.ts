@@ -4,7 +4,7 @@ import type { AccessTokenService } from '../access-tokens/service';
 import type {
   AuthVerifyRequest,
   AuthVerifyResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const ACCESS_TOKEN_PREFIX = 'oat_';
 const ACCESS_TOKEN_SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h

@@ -132,7 +132,7 @@ Add MCP server configuration to the app config template.
 
 ### File to Modify
 
-- [`config/openaidy.template.json`](config/openaidy.template.json)
+- [`config/aidy.template.json`](config/aidy.template.json)
 
 ### Code Changes
 
@@ -214,7 +214,7 @@ export const AppConfigSchema = z.object({
 });
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
-export type OpenAidyConfig = z.infer<typeof AppConfigSchema>;
+export type AidyConfig = z.infer<typeof AppConfigSchema>;
 ```
 
 ---
@@ -235,7 +235,7 @@ Build a service that connects to MCP servers, discovers tools, and executes tool
 import { Client } from '@modelcontextprotocol/typescript-sdk';
 import { spawn, ChildProcess } from 'child_process';
 import { get } from 'http'; // For HTTP transport
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 
 export type McpServerTransport =
   | {
@@ -426,7 +426,7 @@ export function createMcpClientService(): McpClientService {
 
 ### Reuse
 
-- Use [`ToolDefinition`](packages/runtime/src/tools/index.ts:19) from `@openaidy/runtime`
+- Use [`ToolDefinition`](packages/runtime/src/tools/index.ts:19) from `@aidyagent/runtime`
 - Use [`spawn`](node:child_process) from Node.js stdio
 - Use existing error patterns from [`apps/server/src/mcp/service.ts`](apps/server/src/mcp/service.ts)
 
@@ -620,7 +620,7 @@ export class DispatchService {
 
 ### Reuse
 
-- Use [`ToolDefinition`](packages/runtime/src/tools/index.ts) from `@openaidy/runtime`
+- Use [`ToolDefinition`](packages/runtime/src/tools/index.ts) from `@aidyagent/runtime`
 - Use [`ToolCallResult`](packages/runtime/src/tools/index.ts:28)
 - Use existing agent patterns from [`AgentRegistry`](apps/server/src/agents/registry.ts)
 - Use existing dispatch events from [`DispatchEvents`](apps/server/src/dispatch/events.ts)
@@ -821,7 +821,7 @@ export const api = {
 | Action     | File                                                                                       | Description            |
 | ---------- | ------------------------------------------------------------------------------------------ | ---------------------- |
 | **Modify** | [`apps/server/src/agents/schema.ts`](apps/server/src/agents/schema.ts)                     | Add mcpServers field   |
-| **Modify** | [`config/openaidy.template.json`](config/openaidy.template.json)                           | Add MCP server configs |
+| **Modify** | [`config/aidy.template.json`](config/aidy.template.json)                                   | Add MCP server configs |
 | **Modify** | [`packages/config/src/app-config.ts`](packages/config/src/app-config.ts)                   | Add config schemas     |
 | **Create** | [`apps/server/src/mcp/client.ts`](apps/server/src/mcp/client.ts)                           | MCP client service     |
 | **Create** | [`apps/server/src/mcp/client.test.ts`](apps/server/src/mcp/client.test.ts)                 | Client tests           |
@@ -847,7 +847,7 @@ export const api = {
 
 | Reuse From                                                                   | What                               |
 | ---------------------------------------------------------------------------- | ---------------------------------- |
-| [`@openaidy/runtime`](packages/runtime/src/tools/index.ts)                   | `ToolDefinition`, `ToolCallResult` |
+| [`@aidyagent/runtime`](packages/runtime/src/tools/index.ts)                  | `ToolDefinition`, `ToolCallResult` |
 | [`AgentRegistry`](apps/server/src/agents/registry.ts)                        | `getAgent`, `listAgents`           |
 | [`packages/config/src/app-config.ts`](packages/config/src/app-config.ts)     | Zod schemas, config loading        |
 | [`apps/server/src/mcp/service.ts`](apps/server/src/mcp/service.ts)           | Service patterns                   |
@@ -860,7 +860,7 @@ export const api = {
 | Step | Task                   | Files Modified                                                                                                           |
 | ---- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 1    | Extend Agent Schema    | [`agents/schema.ts`](apps/server/src/agents/schema.ts)                                                                   |
-| 2    | MCP Server Config      | [`openaidy.template.json`](config/openaidy.template.json), [`app-config.ts`](packages/config/src/app-config.ts)          |
+| 2    | MCP Server Config      | [`aidy.template.json`](config/aidy.template.json), [`app-config.ts`](packages/config/src/app-config.ts)                  |
 | 3    | MCP Client Service     | [`mcp/client.ts`](apps/server/src/mcp/client.ts)                                                                         |
 | 4    | Invocation Integration | [`dispatch/service.ts`](apps/server/src/dispatch/service.ts), [`agents/registry.ts`](apps/server/src/agents/registry.ts) |
 | 5    | WebSocket Handler      | [`websocket/handlers/mcp.ts`](apps/server/src/websocket/handlers/mcp.ts)                                                 |

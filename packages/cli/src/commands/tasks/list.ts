@@ -1,7 +1,7 @@
 /**
  * Tasks List Command Handler
  *
- * Implements `openaidy tasks list` command.
+ * Implements `aidy tasks list` command.
  */
 
 import * as p from '@clack/prompts';
@@ -9,12 +9,12 @@ import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { formatTaskList } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
-import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
+import type { TaskStatus, TaskPriority } from '@aidyagent/shared-types';
 
 export async function tasksListHandler(args: string[]): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks list [--status <status>] [--limit <n>]
+      `Usage: aidy tasks list [--status <status>] [--limit <n>]
 
 List all tasks, optionally filtered by status.
 
@@ -23,9 +23,9 @@ Options:
   --limit <n>         Limit number of results (default: 50)
 
 Examples:
-  pnpm openaidy tasks list
-  pnpm openaidy tasks list --status in_progress
-  pnpm openaidy tasks list --limit 10
+  pnpm aidy tasks list
+  pnpm aidy tasks list --status in_progress
+  pnpm aidy tasks list --limit 10
 
 Exit Codes:
   0  Success

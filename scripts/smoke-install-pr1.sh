@@ -2,17 +2,17 @@
 # ============================================================================
 # scripts/smoke-install-pr1.sh
 # ============================================================================
-# PR1 smoke test for the OpenAidy install flow.
+# PR1 smoke test for the Aidy install flow.
 #
 # Two modes:
 #  - default: exercises the install.sh end-to-end (requires git remote + pnpm)
-#  - LOCAL_REPO=path/to/repo: exercises just the `openaidy init` step using
+#  - LOCAL_REPO=path/to/repo: exercises just the `aidy init` step using
 #    an existing local repo checkout. Useful in CI sandboxes and on
 #    developer machines where a network clone is slow or unavailable.
 #
 # Verifies:
-#  - `openaidy init` produces a parseable `Bootstrap admin token: <jwt>` line
-#  - the token file at $OPENAIDY_HOME/credentials/bootstrap-admin.json exists
+#  - `aidy init` produces a parseable `Bootstrap admin token: <jwt>` line
+#  - the token file at $AIDY_HOME/credentials/bootstrap-admin.json exists
 #  - on POSIX the file has mode 0o600
 #  - the JSON shape is well-formed: clientId, token, scopes (incl. `*`),
 #    createdAt, expiresAt — all the documented fields
@@ -31,7 +31,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SMOKE_HOME="${SMOKE_HOME:-$(mktemp -d -t openaidy-smoke-pr1-XXXXXX)}"
+SMOKE_HOME="${SMOKE_HOME:-$(mktemp -d -t aidy-smoke-pr1-XXXXXX)}"
 SMOKE_BRANCH="${SMOKE_BRANCH:-main}"
 SMOKE_REPO_URL="${SMOKE_REPO_URL:-}"
 LOCAL_REPO="${LOCAL_REPO:-}"
@@ -67,8 +67,8 @@ if [ -z "$LOCAL_REPO" ]; then
         fi
     done
 
-    SMOKE_REPO_URL="${SMOKE_REPO_URL:-https://github.com/imzodev/openaidy.git}"
-    log "Using OPENAIDY_HOME=$SMOKE_HOME"
+    SMOKE_REPO_URL="${SMOKE_REPO_URL:-https://github.com/imzodev/aidy.git}"
+    log "Using AIDY_HOME=$SMOKE_HOME"
     log "Using repo URL=$SMOKE_REPO_URL (branch=$SMOKE_BRANCH)"
 
     log "Running install.sh..."
@@ -88,7 +88,7 @@ if [ -z "$LOCAL_REPO" ]; then
     fi
 
 # ============================================================================
-# Mode 2: LOCAL_REPO — exercise just `openaidy init` against a local repo
+# Mode 2: LOCAL_REPO — exercise just `aidy init` against a local repo
 # ============================================================================
 else
     if [ ! -d "$LOCAL_REPO/packages/cli" ]; then
@@ -96,7 +96,7 @@ else
     fi
 
     log "Using LOCAL_REPO=$LOCAL_REPO"
-    log "Using OPENAIDY_HOME=$SMOKE_HOME"
+    log "Using AIDY_HOME=$SMOKE_HOME"
 
     # Generate a real JWT secret
     if command -v openssl >/dev/null 2>&1; then
@@ -106,19 +106,19 @@ else
         # Portable fallback
         WS_TOKEN_SECRET=$(od -An -tx1 -N32 /dev/urandom | tr -d ' \n')
     fi
-    export OPENAIDY_HOME="$SMOKE_HOME"
+    export AIDY_HOME="$SMOKE_HOME"
 
-    log "Running: openaidy init (LOCAL_REPO mode)"
-    INIT_OUTPUT=$(cd "$LOCAL_REPO" && node --import tsx "$LOCAL_REPO/packages/cli/bin/openaidy.ts" init 2>&1)
+    log "Running: aidy init (LOCAL_REPO mode)"
+    INIT_OUTPUT=$(cd "$LOCAL_REPO" && node --import tsx "$LOCAL_REPO/packages/cli/bin/aidy.ts" init 2>&1)
     INIT_EXIT=$?
     if [ "$INIT_EXIT" -ne 0 ]; then
         echo "$INIT_OUTPUT" >&2
-        fail "openaidy init exited $INIT_EXIT"
+        fail "aidy init exited $INIT_EXIT"
     fi
 
     if ! printf '%s\n' "$INIT_OUTPUT" | grep -q "^Bootstrap admin token: "; then
         echo "$INIT_OUTPUT" >&2
-        fail "openaidy init stdout missing 'Bootstrap admin token:' line"
+        fail "aidy init stdout missing 'Bootstrap admin token:' line"
     fi
 fi
 
@@ -177,7 +177,7 @@ if [ -z "$LOCAL_REPO" ]; then
         fail "second install.sh exited non-zero"
     fi
 else
-    cd "$LOCAL_REPO" && node --import tsx "$LOCAL_REPO/packages/cli/bin/openaidy.ts" init > /dev/null 2>&1
+    cd "$LOCAL_REPO" && node --import tsx "$LOCAL_REPO/packages/cli/bin/aidy.ts" init > /dev/null 2>&1
 fi
 
 SECOND_HASH=$(sha256sum "$TOKEN_FILE" | awk '{print $1}')

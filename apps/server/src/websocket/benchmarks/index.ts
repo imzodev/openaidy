@@ -3,7 +3,7 @@
  *
  * Performance benchmarks for WebSocket gateway components.
  *
- * Run with: pnpm --filter @openaidy/server bench src/websocket/benchmarks
+ * Run with: pnpm --filter @aidyagent/server bench src/websocket/benchmarks
  */
 
 export {} from './connection.bench';

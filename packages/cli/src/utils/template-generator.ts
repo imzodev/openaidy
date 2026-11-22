@@ -1,5 +1,5 @@
 /**
- * Template Generator - Re-exported from @openaidy/addon-scaffolding
+ * Template Generator - Re-exported from @aidyagent/addon-scaffolding
  *
  * The canonical implementation lives in packages/addon-scaffolding so it can
  * be shared with the server-side addon_create tool without a circular dep.
@@ -10,4 +10,4 @@ export {
   listTemplates,
   type TemplateOptions,
   type TemplateResult,
-} from '@openaidy/addon-scaffolding';
+} from '@aidyagent/addon-scaffolding';

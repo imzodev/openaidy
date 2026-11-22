@@ -1,7 +1,7 @@
 /**
  * Devices Approve Command Handler
  *
- * Implements `openaidy devices approve <request-id>` command.
+ * Implements `aidy devices approve <request-id>` command.
  * Uses the control-plane pairing workflow for approval.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import {
   createPairingWorkflow,
   type PairingContext,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 import { formatRequest } from '../../formatters/devices.js';
 import type { CommandResult, DevicesApproveOptions } from '../../types.js';
 
@@ -23,7 +23,7 @@ export function createDevicesApproveHandler(
     if (args.includes('-h') || args.includes('--help')) {
       p.note(
         [
-          'Usage: openaidy devices approve <request-id> [options]',
+          'Usage: aidy devices approve <request-id> [options]',
           '',
           'Arguments:',
           '  request-id         The ID of the pairing request to approve',
@@ -32,8 +32,8 @@ export function createDevicesApproveHandler(
           '  --scopes <scopes>  Override granted scopes (comma-separated)',
           '',
           'Examples:',
-          '  pnpm openaidy devices approve abc123',
-          '  pnpm openaidy devices approve abc123 --scopes chat,files',
+          '  pnpm aidy devices approve abc123',
+          '  pnpm aidy devices approve abc123 --scopes chat,files',
         ].join('\n'),
         'devices approve',
       );
@@ -44,7 +44,7 @@ export function createDevicesApproveHandler(
 
     if (!requestId) {
       const error =
-        'Error: Missing required argument <request-id>\n\nUsage: openaidy devices approve <request-id>';
+        'Error: Missing required argument <request-id>\n\nUsage: aidy devices approve <request-id>';
       p.log.error(error);
       return { exitCode: 1, error };
     }

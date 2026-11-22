@@ -1,14 +1,14 @@
 ---
-summary: 'Core architecture for OpenAidy as a plugin-first agent platform'
+summary: 'Core architecture for Aidy as a plugin-first agent platform'
 read_when:
-  - You are defining the system boundaries for OpenAidy
+  - You are defining the system boundaries for Aidy
   - You need a high-level view of services, runtimes, and extension points
-title: 'OpenAidy Architecture'
+title: 'Aidy Architecture'
 ---
 
-# OpenAidy Architecture
+# Aidy Architecture
 
-OpenAidy should be a plugin-first agent platform built around a small core and a stable set of extension contracts. The goal is to preserve strong agent-platform capabilities while reducing coupling between the UI, channels, runtime, and third-party integrations.
+Aidy should be a plugin-first agent platform built around a small core and a stable set of extension contracts. The goal is to preserve strong agent-platform capabilities while reducing coupling between the UI, channels, runtime, and third-party integrations.
 
 ## Goals
 
@@ -51,7 +51,7 @@ Recommended stack:
 
 ### WebSocket gateway
 
-The WebSocket gateway provides real-time, bidirectional communication between clients and the OpenAidy server. It enables:
+The WebSocket gateway provides real-time, bidirectional communication between clients and the Aidy server. It enables:
 
 - **Real-time messaging** - Instant message delivery without polling
 - **Streaming responses** - Token-by-token streaming of AI responses
@@ -142,10 +142,10 @@ The core should expose registration APIs instead of private module access.
 
 ### MCP integration
 
-OpenAidy should support both directions:
+Aidy should support both directions:
 
 - using external MCP servers as tool/resource providers
-- exposing OpenAidy features as an MCP server
+- exposing Aidy features as an MCP server
 
 This enables composability with other agent tools and local automation environments.
 
@@ -269,7 +269,7 @@ Postpone these until later:
 
 ## Success criteria
 
-OpenAidy is on the right path if:
+Aidy is on the right path if:
 
 - new channels can be built without changing core session code
 - scheduled jobs can dispatch agents without channel-specific hacks

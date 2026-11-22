@@ -7,8 +7,8 @@ import {
 } from 'discord.js';
 import { EventEmitter } from 'node:events';
 import type { IChannel } from '../interface.js';
-import type { ChannelStatus } from '@openaidy/shared-types';
-import type { DiscordChannelConfig } from '@openaidy/config';
+import type { ChannelStatus } from '@aidyagent/shared-types';
+import type { DiscordChannelConfig } from '@aidyagent/config';
 import type { DiscordChannelDeps } from './types.js';
 import { handleInboundChannelMessage } from '../message-handler.js';
 import { resolveBotToken } from './secret.js';

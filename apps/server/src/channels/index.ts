@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
-import type { ChannelConfig } from '@openaidy/config';
+import type { ChannelConfig } from '@aidyagent/config';
 import type { SessionMessageService } from '../sessions/service';
 import { ChannelRegistry } from './registry.js';
 import type { IChannel } from './interface.js';

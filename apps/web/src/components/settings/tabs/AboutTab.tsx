@@ -16,7 +16,7 @@ import {
   updateInProgress,
 } from '../../../stores/update-notice';
 
-const RELEASES_URL = 'https://github.com/imzodev/openaidy/releases';
+const RELEASES_URL = 'https://github.com/imzodev/aidy/releases';
 
 /** How often to poll /update/status while waiting for the server to restart. */
 const POLL_INTERVAL_MS = 2_000;
@@ -41,7 +41,7 @@ function formatUptime(ms: number): string {
 
 function buildDebugBlock(info: AppInfo): string {
   return [
-    `OpenAidy v${info.version}`,
+    `Aidy v${info.version}`,
     `Node ${info.nodeVersion}`,
     `Platform ${info.platform}/${info.arch}`,
     `PID ${info.pid}`,
@@ -159,11 +159,9 @@ export function AboutTab() {
 
   return (
     <div class="p-6 max-w-2xl">
-      <h2 class="text-lg font-semibold text-text-primary mb-1">
-        About OpenAidy
-      </h2>
+      <h2 class="text-lg font-semibold text-text-primary mb-1">About Aidy</h2>
       <p class="text-sm text-text-tertiary mb-6">
-        Build and runtime information for this OpenAidy instance.
+        Build and runtime information for this Aidy instance.
       </p>
 
       <SaveMessage message={message} />
@@ -254,7 +252,7 @@ export function AboutTab() {
                     is available. This install can't update itself — run:
                   </div>
                   <code class="block font-mono text-xs bg-gray-100 dark:bg-gray-900 rounded px-2 py-1 overflow-x-auto">
-                    npm install -g @openaidy/app@latest && openaidy restart
+                    npm install -g @aidyagent/app@latest && aidy restart
                   </code>
                 </div>
               </Show>
@@ -315,7 +313,7 @@ export function AboutTab() {
 
             <ConfirmDialog
               isOpen={confirmOpen()}
-              title="Update OpenAidy?"
+              title="Update Aidy?"
               confirmLabel="Update & restart"
               cancelLabel="Cancel"
               isPending={updateInProgress()}

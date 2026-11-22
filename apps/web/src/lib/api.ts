@@ -3,8 +3,8 @@
  * All type definitions live in ./types.ts
  */
 
-import { ApiRequestError } from '@openaidy/shared-types';
-import type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
+import { ApiRequestError } from '@aidyagent/shared-types';
+import type { UpdateCheckResult, UpdateState } from '@aidyagent/shared-types';
 import { getStoredToken } from './auth-token';
 
 export type {
@@ -90,8 +90,8 @@ export type {
   ChannelConfig,
 } from './types';
 
-export { ApiRequestError } from '@openaidy/shared-types';
-export type { UpdateCheckResult, UpdateState } from '@openaidy/shared-types';
+export { ApiRequestError } from '@aidyagent/shared-types';
+export type { UpdateCheckResult, UpdateState } from '@aidyagent/shared-types';
 
 import type {
   Session,
@@ -150,7 +150,7 @@ import type {
 /**
  * Get the API base URL.
  *
- * Resolved once from OPENAIDY_VITE_SERVER_URL. Empty string (the default
+ * Resolved once from AIDY_VITE_SERVER_URL. Empty string (the default
  * when the env var is unset) means same-origin — the browser resolves
  * relative URLs against the current host. The Vite dev proxy (see
  * vite.config.ts) forwards same-origin `/api` and `/ws` requests to the
@@ -158,7 +158,7 @@ import type {
  * server on the same origin.
  */
 function getApiBase(): string {
-  return import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
+  return import.meta.env.AIDY_VITE_SERVER_URL ?? '';
 }
 
 /**
@@ -258,7 +258,7 @@ export async function updateSession(
 export async function searchSessions(
   query: string,
   options?: { limit?: number; currentSessionId?: string },
-): Promise<{ items: import('@openaidy/shared-types').SessionSearchResult[] }> {
+): Promise<{ items: import('@aidyagent/shared-types').SessionSearchResult[] }> {
   const params = new URLSearchParams({ q: query });
   if (options?.limit) params.set('limit', String(options.limit));
   if (options?.currentSessionId)
@@ -1083,7 +1083,7 @@ export async function disconnectMcpServer(
 /**
  * Origin the OAuth callback must land on: the API server's own origin (the
  * callback is an API route), which is the page's origin unless the UI talks
- * to a separate server (OPENAIDY_VITE_SERVER_URL, desktop build).
+ * to a separate server (AIDY_VITE_SERVER_URL, desktop build).
  */
 export function mcpOAuthOrigin(): string {
   return API_BASE ? new URL(API_BASE).origin : window.location.origin;

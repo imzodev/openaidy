@@ -1,6 +1,6 @@
-# OpenAidy Skills Documentation
+# Aidy Skills Documentation
 
-This directory contains documentation for the OpenAidy Skills system — a mechanism for attaching reusable prompt fragments to agents, giving them domain-specific expertise without duplicating configuration.
+This directory contains documentation for the Aidy Skills system — a mechanism for attaching reusable prompt fragments to agents, giving them domain-specific expertise without duplicating configuration.
 
 ## Overview
 
@@ -16,7 +16,7 @@ Skills are:
 ## File Structure
 
 ```
-.openaidy/
+.aidy/
 └── skills/
     ├── git-workflow/
     │   └── SKILL.md
@@ -35,7 +35,7 @@ Bundled default skills ship in the repo at:
 config/skills/<skill-id>/SKILL.md
 ```
 
-They are copied to `.openaidy/skills/` on first boot (existing files are never overwritten).
+They are copied to `.aidy/skills/` on first boot (existing files are never overwritten).
 
 ## SKILL.md Format
 
@@ -135,15 +135,15 @@ Skills with unknown IDs are silently skipped. Order follows the `skills` array.
 
 ### Default bundled skills
 
-Default skills ship with OpenAidy in `config/skills/`. They are automatically seeded to `.openaidy/skills/` on first server boot. Existing files are never overwritten, so you can edit them freely.
+Default skills ship with Aidy in `config/skills/`. They are automatically seeded to `.aidy/skills/` on first server boot. Existing files are never overwritten, so you can edit them freely.
 
 ### Custom skills
 
-Create a new directory under `.openaidy/skills/`:
+Create a new directory under `.aidy/skills/`:
 
 ```bash
-mkdir -p .openaidy/skills/my-skill
-cat > .openaidy/skills/my-skill/SKILL.md << 'EOF'
+mkdir -p .aidy/skills/my-skill
+cat > .aidy/skills/my-skill/SKILL.md << 'EOF'
 ---
 name: My Skill
 description: Does something useful

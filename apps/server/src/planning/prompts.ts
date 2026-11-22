@@ -7,14 +7,14 @@
 import fs from 'fs';
 import path from 'path';
 import type { AgentSummary } from '../agents/schema';
-import type { Task } from '@openaidy/db';
+import type { Task } from '@aidyagent/db';
 
 /**
  * Build the agent context section for the planning prompt
  */
 export function buildAgentContextPrompt(
   agents: AgentSummary[],
-  openAidyHome: string,
+  aidyHome: string,
 ): string {
   if (agents.length === 0) {
     return 'No agents available for assignment.';
@@ -24,8 +24,8 @@ export function buildAgentContextPrompt(
     // Read AGENT.md if exists
     let agentMdContent = '';
     const agentMdPath = path.join(
-      openAidyHome,
-      '.openaidy',
+      aidyHome,
+      '.aidy',
       'workspaces',
       agent.id,
       'AGENT.md',

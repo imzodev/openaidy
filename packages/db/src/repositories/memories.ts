@@ -5,7 +5,7 @@ import type {
   CreateMemoryInput,
   UpdateMemoryInput,
   MemorySearchResult,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Helper to access the raw sqlite instance from a Drizzle client.

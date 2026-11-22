@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createDatabaseAdapter, type DatabaseAdapter } from '../adapter';
 
 describe('SessionChannelsRepository (sqlite)', () => {
-  const dbPath = join(tmpdir(), `openaidy-session-channels-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `aidy-session-channels-${Date.now()}.db`);
   let db: DatabaseAdapter;
 
   afterEach(async () => {

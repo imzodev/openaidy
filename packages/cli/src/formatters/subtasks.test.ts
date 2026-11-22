@@ -10,7 +10,7 @@ import {
   formatSubtaskDetail,
   formatSubtaskList,
 } from './subtasks.js';
-import type { SubtaskStatus } from '@openaidy/shared-types';
+import type { SubtaskStatus } from '@aidyagent/shared-types';
 
 describe('formatSubtaskStatus', () => {
   it('returns human-readable labels', () => {

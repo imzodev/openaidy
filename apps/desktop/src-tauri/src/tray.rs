@@ -11,13 +11,13 @@ use tauri::{
 };
 
 /// Build the tray menu.
-/// "Open OpenAidy"  — shows and focuses the main window
+/// "Open Aidy"  — shows and focuses the main window
 /// Separator
 /// "Quit"           — exits the application completely
 pub fn build_tray_menu<R: Runtime>(app: &App<R>) -> Result<Menu<R>, tauri::Error> {
-    let open_item = MenuItem::with_id(app, "open", "Open OpenAidy", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, "open", "Open Aidy", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit OpenAidy", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Aidy", true, None::<&str>)?;
 
     Menu::with_items(app, &[&open_item, &sep, &quit_item])
 }
@@ -35,7 +35,7 @@ pub fn setup_tray<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Er
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .tooltip("OpenAidy")
+        .tooltip("Aidy")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {
             match event.id.as_ref() {

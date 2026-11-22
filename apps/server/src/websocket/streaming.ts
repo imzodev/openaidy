@@ -20,7 +20,7 @@ import {
   type SessionStreamError,
   type SessionRunChoicesEvent,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Types

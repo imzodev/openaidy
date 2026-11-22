@@ -1,5 +1,5 @@
 {
-  "name": "@openaidy/config",
+  "name": "@aidyagent/config",
   "private": true,
   "type": "module",
   "exports": {

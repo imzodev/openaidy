@@ -16,7 +16,7 @@ import type {
   MessageAttachmentsStore,
   MessageAttachment,
   AttachmentKind,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 /** Max upload size (decoded bytes). */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;

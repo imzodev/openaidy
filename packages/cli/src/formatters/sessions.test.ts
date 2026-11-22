@@ -17,7 +17,7 @@ import type {
   SessionDetail,
   SessionMessage,
   MessageRole,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { SessionRun } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ describe('formatSessionList', () => {
   it('returns empty state when list is empty', () => {
     const output = formatSessionList([]);
     expect(output).toContain('No sessions found');
-    expect(output).toContain('openaidy sessions create');
+    expect(output).toContain('aidy sessions create');
   });
 
   it('formats a single session', () => {
@@ -246,7 +246,7 @@ describe('formatEmptyState', () => {
   it('returns empty state with create hint', () => {
     const output = formatEmptyState();
     expect(output).toContain('No sessions found');
-    expect(output).toContain('openaidy sessions create');
+    expect(output).toContain('aidy sessions create');
   });
 });
 

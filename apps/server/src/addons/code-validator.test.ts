@@ -19,7 +19,7 @@ interface TestAddonManifest {
   permissions: string[];
   $schema?: string;
   license?: string;
-  openaidy: { minVersion: string };
+  aidy: { minVersion: string };
 }
 
 // ============================================================================
@@ -30,14 +30,14 @@ function createTestManifest(
   overrides?: Partial<TestAddonManifest>,
 ): TestAddonManifest {
   return {
-    $schema: 'https://openaidy.dev/schemas/addon-v1.json',
+    $schema: 'https://aidyagent.app/schemas/addon-v1.json',
     license: 'MIT',
     id: 'test-addon',
     name: 'Test',
     version: '1.0.0',
     entry: 'index.js',
     permissions: [],
-    openaidy: { minVersion: '1.0.0' },
+    aidy: { minVersion: '1.0.0' },
     ...overrides,
   };
 }

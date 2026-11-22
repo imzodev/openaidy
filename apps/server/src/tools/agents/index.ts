@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
 import type { SessionMessageService } from '../../sessions/service.js';
 import { createAgentsListTool } from './list.js';

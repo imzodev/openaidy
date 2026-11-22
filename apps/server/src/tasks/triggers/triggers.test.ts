@@ -13,8 +13,8 @@ import {
   createDatabaseAdapter,
   type DatabaseAdapter,
   type Task,
-} from '@openaidy/db';
-import { DEFAULT_EXECUTION_CONFIG } from '@openaidy/config';
+} from '@aidyagent/db';
+import { DEFAULT_EXECUTION_CONFIG } from '@aidyagent/config';
 import { TaskService, type TaskServiceOptions } from '../service';
 import { FakeSessions, deferred } from '../testing/fake-sessions';
 import { WorkflowTriggerService } from './service';
@@ -76,10 +76,10 @@ describe('workflow triggers', { timeout: 20000 }, () => {
   let channelUp: boolean;
 
   beforeEach(async () => {
-    dir = mkdtempSync(join(tmpdir(), 'openaidy-triggers-'));
+    dir = mkdtempSync(join(tmpdir(), 'aidy-triggers-'));
     db = await createDatabaseAdapter({
       kind: 'sqlite',
-      sqlitePath: join(dir, 'openaidy.db'),
+      sqlitePath: join(dir, 'aidy.db'),
     });
     sessions = new FakeSessions(db);
     service = new TaskService({
@@ -422,7 +422,7 @@ describe('workflow triggers', { timeout: 20000 }, () => {
       await message('quote');
       await service.whenIdle();
       expect(sent.map((s) => s.text)).toEqual([
-        '"Quotes" is waiting for your approval in OpenAidy: Sign-off.',
+        '"Quotes" is waiting for your approval in Aidy: Sign-off.',
       ]);
       await service.cancelRun(task.id);
       await service.whenIdle();

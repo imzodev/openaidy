@@ -11,10 +11,10 @@ describe('rewriteAddonHtml', () => {
   });
 
   it('adds crossorigin to the SDK script served from an absolute local path', () => {
-    const html = '<script src="/sdk/openaidy-sdk.js"></script>';
+    const html = '<script src="/sdk/aidy-sdk.js"></script>';
     const out = rewriteAddonHtml(html, 'TOKEN');
     expect(out).toBe(
-      '<script crossorigin="anonymous" src="/sdk/openaidy-sdk.js?at=TOKEN"></script>',
+      '<script crossorigin="anonymous" src="/sdk/aidy-sdk.js?at=TOKEN"></script>',
     );
   });
 
@@ -36,7 +36,7 @@ describe('rewriteAddonHtml', () => {
   it('handles a mix of local and external scripts in one document', () => {
     const html = [
       '<script src="https://cdn.tailwindcss.com"></script>',
-      '<script src="/sdk/openaidy-sdk.js"></script>',
+      '<script src="/sdk/aidy-sdk.js"></script>',
       '<script src="index.js"></script>',
     ].join('\n');
     const out = rewriteAddonHtml(html, 'TOKEN');
@@ -44,7 +44,7 @@ describe('rewriteAddonHtml', () => {
       '<script src="https://cdn.tailwindcss.com"></script>',
     );
     expect(out).toContain(
-      '<script crossorigin="anonymous" src="/sdk/openaidy-sdk.js?at=TOKEN"></script>',
+      '<script crossorigin="anonymous" src="/sdk/aidy-sdk.js?at=TOKEN"></script>',
     );
     expect(out).toContain(
       '<script crossorigin="anonymous" src="index.js?at=TOKEN"></script>',

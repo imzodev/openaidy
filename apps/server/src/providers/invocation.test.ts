@@ -7,7 +7,7 @@ import {
   type ProviderDescriptor,
   type ModelRequest,
   type ModelStreamEvent,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import { ProviderRegistryService, createProviderRegistry } from './registry';
 import { ProviderSelectionService, createProviderSelection } from './selection';
 import { ModelInvocationService, createModelInvocation } from './invocation';

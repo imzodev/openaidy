@@ -14,7 +14,7 @@ import {
   WS_ERROR_CODES,
   isWSMessage,
   createErrorResponse,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { ConnectionManager } from './connection-manager';
 
 // ============================================================================

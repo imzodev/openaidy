@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { jobsDeleteMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
 

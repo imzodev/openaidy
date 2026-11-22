@@ -4,11 +4,11 @@ import type { TaskService } from '../tasks/service';
 import type { UpdateSubtaskInput } from '../types';
 import { parseGraphSpec } from '../tasks/graph-spec';
 import type { PlanningService } from '../planning/service';
-import type { DeliverablesRepository, WorkflowRun } from '@openaidy/db';
+import type { DeliverablesRepository, WorkflowRun } from '@aidyagent/db';
 import type {
   PendingApprovalDto,
   WorkflowRunDto,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
 import { requireAuth } from '../middleware/require-auth';
 import { deriveTitleFromDescription } from '../tasks/derive-title';
@@ -319,7 +319,7 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
         agentId: string;
         role?: 'primary' | 'secondary' | 'reviewer';
       }>;
-      schedule?: import('@openaidy/shared-types').CreateTaskScheduleInput;
+      schedule?: import('@aidyagent/shared-types').CreateTaskScheduleInput;
     } = {
       title: derivedTitle,
       description: parsed.description,
@@ -350,10 +350,10 @@ export const taskRoutes: FastifyPluginAsync<TaskRoutesOptions> = async (
       // `unknown` to coerce — safe because the Zod schema and
       // ScheduleInput both accept the same shape (the same union
       // variants, just different optional semantics).
-      const createScheduleInput: import('@openaidy/shared-types').CreateTaskScheduleInput =
+      const createScheduleInput: import('@aidyagent/shared-types').CreateTaskScheduleInput =
         {
           schedule: parsed.schedule
-            .schedule as unknown as import('@openaidy/shared-types').ScheduleInput,
+            .schedule as unknown as import('@aidyagent/shared-types').ScheduleInput,
         };
       if (parsed.schedule.replanPolicy !== undefined) {
         createScheduleInput.replanPolicy = parsed.schedule.replanPolicy;

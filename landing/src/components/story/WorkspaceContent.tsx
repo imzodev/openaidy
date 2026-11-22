@@ -63,7 +63,7 @@ export function ChannelsList() {
       <div className="channel-row channel-row--connected">
         <div className="channel-icon channel-icon--telegram">T</div>
         <div className="channel-info">
-          <div className="channel-name">Telegram · @openaidy_bot</div>
+          <div className="channel-name">Telegram · @aidy_bot</div>
           <div className="channel-meta">Connected · DMs + groups</div>
         </div>
         <div className="channel-state channel-state--on" />
@@ -87,16 +87,14 @@ export function SkillsList() {
         <div className="skill-icon skill-icon--green">✓</div>
         <div className="skill-info">
           <div className="skill-name">code-review</div>
-          <div className="skill-meta">
-            v2.1.0 · openaidy · loaded on reviewer
-          </div>
+          <div className="skill-meta">v2.1.0 · aidy · loaded on reviewer</div>
         </div>
       </div>
       <div className="skill-row skill-row--active">
         <div className="skill-icon skill-icon--green">✓</div>
         <div className="skill-info">
           <div className="skill-name">github-pr</div>
-          <div className="skill-meta">v1.4.2 · openaidy · MCP</div>
+          <div className="skill-meta">v1.4.2 · aidy · MCP</div>
         </div>
       </div>
       <div className="skill-row skill-row--active">

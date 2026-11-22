@@ -8,7 +8,7 @@
 import type {
   PairingRequestData,
   PairingRequestStatus,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 /**
  * Format a single pairing request for display

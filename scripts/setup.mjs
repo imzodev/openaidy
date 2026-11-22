@@ -7,7 +7,7 @@
  *   1. Ensure a root `.env` exists (copy from `.env.example` if missing).
  *   2. Install dependencies with pnpm.
  *
- * OpenAidy is otherwise zero-config: SQLite is the default database and the
+ * Aidy is otherwise zero-config: SQLite is the default database and the
  * JWT signing secret + credentials master key are generated and persisted
  * automatically on first boot, so there is no secret to paste by hand.
  *

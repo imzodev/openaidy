@@ -25,7 +25,7 @@ import {
   type PulsePayload,
   type PulseRunnableDeps,
 } from './pulse-runnable-adapter';
-import type { JobsStore, SessionsStore, ScheduledJob } from '@openaidy/db';
+import type { JobsStore, SessionsStore, ScheduledJob } from '@aidyagent/db';
 import type { SessionMessageService } from '../sessions/service';
 
 // ============================================================================

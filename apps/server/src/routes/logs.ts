@@ -7,7 +7,7 @@ import type {
   LogFilter,
   LogQueryResult,
   LogStats,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 export type LogRoutesOptions = {
   authMiddleware: AuthMiddleware;

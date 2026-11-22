@@ -15,7 +15,7 @@ import {
   mapRequest,
   sanitizeJsonSchemaForGemini,
 } from './request-mapper';
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 
 describe('mapRole', () => {
   it('should map user role', () => {

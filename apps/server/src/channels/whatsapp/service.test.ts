@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import type { WhatsAppChannelConfig } from '@openaidy/config';
+import type { WhatsAppChannelConfig } from '@aidyagent/config';
 import type { WhatsAppChannelDeps } from './types.js';
 
 // Mock baileys before importing service
@@ -84,7 +84,7 @@ describe('WhatsAppChannel', () => {
 
       expect(makeWASocket).toHaveBeenCalledWith(
         expect.objectContaining({
-          browser: ['OpenAidy', '1.0.0', 'Ubuntu'],
+          browser: ['Aidy', '1.0.0', 'Ubuntu'],
         }),
       );
     });
@@ -100,7 +100,7 @@ describe('WhatsAppChannel', () => {
       expect(makeWASocket).toHaveBeenCalledTimes(1);
     });
 
-    it('should create socket with browser name OpenAidy', async () => {
+    it('should create socket with browser name Aidy', async () => {
       const { WhatsAppChannel } = await import('./service.js');
       const { default: makeWASocket } = await import('@whiskeysockets/baileys');
 
@@ -110,7 +110,7 @@ describe('WhatsAppChannel', () => {
       // Verify the browser configuration was passed
       expect(makeWASocket).toHaveBeenCalledWith(
         expect.objectContaining({
-          browser: expect.arrayContaining(['OpenAidy']),
+          browser: expect.arrayContaining(['Aidy']),
         }),
       );
     });

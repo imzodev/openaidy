@@ -5,7 +5,7 @@
  * and secret resolution into the invocation path.
  *
  * It bridges the gap between:
- * - The @openaidy/config package (configuration schemas and secret resolution)
+ * - The @aidyagent/config package (configuration schemas and secret resolution)
  * - The provider adapters in apps/server/src/providers/infrastructure/
  * - The ModelInvocationService
  */
@@ -14,7 +14,7 @@ import {
   createProviderError,
   type ProviderError,
   type ModelProvider,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import {
   type ProviderConfig,
   type ResolvedProviderConfig,
@@ -24,11 +24,11 @@ import {
   resolveProviderConfig,
   createDefaultSecretProvider,
   isSecretReference,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import type {
   AuthMethodProvider,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { createOpenAICompatibleProvider } from './infrastructure/openai-compatible';
 import { createAnthropicProvider } from './infrastructure/anthropic';
 import { createGeminiProvider } from './infrastructure/gemini';

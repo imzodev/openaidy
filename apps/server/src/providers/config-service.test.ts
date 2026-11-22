@@ -10,7 +10,7 @@ import {
   createOpenAIConfig,
   createAnthropicConfig,
   createGeminiConfig,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import {
   ProviderConfigService,
   createProviderConfigService,

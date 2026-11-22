@@ -1,6 +1,6 @@
 # WebSocket Gateway Architecture Documentation
 
-This document describes the architecture of the OpenAidy WebSocket gateway.
+This document describes the architecture of the Aidy WebSocket gateway.
 
 ## Overview
 
@@ -559,7 +559,7 @@ Client A                   Server                    Client B
 - Stateful connections
 - Harder to cache
 
-**Decision:** WebSocket is ideal for OpenAidy because:
+**Decision:** WebSocket is ideal for Aidy because:
 
 - Real-time AI responses benefit from streaming
 - Event subscriptions require persistent connections
@@ -839,4 +839,4 @@ const health = {
 
 ## Summary
 
-The WebSocket gateway provides a robust, scalable, and secure real-time communication layer for OpenAidy. Its component-based architecture ensures maintainability and extensibility, while the capability-based authorization model provides fine-grained access control. The design prioritizes developer experience with full TypeScript support and a comprehensive SDK for client applications.
+The WebSocket gateway provides a robust, scalable, and secure real-time communication layer for Aidy. Its component-based architecture ensures maintainability and extensibility, while the capability-based authorization model provides fine-grained access control. The design prioritizes developer experience with full TypeScript support and a comprehensive SDK for client applications.

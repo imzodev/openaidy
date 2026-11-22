@@ -1,5 +1,5 @@
-import type { BuiltinTool } from '@openaidy/runtime';
-import type { PresentChoicesArgs } from '@openaidy/shared-types';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import type { PresentChoicesArgs } from '@aidyagent/shared-types';
 import { presentChoicesMeta } from './catalog.js';
 
 /**

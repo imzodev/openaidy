@@ -6,8 +6,8 @@
  */
 
 import { z } from 'zod';
-import type { ClientType } from '@openaidy/shared-types';
-import { DEFAULT_SERVER_PORT } from '@openaidy/config';
+import type { ClientType } from '@aidyagent/shared-types';
+import { DEFAULT_SERVER_PORT } from '@aidyagent/config';
 
 // ============================================================================
 // WebSocket Configuration Schema
@@ -132,7 +132,7 @@ export const wsEnvSchema = z.object({
     .default('true'),
   // WS_PORT is the WebSocket gateway's listen port. The gateway shares the
   // HTTP listener (same-origin architecture) so this defaults to the same
-  // value as OPENAIDY_PORT. Override via WS_PORT only when the gateway
+  // value as AIDY_PORT. Override via WS_PORT only when the gateway
   // runs on a separate port.
   WS_PORT: z.coerce.number().int().positive().default(DEFAULT_SERVER_PORT),
   WS_PATH: z.string().default('/ws'),

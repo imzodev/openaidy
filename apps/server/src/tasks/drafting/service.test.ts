@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { validateWorkflowGraph } from '@openaidy/workflow-templates';
+import { validateWorkflowGraph } from '@aidyagent/workflow-templates';
 import type { AgentRegistry } from '../../agents';
 import { createLogger } from '../../lib/logger';
 import type { ProviderServices } from '../../providers';

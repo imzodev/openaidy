@@ -8,7 +8,7 @@ import {
   expectedOutcomes,
   type SubtaskDependencyEdge,
 } from './subtask-graph';
-import type { Subtask } from '@openaidy/db';
+import type { Subtask } from '@aidyagent/db';
 
 function makeSubtask(overrides: Partial<Subtask> = {}): Subtask {
   return {

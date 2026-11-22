@@ -9,7 +9,7 @@ import {
   clearRecentItems,
 } from './recent-items';
 
-const STORAGE_KEY = 'openaidy_recent_items';
+const STORAGE_KEY = 'aidy_recent_items';
 
 const store = new Map<string, string>();
 const localStorageMock = {

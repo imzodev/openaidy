@@ -27,8 +27,8 @@ import type {
   ModelRequest,
   ModelResponse,
   ToolCallRequest,
-} from '@openaidy/runtime';
-import type { MessageAttachment as DbMessageAttachment } from '@openaidy/db';
+} from '@aidyagent/runtime';
+import type { MessageAttachment as DbMessageAttachment } from '@aidyagent/db';
 import {
   type SessionsStore,
   type SessionMessagesStore,
@@ -38,13 +38,13 @@ import {
   type SessionRun,
   type MessageRole as DbMessageRole,
   type FinishReason as DbFinishReason,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type {
   SessionType,
   ModelPricing,
   CompactionSummaryMetadata,
-} from '@openaidy/shared-types';
-import { estimateCost, COMPACTION_SUMMARY_KIND } from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
+import { estimateCost, COMPACTION_SUMMARY_KIND } from '@aidyagent/shared-types';
 import { READ_ONLY_BUILTIN_TOOLS } from '../tools/catalog.js';
 import { ToolCallGuard } from './tool-call-guard.js';
 import { findPresetModel } from '../providers/model-limits.js';
@@ -607,7 +607,7 @@ export class SessionMessageService {
    * store has no status field, so it always returns everything.
    */
   async listSessions(
-    status: import('@openaidy/shared-types').SessionStatus = 'active',
+    status: import('@aidyagent/shared-types').SessionStatus = 'active',
   ): Promise<SessionRecord[] | Session[]> {
     if (this.sessionsRepo) {
       return this.sessionsRepo.list(status);
@@ -666,7 +666,7 @@ export class SessionMessageService {
    */
   async updateSessionStatus(
     id: string,
-    status: import('@openaidy/shared-types').SessionStatus,
+    status: import('@aidyagent/shared-types').SessionStatus,
   ): Promise<SessionRecord | Session | null> {
     if (this.sessionsRepo && !this.isEphemeral(id)) {
       return this.sessionsRepo.updateStatus(id, status);
@@ -963,7 +963,7 @@ export class SessionMessageService {
    */
   async getSessionUsage(
     sessionId: string,
-  ): Promise<import('@openaidy/db').SessionUsageTotals> {
+  ): Promise<import('@aidyagent/db').SessionUsageTotals> {
     if (this.runsRepo && !this.isEphemeral(sessionId)) {
       return this.runsRepo.getSessionUsage(sessionId);
     }
@@ -986,7 +986,7 @@ export class SessionMessageService {
   async listUsageRows(options?: {
     from?: string;
     to?: string;
-  }): Promise<import('@openaidy/db').UsageRunRow[]> {
+  }): Promise<import('@aidyagent/db').UsageRunRow[]> {
     if (this.runsRepo) {
       return this.runsRepo.listUsageRows(options ?? {});
     }
@@ -1003,7 +1003,7 @@ export class SessionMessageService {
   async getUsageBySession(
     sessionIds?: string[],
   ): Promise<
-    Array<import('@openaidy/db').SessionUsageTotals & { sessionId: string }>
+    Array<import('@aidyagent/db').SessionUsageTotals & { sessionId: string }>
   > {
     if (this.runsRepo) {
       return this.runsRepo.getUsageBySession(sessionIds);

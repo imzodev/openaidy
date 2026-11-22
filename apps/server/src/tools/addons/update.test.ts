@@ -6,7 +6,7 @@ import { createAddonUpdateTool } from './update.js';
 
 const CTX = { agentId: 'agent', sessionId: 'test-session' };
 
-const SEED_HTML = `<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>`;
+const SEED_HTML = `<!DOCTYPE html><html><body><script src="/sdk/aidy-sdk.js"></script><script src="index.js"></script></body></html>`;
 const SEED_JS = `// original logic`;
 
 describe('addon_update tool', () => {
@@ -25,7 +25,7 @@ describe('addon_update tool', () => {
       name: 'Demo',
       version: '1.0.0',
       description: 'original desc',
-      openaidy: { minVersion: '0.0.0' },
+      aidy: { minVersion: '0.0.0' },
       entry: 'app/index.html',
       permissions: [] as string[],
       ui: { sidebar: { icon: 'box', label: 'Demo' } },
@@ -196,7 +196,7 @@ describe('addon_update tool', () => {
           id: 'demo',
           files: {
             'app/index.html':
-              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/openaidy-sdk.js"></script></body></html>',
+              '<!DOCTYPE html><html><body><script src="index.js"></script><script src="/sdk/aidy-sdk.js"></script></body></html>',
           },
         },
         CTX,
@@ -213,7 +213,7 @@ describe('addon_update tool', () => {
         id: 'demo',
         files: {
           'app/index.html':
-            '<!DOCTYPE html><html><body><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>',
+            '<!DOCTYPE html><html><body><script src="/sdk/aidy-sdk.js"></script><script src="index.js"></script></body></html>',
         },
       },
       CTX,
@@ -226,7 +226,7 @@ describe('addon_update tool', () => {
     expect(html).toContain('https://cdn.tailwindcss.com');
     // Injected before the SDK script, so ordering is preserved.
     expect(html.indexOf('cdn.tailwindcss.com')).toBeLessThan(
-      html.indexOf('/sdk/openaidy-sdk.js'),
+      html.indexOf('/sdk/aidy-sdk.js'),
     );
   });
 
@@ -236,7 +236,7 @@ describe('addon_update tool', () => {
         id: 'demo',
         files: {
           'app/index.html':
-            '<!DOCTYPE html><html><body><script src="https://cdn.tailwindcss.com"></script><script src="/sdk/openaidy-sdk.js"></script><script src="index.js"></script></body></html>',
+            '<!DOCTYPE html><html><body><script src="https://cdn.tailwindcss.com"></script><script src="/sdk/aidy-sdk.js"></script><script src="index.js"></script></body></html>',
         },
       },
       CTX,

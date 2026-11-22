@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDatabaseClient } from '@openaidy/db';
+import { createDatabaseClient } from '@aidyagent/db';
 import { DbOAuthStateStore } from './state-store';
 import { startMiniMaxOAuth, getMiniMaxOAuthStatus } from './minimax';
 import { type MmxLoginHandle } from './mmx-bridge';
@@ -78,7 +78,7 @@ describe('startMiniMaxOAuth', () => {
     const fakeHandle: MmxLoginHandle = {
       userCode: Promise.resolve('ABCD-1234'),
       verificationUrl: Promise.resolve(
-        'https://platform.minimax.io/oauth-authorize?user_code=ABCD-1234&client=OpenAidy',
+        'https://platform.minimax.io/oauth-authorize?user_code=ABCD-1234&client=Aidy',
       ),
       done: new Promise<CliOAuthResult>(() => undefined), // never resolves in test
       cancel: vi.fn(),
@@ -93,7 +93,7 @@ describe('startMiniMaxOAuth', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.verificationUrl).toContain('user_code=ABCD-1234');
-      expect(result.verificationUrl).toContain('client=OpenAidy');
+      expect(result.verificationUrl).toContain('client=Aidy');
       expect(result.flowId).toBe('flow-cn-1');
     }
 
@@ -164,7 +164,7 @@ describe('getMiniMaxOAuthStatus', () => {
       expect(result.status).toBe('pending');
       expect(result.userCode).toBe('WXYZ-9876');
       expect(result.verificationUrl).toContain('user_code=WXYZ-9876');
-      expect(result.verificationUrl).toContain('client=OpenAidy');
+      expect(result.verificationUrl).toContain('client=Aidy');
     }
   });
 

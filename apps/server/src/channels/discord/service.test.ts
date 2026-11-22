@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyBaseLogger } from 'fastify';
-import type { DiscordChannelConfig } from '@openaidy/config';
+import type { DiscordChannelConfig } from '@aidyagent/config';
 import type { DiscordChannelDeps } from './types.js';
 import { clearSessionMapForTesting } from '../message-handler.js';
 

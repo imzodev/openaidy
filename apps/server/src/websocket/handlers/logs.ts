@@ -17,7 +17,7 @@ import {
   type LogLevel,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { getLogBuffer } from '../../lib/log-buffer';
 
 // ============================================================================

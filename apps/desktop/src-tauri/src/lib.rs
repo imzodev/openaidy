@@ -9,7 +9,7 @@ use log::{error, info};
 use service::ServiceManager;
 use std::sync::Arc;
 use tauri::Manager;
-use window::{set_openaidy_home, setup_close_to_tray, WindowState};
+use window::{set_aidy_home, setup_close_to_tray, WindowState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,21 +17,21 @@ pub fn run() {
         .format_timestamp_millis()
         .init();
 
-    info!("OpenAidy Desktop v{}", env!("CARGO_PKG_VERSION"));
+    info!("Aidy Desktop v{}", env!("CARGO_PKG_VERSION"));
 
-    // Determine OPENAIDY_HOME
-    let openaidy_home = dirs::config_dir()
+    // Determine AIDY_HOME
+    let aidy_home = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("openaidy");
+        .join("aidy");
 
-    let service_manager = Arc::new(ServiceManager::new(openaidy_home.clone()));
+    let service_manager = Arc::new(ServiceManager::new(aidy_home.clone()));
 
     let app_state = AppState {
         service: service_manager.clone(),
     };
 
     // Load saved window state for restoration
-    let window_state = WindowState::load(&openaidy_home);
+    let window_state = WindowState::load(&aidy_home);
 
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -46,8 +46,8 @@ pub fn run() {
             info!("Setting up close-to-tray handler");
             setup_close_to_tray(app.handle().clone())?;
 
-            // Set openaidy home for window state saving
-            set_openaidy_home(openaidy_home.clone());
+            // Set aidy home for window state saving
+            set_aidy_home(aidy_home.clone());
 
             // Restore window state if saved
             if let Some(state) = window_state.as_ref() {

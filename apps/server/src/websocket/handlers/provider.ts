@@ -18,7 +18,7 @@ import {
   type ProviderModelsResponse,
   WS_ERROR_CODES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Provider Handler Class

@@ -1,13 +1,13 @@
 /**
- * OpenAidy Addon SDK
+ * Aidy Addon SDK
  *
  * Loaded by addon iframes. Communicates with the parent app via postMessage —
  * the addon never touches localStorage or makes direct authenticated requests.
  *
  * Usage in addon HTML:
- *   <script src="http://localhost:3001/sdk/openaidy-sdk.js"></script>
+ *   <script src="http://localhost:3001/sdk/aidy-sdk.js"></script>
  *   <script>
- *     OpenAidy.ready(async (sdk) => {
+ *     Aidy.ready(async (sdk) => {
  *       const sessions = await sdk.listSessions();
  *     });
  *   </script>
@@ -16,7 +16,7 @@
   'use strict';
 
   var SDK_VERSION = '0.4.0';
-  console.log('[OpenAidy SDK] v' + SDK_VERSION + ' loaded');
+  console.log('[Aidy SDK] v' + SDK_VERSION + ' loaded');
 
   let _apiBase = null;
   let _nonce = null;
@@ -25,10 +25,10 @@
   const _readyCallbacks = [];
 
   // ── Host theme sync ─────────────────────────────────────────────────────
-  // Every addon that loads this file — whether scaffolded via `openaidy
+  // Every addon that loads this file — whether scaffolded via `aidy
   // addon create` or generated ad hoc by an agent — should follow the host
   // app's light/dark theme instead of carrying its own. The host
-  // (AddonViewPage) posts OPENAIDY_INIT once on load and OPENAIDY_THEME_CHANGED
+  // (AddonViewPage) posts AIDY_INIT once on load and AIDY_THEME_CHANGED
   // whenever the user toggles the theme; applyTheme() mirrors both onto this
   // document so an addon using Tailwind `dark:` classes (the common case,
   // since addon_create injects the Tailwind CDN) or referencing the
@@ -36,7 +36,7 @@
   // host automatically, live, with no addon-authored code required.
   //
   // Fallback tokens mirror the host's dark palette (apps/web/src/index.css)
-  // so an addon that paints before OPENAIDY_INIT arrives still looks
+  // so an addon that paints before AIDY_INIT arrives still looks
   // reasonable instead of flashing unstyled/default browser colors.
   var FALLBACK_THEME_TOKENS = {
     '--primary': '#3b82f6',
@@ -95,14 +95,14 @@
     }
   }
 
-  // Paint something reasonable immediately, before OPENAIDY_INIT arrives.
+  // Paint something reasonable immediately, before AIDY_INIT arrives.
   // The iframe is sandboxed WITHOUT allow-same-origin (opaque origin) by
   // design (see commit c5a8073) — localStorage/sessionStorage are
   // inaccessible and throw a SecurityError on access, not just return
   // undefined, so we can't read the host's explicit theme choice here.
   // Fall back to the OS preference only; the real host-resolved theme
   // (including any explicit override) arrives moments later via
-  // OPENAIDY_INIT and corrects this via _applyTheme().
+  // AIDY_INIT and corrects this via _applyTheme().
   var _prefersDark =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -113,7 +113,7 @@
   _applyTheme({ mode: _initialMode, tokens: FALLBACK_THEME_TOKENS });
 
   // Forward CSP violations to the parent app so it can show a warning banner.
-  // Violations that fire before OPENAIDY_INIT (nonce not yet known) are buffered
+  // Violations that fire before AIDY_INIT (nonce not yet known) are buffered
   // and flushed once the nonce arrives.
   var _cspViolationBuffer = [];
   function _flushCspViolations() {
@@ -144,14 +144,14 @@
     // event.source === iframeRef.contentWindow): only the page that framed
     // this addon may drive it. Without this, any window holding a reference
     // to this iframe's WindowProxy (a sibling addon iframe, window.opener, a
-    // nested iframe this addon itself creates) could post OPENAIDY_INIT /
-    // OPENAIDY_THEME_CHANGED / OPENAIDY_RESPONSE and have it acted on.
+    // nested iframe this addon itself creates) could post AIDY_INIT /
+    // AIDY_THEME_CHANGED / AIDY_RESPONSE and have it acted on.
     if (event.source !== window.parent) return;
     const msg = event.data;
     if (!msg || typeof msg !== 'object') return;
 
-    if (msg.type === 'OPENAIDY_INIT') {
-      // The host sends OPENAIDY_INIT more than once by design (on iframe
+    if (msg.type === 'AIDY_INIT') {
+      // The host sends AIDY_INIT more than once by design (on iframe
       // load, then again on ADDON_READY) — apply the theme every time
       // rather than gating it on `_ready`, since a later INIT can carry a
       // newer palette than the first.
@@ -162,23 +162,23 @@
       _flushCspViolations();
       _readyCallbacks.forEach(function (cb) {
         try {
-          cb(global.OpenAidy);
+          cb(global.Aidy);
         } catch (e) {
-          console.error('[OpenAidy SDK] ready callback error', e);
+          console.error('[Aidy SDK] ready callback error', e);
         }
       });
       _readyCallbacks.length = 0;
       return;
     }
 
-    if (msg.type === 'OPENAIDY_THEME_CHANGED') {
+    if (msg.type === 'AIDY_THEME_CHANGED') {
       // Live update: fires whenever the user toggles the host's theme
       // while the addon is open, so it follows without a reload.
       _applyTheme(msg.theme);
       return;
     }
 
-    if (msg.type === 'OPENAIDY_RESPONSE') {
+    if (msg.type === 'AIDY_RESPONSE') {
       const pending = _pendingRequests.get(msg.requestId);
       if (!pending) return;
       _pendingRequests.delete(msg.requestId);
@@ -190,7 +190,7 @@
     }
   });
 
-  // Timing safety: the host also sends OPENAIDY_INIT on the iframe's `load`
+  // Timing safety: the host also sends AIDY_INIT on the iframe's `load`
   // event as a fallback, but that can race with slower-loading addon pages.
   // Signaling readiness explicitly once this script has registered its
   // listener guarantees a prompt (re-)INIT — receiving it twice is safe
@@ -220,16 +220,14 @@
     return new Promise(function (resolve, reject) {
       if (!_ready) {
         return reject(
-          new Error(
-            '[OpenAidy SDK] Not initialized yet. Use OpenAidy.ready().',
-          ),
+          new Error('[Aidy SDK] Not initialized yet. Use Aidy.ready().'),
         );
       }
       const requestId = Math.random().toString(36).slice(2);
       _pendingRequests.set(requestId, { resolve, reject });
       window.parent.postMessage(
         {
-          type: 'OPENAIDY_REQUEST',
+          type: 'AIDY_REQUEST',
           requestId,
           method,
           path,
@@ -241,7 +239,7 @@
       setTimeout(function () {
         if (_pendingRequests.has(requestId)) {
           _pendingRequests.delete(requestId);
-          reject(new Error('[OpenAidy SDK] Request timed out: ' + path));
+          reject(new Error('[Aidy SDK] Request timed out: ' + path));
         }
       }, timeoutMs || DEFAULT_REQUEST_TIMEOUT_MS);
     });
@@ -420,7 +418,7 @@
         try {
           cb(sdk);
         } catch (e) {
-          console.error('[OpenAidy SDK] ready callback error', e);
+          console.error('[Aidy SDK] ready callback error', e);
         }
       } else {
         _readyCallbacks.push(cb);
@@ -756,7 +754,7 @@
       stopRecording: function () {
         if (!_ready) return;
         window.parent.postMessage(
-          { type: 'OPENAIDY_MEDIA_STOP', nonce: _nonce },
+          { type: 'AIDY_MEDIA_STOP', nonce: _nonce },
           '*',
         );
       },
@@ -2045,5 +2043,5 @@
     },
   };
 
-  global.OpenAidy = sdk;
+  global.Aidy = sdk;
 })(typeof window !== 'undefined' ? window : globalThis);

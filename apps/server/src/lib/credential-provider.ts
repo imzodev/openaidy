@@ -31,7 +31,7 @@
 import {
   ProviderCredentialsRepository,
   type DatabaseClient,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import { getEncryptionService } from './encryption';
 import { createLogger } from './logger';
 import type {
@@ -39,7 +39,7 @@ import type {
   AuthMethodType,
   CredentialInvalidator,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const log = createLogger('credential-provider');
 

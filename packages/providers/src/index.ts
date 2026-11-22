@@ -1,5 +1,5 @@
 /**
- * @openaidy/providers
+ * @aidyagent/providers
  *
  * Public surface — re-export everything from sub-modules.
  */

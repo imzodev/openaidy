@@ -13,7 +13,7 @@ import type {
   SessionStreamEnd,
   SessionStreamError,
   SessionStreamActivity,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // Mock logger
 const mockLogger = {

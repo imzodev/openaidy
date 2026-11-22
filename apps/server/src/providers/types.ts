@@ -2,7 +2,7 @@ import type {
   ModelProvider,
   ProviderCapability,
   ProviderError,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 
 /**
  * Registration options for a provider

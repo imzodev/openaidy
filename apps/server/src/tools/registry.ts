@@ -1,4 +1,4 @@
-import type { BuiltinTool, ToolDefinition } from '@openaidy/runtime';
+import type { BuiltinTool, ToolDefinition } from '@aidyagent/runtime';
 
 /**
  * BuiltinToolRegistry

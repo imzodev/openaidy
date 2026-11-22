@@ -20,7 +20,7 @@ import {
   AttachmentError,
   type AttachmentService,
 } from '../attachments/service';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,7 +33,7 @@ function makeAddonService() {
     repository: null as never,
     validator: null as never,
     jwtSecret: JWT_SECRET,
-    openAidyVersion: '0.0.0',
+    aidyVersion: '0.0.0',
   });
 }
 

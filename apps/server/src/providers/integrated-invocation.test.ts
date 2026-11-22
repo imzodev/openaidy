@@ -10,12 +10,12 @@ import {
   createOpenAIConfig,
   createAnthropicConfig,
   createGeminiConfig,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import {
   IntegratedInvocationService,
   createIntegratedInvocation,
 } from './integrated-invocation';
-import { createFakeProvider } from '@openaidy/runtime/testing';
+import { createFakeProvider } from '@aidyagent/runtime/testing';
 
 /**
  * Helper to create a mock secret provider

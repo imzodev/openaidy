@@ -3,7 +3,7 @@ import {
   RecurringTasksService,
   type RecurringTasksServiceOptions,
 } from './service';
-import type { TaskSchedule } from '@openaidy/db';
+import type { TaskSchedule } from '@aidyagent/db';
 import type { TaskScheduleExecutor } from '../tasks/execution/task-schedule-executor';
 
 // ============================================================================

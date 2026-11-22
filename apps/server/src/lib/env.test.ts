@@ -23,67 +23,67 @@ describe('parseEnv', () => {
 
     expect(parsed.DB_KIND).toBe('sqlite');
     expect(parsed.SQLITE_PATH).toBe(
-      resolve(workspaceRoot, '.openaidy/data/openaidy.db'),
+      resolve(workspaceRoot, '.aidy/data/aidy.db'),
     );
-    expect(parsed.OPENAIDY_HOME).toBe(resolve(workspaceRoot, '.openaidy'));
+    expect(parsed.AIDY_HOME).toBe(resolve(workspaceRoot, '.aidy'));
     expect(parsed.APP_CONFIG_PATH).toBe(
-      resolve(workspaceRoot, '.openaidy/openaidy.json'),
+      resolve(workspaceRoot, '.aidy/aidy.json'),
     );
     expect(parsed.APP_CONFIG_TEMPLATE_PATH).toBe(
-      resolve(workspaceRoot, 'config/openaidy.template.json'),
+      resolve(workspaceRoot, 'config/aidy.template.json'),
     );
     expect(parsed.BUNDLED_SKILLS_DIR).toBe(
       resolve(workspaceRoot, 'config/skills'),
     );
     expect(parsed.WORKSPACE_BASE_DIR).toBe(
-      resolve(workspaceRoot, '.openaidy/workspaces'),
+      resolve(workspaceRoot, '.aidy/workspaces'),
     );
   });
 
   it('honors an explicit BUNDLED_SKILLS_DIR override (packaged CLI injects this)', () => {
-    const customSkills = resolve(tmpdir(), 'openaidy-packaged-skills');
+    const customSkills = resolve(tmpdir(), 'aidy-packaged-skills');
     const parsed = parseEnv({ BUNDLED_SKILLS_DIR: customSkills });
     expect(parsed.BUNDLED_SKILLS_DIR).toBe(customSkills);
   });
 
-  it('defaults OPENAIDY_PORT to DEFAULT_SERVER_PORT (3001) when unset', () => {
+  it('defaults AIDY_PORT to DEFAULT_SERVER_PORT (3001) when unset', () => {
     const parsed = parseEnv({});
-    expect(parsed.OPENAIDY_PORT).toBe(3001);
+    expect(parsed.AIDY_PORT).toBe(3001);
   });
 
-  it('honors an explicit OPENAIDY_PORT override', () => {
-    const parsed = parseEnv({ OPENAIDY_PORT: '8080' });
-    expect(parsed.OPENAIDY_PORT).toBe(8080);
+  it('honors an explicit AIDY_PORT override', () => {
+    const parsed = parseEnv({ AIDY_PORT: '8080' });
+    expect(parsed.AIDY_PORT).toBe(8080);
   });
 
-  it('defaults OPENAIDY_CORS_ORIGIN to the local Vite dev origin', () => {
+  it('defaults AIDY_CORS_ORIGIN to the local Vite dev origin', () => {
     const parsed = parseEnv({});
-    expect(parsed.OPENAIDY_CORS_ORIGIN).toBe('http://localhost:5173');
+    expect(parsed.AIDY_CORS_ORIGIN).toBe('http://localhost:5173');
   });
 
-  it('honors an explicit OPENAIDY_CORS_ORIGIN override', () => {
+  it('honors an explicit AIDY_CORS_ORIGIN override', () => {
     const parsed = parseEnv({
-      OPENAIDY_CORS_ORIGIN: 'https://openaidy.example.com',
+      AIDY_CORS_ORIGIN: 'https://aidy.example.com',
     });
-    expect(parsed.OPENAIDY_CORS_ORIGIN).toBe('https://openaidy.example.com');
+    expect(parsed.AIDY_CORS_ORIGIN).toBe('https://aidy.example.com');
   });
 
-  it('derives openaidy paths from OPENAIDY_HOME', () => {
-    const customHome = resolve(tmpdir(), 'custom-openaidy');
+  it('derives aidy paths from AIDY_HOME', () => {
+    const customHome = resolve(tmpdir(), 'custom-aidy');
     const parsed = parseEnv({
-      OPENAIDY_HOME: customHome,
+      AIDY_HOME: customHome,
     });
 
-    expect(parsed.OPENAIDY_HOME).toBe(customHome);
-    expect(parsed.APP_CONFIG_PATH).toBe(resolve(customHome, 'openaidy.json'));
+    expect(parsed.AIDY_HOME).toBe(customHome);
+    expect(parsed.APP_CONFIG_PATH).toBe(resolve(customHome, 'aidy.json'));
     expect(parsed.BOOTSTRAP_ADMIN_TOKEN_PATH).toBe(
       resolve(customHome, 'credentials/bootstrap-admin.json'),
     );
     expect(parsed.WORKSPACE_BASE_DIR).toBe(resolve(customHome, 'workspaces'));
   });
 
-  it('prefers explicit path overrides over OPENAIDY_HOME derived defaults', () => {
-    const customHome = resolve(tmpdir(), 'custom-openaidy');
+  it('prefers explicit path overrides over AIDY_HOME derived defaults', () => {
+    const customHome = resolve(tmpdir(), 'custom-aidy');
     const appConfigOverride = resolve(tmpdir(), 'other', 'config.json');
     const bootstrapOverride = resolve(
       tmpdir(),
@@ -92,7 +92,7 @@ describe('parseEnv', () => {
     );
     const workspaceOverride = resolve(tmpdir(), 'other', 'workspaces');
     const parsed = parseEnv({
-      OPENAIDY_HOME: customHome,
+      AIDY_HOME: customHome,
       APP_CONFIG_PATH: appConfigOverride,
       BOOTSTRAP_ADMIN_TOKEN_PATH: bootstrapOverride,
       WORKSPACE_BASE_DIR: workspaceOverride,
@@ -122,12 +122,12 @@ describe('parseEnv', () => {
   it('accepts postgres mode with a database url', () => {
     const parsed = parseEnv({
       DB_KIND: 'postgres',
-      DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/openaidy',
+      DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/aidy',
     });
 
     expect(parsed.DB_KIND).toBe('postgres');
     expect(parsed.DATABASE_URL).toBe(
-      'postgres://postgres:postgres@localhost:5432/openaidy',
+      'postgres://postgres:postgres@localhost:5432/aidy',
     );
   });
 
@@ -156,7 +156,7 @@ describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
   let home: string;
 
   beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), 'openaidy-env-'));
+    home = mkdtempSync(join(tmpdir(), 'aidy-env-'));
     mkdirSync(join(home, 'state'), { recursive: true });
   });
 
@@ -171,7 +171,7 @@ describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
       'utf-8',
     );
     const parsed = parseEnv({
-      OPENAIDY_HOME: home,
+      AIDY_HOME: home,
       WS_TOKEN_SECRET: 'env-secret',
     });
     expect(parsed.WS_TOKEN_SECRET).toBe('env-secret');
@@ -183,7 +183,7 @@ describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
       JSON.stringify({ wsTokenSecret: 'manifest-secret' }),
       'utf-8',
     );
-    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    const parsed = parseEnv({ AIDY_HOME: home });
     expect(parsed.WS_TOKEN_SECRET).toBe('manifest-secret');
   });
 
@@ -194,19 +194,19 @@ describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
       'utf-8',
     );
     const parsed = parseEnv({
-      OPENAIDY_HOME: home,
+      AIDY_HOME: home,
       WS_TOKEN_SECRET: '',
     });
     expect(parsed.WS_TOKEN_SECRET).toBe('manifest-secret');
   });
 
   it('uses the unsafe default sentinel when neither env nor manifest has a real secret', () => {
-    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    const parsed = parseEnv({ AIDY_HOME: home });
     expect(parsed.WS_TOKEN_SECRET).toBe('change-me-in-production');
   });
 
   it('does not regenerate the JWT when the manifest secret matches the existing token (regression test for restart bug)', () => {
-    // Reproduces the user-reported bug: on `openaidy stop && openaidy start`
+    // Reproduces the user-reported bug: on `aidy stop && aidy start`
     // without WS_TOKEN_SECRET in the env, the server previously fell back to
     // the unsafe default and BootstrapAdminManager.ensureToken() would
     // silently regenerate the admin JWT, logging the user out.
@@ -216,7 +216,7 @@ describe('parseEnv - WS_TOKEN_SECRET resolution', () => {
       'utf-8',
     );
     // No WS_TOKEN_SECRET in the env — exactly the manual restart case.
-    const parsed = parseEnv({ OPENAIDY_HOME: home });
+    const parsed = parseEnv({ AIDY_HOME: home });
     expect(parsed.WS_TOKEN_SECRET).toBe('install-secret-persisted');
     expect(parsed.WS_TOKEN_SECRET).not.toBe('change-me-in-production');
     // Sanity: install.json is preserved across the read.

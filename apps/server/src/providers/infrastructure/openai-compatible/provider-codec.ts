@@ -16,7 +16,7 @@
  * from this file so the public API stays flat.
  */
 
-import type { ToolDefinition } from '@openaidy/runtime';
+import type { ToolDefinition } from '@aidyagent/runtime';
 
 /**
  * Per-call mutable state produced by `prepareRequest` and

@@ -1,7 +1,7 @@
 /**
- * openaidy init - tests
+ * aidy init - tests
  *
- * Verifies the contract for `openaidy init` per PR1 spec R-1..R-3, R-6:
+ * Verifies the contract for `aidy init` per PR1 spec R-1..R-3, R-6:
  *  - First-run generates and persists a token file at tokenPath
  *  - Valid existing token is reused (mtime unchanged)
  *  - Expired, corrupt, or missing-field records force regeneration
@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 /**
  * Helper: capture stdout writes during the handler invocation.
@@ -52,12 +52,12 @@ function captureStdout<T>(
   });
 }
 
-describe('openaidy init', () => {
+describe('aidy init', () => {
   let tempHome: string;
   let tokenPath: string;
 
   beforeEach(async () => {
-    tempHome = join(tmpdir(), `openaidy-init-${Date.now()}-${Math.random()}`);
+    tempHome = join(tmpdir(), `aidy-init-${Date.now()}-${Math.random()}`);
     await mkdir(tempHome, { recursive: true });
     tokenPath = join(tempHome, 'credentials', 'bootstrap-admin.json');
   });
@@ -71,7 +71,7 @@ describe('openaidy init', () => {
     const { initHandler } = await import('./init.js');
 
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -101,7 +101,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     await initHandler([], {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv);
@@ -114,7 +114,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -141,7 +141,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -172,7 +172,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -192,7 +192,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -214,7 +214,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       // No WS_TOKEN_SECRET — config resolves to default
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -233,7 +233,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
       BOOTSTRAP_ADMIN_ENABLED: 'false',
     } as NodeJS.ProcessEnv;
@@ -251,7 +251,7 @@ describe('openaidy init', () => {
     vi.resetModules();
     const { initHandler } = await import('./init.js');
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'unit-test-jwt-secret-not-the-default',
     } as NodeJS.ProcessEnv;
 
@@ -260,16 +260,16 @@ describe('openaidy init', () => {
     );
     expect(result.exitCode).toBe(0);
     expect(stdout).toContain('Usage:');
-    expect(stdout).toContain('openaidy init');
+    expect(stdout).toContain('aidy init');
   });
 
   // -------------------------------------------------------------------------
   // Manifest-fallback regression tests (the user-reported reinstall bug):
-  // `openaidy stop && curl install.sh | bash` previously caused the server
+  // `aidy stop && curl install.sh | bash` previously caused the server
   // to silently regenerate the bootstrap admin JWT, logging the user out.
   // The CLI's `init` command (used by the install script) must now agree
   // with the server on the same JWT secret precedence: explicit env > the
-  // persisted manifest at $OPENAIDY_HOME/state/install.json > refusal.
+  // persisted manifest at $AIDY_HOME/state/install.json > refusal.
   // -------------------------------------------------------------------------
 
   it('uses the manifest secret when WS_TOKEN_SECRET is unset (regression: reinstall bug)', async () => {
@@ -289,7 +289,7 @@ describe('openaidy init', () => {
     );
 
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       BOOTSTRAP_ADMIN_ENABLED: 'true',
       // No WS_TOKEN_SECRET — exactly the manual-init scenario.
     } as NodeJS.ProcessEnv;
@@ -320,7 +320,7 @@ describe('openaidy init', () => {
     );
 
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       WS_TOKEN_SECRET: 'caller-override-secret',
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
@@ -336,7 +336,7 @@ describe('openaidy init', () => {
     const { initHandler } = await import('./init.js');
 
     const env = {
-      OPENAIDY_HOME: tempHome,
+      AIDY_HOME: tempHome,
       BOOTSTRAP_ADMIN_ENABLED: 'true',
     } as NodeJS.ProcessEnv;
 

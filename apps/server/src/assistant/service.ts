@@ -2,9 +2,9 @@ import type {
   JobsStore,
   ScheduledJob,
   SessionChannelsStore,
-} from '@openaidy/db';
-import type { OwnerConfig } from '@openaidy/config';
-import type { PulseDelivery } from '@openaidy/shared-types';
+} from '@aidyagent/db';
+import type { OwnerConfig } from '@aidyagent/config';
+import type { PulseDelivery } from '@aidyagent/shared-types';
 import type { createLogger } from '../lib/logger';
 import { stripThinking } from '../lib/message';
 import type { PromptContext } from '../prompts/build-system-prompt';
@@ -35,7 +35,7 @@ export type AssistantServiceDeps = {
     text: string,
   ) => Promise<boolean>;
   /**
-   * OpenAidy's own state for the briefing (approvals waiting, failed
+   * Aidy's own state for the briefing (approvals waiting, failed
    * runs…), as plain text lines.
    */
   getBriefingFacts?: () => Promise<string[]>;
@@ -103,7 +103,7 @@ export class AssistantService {
 
   // ── Owner ──────────────────────────────────────────────────────────────────
 
-  /** Whether OpenAidy knows where to reach the owner. */
+  /** Whether Aidy knows where to reach the owner. */
   ownerReachable(): boolean {
     const owner = this.deps.getOwner();
     return Boolean(owner?.channelId && owner.contact?.trim());
@@ -208,7 +208,7 @@ export class AssistantService {
     }
     let text: string | null = null;
     if (event.type === 'approval.waiting') {
-      text = `⏳ "${workflowTitle}" needs your approval: ${event.subtask.title}. Open it in OpenAidy to approve or reject.`;
+      text = `⏳ "${workflowTitle}" needs your approval: ${event.subtask.title}. Open it in Aidy to approve or reject.`;
     } else if (event.run.status === 'failed') {
       text = `⚠️ "${workflowTitle}" failed: ${event.run.error ?? 'a step failed'}`;
     }
@@ -278,8 +278,8 @@ export class AssistantService {
       if (base.trim()) parts.push(`What the owner wants covered:\n${base}`);
       parts.push(
         facts.length
-          ? `From OpenAidy itself:\n${facts.map((f) => `- ${f}`).join('\n')}`
-          : 'From OpenAidy itself: nothing is waiting for their approval, no workflow failed in the last 24 hours, and no reminders are due today. No need to look these up.',
+          ? `From Aidy itself:\n${facts.map((f) => `- ${f}`).join('\n')}`
+          : 'From Aidy itself: nothing is waiting for their approval, no workflow failed in the last 24 hours, and no reminders are due today. No need to look these up.',
       );
     } else {
       parts.push(base);

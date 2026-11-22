@@ -19,7 +19,7 @@ import {
 } from 'lucide-solid';
 import { Layout } from './Layout';
 import { queryLogs, getLogStats, clearLogs } from '../../lib/api';
-import type { LogEntry, LogLevel, LogStats } from '@openaidy/shared-types';
+import type { LogEntry, LogLevel, LogStats } from '@aidyagent/shared-types';
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   debug: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',

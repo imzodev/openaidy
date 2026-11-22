@@ -1,7 +1,7 @@
 /**
  * Sessions Runs Command Handler
  *
- * Implements `openaidy sessions runs <sessionId>` command.
+ * Implements `aidy sessions runs <sessionId>` command.
  * Calls GET /sessions/:sessionId/runs via the HTTP REST API.
  */
 
@@ -16,12 +16,12 @@ export async function sessionsRunsHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy sessions runs <sessionId>
+      `Usage: aidy sessions runs <sessionId>
 
 List all runs for a session.
 
 Examples:
-  pnpm openaidy sessions runs sess_abc123
+  pnpm aidy sessions runs sess_abc123
 
 Exit Codes:
   0  Success
@@ -34,7 +34,7 @@ Exit Codes:
   const sessionId = args[0];
   if (!sessionId) {
     p.log.error(
-      'Session ID is required.\n\nUsage: openaidy sessions runs <sessionId>',
+      'Session ID is required.\n\nUsage: aidy sessions runs <sessionId>',
     );
     return { exitCode: 2, error: 'Missing session ID' };
   }

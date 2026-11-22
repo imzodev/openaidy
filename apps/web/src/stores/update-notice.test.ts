@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { UpdateCheckResult } from '@openaidy/shared-types';
+import type { UpdateCheckResult } from '@aidyagent/shared-types';
 import {
   initUpdateNotice,
   recordUpdateCheck,
@@ -11,7 +11,7 @@ import {
   resetUpdateNotice,
 } from './update-notice';
 
-const STORAGE_KEY = 'openaidy_update_dismissed';
+const STORAGE_KEY = 'aidy_update_dismissed';
 
 const store = new Map<string, string>();
 const localStorageMock = {

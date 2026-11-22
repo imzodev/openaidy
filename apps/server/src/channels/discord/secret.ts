@@ -1,4 +1,4 @@
-import type { McpSecretValue } from '@openaidy/config';
+import type { McpSecretValue } from '@aidyagent/config';
 import { decryptSecret, isEncryptedSecret } from '../../mcp/secret-crypto.js';
 
 /**

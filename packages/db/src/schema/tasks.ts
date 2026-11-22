@@ -524,7 +524,7 @@ export const workflowRuns = pgTable(
 /**
  * Workflow triggers table
  *
- * Something outside OpenAidy that starts a workflow run: an HTTP request
+ * Something outside Aidy that starts a workflow run: an HTTP request
  * to the trigger's webhook URL, or a matching message on a channel
  * (WhatsApp, Discord). `config` holds the kind-specific settings as JSON
  * (see WorkflowTriggerConfig in shared-types); webhooks keep only a

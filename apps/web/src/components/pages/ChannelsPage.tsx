@@ -25,7 +25,7 @@ import { Layout } from './Layout';
 import type {
   ChannelStatusResponse,
   ChannelStatusEvent,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import {
   listChannels,
   connectChannel,

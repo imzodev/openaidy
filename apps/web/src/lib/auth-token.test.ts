@@ -28,7 +28,7 @@ import {
   resolveToken,
 } from './auth-token';
 
-const STORAGE_KEY = 'openaidy_auth_token';
+const STORAGE_KEY = 'aidy_auth_token';
 
 describe('auth-token', () => {
   beforeEach(() => {
@@ -85,7 +85,7 @@ describe('auth-token', () => {
         },
         history: { replaceState },
       });
-      vi.stubGlobal('document', { title: 'OpenAidy' });
+      vi.stubGlobal('document', { title: 'Aidy' });
 
       expect(consumeTokenFromUrl()).toBe('abc123');
       expect(replaceState).toHaveBeenCalledTimes(1);
@@ -103,7 +103,7 @@ describe('auth-token', () => {
         },
         history: { replaceState },
       });
-      vi.stubGlobal('document', { title: 'OpenAidy' });
+      vi.stubGlobal('document', { title: 'Aidy' });
 
       expect(consumeTokenFromUrl()).toBeUndefined();
       expect(replaceState).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('auth-token', () => {
         },
         history: { replaceState },
       });
-      vi.stubGlobal('document', { title: 'OpenAidy' });
+      vi.stubGlobal('document', { title: 'Aidy' });
 
       expect(consumeTokenFromUrl()).toBe('abc123');
       const args = replaceState.mock.calls[0] as [unknown, string, string];

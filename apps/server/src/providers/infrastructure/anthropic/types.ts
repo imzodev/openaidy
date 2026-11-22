@@ -7,7 +7,7 @@
 import type {
   AuthMethodProvider,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // =====================
 // Anthropic API Types

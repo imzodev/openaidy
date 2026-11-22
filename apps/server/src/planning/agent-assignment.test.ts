@@ -8,7 +8,7 @@ import type {
   TasksRepository,
   SubtasksRepository,
   TaskAgentsRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { ProviderServices } from '../providers';
 
 // Mock types

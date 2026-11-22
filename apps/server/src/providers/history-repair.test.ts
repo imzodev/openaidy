@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Message } from '@openaidy/runtime';
+import type { Message } from '@aidyagent/runtime';
 import { repairProviderHistory } from './history-repair';
 
 const user = (content: string): Message => ({ role: 'user', content });

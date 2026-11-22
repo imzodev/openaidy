@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { describeProviderAdapterContract } from '@openaidy/runtime/adapter-contract';
+import { describeProviderAdapterContract } from '@aidyagent/runtime/adapter-contract';
 import { createOpenAICompatibleProvider } from './adapter';
 
 // Mock the OpenAI SDK - the factory function is hoisted, so everything must be self-contained

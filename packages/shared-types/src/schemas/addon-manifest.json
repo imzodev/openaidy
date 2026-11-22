@@ -1,16 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://openaidy.dev/schemas/addon-v1.json",
-  "title": "OpenAidy Addon Manifest",
-  "description": "JSON Schema for validating OpenAidy addon manifests",
+  "$id": "https://aidyagent.app/schemas/addon-v1.json",
+  "title": "Aidy Addon Manifest",
+  "description": "JSON Schema for validating Aidy addon manifests",
   "type": "object",
-  "required": ["id", "name", "version", "openaidy", "entry"],
+  "required": ["id", "name", "version", "aidy", "entry"],
   "properties": {
     "$schema": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https://openaidy\\.dev/schemas/",
-      "default": "https://openaidy.dev/schemas/addon-v1.json"
+      "pattern": "^https://aidy\\.dev/schemas/",
+      "default": "https://aidyagent.app/schemas/addon-v1.json"
     },
     "id": {
       "type": "string",
@@ -69,19 +69,19 @@
       "maxLength": 100,
       "default": "MIT"
     },
-    "openaidy": {
+    "aidy": {
       "type": "object",
       "required": ["minVersion"],
       "properties": {
         "minVersion": {
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+$",
-          "description": "Minimum OpenAidy version required"
+          "description": "Minimum Aidy version required"
         },
         "maxVersion": {
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+$",
-          "description": "Maximum OpenAidy version supported"
+          "description": "Maximum Aidy version supported"
         }
       }
     },

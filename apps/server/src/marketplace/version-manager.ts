@@ -21,8 +21,8 @@ export interface VersionInfo {
   semantic: SemanticVersion;
   changelog: string;
   releaseDate: Date;
-  minOpenaidyVersion: string;
-  maxOpenaidyVersion: string;
+  minAidyVersion: string;
+  maxAidyVersion: string;
   breaking: boolean;
   dependencies: DependencyRequirement[];
 }
@@ -164,12 +164,12 @@ export function satisfiesVersion(version: string, range: string): boolean {
 }
 
 /**
- * Check compatibility with OpenAidy version
+ * Check compatibility with Aidy version
  */
-export function checkOpenaidyCompatibility(
+export function checkAidyCompatibility(
   addonMinVersion: string,
   addonMaxVersion: string,
-  openAidyVersion: string,
+  aidyVersion: string,
 ): CompatibilityResult {
   const result: CompatibilityResult = {
     compatible: true,
@@ -181,41 +181,41 @@ export function checkOpenaidyCompatibility(
   // Parse versions
   const addonMin = parseVersion(addonMinVersion);
   const addonMax = parseVersion(addonMaxVersion);
-  const openAidy = parseVersion(openAidyVersion);
+  const aidy = parseVersion(aidyVersion);
 
-  if (!addonMin || !addonMax || !openAidy) {
+  if (!addonMin || !addonMax || !aidy) {
     result.errors.push('Invalid version format');
     result.compatible = false;
     return result;
   }
 
   // Check minimum version
-  if (compareVersions(openAidyVersion, addonMinVersion) < 0) {
+  if (compareVersions(aidyVersion, addonMinVersion) < 0) {
     result.compatible = false;
     result.errors.push(
-      `OpenAidy ${openAidyVersion} is below minimum required version ${addonMinVersion}`,
+      `Aidy ${aidyVersion} is below minimum required version ${addonMinVersion}`,
     );
     result.suggestions.push(
-      `Please update OpenAidy to version ${addonMinVersion} or higher`,
+      `Please update Aidy to version ${addonMinVersion} or higher`,
     );
   }
 
   // Check maximum version
-  if (compareVersions(openAidyVersion, addonMaxVersion) > 0) {
+  if (compareVersions(aidyVersion, addonMaxVersion) > 0) {
     result.compatible = false;
     result.errors.push(
-      `OpenAidy ${openAidyVersion} exceeds maximum supported version ${addonMaxVersion}`,
+      `Aidy ${aidyVersion} exceeds maximum supported version ${addonMaxVersion}`,
     );
     result.suggestions.push(
-      `This addon may not be compatible with newer OpenAidy versions`,
+      `This addon may not be compatible with newer Aidy versions`,
     );
   }
 
   // Warnings for close to boundaries
-  const minorDiff = addonMax.major - openAidy.major;
-  if (minorDiff === 0 && addonMax.minor - openAidy.minor <= 1) {
+  const minorDiff = addonMax.major - aidy.major;
+  if (minorDiff === 0 && addonMax.minor - aidy.minor <= 1) {
     result.warnings.push(
-      `Addon is close to reaching maximum OpenAidy version support`,
+      `Addon is close to reaching maximum Aidy version support`,
     );
   }
 

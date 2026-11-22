@@ -2,7 +2,7 @@
  * Workflow Template Gallery
  *
  * Lets the user pick a ready-made workflow (from
- * `@openaidy/workflow-templates`'s static registry), grouped by what it's
+ * `@aidyagent/workflow-templates`'s static registry), grouped by what it's
  * for. A selected template shows its form (text, choices, agent and
  * channel pickers), how it starts, and — advisory, not blocking — which
  * integrations or tools no agent has yet.
@@ -11,13 +11,13 @@
 import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { createQuery } from '@tanstack/solid-query';
 import { AlertTriangle, CheckCircle2, LayoutTemplate, Zap } from 'lucide-solid';
-import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
+import { WORKFLOW_TEMPLATES } from '@aidyagent/workflow-templates';
 import type {
   TemplateCategory,
   TemplateInput,
   TemplateRequirement,
   WorkflowTemplate,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { listAgents, listChannels, type Agent } from '../../lib/api';
 import { describeStart, templateStart } from '../../lib/workflow-start';
 

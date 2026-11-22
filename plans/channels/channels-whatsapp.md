@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Channels feature allows openaidy agents to receive and respond to messages from external
+The Channels feature allows aidy agents to receive and respond to messages from external
 messaging platforms. The first supported channel is **WhatsApp**, using the
 [Baileys](https://github.com/WhiskeySockets/Baileys) library which connects to WhatsApp Web
 via WebSocket and authenticates via a QR code scan — no Meta Business account required.
@@ -17,7 +17,7 @@ or UI scaffolding.
 ## Architecture
 
 ```
-openaidy.json                        ← channel config (type, agentId, allowlist, enabled)
+aidy.json                        ← channel config (type, agentId, allowlist, enabled)
         │
 apps/server/src/channels/
     interface.ts                     ← IChannel contract (connect/disconnect/status/qr)
@@ -125,7 +125,7 @@ export * from './channels.js';
 ### `apps/server/src/channels/interface.ts` _(new)_
 
 ```ts
-import type { ChannelStatus } from '@openaidy/shared-types';
+import type { ChannelStatus } from '@aidyagent/shared-types';
 
 export interface IChannel {
   readonly id: string;
@@ -187,7 +187,7 @@ Internal types scoped to the WhatsApp module only:
 ```ts
 import type { FastifyBaseLogger } from 'fastify';
 import type { SessionMessageService } from '../../sessions/service';
-import type { WhatsAppChannelConfig } from '@openaidy/config';
+import type { WhatsAppChannelConfig } from '@aidyagent/config';
 
 export type WhatsAppChannelDeps = {
   sessionService: SessionMessageService;
@@ -206,7 +206,7 @@ export type WhatsAppChannelOptions = {
 Wraps Baileys `useMultiFileAuthState()`. Stores credentials under:
 
 ```
-~/.openaidy/channels/whatsapp-{channelId}/
+~/.aidy/channels/whatsapp-{channelId}/
 ```
 
 ```ts
@@ -281,7 +281,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { EventEmitter } from 'node:events';
 import type { IChannel } from '../interface';
-import type { ChannelStatus } from '@openaidy/shared-types';
+import type { ChannelStatus } from '@aidyagent/shared-types';
 
 export class WhatsAppChannel extends EventEmitter implements IChannel {
   readonly id: string;
@@ -452,7 +452,7 @@ const channelRegistry = createChannelRegistry(
   configService.getConfig().channels,
   {
     sessionService,
-    authBaseDir: path.join(env.OPENAIDY_HOME, 'channels'),
+    authBaseDir: path.join(env.AIDY_HOME, 'channels'),
     logger: app.log,
   },
 );
@@ -490,7 +490,7 @@ await app.register(channelRoutes, {
 
 ### `apps/web/src/lib/api.ts`
 
-Add channel API functions (no new types defined here — import from `@openaidy/shared-types`):
+Add channel API functions (no new types defined here — import from `@aidyagent/shared-types`):
 
 ```ts
 export async function listChannels(): Promise<ChannelStatusResponse[]>;
@@ -511,11 +511,11 @@ Replace the current stub. UI sections:
 3. **Connect / Disconnect button** — calls respective endpoint; disables during pending state
 4. **QR panel** — shown when status is `qr`; opens SSE stream via `EventSource`; renders `<img src="data:image/png;base64,{qr}" />` with "Scan this with your phone's WhatsApp → Linked Devices" instruction; auto-hides when `status: connected` event arrives
 5. **Agent badge** — shows which agent ID handles messages for the channel
-6. **No channels configured** — empty state with instructions pointing to `openaidy.json`
+6. **No channels configured** — empty state with instructions pointing to `aidy.json`
 
 ---
 
-## `openaidy.json` Example
+## `aidy.json` Example
 
 ```json
 {
@@ -542,27 +542,27 @@ Replace the current stub. UI sections:
 Added to `apps/server/package.json`. It requires `node >= 22` (already satisfied).
 
 ```bash
-pnpm --filter @openaidy/server add @whiskeysockets/baileys
+pnpm --filter @aidyagent/server add @whiskeysockets/baileys
 ```
 
 The `qrcode` package is already a dependency in the openclaw reference; we add it here too:
 
 ```bash
-pnpm --filter @openaidy/server add qrcode
-pnpm --filter @openaidy/server add --save-dev @types/qrcode
+pnpm --filter @aidyagent/server add qrcode
+pnpm --filter @aidyagent/server add --save-dev @types/qrcode
 ```
 
 ---
 
 ## Access Control — Two Separate Concerns
 
-The openaidy auth system (JWT bearer tokens) and channel access control are **completely
+The aidy auth system (JWT bearer tokens) and channel access control are **completely
 separate** and must not be confused.
 
 ### Management plane — JWT auth
 
 Routes like `POST /channels/:id/connect`, `GET /channels/:id/status`, and the QR SSE stream
-are protected by `requireAuth()` middleware (same as all other openaidy API routes). These are
+are protected by `requireAuth()` middleware (same as all other aidy API routes). These are
 called by **you** from the web UI to manage the channel. A valid JWT is required.
 
 ### Channel user plane — allowlist
@@ -590,7 +590,7 @@ WA contact sends message
 ### Identity model for channel contacts
 
 Channel contacts are identified solely by their WhatsApp phone number (`waId`). There is no
-openaidy user account associated with them. Each contact gets their own persistent session
+aidy user account associated with them. Each contact gets their own persistent session
 (keyed on `whatsapp:{channelId}:{waId}`) which maintains their full conversation history with
 the agent.
 
@@ -598,7 +598,7 @@ the agent.
 
 ## Session Keying Strategy
 
-Each external contact maps to a persistent openaidy session. The key is:
+Each external contact maps to a persistent aidy session. The key is:
 
 ```
 whatsapp:{channelId}:{waId}
@@ -611,7 +611,7 @@ with this title. On subsequent messages, the existing session is reused — main
 conversation history with the agent.
 
 **Implementation note:** If the DB session store does not support `findByTitle`, a sidecar JSON
-file (`~/.openaidy/channels/whatsapp-{channelId}/session-map.json`) maps `waId → sessionId`.
+file (`~/.aidy/channels/whatsapp-{channelId}/session-map.json`) maps `waId → sessionId`.
 This file is loaded into memory on startup and updated on each new contact.
 
 ---

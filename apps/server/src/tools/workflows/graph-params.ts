@@ -1,4 +1,4 @@
-import type { WorkflowGraphIssue } from '@openaidy/workflow-templates';
+import type { WorkflowGraphIssue } from '@aidyagent/workflow-templates';
 import type { SetGraphResult } from '../../tasks/operations/workflow-graph-operations';
 
 /**

@@ -6,7 +6,7 @@
  *
  * Usage:
  * ```typescript
- * import { describeProviderAdapterContract } from '@openaidy/runtime/adapter-contract';
+ * import { describeProviderAdapterContract } from '@aidyagent/runtime/adapter-contract';
  * import { createMyProvider } from './my-provider';
  *
  * describeProviderAdapterContract('MyProvider', {

@@ -26,10 +26,10 @@ import {
 } from 'lucide-solid';
 import { draftWorkflow, type CreateTaskInput } from '../../lib/api-tasks';
 import type { ScheduleInput, WorkflowDraftDto } from '../../lib/types';
-import type { CreateWorkflowSubmitInput as CreateWorkflowSubmitInputOf } from '@openaidy/shared-types';
+import type { CreateWorkflowSubmitInput as CreateWorkflowSubmitInputOf } from '@aidyagent/shared-types';
 import { ScheduleEditor } from '../common/ScheduleEditor';
 import { WorkflowTemplateGallery } from './WorkflowTemplateGallery';
-import { WORKFLOW_TEMPLATES } from '@openaidy/workflow-templates';
+import { WORKFLOW_TEMPLATES } from '@aidyagent/workflow-templates';
 import { useEscapeKey } from '../settings/hooks';
 import { describeStart } from '../../lib/workflow-start';
 

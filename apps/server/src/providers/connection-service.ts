@@ -1,4 +1,4 @@
-import type { DatabaseClient } from '@openaidy/db';
+import type { DatabaseClient } from '@aidyagent/db';
 import type {
   ProviderInfo,
   ConnectedProvider,
@@ -9,9 +9,9 @@ import type {
   AuthMethod,
   ProviderConnectionStatus,
   CredentialInvalidator,
-} from '@openaidy/shared-types';
-import { registry as providerRegistry } from '@openaidy/providers';
-import { ProviderCredentialsRepository } from '@openaidy/db';
+} from '@aidyagent/shared-types';
+import { registry as providerRegistry } from '@aidyagent/providers';
+import { ProviderCredentialsRepository } from '@aidyagent/db';
 import { getEncryptionService } from '../lib/encryption.js';
 
 /**

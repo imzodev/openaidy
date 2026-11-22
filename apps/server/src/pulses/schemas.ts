@@ -66,7 +66,7 @@ export const listRunsSchema = z.object({
 
 export function toScheduleInput(
   schedule: z.infer<typeof pulseScheduleSchema>,
-): import('@openaidy/shared-types').ScheduleInput {
+): import('@aidyagent/shared-types').ScheduleInput {
   if ('every' in schedule) {
     return { every: schedule.every };
   }
@@ -74,7 +74,7 @@ export function toScheduleInput(
     return { daily: schedule.daily };
   }
   if ('cron' in schedule) {
-    const result: import('@openaidy/shared-types').ScheduleInput = {
+    const result: import('@aidyagent/shared-types').ScheduleInput = {
       cron: schedule.cron.expression,
     };
     if (schedule.cron.tz !== undefined) {

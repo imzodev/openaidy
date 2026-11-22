@@ -1,5 +1,5 @@
 /**
- * CLI Types for OpenAidy Addon Development
+ * CLI Types for Aidy Addon Development
  */
 
 export interface AddonProject {
@@ -16,9 +16,9 @@ export interface CLIConfig {
 }
 
 export const defaultCLIConfig: CLIConfig = {
-  name: 'openaidy',
+  name: 'aidy',
   version: '1.0.0',
-  description: 'OpenAidy Addon Development CLI',
+  description: 'Aidy Addon Development CLI',
 };
 
 export enum ExitCodes {

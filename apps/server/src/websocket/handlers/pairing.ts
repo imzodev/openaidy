@@ -18,7 +18,7 @@ import {
   WS_ERROR_CODES,
   WS_CAPABILITIES,
   createWSMessage,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // ============================================================================
 // Server-Internal Request/Response Types

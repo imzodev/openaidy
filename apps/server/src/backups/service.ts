@@ -1,9 +1,9 @@
 /**
- * Backup service — builds and applies OpenAidy data backups.
+ * Backup service — builds and applies Aidy data backups.
  *
  * A backup is a `.zip` with a `manifest.json` plus one subdirectory per
  * section (db, config, workspaces, skills, addons). Paths are injected so the
- * service is testable against a temp OPENAIDY_HOME. See issue #451.
+ * service is testable against a temp AIDY_HOME. See issue #451.
  *
  * Everything here streams through files on disk — never whole archives or
  * whole entries in memory — so a multi-GB backup works on a 1 GB droplet:
@@ -32,16 +32,16 @@ import {
   type BackupSectionSummary,
   type BackupServiceOptions,
   type ImportedSection,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { measureDir, walkFiles } from './walk';
 
 export type { BackupServiceOptions };
 
 /** Resolved filesystem locations for each backup section. */
 export type BackupPaths = {
-  /** SQLite DB file (e.g. $OPENAIDY_HOME/data/openaidy.db). */
+  /** SQLite DB file (e.g. $AIDY_HOME/data/aidy.db). */
   dbPath: string;
-  /** App config file (e.g. $OPENAIDY_HOME/openaidy.json). */
+  /** App config file (e.g. $AIDY_HOME/aidy.json). */
   configPath: string;
   /** Workspaces root dir. */
   workspacesDir: string;
@@ -251,7 +251,7 @@ async function hasSqliteHeader(file: string): Promise<boolean> {
 export class BackupService {
   constructor(
     private readonly paths: BackupPaths,
-    private readonly openaidyVersion: string,
+    private readonly aidyVersion: string,
     private readonly options: BackupServiceOptions = {},
   ) {}
 
@@ -295,7 +295,7 @@ export class BackupService {
     };
   }
 
-  /** Build a manifest from the live OPENAIDY_HOME. */
+  /** Build a manifest from the live AIDY_HOME. */
   async buildManifest(): Promise<BackupManifest> {
     const sections = emptySectionRecord<BackupSectionSummary>({
       itemCount: 0,
@@ -308,7 +308,7 @@ export class BackupService {
       version: BACKUP_FORMAT_VERSION,
       kind: BACKUP_KIND,
       createdAt: new Date().toISOString(),
-      openaidyVersion: this.openaidyVersion,
+      aidyVersion: this.aidyVersion,
       sections,
     };
   }
@@ -389,7 +389,7 @@ export class BackupService {
         version: BACKUP_FORMAT_VERSION,
         kind: BACKUP_KIND,
         createdAt: new Date().toISOString(),
-        openaidyVersion: this.openaidyVersion,
+        aidyVersion: this.aidyVersion,
         sections: summaries,
         includesHeavyFolders: includeHeavy,
       };
@@ -517,7 +517,7 @@ export class BackupService {
   /**
    * Validate a backup zip on disk and read its manifest plus per-section
    * sizes, without extracting anything. Throws on anything that isn't a
-   * well-formed OpenAidy backup.
+   * well-formed Aidy backup.
    */
   async inspectArchive(zipPath: string): Promise<ArchiveInfo> {
     const zip = await openZip(zipPath);
@@ -545,7 +545,7 @@ export class BackupService {
         throw new Error('manifest.json is not valid JSON');
       }
       if (!isBackupManifest(parsed)) {
-        throw new Error('manifest.json is not an OpenAidy backup manifest');
+        throw new Error('manifest.json is not an Aidy backup manifest');
       }
       return { manifest: parsed, sectionBytes };
     } finally {
@@ -756,8 +756,8 @@ export class BackupService {
 
 export function createBackupService(
   paths: BackupPaths,
-  openaidyVersion: string,
+  aidyVersion: string,
   options?: BackupServiceOptions,
 ): BackupService {
-  return new BackupService(paths, openaidyVersion, options);
+  return new BackupService(paths, aidyVersion, options);
 }

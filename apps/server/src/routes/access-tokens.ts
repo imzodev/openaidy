@@ -6,7 +6,7 @@ import type {
   CreateAccessTokenRequest,
   CreateAccessTokenResponse,
   AccessTokenRecord,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 const ADMIN_SCOPE = '*';
 

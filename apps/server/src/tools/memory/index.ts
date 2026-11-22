@@ -1,6 +1,6 @@
-import type { BuiltinTool } from '@openaidy/runtime';
-import type { MemoriesRepository } from '@openaidy/db';
-import type { SessionsStore } from '@openaidy/db';
+import type { BuiltinTool } from '@aidyagent/runtime';
+import type { MemoriesRepository } from '@aidyagent/db';
+import type { SessionsStore } from '@aidyagent/db';
 import { createLogger } from '../../lib/logger';
 import { createMemorySaveTool } from './save.js';
 import { createMemorySearchTool } from './search.js';

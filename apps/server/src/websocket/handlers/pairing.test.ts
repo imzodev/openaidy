@@ -10,7 +10,7 @@ import { NodeRegistry, type NodeType } from '../node-registry';
 import { type HandlerContext } from '../message-router';
 import { ConnectionManager } from '../connection-manager';
 import { AuthMiddleware } from '../middleware/auth';
-import { createWSMessage, WS_ERROR_CODES } from '@openaidy/shared-types';
+import { createWSMessage, WS_ERROR_CODES } from '@aidyagent/shared-types';
 import type { WebSocketConfig } from '../types';
 
 // ============================================================================

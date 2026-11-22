@@ -8,7 +8,7 @@ import type {
   SubtaskStatus,
   SubtaskSummary,
   SubtaskWithDetails,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * Map subtask status to a readable label

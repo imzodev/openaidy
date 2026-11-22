@@ -69,7 +69,7 @@ export const usageRoutes: FastifyPluginAsync<UsageRoutesOptions> = async (
     const rows = await sessionService.getUsageBySession(sessionIds);
     const usageBySession: Record<
       string,
-      import('@openaidy/db').SessionUsageTotals
+      import('@aidyagent/db').SessionUsageTotals
     > = {};
     for (const { sessionId, ...usage } of rows) {
       usageBySession[sessionId] = usage;

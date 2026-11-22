@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { aggregateUsage, dayOf } from './aggregate';
-import type { UsageRunRow } from '@openaidy/db';
+import type { UsageRunRow } from '@aidyagent/db';
 
 function row(overrides: Partial<UsageRunRow>): UsageRunRow {
   return {

@@ -3,7 +3,7 @@
  *
  * These types describe the four markdown files that define an agent's
  * identity, user context, mission, and behavioural rules.
- * Files are stored in .openaidy/workspaces/<agentId>/ and injected
+ * Files are stored in .aidy/workspaces/<agentId>/ and injected
  * into the system prompt at dispatch time.
  */
 

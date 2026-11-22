@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: 'OpenAidy'
+  name: 'Aidy'
   text: 'Open Source AI Agent Platform'
   tagline: 'Self-hosted · Structured tasks · Multi-channel integrations · Extensible plugin system'
   actions:
@@ -11,7 +11,7 @@ hero:
       link: /docs/
     - theme: alt
       text: View on GitHub
-      link: https://github.com/imzodev/openaidy
+      link: https://github.com/imzodev/aidy
 
 features:
   - title: Agents

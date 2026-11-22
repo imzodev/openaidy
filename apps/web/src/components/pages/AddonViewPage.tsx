@@ -34,12 +34,12 @@ import {
   type AddonThemePayload,
   type SpeechRecognitionCtorLike,
   type SpeechRecognitionLike,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 // Defaults to empty string (same-origin). The Vite dev proxy (dev mode)
 // and the server's static handler (--integrated mode) both serve addons
 // on the same origin the browser is already on, so a relative URL works.
-const SERVER_BASE = import.meta.env.OPENAIDY_VITE_SERVER_URL ?? '';
+const SERVER_BASE = import.meta.env.AIDY_VITE_SERVER_URL ?? '';
 
 const MAX_RECORD_SECONDS = 600;
 
@@ -149,14 +149,14 @@ export function AddonViewPage(props: Props) {
     iframeRef?.contentWindow?.postMessage(
       result.ok
         ? {
-            type: 'OPENAIDY_RESPONSE',
+            type: 'AIDY_RESPONSE',
             requestId,
             ok: true,
             status: 200,
             data: result.data,
           }
         : {
-            type: 'OPENAIDY_RESPONSE',
+            type: 'AIDY_RESPONSE',
             requestId,
             ok: false,
             status: result.status,
@@ -551,7 +551,7 @@ export function AddonViewPage(props: Props) {
   onMount(async () => {
     void loadAssetToken();
 
-    const key = `openaidy_addon_token:${props.addon.addonId}`;
+    const key = `aidy_addon_token:${props.addon.addonId}`;
     if (!localStorage.getItem(key)) {
       try {
         const userToken = resolveToken();
@@ -581,11 +581,11 @@ export function AddonViewPage(props: Props) {
   //
   // The host's current theme (mode + the resolved CSS variable values) is
   // included on init so an addon that mirrors the host's palette is correct
-  // on first paint, with no flash. See OPENAIDY_THEME_CHANGED below for the
+  // on first paint, with no flash. See AIDY_THEME_CHANGED below for the
   // live-update path.
   const sendInit = () => {
     const init: AddonInitMessage = {
-      type: 'OPENAIDY_INIT',
+      type: 'AIDY_INIT',
       apiBase: SERVER_BASE,
       nonce,
       theme: readThemeFromHost(),
@@ -596,15 +596,15 @@ export function AddonViewPage(props: Props) {
   // Live theme propagation. When the user toggles light/dark (or the OS
   // preference changes for `system` mode), the host's `<html>` class flips
   // and the CSS variables resolve to the new palette. We re-sample the host
-  // and post OPENAIDY_THEME_CHANGED so a theme-aware addon follows without
+  // and post AIDY_THEME_CHANGED so a theme-aware addon follows without
   // a reload. The first run is intentionally skipped (`defer: true`) — the
-  // initial OPENAIDY_INIT already carries the theme, so we only push deltas.
+  // initial AIDY_INIT already carries the theme, so we only push deltas.
   createEffect(
     on(
       resolvedTheme,
       () => {
         const message: AddonThemeMessage = {
-          type: 'OPENAIDY_THEME_CHANGED',
+          type: 'AIDY_THEME_CHANGED',
           theme: readThemeFromHost(),
         };
         iframeRef?.contentWindow?.postMessage(message, '*');
@@ -615,7 +615,7 @@ export function AddonViewPage(props: Props) {
 
   // Send on iframe load as a fallback for addons that predate ADDON_READY,
   // and again when the addon sends ADDON_READY (see handleMessage) for reliability.
-  // Receiving OPENAIDY_INIT twice is safe — the SDK clears callbacks after the first.
+  // Receiving AIDY_INIT twice is safe — the SDK clears callbacks after the first.
   const handleLoad = () => sendInit();
 
   // Allowlist of paths the addon proxy may forward (method + path regex)
@@ -642,7 +642,7 @@ export function AddonViewPage(props: Props) {
     const raw = event.data;
     if (typeof raw !== 'object' || raw === null) return;
     const msg = raw as AddonIframeMessage;
-    // Addon signals it is ready to receive OPENAIDY_INIT (timing safety)
+    // Addon signals it is ready to receive AIDY_INIT (timing safety)
     if (msg.type === 'ADDON_READY') {
       sendInit();
       return;
@@ -662,12 +662,12 @@ export function AddonViewPage(props: Props) {
       }
       return;
     }
-    if (msg.type === 'OPENAIDY_MEDIA_STOP') {
+    if (msg.type === 'AIDY_MEDIA_STOP') {
       if (msg.nonce !== nonce) return;
       stopRecordingFn?.();
       return;
     }
-    if (msg.type !== 'OPENAIDY_REQUEST') return;
+    if (msg.type !== 'AIDY_REQUEST') return;
     // Validate nonce instead of origin (sandbox strips origin to 'null')
     if (msg.nonce !== nonce) return;
 
@@ -691,7 +691,7 @@ export function AddonViewPage(props: Props) {
     if (!isAllowed(method, reqPath)) {
       iframeRef?.contentWindow?.postMessage(
         {
-          type: 'OPENAIDY_RESPONSE',
+          type: 'AIDY_RESPONSE',
           requestId,
           ok: false,
           status: 403,
@@ -707,13 +707,13 @@ export function AddonViewPage(props: Props) {
     // the user's own auth token. Fail closed if it's missing; there is no
     // fallback to a broader credential.
     const addonToken = localStorage.getItem(
-      `openaidy_addon_token:${props.addon.addonId}`,
+      `aidy_addon_token:${props.addon.addonId}`,
     );
 
     if (!addonToken) {
       iframeRef?.contentWindow?.postMessage(
         {
-          type: 'OPENAIDY_RESPONSE',
+          type: 'AIDY_RESPONSE',
           requestId,
           ok: false,
           status: 401,
@@ -739,7 +739,7 @@ export function AddonViewPage(props: Props) {
         : await res.text();
       iframeRef?.contentWindow?.postMessage(
         {
-          type: 'OPENAIDY_RESPONSE',
+          type: 'AIDY_RESPONSE',
           requestId,
           ok: res.ok,
           status: res.status,
@@ -750,7 +750,7 @@ export function AddonViewPage(props: Props) {
     } catch (err) {
       iframeRef?.contentWindow?.postMessage(
         {
-          type: 'OPENAIDY_RESPONSE',
+          type: 'AIDY_RESPONSE',
           requestId,
           ok: false,
           status: 0,
@@ -1033,7 +1033,7 @@ export function AddonViewPage(props: Props) {
           <p class="text-sm text-text-tertiary max-w-sm">
             Make sure the addon files exist at{' '}
             <code class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">
-              .openaidy/addons/{props.addon.addonId}/
+              .aidy/addons/{props.addon.addonId}/
             </code>
           </p>
         </div>

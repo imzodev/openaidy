@@ -1,4 +1,4 @@
-# OpenAidy Desktop App — Architecture
+# Aidy Desktop App — Architecture
 
 ## Design Principles
 
@@ -58,11 +58,11 @@
 │  │   ├── SessionMessageService  ← conversation state                   │  │
 │  │   ├── PulseService        ← cron scheduling                       │  │
 │  │   ├── AddonService        ← lifecycle + permissions               │  │
-│  │   ├── ConfigService       ← openaidy.yaml                         │  │
+│  │   ├── ConfigService       ← aidy.yaml                         │  │
 │  │   └── SkillRegistry       ← builtin + user skills                 │  │
 │  │                                                                   │  │
 │  │   Data Layer                                                       │  │
-│  │   ├── SQLite (default)  →  ~/.config/openaidy/openaidy.db        │  │
+│  │   ├── SQLite (default)  →  ~/.config/aidy/aidy.db        │  │
 │  │   └── Postgres (optional) → user-configured DATABASE_URL          │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
@@ -114,19 +114,19 @@ Frontend (Solid.js)                   Rust Backend
 ## Data Flow: App Startup
 
 ```
-1. User launches OpenAidy (dock/taskbar/CLI)
+1. User launches Aidy (dock/taskbar/CLI)
    │
 2. Tauri main() runs
    │
 3. ServiceManager::start() called
    │  ├─ pick_free_port()
    │  ├─ locate_server_entry() → /apps/server/src/server.ts or dist/index.js
-   │  ├─ build_server_env() → PORT, OPENAIDY_HOME, keychain creds, etc.
+   │  ├─ build_server_env() → PORT, AIDY_HOME, keychain creds, etc.
    │  └─ spawn server subprocess (tsx/server.ts)
    │
 4. Poll until server binds to port (TCP connect check, 15s timeout)
    │
-5. write_port_file(port) → ~/.config/openaidy/port
+5. write_port_file(port) → ~/.config/aidy/port
    │
 6. setup_tray() → system tray icon + menu
    │
@@ -209,16 +209,16 @@ apps/
 │   │       └── icon.ico
 │   ├── bundle/
 │   │   ├── linux/
-│   │   │   └── openaidy.service          ← systemd unit file
+│   │   │   └── aidy.service          ← systemd unit file
 │   │   ├── macos/
-│   │   │   ├── dev.openaidy.plist        ← LaunchAgent plist
+│   │   │   ├── app.aidyagent.plist        ← LaunchAgent plist
 │   │   │   └── entitlements.plist       ← macOS sandbox entitlements
 │   │   └── windows/
-│   │       ├── openaidy-task.xml         ← Scheduled task XML
+│   │       ├── aidy-task.xml         ← Scheduled task XML
 │   │       └── installer.nsi             ← NSIS custom install/uninstall
 │   ├── scripts/
-│   │   └── openaidy-service.sh           ← Service wrapper (Linux/macOS)
-│   │       openaidy-service.bat          ← Service wrapper (Windows)
+│   │   └── aidy-service.sh           ← Service wrapper (Linux/macOS)
+│   │       aidy-service.bat          ← Service wrapper (Windows)
 │   ├── src/                             ← Web root (Tauri CLI scaffold)
 │   │   ├── App.tsx
 │   │   ├── main.tsx
@@ -244,7 +244,7 @@ apps/server/                             ← Existing (no changes)
 │   └── src/
 │       ├── server.ts                    ← Entry point (reads PORT env var)
 │       ├── app.ts                       ← Full Fastify app (no changes)
-│       ├── lib/env.ts                   ← Respects PORT, OPENAIDY_HOME, etc.
+│       ├── lib/env.ts                   ← Respects PORT, AIDY_HOME, etc.
 │       ├── routes/addons.ts             ← Serves /addons/<id>/... static files
 │       ├── addons/service.ts            ← Addon lifecycle
 │       ├── addons/proxy.ts              ← Addon proxy with permissions
@@ -268,7 +268,7 @@ interface ServiceStatus {
   port: number | null;
   restart_attempts: number;
   pid: number | null;
-  openaidy_home: string;
+  aidy_home: string;
 }
 
 // apps/desktop/src-tauri/src/keychain.rs → exposed via IPC
@@ -315,7 +315,7 @@ interface WindowCommands {
 │  - Fastify: CORS enforced to app:// protocol (Tauri origin)               │
 │  - JWT: addon tokens scoped to specific permissions                      │
 │  - Addon proxy: validates permissions before agent invocation            │
-│  - No filesystem access outside OPENAIDY_HOME                           │
+│  - No filesystem access outside AIDY_HOME                           │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

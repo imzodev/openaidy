@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join, normalize, relative, sep } from 'node:path';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { SkillRegistry } from '../../skills/index.js';
 import { sanitizeSkillBody } from '../../skills/sanitize.js';
 import type { AgentRegistry } from '../../agents/registry.js';

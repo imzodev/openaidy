@@ -7,7 +7,7 @@ import { registerMcpRoutes } from './mcp';
 import type { McpClientService } from '../mcp/client';
 import type { AppConfigService } from '../config/service';
 import type { AuthMiddleware } from '../websocket/middleware/auth';
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import { EnvPlaceholderResolver } from '../mcp/placeholder-resolver';
 import { encryptSecret } from '../mcp/secret-crypto';
 import type { McpOAuthService } from '../mcp/oauth';
@@ -1357,7 +1357,7 @@ describe('MCP Routes', () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.headers['content-type']).toContain('text/html');
-      expect(res.body).toContain('openaidy:mcp-oauth');
+      expect(res.body).toContain('aidy:mcp-oauth');
       expect(res.body).toContain('"http://localhost:5173"');
       expect(oauth.completeAuthorization).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'notion' }),

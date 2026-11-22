@@ -159,7 +159,7 @@ describe('agents create', () => {
       expect(result.exitCode).toBe(0);
     });
 
-    it('writes openaidy.json with the new agent appended', async () => {
+    it('writes aidy.json with the new agent appended', async () => {
       await agentsCreateHandler(['--name', 'My New Agent', '--no-identity']);
       expect(mockWriteFile).toHaveBeenCalledOnce();
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string) as {

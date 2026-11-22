@@ -13,7 +13,7 @@ import type {
   AddonAgentQuery,
   AddonAgentQueryParamType,
   AddonStorageConfig,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { AddonStorageEngine } from './engine';
 
 export type AgentQueryErrorCode =

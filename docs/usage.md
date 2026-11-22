@@ -20,7 +20,7 @@ Per-session usage is also available — open a session and its usage summary sho
 
 ## When cost isn't shown
 
-Cost is only computed when OpenAidy has pricing data for that model. If you're using a provider/model without built-in pricing (a brand-new model, a custom local model), the run still records token counts — you just won't see a dollar figure until you add a [pricing override](./config.md#per-model-pricing-overrides).
+Cost is only computed when Aidy has pricing data for that model. If you're using a provider/model without built-in pricing (a brand-new model, a custom local model), the run still records token counts — you just won't see a dollar figure until you add a [pricing override](./config.md#per-model-pricing-overrides).
 
 ## API
 

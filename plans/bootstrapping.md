@@ -1,15 +1,15 @@
 ---
-summary: 'Practical bootstrap guide for starting OpenAidy from scratch'
+summary: 'Practical bootstrap guide for starting Aidy from scratch'
 read_when:
-  - You are initializing the OpenAidy repository
+  - You are initializing the Aidy repository
   - You want concrete steps, packages, and commands for the initial foundation
   - You need a recommended first vertical slice for implementation
-title: 'Bootstrapping OpenAidy'
+title: 'Bootstrapping Aidy'
 ---
 
-# Bootstrapping OpenAidy
+# Bootstrapping Aidy
 
-This document describes how to start OpenAidy from scratch using Node.js and TypeScript without Next.js.
+This document describes how to start Aidy from scratch using Node.js and TypeScript without Next.js.
 
 The goal is to create a strong foundation that is:
 
@@ -79,7 +79,7 @@ Optional:
 ## Initial repository layout
 
 ```text
-openaidy/
+aidy/
   apps/
     server/
     web/
@@ -123,7 +123,7 @@ Recommended scripts:
 
 ```json
 {
-  "name": "openaidy",
+  "name": "aidy",
   "private": true,
   "packageManager": "pnpm@10.23.0",
   "scripts": {

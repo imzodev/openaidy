@@ -26,7 +26,7 @@ import { createDevicesDenyHandler } from './deny.js';
 import type {
   PairingContext,
   PairingRequestData,
-} from '@openaidy/control-plane';
+} from '@aidyagent/control-plane';
 
 /** Return the concatenated text from all p.note() calls */
 function noteOutput(): string {

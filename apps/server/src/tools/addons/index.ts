@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { createAddonCreateTool, type AddonToolDeps } from './create.js';
 import { createAddonUpdateTool } from './update.js';
 import { createAddonReadTool } from './read.js';

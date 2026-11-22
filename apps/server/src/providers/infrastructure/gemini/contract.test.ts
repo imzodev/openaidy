@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { describeProviderAdapterContract } from '@openaidy/runtime/adapter-contract';
+import { describeProviderAdapterContract } from '@aidyagent/runtime/adapter-contract';
 import { createGeminiProvider } from './adapter';
 
 // Mock fetch for contract tests

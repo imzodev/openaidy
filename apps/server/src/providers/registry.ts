@@ -1,4 +1,4 @@
-import type { ModelProvider, ProviderDescriptor } from '@openaidy/runtime';
+import type { ModelProvider, ProviderDescriptor } from '@aidyagent/runtime';
 import type {
   ProviderRegistrationOptions,
   RegisteredProvider,

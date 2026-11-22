@@ -4,7 +4,7 @@
  * Handles dynamic loading, lifecycle management, and component registration for addons.
  */
 
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 import type { LoadedAddon, AddonRoute, AddonLoaderEvents } from './addon-types';
 
 // ============================================================================
@@ -413,7 +413,7 @@ export class AddonLoader {
    */
   private getStoredToken(): string | undefined {
     if (typeof window === 'undefined') return undefined;
-    return localStorage.getItem('openaidy_auth_token') ?? undefined;
+    return localStorage.getItem('aidy_auth_token') ?? undefined;
   }
 
   /**

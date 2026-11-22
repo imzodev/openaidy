@@ -1,5 +1,5 @@
-import type { ToolDefinition } from '@openaidy/runtime';
-import type { CompactionSourceMessage } from '@openaidy/shared-types';
+import type { ToolDefinition } from '@aidyagent/runtime';
+import type { CompactionSourceMessage } from '@aidyagent/shared-types';
 
 export const TOOL_SEARCH_NAME = 'tool_search';
 

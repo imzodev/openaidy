@@ -1,5 +1,5 @@
 /**
- * Tests for `openaidy mcp migrate-secrets` (issue #401).
+ * Tests for `aidy mcp migrate-secrets` (issue #401).
  *
  * Mocks @clack/prompts, admin-token, and global fetch so the handler can
  * be exercised without a real server.
@@ -37,17 +37,17 @@ function mockFetchJson(data: unknown, status = 200) {
   ) as unknown as typeof fetch;
 }
 
-const originalServerUrl = process.env.OPENAIDY_SERVER_URL;
+const originalServerUrl = process.env.AIDY_SERVER_URL;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
   mockReadAdminToken.mockResolvedValue({ ok: true, token: 'fake-token' });
-  process.env.OPENAIDY_SERVER_URL = 'http://localhost:3001';
+  process.env.AIDY_SERVER_URL = 'http://localhost:3001';
 });
 
 afterEach(() => {
-  process.env.OPENAIDY_SERVER_URL = originalServerUrl ?? '';
+  process.env.AIDY_SERVER_URL = originalServerUrl ?? '';
 });
 
 const { mcpMigrateSecretsHandler } = await import('./migrate-secrets.js');
@@ -131,7 +131,7 @@ describe('mcp migrate-secrets', () => {
   it('returns exitCode 1 when the admin token cannot be read', async () => {
     mockReadAdminToken.mockResolvedValueOnce({
       ok: false,
-      error: 'No admin token at /etc/openaidy/bootstrap-admin.json',
+      error: 'No admin token at /etc/aidy/bootstrap-admin.json',
     });
     const result = await mcpMigrateSecretsHandler([]);
     expect(result.exitCode).toBe(1);

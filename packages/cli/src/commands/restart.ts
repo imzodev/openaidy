@@ -1,5 +1,5 @@
 /**
- * openaidy restart — Stop the running OpenAidy server, then start a fresh one
+ * aidy restart — Stop the running Aidy server, then start a fresh one
  * (stop + start, atomically from the user's perspective).
  *
  * Design:
@@ -29,25 +29,25 @@ import {
 } from '../lib/service-manager.js';
 
 const HELP_TEXT = `
-Usage: openaidy restart [options]
+Usage: aidy restart [options]
 
-Restart the OpenAidy server: stop (if running) then start.
+Restart the Aidy server: stop (if running) then start.
 
-This is equivalent to running \`openaidy stop\` followed by \`openaidy start\`,
+This is equivalent to running \`aidy stop\` followed by \`aidy start\`,
 but in a single command with port preservation and a coherent exit code:
   - exit 0 only if BOTH stop and start succeed.
   - exit 1 if either step fails (with the relevant output surfaced).
 
 The port from the previous server PID file is preserved by default. Pass
---port to override (same semantics as \`openaidy start\`).
+--port to override (same semantics as \`aidy start\`).
 
-When the OpenAidy service is installed (\`openaidy service install\`),
+When the Aidy service is installed (\`aidy service install\`),
 this restarts it through systemctl; the port comes from the unit.
 
 Options:
   -h, --help          Show this help message
   --port <N>          Listen port (default: preserved from previous PID file;
-                      falls back to OPENAIDY_PORT / 3001 if no PID file)
+                      falls back to AIDY_PORT / 3001 if no PID file)
   --server-only       Restart only the server, leave the web frontend alone
                       across the bounce
   --integrated        Build the web bundle first and have the server serve
@@ -56,7 +56,7 @@ Options:
 
 Exit Codes:
   0  Server stopped cleanly (or wasn't running) and a fresh server started
-  1  --port / OPENAIDY_PORT invalid, --server-only + --integrated conflict,
+  1  --port / AIDY_PORT invalid, --server-only + --integrated conflict,
      stop failed, or start failed
 `;
 
@@ -85,9 +85,8 @@ export async function restartHandler(args: string[]): Promise<CommandResult> {
   const service = detectInstalledService();
   if (service) {
     // Read the port before the bounce removes and rewrites the PID file.
-    const openaidyHome =
-      process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
-    const record = await readPidFile(resolve(openaidyHome, 'state/server.pid'));
+    const aidyHome = process.env.AIDY_HOME || resolve(homedir(), '.aidy');
+    const record = await readPidFile(resolve(aidyHome, 'state/server.pid'));
     const result = await systemctl(service.scope, ['restart', SERVICE_NAME]);
     if (result.code !== 0) {
       return {
@@ -102,7 +101,7 @@ export async function restartHandler(args: string[]): Promise<CommandResult> {
       exitCode: healthy ? 0 : 1,
       output: healthy
         ? `Server restarted (${SERVICE_NAME}.service) on http://localhost:${port}`
-        : `Error: ${SERVICE_NAME}.service restarted but /health did not respond within 30 seconds. Check \`openaidy service status\`.`,
+        : `Error: ${SERVICE_NAME}.service restarted but /health did not respond within 30 seconds. Check \`aidy service status\`.`,
     };
   }
 
@@ -112,11 +111,8 @@ export async function restartHandler(args: string[]): Promise<CommandResult> {
   // working, the Vite proxy stays pointed at the same backend, etc.
   let startArgs = args;
   if (!args.includes('--port')) {
-    const openaidyHome =
-      process.env.OPENAIDY_HOME || resolve(homedir(), '.openaidy');
-    const existing = await readPidFile(
-      resolve(openaidyHome, 'state/server.pid'),
-    );
+    const aidyHome = process.env.AIDY_HOME || resolve(homedir(), '.aidy');
+    const existing = await readPidFile(resolve(aidyHome, 'state/server.pid'));
     if (existing && Number.isInteger(existing.port) && existing.port > 0) {
       startArgs = [...args, '--port', String(existing.port)];
     }

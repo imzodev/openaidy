@@ -7,10 +7,10 @@ Add a system tray icon with a context menu (macOS menu bar, Linux panel, Windows
 ## Success Criteria
 
 1. Tauri app displays a system tray icon after startup
-2. Tray icon menu has: "Open OpenAidy", separator, "Quit"
+2. Tray icon menu has: "Open Aidy", separator, "Quit"
 3. Left-clicking the tray icon opens/restores the main window
 4. Closing the main window hides to tray (app keeps running)
-5. Tray tooltip shows "OpenAidy" and connection status
+5. Tray tooltip shows "Aidy" and connection status
 
 ## Reused Components
 
@@ -44,13 +44,13 @@ use tauri::{
 };
 
 /// Build the tray menu.
-/// "Open OpenAidy"  — shows and focuses the main window
+/// "Open Aidy"  — shows and focuses the main window
 /// Separator
 /// "Quit"           — exits the application completely
 pub fn build_tray_menu<R: Runtime>(app: &App<R>) -> Result<Menu<R>, tauri::Error> {
-    let open_item = MenuItem::with_id(app, "open", "Open OpenAidy", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, "open", "Open Aidy", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit OpenAidy", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Aidy", true, None::<&str>)?;
 
     Menu::with_items(app, &[&open_item, &sep, &quit_item])
 }
@@ -68,7 +68,7 @@ pub fn setup_tray<R: Runtime>(app: &App<R>) -> Result<(), Box<dyn std::error::Er
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .tooltip("OpenAidy")
+        .tooltip("Aidy")
         .menu_on_left_click(false)  // Right-click for menu, left-click for action
         .on_menu_event(|app, event| {
             match event.id.as_ref() {
@@ -221,14 +221,14 @@ async fn main() {
         .format_timestamp_millis()
         .init();
 
-    info!("OpenAidy Desktop v{}", env!("CARGO_PKG_VERSION"));
+    info!("Aidy Desktop v{}", env!("CARGO_PKG_VERSION"));
 
-    let openaidy_home = dirs::config_dir()
+    let aidy_home = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("openaidy");
+        .join("aidy");
 
     let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();
-    let service_manager = Arc::new(ServiceManager::new(openaidy_home.clone()));
+    let service_manager = Arc::new(ServiceManager::new(aidy_home.clone()));
 
     let port = service_manager.start(keychain_creds).await
         .expect("Failed to start core service");
@@ -325,13 +325,13 @@ On macOS, tray icons should be **template images** (single-color, uses system ti
 
 ## Verification
 
-| Action                       | Expected Result                       |
-| ---------------------------- | ------------------------------------- |
-| Click close button on window | Window hides, app stays in tray       |
-| Click tray icon              | Window shows and focuses              |
-| Right-click tray icon        | Menu appears: "Open OpenAidy", "Quit" |
-| Click "Quit" in menu         | App exits, service stopped            |
-| Log out / shut down          | Service gracefully stopped            |
+| Action                       | Expected Result                   |
+| ---------------------------- | --------------------------------- |
+| Click close button on window | Window hides, app stays in tray   |
+| Click tray icon              | Window shows and focuses          |
+| Right-click tray icon        | Menu appears: "Open Aidy", "Quit" |
+| Click "Quit" in menu         | App exits, service stopped        |
+| Log out / shut down          | Service gracefully stopped        |
 
 ## Risks & Mitigations
 

@@ -1,7 +1,7 @@
 /**
  * Component Manifest — JSDoc-derived, agent-discoverable
  *
- * Parses `@component` JSDoc blocks directly out of `openaidy-sdk.js` at
+ * Parses `@component` JSDoc blocks directly out of `aidy-sdk.js` at
  * request time and turns them into the structured manifest served by
  * `GET /sdk/components.json`. This is deliberately a SEPARATE source from
  * `sdk-reference.ts`'s hand-authored `SDK_METHODS` array: this file describes

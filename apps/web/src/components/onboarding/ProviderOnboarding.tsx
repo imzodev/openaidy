@@ -21,8 +21,8 @@ import { PresetProviderModal } from '../settings/PresetProviderModal';
 import { DialogConnectProvider } from '../providers/DialogConnectProvider';
 import { useConfig } from '../settings/hooks/useConfig';
 import type { AppConfig, ProviderConfig } from '../../lib/api';
-import type { ProviderPreset } from '@openaidy/shared-types';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import type { ProviderPreset } from '@aidyagent/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 interface ProviderOnboardingProps {
   /**
@@ -125,7 +125,7 @@ export function ProviderOnboarding(props: ProviderOnboardingProps) {
             Connect your first AI provider
           </h1>
           <p class="text-text-secondary max-w-xl mx-auto">
-            OpenAidy doesn't ship with any providers configured. Pick a provider
+            Aidy doesn't ship with any providers configured. Pick a provider
             below and add your API key to start chatting — you can add more or
             change the default later in Settings.
           </p>

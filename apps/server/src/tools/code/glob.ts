@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { WorkspaceService } from '../../workspace/service';
 import { runRipgrep, RipgrepNotFoundError } from './ripgrep.js';
 import { codeGlobMeta } from '../catalog.js';

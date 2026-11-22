@@ -19,11 +19,11 @@
  * Single responsibility: normalisation only — no persistence, no connection.
  */
 
-import type { McpServerConfig } from '@openaidy/config';
+import type { McpServerConfig } from '@aidyagent/config';
 import type {
   McpServerTransport,
   McpServerImportEntry,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 
 /**
  * A raw MCP server entry in the keyed-map format. Transport may be given as

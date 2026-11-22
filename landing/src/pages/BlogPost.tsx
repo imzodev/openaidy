@@ -23,14 +23,17 @@ export default function BlogPost() {
   return (
     <div className="page-wrapper">
       <Helmet>
-        <title>{post.title} — OpenAidy</title>
+        <title>{post.title} — Aidy</title>
         <meta name="description" content={post.description} />
         <meta property="og:title" content={post.title} />
         <meta property="og:description" content={post.description} />
-        <meta property="og:image" content="https://openaidy.com/og-blog.png" />
+        <meta property="og:image" content="https://aidyagent.app/og-blog.png" />
         <meta name="twitter:title" content={post.title} />
         <meta name="twitter:description" content={post.description} />
-        <meta name="twitter:image" content="https://openaidy.com/og-blog.png" />
+        <meta
+          name="twitter:image"
+          content="https://aidyagent.app/og-blog.png"
+        />
       </Helmet>
       {/* ── Back nav ───────────────────────────────────────────────── */}
       <div className="post-nav">

@@ -15,7 +15,7 @@ import { createDatabaseClient } from './client';
 // SQLite — runs always
 // -------------------------------------------------------------------------
 describe('createDatabaseClient (sqlite)', () => {
-  const dbPath = join(tmpdir(), `openaidy-test-${Date.now()}.db`);
+  const dbPath = join(tmpdir(), `aidy-test-${Date.now()}.db`);
 
   afterEach(() => {
     if (existsSync(dbPath)) unlinkSync(dbPath);

@@ -1,7 +1,7 @@
 /**
  * Sessions Messages Command Handler
  *
- * Implements `openaidy sessions messages <sessionId>` command.
+ * Implements `aidy sessions messages <sessionId>` command.
  * Calls GET /sessions/:sessionId/messages via the HTTP REST API.
  */
 
@@ -16,12 +16,12 @@ export async function sessionsMessagesHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy sessions messages <sessionId>
+      `Usage: aidy sessions messages <sessionId>
 
 List all messages in a session.
 
 Examples:
-  pnpm openaidy sessions messages sess_abc123
+  pnpm aidy sessions messages sess_abc123
 
 Exit Codes:
   0  Success
@@ -34,7 +34,7 @@ Exit Codes:
   const sessionId = args[0];
   if (!sessionId) {
     p.log.error(
-      'Session ID is required.\n\nUsage: openaidy sessions messages <sessionId>',
+      'Session ID is required.\n\nUsage: aidy sessions messages <sessionId>',
     );
     return { exitCode: 2, error: 'Missing session ID' };
   }

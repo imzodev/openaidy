@@ -146,7 +146,7 @@ Run the full test suite against both backends:
 pnpm test
 
 # PostgreSQL (requires a running instance)
-DATABASE_URL=postgres://localhost:5432/openaidy_test DB_KIND=postgres pnpm test
+DATABASE_URL=postgres://localhost:5432/aidy_test DB_KIND=postgres pnpm test
 ```
 
 Fix any SQL that doesn't translate (e.g. `json_extract` syntax differences).
@@ -239,7 +239,7 @@ Remove the deprecated `parseScheduleInput` re-export. The canonical location is 
 A periodic cleanup task that archives or deletes old history rows:
 
 ```ts
-import type { TaskExecutionHistoryRepository } from '@openaidy/db';
+import type { TaskExecutionHistoryRepository } from '@aidyagent/db';
 
 const DEFAULT_RETENTION = 1000; // keep 1000 rows per task
 

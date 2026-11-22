@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AssistantService } from '../../assistant/service';
 import { formatWhen, parseWhen } from '../../assistant/when';
 import type { PulseService } from '../../pulses/service';

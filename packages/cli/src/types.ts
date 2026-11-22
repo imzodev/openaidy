@@ -1,10 +1,10 @@
 /**
  * CLI Types
  *
- * Shared type definitions for the OpenAidy CLI.
+ * Shared type definitions for the Aidy CLI.
  */
 
-import type { AgentIdentity } from '@openaidy/shared-types';
+import type { AgentIdentity } from '@aidyagent/shared-types';
 
 /**
  * Output format mode
@@ -77,14 +77,14 @@ export const ExitCodes = {
  * Default CLI configuration
  */
 export const defaultCLIConfig: CLIConfig = {
-  name: 'openaidy',
+  name: 'aidy',
   version: '0.0.1',
-  description: 'OpenAidy CLI - Local administration tool',
+  description: 'Aidy CLI - Local administration tool',
 };
 
 // ============================================================================
 // Agent / Config types
-// These mirror the openaidy.json file format read/written by the CLI.
+// These mirror the aidy.json file format read/written by the CLI.
 // ============================================================================
 
 export type WorkspacePermissions = {
@@ -112,11 +112,11 @@ export type AgentConfig = {
   identity?: AgentIdentity;
 };
 
-export type OpenAidyConfig = {
+export type AidyConfig = {
   agents?: AgentConfig[];
 };
 
-export type { CreateAgentInput, AgentIdentity } from '@openaidy/shared-types';
+export type { CreateAgentInput, AgentIdentity } from '@aidyagent/shared-types';
 
 export type SkillSummary = {
   id: string;

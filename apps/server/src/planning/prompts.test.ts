@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { buildAgentContextPrompt, buildPlanningPrompt } from './prompts';
 import type { AgentSummary } from '../agents/schema';
-import type { Task } from '@openaidy/db';
+import type { Task } from '@aidyagent/db';
 
 describe('buildAgentContextPrompt', () => {
   const mockAgents: AgentSummary[] = [
@@ -40,12 +40,12 @@ describe('buildAgentContextPrompt', () => {
   });
 
   it('returns message when no agents provided', () => {
-    const result = buildAgentContextPrompt([], '/tmp/openaidy');
+    const result = buildAgentContextPrompt([], '/tmp/aidy');
     expect(result).toBe('No agents available for assignment.');
   });
 
   it('includes agent name and description', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('Researcher');
     expect(result).toContain('Research focused agent');
     expect(result).toContain('Creative');
@@ -53,25 +53,25 @@ describe('buildAgentContextPrompt', () => {
   });
 
   it('includes agent IDs', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('agent-1');
     expect(result).toContain('agent-2');
   });
 
   it('includes tools for each agent', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('web_fetch');
     expect(result).toContain('workspace_read');
     expect(result).toContain('workspace_write');
   });
 
   it('includes skills for each agent', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('creative-writing');
   });
 
   it('includes MCP servers for each agent', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('github');
   });
 
@@ -89,7 +89,7 @@ describe('buildAgentContextPrompt', () => {
         tags: [],
       },
     ];
-    const result = buildAgentContextPrompt(agentsWithoutTools, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(agentsWithoutTools, '/tmp/aidy');
     expect(result).toContain('Tools: None');
   });
 
@@ -107,10 +107,7 @@ describe('buildAgentContextPrompt', () => {
         tags: [],
       },
     ];
-    const result = buildAgentContextPrompt(
-      agentsWithoutSkills,
-      '/tmp/openaidy',
-    );
+    const result = buildAgentContextPrompt(agentsWithoutSkills, '/tmp/aidy');
     expect(result).toContain('Skills: None');
   });
 
@@ -128,17 +125,17 @@ describe('buildAgentContextPrompt', () => {
         tags: [],
       },
     ];
-    const result = buildAgentContextPrompt(agentsWithoutMcp, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(agentsWithoutMcp, '/tmp/aidy');
     expect(result).toContain('MCP Servers: None');
   });
 
   it('includes "Available Agents" header', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('Available Agents:');
   });
 
   it('includes assignment guidelines', () => {
-    const result = buildAgentContextPrompt(mockAgents, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(mockAgents, '/tmp/aidy');
     expect(result).toContain('Tool availability');
     expect(result).toContain('Skill match');
     expect(result).toContain('Specialization');
@@ -147,8 +144,8 @@ describe('buildAgentContextPrompt', () => {
 
   it('reads AGENT.md file when it exists', () => {
     const agentMdPath = path.join(
-      '/tmp/openaidy',
-      '.openaidy',
+      '/tmp/aidy',
+      '.aidy',
       'workspaces',
       'agent-1',
       'AGENT.md',
@@ -158,7 +155,7 @@ describe('buildAgentContextPrompt', () => {
       'Specializes in research tasks',
     );
 
-    const result = buildAgentContextPrompt([mockAgents[0]!], '/tmp/openaidy');
+    const result = buildAgentContextPrompt([mockAgents[0]!], '/tmp/aidy');
 
     expect(fs.existsSync).toHaveBeenCalledWith(agentMdPath);
     expect(fs.readFileSync).toHaveBeenCalledWith(agentMdPath, 'utf-8');
@@ -169,7 +166,7 @@ describe('buildAgentContextPrompt', () => {
   it('does not include AGENT.md section when file does not exist', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
-    const result = buildAgentContextPrompt([mockAgents[0]!], '/tmp/openaidy');
+    const result = buildAgentContextPrompt([mockAgents[0]!], '/tmp/aidy');
 
     expect(result).not.toContain('Specialization (from AGENT.md):');
   });
@@ -188,7 +185,7 @@ describe('buildAgentContextPrompt', () => {
         tags: [],
       },
     ];
-    const result = buildAgentContextPrompt(agentNoDesc, '/tmp/openaidy');
+    const result = buildAgentContextPrompt(agentNoDesc, '/tmp/aidy');
     expect(result).toContain('No description');
   });
 });

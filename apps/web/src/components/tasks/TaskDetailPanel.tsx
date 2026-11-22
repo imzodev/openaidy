@@ -306,7 +306,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
 
       try {
         // The path stored is the absolute path - we need to extract the relative path
-        // Expected format: .openaidy/workspaces/{agentId}/filename.txt
+        // Expected format: .aidy/workspaces/{agentId}/filename.txt
         // So we need to extract everything after {agentId}/
         const pathParts = d.path.split('/');
         const workspaceIndex = pathParts.findIndex((p) => p === 'workspaces');

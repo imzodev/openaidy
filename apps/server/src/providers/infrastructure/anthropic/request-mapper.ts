@@ -4,7 +4,7 @@
  * Maps normalized internal requests to Anthropic Messages API payloads.
  */
 
-import type { Message, ModelRequest, ToolDefinition } from '@openaidy/runtime';
+import type { Message, ModelRequest, ToolDefinition } from '@aidyagent/runtime';
 import type {
   AnthropicMessage,
   AnthropicContentBlock,

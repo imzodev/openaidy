@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import {
   createDatabaseClient,
   ProviderCredentialsRepository,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 // Set master key BEFORE importing anything that touches encryption.
 process.env.CREDENTIALS_MASTER_KEY = 'test-master-key-at-least-32-chars-long';

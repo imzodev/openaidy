@@ -1,4 +1,4 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import type { AgentRegistry } from '../../agents/registry.js';
 import { agentsCreateMeta } from '../catalog.js';
 

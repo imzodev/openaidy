@@ -18,7 +18,7 @@ import {
   type ModelResponse,
   type ModelStreamEvent,
   type ProviderResult,
-} from '@openaidy/runtime';
+} from '@aidyagent/runtime';
 import type { OpenAICompatibleAdapterConfig } from './types';
 import { createLogger } from '../../../lib/logger';
 import { mergeLeadingSystemMessages } from './request-mapper';
@@ -619,7 +619,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           role: 'assistant',
           content: msg.content,
         };
-        const aMsg = msg as import('@openaidy/runtime').AssistantMessage;
+        const aMsg = msg as import('@aidyagent/runtime').AssistantMessage;
         if (aMsg.toolCalls && aMsg.toolCalls.length > 0) {
           assistantMsg.tool_calls = aMsg.toolCalls.map((tc) => ({
             id: tc.id,
@@ -742,7 +742,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
           ? 'provider.rate_limit'
           : 'provider.api_error';
       return createProviderError(
-        errorCode as import('@openaidy/runtime').ProviderErrorCode,
+        errorCode as import('@aidyagent/runtime').ProviderErrorCode,
         error.message,
         { cause: { code: error.code, type: error.type } },
       );
@@ -751,14 +751,14 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (error instanceof Error) {
       this.logger.error(`Provider error: ${error.message}`);
       return createProviderError(
-        'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
+        'provider.unknown' as import('@aidyagent/runtime').ProviderErrorCode,
         error.message,
       );
     }
 
     this.logger.error(`Unknown provider error: ${String(error)}`);
     return createProviderError(
-      'provider.unknown' as import('@openaidy/runtime').ProviderErrorCode,
+      'provider.unknown' as import('@aidyagent/runtime').ProviderErrorCode,
       'Unknown error occurred',
     );
   }

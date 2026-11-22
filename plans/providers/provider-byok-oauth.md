@@ -70,7 +70,7 @@
 ### The CLI flow
 
 ```
-$ openaidy providers connect minimax
+$ aidy providers connect minimax
 
    ┌─────────────────────────────────────────────────┐
    │  Connect MiniMax                                │
@@ -153,7 +153,7 @@ This phase replaces the OAuth stub in `MiniMaxProfile` with a working device-cod
 
 **New file: `apps/server/src/providers/oauth/state-store.ts`**
 
-A short-lived (10 minute TTL) key-value store for OAuth state. Backed by the same SQLite/Postgres DB the rest of the app uses (`apps/server/data/openaidy.db` in dev, Postgres in prod). One implementation: `DbOAuthStateStore`. No in-memory variant — the user has been bitten by state-loss in multi-process / multi-restart scenarios before.
+A short-lived (10 minute TTL) key-value store for OAuth state. Backed by the same SQLite/Postgres DB the rest of the app uses (`apps/server/data/aidy.db` in dev, Postgres in prod). One implementation: `DbOAuthStateStore`. No in-memory variant — the user has been bitten by state-loss in multi-process / multi-restart scenarios before.
 
 ```ts
 export type OAuthFlowState = {
@@ -221,10 +221,10 @@ The actual `/oauth/code` + `/oauth/token` calls live in the server (`apps/server
 ```ts
 import { generatePkce, generateState } from './pkce.js';
 import type { OAuthStateStore } from './state-store.js';
-import type { DatabaseClient } from '@openaidy/db';
-import { ProviderCredentialsRepository } from '@openaidy/db';
+import type { DatabaseClient } from '@aidyagent/db';
+import { ProviderCredentialsRepository } from '@aidyagent/db';
 import { getEncryptionService } from '../../lib/encryption.js';
-import type { DeviceCodeResponse } from '@openaidy/shared-types';
+import type { DeviceCodeResponse } from '@aidyagent/shared-types';
 
 const MINIMAX_ENDPOINTS = {
   global: {
@@ -776,7 +776,7 @@ The endpoint returns the providers the agent can actually use, based on what the
 
 ```tsx
 import { For, Show, createSignal, createResource } from 'solid-js';
-import type { ProviderInfo } from '@openaidy/shared-types';
+import type { ProviderInfo } from '@aidyagent/shared-types';
 import { listAvailableModels } from '../../lib/api';
 
 interface ModelSelectorProps {
@@ -950,13 +950,13 @@ Uses a real SQLite database and `nock` for the HTTP layer. Tests the full flow:
 
 These affect implementation. Defaults shown; confirm before coding.
 
-| Question                              | Default                                                                                                                                                                                                  |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MiniMax region default in the dialog? | Global (`minimax.io`); user can toggle to CN                                                                                                                                                             |
-| State store backend?                  | **DB in dev AND prod** (`oauth_flow_state` table, same SQLite/Postgres dual-target pattern). No in-memory variant — we use the same DB the rest of the app uses (`apps/server/data/openaidy.db` in dev). |
-| Token refresh window?                 | Refresh if expiring in <60s                                                                                                                                                                              |
-| Popup blocker fallback?               | Show a "click to open in a new tab" link if the popup is blocked                                                                                                                                         |
-| API key option in the dialog?         | Keep it for power users; OAuth is the default/recommended option                                                                                                                                         |
-| Multi-account support?                | Out of scope for this phase; one credential per providerId                                                                                                                                               |
-| Encryption                            | AES-256-GCM (already in place via `EncryptionService`)                                                                                                                                                   |
-| State TTL                             | 10 minutes (matches typical OAuth code lifetimes)                                                                                                                                                        |
+| Question                              | Default                                                                                                                                                                                              |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MiniMax region default in the dialog? | Global (`minimax.io`); user can toggle to CN                                                                                                                                                         |
+| State store backend?                  | **DB in dev AND prod** (`oauth_flow_state` table, same SQLite/Postgres dual-target pattern). No in-memory variant — we use the same DB the rest of the app uses (`apps/server/data/aidy.db` in dev). |
+| Token refresh window?                 | Refresh if expiring in <60s                                                                                                                                                                          |
+| Popup blocker fallback?               | Show a "click to open in a new tab" link if the popup is blocked                                                                                                                                     |
+| API key option in the dialog?         | Keep it for power users; OAuth is the default/recommended option                                                                                                                                     |
+| Multi-account support?                | Out of scope for this phase; one credential per providerId                                                                                                                                           |
+| Encryption                            | AES-256-GCM (already in place via `EncryptionService`)                                                                                                                                               |
+| State TTL                             | 10 minutes (matches typical OAuth code lifetimes)                                                                                                                                                    |

@@ -4,8 +4,8 @@ import { Terminal, Check } from 'lucide-react';
 import { TypewriterText } from '../ui';
 
 const INSTALL_COMMANDS = {
-  windows: 'iex (irm https://openaidy.com/install.ps1)',
-  unix: 'curl -fsSL https://openaidy.com/install.sh | bash',
+  windows: 'iex (irm https://aidyagent.app/install.ps1)',
+  unix: 'curl -fsSL https://aidyagent.app/install.sh | bash',
 } as const;
 
 const TITLE_PHRASES = [
@@ -54,7 +54,7 @@ export function Hero() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.15, ease: 'easeOut' }}
       >
-        OpenAidy · Open AI · Do-It-Yourself
+        Aidy · Open AI · Do-It-Yourself
       </motion.p>
 
       <motion.h1
@@ -128,7 +128,7 @@ export function Hero() {
       >
         <img
           src="/banner.png"
-          alt="OpenAidy platform"
+          alt="Aidy platform"
           onLoad={() => setBannerLoaded(true)}
           style={{
             opacity: bannerLoaded ? 1 : 0,

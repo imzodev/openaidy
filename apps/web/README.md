@@ -1,6 +1,6 @@
-# OpenAidy Web Client
+# Aidy Web Client
 
-Real-time WebSocket-enabled web client for the OpenAidy platform.
+Real-time WebSocket-enabled web client for the Aidy platform.
 
 ## Quick Start
 

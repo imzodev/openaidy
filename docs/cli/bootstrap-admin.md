@@ -1,6 +1,6 @@
 # Bootstrap Admin Operator Guide
 
-This guide explains how to manage the bootstrap-admin token used for OpenAidy administration.
+This guide explains how to manage the bootstrap-admin token used for Aidy administration.
 
 ## What is Bootstrap Admin?
 
@@ -17,40 +17,40 @@ The bootstrap-admin token is **local-first** - it's generated and stored on the 
 **Default Path:**
 
 ```
-.openaidy/credentials/bootstrap-admin.json
+.aidy/credentials/bootstrap-admin.json
 ```
 
-This path is relative to the working directory where the OpenAidy server runs.
+This path is relative to the working directory where the Aidy server runs.
 
 **View the path:**
 
 ```bash
-pnpm openaidy admin token path
+pnpm aidy admin token path
 ```
 
 ## Token Generation
 
 ### Automatic Generation (Install Path)
 
-The canonical entry point is the install script, which calls `openaidy init`:
+The canonical entry point is the install script, which calls `aidy init`:
 
 ```bash
 # Unix / macOS / WSL2
-curl -fsSL https://openaidy.com/install.sh | bash
+curl -fsSL https://aidyagent.app/install.sh | bash
 
 # Or invoke init directly with a real JWT secret
-WS_TOKEN_SECRET=$(openssl rand -hex 32) openaidy init
+WS_TOKEN_SECRET=$(openssl rand -hex 32) aidy init
 ```
 
-The installer generates a JWT signing secret at `$OPENAIDY_HOME/state/install.json` and runs `openaidy init` to mint a fresh token (or reuse a valid existing one). See the [Installation Guide](./installation.md) for the full flow.
+The installer generates a JWT signing secret at `$AIDY_HOME/state/install.json` and runs `aidy init` to mint a fresh token (or reuse a valid existing one). See the [Installation Guide](./installation.md) for the full flow.
 
 ### Server-Side Generation (Legacy)
 
-The bootstrap-admin token can also be generated when the OpenAidy server starts for the first time (this remains the fallback when `openaidy init` hasn't been run):
+The bootstrap-admin token can also be generated when the Aidy server starts for the first time (this remains the fallback when `aidy init` hasn't been run):
 
 ```bash
 # Start the server (generates token if missing)
-pnpm --filter @openaidy/server start
+pnpm --filter @aidyagent/server start
 ```
 
 ### Token Contents
@@ -92,10 +92,10 @@ The token can be in one of several states:
 
 ```bash
 # Show full token info
-pnpm openaidy admin token show
+pnpm aidy admin token show
 
 # Validate token
-pnpm openaidy admin token validate
+pnpm aidy admin token validate
 ```
 
 ## Security Considerations
@@ -113,8 +113,8 @@ Set appropriate permissions on the credentials directory:
 
 ```bash
 # Restrict access to credentials
-chmod 700 .openaidy/credentials
-chmod 600 .openaidy/credentials/bootstrap-admin.json
+chmod 700 .aidy/credentials
+chmod 600 .aidy/credentials/bootstrap-admin.json
 ```
 
 ### Token Rotation
@@ -123,7 +123,7 @@ A running server automatically re-mints the token before it expires — no
 manual rotation needed for the normal case. By default, once the current
 token has 20% of its lifetime left, the server generates a fresh one and
 overwrites the credentials file in place (checked every 6 hours). This means
-`pnpm openaidy admin token show` always returns a currently-valid token as
+`pnpm aidy admin token show` always returns a currently-valid token as
 long as the server keeps running, even if it's never restarted.
 
 Tune this via environment variables:
@@ -139,11 +139,11 @@ token you suspect has leaked:
 1. **Stop the server.**
 2. **Delete the old token:**
    ```bash
-   rm .openaidy/credentials/bootstrap-admin.json
+   rm .aidy/credentials/bootstrap-admin.json
    ```
 3. **Restart the server:**
    ```bash
-   pnpm --filter @openaidy/server start
+   pnpm --filter @aidyagent/server start
    ```
 
 > **Future:** Explicit revocation (invalidating a token before its own
@@ -155,7 +155,7 @@ token you suspect has leaked:
 
 ```bash
 # Full token info
-pnpm openaidy admin token show
+pnpm aidy admin token show
 ```
 
 Output:
@@ -165,7 +165,7 @@ Bootstrap Admin Token
 ========================
 
 Status:    valid
-Path:      .openaidy/credentials/bootstrap-admin.json
+Path:      .aidy/credentials/bootstrap-admin.json
 Enabled:   true
 Client ID: admin_abc123
 Created:   2026-04-01 10:00:00
@@ -178,7 +178,7 @@ Token:     eyJhbGciOiJIUzI1NiIs...
 ### Validating Token
 
 ```bash
-pnpm openaidy admin token validate
+pnpm aidy admin token validate
 ```
 
 This command checks:
@@ -191,13 +191,13 @@ This command checks:
 ### Getting Token Path
 
 ```bash
-pnpm openaidy admin token path
+pnpm aidy admin token path
 ```
 
 Output:
 
 ```
-.openaidy/credentials/bootstrap-admin.json
+.aidy/credentials/bootstrap-admin.json
 ```
 
 ## Troubleshooting
@@ -211,7 +211,7 @@ Output:
 **Solution:** Start the server to generate a new token:
 
 ```bash
-pnpm --filter @openaidy/server start
+pnpm --filter @aidyagent/server start
 ```
 
 ### Token Expired
@@ -226,14 +226,14 @@ lifetime when it stopped.
 **Solution:** Start (or restart) the server to generate a new token:
 
 ```bash
-pnpm --filter @openaidy/server start
+pnpm --filter @aidyagent/server start
 ```
 
 If the file is still present but stale, delete it first:
 
 ```bash
-rm .openaidy/credentials/bootstrap-admin.json
-pnpm --filter @openaidy/server start
+rm .aidy/credentials/bootstrap-admin.json
+pnpm --filter @aidyagent/server start
 ```
 
 ### Token Malformed
@@ -245,8 +245,8 @@ pnpm --filter @openaidy/server start
 **Solution:** Regenerate the token:
 
 ```bash
-rm .openaidy/credentials/bootstrap-admin.json
-pnpm --filter @openaidy/server start
+rm .aidy/credentials/bootstrap-admin.json
+pnpm --filter @aidyagent/server start
 ```
 
 ### Token Invalid
@@ -258,8 +258,8 @@ pnpm --filter @openaidy/server start
 **Solution:** Delete and regenerate:
 
 ```bash
-rm .openaidy/credentials/bootstrap-admin.json
-pnpm --filter @openaidy/server start
+rm .aidy/credentials/bootstrap-admin.json
+pnpm --filter @aidyagent/server start
 ```
 
 ### Token Disabled
@@ -274,10 +274,10 @@ pnpm --filter @openaidy/server start
 
 Token behavior can be configured through environment variables:
 
-| Variable                          | Description            | Default                                      |
-| --------------------------------- | ---------------------- | -------------------------------------------- |
-| `OPENAIDY_BOOTSTRAP_TOKEN_PATH`   | Custom token file path | `.openaidy/credentials/bootstrap-admin.json` |
-| `OPENAIDY_BOOTSTRAP_TOKEN_EXPIRY` | Token expiration time  | `24h`                                        |
+| Variable                      | Description            | Default                                  |
+| ----------------------------- | ---------------------- | ---------------------------------------- |
+| `AIDY_BOOTSTRAP_TOKEN_PATH`   | Custom token file path | `.aidy/credentials/bootstrap-admin.json` |
+| `AIDY_BOOTSTRAP_TOKEN_EXPIRY` | Token expiration time  | `24h`                                    |
 
 > **Note:** Configuration options may vary. Check server documentation for current options.
 

@@ -12,7 +12,7 @@ import {
 const tutorials = [
   {
     icon: <MessageSquare size={24} />,
-    title: 'Connect WhatsApp to OpenAidy',
+    title: 'Connect WhatsApp to Aidy',
     description:
       'Connect your WhatsApp number so agents can handle real conversations. This guide walks through channel setup, authentication, and receiving your first message.',
     time: '10 min',
@@ -32,7 +32,7 @@ const tutorials = [
     icon: <Puzzle size={24} />,
     title: 'Build a Custom Plugin',
     description:
-      'Extend OpenAidy with your own tools and integrations. This tutorial covers the plugin SDK, defining tool schemas, and registering plugins with the control plane.',
+      'Extend Aidy with your own tools and integrations. This tutorial covers the plugin SDK, defining tool schemas, and registering plugins with the control plane.',
     time: '25 min',
     level: 'Intermediate',
     href: '/docs/plugin-sdk',
@@ -67,28 +67,28 @@ export default function Tutorials() {
   return (
     <div className="tutorials-page">
       <Helmet>
-        <title>Tutorials — OpenAidy</title>
+        <title>Tutorials — Aidy</title>
         <meta
           name="description"
-          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+          content="Step-by-step guides to get the most out of Aidy. WhatsApp integration, scheduling, plugins, and more."
         />
-        <meta property="og:title" content="Tutorials — OpenAidy" />
+        <meta property="og:title" content="Tutorials — Aidy" />
         <meta
           property="og:description"
-          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+          content="Step-by-step guides to get the most out of Aidy. WhatsApp integration, scheduling, plugins, and more."
         />
         <meta
           property="og:image"
-          content="https://openaidy.com/og-tutorials.png"
+          content="https://aidyagent.app/og-tutorials.png"
         />
-        <meta name="twitter:title" content="Tutorials — OpenAidy" />
+        <meta name="twitter:title" content="Tutorials — Aidy" />
         <meta
           name="twitter:description"
-          content="Step-by-step guides to get the most out of OpenAidy. WhatsApp integration, scheduling, plugins, and more."
+          content="Step-by-step guides to get the most out of Aidy. WhatsApp integration, scheduling, plugins, and more."
         />
         <meta
           name="twitter:image"
-          content="https://openaidy.com/og-tutorials.png"
+          content="https://aidyagent.app/og-tutorials.png"
         />
       </Helmet>
 
@@ -107,10 +107,10 @@ export default function Tutorials() {
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           >
             <span className="tutorials-eyebrow">Tutorials</span>
-            <h1>Learn OpenAidy step by step</h1>
+            <h1>Learn Aidy step by step</h1>
             <p>
               From first install to advanced agent workflows — practical guides
-              to get the most out of OpenAidy.
+              to get the most out of Aidy.
             </p>
           </motion.div>
         </div>

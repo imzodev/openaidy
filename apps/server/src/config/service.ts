@@ -13,10 +13,10 @@ import {
   type AppProviderConfig,
   type ChannelConfig,
   type McpServerConfig,
-  type OpenAidyAppConfig,
+  type AidyAppConfig,
   type ProviderConfig,
   providerConfigSchema,
-} from '@openaidy/config';
+} from '@aidyagent/config';
 import type { AgentRegistry } from '../agents';
 import type { Agent } from '../agents';
 import type { ProviderServices } from '../providers';
@@ -29,7 +29,7 @@ import type {
 import type {
   AuthMethodProvider,
   CredentialProvider,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import {
   MCP_SEED_MANIFEST_FILE,
   reconcilePreinstalledMcpServers,
@@ -45,11 +45,9 @@ export class AppConfigService {
   private readonly agents: AgentRegistry;
   private readonly credentialProvider: CredentialProvider | undefined;
   private readonly authMethodProvider: AuthMethodProvider | undefined;
-  private currentConfig: OpenAidyAppConfig | undefined;
+  private currentConfig: AidyAppConfig | undefined;
   private issues: AppConfigIssue[] = [];
-  private readonly savedListeners = new Set<
-    (config: OpenAidyAppConfig) => void
-  >();
+  private readonly savedListeners = new Set<(config: AidyAppConfig) => void>();
   private channelReconciler:
     | ((channels: ChannelConfig[] | undefined) => void | Promise<void>)
     | undefined;
@@ -82,12 +80,12 @@ export class AppConfigService {
    * settings that live outside agents/providers (e.g. the schedule
    * timezone). Returns an unsubscribe function.
    */
-  onSaved(listener: (config: OpenAidyAppConfig) => void): () => void {
+  onSaved(listener: (config: AidyAppConfig) => void): () => void {
     this.savedListeners.add(listener);
     return () => this.savedListeners.delete(listener);
   }
 
-  getConfig(): OpenAidyAppConfig {
+  getConfig(): AidyAppConfig {
     if (!this.currentConfig) {
       throw new Error('Application config has not been loaded');
     }
@@ -208,7 +206,7 @@ export class AppConfigService {
     };
   }
 
-  async load(): Promise<OpenAidyAppConfig> {
+  async load(): Promise<AidyAppConfig> {
     this.bootstrapIfMissing();
     const config = this.readConfigFile(this.configPath);
     await this.applyConfig(config);
@@ -216,7 +214,7 @@ export class AppConfigService {
     return config;
   }
 
-  async save(input: unknown): Promise<OpenAidyAppConfig> {
+  async save(input: unknown): Promise<AidyAppConfig> {
     const parsed = appConfigSchema.parse(input);
     this.encryptChannelSecrets(parsed);
     this.encryptMcpSecrets(parsed);
@@ -241,7 +239,7 @@ export class AppConfigService {
     return parsed;
   }
 
-  async reload(): Promise<OpenAidyAppConfig> {
+  async reload(): Promise<AidyAppConfig> {
     return this.load();
   }
 
@@ -258,7 +256,7 @@ export class AppConfigService {
     copyFileSync(this.templatePath, this.configPath);
   }
 
-  private readConfigFile(filePath: string): OpenAidyAppConfig {
+  private readConfigFile(filePath: string): AidyAppConfig {
     let parsedJson: unknown;
 
     try {
@@ -275,11 +273,11 @@ export class AppConfigService {
   /**
    * Encrypt inline channel secrets (currently the Discord bot token) before
    * the config is written, so a plaintext token pasted in the UI never lands
-   * in openaidy.json. Idempotent: already-encrypted (`enc:v1:`) values and
+   * in aidy.json. Idempotent: already-encrypted (`enc:v1:`) values and
    * env-var references are left untouched. Mirrors MCP inline-secret handling
    * (see `mcp/server-record.ts`).
    */
-  private encryptChannelSecrets(config: OpenAidyAppConfig): void {
+  private encryptChannelSecrets(config: AidyAppConfig): void {
     for (const channel of config.channels ?? []) {
       if (channel.type !== 'discord') continue;
       const token = channel.botToken;
@@ -299,7 +297,7 @@ export class AppConfigService {
    * also be imported/restored with a plaintext value). Idempotent, mirrors
    * {@link encryptChannelSecrets}.
    */
-  private encryptMcpSecrets(config: OpenAidyAppConfig): void {
+  private encryptMcpSecrets(config: AidyAppConfig): void {
     if (!config.mcpSecrets) return;
     for (const [name, value] of Object.entries(config.mcpSecrets)) {
       if (!isEncryptedSecret(value)) {
@@ -308,14 +306,14 @@ export class AppConfigService {
     }
   }
 
-  private writeConfigFile(config: OpenAidyAppConfig): void {
+  private writeConfigFile(config: AidyAppConfig): void {
     mkdirSync(dirname(this.configPath), { recursive: true });
     const tempPath = `${this.configPath}.tmp`;
     writeFileSync(tempPath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
     renameSync(tempPath, this.configPath);
   }
 
-  private async applyConfig(config: OpenAidyAppConfig): Promise<void> {
+  private async applyConfig(config: AidyAppConfig): Promise<void> {
     this.agents.replaceAll(config.agents as Agent[]);
 
     this.providers.registry.clear();

@@ -40,8 +40,8 @@ apps/desktop/                              ← NEW (Tauri project root)
 ### Step 1.1: Bootstrap Tauri Project
 
 ```bash
-# Must be done inside /tmp/openaidy/apps/
-cd /tmp/openaidy/apps
+# Must be done inside /tmp/aidy/apps/
+cd /tmp/aidy/apps
 npm create tauri-app@latest desktop -- --template solid-ts --manager pnpm --yes
 ```
 
@@ -50,7 +50,7 @@ This creates `apps/desktop/` with the Solid.js + TypeScript + Vite template.
 **Verify:**
 
 ```bash
-cd /tmp/openaidy/apps/desktop
+cd /tmp/aidy/apps/desktop
 ls -la
 # Should have: src-tauri/, src/, package.json, vite.config.ts, index.html
 ```
@@ -62,9 +62,9 @@ Edit `apps/desktop/src-tauri/tauri.conf.json`:
 ```json
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenAidy",
+  "productName": "Aidy",
   "version": "0.1.0",
-  "identifier": "dev.openaidy",
+  "identifier": "app.aidyagent",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -76,7 +76,7 @@ Edit `apps/desktop/src-tauri/tauri.conf.json`:
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "OpenAidy",
+        "title": "Aidy",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
@@ -134,12 +134,12 @@ Edit `apps/desktop/src-tauri/Cargo.toml`:
 
 ```toml
 [package]
-name = "openaidy-desktop"
+name = "aidy-desktop"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "openaidy_desktop_lib"
+name = "aidy_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -189,7 +189,7 @@ fn main() {
         .format_timestamp_millis()
         .init();
 
-    info!("Starting OpenAidy Desktop v{}", env!("CARGO_PKG_VERSION"));
+    info!("Starting Aidy Desktop v{}", env!("CARGO_PKG_VERSION"));
 
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -228,7 +228,7 @@ mkdir -p apps/desktop/src-tauri/icons
 
 # Create a simple 32x32 PNG (you'd replace this with real icons later)
 # The Tauri CLI can scaffold default icons; alternatively:
-cd /tmp/openaidy/apps/desktop/src-tauri/icons
+cd /tmp/aidy/apps/desktop/src-tauri/icons
 
 # For now, create empty placeholder files that allow build to proceed
 touch 32x32.png 128x128.png 128x128@2x.png icon.icns icon.ico
@@ -246,7 +246,7 @@ Ensure `apps/desktop/package.json` has the correct scripts:
 
 ```json
 {
-  "name": "@openaidy/desktop",
+  "name": "@aidyagent/desktop",
   "private": true,
   "type": "module",
   "scripts": {
@@ -304,14 +304,14 @@ For **Step 1 only**, we verify the shell works. The integration with `apps/serve
 
 ```bash
 # 1. Start the web dev server (from apps/web)
-cd /tmp/openaidy/apps/web && pnpm dev &
+cd /tmp/aidy/apps/web && pnpm dev &
 # Should output: Local: http://localhost:5173/
 
 # 2. In another terminal, start Tauri dev
-cd /tmp/openaidy/apps/desktop && pnpm tauri dev
+cd /tmp/aidy/apps/desktop && pnpm tauri dev
 
 # Expected result:
-# - A window opens titled "OpenAidy"
+# - A window opens titled "Aidy"
 # - The Solid.js web app is visible at localhost:5173
 # - No errors in the Tauri console
 ```

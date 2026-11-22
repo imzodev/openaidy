@@ -20,7 +20,7 @@ import type {
   BackupJob,
   BackupSection,
   BackupUpload,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import type { BackupService } from './service';
 
 /** Raised when a job can't start because another one is running. */

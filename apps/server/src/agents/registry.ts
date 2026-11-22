@@ -10,7 +10,7 @@ import {
   toAgentSummary,
 } from './schema';
 import type { CreateAgentInput } from '../types';
-import type { AgentIdentity } from '@openaidy/shared-types';
+import type { AgentIdentity } from '@aidyagent/shared-types';
 
 /**
  * Agent registry options
@@ -20,7 +20,7 @@ export type AgentRegistryOptions = {
   agentsDir?: string;
   /** Initial in-memory agents */
   initialAgents?: Agent[];
-  /** Path to the main openaidy.json config file used for persisting agent changes */
+  /** Path to the main aidy.json config file used for persisting agent changes */
   configPath?: string;
 };
 
@@ -48,7 +48,7 @@ export class AgentRegistry {
   }
 
   /**
-   * Set (or update) the path to the main openaidy.json config file.
+   * Set (or update) the path to the main aidy.json config file.
    * Called by AppConfigService after it resolves the path.
    */
   setConfigPath(configPath: string): void {
@@ -270,7 +270,7 @@ export class AgentRegistry {
 
   /**
    * Update the builtin tools list for an agent.
-   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Patches both the in-memory registry and the main aidy.json config file on disk.
    * Returns the updated AgentSummary or undefined if the agent was not found.
    */
   updateAgentTools(agentId: string, tools: string[]): AgentSummary | undefined {
@@ -295,7 +295,7 @@ export class AgentRegistry {
 
   /**
    * Update the skills list for an agent.
-   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Patches both the in-memory registry and the main aidy.json config file on disk.
    * Returns the updated AgentSummary or undefined if the agent was not found.
    */
   updateAgentSkills(
@@ -323,7 +323,7 @@ export class AgentRegistry {
 
   /**
    * Append a skill ID to an agent's skills list.
-   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Patches both the in-memory registry and the main aidy.json config file on disk.
    *
    * - Throws if the agent does not exist.
    * - No-op (returns the existing agent) if the skill is already attached.
@@ -358,7 +358,7 @@ export class AgentRegistry {
 
   /**
    * Update the MCP server references for an agent.
-   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Patches both the in-memory registry and the main aidy.json config file on disk.
    * Returns the updated AgentSummary or undefined if the agent was not found.
    */
   updateAgentMcpServers(
@@ -386,7 +386,7 @@ export class AgentRegistry {
 
   /**
    * Update (or clear) the structured visual identity for an agent.
-   * Patches both the in-memory registry and the main openaidy.json config file on disk.
+   * Patches both the in-memory registry and the main aidy.json config file on disk.
    * Passing `null` removes the `identity` key. Returns the updated AgentSummary
    * or undefined if the agent was not found.
    */
@@ -416,7 +416,7 @@ export class AgentRegistry {
   /**
    * Create a new agent from user-provided input.
    * All structural defaults (version, enabled, workspace scaffold, tags) are applied here
-   * so callers never duplicate this logic. Persists to openaidy.json and registers in memory.
+   * so callers never duplicate this logic. Persists to aidy.json and registers in memory.
    * Throws if the ID already exists or validation fails.
    */
   createAgent(input: CreateAgentInput): AgentSummary {
@@ -474,7 +474,7 @@ export class AgentRegistry {
 
   /**
    * Delete an agent by ID.
-   * Removes from the in-memory map and persists to openaidy.json.
+   * Removes from the in-memory map and persists to aidy.json.
    * Returns the deleted summary, or null if not found.
    */
   deleteAgent(agentId: string): AgentSummary | null {

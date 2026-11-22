@@ -1,7 +1,7 @@
 /**
  * Providers Disconnect Command Handler
  *
- * Implements `openaidy providers disconnect` command.
+ * Implements `aidy providers disconnect` command.
  * Uses GET/PUT /config API to remove provider API keys from app config.
  */
 
@@ -9,7 +9,7 @@ import * as p from '@clack/prompts';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { resolveCLIConfig } from '../../lib/config.js';
 import type { CommandResult } from '../../types.js';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 interface AppConfig {
   version: number;
@@ -80,7 +80,7 @@ export async function providersDisconnectHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy providers disconnect <provider-id> [options]
+      `Usage: aidy providers disconnect <provider-id> [options]
 
 Disconnect from a provider (removes API key from config).
 
@@ -91,7 +91,7 @@ Options:
   --help           Show this help message
 
 Examples:
-  pnpm openaidy providers disconnect openai
+  pnpm aidy providers disconnect openai
 
 Exit Codes:
   0  Success
@@ -104,7 +104,7 @@ Exit Codes:
   const providerId = args[0];
   if (!providerId) {
     p.log.error('Provider ID is required.');
-    p.log.info('Usage: openaidy providers disconnect <provider-id>');
+    p.log.info('Usage: aidy providers disconnect <provider-id>');
     return { exitCode: 1, error: 'Provider ID is required' };
   }
 

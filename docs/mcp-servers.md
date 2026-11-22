@@ -7,7 +7,7 @@ title: 'MCP Servers'
 
 # MCP Servers
 
-OpenAidy connects to external [MCP](https://modelcontextprotocol.io) servers via stdio or HTTP transport, giving agents access to whatever tools those servers expose. Configure servers through **Settings → MCP** in the web UI, or the REST API at `POST /api/mcp/servers`.
+Aidy connects to external [MCP](https://modelcontextprotocol.io) servers via stdio or HTTP transport, giving agents access to whatever tools those servers expose. Configure servers through **Settings → MCP** in the web UI, or the REST API at `POST /api/mcp/servers`.
 
 ## Preinstalled servers
 
@@ -28,13 +28,13 @@ A server whose secret is unset sits in "Awaiting configuration" instead of tryin
 
 ## Setting API keys
 
-A server that needs a secret references it as `${VAR_NAME}` in its `headers` (http transport) or `env` (stdio transport). On the MCP page, a server missing one shows an **Awaiting configuration** banner with a plain "paste your API key" field for each `${VAR_NAME}` it needs — paste the key and save. OpenAidy encrypts it at rest (AES-256-GCM) and resolves it into the placeholder at connection time; the server's own `env`/`headers` config is never edited, so there's nothing to break and future updates to a preinstalled server's definition still apply.
+A server that needs a secret references it as `${VAR_NAME}` in its `headers` (http transport) or `env` (stdio transport). On the MCP page, a server missing one shows an **Awaiting configuration** banner with a plain "paste your API key" field for each `${VAR_NAME}` it needs — paste the key and save. Aidy encrypts it at rest (AES-256-GCM) and resolves it into the placeholder at connection time; the server's own `env`/`headers` config is never edited, so there's nothing to break and future updates to a preinstalled server's definition still apply.
 
 For self-hosted/ops deployments that want a secret out of the config file entirely, set the real environment variable before starting the server instead — it takes priority over a pasted key if both are set:
 
 ```bash
 export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_…
-openaidy start
+aidy start
 ```
 
 ## Adding your own server
@@ -51,15 +51,15 @@ Add an entry via the UI or the API, specifying:
 If you have older MCP server entries with plaintext inline secrets, encrypt them at rest:
 
 ```bash
-openaidy mcp migrate-secrets --dry-run   # preview what would change
-openaidy mcp migrate-secrets             # actually re-encrypt
+aidy mcp migrate-secrets --dry-run   # preview what would change
+aidy mcp migrate-secrets             # actually re-encrypt
 ```
 
 ## Importing servers in bulk
 
 ```bash
-openaidy mcp import servers.json     # from a file
-cat servers.json | openaidy mcp import   # from stdin
+aidy mcp import servers.json     # from a file
+cat servers.json | aidy mcp import   # from stdin
 ```
 
 ## Related

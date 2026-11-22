@@ -1,28 +1,28 @@
 <#
 .SYNOPSIS
-    Full-stack smoke test for the OpenAidy installation flow on Windows.
+    Full-stack smoke test for the Aidy installation flow on Windows.
 
 .DESCRIPTION
-    Tests openaidy init, start, status, and stop on a clean Windows environment.
+    Tests aidy init, start, status, and stop on a clean Windows environment.
     Designed for manual execution on a Windows VM or dev machine.
 
     Steps:
-      1. Creates a clean OPENAIDY_HOME in %TEMP%
+      1. Creates a clean AIDY_HOME in %TEMP%
       2. Generates a WS_TOKEN_SECRET
-      3. Runs `openaidy init` and validates the token file
-      4. Runs `openaidy start` and polls /health
-      5. Runs `openaidy status` and confirms running
-      6. Runs `openaidy stop` and confirms stopped
+      3. Runs `aidy init` and validates the token file
+      4. Runs `aidy start` and polls /health
+      5. Runs `aidy status` and confirms running
+      6. Runs `aidy stop` and confirms stopped
       7. Cleans up the temp home
 
 .PARAMETER LocalRepo
-    Path to a local openaidy repo checkout. If omitted, uses `openaidy` from PATH.
+    Path to a local aidy repo checkout. If omitted, uses `aidy` from PATH.
 
 .PARAMETER NoCleanup
     If set, does NOT delete the temp home after the test (useful for debugging).
 
 .EXAMPLE
-    .\scripts\smoke-install.ps1 -LocalRepo C:\Users\me\openaidy
+    .\scripts\smoke-install.ps1 -LocalRepo C:\Users\me\aidy
 
 .EXAMPLE
     .\scripts\smoke-install.ps1
@@ -39,10 +39,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$SmokeHome = Join-Path $env:TEMP "openaidy-smoke-$(Get-Random)"
-$SmokeRepo = Join-Path $env:TEMP "openaidy-smoke-repo-$(Get-Random)"
-$OldHome = $env:OPENAIDY_HOME
-$OldRepo = $env:OPENAIDY_REPO
+$SmokeHome = Join-Path $env:TEMP "aidy-smoke-$(Get-Random)"
+$SmokeRepo = Join-Path $env:TEMP "aidy-smoke-repo-$(Get-Random)"
+$OldHome = $env:AIDY_HOME
+$OldRepo = $env:AIDY_REPO
 $OldSecret = $env:WS_TOKEN_SECRET
 
 function Log($msg) { Write-Host "[smoke] $msg" }
@@ -50,20 +50,20 @@ function Fail($msg) { Write-Host "[smoke] FAIL: $msg" -ForegroundColor Red; exit
 
 # Cleanup handler
 try {
-    # Create temp home (data) and temp repo (code) — separated per fix-openaidy-home
+    # Create temp home (data) and temp repo (code) — separated per fix-aidy-home
     New-Item -ItemType Directory -Path $SmokeHome -Force | Out-Null
     New-Item -ItemType Directory -Path $SmokeRepo -Force | Out-Null
-    $env:OPENAIDY_HOME = $SmokeHome
-    $env:OPENAIDY_REPO = $SmokeRepo
+    $env:AIDY_HOME = $SmokeHome
+    $env:AIDY_REPO = $SmokeRepo
     $env:WS_TOKEN_SECRET = -join ((48..57) + (97..102) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
     $env:CI = "1"
 
-    Log "Using OPENAIDY_HOME=$SmokeHome"
-    Log "Using OPENAIDY_REPO=$SmokeRepo"
+    Log "Using AIDY_HOME=$SmokeHome"
+    Log "Using AIDY_REPO=$SmokeRepo"
 
     # Validate paths are separated
     if ($SmokeHome -eq $SmokeRepo) {
-        Fail "OPENAIDY_HOME and OPENAIDY_REPO must differ"
+        Fail "AIDY_HOME and AIDY_REPO must differ"
     }
 
     # Determine CLI
@@ -71,17 +71,17 @@ try {
         if (-not (Test-Path (Join-Path $LocalRepo "packages/cli"))) {
             Fail "LocalRepo '$LocalRepo' does not contain packages/cli"
         }
-        $Cli = "node --import tsx $(Join-Path $LocalRepo "packages/cli/bin/openaidy.ts")"
+        $Cli = "node --import tsx $(Join-Path $LocalRepo "packages/cli/bin/aidy.ts")"
         Push-Location $LocalRepo
     } else {
-        $Cli = "openaidy"
+        $Cli = "aidy"
     }
 
     # Phase 1: init
-    Log "=== Phase 1: openaidy init ==="
+    Log "=== Phase 1: aidy init ==="
     $InitOutput = Invoke-Expression "$Cli init" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Fail "openaidy init exited $LASTEXITCODE`n$InitOutput"
+        Fail "aidy init exited $LASTEXITCODE`n$InitOutput"
     }
     if ($InitOutput -notmatch "^Bootstrap admin token: ") {
         Fail "missing 'Bootstrap admin token:' line`n$InitOutput"
@@ -120,12 +120,12 @@ try {
     Log "OK: idempotent — token unchanged"
 
     # Phase 4: start
-    Log "=== Phase 4: openaidy start ==="
+    Log "=== Phase 4: aidy start ==="
     Log "Building server..."
-    Invoke-Expression "pnpm --filter @openaidy/server build" 2>&1 | Out-Null
+    Invoke-Expression "pnpm --filter @aidyagent/server build" 2>&1 | Out-Null
     $StartOutput = Invoke-Expression "$Cli start" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Fail "openaidy start exited $LASTEXITCODE`n$StartOutput"
+        Fail "aidy start exited $LASTEXITCODE`n$StartOutput"
     }
     if ($StartOutput -notmatch "Server is ready") {
         Log "WARNING: start may not have confirmed readiness (server may still be starting)`n$StartOutput"
@@ -133,7 +133,7 @@ try {
     Log "OK: server started"
 
     # Phase 5: status
-    Log "=== Phase 5: openaidy status ==="
+    Log "=== Phase 5: aidy status ==="
     $StatusOutput = Invoke-Expression "$Cli status" 2>&1
     if ($StatusOutput -notmatch "running") {
         Fail "status did not report running`n$StatusOutput"
@@ -141,10 +141,10 @@ try {
     Log "OK: status reports running"
 
     # Phase 6: stop
-    Log "=== Phase 6: openaidy stop ==="
+    Log "=== Phase 6: aidy stop ==="
     $StopOutput = Invoke-Expression "$Cli stop" 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Fail "openaidy stop exited $LASTEXITCODE`n$StopOutput"
+        Fail "aidy stop exited $LASTEXITCODE`n$StopOutput"
     }
     Log "OK: server stopped"
 
@@ -170,8 +170,8 @@ try {
 
 } finally {
     # Cleanup
-    $env:OPENAIDY_HOME = $OldHome
-    $env:OPENAIDY_REPO = $OldRepo
+    $env:AIDY_HOME = $OldHome
+    $env:AIDY_REPO = $OldRepo
     $env:WS_TOKEN_SECRET = $OldSecret
     if (-not $NoCleanup -and (Test-Path $SmokeHome)) {
         Remove-Item -Recurse -Force $SmokeHome -ErrorAction SilentlyContinue

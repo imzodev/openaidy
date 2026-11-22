@@ -5,7 +5,7 @@
  * `.types.ts` file.
  */
 
-import type { PersonalityPreset } from '@openaidy/shared-types';
+import type { PersonalityPreset } from '@aidyagent/shared-types';
 
 export type PersonalityPresetCardProps = {
   preset: PersonalityPreset;

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 5 introduces advanced features that transform the addon system into a full-featured ecosystem. This phase includes addon marketplace/discovery, version management, dependency resolution, analytics dashboard, and monetization support. These features enable OpenAidy to scale its addon ecosystem and provide enterprise-grade addon management.
+Phase 5 introduces advanced features that transform the addon system into a full-featured ecosystem. This phase includes addon marketplace/discovery, version management, dependency resolution, analytics dashboard, and monetization support. These features enable Aidy to scale its addon ecosystem and provide enterprise-grade addon management.
 
 ## Objectives
 
@@ -103,8 +103,8 @@ export const addonVersions = pgTable(
     downloadCount: integer('download_count').default(0).notNull(),
     isLatest: boolean('is_latest').default(false).notNull(),
     isPrerelease: boolean('is_prerelease').default(false).notNull(),
-    minOpenaidyVersion: varchar('min_openaidy_version', { length: 50 }),
-    maxOpenaidyVersion: varchar('max_openaidy_version', { length: 50 }),
+    minAidyVersion: varchar('min_aidy_version', { length: 50 }),
+    maxAidyVersion: varchar('max_aidy_version', { length: 50 }),
     dependencies: jsonb('dependencies').notNull().default('{}'), // Addon dependencies
     publishedAt: timestamp('published_at').defaultNow().notNull(),
   },
@@ -223,8 +223,8 @@ import type {
   AddonDownload,
   NewMarketplaceAddon,
   NewAddonVersion,
-} from '@openaidy/db';
-import type { Database } from '@openaidy/db/client';
+} from '@aidyagent/db';
+import type { Database } from '@aidyagent/db/client';
 import { eq, and, desc, asc, ilike, sql, inArray } from 'drizzle-orm';
 import {
   marketplaceAddons,
@@ -232,7 +232,7 @@ import {
   addonReviews,
   addonCategories,
   addonDownloads,
-} from '@openaidy/db/schema/marketplace';
+} from '@aidyagent/db/schema/marketplace';
 
 export interface MarketplaceServiceOptions {
   db: Database;
@@ -589,8 +589,8 @@ export class MarketplaceService {
       downloadCount: 0,
       isLatest: true,
       isPrerelease,
-      minOpenaidyVersion: manifest.openaidy.minVersion,
-      maxOpenaidyVersion: manifest.openaidy.maxVersion,
+      minAidyVersion: manifest.aidy.minVersion,
+      maxAidyVersion: manifest.aidy.maxVersion,
       dependencies: manifest.dependencies || {},
     };
 
@@ -965,16 +965,16 @@ export interface StorageService {
 
 ```typescript
 import { semver } from 'semver';
-import type { Database } from '@openaidy/db/client';
+import type { Database } from '@aidyagent/db/client';
 import { eq, and, desc } from 'drizzle-orm';
 import {
   marketplaceAddons,
   addonVersions,
-} from '@openaidy/db/schema/marketplace';
+} from '@aidyagent/db/schema/marketplace';
 
 export interface VersionManagerOptions {
   db: Database;
-  currentOpenaidyVersion: string;
+  currentAidyVersion: string;
 }
 
 export interface VersionCompatibility {
@@ -1002,14 +1002,14 @@ export class VersionManager {
   constructor(private options: VersionManagerOptions) {}
 
   /**
-   * Check if addon version is compatible with current OpenAidy version
+   * Check if addon version is compatible with current Aidy version
    */
   checkCompatibility(
     version: string,
     minVersion?: string,
     maxVersion?: string,
   ): VersionCompatibility {
-    const currentVersion = this.options.currentOpenaidyVersion;
+    const currentVersion = this.options.currentAidyVersion;
 
     try {
       // Check minimum version requirement
@@ -1019,7 +1019,7 @@ export class VersionManager {
       ) {
         return {
           compatible: false,
-          reason: `Requires OpenAidy ${minVersion} or higher, current version is ${currentVersion}`,
+          reason: `Requires Aidy ${minVersion} or higher, current version is ${currentVersion}`,
           suggestedVersion: minVersion,
         };
       }
@@ -1031,7 +1031,7 @@ export class VersionManager {
       ) {
         return {
           compatible: false,
-          reason: `Requires OpenAidy ${maxVersion} or lower, current version is ${currentVersion}`,
+          reason: `Requires Aidy ${maxVersion} or lower, current version is ${currentVersion}`,
           suggestedVersion: maxVersion,
         };
       }
@@ -1182,8 +1182,8 @@ export class VersionManager {
         isPrerelease: addonVersions.isPrerelease,
         publishedAt: addonVersions.publishedAt,
         downloadCount: addonVersions.downloadCount,
-        minOpenaidyVersion: addonVersions.minOpenaidyVersion,
-        maxOpenaidyVersion: addonVersions.maxOpenaidyVersion,
+        minAidyVersion: addonVersions.minAidyVersion,
+        maxAidyVersion: addonVersions.maxAidyVersion,
       })
       .from(addonVersions)
       .innerJoin(
@@ -1202,8 +1202,8 @@ export class VersionManager {
       ...v,
       compatible: this.checkCompatibility(
         v.version,
-        v.minOpenaidyVersion || undefined,
-        v.maxOpenaidyVersion || undefined,
+        v.minAidyVersion || undefined,
+        v.maxAidyVersion || undefined,
       ).compatible,
     }));
   }
@@ -1409,15 +1409,15 @@ export class VersionManager {
 **File: `apps/server/src/analytics/service.ts`**
 
 ```typescript
-import type { Database } from '@openaidy/db/client';
+import type { Database } from '@aidyagent/db/client';
 import { eq, and, gte, lte, sql, desc, asc } from 'drizzle-orm';
 import {
   marketplaceAddons,
   addonDownloads,
   addonReviews,
   addonUsage,
-} from '@openaidy/db/schema/marketplace';
-import { addons } from '@openaidy/db/schema/addons';
+} from '@aidyagent/db/schema/marketplace';
+import { addons } from '@aidyagent/db/schema/addons';
 
 export interface AnalyticsServiceOptions {
   db: Database;
@@ -1955,12 +1955,12 @@ export class AnalyticsService {
 **File: `apps/server/src/marketplace/licensing.ts`**
 
 ```typescript
-import type { Database } from '@openaidy/db/client';
+import type { Database } from '@aidyagent/db/client';
 import { eq, and, sql } from 'drizzle-orm';
 import {
   marketplaceAddons,
   addonLicenses,
-} from '@openaidy/db/schema/marketplace';
+} from '@aidyagent/db/schema/marketplace';
 
 export interface LicenseOptions {
   db: Database;
@@ -2856,7 +2856,7 @@ Phase 5 is complete when:
 
 ## Final System Summary
 
-After completing all 5 phases, the OpenAidy addon system provides:
+After completing all 5 phases, the Aidy addon system provides:
 
 - **Complete Backend Foundation**: Secure, scalable addon infrastructure
 - **Modern Frontend Integration**: Dynamic loading with seamless UI integration
@@ -2864,7 +2864,7 @@ After completing all 5 phases, the OpenAidy addon system provides:
 - **Excellent Developer Experience**: CLI tools, templates, and documentation
 - **Thriving Ecosystem**: Marketplace, analytics, and monetization support
 
-The addon system transforms OpenAidy into an extensible platform where third-party developers can create valuable extensions while maintaining security, performance, and user experience standards.
+The addon system transforms Aidy into an extensible platform where third-party developers can create valuable extensions while maintaining security, performance, and user experience standards.
 
 ## Next Steps
 

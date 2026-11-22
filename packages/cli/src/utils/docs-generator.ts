@@ -83,7 +83,7 @@ export async function generateDocs(
 function generateReadme(manifest: Record<string, unknown>): string {
   const id = String(manifest.id || 'addon');
   const name = String(manifest.name || id);
-  const description = String(manifest.description || 'An OpenAidy addon');
+  const description = String(manifest.description || 'An Aidy addon');
   const version = String(manifest.version || '1.0.0');
   const author = (manifest.author as Record<string, string>) || {};
 
@@ -96,10 +96,10 @@ function generateReadme(manifest: Record<string, unknown>): string {
   }
 
   content += `## Installation\n\n`;
-  content += `\`\`\`bash\nnpm install @openaidy/addon-${id}\n\`\`\`\n\n`;
+  content += `\`\`\`bash\nnpm install @aidyagent/addon-${id}\n\`\`\`\n\n`;
 
   content += `## Usage\n\n`;
-  content += `\`\`\`javascript\nimport { ${name.replace(/\s+/g, '')} } from '@openaidy/addon-${id}';\n\nconst addon = new ${name.replace(/\s+/g, '')}(config);\naddon.start();\n\`\`\`\n\n`;
+  content += `\`\`\`javascript\nimport { ${name.replace(/\s+/g, '')} } from '@aidyagent/addon-${id}';\n\nconst addon = new ${name.replace(/\s+/g, '')}(config);\naddon.start();\n\`\`\`\n\n`;
 
   // Add routes if defined
   const ui = manifest.ui as Record<string, unknown> | undefined;
@@ -224,9 +224,7 @@ export function validateDocs(projectPath: string): {
   for (const file of requiredFiles) {
     if (!fs.existsSync(path.join(docsPath, file))) {
       missing.push(`docs/${file}`);
-      suggestions.push(
-        `Missing ${file} - run 'openaidy docs generate' to create`,
-      );
+      suggestions.push(`Missing ${file} - run 'aidy docs generate' to create`);
     }
   }
 

@@ -17,7 +17,7 @@ import { AddonService } from './service';
 import { AddonProxyService } from './proxy';
 import { AddonProxyAgentService } from './proxy-agent-service';
 import type { SessionMessageService } from '../sessions/service';
-import type { Addon } from '@openaidy/db';
+import type { Addon } from '@aidyagent/db';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,7 +30,7 @@ function makeAddonService() {
     repository: null as never, // token ops don't touch the repo
     validator: null as never,
     jwtSecret: JWT_SECRET,
-    openAidyVersion: '0.0.0',
+    aidyVersion: '0.0.0',
   });
 }
 
@@ -99,7 +99,7 @@ describe('AddonService token round-trip', () => {
       repository: null as never,
       validator: null as never,
       jwtSecret: 'different-secret-at-least-32-chars!!',
-      openAidyVersion: '0.0.0',
+      aidyVersion: '0.0.0',
     });
     expect(wrongSvc.validateAccessToken(token)).toBeNull();
   });

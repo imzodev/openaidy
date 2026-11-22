@@ -5,7 +5,7 @@ import type {
   Task,
   TaskAgent,
   TaskStatus,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 import type { AgentRegistry } from '../../agents';
 import type { PlanningService } from '../../planning';
 import { createLogger } from '../../lib/logger';
@@ -215,7 +215,10 @@ export class TaskOperations {
 
   async assignAgents(
     taskId: string,
-    agents: Array<{ agentId: string; role?: import('@openaidy/db').AgentRole }>,
+    agents: Array<{
+      agentId: string;
+      role?: import('@aidyagent/db').AgentRole;
+    }>,
   ): Promise<ServiceResult<TaskAgent[]>> {
     const existing = await this.tasksRepo.findById(taskId);
     if (!existing) {
@@ -261,7 +264,7 @@ export class TaskOperations {
 
   async updatePlanningStatus(
     taskId: string,
-    status: import('@openaidy/db').PlanningStatus,
+    status: import('@aidyagent/db').PlanningStatus,
   ): Promise<ServiceResult<Task>> {
     const existing = await this.tasksRepo.findById(taskId);
     if (!existing) {
@@ -284,7 +287,7 @@ export class TaskOperations {
       description: string;
       assignedAgentId?: string;
     }>,
-  ): Promise<ServiceResult<import('@openaidy/db').Subtask[]>> {
+  ): Promise<ServiceResult<import('@aidyagent/db').Subtask[]>> {
     const existing = await this.tasksRepo.findById(taskId);
     if (!existing) {
       return {
@@ -295,7 +298,7 @@ export class TaskOperations {
         },
       };
     }
-    const created: import('@openaidy/db').Subtask[] = [];
+    const created: import('@aidyagent/db').Subtask[] = [];
     for (const [i, subtaskInput] of subtasks.entries()) {
       const createInput: {
         taskId: string;

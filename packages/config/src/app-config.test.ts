@@ -763,7 +763,7 @@ describe('appConfigSchema disabled model validation', () => {
 });
 
 describe('appConfigSchema unconfigured (fresh install)', () => {
-  // Mirrors config/openaidy.template.json: no providers, no default
+  // Mirrors config/aidy.template.json: no providers, no default
   // provider/model, and a single model-less agent.
   const freshInstall = {
     version: 1,

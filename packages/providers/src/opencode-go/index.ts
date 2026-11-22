@@ -26,7 +26,7 @@
  * `PROVIDER_PRESETS` — the single source of truth.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 
 const PRESET = PROVIDER_PRESETS.find((p) => p.id === 'opencode-go');
@@ -54,7 +54,7 @@ export class OpenCodeGoProfile extends ProviderProfile {
    * filters by `availableAuthMethods` never surfaces OAuth for this
    * provider.
    */
-  getAvailableAuthMethods(): import('@openaidy/shared-types').AuthMethod[] {
+  getAvailableAuthMethods(): import('@aidyagent/shared-types').AuthMethod[] {
     return [{ type: 'api_key', label: 'API Key' }];
   }
 }

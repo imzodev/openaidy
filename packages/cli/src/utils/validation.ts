@@ -39,7 +39,7 @@ export function validateManifest(
   const warnings: string[] = [];
 
   // Required fields
-  const requiredFields = ['id', 'name', 'version', 'description', 'openaidy'];
+  const requiredFields = ['id', 'name', 'version', 'description', 'aidy'];
   for (const field of requiredFields) {
     if (!manifest[field]) {
       errors.push(`Missing required field: ${field}`);
@@ -64,11 +64,11 @@ export function validateManifest(
     }
   }
 
-  // Validate openaidy config
-  if (manifest.openaidy && typeof manifest.openaidy === 'object') {
-    const openaidy = manifest.openaidy as Record<string, unknown>;
-    if (!openaidy.minVersion) {
-      warnings.push('openaidy.minVersion not specified');
+  // Validate aidy config
+  if (manifest.aidy && typeof manifest.aidy === 'object') {
+    const aidy = manifest.aidy as Record<string, unknown>;
+    if (!aidy.minVersion) {
+      warnings.push('aidy.minVersion not specified');
     }
   }
 

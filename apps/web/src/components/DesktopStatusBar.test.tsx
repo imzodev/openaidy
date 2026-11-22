@@ -28,7 +28,7 @@ function mockDesktopContext(overrides: Partial<{ isConnected: boolean }> = {}) {
       port: 3001,
       restart_attempts: 0,
       pid: 1234,
-      openaidy_home: '/home/user/.config/openaidy',
+      aidy_home: '/home/user/.config/aidy',
     }),
     isConnected: () => overrides.isConnected !== false,
   });

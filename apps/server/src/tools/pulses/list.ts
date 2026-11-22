@@ -1,7 +1,7 @@
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { jobsListMeta } from '../catalog.js';
 import type { PulseToolDeps } from './types.js';
-import type { ListPulsesFilters, PulseRecord } from '@openaidy/shared-types';
+import type { ListPulsesFilters, PulseRecord } from '@aidyagent/shared-types';
 
 export function createPulsesListTool(deps: PulseToolDeps): BuiltinTool {
   return {

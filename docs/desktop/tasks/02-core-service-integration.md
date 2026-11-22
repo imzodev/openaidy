@@ -2,12 +2,12 @@
 
 ## Objective
 
-Wire `apps/server` into the Tauri app so the Solid.js WebView talks to the existing OpenAidy core service. The core runs as a Node.js subprocess spawned by Tauri, and the WebView proxies all requests to it.
+Wire `apps/server` into the Tauri app so the Solid.js WebView talks to the existing Aidy core service. The core runs as a Node.js subprocess spawned by Tauri, and the WebView proxies all requests to it.
 
 ## Success Criteria
 
 1. Tauri spawns `apps/server` as a subprocess on a dynamically allocated port
-2. The port is written to `~/.config/openaidy/port` so all components can find it
+2. The port is written to `~/.config/aidy/port` so all components can find it
 3. The WebView loads the Solid.js SPA which connects to `http://127.0.0.1:<port>`
 4. The core service receives and handles API requests correctly
 5. Graceful shutdown: closing the Tauri window sends SIGTERM to the server subprocess
@@ -17,7 +17,7 @@ Wire `apps/server` into the Tauri app so the Solid.js WebView talks to the exist
 | Component          | File                         | Purpose                                                       |
 | ------------------ | ---------------------------- | ------------------------------------------------------------- |
 | Server entry point | `apps/server/src/server.ts`  | `buildApp()` + `app.listen({ host, port })`                   |
-| Env schema         | `apps/server/src/lib/env.ts` | `PORT`, `OPENAIDY_HOME`, `DB_KIND`, `CORS_ORIGIN`             |
+| Env schema         | `apps/server/src/lib/env.ts` | `PORT`, `AIDY_HOME`, `DB_KIND`, `CORS_ORIGIN`                 |
 | App builder        | `apps/server/src/app.ts`     | Full Fastify app wiring (providers, agents, sessions, addons) |
 
 ## Files to Create/Modify
@@ -37,7 +37,7 @@ Create `apps/desktop/src-tauri/src/service.rs`:
 //! Core service lifecycle manager.
 //!
 //! Spawns `apps/server` as a managed subprocess, writes the assigned port to
-//! OPENAIDY_HOME/port, and handles graceful shutdown.
+//! AIDY_HOME/port, and handles graceful shutdown.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -53,7 +53,7 @@ static SERVICE_HANDLE: Mutex<Option<ServiceHandle>> = Mutex::const_new(Mutex::co
 pub struct ServiceHandle {
     child: Child,
     port: u16,
-    openaidy_home: PathBuf,
+    aidy_home: PathBuf,
 }
 
 impl Drop for ServiceHandle {
@@ -75,11 +75,11 @@ impl Drop for ServiceHandle {
 /// Locate the built server entry point.
 /// In dev mode: ../../apps/server/src/server.ts  (tsx runs it)
 /// In prod mode: ../../apps/server/dist/index.js  (node runs it)
-fn locate_server_entry(openaidy_home: &PathBuf) -> (String, Vec<String>, PathBuf) {
-    let workspace_root = openaidy_home
-        .parent()  // .openaidy
+fn locate_server_entry(aidy_home: &PathBuf) -> (String, Vec<String>, PathBuf) {
+    let workspace_root = aidy_home
+        .parent()  // .aidy
         .and_then(|p| p.parent())  // ~  (home)
-        .unwrap_or(openaidy_home);
+        .unwrap_or(aidy_home);
 
     // Try dev entry first
     let dev_entry = workspace_root
@@ -129,21 +129,21 @@ fn pick_free_port() -> std::io::Result<u16> {
 /// Reads existing env and supplements with keychain credentials + computed values.
 fn build_server_env(
     port: u16,
-    openaidy_home: &PathBuf,
+    aidy_home: &PathBuf,
     keychain_creds: &std::collections::HashMap<String, String>,
 ) -> Vec<(String, String)> {
     use std::env;
 
     let mut vars: Vec<(String, String)> = env::vars().collect();
 
-    // Override/add OpenAidy-specific vars
+    // Override/add Aidy-specific vars
     let additions = [
         ("PORT".to_string(), port.to_string()),
-        ("OPENAIDY_HOME".to_string(), openaidy_home.to_string_lossy().to_string()),
+        ("AIDY_HOME".to_string(), aidy_home.to_string_lossy().to_string()),
         ("WS_PORT".to_string(), port.to_string()),
         ("CORS_ORIGIN".to_string(), "app://0.0.0.0".to_string()),
         ("DB_KIND".to_string(), "sqlite".to_string()),
-        ("SQLITE_PATH".to_string(), openaidy_home.join("openaidy.db").to_string_lossy().to_string()),
+        ("SQLITE_PATH".to_string(), aidy_home.join("aidy.db").to_string_lossy().to_string()),
     ];
 
     for (k, v) in additions {
@@ -164,42 +164,42 @@ fn build_server_env(
 }
 
 /// Write the port file so the frontend IPC bridge and other components can find it.
-fn write_port_file(openaidy_home: &PathBuf, port: u16) -> std::io::Result<()> {
-    std::fs::create_dir_all(openaidy_home)?;
-    let port_file = openaidy_home.join("port");
+fn write_port_file(aidy_home: &PathBuf, port: u16) -> std::io::Result<()> {
+    std::fs::create_dir_all(aidy_home)?;
+    let port_file = aidy_home.join("port");
     std::fs::write(port_file, port.to_string())?;
     info!("Wrote port file: {:?} = {}", port_file, port);
     Ok(())
 }
 
 /// Read the port file to reconnect to an already-running server.
-fn read_port_file(openaidy_home: &PathBuf) -> Option<u16> {
-    let port_file = openaidy_home.join("port");
+fn read_port_file(aidy_home: &PathBuf) -> Option<u16> {
+    let port_file = aidy_home.join("port");
     let content = std::fs::read_to_string(port_file).ok()?;
     content.trim().parse().ok()
 }
 
 /// Start the core service subprocess.
 pub async fn start_service(
-    openaidy_home: PathBuf,
+    aidy_home: PathBuf,
     keychain_creds: std::collections::HashMap<String, String>,
 ) -> Result<ServiceHandle, String> {
     // Check if already running
-    if let Some(port) = read_port_file(&openaidy_home) {
+    if let Some(port) = read_port_file(&aidy_home) {
         info!("Server already running on port {}", port);
         // Try to connect to verify it's alive
         if tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)).await.is_ok() {
             return Ok(ServiceHandle {
                 child: unsafe { std::process::Command::new("echo").spawn().unwrap() }, // placeholder
                 port,
-                openaidy_home,
+                aidy_home,
             });
         }
     }
 
     let port = pick_free_port().map_err(|e| e.to_string())?;
-    let (program, args, cwd) = locate_server_entry(&openaidy_home);
-    let env_vars = build_server_env(port, &openaidy_home, &keychain_creds);
+    let (program, args, cwd) = locate_server_entry(&aidy_home);
+    let env_vars = build_server_env(port, &aidy_home, &keychain_creds);
 
     info!("Spawning server: {} {:?} (port={}, cwd={:?})", program, args, port, cwd);
 
@@ -252,12 +252,12 @@ pub async fn start_service(
         error!("Server failed to bind within 10 seconds");
     });
 
-    write_port_file(&openaidy_home, port)?;
+    write_port_file(&aidy_home, port)?;
 
     Ok(ServiceHandle {
         child,
         port,
-        openaidy_home,
+        aidy_home,
     })
 }
 
@@ -307,18 +307,18 @@ async fn main() {
         .format_timestamp_millis()
         .init();
 
-    info!("OpenAidy Desktop v{}", env!("CARGO_PKG_VERSION"));
+    info!("Aidy Desktop v{}", env!("CARGO_PKG_VERSION"));
 
-    // Determine OPENAIDY_HOME
-    let openaidy_home = dirs::config_dir()
+    // Determine AIDY_HOME
+    let aidy_home = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("openaidy");
+        .join("aidy");
 
     // Load credentials from keychain
     let keychain_creds = keychain::get_all_credentials().await.unwrap_or_default();
 
     // Start the core service
-    let service_handle = service::start_service(openaidy_home.clone(), keychain_creds)
+    let service_handle = service::start_service(aidy_home.clone(), keychain_creds)
         .await
         .expect("Failed to start core service");
 
@@ -367,11 +367,11 @@ In dev mode (`tauri dev`), the WebView opens `http://localhost:5173`. The Vite d
 
 ```bash
 # Terminal 1: Start web dev server
-cd /tmp/openaidy/apps/web && pnpm dev
+cd /tmp/aidy/apps/web && pnpm dev
 # → Vite dev server at http://localhost:5173
 
 # Terminal 2: Start Tauri
-cd /tmp/openaidy/apps/desktop && pnpm tauri dev
+cd /tmp/aidy/apps/desktop && pnpm tauri dev
 # → Tauri window opens, WebView loads localhost:5173
 # → Core service spawns on some port (e.g., 34567)
 # → Frontend at :5173 makes API calls to :34567
@@ -396,7 +396,7 @@ const app = await buildApp();
 await app.listen({ host: env.HOST, port: env.PORT });
 
 // apps/server/src/lib/env.ts — respected env vars
-(PORT, CORS_ORIGIN, OPENAIDY_HOME, DB_KIND, SQLITE_PATH, DATABASE_URL);
+(PORT, CORS_ORIGIN, AIDY_HOME, DB_KIND, SQLITE_PATH, DATABASE_URL);
 
 // apps/server/src/app.ts — full app wiring
 // createProviderServices, createAgentRegistry, SessionMessageService, etc.
@@ -404,25 +404,25 @@ await app.listen({ host: env.HOST, port: env.PORT });
 
 ## Environment Variables Passed
 
-| Variable        | Value                            | Source                     |
-| --------------- | -------------------------------- | -------------------------- |
-| `PORT`          | Dynamic (e.g. `34567`)           | Tauri `service.rs`         |
-| `OPENAIDY_HOME` | `~/.config/openaidy`             | Tauri `main.rs`            |
-| `WS_PORT`       | Same as PORT                     | Tauri `service.rs`         |
-| `CORS_ORIGIN`   | `app://0.0.0.0`                  | Tauri `service.rs`         |
-| `DB_KIND`       | `sqlite`                         | Tauri `service.rs` default |
-| `SQLITE_PATH`   | `~/.config/openaidy/openaidy.db` | Tauri `service.rs`         |
-| `API keys`      | From keychain                    | Tauri `keychain.rs` → env  |
+| Variable      | Value                    | Source                     |
+| ------------- | ------------------------ | -------------------------- |
+| `PORT`        | Dynamic (e.g. `34567`)   | Tauri `service.rs`         |
+| `AIDY_HOME`   | `~/.config/aidy`         | Tauri `main.rs`            |
+| `WS_PORT`     | Same as PORT             | Tauri `service.rs`         |
+| `CORS_ORIGIN` | `app://0.0.0.0`          | Tauri `service.rs`         |
+| `DB_KIND`     | `sqlite`                 | Tauri `service.rs` default |
+| `SQLITE_PATH` | `~/.config/aidy/aidy.db` | Tauri `service.rs`         |
+| `API keys`    | From keychain            | Tauri `keychain.rs` → env  |
 
 ## Verification Commands
 
 ```bash
 # Start only the core service (without Tauri UI) to test
-cd /tmp/openaidy/apps/server && \
-  OPENAIDY_HOME=$HOME/.config/openaidy \
+cd /tmp/aidy/apps/server && \
+  AIDY_HOME=$HOME/.config/aidy \
   PORT=0 \
   DB_KIND=sqlite \
-  SQLITE_PATH=$HOME/.config/openaidy/openaidy.db \
+  SQLITE_PATH=$HOME/.config/aidy/aidy.db \
   pnpm dev
 
 # Should output something like:

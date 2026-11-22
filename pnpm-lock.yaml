@@ -75,6 +75,30 @@ importers:
 
   apps/server:
     dependencies:
+      '@aidyagent/addon-scaffolding':
+        specifier: workspace:*
+        version: link:../../packages/addon-scaffolding
+      '@aidyagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@aidyagent/control-plane':
+        specifier: workspace:*
+        version: link:../../packages/control-plane
+      '@aidyagent/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@aidyagent/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
+      '@aidyagent/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@aidyagent/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@aidyagent/workflow-templates':
+        specifier: workspace:*
+        version: link:../../packages/workflow-templates
       '@fastify/cors':
         specifier: ^11.2.0
         version: 11.2.0
@@ -99,30 +123,6 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
-      '@openaidy/addon-scaffolding':
-        specifier: workspace:*
-        version: link:../../packages/addon-scaffolding
-      '@openaidy/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@openaidy/control-plane':
-        specifier: workspace:*
-        version: link:../../packages/control-plane
-      '@openaidy/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@openaidy/providers':
-        specifier: workspace:*
-        version: link:../../packages/providers
-      '@openaidy/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
-      '@openaidy/shared-types':
-        specifier: workspace:*
-        version: link:../../packages/shared-types
-      '@openaidy/workflow-templates':
-        specifier: workspace:*
-        version: link:../../packages/workflow-templates
       '@whiskeysockets/baileys':
         specifier: 7.0.0-rc14
         version: 7.0.0-rc14(sharp@0.34.5)
@@ -217,6 +217,18 @@ importers:
 
   apps/web:
     dependencies:
+      '@aidyagent/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@aidyagent/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@aidyagent/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
+      '@aidyagent/workflow-templates':
+        specifier: workspace:*
+        version: link:../../packages/workflow-templates
       '@codemirror/commands':
         specifier: ^6.10.3
         version: 6.10.3
@@ -244,18 +256,6 @@ importers:
       '@codemirror/view':
         specifier: ^6.41.0
         version: 6.41.0
-      '@openaidy/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@openaidy/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-      '@openaidy/shared-types':
-        specifier: workspace:*
-        version: link:../../packages/shared-types
-      '@openaidy/workflow-templates':
-        specifier: workspace:*
-        version: link:../../packages/workflow-templates
       '@solidjs/router':
         specifier: ^0.15.4
         version: 0.15.4(solid-js@1.9.11)
@@ -404,27 +404,27 @@ importers:
 
   packages/cli:
     dependencies:
+      '@aidyagent/addon-scaffolding':
+        specifier: workspace:*
+        version: link:../addon-scaffolding
+      '@aidyagent/config':
+        specifier: workspace:*
+        version: link:../config
+      '@aidyagent/control-plane':
+        specifier: workspace:*
+        version: link:../control-plane
+      '@aidyagent/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+      '@aidyagent/server':
+        specifier: workspace:*
+        version: link:../../apps/server
+      '@aidyagent/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
       '@clack/prompts':
         specifier: ^1.3.0
         version: 1.3.0
-      '@openaidy/addon-scaffolding':
-        specifier: workspace:*
-        version: link:../addon-scaffolding
-      '@openaidy/config':
-        specifier: workspace:*
-        version: link:../config
-      '@openaidy/control-plane':
-        specifier: workspace:*
-        version: link:../control-plane
-      '@openaidy/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@openaidy/server':
-        specifier: workspace:*
-        version: link:../../apps/server
-      '@openaidy/shared-types':
-        specifier: workspace:*
-        version: link:../shared-types
     devDependencies:
       '@types/node':
         specifier: ^24.12.0
@@ -444,7 +444,7 @@ importers:
 
   packages/control-plane:
     dependencies:
-      '@openaidy/shared-types':
+      '@aidyagent/shared-types':
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
@@ -457,7 +457,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@openaidy/shared-types':
+      '@aidyagent/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       drizzle-orm:
@@ -477,7 +477,7 @@ importers:
 
   packages/providers:
     dependencies:
-      '@openaidy/shared-types':
+      '@aidyagent/shared-types':
         specifier: workspace:*
         version: link:../shared-types
       zod:
@@ -488,7 +488,7 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@openaidy/shared-types':
+      '@aidyagent/shared-types':
         specifier: workspace:*
         version: link:../shared-types
     devDependencies:
@@ -506,7 +506,7 @@ importers:
 
   packages/workflow-templates:
     dependencies:
-      '@openaidy/shared-types':
+      '@aidyagent/shared-types':
         specifier: workspace:*
         version: link:../shared-types
 

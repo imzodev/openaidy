@@ -2,7 +2,7 @@
  * Skill seeding
  *
  * Copies bundled skills from config/skills to the user's SKILLS_DIR
- * (.openaidy/skills) on startup. Uses a manifest file to track the
+ * (.aidy/skills) on startup. Uses a manifest file to track the
  * hash of each file at the time it was seeded.
  *
  * Update policy:

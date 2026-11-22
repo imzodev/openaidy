@@ -9,7 +9,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { BACKUP_HEAVY_FOLDER_NAMES } from '@openaidy/shared-types';
+import { BACKUP_HEAVY_FOLDER_NAMES } from '@aidyagent/shared-types';
 
 const HEAVY = new Set(BACKUP_HEAVY_FOLDER_NAMES);
 

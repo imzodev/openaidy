@@ -1,7 +1,7 @@
 /**
  * Update-notice store (issue #456)
  *
- * Tracks whether a newer OpenAidy version is available so the Settings sidebar
+ * Tracks whether a newer Aidy version is available so the Settings sidebar
  * item can show a badge, and remembers which version the user has dismissed so
  * the badge doesn't nag after they've acknowledged it.
  *
@@ -15,9 +15,9 @@
  */
 
 import { createSignal, untrack } from 'solid-js';
-import type { UpdateCheckResult } from '@openaidy/shared-types';
+import type { UpdateCheckResult } from '@aidyagent/shared-types';
 
-const STORAGE_KEY = 'openaidy_update_dismissed';
+const STORAGE_KEY = 'aidy_update_dismissed';
 
 function readDismissed(): string | null {
   if (typeof localStorage === 'undefined') return null;

@@ -3,8 +3,8 @@ import { AuthMiddleware, CAPABILITIES } from './websocket/middleware/auth';
 import {
   loadValidBootstrapAdminRecord,
   persistBootstrapAdminRecord,
-} from '@openaidy/control-plane';
-import type { BootstrapAdminRecord } from '@openaidy/shared-types';
+} from '@aidyagent/control-plane';
+import type { BootstrapAdminRecord } from '@aidyagent/shared-types';
 
 export type BootstrapAdminEnsureResult = {
   record: BootstrapAdminRecord;

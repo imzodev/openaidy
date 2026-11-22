@@ -15,7 +15,7 @@ export async function publishAddon(
   projectPath: string = process.cwd(),
   _options: PublishOptions = {},
 ): Promise<PublishResult> {
-  const { registry = 'https://registry.openaidy.dev' } = _options;
+  const { registry = 'https://registry.aidyagent.app' } = _options;
 
   // Validate project first
   const validation = await validateAddon(projectPath, { package: true });
@@ -40,8 +40,7 @@ export async function publishAddon(
   if (!fs.existsSync(distPath)) {
     return {
       success: false,
-      message:
-        'dist directory not found. Run "openaidy build" before publishing.',
+      message: 'dist directory not found. Run "aidy build" before publishing.',
     };
   }
 

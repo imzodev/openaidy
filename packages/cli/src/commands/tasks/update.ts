@@ -1,14 +1,14 @@
 /**
  * Tasks Update Command Handler
  *
- * Implements `openaidy tasks update <id>` command.
+ * Implements `aidy tasks update <id>` command.
  */
 
 import * as p from '@clack/prompts';
 import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import type { CommandResult } from '../../types.js';
-import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
+import type { TaskStatus, TaskPriority } from '@aidyagent/shared-types';
 
 const VALID_PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
 const VALID_STATUSES: TaskStatus[] = [
@@ -25,7 +25,7 @@ export async function tasksUpdateHandler(
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks update <id> [options]
+      `Usage: aidy tasks update <id> [options]
 
 Update a task's title, description, priority, or status.
 
@@ -39,9 +39,9 @@ Options:
   --status <s>           Status: backlog, todo, in_progress, review, done, cancelled
 
 Examples:
-  pnpm openaidy tasks update abc123 --priority high
-  pnpm openaidy tasks update abc123 --status done
-  pnpm openaidy tasks update abc123 --title "New title" --priority urgent
+  pnpm aidy tasks update abc123 --priority high
+  pnpm aidy tasks update abc123 --status done
+  pnpm aidy tasks update abc123 --title "New title" --priority urgent
 
 Exit Codes:
   0  Success
@@ -93,7 +93,7 @@ Exit Codes:
   }
 
   if (positional.length === 0) {
-    const msg = 'Task ID is required.\nUsage: openaidy tasks update <id>';
+    const msg = 'Task ID is required.\nUsage: aidy tasks update <id>';
     p.log.error(msg);
     return { exitCode: 2, error: msg };
   }

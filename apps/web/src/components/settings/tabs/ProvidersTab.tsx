@@ -14,8 +14,8 @@ import {
   type ProviderConfig,
   type RewiredAgentNotice,
 } from '../../../lib/api';
-import type { ProviderPreset, ProviderPresetId } from '@openaidy/shared-types';
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import type { ProviderPreset, ProviderPresetId } from '@aidyagent/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 
 const READY_PROVIDER_IDS = new Set(PROVIDER_PRESETS.map((p) => p.id));
 

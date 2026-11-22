@@ -1,12 +1,12 @@
 # WebSocket Protocol Documentation
 
-This document describes the WebSocket protocol for the OpenAidy control plane.
+This document describes the WebSocket protocol for the Aidy control plane.
 
 ## Overview
 
 ### What is the WebSocket Gateway?
 
-The WebSocket gateway provides real-time, bidirectional communication between clients and the OpenAidy server. It enables:
+The WebSocket gateway provides real-time, bidirectional communication between clients and the Aidy server. It enables:
 
 - **Real-time messaging** - Instant message delivery without polling
 - **Streaming responses** - Token-by-token streaming of AI responses
@@ -958,7 +958,7 @@ Errors are returned with `type: "error"`:
   "timestamp": "2026-03-29T12:21:00.050Z",
   "payload": {
     "config": {
-      "app": { "name": "OpenAidy", "version": "1.0.0" },
+      "app": { "name": "Aidy", "version": "1.0.0" },
       "server": { "port": 3000 }
     }
   }
@@ -991,7 +991,7 @@ Errors are returned with `type: "error"`:
   "timestamp": "2026-03-29T12:22:00.050Z",
   "payload": {
     "success": true,
-    "config": { "app": { "name": "OpenAidy", "theme": "dark" } }
+    "config": { "app": { "name": "Aidy", "theme": "dark" } }
   }
 }
 ```
@@ -1230,7 +1230,7 @@ client.onError((error) => {
 ### Basic Connection Example
 
 ```javascript
-import { createWebSocketClient } from '@openaidy/sdk';
+import { createWebSocketClient } from '@aidyagent/sdk';
 
 const client = createWebSocketClient({
   url: 'wss://api.example.com/ws',

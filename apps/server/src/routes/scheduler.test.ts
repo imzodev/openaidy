@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url';
 vi.mock('../lib/env', () => ({
   env: (() => {
     const appConfigPath = fileURLToPath(
-      new URL('../../../.openaidy/test-scheduler-config.json', import.meta.url),
+      new URL('../../../.aidy/test-scheduler-config.json', import.meta.url),
     );
     const appConfigTemplatePath = fileURLToPath(
-      new URL('../../../../config/openaidy.template.json', import.meta.url),
+      new URL('../../../../config/aidy.template.json', import.meta.url),
     );
 
     return {
@@ -28,7 +28,7 @@ import { buildApp } from '../app';
 import type { FastifyInstance } from 'fastify';
 
 const describeSchedulerRoutes =
-  process.env.OPENAIDY_RUN_DB_TESTS === '1' ? describe : describe.skip;
+  process.env.AIDY_RUN_DB_TESTS === '1' ? describe : describe.skip;
 
 describeSchedulerRoutes('Scheduler Routes', () => {
   let app: FastifyInstance;

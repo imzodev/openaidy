@@ -7,7 +7,7 @@
 
 import type { WebSocketConfig } from '../types';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { ClientType } from '@openaidy/shared-types';
+import type { ClientType } from '@aidyagent/shared-types';
 import { getCapabilityPreset } from '../capability-presets';
 
 // ============================================================================

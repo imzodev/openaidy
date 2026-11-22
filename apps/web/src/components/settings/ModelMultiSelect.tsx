@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import type { ModelPreset } from '@openaidy/shared-types';
+import type { ModelPreset } from '@aidyagent/shared-types';
 
 interface ModelMultiSelectProps {
   models: ModelPreset[];

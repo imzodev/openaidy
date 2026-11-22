@@ -1,7 +1,7 @@
 /**
  * Tasks Kanban Command Handler
  *
- * Implements `openaidy tasks kanban` command.
+ * Implements `aidy tasks kanban` command.
  */
 
 import * as p from '@clack/prompts';
@@ -9,19 +9,19 @@ import { resolveCLIConfig } from '../../lib/config.js';
 import { readAdminToken } from '../../lib/admin-token.js';
 import { formatKanbanBoard } from '../../formatters/tasks.js';
 import type { CommandResult } from '../../types.js';
-import type { TaskStatus, TaskPriority } from '@openaidy/shared-types';
+import type { TaskStatus, TaskPriority } from '@aidyagent/shared-types';
 
 export async function tasksKanbanHandler(
   args: string[],
 ): Promise<CommandResult> {
   if (args.includes('-h') || args.includes('--help')) {
     p.note(
-      `Usage: openaidy tasks kanban
+      `Usage: aidy tasks kanban
 
 Display all tasks grouped by status in Kanban board layout.
 
 Examples:
-  pnpm openaidy tasks kanban
+  pnpm aidy tasks kanban
 
 Exit Codes:
   0  Success

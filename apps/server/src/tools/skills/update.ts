@@ -1,6 +1,6 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import type { BuiltinTool } from '@openaidy/runtime';
+import type { BuiltinTool } from '@aidyagent/runtime';
 import { parseSkillMd } from '../../skills/parser.js';
 import type { SkillRegistry } from '../../skills/index.js';
 import type { WorkspaceService } from '../../workspace/service.js';

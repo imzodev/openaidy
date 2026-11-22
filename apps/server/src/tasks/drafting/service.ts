@@ -2,9 +2,9 @@ import type {
   MessageMatchType,
   ResolvedTemplateTrigger,
   ScheduleInput,
-} from '@openaidy/shared-types';
-import { MESSAGE_MATCH_TYPE_VALUES } from '@openaidy/shared-types';
-import type { WorkflowGraph } from '@openaidy/workflow-templates';
+} from '@aidyagent/shared-types';
+import { MESSAGE_MATCH_TYPE_VALUES } from '@aidyagent/shared-types';
+import type { WorkflowGraph } from '@aidyagent/workflow-templates';
 import type { AgentRegistry } from '../../agents';
 import type { createLogger } from '../../lib/logger';
 import { resolveDefaultModel } from '../../planning/service';
@@ -34,7 +34,7 @@ export type WorkflowDraftServiceDeps = {
 
 const MAX_DESCRIPTION_CHARS = 4000;
 
-const SYSTEM_PROMPT = `You design workflows for OpenAidy, an AI agent platform used by small businesses.
+const SYSTEM_PROMPT = `You design workflows for Aidy, an AI agent platform used by small businesses.
 A workflow is a graph of steps. Reply with ONLY a JSON object, no prose, in this shape:
 
 {

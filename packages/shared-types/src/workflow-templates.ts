@@ -13,7 +13,7 @@ import type { ScheduleInput } from './pulses.js';
 // A workflow template is a reusable, pre-built subtask graph a user can
 // apply to a freshly created task (a "workflow") instead of hand-authoring
 // the graph or waiting on the AI planner. Templates are static, curated
-// data — not a DB-backed entity — living in `@openaidy/workflow-templates`
+// data — not a DB-backed entity — living in `@aidyagent/workflow-templates`
 // and typed here for both the server (apply-time) and web (gallery/preview)
 // packages to share.
 

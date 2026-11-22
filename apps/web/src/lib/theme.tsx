@@ -5,7 +5,7 @@ import {
   createEffect,
   type ParentComponent,
 } from 'solid-js';
-import type { Theme } from '@openaidy/shared-types';
+import type { Theme } from '@aidyagent/shared-types';
 
 export type { Theme };
 

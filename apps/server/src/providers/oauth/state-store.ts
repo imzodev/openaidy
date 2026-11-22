@@ -1,8 +1,8 @@
-import type { DatabaseClient } from '@openaidy/db';
+import type { DatabaseClient } from '@aidyagent/db';
 import {
   OAuthFlowStateRepository,
   type OAuthFlowStateRecord,
-} from '@openaidy/db';
+} from '@aidyagent/db';
 
 /**
  * Application-layer view of an OAuth flow state.
@@ -23,7 +23,7 @@ export type OAuthFlowState = {
  * Short-lived key-value store for OAuth flow state.
  *
  * Production + dev both use the same DB (SQLite at
- * `apps/server/data/openaidy.db` in dev, Postgres in prod). The state
+ * `apps/server/data/aidy.db` in dev, Postgres in prod). The state
  * is keyed by the OAuth `state` parameter — a random, single-use token
  * we generate at /start and that the provider echoes back at /callback.
  *

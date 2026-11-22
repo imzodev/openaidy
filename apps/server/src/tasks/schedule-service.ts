@@ -5,7 +5,7 @@ import type {
   TaskExecutionHistoryDto,
   TaskExecutionHistoryStatus,
   TaskScheduleStatus,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { parseScheduleInput } from '../pulses/utils';
 import { taskScheduleToDto, taskExecutionHistoryToDto } from './schedule-dto';
 import { createLogger } from '../lib/logger';

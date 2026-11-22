@@ -1,6 +1,6 @@
-import type { JobsStore, JobRunsStore, SessionsStore } from '@openaidy/db';
+import type { JobsStore, JobRunsStore, SessionsStore } from '@aidyagent/db';
 import type { SessionMessageService } from '../sessions/service';
-import type { ScheduledRunnable } from '@openaidy/runtime';
+import type { ScheduledRunnable } from '@aidyagent/runtime';
 
 /**
  * Generic logger interface compatible with both pino.Logger and FastifyBaseLogger
@@ -252,7 +252,7 @@ export class SchedulerService {
       });
     }
 
-    let result: import('@openaidy/runtime').ExecutionResult;
+    let result: import('@aidyagent/runtime').ExecutionResult;
     try {
       result = await runnable.execute(id, payload);
     } catch (err) {

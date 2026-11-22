@@ -4,17 +4,15 @@ import { fileURLToPath } from 'node:url';
 vi.mock('./lib/env', () => ({
   env: (() => {
     const appConfigPath = fileURLToPath(
-      new URL('../../.openaidy/test-app-config.json', import.meta.url),
+      new URL('../../.aidy/test-app-config.json', import.meta.url),
     );
     const appConfigTemplatePath = fileURLToPath(
-      new URL('../../../config/openaidy.template.json', import.meta.url),
+      new URL('../../../config/aidy.template.json', import.meta.url),
     );
     const bootstrapAdminTokenPath = fileURLToPath(
-      new URL('../../.openaidy/test-bootstrap-admin.json', import.meta.url),
+      new URL('../../.aidy/test-bootstrap-admin.json', import.meta.url),
     );
-    const openAidyHome = fileURLToPath(
-      new URL('../../.openaidy', import.meta.url),
-    );
+    const aidyHome = fileURLToPath(new URL('../../.aidy', import.meta.url));
 
     return {
       HOST: '0.0.0.0',
@@ -23,13 +21,13 @@ vi.mock('./lib/env', () => ({
       DB_KIND: 'disabled',
       DATABASE_URL: undefined,
       SQLITE_PATH: undefined,
-      OPENAIDY_HOME: openAidyHome,
+      AIDY_HOME: aidyHome,
       APP_CONFIG_PATH: appConfigPath,
       APP_CONFIG_TEMPLATE_PATH: appConfigTemplatePath,
       LOG_LEVEL: 'info',
       // Workspace configuration
       WORKSPACE_BASE_DIR: fileURLToPath(
-        new URL('../../.openaidy/workspaces', import.meta.url),
+        new URL('../../.aidy/workspaces', import.meta.url),
       ),
       // WebSocket configuration - explicitly enabled
       WS_ENABLED: true,
@@ -68,8 +66,8 @@ import type {
   ProviderResult,
   ModelStreamEvent,
   ModelDescriptor,
-} from '@openaidy/runtime';
-import { err, createProviderError, ok } from '@openaidy/runtime';
+} from '@aidyagent/runtime';
+import { err, createProviderError, ok } from '@aidyagent/runtime';
 
 async function injectTestAuth(app: FastifyInstance): Promise<void> {
   const auth = new AuthMiddleware({

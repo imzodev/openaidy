@@ -7,7 +7,7 @@ title: 'Pulses'
 
 # Pulses
 
-Pulses are scheduled prompt executions — you define a prompt and a schedule, and OpenAidy automatically fires the prompt against an agent at the specified interval.
+Pulses are scheduled prompt executions — you define a prompt and a schedule, and Aidy automatically fires the prompt against an agent at the specified interval.
 
 Think of a Pulse as a cron job for your AI agent: "Every morning at 9am, run this prompt and store the result."
 

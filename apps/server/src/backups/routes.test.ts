@@ -5,7 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
-import type { BackupJob } from '@openaidy/shared-types';
+import type { BackupJob } from '@aidyagent/shared-types';
 import { backupRoutes } from './routes';
 import { BackupService, type BackupPaths } from './service';
 import { BackupJobManager } from './jobs';
@@ -34,7 +34,7 @@ function multipart(
   file: { field: string; filename: string; content: Buffer } | null,
   fields: Record<string, string> = {},
 ): { body: Buffer; contentType: string } {
-  const boundary = '----oaidytest' + Math.random().toString(36).slice(2);
+  const boundary = '----aidytest' + Math.random().toString(36).slice(2);
   const chunks: Buffer[] = [];
   const CRLF = '\r\n';
   for (const [name, value] of Object.entries(fields)) {
@@ -119,10 +119,10 @@ async function upload(content: Buffer) {
 }
 
 beforeEach(async () => {
-  home = fs.mkdtempSync(path.join(os.tmpdir(), 'oaidy-broutes-'));
+  home = fs.mkdtempSync(path.join(os.tmpdir(), 'aidy-broutes-'));
   paths = {
-    dbPath: path.join(home, 'data', 'openaidy.db'),
-    configPath: path.join(home, 'openaidy.json'),
+    dbPath: path.join(home, 'data', 'aidy.db'),
+    configPath: path.join(home, 'aidy.json'),
     workspacesDir: path.join(home, 'workspaces'),
     skillsDir: path.join(home, 'skills'),
     addonsDir: path.join(home, 'addons'),
@@ -175,7 +175,7 @@ describe('GET /api/backups/manifest', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.manifest.kind).toBe('openaidy-backup');
+    expect(body.manifest.kind).toBe('aidy-backup');
     expect(body.manifest.sections.config.itemCount).toBe(1);
   });
 
@@ -198,9 +198,7 @@ describe('exports', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('application/zip');
     expect(res.headers['accept-ranges']).toBe('bytes');
-    expect(res.headers['content-disposition']).toMatch(
-      /openaidy-backup-.*\.zip/,
-    );
+    expect(res.headers['content-disposition']).toMatch(/aidy-backup-.*\.zip/);
     expect(res.rawPayload.length).toBe(job.fileSizeBytes);
     // PK zip magic bytes.
     expect(res.rawPayload.subarray(0, 2).toString('latin1')).toBe('PK');
@@ -308,7 +306,7 @@ describe('uploads + import', () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.id).toBeTruthy();
-    expect(body.manifest.kind).toBe('openaidy-backup');
+    expect(body.manifest.kind).toBe('aidy-backup');
     expect(body.zipSizeBytes).toBeGreaterThan(0);
   });
 

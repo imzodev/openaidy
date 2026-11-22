@@ -2,13 +2,13 @@
  * OpenAI Provider Profile
  *
  * Reads `id`, `name`, `baseUrl`, and the model list from
- * `PROVIDER_PRESETS` (in `@openaidy/shared-types`) — the single
+ * `PROVIDER_PRESETS` (in `@aidyagent/shared-types`) — the single
  * source of truth. The default `validateApiKey` (a `GET /models`
  * probe with `Authorization: Bearer <key>`) works for OpenAI, so
  * no overrides are needed.
  */
 
-import { PROVIDER_PRESETS } from '@openaidy/shared-types';
+import { PROVIDER_PRESETS } from '@aidyagent/shared-types';
 import { ProviderProfile } from '../types';
 
 const PRESET = PROVIDER_PRESETS.find((p) => p.id === 'openai');

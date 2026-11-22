@@ -1,8 +1,8 @@
 # Control Plane Documentation Plan
 
-# OpenAidy CLI Implementation and Documentation Plan
+# Aidy CLI Implementation and Documentation Plan
 
-This plan defines the full work required to deliver the first production-worthy OpenAidy CLI, keep the command UX stable as `openaidy ...`, and document the feature set properly as part of the rollout. It covers implementation, package structure, shared services, testing, operator experience, and the documentation set that must ship with it.
+This plan defines the full work required to deliver the first production-worthy Aidy CLI, keep the command UX stable as `aidy ...`, and document the feature set properly as part of the rollout. It covers implementation, package structure, shared services, testing, operator experience, and the documentation set that must ship with it.
 
 ## Scope
 
@@ -24,7 +24,7 @@ This plan does not cover:
 
 ## Goals
 
-- keep the operator-facing command UX stable as `openaidy ...`
+- keep the operator-facing command UX stable as `aidy ...`
 - avoid duplicating server-side business logic in the CLI
 - reuse the bootstrap-admin token state that already exists on disk
 - make local privileged workflows reliable even when the server is not running
@@ -37,19 +37,19 @@ This plan does not cover:
 
 Inside the repo, a developer or operator should be able to run:
 
-- `pnpm openaidy admin token show`
-- `pnpm openaidy devices list`
-- `pnpm openaidy devices approve <requestId>`
-- `pnpm openaidy devices deny <requestId>`
+- `pnpm aidy admin token show`
+- `pnpm aidy devices list`
+- `pnpm aidy devices approve <requestId>`
+- `pnpm aidy devices deny <requestId>`
 
 ### Long-term
 
 After the CLI package is ready for distribution, the same UX should become:
 
-- `openaidy admin token show`
-- `openaidy devices list`
-- `openaidy devices approve <requestId>`
-- `openaidy devices deny <requestId>`
+- `aidy admin token show`
+- `aidy devices list`
+- `aidy devices approve <requestId>`
+- `aidy devices deny <requestId>`
 
 The command names, nesting, and semantics should not change between these phases.
 
@@ -115,7 +115,7 @@ Recommended responsibilities:
 
 Recommended package requirements:
 
-- `package.json` with `bin` mapping for `openaidy`
+- `package.json` with `bin` mapping for `aidy`
 - TypeScript entrypoint
 - build script
 - test script
@@ -154,7 +154,7 @@ Avoid reversing this dependency direction.
 
 These commands should be treated as the first stable contract.
 
-## 1. `openaidy admin token show`
+## 1. `aidy admin token show`
 
 Purpose:
 
@@ -168,7 +168,7 @@ Expected behavior:
 - prints the token intentionally and only for this explicit command
 - prints useful metadata if available, such as file path or expiration state
 
-## 2. `openaidy devices list`
+## 2. `aidy devices list`
 
 Purpose:
 
@@ -180,7 +180,7 @@ Expected behavior:
 - shows request identifiers and enough context for an operator decision
 - exits successfully with a clear empty state when no requests are pending
 
-## 3. `openaidy devices approve <requestId>`
+## 3. `aidy devices approve <requestId>`
 
 Purpose:
 
@@ -192,7 +192,7 @@ Expected behavior:
 - performs the approval through shared application logic
 - returns a clear success message and non-zero exit code on failure
 
-## 4. `openaidy devices deny <requestId>`
+## 4. `aidy devices deny <requestId>`
 
 Purpose:
 
@@ -213,9 +213,9 @@ Deliver the CLI package and local execution path.
 ### Deliverables
 
 - new workspace package for the CLI
-- `openaidy` executable entrypoint
+- `aidy` executable entrypoint
 - TypeScript project configuration for the CLI package
-- root-level repo wiring so `pnpm openaidy ...` works naturally
+- root-level repo wiring so `pnpm aidy ...` works naturally
 - baseline help output and command discovery
 
 ### Design decisions to lock in
@@ -331,7 +331,7 @@ Define the next steps now so the first implementation does not block them later.
 
 ## 2. CLI entrypoint and command registry
 
-- create a single entrypoint for the `openaidy` binary
+- create a single entrypoint for the `aidy` binary
 - define top-level command groups: `admin` and `devices`
 - define nested command groups such as `admin token`
 - implement help output for the root command and each subgroup
@@ -389,7 +389,7 @@ The CLI is a privileged administration surface and should be designed accordingl
 
 ### Rules
 
-- treat `.openaidy/credentials/bootstrap-admin.json` as sensitive operator state
+- treat `.aidy/credentials/bootstrap-admin.json` as sensitive operator state
 - never regenerate bootstrap credentials from the CLI unless a future rotation workflow explicitly allows it
 - avoid logging token values in tests, errors, or normal command output
 - keep mutation commands explicit and easy to audit
@@ -463,16 +463,16 @@ Topics:
 
 Document both phases:
 
-- repo-local execution with `pnpm openaidy ...` and `pnpm exec openaidy ...`
+- repo-local execution with `pnpm aidy ...` and `pnpm exec aidy ...`
 - future published/global install with unchanged command UX
 
 ## Recommended implementation order
 
 1. Create the CLI package and repo-local executable path.
 2. Add the shared control-plane application layer.
-3. Implement `openaidy admin token show`.
-4. Implement `openaidy devices list`.
-5. Implement `openaidy devices approve <requestId>` and `openaidy devices deny <requestId>`.
+3. Implement `aidy admin token show`.
+4. Implement `aidy devices list`.
+5. Implement `aidy devices approve <requestId>` and `aidy devices deny <requestId>`.
 6. Add error handling and output conventions.
 7. Add tests across command and service layers.
 8. Write the usage and architecture documentation against the implemented behavior.
@@ -496,7 +496,7 @@ The following tasks are written for an AI programming agent. Each task should pr
 
 #### Result expected
 
-Create a new workspace package that exposes the `openaidy` binary and can be invoked locally from the monorepo. The result should be the minimal but real foundation for all later CLI work.
+Create a new workspace package that exposes the `aidy` binary and can be invoked locally from the monorepo. The result should be the minimal but real foundation for all later CLI work.
 
 #### Likely files to create or modify
 
@@ -509,13 +509,13 @@ Create a new workspace package that exposes the `openaidy` binary and can be inv
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/package.json`
-- `/home/irving/webdev/openaidy/pnpm-workspace.yaml`
-- `/home/irving/webdev/openaidy/apps/server/package.json`
+- `/home/irving/webdev/aidy/package.json`
+- `/home/irving/webdev/aidy/pnpm-workspace.yaml`
+- `/home/irving/webdev/aidy/apps/server/package.json`
 
 #### Guidance for the agent
 
-- expose the executable through `package.json#bin` as `openaidy`
+- expose the executable through `package.json#bin` as `aidy`
 - follow existing monorepo script and tooling conventions
 - keep the entrypoint minimal and avoid placing business logic directly in it
 - ensure the local execution model can evolve into published/global install without command renames
@@ -575,10 +575,10 @@ Create a reusable application/service layer that owns admin workflows and sits b
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/app.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/lib/env.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.ts`
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.ts`
+- `/home/irving/webdev/aidy/apps/server/src/app.ts`
+- `/home/irving/webdev/aidy/apps/server/src/lib/env.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.ts`
 
 #### Guidance for the agent
 
@@ -597,21 +597,21 @@ Create a reusable application/service layer that owns admin workflows and sits b
 
 #### Result expected
 
-Provide the reusable logic needed to support `openaidy admin token show`. The result should inspect existing bootstrap-admin state safely without regenerating credentials during a read-only command.
+Provide the reusable logic needed to support `aidy admin token show`. The result should inspect existing bootstrap-admin state safely without regenerating credentials during a read-only command.
 
 #### Likely files to create or modify
 
 - shared workflow module for bootstrap token inspection
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.ts` if a read-oriented API is needed
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.ts` if a read-oriented API is needed
 - CLI handler for `admin token show`
 - related tests
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.test.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/lib/env.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/app.ts`
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.ts`
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/lib/env.ts`
+- `/home/irving/webdev/aidy/apps/server/src/app.ts`
 
 #### Guidance for the agent
 
@@ -628,13 +628,13 @@ Provide the reusable logic needed to support `openaidy admin token show`. The re
 - missing token file behavior
 - malformed token file behavior
 - invalid persisted token behavior
-- command-level test for `openaidy admin token show`
+- command-level test for `aidy admin token show`
 
 ### Task 5: Implement pending pairing request listing
 
 #### Result expected
 
-Provide the reusable workflow and CLI handler for `openaidy devices list`. The result should expose pending pairing requests in an operator-friendly shape without leaking persistence details into the CLI layer.
+Provide the reusable workflow and CLI handler for `aidy devices list`. The result should expose pending pairing requests in an operator-friendly shape without leaking persistence details into the CLI layer.
 
 #### Likely files to create or modify
 
@@ -645,8 +645,8 @@ Provide the reusable workflow and CLI handler for `openaidy devices list`. The r
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.test.ts`
 
 #### Guidance for the agent
 
@@ -666,7 +666,7 @@ Provide the reusable workflow and CLI handler for `openaidy devices list`. The r
 
 #### Result expected
 
-Provide shared workflows and CLI handlers for `openaidy devices approve <requestId>` and `openaidy devices deny <requestId>`. The result should reuse existing pairing business rules and provide explicit operator feedback.
+Provide shared workflows and CLI handlers for `aidy devices approve <requestId>` and `aidy devices deny <requestId>`. The result should reuse existing pairing business rules and provide explicit operator feedback.
 
 #### Likely files to create or modify
 
@@ -677,8 +677,8 @@ Provide shared workflows and CLI handlers for `openaidy devices approve <request
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.test.ts`
 
 #### Guidance for the agent
 
@@ -711,8 +711,8 @@ Introduce a centralized error model for the CLI and shared workflows. The result
 
 #### Current code to inspect or reuse
 
-- error cases implied by `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.ts`
-- request lifecycle and failure cases in `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.ts`
+- error cases implied by `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.ts`
+- request lifecycle and failure cases in `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.ts`
 
 #### Guidance for the agent
 
@@ -740,9 +740,9 @@ Add strong automated coverage across CLI parsing, workflow behavior, and file-ba
 
 #### Current code to inspect or reuse
 
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.test.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/websocket/pairing-service.test.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/app.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/websocket/pairing-service.test.ts`
+- `/home/irving/webdev/aidy/apps/server/src/app.test.ts`
 
 #### Guidance for the agent
 
@@ -778,8 +778,8 @@ Create the docs that should ship with the CLI implementation. The result should 
 #### Current code to inspect or reuse
 
 - final CLI package and command handlers
-- `/home/irving/webdev/openaidy/apps/server/src/bootstrap-admin.ts`
-- `/home/irving/webdev/openaidy/apps/server/src/lib/env.ts`
+- `/home/irving/webdev/aidy/apps/server/src/bootstrap-admin.ts`
+- `/home/irving/webdev/aidy/apps/server/src/lib/env.ts`
 - existing control-plane planning docs
 
 #### Guidance for the agent
@@ -827,7 +827,7 @@ Ensure the first implementation supports future JSON output, more commands, and 
 
 ## Definition of done for the first CLI slice
 
-- repo-local `pnpm openaidy ...` execution works
+- repo-local `pnpm aidy ...` execution works
 - the four initial commands are implemented and tested
 - bootstrap-admin behavior is reused from authoritative code instead of duplicated
 - pairing administration flows are implemented through shared application services
@@ -837,7 +837,7 @@ Ensure the first implementation supports future JSON output, more commands, and 
 
 ## Success criteria
 
-- a developer in the repo can run the first `openaidy` commands through pnpm with stable naming
+- a developer in the repo can run the first `aidy` commands through pnpm with stable naming
 - the CLI reuses shared workflows rather than re-implementing server logic
 - bootstrap-admin credentials must be handled safely
 - the package boundaries for contributors are explained

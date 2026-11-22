@@ -8,8 +8,8 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@openaidy/sdk": ["../../packages/sdk/src/index.ts"],
-      "@openaidy/shared-types": ["../../packages/shared-types/src/index.ts"]
+      "@aidyagent/sdk": ["../../packages/sdk/src/index.ts"],
+      "@aidyagent/shared-types": ["../../packages/shared-types/src/index.ts"]
     },
     "skipLibCheck": true,
 

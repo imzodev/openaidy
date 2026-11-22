@@ -86,7 +86,7 @@ to `packages/db/src/repositories/`. Follow the existing pattern in
 Create a new class in `apps/server/src/<your-kind>/executor.ts`:
 
 ```ts
-import type { ScheduledRunnable, ExecutionResult } from '@openaidy/runtime';
+import type { ScheduledRunnable, ExecutionResult } from '@aidyagent/runtime';
 
 export type MyKindPayload = {
   // Whatever data your executor needs to run. Cache it in

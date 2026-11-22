@@ -4,7 +4,7 @@
  * Third-party MCP tools (e.g. a vision-analysis tool) run as separate
  * processes with no knowledge of an agent's workspace directory — they can
  * only accept an http(s) URL, a base64 `data:` URI, or a path resolvable on
- * their OWN filesystem/cwd. OpenAidy's workspace tools deliberately never
+ * their OWN filesystem/cwd. Aidy's workspace tools deliberately never
  * expose the real absolute path to the agent (sandbox boundary), so an agent
  * has no path it could hand such a tool that would ever resolve.
  *

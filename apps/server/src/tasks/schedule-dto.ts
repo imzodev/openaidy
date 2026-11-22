@@ -1,10 +1,10 @@
-import type { TaskSchedule, TaskExecutionHistoryRow } from '@openaidy/db';
+import type { TaskSchedule, TaskExecutionHistoryRow } from '@aidyagent/db';
 import type {
   TaskScheduleDto,
   TaskExecutionHistoryDto,
   ScheduleInput,
   ExecutionSubtaskSummary,
-} from '@openaidy/shared-types';
+} from '@aidyagent/shared-types';
 import { describeCronExpression } from '../scheduler/cron-utils';
 
 /**

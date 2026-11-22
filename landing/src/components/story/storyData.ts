@@ -86,16 +86,16 @@ export const CHAT_CHAPTERS: ChatChapter[] = [
     user: {
       avatar: 'K',
       meta: '@kira · 11:30 AM',
-      text: '/connect telegram @openaidy_bot',
+      text: '/connect telegram @aidy_bot',
     },
     agent: {
       avatar: 'O',
-      meta: 'openaidy · 11:30 AM',
+      meta: 'aidy · 11:30 AM',
       text: 'Connecting Telegram… exchange complete. Bot authorized for DMs and group mentions.',
     },
     check: '3 channels active · 0 errors',
     live: 'Syncing conversation history with first session',
-    input: 'Send to openaidy…',
+    input: 'Send to aidy…',
   },
   {
     user: {

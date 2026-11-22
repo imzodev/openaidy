@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 4 focuses on creating an excellent developer experience for addon creators. This phase provides comprehensive tooling, templates, validation, and documentation that make it easy for developers to create, test, and publish addons for the OpenAidy ecosystem.
+Phase 4 focuses on creating an excellent developer experience for addon creators. This phase provides comprehensive tooling, templates, validation, and documentation that make it easy for developers to create, test, and publish addons for the Aidy ecosystem.
 
 ## Objectives
 
@@ -23,12 +23,12 @@ Phase 4 focuses on creating an excellent developer experience for addon creators
 
 ```json
 {
-  "name": "@openaidy/cli",
+  "name": "@aidyagent/cli",
   "version": "1.0.0",
-  "description": "OpenAidy Addon Development CLI",
+  "description": "Aidy Addon Development CLI",
   "main": "dist/index.js",
   "bin": {
-    "openaidy": "dist/cli.js"
+    "aidy": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -45,7 +45,7 @@ Phase 4 focuses on creating an excellent developer experience for addon creators
     "glob": "^10.3.0",
     "semver": "^7.5.0",
     "zod": "^3.22.0",
-    "@openaidy/shared-types": "workspace:*"
+    "@aidyagent/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -77,10 +77,7 @@ import { initCommand } from './commands/init';
 
 const program = new Command();
 
-program
-  .name('openaidy')
-  .description('OpenAidy Addon Development CLI')
-  .version('1.0.0');
+program.name('aidy').description('Aidy Addon Development CLI').version('1.0.0');
 
 // ASCII Art Banner
 console.log(
@@ -340,7 +337,7 @@ export const validateCommand = new Command('validate')
       const addonRoot = await findAddonRoot(process.cwd());
       if (!addonRoot) {
         console.error(
-          chalk.red('Not in an addon project. Run "openaidy init" first.'),
+          chalk.red('Not in an addon project. Run "aidy init" first.'),
         );
         process.exit(1);
       }
@@ -509,17 +506,13 @@ export const devCommand = new Command('dev')
   .description('Start development server with hot reloading')
   .option('-p, --port <port>', 'Port for development server', '3001')
   .option('--host <host>', 'Host for development server', 'localhost')
-  .option(
-    '--openaidy-url <url>',
-    'OpenAidy server URL',
-    'http://localhost:3000',
-  )
+  .option('--aidy-url <url>', 'Aidy server URL', 'http://localhost:3000')
   .action(async (options) => {
     try {
       const addonRoot = await findAddonRoot(process.cwd());
       if (!addonRoot) {
         console.error(
-          chalk.red('Not in an addon project. Run "openaidy init" first.'),
+          chalk.red('Not in an addon project. Run "aidy init" first.'),
         );
         process.exit(1);
       }
@@ -556,8 +549,8 @@ export const devCommand = new Command('dev')
           options.port,
           '--host',
           options.host,
-          '--openaidy-url',
-          options.openaidyUrl,
+          '--aidy-url',
+          options.aidyUrl,
         ],
         {
           stdio: 'pipe',
@@ -574,7 +567,7 @@ export const devCommand = new Command('dev')
               `\n🌐 Addon available at: http://${options.host}:${options.port}`,
             ),
           );
-          console.log(chalk.blue(`🔗 OpenAidy server: ${options.openaidyUrl}`));
+          console.log(chalk.blue(`🔗 Aidy server: ${options.aidyUrl}`));
           console.log(chalk.gray('\nWatching for changes...'));
         } else {
           process.stdout.write(output);
@@ -670,7 +663,7 @@ export const devCommand = new Command('dev')
 ```typescript
 import fs from 'fs-extra';
 import path from 'node:path';
-import { AddonManifest } from '@openaidy/shared-types';
+import { AddonManifest } from '@aidyagent/shared-types';
 
 export interface CreateAddonOptions {
   id: string;
@@ -728,13 +721,13 @@ export async function createAddonTemplate(
 
 function generateManifest(options: CreateAddonOptions): AddonManifest {
   const baseManifest: AddonManifest = {
-    $schema: 'https://openaidy.dev/schemas/addon-manifest-v1.json',
+    $schema: 'https://aidyagent.app/schemas/addon-manifest-v1.json',
     id: options.id,
     name: options.name,
     version: '1.0.0',
     description: options.description,
     author: options.author,
-    openaidy: {
+    aidy: {
       minVersion: '1.0.0',
     },
     entry: './dist/index.js',
@@ -776,7 +769,7 @@ function generatePackageJson(options: CreateAddonOptions): any {
     typescript: '^5.0.0',
     vite: '^4.4.0',
     'vite-plugin-solid': '^2.7.0',
-    '@openaidy/cli': '^1.0.0',
+    '@aidyagent/cli': '^1.0.0',
     vitest: '^0.34.0',
     jsdom: '^22.1.0',
   };
@@ -787,17 +780,17 @@ function generatePackageJson(options: CreateAddonOptions): any {
   }
 
   return {
-    name: `openaidy-addon-${options.id}`,
+    name: `aidy-addon-${options.id}`,
     version: '1.0.0',
     description: options.description,
     type: 'module',
     scripts: {
-      dev: 'openaidy dev',
-      build: 'openaidy build',
-      test: 'openaidy test',
-      validate: 'openaidy validate',
-      'validate:package': 'openaidy validate --package',
-      publish: 'openaidy publish',
+      dev: 'aidy dev',
+      build: 'aidy build',
+      test: 'aidy test',
+      validate: 'aidy validate',
+      'validate:package': 'aidy validate --package',
+      publish: 'aidy publish',
     },
     dependencies,
     devDependencies,
@@ -814,7 +807,7 @@ async function generateBasicTemplate(
   const mainComponent = options.typescript
     ? `
 import { createSignal, onMount } from 'solid-js';
-import type { AddonRuntime } from '@openaidy/addon-runtime';
+import type { AddonRuntime } from '@aidyagent/addon-runtime';
 
 export default function ${options.name.replace(/[^a-zA-Z0-9]/g, '')}Page() {
   const [message, setMessage] = createSignal('');
@@ -956,7 +949,7 @@ async function generateAgentTemplate(
   const agentComponent = options.typescript
     ? `
 import { createSignal, onMount } from 'solid-js';
-import type { AddonRuntime } from '@openaidy/addon-runtime';
+import type { AddonRuntime } from '@aidyagent/addon-runtime';
 
 interface AgentMessage {
   role: 'user' | 'assistant';
@@ -1381,7 +1374,7 @@ async function generateConfigTemplate(
   const configComponent = options.typescript
     ? `
 import { createSignal, onMount } from 'solid-js';
-import type { AddonRuntime } from '@openaidy/addon-runtime';
+import type { AddonRuntime } from '@aidyagent/addon-runtime';
 
 interface AddonConfig {
   refreshInterval: number;
@@ -1674,10 +1667,10 @@ ${options.description}
 
 ## Installation
 
-This addon is part of the OpenAidy ecosystem. To install:
+This addon is part of the Aidy ecosystem. To install:
 
 1. Build the addon: \`npm run build\`
-2. Upload the generated \`dist/package.tar.gz\` to your OpenAidy instance
+2. Upload the generated \`dist/package.tar.gz\` to your Aidy instance
 
 ## Development
 
@@ -2113,12 +2106,12 @@ export function createTestEnvironment(): AddonTestEnvironment {
   (window as any).__ADDON_RUNTIME__ = mockRuntime;
 
   // Mock router
-  (window as any).__OPENAIDY_ROUTER__ = {
+  (window as any).__AIDY_ROUTER__ = {
     navigate: vitest.fn(),
   };
 
   // Mock notifications
-  (window as any).__OPENAIDY_NOTIFICATIONS__ = {
+  (window as any).__AIDY_NOTIFICATIONS__ = {
     show: vitest.fn(),
   };
 
@@ -2210,7 +2203,7 @@ export const testCommand = new Command('test')
       const addonRoot = await findAddonRoot(process.cwd());
       if (!addonRoot) {
         console.error(
-          chalk.red('Not in an addon project. Run "openaidy init" first.'),
+          chalk.red('Not in an addon project. Run "aidy init" first.'),
         );
         process.exit(1);
       }
@@ -2268,7 +2261,7 @@ export const testCommand = new Command('test')
 ```typescript
 import fs from 'fs-extra';
 import path from 'node:path';
-import type { AddonManifest } from '@openaidy/shared-types';
+import type { AddonManifest } from '@aidyagent/shared-types';
 
 export interface DocumentationOptions {
   outputDir: string;
@@ -2313,7 +2306,7 @@ ${manifest.description}
 
 ## Overview
 
-This addon extends OpenAidy with additional functionality. It integrates seamlessly with the OpenAidy ecosystem and provides enhanced capabilities for specific use cases.
+This addon extends Aidy with additional functionality. It integrates seamlessly with the Aidy ecosystem and provides enhanced capabilities for specific use cases.
 
 ## Features
 
@@ -2323,13 +2316,13 @@ This addon extends OpenAidy with additional functionality. It integrates seamles
 
 ### Prerequisites
 
-- OpenAidy instance (version ${manifest.openaidy.minVersion} or higher)
-- Admin access to OpenAidy
+- Aidy instance (version ${manifest.aidy.minVersion} or higher)
+- Admin access to Aidy
 
 ### Installation Steps
 
 1. Download the addon package
-2. Navigate to **Addons** in your OpenAidy instance
+2. Navigate to **Addons** in your Aidy instance
 3. Click **Install Addon** and upload the package
 4. Review and approve the requested permissions
 5. Enable the addon
@@ -2338,7 +2331,7 @@ This addon extends OpenAidy with additional functionality. It integrates seamles
 
 ### Getting Started
 
-After installation, the addon will appear in the OpenAidy sidebar under the name "${manifest.ui.sidebar.label}". Click on it to access the addon's interface.
+After installation, the addon will appear in the Aidy sidebar under the name "${manifest.ui.sidebar.label}". Click on it to access the addon's interface.
 
 ### Main Features
 
@@ -2349,7 +2342,7 @@ ${generateUsageSection(manifest)}
 ${
   manifest.config
     ? `
-This addon supports configuration through the OpenAidy interface. Navigate to the addon settings to customize:
+This addon supports configuration through the Aidy interface. Navigate to the addon settings to customize:
 
 - ${Object.keys(manifest.config.defaults).join('\n- ')}
 `
@@ -2364,7 +2357,7 @@ ${generatePermissionsList(manifest)}
 
 ## Security
 
-This addon has been validated and follows OpenAidy's security guidelines:
+This addon has been validated and follows Aidy's security guidelines:
 
 - ✅ Code scanned for security vulnerabilities
 - ✅ Permissions limited to required functionality
@@ -2382,7 +2375,7 @@ This addon has been validated and follows OpenAidy's security guidelines:
 
 **Permission denied errors**
 - Verify that all requested permissions have been approved
-- Check the addon logs in the OpenAidy admin panel
+- Check the addon logs in the Aidy admin panel
 
 **Configuration not saving**
 - Ensure you have admin permissions
@@ -2462,7 +2455,7 @@ This addon provides access to the following APIs and functionality.
 
 ## Addon Runtime API
 
-The addon runtime provides a secure API for interacting with OpenAidy services.
+The addon runtime provides a secure API for interacting with Aidy services.
 
 ### Agent Communication
 
@@ -2762,7 +2755,7 @@ async function generateConfigGuide(
 
   const configGuide = `# Configuration Guide
 
-This addon supports configuration through the OpenAidy interface. This guide explains all available configuration options.
+This addon supports configuration through the Aidy interface. This guide explains all available configuration options.
 
 ## Configuration Options
 
@@ -2838,7 +2831,7 @@ ${Object.entries(manifest.config.defaults)
 
 - Ensure values match the expected types
 - Check the configuration schema for constraints
-- Use the OpenAidy configuration interface for validation
+- Use the Aidy configuration interface for validation
 
 ### Configuration Not Loading
 
@@ -2868,7 +2861,7 @@ function generateFeatureList(manifest: AddonManifest): string {
     features.push('Customizable configuration options');
   }
 
-  features.push('Seamless OpenAidy integration');
+  features.push('Seamless Aidy integration');
   features.push('Real-time updates and notifications');
 
   return features.join('\n- ');
@@ -2983,4 +2976,4 @@ After Phase 4 completion:
 - Build community contribution guidelines
 - Add performance profiling tools
 
-This phase provides a comprehensive developer experience that makes it easy and enjoyable to create high-quality addons for the OpenAidy ecosystem.
+This phase provides a comprehensive developer experience that makes it easy and enjoyable to create high-quality addons for the Aidy ecosystem.
