@@ -1,5 +1,5 @@
 import { Show, For, createEffect, onMount } from 'solid-js';
-import { Bot, CircleStop, EyeOff } from 'lucide-solid';
+import { CircleStop, EyeOff } from 'lucide-solid';
 import type { SessionMessage } from '../lib/api';
 import type { QueuedMessage } from '../lib/types';
 import { TypingIndicator } from './TypingIndicator';
@@ -11,6 +11,7 @@ import type { RunActivityPhase } from './RunActivityBadge';
 import { MessageListItem } from './MessageListItem';
 import { LoadMoreControl } from './LoadMoreControl';
 import { MessageContent } from './MessageContent';
+import { Wordmark } from './ui/Wordmark';
 
 type StreamingToolCall = {
   id: string;
@@ -178,7 +179,7 @@ export function ChatView(props: ChatViewProps) {
     <div
       ref={scrollContainerRef}
       onScroll={handleScroll}
-      class="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4"
+      class="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-6 pb-4 sm:px-6 space-y-5 [&>*]:max-w-3xl [&>*]:mx-auto [&>*]:w-full"
     >
       {/* Loading state */}
       <Show when={props.isLoading}>
@@ -200,7 +201,7 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Error state */}
       <Show when={props.error}>
-        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-4">
           <p class="text-red-600 dark:text-red-400 text-sm">{props.error}</p>
           <Show when={props.onLoadMore}>
             <button
@@ -223,20 +224,22 @@ export function ChatView(props: ChatViewProps) {
           !props.isStreaming
         }
       >
-        <div class="flex flex-col items-center justify-center h-full text-text-tertiary">
+        <div class="flex flex-col items-center justify-center h-full text-center animate-rise-in">
           <Show
             when={props.isPrivate}
-            fallback={<Bot class="w-12 h-12 mb-4 opacity-50" />}
+            fallback={<Wordmark iconOnly size="xl" class="mb-5" />}
           >
-            <EyeOff class="w-12 h-12 mb-4 opacity-50" />
+            <div class="w-16 h-16 mb-5 rounded-[18px] bg-purple-500/10 flex items-center justify-center">
+              <EyeOff class="w-8 h-8 text-purple-500" stroke-width={1.75} />
+            </div>
           </Show>
-          <p class="text-lg font-medium">
+          <p class="text-[22px] font-semibold tracking-tight text-text-primary">
             {props.isPrivate ? 'Private chat' : 'No messages yet'}
           </p>
-          <p class="text-sm mt-1">
+          <p class="text-[15px] mt-1.5 text-text-tertiary max-w-sm">
             {props.isPrivate
               ? "Not saved, not listed — gone once you leave. Say what's on your mind below."
-              : 'Start a conversation by sending a message below'}
+              : 'Ask anything, or describe a task — Aidy can plan, use tools, and get it done.'}
           </p>
         </div>
       </Show>
@@ -262,14 +265,14 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Streaming content display — shown while waiting or receiving */}
       <Show when={props.isStreaming}>
-        <div class="rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+        <div class="py-1">
           <div class="flex items-start gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-              <Bot class="w-4 h-4" />
+            <div class="flex-shrink-0">
+              <Wordmark iconOnly size="md" />
             </div>
             <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-medium text-sm text-text-primary">
+              <div class="flex items-center gap-2 h-7 mb-0.5">
+                <span class="font-semibold text-[13px] text-text-primary">
                   Assistant
                 </span>
                 <span class="inline-flex items-center gap-1.5">
@@ -288,7 +291,7 @@ export function ChatView(props: ChatViewProps) {
                     type="button"
                     onClick={() => props.onCancelRun?.()}
                     aria-label="Stop agent"
-                    class="ml-auto inline-flex items-center gap-1 rounded border border-red-200 dark:border-red-800 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    class="ml-auto inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors"
                   >
                     <CircleStop class="w-3.5 h-3.5" />
                     Stop agent
@@ -311,7 +314,7 @@ export function ChatView(props: ChatViewProps) {
               <Show when={props.streamingContent}>
                 <div class="text-text-secondary mb-2">
                   <MessageContent content={props.streamingContent!} />
-                  <span class="inline-block w-2 h-4 bg-primary animate-pulse ml-0.5" />
+                  <span class="inline-block w-[3px] h-4 rounded-full bg-primary animate-pulse ml-0.5 align-middle" />
                 </div>
               </Show>
               {/* Live activity heartbeat — what the agent is doing right now */}

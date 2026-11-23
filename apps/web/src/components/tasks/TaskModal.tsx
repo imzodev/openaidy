@@ -157,7 +157,7 @@ export function TaskModal(props: TaskModalProps) {
   return (
     <Show when={props.isOpen}>
       <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in backdrop-blur-[3px] animate-fade-in"
         onClick={props.onClose}
       >
         <div

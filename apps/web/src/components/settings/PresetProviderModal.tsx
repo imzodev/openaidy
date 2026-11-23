@@ -218,10 +218,10 @@ export function PresetProviderModal(props: PresetProviderModalProps) {
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center">
       <div
-        class="absolute inset-0 bg-black/50"
+        class="absolute inset-0 bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in"
         onClick={() => props.onClose()}
       />
-      <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800">
           <h3 class="text-lg font-semibold text-text-primary">
             Configure {props.preset.name}

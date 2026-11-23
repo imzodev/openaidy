@@ -1,5 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { Send, ListPlus, Paperclip, X, Music } from 'lucide-solid';
+import { ArrowUp, ListPlus, Paperclip, X, Music } from 'lucide-solid';
 import { AgentPicker } from './AgentPicker';
 import type { Agent } from '../lib/api';
 
@@ -170,7 +170,10 @@ export function ChatComposer(props: ChatComposerProps) {
     <Show
       when={isSending()}
       fallback={
-        <Show when={isQueueing()} fallback={<Send class="w-4 h-4" />}>
+        <Show
+          when={isQueueing()}
+          fallback={<ArrowUp class="w-[18px] h-[18px]" stroke-width={2.5} />}
+        >
           <ListPlus class="w-4 h-4" />
         </Show>
       }
@@ -190,9 +193,9 @@ export function ChatComposer(props: ChatComposerProps) {
           ? 'Attachments are not available in a private chat'
           : 'Attach image or audio'
       }
-      class={`flex-shrink-0 flex items-center justify-center rounded-lg text-text-tertiary hover:text-text-primary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${extraClass}`}
+      class={`flex-shrink-0 flex items-center justify-center rounded-full text-text-tertiary hover:text-text-primary hover:bg-fill transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${extraClass}`}
     >
-      <Paperclip class="w-4 h-4" />
+      <Paperclip class="w-[18px] h-[18px]" stroke-width={1.75} />
     </button>
   );
 
@@ -200,10 +203,13 @@ export function ChatComposer(props: ChatComposerProps) {
   // the input until the message is sent.
   const attachmentChips = () => (
     <Show when={pendingFiles().length > 0}>
-      <div class="flex flex-wrap gap-2 mb-2" aria-label="Pending attachments">
+      <div
+        class="flex flex-wrap gap-2 mb-2 max-w-3xl mx-auto"
+        aria-label="Pending attachments"
+      >
         <For each={pendingFiles()}>
           {(file, index) => (
-            <div class="flex items-center gap-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 pl-1.5 pr-1 py-1 text-xs text-text-secondary max-w-48">
+            <div class="flex items-center gap-1.5 rounded-full bg-white dark:bg-gray-800 shadow-sm ring-1 ring-black/5 dark:ring-white/10 pl-1 pr-1.5 py-1 text-xs text-text-secondary max-w-48 animate-rise-in">
               <Show
                 when={file.type.startsWith('image/')}
                 fallback={<Music class="w-4 h-4 flex-shrink-0" />}
@@ -211,7 +217,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  class="w-6 h-6 rounded object-cover flex-shrink-0"
+                  class="w-6 h-6 rounded-full object-cover flex-shrink-0"
                   onLoad={(e) => URL.revokeObjectURL(e.currentTarget.src)}
                 />
               </Show>
@@ -220,7 +226,7 @@ export function ChatComposer(props: ChatComposerProps) {
                 type="button"
                 onClick={() => removeFile(index())}
                 aria-label={`Remove ${file.name}`}
-                class="flex-shrink-0 rounded p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600"
+                class="flex-shrink-0 rounded-full p-0.5 hover:bg-fill-strong"
               >
                 <X class="w-3 h-3" />
               </button>
@@ -240,8 +246,10 @@ export function ChatComposer(props: ChatComposerProps) {
       }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
-      class={`border-t border-gray-200 dark:border-gray-700 px-3 py-2 md:p-4 ${
-        isDragOver() ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+      class={`px-3 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:px-6 md:pt-2 md:pb-4 transition-colors ${
+        isDragOver()
+          ? '[&_[data-composer]]:ring-2 [&_[data-composer]]:ring-blue-500'
+          : ''
       }`}
     >
       <input
@@ -261,7 +269,10 @@ export function ChatComposer(props: ChatComposerProps) {
         when={isMobile()}
         fallback={
           /* ── Desktop / tablet (≥ md): [picker] [attach] [input] [send] ── */
-          <div class="flex items-center gap-3">
+          <div
+            data-composer
+            class="max-w-3xl mx-auto flex items-end gap-1.5 rounded-[26px] bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black/[0.06] dark:ring-white/10 p-1.5 transition-shadow focus-within:ring-blue-500/50 focus-within:shadow-xl"
+          >
             <AgentPicker
               agents={props.agents}
               selectedAgentId={props.selectedAgentId}
@@ -269,9 +280,9 @@ export function ChatComposer(props: ChatComposerProps) {
               disabled={inputDisabled()}
             />
 
-            {attachButton('w-10 h-10')}
+            {attachButton('w-9 h-9')}
 
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
               <textarea
                 ref={setRef}
                 value={input()}
@@ -281,14 +292,14 @@ export function ChatComposer(props: ChatComposerProps) {
                 disabled={inputDisabled()}
                 placeholder={placeholder()}
                 rows={1}
-                class="w-full resize-none rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-2 text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed min-h-10 max-h-32 overflow-y-auto mt-1"
+                class="block w-full resize-none bg-transparent px-1.5 py-[7px] text-[15px] leading-[22px] text-text-primary placeholder-text-muted focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed min-h-9 max-h-48 overflow-y-auto"
               />
             </div>
 
             <button
               type="submit"
               disabled={sendDisabled()}
-              class="flex-shrink-0 w-10 h-10 rounded-lg bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+              class="flex-shrink-0 w-9 h-9 rounded-full bg-primary hover:bg-primary-hover disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed shadow-sm disabled:shadow-none"
               aria-label={sendAriaLabel()}
               title={sendTitle()}
             >
@@ -301,7 +312,10 @@ export function ChatComposer(props: ChatComposerProps) {
             in a single pill, so the chat scrollback keeps the vertical space.
             The agent is icon-only (its name shows in the picker sheet), and
             the keyboard hint below is hidden. ── */}
-        <div class="flex items-end gap-1.5 rounded-2xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-1.5 py-1 focus-within:ring-2 focus-within:ring-primary focus-within:border-transparent">
+        <div
+          data-composer
+          class="flex items-end gap-1.5 rounded-[22px] bg-white dark:bg-gray-800 shadow-md ring-1 ring-black/[0.06] dark:ring-white/10 px-1.5 py-1 focus-within:ring-blue-500/50"
+        >
           <AgentPicker
             variant="icon"
             agents={props.agents}
@@ -319,12 +333,12 @@ export function ChatComposer(props: ChatComposerProps) {
             disabled={inputDisabled()}
             placeholder={placeholder()}
             rows={1}
-            class="flex-1 min-w-0 resize-none bg-transparent py-1 text-text-primary placeholder-text-tertiary focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed min-h-8 max-h-32 overflow-y-auto"
+            class="flex-1 min-w-0 resize-none bg-transparent py-1 text-[16px] text-text-primary placeholder-text-muted focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed min-h-8 max-h-32 overflow-y-auto"
           />
           <button
             type="submit"
             disabled={sendDisabled()}
-            class="flex-shrink-0 w-8 h-8 rounded-full bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+            class="flex-shrink-0 w-8 h-8 rounded-full bg-primary hover:bg-primary-hover disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white flex items-center justify-center transition-colors disabled:cursor-not-allowed"
             aria-label={sendAriaLabel()}
             title={sendTitle()}
           >
@@ -334,7 +348,7 @@ export function ChatComposer(props: ChatComposerProps) {
       </Show>
 
       {/* Keyboard hint — desktop only; hidden on mobile to maximize chat space. */}
-      <p class="mt-2 text-xs text-text-tertiary hidden md:block">
+      <p class="mt-2 text-[11px] text-text-muted text-center hidden md:block">
         <Show
           when={isQueueing()}
           fallback="Press Enter to send, Shift+Enter for new line — paste or drop images/audio to attach"

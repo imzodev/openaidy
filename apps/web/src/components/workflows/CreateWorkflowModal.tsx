@@ -312,7 +312,7 @@ export function CreateWorkflowModal(props: CreateWorkflowModalProps) {
   return (
     <Show when={props.isOpen}>
       <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in backdrop-blur-[3px] animate-fade-in p-4"
         onClick={props.onClose}
       >
         <div

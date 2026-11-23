@@ -125,10 +125,10 @@ export function RunList(props: RunListProps) {
   };
 
   return (
-    <div class="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+    <div class="hairline-t">
       {/* Header */}
       <div
-        class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors"
+        class="px-4 sm:px-6 py-1.5 flex items-center justify-between cursor-pointer hover:bg-fill transition-colors"
         onClick={() => setIsCollapsed(!isCollapsed())}
       >
         <div class="flex items-center gap-2">
@@ -138,7 +138,7 @@ export function RunList(props: RunListProps) {
           >
             <ChevronUp class="w-4 h-4 text-text-tertiary" />
           </Show>
-          <h3 class="text-sm font-medium text-text-secondary">Runs</h3>
+          <h3 class="text-xs font-medium text-text-tertiary">Runs</h3>
         </div>
         <div class="flex items-center gap-2 min-w-0">
           <Show when={modelLabel()}>

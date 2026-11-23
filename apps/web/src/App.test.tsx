@@ -112,6 +112,7 @@ vi.mock('lucide-solid', () => ({
   Code: () => <span data-testid="code" />,
   ChevronLeft: () => <span data-testid="chevron-left" />,
   ChevronRight: () => <span data-testid="chevron-right" />,
+  PanelLeft: () => <span data-testid="panel-left" />,
   ChevronUp: () => <span data-testid="chevron-up" />,
   CircleCheck: () => <span data-testid="circle-check" />,
   Clock: () => <span data-testid="clock" />,
