@@ -146,7 +146,7 @@ export function CommandPalette(props: CommandPaletteProps) {
   return (
     <Show when={props.isOpen()}>
       <div
-        class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-start justify-center pt-[10vh] px-4"
+        class="fixed inset-0 z-50 bg-black/20 dark:bg-black/45 backdrop-blur-[3px] flex items-start justify-center pt-[14vh] px-4 animate-fade-in"
         onClick={(e) => {
           if (e.target === e.currentTarget) props.onClose();
         }}
@@ -155,11 +155,14 @@ export function CommandPalette(props: CommandPaletteProps) {
         aria-label="Command palette"
       >
         <div
-          class="w-full max-w-xl rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden"
+          class="w-full max-w-[640px] rounded-[18px] material-sheet shadow-2xl ring-1 ring-black/5 dark:ring-white/10 overflow-hidden animate-sheet-in"
           data-testid="command-palette"
         >
-          <div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-700">
-            <Search class="w-4 h-4 text-text-tertiary shrink-0" />
+          <div class="flex items-center gap-3 px-4 h-14 hairline-b">
+            <Search
+              class="w-5 h-5 text-text-tertiary shrink-0"
+              stroke-width={1.75}
+            />
             <input
               ref={inputRef}
               type="text"
@@ -172,7 +175,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                   ? `command-palette-item-${flatList()[highlightedIndex()].id}`
                   : undefined
               }
-              class="flex-1 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-tertiary"
+              class="flex-1 bg-transparent outline-none text-[20px] font-light tracking-tight text-text-primary placeholder:text-text-muted"
               placeholder="Type a command or search…"
               value={query()}
               onInput={(e) => {
@@ -182,7 +185,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               onKeyDown={handleKeyDown}
               data-testid="command-palette-input"
             />
-            <kbd class="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-[10px] font-medium text-text-tertiary">
+            <kbd class="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md bg-fill text-[11px] font-medium text-text-tertiary">
               esc
             </kbd>
           </div>
@@ -190,7 +193,7 @@ export function CommandPalette(props: CommandPaletteProps) {
           <div
             id="command-palette-listbox"
             role="listbox"
-            class="max-h-[60vh] overflow-y-auto py-1"
+            class="max-h-[60vh] overflow-y-auto p-1.5"
           >
             <Show
               when={flatList().length > 0}
@@ -206,7 +209,7 @@ export function CommandPalette(props: CommandPaletteProps) {
               <For each={grouped()}>
                 {(group, groupIdx) => (
                   <div class={groupIdx() > 0 ? 'mt-1' : ''}>
-                    <div class="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                    <div class="px-2.5 pt-2 pb-1 text-[11px] font-semibold text-text-muted">
                       {CATEGORY_LABELS[group.category]}
                     </div>
                     <For each={group.commands}>
@@ -228,10 +231,10 @@ export function CommandPalette(props: CommandPaletteProps) {
                             }
                             onClick={() => runCommand(cmd)}
                             class={
-                              'w-full text-left flex items-center gap-3 px-3 py-2 text-sm transition-colors ' +
+                              'w-full text-left flex items-center gap-3 px-2.5 h-9 rounded-lg text-[14px] transition-colors ' +
                               (isHighlighted()
-                                ? 'bg-blue-50 dark:bg-blue-900/30 text-text-primary'
-                                : 'text-text-secondary hover:bg-gray-50 dark:hover:bg-gray-700/50')
+                                ? 'bg-blue-600 text-white [&_*]:!text-white'
+                                : 'text-text-primary')
                             }
                           >
                             <span class="flex h-5 w-5 items-center justify-center text-text-tertiary shrink-0">
@@ -251,7 +254,7 @@ export function CommandPalette(props: CommandPaletteProps) {
                               </Show>
                             </span>
                             <Show when={cmd.shortcut}>
-                              <kbd class="text-[10px] font-medium text-text-tertiary bg-gray-100 dark:bg-gray-900 px-1.5 py-0.5 rounded">
+                              <kbd class="text-[11px] font-medium text-text-tertiary bg-fill px-1.5 py-0.5 rounded-md">
                                 {cmd.shortcut}
                               </kbd>
                             </Show>
@@ -265,7 +268,7 @@ export function CommandPalette(props: CommandPaletteProps) {
             </Show>
           </div>
 
-          <div class="border-t border-gray-200 dark:border-gray-700 px-3 py-1.5 text-[10px] text-text-tertiary flex items-center justify-between">
+          <div class="hairline-t px-4 py-2 text-[11px] text-text-muted flex items-center justify-between">
             <span>
               <kbd class="font-medium">↑↓</kbd> navigate ·{' '}
               <kbd class="font-medium">↵</kbd> select ·{' '}

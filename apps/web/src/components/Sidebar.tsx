@@ -2,8 +2,7 @@ import { Show, For, createSignal } from 'solid-js';
 import {
   Plus,
   Settings,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeft,
   MessageSquare,
   CheckSquare,
   Zap,
@@ -22,6 +21,7 @@ import {
   Workflow,
 } from 'lucide-solid';
 import { ThemeToggle } from './ThemeToggle';
+import { Wordmark } from './ui/Wordmark';
 import { SessionList } from './SessionList';
 import type { Session, AddonRecord } from '../lib/api';
 import { updateBadgeVisible } from '../stores/update-notice';
@@ -126,6 +126,15 @@ const navSections: NavSection[] = [
   },
 ];
 
+// macOS source-list rows: compact, gray-fill selection, accent-tinted icon.
+function rowClass(active: boolean, collapsed: boolean): string {
+  const state = active
+    ? 'bg-fill-strong text-text-primary font-medium [&_svg]:text-blue-600 dark:[&_svg]:text-blue-400'
+    : 'text-text-secondary hover:bg-fill hover:text-text-primary';
+  const layout = collapsed ? 'justify-center px-0' : 'justify-start px-2.5';
+  return `flex items-center gap-2.5 h-8 rounded-md text-[13px] transition-colors ${state} ${layout}`;
+}
+
 export function Sidebar(props: SidebarProps) {
   // Approval steps waiting on the user, shown as a badge on Workflows.
   const pendingApprovals = usePendingApprovals();
@@ -153,57 +162,55 @@ export function Sidebar(props: SidebarProps) {
         <button
           type="button"
           aria-label="Close sidebar overlay"
-          class="fixed inset-0 z-30 bg-black/40 md:hidden"
+          class="fixed inset-0 z-30 bg-black/30 backdrop-blur-[2px] md:hidden animate-fade-in"
           onClick={props.onCollapse}
         />
       </Show>
 
       <aside
-        class={`fixed inset-y-0 left-0 z-40 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full transition-all duration-300 md:relative md:z-auto md:flex-shrink-0 ${
+        class={`fixed inset-y-0 left-0 z-40 material-sidebar hairline-r flex flex-col h-full transition-all duration-300 ease-spring md:relative md:z-auto md:flex-shrink-0 ${
           props.isCollapsed
-            ? '-translate-x-full w-64 max-w-[85vw] md:translate-x-0 md:w-12'
+            ? '-translate-x-full w-64 max-w-[85vw] md:translate-x-0 md:w-14'
             : 'translate-x-0 w-64 max-w-[85vw]'
         }`}
       >
         {/* Header */}
         <div
-          class={`py-2 border-b border-gray-200 dark:border-gray-700 flex items-center h-[55px] ${
-            props.isCollapsed ? 'justify-center px-0' : 'justify-between px-4'
+          class={`flex items-center h-[52px] flex-shrink-0 ${
+            props.isCollapsed
+              ? 'justify-center px-0'
+              : 'justify-between pl-4 pr-2.5'
           }`}
         >
           <Show when={!props.isCollapsed}>
-            <img src="/logo.webp" alt="Aidy" class="h-7 w-auto" />
+            <Wordmark size="sm" />
           </Show>
           <button
             onClick={props.onToggleCollapse}
-            class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-text-tertiary transition-colors"
+            class="p-1.5 rounded-md text-text-tertiary hover:bg-fill hover:text-text-primary transition-colors"
             aria-label={
               props.isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
             }
           >
-            {props.isCollapsed ? (
-              <ChevronRight class="w-5 h-5" />
-            ) : (
-              <ChevronLeft class="w-5 h-5" />
-            )}
+            <PanelLeft class="w-[18px] h-[18px]" stroke-width={1.75} />
           </button>
         </div>
 
         {/* Navigation Sections */}
-        <div class="flex-1 overflow-y-auto flex flex-col">
+        <div class="flex-1 overflow-y-auto flex flex-col pb-1">
           {/* Chat Item with Plus */}
-          <div class="mb-2">
+          <div class="mb-1">
             <Show when={!props.isCollapsed}>
-              <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider">
+              <h3 class="px-4 pt-3 pb-1 text-[11px] font-semibold text-text-muted">
                 Chat
               </h3>
             </Show>
             <Show when={props.isCollapsed}>
               <div class="px-2 py-1">
-                <div class="h-px bg-gray-200 dark:bg-gray-700" />
+                <div class="h-px bg-separator mx-1.5" />
               </div>
             </Show>
-            <div class="flex items-center gap-1 px-2">
+            <div class="flex items-center gap-0.5 px-2">
               <a
                 href={RoutePaths.CHAT}
                 onClick={(e) => {
@@ -215,20 +222,15 @@ export function Sidebar(props: SidebarProps) {
                     props.onCollapse();
                   }
                 }}
-                class={`flex-1 flex items-center gap-2 py-2 rounded-lg transition-colors ${
-                  props.currentView === 'chat'
-                    ? 'bg-blue-50 dark:bg-blue-900/20 text-text-primary'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
-                } ${
-                  props.isCollapsed
-                    ? 'justify-center px-0'
-                    : 'px-2 justify-start'
-                }`}
+                class={`flex-1 ${rowClass(props.currentView === 'chat', props.isCollapsed)}`}
                 title="Chat"
               >
-                <MessageSquare class="w-5 h-5 flex-shrink-0" />
+                <MessageSquare
+                  class="w-[18px] h-[18px] flex-shrink-0"
+                  stroke-width={1.75}
+                />
                 <Show when={!props.isCollapsed}>
-                  <span class="text-sm">Chat</span>
+                  <span>Chat</span>
                 </Show>
               </a>
               <Show when={!props.isCollapsed}>
@@ -236,8 +238,9 @@ export function Sidebar(props: SidebarProps) {
                   type="button"
                   onClick={handleCreate}
                   disabled={isCreating()}
-                  class="p-2 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-text-primary transition-colors"
+                  class="h-8 w-8 flex items-center justify-center rounded-md text-text-tertiary hover:bg-fill hover:text-text-primary transition-colors"
                   title="New Session"
+                  aria-label="New session"
                 >
                   <Plus class="w-4 h-4" />
                 </button>
@@ -267,15 +270,15 @@ export function Sidebar(props: SidebarProps) {
 
           <For each={navSections}>
             {(section) => (
-              <div class="mb-2">
+              <div class="mb-1">
                 <Show when={!props.isCollapsed}>
-                  <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider">
+                  <h3 class="px-4 pt-3 pb-1 text-[11px] font-semibold text-text-muted">
                     {section.title}
                   </h3>
                 </Show>
                 <Show when={props.isCollapsed}>
                   <div class="px-2 py-1">
-                    <div class="h-px bg-gray-200 dark:bg-gray-700" />
+                    <div class="h-px bg-separator mx-1.5" />
                   </div>
                 </Show>
                 <For each={section.items}>
@@ -292,19 +295,11 @@ export function Sidebar(props: SidebarProps) {
                             props.onCollapse();
                           }
                         }}
-                        class={`w-full flex items-center gap-2 py-2 rounded-lg transition-colors ${
-                          props.currentView === item.id
-                            ? 'bg-blue-50 dark:bg-blue-900/20 text-text-primary'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
-                        } ${
-                          props.isCollapsed
-                            ? 'justify-center px-0'
-                            : 'px-4 justify-start'
-                        }`}
+                        class={`mx-2 ${rowClass(props.currentView === item.id, props.isCollapsed)}`}
                         title={item.label}
                       >
                         <span class="relative flex-shrink-0">
-                          <Icon class="w-5 h-5" />
+                          <Icon class="w-[18px] h-[18px]" stroke-width={1.75} />
                           <Show
                             when={
                               item.id === 'workflows' &&
@@ -316,7 +311,7 @@ export function Sidebar(props: SidebarProps) {
                           </Show>
                         </span>
                         <Show when={!props.isCollapsed}>
-                          <span class="text-sm flex-1">{item.label}</span>
+                          <span class="flex-1">{item.label}</span>
                           <Show
                             when={
                               item.id === 'workflows' &&
@@ -354,20 +349,15 @@ export function Sidebar(props: SidebarProps) {
                             props.onCollapse();
                           }
                         }}
-                        class={`w-full flex items-center gap-2 py-2 rounded-lg transition-colors ${
-                          props.activeAddonId === addon.addonId
-                            ? 'bg-blue-50 dark:bg-blue-900/20 text-text-primary'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
-                        } ${
-                          props.isCollapsed
-                            ? 'justify-center px-0'
-                            : 'px-4 justify-start'
-                        }`}
+                        class={`mx-2 ${rowClass(props.activeAddonId === addon.addonId, props.isCollapsed)}`}
                         title={addon.name}
                       >
-                        <Puzzle class="w-5 h-5 flex-shrink-0" />
+                        <Puzzle
+                          class="w-[18px] h-[18px] flex-shrink-0"
+                          stroke-width={1.75}
+                        />
                         <Show when={!props.isCollapsed}>
-                          <span class="text-sm truncate">{addon.name}</span>
+                          <span class="truncate">{addon.name}</span>
                         </Show>
                       </a>
                     )}
@@ -379,11 +369,7 @@ export function Sidebar(props: SidebarProps) {
 
           {/* Bottom Actions */}
           <div class="flex-1" />
-          <div
-            class={`py-3 border-t border-gray-200 dark:border-gray-700 ${
-              props.isCollapsed ? 'px-2' : 'px-3'
-            } space-y-2`}
-          >
+          <div class="py-2.5 px-2 hairline-t space-y-1.5">
             <ThemeToggle isCollapsed={props.isCollapsed} />
 
             <a
@@ -396,23 +382,20 @@ export function Sidebar(props: SidebarProps) {
                   props.onCollapse();
                 }
               }}
-              class={`w-full flex items-center gap-2 py-2 rounded-lg transition-colors ${
-                props.currentView === 'settings'
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-text-primary'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
-              } ${
-                props.isCollapsed ? 'justify-center px-0' : 'px-3 justify-start'
-              }`}
+              class={rowClass(
+                props.currentView === 'settings',
+                props.isCollapsed,
+              )}
               title="Settings"
             >
               <span class="relative flex-shrink-0">
-                <Settings class="w-5 h-5" />
+                <Settings class="w-[18px] h-[18px]" stroke-width={1.75} />
                 {/* Update-available indicator (issue #456). Shown in both
                     collapsed and expanded states so the nudge isn't lost when
                     the sidebar is narrow. */}
                 <Show when={updateBadgeVisible()}>
                   <span
-                    class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-white dark:ring-gray-800"
+                    class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary ring-2 ring-white dark:ring-gray-900"
                     aria-label="Update available"
                   />
                 </Show>

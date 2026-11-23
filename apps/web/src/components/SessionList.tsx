@@ -48,15 +48,18 @@ export function SessionList(props: SessionListProps) {
     <li>
       <div
         onClick={() => props.onSelect(session.id)}
-        class={`w-full text-left py-1.5 px-3 rounded-lg transition-colors group flex items-center gap-2 cursor-pointer ${
+        class={`w-full text-left h-8 px-2.5 rounded-md transition-colors group flex items-center gap-2.5 cursor-pointer text-[13px] ${
           props.isActiveView && props.selectedId === session.id
-            ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-            : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-text-secondary'
+            ? 'bg-blue-600 text-white [&_svg]:text-white/90'
+            : 'hover:bg-fill text-text-secondary hover:text-text-primary'
         }`}
         title={session.title}
       >
-        <MessageSquare class="w-4 h-4 flex-shrink-0" />
-        <span class="truncate flex-1 text-sm">{session.title}</span>
+        <MessageSquare
+          class="w-4 h-4 flex-shrink-0 text-text-muted"
+          stroke-width={1.75}
+        />
+        <span class="truncate flex-1">{session.title}</span>
         <Show when={props.onToggleFavorite}>
           <button
             onClick={(e) => {
@@ -92,20 +95,20 @@ export function SessionList(props: SessionListProps) {
         </Show>
 
         <Show when={!props.isLoading && favorites().length > 0}>
-          <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1">
+          <h3 class="px-4 pt-3 pb-1 text-[11px] font-semibold text-text-muted flex items-center gap-1">
             <Star class="w-3 h-3 fill-amber-400 text-amber-400" />
             Favorites
           </h3>
-          <ul class="space-y-0.5 px-2 mb-1">
+          <ul class="space-y-px px-2 mb-1">
             <For each={favorites()}>{renderItem}</For>
           </ul>
         </Show>
 
         <Show when={!props.isLoading && recent().length > 0}>
-          <h3 class="px-4 py-1 text-xs font-semibold text-text-muted uppercase tracking-wider">
+          <h3 class="px-4 pt-3 pb-1 text-[11px] font-semibold text-text-muted">
             Recent
           </h3>
-          <ul class="space-y-0.5 px-2">
+          <ul class="space-y-px px-2">
             <For each={recent()}>{renderItem}</For>
           </ul>
         </Show>
