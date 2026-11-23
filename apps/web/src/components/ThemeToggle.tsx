@@ -31,7 +31,7 @@ export function ThemeToggle(props: ThemeToggleProps) {
                     : 'light';
               setTheme(next);
             }}
-            class="p-2 rounded-lg text-text-tertiary hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            class="p-2 rounded-md text-text-tertiary hover:bg-fill hover:text-text-primary transition-colors"
             title={`Theme: ${theme()}`}
           >
             <Show when={theme() === 'light'}>
@@ -47,21 +47,27 @@ export function ThemeToggle(props: ThemeToggleProps) {
         </div>
       }
     >
-      <div class="flex items-center justify-between gap-1 p-1.5 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+      <div
+        role="radiogroup"
+        aria-label="Appearance"
+        class="flex items-center gap-0.5 p-0.5 bg-fill rounded-lg"
+      >
         {options.map((option) => {
           const Icon = option.icon;
           const isActive = theme() === option.value;
           return (
             <button
               onClick={() => setTheme(option.value)}
-              class={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              role="radio"
+              aria-checked={isActive}
+              class={`flex-1 flex items-center justify-center gap-1.5 h-7 rounded-md text-xs font-medium transition-all duration-200 ${
                 isActive
-                  ? 'bg-white dark:bg-gray-700 text-text-primary shadow-sm ring-1 ring-gray-200 dark:ring-gray-600'
+                  ? 'bg-white dark:bg-gray-600 text-text-primary shadow-sm'
                   : 'text-text-tertiary hover:text-text-secondary'
               }`}
               title={option.label}
             >
-              <Icon class={`w-4 h-4 ${isActive ? 'text-blue-500' : ''}`} />
+              <Icon class="w-3.5 h-3.5" stroke-width={2} />
               <span class="hidden sm:inline">{option.label}</span>
             </button>
           );

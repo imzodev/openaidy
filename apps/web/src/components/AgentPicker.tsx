@@ -47,9 +47,9 @@ export function AgentPicker(props: AgentPickerProps) {
       <button
         type="button"
         onClick={() => handleSelect(undefined)}
-        class={`w-full px-3 py-3 md:py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+        class={`w-full px-3 py-3 md:py-2 rounded-lg text-left text-[13px] hover:bg-fill flex items-center gap-2 ${
           props.selectedAgentId === undefined
-            ? 'bg-blue-50 dark:bg-blue-900/30 text-text-primary'
+            ? 'bg-fill-strong text-text-primary font-medium'
             : 'text-text-tertiary'
         }`}
       >
@@ -57,7 +57,7 @@ export function AgentPicker(props: AgentPickerProps) {
         <span>Default agent</span>
       </button>
 
-      <div class="border-t border-gray-200 dark:border-gray-700" />
+      <div class="h-px bg-separator my-1 mx-2" />
 
       <For each={enabledAgents()}>
         {(agent) => (
@@ -69,7 +69,7 @@ export function AgentPicker(props: AgentPickerProps) {
                 ? { 'border-left': `2px solid ${agent.identity.accentColor}` }
                 : undefined
             }
-            class={`w-full px-3 py-3 md:py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+            class={`w-full px-3 py-3 md:py-2 rounded-lg text-left text-[13px] hover:bg-fill flex items-center gap-2 ${
               agent.identity?.accentColor ? '' : 'border-l-2 border-transparent'
             } ${
               props.selectedAgentId === agent.id
@@ -118,13 +118,13 @@ export function AgentPicker(props: AgentPickerProps) {
             onClick={() => !props.disabled && setIsOpen(!isOpen())}
             disabled={props.disabled}
             aria-label="Select agent"
-            class="flex items-center gap-2 px-3 h-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[140px]"
+            class="flex items-center gap-1.5 pl-2.5 pr-2 h-9 rounded-full bg-fill hover:bg-fill-strong disabled:opacity-50 disabled:cursor-not-allowed max-w-[180px] transition-colors"
           >
             <AgentIcon
               agent={selectedAgent()}
               class="w-4 h-4 text-text-tertiary"
             />
-            <span class="flex-1 text-left text-sm text-text-secondary truncate">
+            <span class="flex-1 text-left text-[13px] font-medium text-text-secondary truncate">
               {selectedLabel()}
             </span>
             <ChevronDown class="w-4 h-4 text-text-tertiary" />
@@ -137,7 +137,7 @@ export function AgentPicker(props: AgentPickerProps) {
           disabled={props.disabled}
           aria-label="Select agent"
           title={selectedLabel()}
-          class="flex items-center justify-center w-8 h-8 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-text-tertiary hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex items-center justify-center w-8 h-8 rounded-full bg-fill text-text-tertiary hover:bg-fill-strong disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <AgentIcon agent={selectedAgent()} class="w-4 h-4" />
         </button>
@@ -145,7 +145,7 @@ export function AgentPicker(props: AgentPickerProps) {
 
       {/* Desktop dropdown */}
       <Show when={isOpen() && variant() === 'inline'}>
-        <div class="absolute bottom-full left-0 mb-1 w-full min-w-[220px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div class="absolute bottom-full left-0 mb-2 w-full min-w-[240px] material-sheet rounded-xl shadow-xl ring-1 ring-black/5 dark:ring-white/10 z-50 max-h-72 overflow-y-auto p-1 animate-sheet-in">
           <OptionList />
         </div>
       </Show>
@@ -153,11 +153,11 @@ export function AgentPicker(props: AgentPickerProps) {
       {/* Mobile bottom sheet */}
       <Show when={isOpen() && variant() === 'icon'}>
         <div
-          class="fixed inset-0 z-40 bg-black/40"
+          class="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] animate-fade-in"
           onClick={() => setIsOpen(false)}
         />
-        <div class="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-2xl max-h-[70vh] overflow-y-auto pb-6">
-          <div class="sticky top-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <div class="fixed inset-x-0 bottom-0 z-50 rounded-t-[22px] material-sheet shadow-2xl max-h-[70vh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))] animate-sheet-in">
+          <div class="sticky top-0 flex items-center justify-between px-4 py-3 hairline-b material-sheet">
             <span class="text-sm font-medium text-text-primary">
               Choose an agent
             </span>

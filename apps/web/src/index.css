@@ -1,58 +1,152 @@
+@import '@fontsource-variable/inter';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom styles for Aidy */
+/*
+ * Aidy design tokens — modeled on Apple's Human Interface Guidelines:
+ * system label/fill/separator colors, SF Pro type (Inter off Apple
+ * platforms), and translucent "materials" for chrome.
+ */
 :root {
-  /* Brand colors */
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --primary-disabled: #93c5fd;
-  --danger: #ef4444;
-  --success: #22c55e;
+  color-scheme: light;
 
-  /* Text colors - semantic */
-  --text-primary: #172554;
-  --text-secondary: #4b5563;
-  --text-tertiary: #6b7280;
-  --text-muted: #9ca3af;
-  --text-inverse: #111827;
+  /* Accent (systemBlue) */
+  --primary: #007aff;
+  --primary-hover: #0066d6;
+  --primary-disabled: #8ac0ff;
+  --danger: #ff3b30;
+  --success: #34c759;
 
-  /* Background colors - semantic */
-  --bg-primary: #f8fafc;
-  --bg-secondary: #f1f5f9;
-  --bg-tertiary: #e2e8f0;
+  /* Labels */
+  --text-primary: #1d1d1f;
+  --text-secondary: #515154;
+  --text-tertiary: #6e6e73;
+  --text-muted: #86868b;
+  --text-inverse: #1d1d1f;
+
+  /* Backgrounds */
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ededf0;
+  --bg-tertiary: #e3e3e8;
   --bg-elevated: #ffffff;
 
-  /* Border colors */
-  --border-primary: #e2e8f0;
-  --border-secondary: #cbd5e1;
+  /* Borders, separators and fills */
+  --border-primary: #e3e3e8;
+  --border-secondary: #d1d1d6;
+  --separator: rgb(60 60 67 / 0.16);
+  --fill: rgb(120 120 128 / 0.1);
+  --fill-strong: rgb(120 120 128 / 0.18);
+
+  /* Materials */
+  --material-chrome: rgb(255 255 255 / 0.72);
+  --material-sidebar: rgb(246 246 248 / 0.82);
+  --material-sheet: rgb(255 255 255 / 0.93);
 }
 
 .dark {
-  /* Text colors - dark mode */
-  --text-primary: #f3f4f6;
-  --text-secondary: #d1d5db;
-  --text-tertiary: #9ca3af;
-  --text-muted: #6b7280;
-  --text-inverse: #f9fafb;
+  color-scheme: dark;
 
-  /* Background colors - dark mode */
-  --bg-primary: #111827;
-  --bg-secondary: #1f2937;
-  --bg-tertiary: #374151;
-  --bg-elevated: #1f2937;
+  --primary: #0a84ff;
+  --primary-hover: #409cff;
+  --primary-disabled: #003d80;
+  --danger: #ff453a;
+  --success: #30d158;
 
-  /* Border colors - dark mode */
-  --border-primary: #374151;
-  --border-secondary: #4b5563;
+  --text-primary: #f5f5f7;
+  --text-secondary: #c7c7cc;
+  --text-tertiary: #98989d;
+  --text-muted: #6e6e73;
+  --text-inverse: #f5f5f7;
+
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #2c2c2e;
+  --bg-tertiary: #3a3a3c;
+  --bg-elevated: #2c2c2e;
+
+  --border-primary: #38383a;
+  --border-secondary: #48484a;
+  --separator: rgb(84 84 88 / 0.6);
+  --fill: rgb(118 118 128 / 0.2);
+  --fill-strong: rgb(118 118 128 / 0.32);
+
+  --material-chrome: rgb(28 28 30 / 0.72);
+  --material-sidebar: rgb(24 24 26 / 0.82);
+  --material-sheet: rgb(44 44 46 / 0.93);
 }
 
 @layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
+    @apply font-sans;
     background-color: var(--bg-primary);
     color: var(--text-primary);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    /* Inter reads closest to SF Pro with these alternates and a hair of
+       negative tracking; SF ignores the features it doesn't have. */
+    font-feature-settings:
+      'cv11' 1,
+      'ss01' 1,
+      'ss03' 1;
+    letter-spacing: -0.006em;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.022em;
+  }
+
+  ::selection {
+    background-color: rgb(0 122 255 / 0.22);
+  }
+
+  input,
+  textarea {
+    caret-color: var(--primary);
+  }
+
+  /* Native selects render as OS chrome (very un-Apple on Windows/Linux):
+     draw a consistent field with an SF-style chevron instead. */
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5'/%3E%3Cpath d='m7 9 5-5 5 5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+    background-size: 12px 12px;
+    padding-right: 2.25rem !important;
+  }
+
+  select:not([multiple]):not([size]) {
+    cursor: pointer;
+  }
+
+  /* One consistent focus halo (accessibility first, Apple-style). Elements
+     that opt out with Tailwind's `focus:outline-none` keep their own ring. */
+  :focus-visible {
+    outline: 3px solid rgb(0 122 255 / 0.4);
+    outline-offset: 1px;
+  }
+
+  button,
+  a,
+  [role='button'] {
+    transition-property: color, background-color, border-color, box-shadow,
+      opacity, transform;
+    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+    transition-duration: 160ms;
+  }
+
+  button:not(:disabled):active,
+  [role='button']:active {
+    transform: scale(0.98);
   }
 }
 
@@ -109,22 +203,82 @@
   .btn-secondary:hover {
     background-color: var(--btn-secondary-hover);
   }
+
+  /* Translucent materials (vibrancy). */
+  .material-chrome {
+    background-color: var(--material-chrome);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+  .material-sidebar {
+    background-color: var(--material-sidebar);
+    -webkit-backdrop-filter: saturate(180%) blur(30px);
+    backdrop-filter: saturate(180%) blur(30px);
+  }
+  .material-sheet {
+    background-color: var(--material-sheet);
+    -webkit-backdrop-filter: saturate(180%) blur(40px);
+    backdrop-filter: saturate(180%) blur(40px);
+  }
+
+  /* Hairline separators that stay crisp on retina displays. */
+  .hairline-b {
+    box-shadow: inset 0 -0.5px 0 var(--separator);
+  }
+  .hairline-t {
+    box-shadow: inset 0 0.5px 0 var(--separator);
+  }
+  .hairline-r {
+    box-shadow: inset -0.5px 0 0 var(--separator);
+  }
+
+  /* Large-title typography (HIG "Large Title" / "Title 2"). */
+  .text-large-title {
+    font-size: 1.75rem;
+    line-height: 2.125rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  /* The Aidy wordmark: typographic, so it themes with light/dark. */
+  .wordmark {
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    color: var(--text-primary);
+  }
 }
 
-/* Scrollbar styling */
+/* Scrollbars: slim, overlay-like, only as present as they need to be. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(120 120 128 / 0.35) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+  background-color: rgb(120 120 128 / 0.32);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-600;
+  background-color: rgb(120 120 128 / 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

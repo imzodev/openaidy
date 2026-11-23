@@ -5,9 +5,9 @@
  */
 
 import { Show, For, createMemo } from 'solid-js';
-import { Bot } from 'lucide-solid';
 import { MessageContent } from './MessageContent';
 import { ToolCallBlock } from './ToolBlocks';
+import { Wordmark } from './ui/Wordmark';
 import type {
   StreamingDelta,
   StreamingToolCall,
@@ -30,14 +30,16 @@ export function StreamingMessage(props: StreamingMessageProps) {
   });
 
   return (
-    <div class="rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+    <div class="py-1">
       <div class="flex items-start gap-3">
-        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 flex items-center justify-center">
-          <Bot class="w-4 h-4" />
+        <div class="flex-shrink-0">
+          <Wordmark iconOnly size="md" />
         </div>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="font-medium text-sm text-text-primary">Assistant</span>
+          <div class="flex items-center gap-2 h-7 mb-0.5">
+            <span class="font-semibold text-[13px] text-text-primary">
+              Assistant
+            </span>
             <Show when={props.isError}>
               <span class="text-xs text-red-500">Error</span>
             </Show>

@@ -491,7 +491,10 @@ export function AgentsPage(props: AgentsPageProps) {
     }
   };
 
-  const getModelDisplay = (model: string) => {
+  // `model` is typed as required, but a fresh install with no provider
+  // configured yields agents without one; don't crash the page over it.
+  const getModelDisplay = (model: string | undefined): string => {
+    if (!model) return 'No model selected';
     const parts = model.split('/');
     return parts.length === 2 ? `${parts[1]} (${parts[0]})` : model;
   };

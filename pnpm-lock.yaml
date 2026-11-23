@@ -256,6 +256,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.41.0
         version: 6.41.0
+      '@fontsource-variable/inter':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@solidjs/router':
         specifier: ^0.15.4
         version: 0.15.4(solid-js@1.9.11)
@@ -1583,6 +1586,9 @@ packages:
   '@fastify/websocket@11.2.0':
     resolution: {integrity: sha512-3HrDPbAG1CzUCqnslgJxppvzaAZffieOVbLp1DAy1huCSynUWPifSvfdEDUR8HlJLp3sp1A36uOM2tJogADS8w==}
 
+  '@fontsource-variable/inter@5.3.0':
+    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+
   '@fontsource/inter@5.2.8':
     resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
 
@@ -2220,6 +2226,7 @@ packages:
   '@sapphire/shapeshift@4.0.0':
     resolution: {integrity: sha512-d9dUmWVA7MMiKobL3VpLF8P2aeanRTu6ypG2OIaEv/ZHH/SUQ2iHOVyi5wAPjQ+HmnMuL0whK9ez8I/raWbtIg==}
     engines: {node: '>=v16'}
+    deprecated: Shapeshift was created when other validation libraries had significant limitations in performance and error reporting. Those advantages have diminished as libraries such as Zod have become faster and improved their error messages, while also gaining broader environment support, a larger community, and custom error printers.
 
   '@sapphire/snowflake@3.5.5':
     resolution: {integrity: sha512-xzvBr1Q1c4lCe7i6sRnrofxeO1QTP/LKQ6A6qy0iB4x5yfiSfARMEQEghojzTNALDTcv8En04qYNIco9/K9eZQ==}
@@ -6791,6 +6798,8 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@fontsource-variable/inter@5.3.0': {}
 
   '@fontsource/inter@5.2.8': {}
 

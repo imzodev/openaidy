@@ -346,7 +346,7 @@ export function TasksPage(props: TasksPageProps) {
           is used for both; `detailView` decides which renders. */}
       <Show when={props.detailTaskId}>
         <div
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseDetail();
           }}
@@ -362,7 +362,7 @@ export function TasksPage(props: TasksPageProps) {
             />
           </Show>
           <Show when={props.detailView === 'executions'}>
-            <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col overflow-hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in max-w-4xl w-full max-h-[80vh] flex flex-col overflow-hidden">
               <TaskExecutionsPage
                 taskId={props.detailTaskId!}
                 onBack={handleBackToDetail}

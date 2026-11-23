@@ -96,8 +96,8 @@ describe('MessageListItem', () => {
       <MessageListItem message={makeMsg({ id: 'm1', role: 'assistant' })} />
     ));
     const bubble = document.querySelector('[data-message-id="m1"]')!;
-    // The class includes the dark: variant — assert substring.
-    expect(bubble.className).toContain('bg-gray-50');
+    // Assistant turns render as plain text beside the Aidy glyph, not a card.
+    expect(bubble.className).toContain('bg-transparent');
   });
 
   it('renders an MCP tool label for tool messages whose metadata.toolName contains "::"', () => {

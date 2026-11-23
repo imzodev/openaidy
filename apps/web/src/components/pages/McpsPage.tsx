@@ -539,8 +539,8 @@ function ServerFormModal(props: {
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-lg mx-4">
         <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {isEdit() ? 'Edit MCP Server' : 'Add MCP Server'}
@@ -856,8 +856,8 @@ function ImportModal(props: {
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-lg mx-4">
         <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Import MCP Servers
@@ -937,8 +937,8 @@ function ConfirmDeleteModal(props: {
   };
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-4">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-md mx-4">
         <div class="p-4 border-b dark:border-gray-700">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Delete MCP Server
