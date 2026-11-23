@@ -5,7 +5,7 @@ import { ChatComposer } from './ChatComposer';
 // Stub the icons ChatComposer + AgentPicker render. Plain-object factory
 // (a Proxy module mock hangs vitest collection here).
 vi.mock('lucide-solid', () => ({
-  Send: () => <span data-testid="send" />,
+  ArrowUp: () => <span data-testid="send" />,
   ListPlus: () => <span data-testid="list-plus" />,
   ChevronDown: () => <span data-testid="chevron-down" />,
   Bot: () => <span data-testid="bot" />,

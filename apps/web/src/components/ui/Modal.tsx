@@ -53,7 +53,7 @@ export function Modal(props: ModalProps) {
       <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
         {/* Overlay */}
         <div
-          class="absolute inset-0 bg-black/50"
+          class="absolute inset-0 bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in"
           onClick={props.onClose}
           aria-hidden="true"
         />
@@ -62,22 +62,22 @@ export function Modal(props: ModalProps) {
             body so long forms never get clipped with no way to reach the
             rest of the content or the footer actions below the fold. */}
         <div
-          class={`relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4 max-h-[90vh] flex flex-col ${sizeClass()}`}
+          class={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 w-full mx-4 max-h-[90vh] flex flex-col animate-sheet-in ${sizeClass()}`}
           role="dialog"
           aria-modal="true"
         >
           {/* Header */}
           <Show when={props.title}>
-            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+            <div class="flex items-center justify-between pl-5 pr-3 py-3 hairline-b shrink-0">
+              <h2 class="text-[17px] font-semibold tracking-tight text-text-primary">
                 {props.title}
               </h2>
               <button
                 onClick={props.onClose}
-                class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
+                class="w-7 h-7 flex items-center justify-center rounded-full bg-fill text-text-tertiary hover:bg-fill-strong hover:text-text-primary transition-colors"
                 aria-label="Close modal"
               >
-                <X class="w-5 h-5" />
+                <X class="w-4 h-4" stroke-width={2.25} />
               </button>
             </div>
           </Show>
@@ -86,15 +86,15 @@ export function Modal(props: ModalProps) {
           <Show when={!props.title}>
             <button
               onClick={props.onClose}
-              class="absolute top-3 right-3 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
+              class="absolute top-3 right-3 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-fill text-text-tertiary hover:bg-fill-strong hover:text-text-primary transition-colors"
               aria-label="Close modal"
             >
-              <X class="w-5 h-5" />
+              <X class="w-4 h-4" stroke-width={2.25} />
             </button>
           </Show>
 
           {/* Body */}
-          <div class="p-4 overflow-y-auto min-h-0">{props.children}</div>
+          <div class="p-5 overflow-y-auto min-h-0">{props.children}</div>
         </div>
       </div>
     </Show>

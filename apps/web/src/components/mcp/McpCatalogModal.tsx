@@ -103,8 +103,8 @@ export function McpCatalogModal(props: {
     }`;
 
   return (
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between p-4 border-b dark:border-gray-700">
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">

@@ -850,8 +850,8 @@ export function AddonViewPage(props: Props) {
 
       {/* Photo capture modal — camera preview lives in the host too. */}
       <Show when={photoRequestId()}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-md mx-4 overflow-hidden">
             <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
               <h2 class="text-lg font-semibold text-text-primary flex items-center gap-2">
                 <Camera class="w-4 h-4" />
@@ -894,11 +894,11 @@ export function AddonViewPage(props: Props) {
       {/* Info modal */}
       <Show when={showInfo()}>
         <div
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in"
           onClick={() => setShowInfo(false)}
         >
           <div
-            class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden"
+            class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full max-w-md mx-4 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">

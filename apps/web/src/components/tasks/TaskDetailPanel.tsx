@@ -402,7 +402,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
 
   return (
     <div
-      class={`task-detail-panel bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full overflow-y-auto ${
+      class={`task-detail-panel bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in w-full overflow-y-auto ${
         subtaskView() === 'flow'
           ? 'max-w-[95vw] h-[85vh]'
           : 'max-w-2xl max-h-[90vh]'
@@ -843,8 +843,8 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
 
           {/* Deliverable viewer modal */}
           <Show when={deliverableModal().isOpen}>
-            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div class="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/25 dark:bg-black/50 backdrop-blur-[3px] animate-fade-in">
+              <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-sheet-in max-w-4xl w-full max-h-[80vh] flex flex-col">
                 <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                   <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100">
                     {deliverableModal().path.split('/').pop()}

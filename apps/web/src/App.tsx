@@ -5,7 +5,7 @@ import {
   createQuery,
   createMutation,
 } from '@tanstack/solid-query';
-import { Menu, Settings, MessageSquare, LogOut } from 'lucide-solid';
+import { Menu, LogOut } from 'lucide-solid';
 import {
   listSessions,
   createSession,
@@ -27,6 +27,8 @@ import { ConnectionStatus } from './components/ConnectionStatus';
 import { PresenceIndicator } from './components/PresenceIndicator';
 import { DesktopStatusBar } from './components/DesktopStatusBar';
 import { Sidebar } from './components/Sidebar';
+import { Wordmark } from './components/ui/Wordmark';
+import type { ViewType } from './components/Sidebar';
 import { SettingsView } from './components/settings/SettingsView';
 import { ChatView } from './components/ChatView';
 import { ChatComposer } from './components/ChatComposer';
@@ -1069,6 +1071,28 @@ function AppContent(props: AppContentProps) {
 
   // Current view for conditional rendering
   const view = () => currentView();
+  const VIEW_TITLES: Record<ViewType, string> = {
+    chat: 'Chat',
+    sessions: 'Sessions',
+    tasks: 'Tasks',
+    pulses: 'Pulses',
+    workflows: 'Workflows',
+    'workflow-detail': 'Workflow',
+    channels: 'Channels',
+    webhooks: 'Webhooks',
+    agents: 'Agents',
+    memories: 'Memories',
+    skills: 'Skills',
+    mcps: 'MCP Servers',
+    logs: 'Logs',
+    usage: 'Usage',
+    backups: 'Backups',
+    addons: 'Addons',
+    'addon-view': 'Addon',
+    'api-keys': 'Access Tokens',
+    settings: 'Settings',
+  };
+  const viewTitle = () => VIEW_TITLES[view()];
 
   // Record a session visit for the command palette "Recent" section.
   // Lookup the session title from the cached list so the palette can show
@@ -1134,7 +1158,7 @@ function AppContent(props: AppContentProps) {
   };
 
   return (
-    <div class="h-dvh flex overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div class="h-dvh flex overflow-hidden bg-gray-50 dark:bg-gray-900 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       {/* Sidebar */}
       <Sidebar
         sessions={sessionsQuery.data?.items || []}
@@ -1159,32 +1183,22 @@ function AppContent(props: AppContentProps) {
 
       {/* Main Content */}
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header class="sticky top-0 z-20 border-b border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:supports-[backdrop-filter]:bg-gray-900/80">
-          <div class="flex items-center justify-between gap-3 px-4 py-2 sm:px-6">
+        <header class="sticky top-0 z-20 material-chrome hairline-b">
+          <div class="flex items-center justify-between gap-3 h-[52px] px-3 sm:px-5">
             <div class="flex items-center gap-3 min-w-0">
               <button
                 type="button"
                 onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-                class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 shadow-sm transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 md:hidden"
+                class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-fill md:hidden"
                 aria-label="Toggle sidebar"
               >
-                <Menu class="w-5 h-5" />
+                <Menu class="w-5 h-5" stroke-width={1.75} />
               </button>
 
               <div class="min-w-0">
-                <div class="flex items-center gap-2 text-xs font-medium text-text-tertiary">
-                  <span class="hidden sm:inline">Aidy</span>
-                  <span class="hidden sm:inline">/</span>
-                  <span class="inline-flex items-center gap-1.5">
-                    <Show
-                      when={view() === 'settings'}
-                      fallback={<MessageSquare class="w-3.5 h-3.5" />}
-                    >
-                      <Settings class="w-3.5 h-3.5" />
-                    </Show>
-                    {view() === 'settings' ? 'Settings' : 'Chat'}
-                  </span>
-                </div>
+                <h2 class="text-[15px] font-semibold text-text-primary truncate">
+                  {viewTitle()}
+                </h2>
               </div>
             </div>
 
@@ -1233,13 +1247,13 @@ function AppContent(props: AppContentProps) {
                         ? 'Private chat'
                         : 'Normal chat'
                   }
-                  class={`inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-1.5 sm:px-3 py-1.5 shadow-sm transition-colors disabled:opacity-60 ${
+                  class={`inline-flex items-center gap-2 rounded-full bg-fill px-1.5 sm:pl-3 sm:pr-1.5 py-1 transition-colors disabled:opacity-60 ${
                     canTogglePrivacy()
-                      ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer'
+                      ? 'hover:bg-fill-strong cursor-pointer'
                       : 'cursor-default opacity-70'
                   }`}
                 >
-                  <span class="hidden sm:inline text-sm font-medium text-text-secondary whitespace-nowrap">
+                  <span class="hidden sm:inline text-[13px] font-medium text-text-secondary whitespace-nowrap">
                     {isTogglingPrivacy()
                       ? 'Switching…'
                       : isActiveSessionPrivate()
@@ -1247,17 +1261,17 @@ function AppContent(props: AppContentProps) {
                         : 'Normal chat'}
                   </span>
                   <span
-                    class={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+                    class={`relative inline-flex h-[22px] w-[38px] flex-shrink-0 items-center rounded-full transition-colors duration-300 ${
                       isActiveSessionPrivate()
                         ? 'bg-violet-500'
                         : 'bg-gray-300 dark:bg-gray-600'
                     }`}
                   >
                     <span
-                      class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      class={`inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-md transition-transform duration-300 ease-spring ${
                         isActiveSessionPrivate()
                           ? 'translate-x-[18px]'
-                          : 'translate-x-0.5'
+                          : 'translate-x-[2px]'
                       }`}
                     />
                   </span>
@@ -1271,9 +1285,10 @@ function AppContent(props: AppContentProps) {
                 type="button"
                 onClick={props.onLogout}
                 title="Log out"
-                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:text-text-primary hover:bg-fill transition-colors"
+                aria-label="Log out"
               >
-                <LogOut class="w-4 h-4" />
+                <LogOut class="w-[17px] h-[17px]" stroke-width={1.75} />
               </button>
             </div>
           </div>
@@ -1400,21 +1415,21 @@ function AppContent(props: AppContentProps) {
           <Show when={!needsProviderSetup()}>
             <Show when={!selectedSessionId()}>
               <div class="flex-1 flex items-center justify-center">
-                <div class="text-center">
-                  <h1 class="text-2xl font-bold text-text-primary mb-2">
+                <div class="text-center px-6 animate-rise-in">
+                  <Wordmark iconOnly size="xl" class="mb-6" />
+                  <h1 class="text-[32px] leading-tight font-bold tracking-tight text-text-primary mb-2">
                     Welcome to Aidy
                   </h1>
-                  <p class="text-text-secondary mb-4">
-                    Select a session or create a new one to start chatting
+                  <p class="text-[17px] text-text-tertiary mb-7 max-w-md mx-auto">
+                    Pick up a recent conversation from the sidebar, or start
+                    something new.
                   </p>
                   <button
                     onClick={handleCreateSession}
                     disabled={createSessionMutation.isPending}
-                    class="px-4 py-2 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white rounded-lg transition-colors"
+                    class="h-11 px-6 bg-primary hover:bg-primary-hover disabled:bg-primary-disabled text-white text-[15px] font-medium rounded-full shadow-md transition-colors"
                   >
-                    {createSessionMutation.isPending
-                      ? 'Creating...'
-                      : 'Create New Session'}
+                    {createSessionMutation.isPending ? 'Creating…' : 'New Chat'}
                   </button>
                 </div>
               </div>
