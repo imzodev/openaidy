@@ -260,7 +260,7 @@ describe('AboutTab', () => {
       screen.queryByRole('button', { name: /update to v0\.4\.0/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/npm install -g @aidy\/app@latest/i),
+      screen.getByText(/npm install -g @aidyagent\/app@latest/i),
     ).toBeInTheDocument();
   });
 });
